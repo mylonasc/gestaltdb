@@ -7,7 +7,141 @@ GestaltDB is a pure Python graph database toolkit for attributed graphs. It stor
 
 Documentation: https://mylonasc.github.io/gestaltdb/
 
-## Install
+## Install From PyPI
+
+With pip:
+
+```sh
+python -m pip install gestaltdb
+```
+
+With uv:
+
+```sh
+uv add gestaltdb
+```
+
+Install columnar ingestion dependencies:
+
+```sh
+python -m pip install "gestaltdb[arrow,polars]"
+```
+
+Install all optional backends and serializers:
+
+```sh
+python -m pip install "gestaltdb[all]"
+```
+
+Optional extras include `lmdb`, `leveldb`, `rocksdb`, `arrow`, `polars`, `fast-ingest`, `msgpack`, `protobuf`, `bloom`, `docs`, `dev`, and `all`.
+
+## Basic Example
+
+```python
+from tempfile import TemporaryDirectory
+
+from gestaltdb.graphdb import Edge, GraphDB, Node
+from gestaltdb.kvstores import LevelDBStore
+from gestaltdb.serializers import PickleSerializer
+
+with TemporaryDirectory() as tmpdir:
+    graph = GraphDB(LevelDBStore(path=f"{tmpdir}/graph"), PickleSerializer())
+
+    graph.put_node(Node(node_id="alice", labels=["Person"], properties={"name": "Alice"}))
+    graph.put_node(Node(node_id="bob", labels=["Person"], properties={"name": "Bob"}))
+    graph.put_edge(Edge(
+        edge_id="alice-knows-bob",
+        source="alice",
+        target="bob",
+        properties={"type": "knows", "since": 2024},
+    ))
+
+    result = graph.query('MATCH (a:Person {name: "Alice"}) MATCH (a)-[:knows]->(b) RETURN a.id, b.name')
+    print(result.records)
+
+    graph.close()
+```
+
+## Arrow Ingestion Example
+
+This example ingests entity columns from PyArrow arrays. `JSONSerializer` lets GestaltDB build node and edge payloads from structured columns.
+
+```python
+from tempfile import TemporaryDirectory
+
+import pyarrow as pa
+
+from gestaltdb.graphdb import GraphDB
+from gestaltdb.kvstores import LevelDBStore
+from gestaltdb.serializers import JSONSerializer
+
+with TemporaryDirectory() as tmpdir:
+    graph = GraphDB(LevelDBStore(path=f"{tmpdir}/graph"), JSONSerializer())
+
+    graph.ingest_nodes_arrow_entities(
+        pa.array(["alice", "bob", "carol"]),
+        labels=pa.array([["Person"], ["Person"], ["Person"]]),
+        properties={
+            "name": pa.array(["Alice", "Bob", "Carol"]),
+            "age": pa.array([34, 36, 29]),
+        },
+    )
+
+    graph.ingest_edges_arrow_entities(
+        pa.array(["alice-knows-bob", "bob-knows-carol"]),
+        pa.array(["alice", "bob"]),
+        pa.array(["bob", "carol"]),
+        pa.array(["knows", "knows"]),
+        properties={"since": pa.array([2024, 2025])},
+    )
+
+    result = graph.query('MATCH (a:Person {name: "Alice"}) MATCH (a)-[:knows]->(b) RETURN a.id, b.name')
+    print(result.records)
+
+    graph.close()
+```
+
+## Polars Ingestion Example
+
+This example ingests the same graph from Polars DataFrames. Property columns are converted into node and edge payloads during ingestion.
+
+```python
+from tempfile import TemporaryDirectory
+
+import polars as pl
+
+from gestaltdb.graphdb import GraphDB
+from gestaltdb.kvstores import LevelDBStore
+from gestaltdb.serializers import JSONSerializer
+
+nodes = pl.DataFrame({
+    "node_id": ["alice", "bob", "carol"],
+    "labels": [["Person"], ["Person"], ["Person"]],
+    "name": ["Alice", "Bob", "Carol"],
+    "age": [34, 36, 29],
+})
+
+edges = pl.DataFrame({
+    "edge_id": ["alice-knows-bob", "bob-knows-carol"],
+    "source": ["alice", "bob"],
+    "target": ["bob", "carol"],
+    "edge_type": ["knows", "knows"],
+    "since": [2024, 2025],
+})
+
+with TemporaryDirectory() as tmpdir:
+    graph = GraphDB(LevelDBStore(path=f"{tmpdir}/graph"), JSONSerializer())
+
+    graph.ingest_nodes_polars_entities(nodes)
+    graph.ingest_edges_polars_entities(edges)
+
+    result = graph.query('MATCH (a:Person) MATCH (a)-[:knows]->(b) RETURN a.name, b.name ORDER BY a.name')
+    print(result.records)
+
+    graph.close()
+```
+
+## Install From A Checkout
 
 From a local checkout:
 
@@ -27,32 +161,6 @@ With pip:
 python -m pip install /path/to/gestaltdb
 ```
 
-Optional extras include `lmdb`, `leveldb`, `rocksdb`, `arrow`, `polars`, `fast-ingest`, `msgpack`, `protobuf`, `bloom`, `docs`, `dev`, and `all`.
-
-## Quick Example
-
-```python
-from gestaltdb.graphdb import Edge, GraphDB, Node
-from gestaltdb.kvstores import LMDBStore
-from gestaltdb.serializers import PickleSerializer
-
-graph = GraphDB(LMDBStore(path="example_lmdb"), PickleSerializer())
-
-graph.put_node(Node(node_id="alice", labels=["Person"], properties={"name": "Alice"}))
-graph.put_node(Node(node_id="bob", labels=["Person"], properties={"name": "Bob"}))
-graph.put_edge(Edge(
-    edge_id="alice-knows-bob",
-    source="alice",
-    target="bob",
-    properties={"type": "knows", "since": 2024},
-))
-
-result = graph.query('MATCH (a:Person {name: "Alice"}) MATCH (a)-[:knows]->(b) RETURN a.id, b.name')
-print(result.records)
-
-graph.close()
-```
-
 ## Features
 
 - Attributed `Node` and `Edge` objects with stable IDs.
@@ -61,7 +169,7 @@ graph.close()
 - Pickle, JSON, MessagePack, and Protobuf serializers.
 - Label, relationship type, property, composite, and range indexes.
 - Read-only Cypher subset for indexed scans, typed traversal, filtering, ordering, limits, and chained `MATCH` clauses.
-- Bulk and columnar ingestion helpers.
+- Bulk and columnar ingestion helpers for Arrow and Polars.
 - Typed path and subgraph sampling.
 
 See the full documentation for backend selection, indexing, Cypher syntax, ingestion, sampling, and benchmarks.

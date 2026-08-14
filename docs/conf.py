@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 project = "GestaltDB"
 author = "GestaltDB contributors"
 copyright = "2026, GestaltDB contributors"
-release = "0.3.0a0"
+release = "0.3.0"
 
 extensions = [
     "sphinx.ext.autodoc",
