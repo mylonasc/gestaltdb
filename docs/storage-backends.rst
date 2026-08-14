@@ -66,9 +66,37 @@ durability and should not be used as a safe default.
 
 When installed with ``pyrex-rocksdb>=0.3.0a0``, ``PyRexStore`` can use PyRex's
 native ``write_columnar_batch`` API through ``GraphDB.ingest_nodes_arrow`` and
-``GraphDB.ingest_edges_arrow``. The columnar methods currently require
-caller-provided serialized ``node_value`` and ``edge_value`` payloads and edge
-ingestion is append-only.
+``GraphDB.ingest_edges_arrow``. Serialized ``node_value`` and ``edge_value``
+columns backed by Arrow binary arrays are passed directly to PyRex's native
+batch writer where possible. The native path still constructs RocksDB keys in
+PyGraphDB, but avoids Python value materialization for Arrow-backed value
+columns.
+
+For JSON-compatible payloads, ``GraphDB.ingest_nodes_polars_entities`` and
+``GraphDB.ingest_edges_polars_entities`` can build serialized payload columns
+from structured Polars columns before using the same columnar write path:
+
+.. code-block:: python
+
+   import polars as pl
+
+   from pygraphdb.graphdb import GraphDB
+   from pygraphdb.kvstores import PyRexStore
+   from pygraphdb.serializers import JSONSerializer
+
+   graph_db = GraphDB(PyRexStore(path="graph_rocksdb"), JSONSerializer())
+   graph_db.ingest_nodes_polars_entities(
+       pl.DataFrame({
+           "node_id": ["n1"],
+           "labels": [["Entity"]],
+           "kind": ["drug"],
+       }),
+       property_columns=["kind"],
+   )
+
+Other serializers use the same entity methods as a convenience API, but fall
+back to Python row-wise serialization. Columnar edge ingestion remains
+append-only.
 
 Indexes
 -------

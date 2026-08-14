@@ -46,7 +46,77 @@ Columnar Ingestion Benchmarks
 
 Columnar ingestion accepts already-serialized node and edge payloads. With
 ``PyRexStore`` and ``pyrex-rocksdb>=0.3.0a0``, RocksDB can use PyRex's native
-``write_columnar_batch`` path.
+``write_columnar_batch`` path. When Arrow-backed string or binary arrays are
+passed, PyGraphDB preserves those arrays through chunking and passes value
+columns directly to PyRex instead of materializing Python ``bytes`` for every
+stored value.
+
+Structured JSON Entity Ingestion
+--------------------------------
+
+For ``JSONSerializer`` workloads, use the structured entity helpers to build
+node and edge payloads from Polars or Arrow columns. PyGraphDB uses Polars
+``struct`` JSON encoding to serialize the payload column outside the Python
+row loop, then sends the resulting Arrow binary values through the native PyRex
+columnar write path when available.
+
+.. code-block:: python
+
+   import polars as pl
+
+   from pygraphdb.graphdb import GraphDB
+   from pygraphdb.kvstores import PyRexStore
+   from pygraphdb.serializers import JSONSerializer
+
+   graph = GraphDB(PyRexStore(path="graph_rocksdb"), JSONSerializer())
+
+   nodes = pl.DataFrame({
+       "node_id": ["drug-1", "protein-1"],
+       "labels": [["Drug"], ["Protein"]],
+       "kind": ["drug", "protein"],
+   })
+   graph.ingest_nodes_polars_entities(
+       nodes,
+       property_columns=["kind"],
+   )
+
+   edges = pl.DataFrame({
+       "edge_id": ["d1-p1"],
+       "source": ["drug-1"],
+       "target": ["protein-1"],
+       "edge_type": ["binds"],
+       "score": [0.9],
+   })
+   graph.ingest_edges_polars_entities(
+       edges,
+       property_columns=["score"],
+   )
+
+This path is most useful when Python serialization dominates ingestion time.
+It avoids constructing ``Node`` and ``Edge`` objects per row for JSON-compatible
+payloads. Non-JSON serializers still work through the same methods, but they
+fall back to Python object serialization so they do not get the same
+serialization speedup.
+
+Arrow inputs can use the same optimized JSON path when Polars is installed:
+
+.. code-block:: python
+
+   import pyarrow as pa
+
+   graph.ingest_nodes_arrow_entities(
+       pa.array(["n1", "n2"]),
+       labels=pa.array([["Entity"], ["Entity"]]),
+       properties={"kind": pa.array(["drug", "protein"])},
+   )
+
+   graph.ingest_edges_arrow_entities(
+       pa.array(["e1"]),
+       pa.array(["n1"]),
+       pa.array(["n2"]),
+       pa.array(["binds"]),
+       properties={"score": pa.array([0.9])},
+   )
 
 See ``notebooks/05_columnar_ingestion_benchmark.ipynb`` for a runnable example.
 A local run on 10,000 nodes and 50,000 edges with batch size 10,000 produced:

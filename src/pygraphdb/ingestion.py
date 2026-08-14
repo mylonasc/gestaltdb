@@ -60,12 +60,30 @@ def _validate_equal_lengths(columns: dict[str, list]) -> int:
     return next(iter(unique_lengths), 0)
 
 
+def _slice_column(column, start: int, length: int):
+    """Slice Arrow-like columns while preserving Python list fallback behavior."""
+    if column is None:
+        return None
+    if hasattr(column, "slice"):
+        return column.slice(start, length)
+    return column[start : start + length]
+
+
+def _direct_column(column):
+    """Return columns PyRex can consume without Python list materialization."""
+    if hasattr(column, "buffers") and hasattr(column, "type") and hasattr(column, "null_count"):
+        return column
+    return None
+
+
 @dataclass(frozen=True)
 class NodeList:
     """Columnar nodes with caller-provided serialized node values."""
 
     node_ids: list[bytes]
     node_values: list[bytes]
+    node_ids_column: object = None
+    node_values_column: object = None
 
     @classmethod
     def from_arrow(cls, node_ids, node_values):
@@ -78,6 +96,8 @@ class NodeList:
         return cls(
             node_ids=[_to_bytes(value, "node_ids") for value in raw_node_ids],
             node_values=[_to_payload_bytes(value, "node_values") for value in raw_node_values],
+            node_ids_column=_direct_column(node_ids),
+            node_values_column=_direct_column(node_values),
         )
 
     @classmethod
@@ -100,7 +120,12 @@ class NodeList:
             raise ValueError("chunk_size must be positive")
         for start in range(0, len(self.node_ids), chunk_size):
             end = start + chunk_size
-            yield NodeList(self.node_ids[start:end], self.node_values[start:end])
+            yield NodeList(
+                self.node_ids[start:end],
+                self.node_values[start:end],
+                _slice_column(self.node_ids_column, start, end - start),
+                _slice_column(self.node_values_column, start, end - start),
+            )
 
 
 @dataclass(frozen=True)
@@ -112,6 +137,11 @@ class EdgeList:
     targets: list[bytes]
     edge_types: list[str]
     edge_values: list[bytes]
+    edge_ids_column: object = None
+    sources_column: object = None
+    targets_column: object = None
+    edge_types_column: object = None
+    edge_values_column: object = None
 
     @classmethod
     def from_arrow(cls, edge_ids, sources, targets, edge_types, edge_values):
@@ -146,6 +176,11 @@ class EdgeList:
             targets=[_to_bytes(value, "targets") for value in raw_targets],
             edge_types=normalized_edge_types,
             edge_values=[_to_payload_bytes(value, "edge_values") for value in raw_edge_values],
+            edge_ids_column=_direct_column(edge_ids),
+            sources_column=_direct_column(sources),
+            targets_column=_direct_column(targets),
+            edge_types_column=_direct_column(edge_types),
+            edge_values_column=_direct_column(edge_values),
         )
 
     @classmethod
@@ -190,4 +225,9 @@ class EdgeList:
                 self.targets[start:end],
                 self.edge_types[start:end],
                 self.edge_values[start:end],
+                _slice_column(self.edge_ids_column, start, end - start),
+                _slice_column(self.sources_column, start, end - start),
+                _slice_column(self.targets_column, start, end - start),
+                _slice_column(self.edge_types_column, start, end - start),
+                _slice_column(self.edge_values_column, start, end - start),
             )

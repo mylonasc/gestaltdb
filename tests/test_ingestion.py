@@ -6,7 +6,7 @@ from pygraphdb.ingestion import _column_to_list
 from pygraphdb.graphdb import Edge, GraphDB, Node
 from pygraphdb.ingestion import EdgeList, NodeList
 from pygraphdb.kvstores import LMDBStore, PyRexStore
-from pygraphdb.serializers import PickleSerializer
+from pygraphdb.serializers import JSONSerializer, PickleSerializer
 
 
 def test_node_list_requires_serialized_values():
@@ -127,6 +127,86 @@ def test_graphdb_ingests_serialized_nodes_and_edges_from_columns(tmp_path):
         graph_db.close()
 
 
+def test_graphdb_ingests_polars_node_and_edge_entities_with_json_serializer(tmp_path):
+    pytest.importorskip("lmdb")
+    pl = pytest.importorskip("polars")
+    graph_db = GraphDB(LMDBStore(path=str(tmp_path / "lmdb")), JSONSerializer())
+    try:
+        graph_db.create_node_property_index("kind")
+        graph_db.create_edge_property_index("score")
+        node_df = pl.DataFrame(
+            {
+                "node_id": ["drug-1", "protein-1"],
+                "labels": [["Drug"], ["Protein"]],
+                "kind": ["drug", "protein"],
+            }
+        )
+
+        assert graph_db.ingest_nodes_polars_entities(node_df, property_columns=["kind"], chunk_size=1) == 2
+
+        edge_df = pl.DataFrame(
+            {
+                "edge_id": ["d1-p1"],
+                "source": ["drug-1"],
+                "target": ["protein-1"],
+                "edge_type": ["drug-to-protein"],
+                "score": [0.9],
+            }
+        )
+
+        assert graph_db.ingest_edges_polars_entities(edge_df, property_columns=["score"], chunk_size=1) == 1
+
+        assert graph_db.get_node(b"drug-1").properties == {"kind": "drug"}
+        assert [node.get_id for node in graph_db.nodes_by_label("Drug")] == ["drug-1"]
+        assert [node.get_id for node in graph_db.nodes_by_property("kind", "drug")] == ["drug-1"]
+        assert graph_db.get_edge(b"d1-p1").properties == {"type": "drug-to-protein", "score": 0.9}
+        assert [edge.get_id for edge in graph_db.edges_by_property("score", 0.9)] == ["d1-p1"]
+        assert graph_db.neighbors_by_edge_type("drug-1", "drug-to-protein") == [b"protein-1"]
+    finally:
+        graph_db.close()
+
+
+def test_graphdb_ingests_arrow_entities_with_json_serializer(tmp_path):
+    pytest.importorskip("lmdb")
+    pa = pytest.importorskip("pyarrow")
+    graph_db = GraphDB(LMDBStore(path=str(tmp_path / "lmdb")), JSONSerializer())
+    try:
+        assert graph_db.ingest_nodes_arrow_entities(
+            pa.array(["n1"]),
+            labels=pa.array([["Entity"]]),
+            properties={"kind": pa.array(["entity"])},
+        ) == 1
+        assert graph_db.ingest_edges_arrow_entities(
+            pa.array(["e1"]),
+            pa.array(["n1"]),
+            pa.array(["n2"]),
+            pa.array(["rel"]),
+            properties={"score": pa.array([1])},
+        ) == 1
+
+        assert graph_db.get_node(b"n1").labels == ("Entity",)
+        assert graph_db.get_edge(b"e1").properties == {"type": "rel", "score": 1}
+    finally:
+        graph_db.close()
+
+
+def test_graphdb_entity_ingestion_falls_back_for_non_json_serializer(tmp_path):
+    pytest.importorskip("lmdb")
+    pl = pytest.importorskip("polars")
+    graph_db = GraphDB(LMDBStore(path=str(tmp_path / "lmdb")), PickleSerializer())
+    try:
+        node_df = pl.DataFrame({"node_id": ["n1"], "labels": [["Entity"]], "kind": ["entity"]})
+        edge_df = pl.DataFrame({"edge_id": ["e1"], "source": ["n1"], "target": ["n2"], "edge_type": ["rel"], "score": [1]})
+
+        assert graph_db.ingest_nodes_polars_entities(node_df, property_columns=["kind"]) == 1
+        assert graph_db.ingest_edges_polars_entities(edge_df, property_columns=["score"]) == 1
+
+        assert graph_db.get_node(b"n1").properties == {"kind": "entity"}
+        assert graph_db.get_edge(b"e1").properties == {"score": 1, "type": "rel"}
+    finally:
+        graph_db.close()
+
+
 def test_columnar_node_ingestion_removes_stale_indexes(tmp_path):
     pytest.importorskip("lmdb")
     graph_db = GraphDB(LMDBStore(path=str(tmp_path / "lmdb")), PickleSerializer())
@@ -208,6 +288,89 @@ def test_pyrex_store_native_columnar_node_path_writes_expected_batch():
     assert store.db.batches[0][1] == [b"node-value-1", b"node-value-2"]
 
 
+def test_pyrex_store_native_columnar_node_path_passes_arrow_values_directly():
+    pa = pytest.importorskip("pyarrow")
+
+    class FakeDB:
+        def __init__(self):
+            self.batches = []
+
+        def write_columnar_batch(self, keys, values, write_options=None):
+            self.batches.append((keys, values, write_options))
+
+    store = object.__new__(PyRexStore)
+    store.db = FakeDB()
+    store.write_options = object()
+    node_values = pa.array([b"node-value-1", b"node-value-2"], type=pa.binary())
+    node_list = NodeList.from_arrow(pa.array(["n1", "n2"]), node_values)
+
+    store.ingest_nodes_columnar(node_list, native=True)
+
+    assert store.db.batches[0][0] == [b"N\x1fn1", b"N\x1fn2"]
+    assert store.db.batches[0][1] is node_values
+
+
+def test_pyrex_store_native_columnar_edge_path_passes_arrow_values_directly():
+    pa = pytest.importorskip("pyarrow")
+
+    class FakeDB:
+        def __init__(self):
+            self.batches = []
+
+        def write_columnar_batch(self, keys, values, write_options=None):
+            self.batches.append((keys, values, write_options))
+
+    store = object.__new__(PyRexStore)
+    store.db = FakeDB()
+    store.write_options = object()
+    edge_ids = pa.array(["e1", "e2"])
+    edge_values = pa.array([b"edge-value-1", b"edge-value-2"], type=pa.binary())
+    sources = pa.array(["n1", "n1"])
+    targets = pa.array(["n2", "n3"])
+    edge_list = EdgeList.from_arrow(
+        edge_ids,
+        sources,
+        targets,
+        pa.array(["rel", "rel"]),
+        edge_values,
+    )
+
+    store.ingest_edges_columnar(edge_list, native=True)
+
+    assert store.db.batches[0][1] is edge_values
+    assert store.db.batches[1][1] is targets
+    assert store.db.batches[2][1] is sources
+    assert store.db.batches[3][1] is edge_ids
+
+
+def test_columnar_chunks_preserve_arrow_value_slices():
+    pa = pytest.importorskip("pyarrow")
+    node_values = pa.array([b"v1", b"v2", b"v3"], type=pa.binary())
+    node_list = NodeList.from_arrow(pa.array(["n1", "n2", "n3"]), node_values)
+
+    first, second = list(node_list.chunks(2))
+
+    assert first.node_values_column.to_pylist() == [b"v1", b"v2"]
+    assert second.node_values_column.to_pylist() == [b"v3"]
+
+    edge_values = pa.array([b"ev1", b"ev2", b"ev3"], type=pa.binary())
+    targets = pa.array(["n2", "n3", "n4"])
+    edge_list = EdgeList.from_arrow(
+        pa.array(["e1", "e2", "e3"]),
+        pa.array(["n1", "n1", "n1"]),
+        targets,
+        pa.array(["rel", "rel", "rel"]),
+        edge_values,
+    )
+
+    first, second = list(edge_list.chunks(2))
+
+    assert first.edge_values_column.to_pylist() == [b"ev1", b"ev2"]
+    assert second.edge_values_column.to_pylist() == [b"ev3"]
+    assert first.targets_column.to_pylist() == ["n2", "n3"]
+    assert second.targets_column.to_pylist() == ["n4"]
+
+
 @pytest.mark.skipif(importlib.util.find_spec("pyrex") is None, reason="pyrex not installed")
 def test_graphdb_ingests_nodes_and_edges_with_real_pyrex_native_columnar_path(tmp_path):
     graph_db = GraphDB(PyRexStore(path=str(tmp_path / "pyrex")), PickleSerializer())
@@ -224,5 +387,40 @@ def test_graphdb_ingests_nodes_and_edges_with_real_pyrex_native_columnar_path(tm
         assert graph_db.get_node(b"n1").properties == {"label": "drug"}
         assert graph_db.get_edge(b"e1").properties["weight"] == 1
         assert graph_db.neighbors_by_edge_type("n1", "rel") == [b"n2"]
+    finally:
+        graph_db.close()
+
+
+@pytest.mark.skipif(importlib.util.find_spec("pyrex") is None, reason="pyrex not installed")
+def test_graphdb_ingests_json_entities_with_real_pyrex_native_columnar_path(tmp_path):
+    pl = pytest.importorskip("polars")
+    graph_db = GraphDB(PyRexStore(path=str(tmp_path / "pyrex_json")), JSONSerializer())
+    try:
+        if not graph_db.store.has_native_columnar_ingestion():
+            pytest.skip("pyrex native columnar ingestion is not available")
+
+        node_df = pl.DataFrame(
+            {
+                "node_id": ["n1", "n2"],
+                "labels": [["Entity"], ["Entity"]],
+                "kind": ["drug", "protein"],
+            }
+        )
+        edge_df = pl.DataFrame(
+            {
+                "edge_id": ["e1"],
+                "source": ["n1"],
+                "target": ["n2"],
+                "edge_type": ["binds"],
+                "score": [3.5],
+            }
+        )
+
+        graph_db.ingest_nodes_polars_entities(node_df, property_columns=["kind"], chunk_size=1)
+        graph_db.ingest_edges_polars_entities(edge_df, property_columns=["score"], chunk_size=1)
+
+        assert graph_db.get_node(b"n1").properties == {"kind": "drug"}
+        assert graph_db.get_edge(b"e1").properties == {"type": "binds", "score": 3.5}
+        assert graph_db.neighbors_by_edge_type("n1", "binds") == [b"n2"]
     finally:
         graph_db.close()

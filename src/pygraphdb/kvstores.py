@@ -1146,7 +1146,8 @@ class PyRexStore(KVStore):
         """Store columnar nodes, using native PyRex ingestion when available."""
         if native and self.has_native_columnar_ingestion():
             keys = [self._key(b"N", node_id) for node_id in node_list.node_ids]
-            self._write_columnar_batch(keys, node_list.node_values)
+            values = node_list.node_values_column if node_list.node_values_column is not None else node_list.node_values
+            self._write_columnar_batch(keys, values)
             return
         self.put_nodes_bulk(dict(zip(node_list.node_ids, node_list.node_values)))
 
@@ -1245,12 +1246,16 @@ class PyRexStore(KVStore):
                 self._typed_key("in", target_id, edge_type, edge_id)
                 for target_id, edge_type, edge_id in zip(edge_list.targets, edge_list.edge_types, edge_list.edge_ids)
             ]
-            self._write_columnar_batch(edge_keys, edge_list.edge_values)
-            self._write_columnar_batch(out_keys, edge_list.targets)
-            self._write_columnar_batch(in_keys, edge_list.sources)
+            edge_values = edge_list.edge_values_column if edge_list.edge_values_column is not None else edge_list.edge_values
+            targets = edge_list.targets_column if edge_list.targets_column is not None else edge_list.targets
+            sources = edge_list.sources_column if edge_list.sources_column is not None else edge_list.sources
+            self._write_columnar_batch(edge_keys, edge_values)
+            self._write_columnar_batch(out_keys, targets)
+            self._write_columnar_batch(in_keys, sources)
+            edge_ids = edge_list.edge_ids_column if edge_list.edge_ids_column is not None else edge_list.edge_ids
             self._write_columnar_batch(
                 [_index_key("edge_type", [edge_type.encode("utf-8")], edge_id) for edge_type, edge_id in zip(edge_list.edge_types, edge_list.edge_ids)],
-                edge_list.edge_ids,
+                edge_ids,
             )
             return
         self.put_edges_bulk(dict(zip(edge_list.edge_ids, edge_list.edge_values)))

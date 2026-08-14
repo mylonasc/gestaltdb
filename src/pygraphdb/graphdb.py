@@ -18,6 +18,7 @@ import struct
 
 from .ingestion import EdgeList, NodeList
 from .sampling import SamplingPattern, as_sampling_pattern
+from .serializers import JSONSerializer
 
 
 _NODE_PROPERTY_INDEXES_METADATA_KEY = b"schema:indexes:node_properties"
@@ -1528,6 +1529,139 @@ class GraphDB:
             self._put_node_indexes_for_columnar_chunk(chunk)
         return len(node_list.node_ids)
 
+    def ingest_nodes_polars_entities(
+        self,
+        df,
+        *,
+        node_id: str = "node_id",
+        labels: str | list[str] | tuple[str, ...] | None = "labels",
+        property_columns: list[str] | tuple[str, ...] | None = None,
+        native: bool = True,
+        chunk_size: int = 100_000,
+    ):
+        """Ingest node entity columns from a Polars DataFrame.
+
+        With ``JSONSerializer``, node payloads are built with Polars struct JSON
+        encoding. Other serializers fall back to Python ``Node`` serialization.
+        """
+        try:
+            import polars as pl
+        except ImportError as exc:
+            from .ingestion import _missing_dependency_error
+
+            raise _missing_dependency_error("polars", feature_name="GraphDB.ingest_nodes_polars_entities") from exc
+        if not isinstance(df, pl.DataFrame):
+            raise TypeError("df must be a polars.DataFrame")
+        if node_id not in df.columns:
+            raise ValueError(f"missing required columns: {node_id}")
+
+        if property_columns is None:
+            excluded = {node_id}
+            if isinstance(labels, str):
+                excluded.add(labels)
+            property_columns = [column for column in df.columns if column not in excluded]
+        missing = [column for column in property_columns if column not in df.columns]
+        if missing:
+            raise ValueError(f"missing property columns: {', '.join(missing)}")
+
+        if isinstance(self.serializer, JSONSerializer):
+            label_expr = self._polars_labels_expr(pl, df, labels)
+            value_expr = pl.struct(
+                [
+                    pl.col(node_id).alias("id"),
+                    self._polars_properties_expr(pl, property_columns).alias("properties"),
+                    label_expr.alias("labels"),
+                ]
+            ).struct.json_encode()
+            payloads = df.select(value_expr.alias("node_value"))["node_value"].to_arrow().cast("binary")
+        else:
+            payloads = []
+            selected = [node_id, *property_columns]
+            label_column = labels if isinstance(labels, str) and labels in df.columns else None
+            if label_column is not None:
+                selected.append(label_column)
+            for row in df.select(selected).rows(named=True):
+                node_labels = row[label_column] if label_column is not None else ([] if labels is None or isinstance(labels, str) else labels)
+                if isinstance(node_labels, str):
+                    node_labels = [node_labels]
+                payloads.append(
+                    self.serialize_node_value(
+                        Node(
+                            node_id=row[node_id],
+                            labels=node_labels,
+                            properties={column: row[column] for column in property_columns},
+                        )
+                    )
+                )
+
+        return self.ingest_nodes_arrow(df[node_id].to_arrow(), payloads, native=native, chunk_size=chunk_size)
+
+    def ingest_nodes_arrow_entities(
+        self,
+        node_ids,
+        *,
+        labels=None,
+        properties: dict[str, object] | None = None,
+        native: bool = True,
+        chunk_size: int = 100_000,
+    ):
+        """Ingest node entity columns from Arrow-like columns."""
+        try:
+            import polars as pl
+        except ImportError:
+            pl = None
+
+        if isinstance(self.serializer, JSONSerializer) and pl is not None:
+            data = {"node_id": node_ids}
+            if labels is not None:
+                data["labels"] = labels
+            for name, column in (properties or {}).items():
+                data[name] = column
+            return self.ingest_nodes_polars_entities(
+                pl.DataFrame(data),
+                node_id="node_id",
+                labels="labels" if labels is not None else None,
+                property_columns=list((properties or {}).keys()),
+                native=native,
+                chunk_size=chunk_size,
+            )
+
+        raw_node_ids = node_ids.to_pylist() if hasattr(node_ids, "to_pylist") else list(node_ids)
+        raw_labels = labels.to_pylist() if hasattr(labels, "to_pylist") else labels
+        raw_properties = {
+            name: column.to_pylist() if hasattr(column, "to_pylist") else list(column)
+            for name, column in (properties or {}).items()
+        }
+        payloads = []
+        for index, node_key in enumerate(raw_node_ids):
+            node_labels = raw_labels[index] if isinstance(raw_labels, list) else raw_labels
+            if isinstance(node_labels, str):
+                node_labels = [node_labels]
+            payloads.append(
+                self.serialize_node_value(
+                    Node(
+                        node_id=node_key,
+                        labels=node_labels,
+                        properties={name: values[index] for name, values in raw_properties.items()},
+                    )
+                )
+            )
+        return self.ingest_nodes_arrow(raw_node_ids, payloads, native=native, chunk_size=chunk_size)
+
+    def _polars_labels_expr(self, pl, df, labels):
+        """Return a Polars expression for node labels."""
+        if labels is None:
+            return pl.lit([])
+        if isinstance(labels, str):
+            return pl.col(labels) if labels in df.columns else pl.lit([])
+        return pl.lit(list(labels))
+
+    def _polars_properties_expr(self, pl, property_columns):
+        """Return a Polars expression for an entity properties object."""
+        if not property_columns:
+            return pl.lit({})
+        return pl.struct(list(property_columns))
+
     def _delete_existing_node_indexes_for_columnar_chunk(self, chunk: NodeList) -> None:
         """Remove stale indexes before opaque columnar node upserts."""
         for node_id in chunk.node_ids:
@@ -1902,6 +2036,146 @@ class GraphDB:
             self.store.ingest_edges_columnar(chunk, append_only=append_only, native=native)
             self._put_edge_property_indexes_for_columnar_chunk(chunk)
         return len(edge_list.edge_ids)
+
+    def ingest_edges_polars_entities(
+        self,
+        df,
+        *,
+        edge_id: str = "edge_id",
+        source: str = "source",
+        target: str = "target",
+        edge_type: str = "edge_type",
+        property_columns: list[str] | tuple[str, ...] | None = None,
+        append_only: bool = True,
+        native: bool = True,
+        chunk_size: int = 100_000,
+    ):
+        """Ingest edge entity columns from a Polars DataFrame.
+
+        With ``JSONSerializer``, edge payloads are built with Polars struct JSON
+        encoding. Other serializers fall back to Python ``Edge`` serialization.
+        """
+        try:
+            import polars as pl
+        except ImportError as exc:
+            from .ingestion import _missing_dependency_error
+
+            raise _missing_dependency_error("polars", feature_name="GraphDB.ingest_edges_polars_entities") from exc
+        if not isinstance(df, pl.DataFrame):
+            raise TypeError("df must be a polars.DataFrame")
+        required = [edge_id, source, target, edge_type]
+        missing = [column for column in required if column not in df.columns]
+        if missing:
+            raise ValueError(f"missing required columns: {', '.join(missing)}")
+        if property_columns is None:
+            excluded = set(required)
+            property_columns = [column for column in df.columns if column not in excluded]
+        missing = [column for column in property_columns if column not in df.columns]
+        if missing:
+            raise ValueError(f"missing property columns: {', '.join(missing)}")
+
+        if isinstance(self.serializer, JSONSerializer):
+            property_exprs = [pl.col(edge_type).alias("type")]
+            property_exprs.extend(pl.col(column) for column in property_columns if column != "type")
+            value_expr = pl.struct(
+                [
+                    pl.col(edge_id).alias("id"),
+                    pl.col(source).alias("source"),
+                    pl.col(target).alias("target"),
+                    pl.struct(property_exprs).alias("properties"),
+                ]
+            ).struct.json_encode()
+            payloads = df.select(value_expr.alias("edge_value"))["edge_value"].to_arrow().cast("binary")
+        else:
+            payloads = []
+            selected = [edge_id, source, target, edge_type, *property_columns]
+            for row in df.select(selected).rows(named=True):
+                properties = {column: row[column] for column in property_columns if column != "type"}
+                properties["type"] = row[edge_type]
+                payloads.append(
+                    self.serialize_edge_value(
+                        Edge(
+                            edge_id=row[edge_id],
+                            source=row[source],
+                            target=row[target],
+                            properties=properties,
+                        )
+                    )
+                )
+
+        return self.ingest_edges_arrow(
+            df[edge_id].to_arrow(),
+            df[source].to_arrow(),
+            df[target].to_arrow(),
+            df[edge_type].to_arrow(),
+            payloads,
+            append_only=append_only,
+            native=native,
+            chunk_size=chunk_size,
+        )
+
+    def ingest_edges_arrow_entities(
+        self,
+        edge_ids,
+        sources,
+        targets,
+        edge_types,
+        *,
+        properties: dict[str, object] | None = None,
+        append_only: bool = True,
+        native: bool = True,
+        chunk_size: int = 100_000,
+    ):
+        """Ingest edge entity columns from Arrow-like columns."""
+        try:
+            import polars as pl
+        except ImportError:
+            pl = None
+
+        if isinstance(self.serializer, JSONSerializer) and pl is not None:
+            data = {"edge_id": edge_ids, "source": sources, "target": targets, "edge_type": edge_types}
+            for name, column in (properties or {}).items():
+                data[name] = column
+            return self.ingest_edges_polars_entities(
+                pl.DataFrame(data),
+                property_columns=list((properties or {}).keys()),
+                append_only=append_only,
+                native=native,
+                chunk_size=chunk_size,
+            )
+
+        raw_edge_ids = edge_ids.to_pylist() if hasattr(edge_ids, "to_pylist") else list(edge_ids)
+        raw_sources = sources.to_pylist() if hasattr(sources, "to_pylist") else list(sources)
+        raw_targets = targets.to_pylist() if hasattr(targets, "to_pylist") else list(targets)
+        raw_edge_types = edge_types.to_pylist() if hasattr(edge_types, "to_pylist") else list(edge_types)
+        raw_properties = {
+            name: column.to_pylist() if hasattr(column, "to_pylist") else list(column)
+            for name, column in (properties or {}).items()
+        }
+        payloads = []
+        for index, edge_key in enumerate(raw_edge_ids):
+            edge_properties = {name: values[index] for name, values in raw_properties.items() if name != "type"}
+            edge_properties["type"] = raw_edge_types[index]
+            payloads.append(
+                self.serialize_edge_value(
+                    Edge(
+                        edge_id=edge_key,
+                        source=raw_sources[index],
+                        target=raw_targets[index],
+                        properties=edge_properties,
+                    )
+                )
+            )
+        return self.ingest_edges_arrow(
+            raw_edge_ids,
+            raw_sources,
+            raw_targets,
+            raw_edge_types,
+            payloads,
+            append_only=append_only,
+            native=native,
+            chunk_size=chunk_size,
+        )
 
     def _put_edge_property_indexes_for_columnar_chunk(self, chunk: EdgeList) -> None:
         """Maintain configured edge property indexes for columnar edges."""
