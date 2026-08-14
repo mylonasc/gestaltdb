@@ -2,16 +2,16 @@ Typed Traversal and Sampling
 ============================
 
 Typed traversal uses ``edge.properties["type"]``. When an edge has a type,
-PyGraphDB stores typed adjacency records for efficient directional scans.
+GestaltDB stores typed adjacency records for efficient directional scans.
 
 Create a Typed Graph
 --------------------
 
 .. code-block:: python
 
-   from pygraphdb.graphdb import Edge, GraphDB, Node
-   from pygraphdb.kvstores import LMDBStore
-   from pygraphdb.serializers import PickleSerializer
+   from gestaltdb.graphdb import Edge, GraphDB, Node
+   from gestaltdb.kvstores import LMDBStore
+   from gestaltdb.serializers import PickleSerializer
 
    graph_db = GraphDB(LMDBStore(path="typed_graph_lmdb"), PickleSerializer())
 
@@ -80,7 +80,7 @@ configuration objects.
 
    import random
 
-   from pygraphdb.sampling import SamplingHop, SamplingPattern
+   from gestaltdb.sampling import SamplingHop, SamplingPattern
 
    pattern = SamplingPattern([
        SamplingHop("drug-to-protein", direction="out", sample_size=2),
@@ -110,7 +110,7 @@ Existing dictionary configurations are still supported.
 Cypher Sampling Procedure
 -------------------------
 
-The Cypher API exposes multi-hop typed path sampling through a PyGraphDB-specific
+The Cypher API exposes multi-hop typed path sampling through a GestaltDB-specific
 procedure call. This delegates to ``GraphDB.sample_typed_paths`` and returns one
 ``path`` value per sampled path.
 

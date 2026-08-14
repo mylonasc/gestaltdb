@@ -8,9 +8,9 @@ Create a Graph
 
 .. code-block:: python
 
-   from pygraphdb.graphdb import Edge, GraphDB, Node
-   from pygraphdb.kvstores import LMDBStore
-   from pygraphdb.serializers import PickleSerializer
+   from gestaltdb.graphdb import Edge, GraphDB, Node
+   from gestaltdb.kvstores import LMDBStore
+   from gestaltdb.serializers import PickleSerializer
 
    graph_db = GraphDB(LMDBStore(path="quickstart_lmdb"), PickleSerializer())
 

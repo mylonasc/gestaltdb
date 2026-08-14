@@ -1,4 +1,4 @@
-"""Sphinx configuration for PyGraphDB documentation."""
+"""Sphinx configuration for GestaltDB documentation."""
 
 from __future__ import annotations
 
@@ -9,10 +9,10 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-project = "PyGraphDB"
-author = "PyGraphDB contributors"
-copyright = "2026, PyGraphDB contributors"
-release = "0.2.0a0"
+project = "GestaltDB"
+author = "GestaltDB contributors"
+copyright = "2026, GestaltDB contributors"
+release = "0.3.0a0"
 
 extensions = [
     "sphinx.ext.autodoc",
@@ -28,7 +28,7 @@ templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 html_theme = "furo"
-html_title = "PyGraphDB"
+html_title = "GestaltDB"
 html_static_path = ["_static"]
 
 autodoc_typehints = "description"

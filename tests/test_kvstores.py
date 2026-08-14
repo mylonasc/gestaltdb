@@ -1,6 +1,6 @@
 import pytest
 
-from pygraphdb.kvstores import KVStore, _pack_long_int, _typed_adjacency_prefix, _unpack_long_int
+from gestaltdb.kvstores import KVStore, _pack_long_int, _typed_adjacency_prefix, _unpack_long_int
 
 
 def test_integer_pack_helpers_round_trip():

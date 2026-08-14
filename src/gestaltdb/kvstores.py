@@ -391,7 +391,7 @@ class SimpleKV:
         
 
 class LMDBStore(KVStore):
-    """LMDB implementation of the PyGraphDB key-value store.
+    """LMDB implementation of the GestaltDB key-value store.
 
     Examples:
         >>> store = LMDBStore(path="/tmp/example_graph_lmdb")  # doctest: +SKIP

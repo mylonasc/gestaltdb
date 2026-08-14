@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Compare pygraphdb/RocksDB with ArcadeDB graph workloads.
+"""Compare gestaltdb/RocksDB with ArcadeDB graph workloads.
 
 The suite intentionally includes workloads that stress different strengths:
 
-* ``columnar_ingest`` uses pygraphdb's serialized Arrow column ingestion and
+* ``columnar_ingest`` uses gestaltdb's serialized Arrow column ingestion and
   ArcadeDB's embedded GraphBatch importer.
 * ``star_traversal`` and ``bfs_depth`` favor native adjacency traversal.
 * ``typed_path`` exercises repeated typed-edge expansion.
@@ -11,7 +11,7 @@ The suite intentionally includes workloads that stress different strengths:
   compaction behavior and is recorded as not applicable for ArcadeDB.
 
 ArcadeDB is optional. If ``arcadedb-embedded`` is unavailable, ArcadeDB rows are
-emitted with ``status=skipped`` so pygraphdb-only runs remain useful in CI and
+emitted with ``status=skipped`` so gestaltdb-only runs remain useful in CI and
 local development.
 """
 
@@ -38,9 +38,9 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from pygraphdb.graphdb import Edge, GraphDB, Node
-from pygraphdb.kvstores import PyRexStore
-from pygraphdb.serializers import MessagePackSerializer
+from gestaltdb.graphdb import Edge, GraphDB, Node
+from gestaltdb.kvstores import PyRexStore
+from gestaltdb.serializers import MessagePackSerializer
 
 
 EDGE_TYPES = ("RelA", "RelB", "RelC")
@@ -141,11 +141,11 @@ def pyarrow_array(values):
     try:
         import pyarrow as pa
     except ImportError as exc:
-        raise RuntimeError("pyarrow is required for pygraphdb columnar ingestion") from exc
+        raise RuntimeError("pyarrow is required for gestaltdb columnar ingestion") from exc
     return pa.array(values)
 
 
-def open_pygraphdb(path: Path, args: argparse.Namespace) -> GraphDB:
+def open_gestaltdb(path: Path, args: argparse.Namespace) -> GraphDB:
     return GraphDB(
         PyRexStore(
             path=str(path),
@@ -159,7 +159,7 @@ def open_pygraphdb(path: Path, args: argparse.Namespace) -> GraphDB:
     )
 
 
-def ingest_pygraphdb_object(graph: GraphDB, shape: str, nodes: int, edges: int, batch_size: int) -> None:
+def ingest_gestaltdb_object(graph: GraphDB, shape: str, nodes: int, edges: int, batch_size: int) -> None:
     for start, end in chunks(nodes, batch_size):
         graph.put_nodes([Node(node_id=f"n{index}", labels=("Node",), properties={"id": f"n{index}"}) for index in range(start, end)])
     edge_rows = list(graph_edges(shape, nodes, edges))
@@ -173,7 +173,7 @@ def ingest_pygraphdb_object(graph: GraphDB, shape: str, nodes: int, edges: int, 
         )
 
 
-def ingest_pygraphdb_columnar(graph: GraphDB, shape: str, nodes: int, edges: int, batch_size: int) -> None:
+def ingest_gestaltdb_columnar(graph: GraphDB, shape: str, nodes: int, edges: int, batch_size: int) -> None:
     for start, end in chunks(nodes, batch_size):
         node_ids = [f"n{index}" for index in range(start, end)]
         node_values = [graph.serialize_node_value(Node(node_id=node_id, labels=("Node",), properties={"id": node_id})) for node_id in node_ids]
@@ -219,7 +219,7 @@ def typed_bfs(graph: GraphDB, start_node: str, depth: int, limit: int) -> int:
     return len(visited)
 
 
-def run_pygraphdb_query(graph: GraphDB, workload: str, args: argparse.Namespace) -> int:
+def run_gestaltdb_query(graph: GraphDB, workload: str, args: argparse.Namespace) -> int:
     if workload == "star_traversal":
         count = 0
         for _ in range(args.iterations):
@@ -242,7 +242,7 @@ def run_pygraphdb_query(graph: GraphDB, workload: str, args: argparse.Namespace)
                 frontier = next_frontier[: args.path_fanout_limit]
             count += len(frontier)
         return count
-    raise ValueError(f"unsupported pygraphdb query workload: {workload}")
+    raise ValueError(f"unsupported gestaltdb query workload: {workload}")
 
 
 def disk_usage(path: Path) -> int:
@@ -375,8 +375,8 @@ def add_rates(row: dict[str, object]) -> None:
         row["queries_per_second"] = row["iterations"] / query_seconds
 
 
-def run_pygraphdb(workload: str, args: argparse.Namespace) -> dict[str, object]:
-    row = base_row("pygraphdb-rocksdb", workload, args)
+def run_gestaltdb(workload: str, args: argparse.Namespace) -> dict[str, object]:
+    row = base_row("gestaltdb-rocksdb", workload, args)
     if importlib.util.find_spec("pyrex") is None:
         row.update({"status": "skipped", "skip_reason": "missing pyrex-rocksdb"})
         return row
@@ -384,26 +384,26 @@ def run_pygraphdb(workload: str, args: argparse.Namespace) -> dict[str, object]:
         row.update({"status": "skipped", "skip_reason": "missing pyarrow"})
         return row
 
-    path = Path(tempfile.mkdtemp(prefix=f"pygraphdb_arcade_compare_{workload}_", dir=args.tmp_dir))
+    path = Path(tempfile.mkdtemp(prefix=f"gestaltdb_arcade_compare_{workload}_", dir=args.tmp_dir))
     graph = None
     try:
-        graph = open_pygraphdb(path, args)
+        graph = open_gestaltdb(path, args)
         row["native_columnar"] = bool(getattr(graph.store, "has_native_columnar_ingestion", lambda: False)())
         shape = workload_shape(workload)
         if workload == "rocksdb_compaction":
             row["ingest_seconds"] = 0.0
-            result_count, query_seconds = seconds(lambda: pygraphdb_compaction(graph.store, args))
+            result_count, query_seconds = seconds(lambda: gestaltdb_compaction(graph.store, args))
             row["result_count"] = result_count
             row["query_seconds"] = query_seconds
         else:
-            ingest = ingest_pygraphdb_columnar if workload == "columnar_ingest" else ingest_pygraphdb_object
+            ingest = ingest_gestaltdb_columnar if workload == "columnar_ingest" else ingest_gestaltdb_object
             _, ingest_seconds = seconds(lambda: ingest(graph, shape, args.nodes, args.edges, args.batch_size))
             row["ingest_seconds"] = ingest_seconds
         if workload == "columnar_ingest":
             row["result_count"] = args.nodes + args.edges
             row["query_seconds"] = 0.0
         elif workload != "rocksdb_compaction":
-            result_count, query_seconds = seconds(lambda: run_pygraphdb_query(graph, workload, args))
+            result_count, query_seconds = seconds(lambda: run_gestaltdb_query(graph, workload, args))
             row["result_count"] = result_count
             row["query_seconds"] = query_seconds
         row["db_bytes"] = disk_usage(path)
@@ -419,7 +419,7 @@ def run_pygraphdb(workload: str, args: argparse.Namespace) -> dict[str, object]:
     return row
 
 
-def pygraphdb_compaction(store: PyRexStore, args: argparse.Namespace) -> int:
+def gestaltdb_compaction(store: PyRexStore, args: argparse.Namespace) -> int:
     value = b"x" * args.compaction_value_size
     total = 0
     for pass_index in range(args.compaction_passes):
@@ -475,8 +475,8 @@ def run_arcadedb(workload: str, args: argparse.Namespace) -> dict[str, object]:
 
 def write_row(output_dir: Path, row: dict[str, object]) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    jsonl_path = output_dir / "arcadedb_vs_pygraphdb_results.jsonl"
-    csv_path = output_dir / "arcadedb_vs_pygraphdb_results.csv"
+    jsonl_path = output_dir / "arcadedb_vs_gestaltdb_results.jsonl"
+    csv_path = output_dir / "arcadedb_vs_gestaltdb_results.csv"
     with jsonl_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(row, sort_keys=True) + "\n")
     write_header = not csv_path.exists()
@@ -547,8 +547,8 @@ def summarize_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
 def write_summary(output_dir: Path, rows: list[dict[str, object]]) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     summaries = summarize_rows(rows)
-    jsonl_path = output_dir / "arcadedb_vs_pygraphdb_summary.jsonl"
-    csv_path = output_dir / "arcadedb_vs_pygraphdb_summary.csv"
+    jsonl_path = output_dir / "arcadedb_vs_gestaltdb_summary.jsonl"
+    csv_path = output_dir / "arcadedb_vs_gestaltdb_summary.csv"
     with jsonl_path.open("w", encoding="utf-8") as jsonl, csv_path.open("w", newline="", encoding="utf-8") as csv_handle:
         writer = csv.DictWriter(csv_handle, fieldnames=SUMMARY_FIELDS, extrasaction="ignore")
         writer.writeheader()
@@ -558,8 +558,8 @@ def write_summary(output_dir: Path, rows: list[dict[str, object]]) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Benchmark pygraphdb/RocksDB against ArcadeDB graph workloads")
-    parser.add_argument("--engines", nargs="+", choices=["pygraphdb", "arcadedb"], default=["pygraphdb", "arcadedb"])
+    parser = argparse.ArgumentParser(description="Benchmark gestaltdb/RocksDB against ArcadeDB graph workloads")
+    parser.add_argument("--engines", nargs="+", choices=["gestaltdb", "arcadedb"], default=["gestaltdb", "arcadedb"])
     parser.add_argument(
         "--workloads",
         nargs="+",
@@ -574,7 +574,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--depth", type=int, default=3)
     parser.add_argument("--bfs-limit", type=int, default=100_000)
     parser.add_argument("--path-fanout-limit", type=int, default=1_000)
-    parser.add_argument("--output-dir", type=Path, default=Path("benchmark_results/arcadedb_vs_pygraphdb"))
+    parser.add_argument("--output-dir", type=Path, default=Path("benchmark_results/arcadedb_vs_gestaltdb"))
     parser.add_argument("--tmp-dir", type=Path, default=None)
     parser.add_argument("--keep-dbs", action="store_true")
     parser.add_argument("--rocksdb-parallelism", type=int, default=4)
@@ -592,7 +592,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    runners = {"pygraphdb": run_pygraphdb, "arcadedb": run_arcadedb}
+    runners = {"gestaltdb": run_gestaltdb, "arcadedb": run_arcadedb}
     rows = []
     for repetition in range(1, args.repetitions + 1):
         for workload in args.workloads:

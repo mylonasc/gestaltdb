@@ -1,11 +1,11 @@
 import pytest
 
-from pygraphdb.graphdb import Edge, Node
-from pygraphdb.cypher import QueryResult, _split_top_level_args, execute, parse, plan
-from pygraphdb.cypher_ast import MultiMatchQuery, Parameter
-from pygraphdb.cypher_plan import Expand, Limit, NodeAllScan, NodeByIdSeek, NodeLabelScan, NodePropertySeek, ProcedureCall, Project, RelationshipPropertyRangeSeek, RelationshipPropertySeek, RelationshipTypeScan
-from pygraphdb.cypher_parser import parse_literal
-from pygraphdb.cypher_runtime import QueryContext, execute_match, execute_node_scan, expand_typed
+from gestaltdb.graphdb import Edge, Node
+from gestaltdb.cypher import QueryResult, _split_top_level_args, execute, parse, plan
+from gestaltdb.cypher_ast import MultiMatchQuery, Parameter
+from gestaltdb.cypher_plan import Expand, Limit, NodeAllScan, NodeByIdSeek, NodeLabelScan, NodePropertySeek, ProcedureCall, Project, RelationshipPropertyRangeSeek, RelationshipPropertySeek, RelationshipTypeScan
+from gestaltdb.cypher_parser import parse_literal
+from gestaltdb.cypher_runtime import QueryContext, execute_match, execute_node_scan, expand_typed
 
 from .conftest import populate_typed_graph
 

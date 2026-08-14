@@ -1,4 +1,4 @@
-"""Small benchmark suite for PyGraphDB ingestion and typed sampling.
+"""Small benchmark suite for GestaltDB ingestion and typed sampling.
 
 Run examples:
 
@@ -18,10 +18,10 @@ import shutil
 import tempfile
 import time
 
-from pygraphdb.graphdb import Edge, GraphDB, Node
-from pygraphdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
-from pygraphdb.sampling import SamplingHop, SamplingPattern
-from pygraphdb.serializers import PickleSerializer
+from gestaltdb.graphdb import Edge, GraphDB, Node
+from gestaltdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
+from gestaltdb.sampling import SamplingHop, SamplingPattern
+from gestaltdb.serializers import PickleSerializer
 
 
 def timed(label, func):
@@ -82,7 +82,7 @@ def chunks(items, chunk_size):
 
 def run_benchmark(args):
     """Run ingestion and sampling benchmarks."""
-    path = tempfile.mkdtemp(prefix=f"pygraphdb_{args.backend}_benchmark_")
+    path = tempfile.mkdtemp(prefix=f"gestaltdb_{args.backend}_benchmark_")
     graph = open_graph(args, path)
     try:
         nodes = [Node(node_id=f"n{index}", properties={"group": index % 10}) for index in range(args.nodes)]
@@ -131,7 +131,7 @@ def run_benchmark(args):
 
 def main():
     """Parse arguments and run benchmarks."""
-    parser = argparse.ArgumentParser(description="Run PyGraphDB ingestion and sampling benchmarks")
+    parser = argparse.ArgumentParser(description="Run GestaltDB ingestion and sampling benchmarks")
     parser.add_argument("--backend", choices=["lmdb", "leveldb", "rocksdb"], default="lmdb")
     parser.add_argument("--nodes", type=int, default=10_000)
     parser.add_argument("--edges", type=int, default=50_000)

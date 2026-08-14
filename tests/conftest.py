@@ -4,9 +4,9 @@ import importlib.util
 
 import pytest
 
-from pygraphdb.graphdb import Edge, GraphDB, Node
-from pygraphdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
-from pygraphdb.serializers import PickleSerializer
+from gestaltdb.graphdb import Edge, GraphDB, Node
+from gestaltdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
+from gestaltdb.serializers import PickleSerializer
 
 
 @contextmanager

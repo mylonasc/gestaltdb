@@ -1,4 +1,4 @@
-from pygraphdb.graphdb import Edge, Node
+from gestaltdb.graphdb import Edge, Node
 
 from .conftest import populate_typed_graph
 

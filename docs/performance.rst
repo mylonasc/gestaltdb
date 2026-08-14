@@ -1,7 +1,7 @@
 Performance and Benchmarks
 ==========================
 
-PyGraphDB includes benchmark scripts for ingestion, traversal, sampling, RocksDB
+GestaltDB includes benchmark scripts for ingestion, traversal, sampling, RocksDB
 tuning, and an optional ArcadeDB comparison. Treat the included local results as
 directional examples, not universal claims.
 
@@ -47,7 +47,7 @@ Columnar Ingestion Benchmarks
 Columnar ingestion accepts already-serialized node and edge payloads. With
 ``PyRexStore`` and ``pyrex-rocksdb>=0.3.0a0``, RocksDB can use PyRex's native
 ``write_columnar_batch`` path. When Arrow-backed string or binary arrays are
-passed, PyGraphDB preserves those arrays through chunking and passes value
+passed, GestaltDB preserves those arrays through chunking and passes value
 columns directly to PyRex instead of materializing Python ``bytes`` for every
 stored value.
 
@@ -55,7 +55,7 @@ Structured JSON Entity Ingestion
 --------------------------------
 
 For ``JSONSerializer`` workloads, use the structured entity helpers to build
-node and edge payloads from Polars or Arrow columns. PyGraphDB uses Polars
+node and edge payloads from Polars or Arrow columns. GestaltDB uses Polars
 ``struct`` JSON encoding to serialize the payload column outside the Python
 row loop, then sends the resulting Arrow binary values through the native PyRex
 columnar write path when available.
@@ -64,9 +64,9 @@ columnar write path when available.
 
    import polars as pl
 
-   from pygraphdb.graphdb import GraphDB
-   from pygraphdb.kvstores import PyRexStore
-   from pygraphdb.serializers import JSONSerializer
+   from gestaltdb.graphdb import GraphDB
+   from gestaltdb.kvstores import PyRexStore
+   from gestaltdb.serializers import JSONSerializer
 
    graph = GraphDB(PyRexStore(path="graph_rocksdb"), JSONSerializer())
 
@@ -174,52 +174,52 @@ all graph workloads.
 ArcadeDB Comparison Benchmarks
 ------------------------------
 
-Use ``scripts/benchmark_arcadedb_vs_pygraphdb.py`` to compare PyGraphDB with the
-optional embedded ArcadeDB package. ArcadeDB is not required for normal PyGraphDB
+Use ``scripts/benchmark_arcadedb_vs_gestaltdb.py`` to compare GestaltDB with the
+optional embedded ArcadeDB package. ArcadeDB is not required for normal GestaltDB
 use.
 
-Run a PyGraphDB-only smoke test:
+Run a GestaltDB-only smoke test:
 
 .. code-block:: sh
 
-   uv run python scripts/benchmark_arcadedb_vs_pygraphdb.py \
-      --engines pygraphdb \
+   uv run python scripts/benchmark_arcadedb_vs_gestaltdb.py \
+      --engines gestaltdb \
       --nodes 10000 \
       --edges 50000 \
       --iterations 25 \
-      --output-dir benchmark_results/arcadedb_vs_pygraphdb_YYYYMMDD
+      --output-dir benchmark_results/arcadedb_vs_gestaltdb_YYYYMMDD
 
 Include embedded ArcadeDB with ``uv --with``:
 
 .. code-block:: sh
 
-   uv run --with arcadedb-embedded python scripts/benchmark_arcadedb_vs_pygraphdb.py \
-      --engines pygraphdb arcadedb \
+   uv run --with arcadedb-embedded python scripts/benchmark_arcadedb_vs_gestaltdb.py \
+      --engines gestaltdb arcadedb \
       --workloads columnar_ingest star_traversal bfs_depth typed_path rocksdb_compaction \
       --nodes 100000 \
       --edges 500000 \
       --batch-size 100000 \
       --iterations 100 \
       --repetitions 10 \
-      --output-dir benchmark_results/arcadedb_vs_pygraphdb_YYYYMMDD
+      --output-dir benchmark_results/arcadedb_vs_gestaltdb_YYYYMMDD
 
 The script writes raw rows and summary files grouped by engine and workload. If
 ``arcadedb-embedded`` is not installed, ArcadeDB rows are marked skipped and
-PyGraphDB rows still run.
+GestaltDB rows still run.
 
 Representative small local results from 2026-06-25:
 
 =================== ================= ================= ================
-Workload            PyGraphDB/RocksDB ArcadeDB embedded Relative result
+Workload            GestaltDB/RocksDB ArcadeDB embedded Relative result
 =================== ================= ================= ================
-columnar_ingest     0.0358 s          0.0506 s          PyGraphDB 1.41x faster
+columnar_ingest     0.0358 s          0.0506 s          GestaltDB 1.41x faster
 star_traversal      0.0383 s          0.0333 s          ArcadeDB 1.15x faster
-bfs_depth           0.0303 s          0.0366 s          PyGraphDB 1.21x faster
-typed_path          0.0293 s          0.0404 s          PyGraphDB 1.38x faster
-rocksdb_compaction  0.0022 s          Not applicable    PyGraphDB only
+bfs_depth           0.0303 s          0.0366 s          GestaltDB 1.21x faster
+typed_path          0.0293 s          0.0404 s          GestaltDB 1.38x faster
+rocksdb_compaction  0.0022 s          Not applicable    GestaltDB only
 =================== ================= ================= ================
 
-Interpret these results by workload. RocksDB/PyGraphDB tends to show strength on
+Interpret these results by workload. RocksDB/GestaltDB tends to show strength on
 append-only columnar ingestion and compaction-sensitive raw writes. ArcadeDB can
 be strongest when queries start from an indexed vertex and stay on native
 adjacency chains.

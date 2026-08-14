@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run PyGraphDB backend benchmarks across sizes, cores, and ingest modes.
+"""Run GestaltDB backend benchmarks across sizes, cores, and ingest modes.
 
 The runner is intentionally storage-backed: each benchmark writes to an on-disk
 temporary database, closes it, reopens it, then runs traversal workloads. This
@@ -31,10 +31,10 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from pygraphdb.graphdb import Edge, GraphDB, Node
-from pygraphdb.kvstores import LevelDBStore, PyRexStore
-from pygraphdb.sampling import SamplingHop, SamplingPattern
-from pygraphdb.serializers import (
+from gestaltdb.graphdb import Edge, GraphDB, Node
+from gestaltdb.kvstores import LevelDBStore, PyRexStore
+from gestaltdb.sampling import SamplingHop, SamplingPattern
+from gestaltdb.serializers import (
     JSONSerializer,
     MessagePackSerializer,
     PickleSerializer,
@@ -377,7 +377,7 @@ def run_one(args, backend: str, config_name: str, rocksdb_options: dict[str, obj
         return result
 
     set_thread_env(cores)
-    db_path = Path(tempfile.mkdtemp(prefix=f"pygraphdb_{backend}_{ingestion_mode}_{nodes}_", dir=args.tmp_dir))
+    db_path = Path(tempfile.mkdtemp(prefix=f"gestaltdb_{backend}_{ingestion_mode}_{nodes}_", dir=args.tmp_dir))
     graph = None
     try:
         with cpu_affinity(cores):
@@ -440,7 +440,7 @@ def write_result(output_dir: Path, result: dict[str, object]) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run PyGraphDB benchmark matrix")
+    parser = argparse.ArgumentParser(description="Run GestaltDB benchmark matrix")
     parser.add_argument("--backends", nargs="+", choices=["leveldb", "rocksdb"], default=["leveldb", "rocksdb"])
     parser.add_argument("--sizes", nargs="+", type=int, default=[10_000, 100_000, 1_000_000])
     parser.add_argument("--cores", nargs="+", type=int, default=[1, 2, 4])

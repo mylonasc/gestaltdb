@@ -1,8 +1,8 @@
 import pytest
 
-from pygraphdb.graphdb import Edge, GraphDB, Node
-from pygraphdb.kvstores import LMDBStore
-from pygraphdb.serializers import JSONSerializer, MessagePackSerializer, PickleSerializer, ProtobufSerializer, Serializer
+from gestaltdb.graphdb import Edge, GraphDB, Node
+from gestaltdb.kvstores import LMDBStore
+from gestaltdb.serializers import JSONSerializer, MessagePackSerializer, PickleSerializer, ProtobufSerializer, Serializer
 from .conftest import blocked_import
 
 

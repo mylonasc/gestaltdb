@@ -26,16 +26,16 @@ Python 3.12 is a safe default.
    uv venv --python 3.12
    uv sync --extra leveldb --extra lmdb
    uv add --dev notebook ipykernel
-   .venv/bin/python -m ipykernel install --user --name pygraphdb-py312 --display-name "PyGraphDB Python 3.12"
+   .venv/bin/python -m ipykernel install --user --name gestaltdb-py312 --display-name "GestaltDB Python 3.12"
 
 Minimal Notebook Cell
 ---------------------
 
 .. code-block:: python
 
-   from pygraphdb.graphdb import Edge, GraphDB, Node
-   from pygraphdb.kvstores import LevelDBStore
-   from pygraphdb.serializers import PickleSerializer
+   from gestaltdb.graphdb import Edge, GraphDB, Node
+   from gestaltdb.kvstores import LevelDBStore
+   from gestaltdb.serializers import PickleSerializer
 
    graph_db = GraphDB(LevelDBStore("/tmp/leveldb_notebook_example"), PickleSerializer())
 
@@ -73,4 +73,4 @@ check the kernel interpreter:
    print(sys.version)
 
 If it is Python 3.14 or a free-threaded build, switch the notebook to a Python
-3.12 kernel and install ``pygraphdb[leveldb]`` there.
+3.12 kernel and install ``gestaltdb[leveldb]`` there.

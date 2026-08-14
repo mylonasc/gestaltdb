@@ -1,4 +1,4 @@
-"""Parser for the current PyGraphDB Cypher subset.
+"""Parser for the current GestaltDB Cypher subset.
 
 This module intentionally keeps the accepted language small while separating
 query syntax from execution. It is the migration point for a fuller Cypher

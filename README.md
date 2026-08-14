@@ -1,10 +1,11 @@
-# PyGraphDB
+# GestaltDB
 
-<img src="https://raw.githubusercontent.com/mylonasc/pygraphdb/refs/heads/main/assets/coverage_badge.svg">
+<img src="https://raw.githubusercontent.com/mylonasc/gestaltdb/refs/heads/main/assets/coverage_badge.svg">
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://mylonasc.github.io/gestaltdb/)
 
-PyGraphDB is a pure Python graph database toolkit for attributed graphs. It stores nodes, edges, labels, typed adjacency records, and property indexes on embedded key-value backends.
+GestaltDB is a pure Python graph database toolkit for attributed graphs. It stores nodes, edges, labels, typed adjacency records, and property indexes on embedded key-value backends.
 
-Documentation: https://mylonasc.github.io/pygraphdb/
+Documentation: https://mylonasc.github.io/gestaltdb/
 
 ## Install
 
@@ -17,13 +18,13 @@ uv sync
 Install into another project:
 
 ```sh
-uv add /path/to/pygraphdb
+uv add /path/to/gestaltdb
 ```
 
 With pip:
 
 ```sh
-python -m pip install /path/to/pygraphdb
+python -m pip install /path/to/gestaltdb
 ```
 
 Optional extras include `lmdb`, `leveldb`, `rocksdb`, `arrow`, `polars`, `fast-ingest`, `msgpack`, `protobuf`, `bloom`, `docs`, `dev`, and `all`.
@@ -31,9 +32,9 @@ Optional extras include `lmdb`, `leveldb`, `rocksdb`, `arrow`, `polars`, `fast-i
 ## Quick Example
 
 ```python
-from pygraphdb.graphdb import Edge, GraphDB, Node
-from pygraphdb.kvstores import LMDBStore
-from pygraphdb.serializers import PickleSerializer
+from gestaltdb.graphdb import Edge, GraphDB, Node
+from gestaltdb.kvstores import LMDBStore
+from gestaltdb.serializers import PickleSerializer
 
 graph = GraphDB(LMDBStore(path="example_lmdb"), PickleSerializer())
 
@@ -64,3 +65,10 @@ graph.close()
 - Typed path and subgraph sampling.
 
 See the full documentation for backend selection, indexing, Cypher syntax, ingestion, sampling, and benchmarks.
+
+<details>
+<summary>Name origin</summary>
+
+The name GestaltDB is inspired by Gestalt psychology and the idea that the whole is something more than its parts.
+
+</details>

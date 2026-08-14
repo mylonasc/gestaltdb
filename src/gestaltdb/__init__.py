@@ -1,4 +1,4 @@
-"""PyGraphDB package."""
+"""GestaltDB package."""
 
 from .sampling import SamplingHop, SamplingPattern
 from .ingestion import EdgeList, NodeList

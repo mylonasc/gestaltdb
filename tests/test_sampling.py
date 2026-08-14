@@ -2,9 +2,9 @@ import random
 
 import pytest
 
-from pygraphdb.graphdb import Edge, Node
-from pygraphdb.sampling import SamplingHop, SamplingPattern
-from pygraphdb.sampling import as_sampling_pattern
+from gestaltdb.graphdb import Edge, Node
+from gestaltdb.sampling import SamplingHop, SamplingPattern
+from gestaltdb.sampling import as_sampling_pattern
 
 from .conftest import populate_typed_graph
 

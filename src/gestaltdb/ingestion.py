@@ -1,4 +1,4 @@
-"""Columnar ingestion containers for PyGraphDB."""
+"""Columnar ingestion containers for GestaltDB."""
 
 from __future__ import annotations
 

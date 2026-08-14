@@ -28,7 +28,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from pygraphdb.kvstores import LevelDBStore, PyRexStore
+from gestaltdb.kvstores import LevelDBStore, PyRexStore
 
 
 CSV_FIELDS = [
@@ -137,7 +137,7 @@ def run_config(config: str, args: argparse.Namespace) -> list[dict[str, object]]
     backend, options = config_options(config, args)
     if backend == "rocksdb" and args.disable_wal:
         options["disable_wal"] = True
-    path = Path(tempfile.mkdtemp(prefix=f"pygraphdb_compaction_{config}_", dir=args.tmp_dir))
+    path = Path(tempfile.mkdtemp(prefix=f"gestaltdb_compaction_{config}_", dir=args.tmp_dir))
     rows: list[dict[str, object]] = []
     store = None
     close_seconds = 0.0

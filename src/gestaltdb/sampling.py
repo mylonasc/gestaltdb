@@ -1,4 +1,4 @@
-"""Typed sampling configuration objects for PyGraphDB.
+"""Typed sampling configuration objects for GestaltDB.
 
 The graph sampling APIs accept these objects as a structured alternative to
 plain dictionaries while preserving dict compatibility.

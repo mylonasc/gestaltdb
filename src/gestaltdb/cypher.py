@@ -1,4 +1,4 @@
-"""Minimal read-only Cypher support for PyGraphDB.
+"""Minimal read-only Cypher support for GestaltDB.
 
 The supported subset maps directly to existing typed adjacency and sampling APIs:
 

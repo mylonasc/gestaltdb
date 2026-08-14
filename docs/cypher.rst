@@ -1,9 +1,9 @@
 Cypher Queries
 ==============
 
-PyGraphDB exposes a read-only Cypher subset through
+GestaltDB exposes a read-only Cypher subset through
 ``GraphDB.query(cypher, parameters=None)``. It is designed around the features
-PyGraphDB can execute efficiently today: indexed node scans, typed relationship
+GestaltDB can execute efficiently today: indexed node scans, typed relationship
 expansion, filtering, ordering, and chained ``MATCH`` clauses.
 
 Relationship types come from ``edge.properties["type"]``. Node labels are stored
@@ -114,7 +114,7 @@ that it refers to the same entity.
 Sampling Procedure
 ------------------
 
-PyGraphDB also exposes typed path sampling through a project-specific procedure.
+GestaltDB also exposes typed path sampling through a project-specific procedure.
 This is not standard openCypher syntax.
 
 .. code-block:: python

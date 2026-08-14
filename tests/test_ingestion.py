@@ -2,11 +2,11 @@ import importlib.util
 
 import pytest
 
-from pygraphdb.ingestion import _column_to_list
-from pygraphdb.graphdb import Edge, GraphDB, Node
-from pygraphdb.ingestion import EdgeList, NodeList
-from pygraphdb.kvstores import LMDBStore, PyRexStore
-from pygraphdb.serializers import JSONSerializer, PickleSerializer
+from gestaltdb.ingestion import _column_to_list
+from gestaltdb.graphdb import Edge, GraphDB, Node
+from gestaltdb.ingestion import EdgeList, NodeList
+from gestaltdb.kvstores import LMDBStore, PyRexStore
+from gestaltdb.serializers import JSONSerializer, PickleSerializer
 
 
 def test_node_list_requires_serialized_values():

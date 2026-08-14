@@ -1,7 +1,7 @@
 Storage Backends
 ================
 
-PyGraphDB separates graph logic from storage. ``GraphDB`` receives a key-value
+GestaltDB separates graph logic from storage. ``GraphDB`` receives a key-value
 store instance and a serializer instance.
 
 LMDB Backend
@@ -11,9 +11,9 @@ Use ``LMDBStore`` for a mature embedded backend with named sub-databases.
 
 .. code-block:: python
 
-   from pygraphdb.graphdb import GraphDB
-   from pygraphdb.kvstores import LMDBStore
-   from pygraphdb.serializers import PickleSerializer
+   from gestaltdb.graphdb import GraphDB
+   from gestaltdb.kvstores import LMDBStore
+   from gestaltdb.serializers import PickleSerializer
 
    store = LMDBStore(path="graph_lmdb", map_size=2**30)
    graph_db = GraphDB(store, PickleSerializer())
@@ -28,16 +28,16 @@ Use ``LevelDBStore`` when you want LevelDB through ``plyvel``.
 
 .. code-block:: python
 
-   from pygraphdb.graphdb import GraphDB
-   from pygraphdb.kvstores import LevelDBStore
-   from pygraphdb.serializers import PickleSerializer
+   from gestaltdb.graphdb import GraphDB
+   from gestaltdb.kvstores import LevelDBStore
+   from gestaltdb.serializers import PickleSerializer
 
    store = LevelDBStore(path="graph_leveldb")
    graph_db = GraphDB(store, PickleSerializer())
 
 ``plyvel`` requires compatible CPython wheels or local LevelDB build tooling. If
 installation fails on Python 3.14 or a free-threaded interpreter, create a Python
-3.12 environment and install ``pygraphdb[leveldb]`` there.
+3.12 environment and install ``gestaltdb[leveldb]`` there.
 
 RocksDB Backend
 ---------------
@@ -48,9 +48,9 @@ several RocksDB tuning knobs.
 
 .. code-block:: python
 
-   from pygraphdb.graphdb import GraphDB
-   from pygraphdb.kvstores import PyRexStore
-   from pygraphdb.serializers import PickleSerializer
+   from gestaltdb.graphdb import GraphDB
+   from gestaltdb.kvstores import PyRexStore
+   from gestaltdb.serializers import PickleSerializer
 
    store = PyRexStore(
        path="graph_rocksdb",
@@ -69,7 +69,7 @@ native ``write_columnar_batch`` API through ``GraphDB.ingest_nodes_arrow`` and
 ``GraphDB.ingest_edges_arrow``. Serialized ``node_value`` and ``edge_value``
 columns backed by Arrow binary arrays are passed directly to PyRex's native
 batch writer where possible. The native path still constructs RocksDB keys in
-PyGraphDB, but avoids Python value materialization for Arrow-backed value
+GestaltDB, but avoids Python value materialization for Arrow-backed value
 columns.
 
 For JSON-compatible payloads, ``GraphDB.ingest_nodes_polars_entities`` and
@@ -80,9 +80,9 @@ from structured Polars columns before using the same columnar write path:
 
    import polars as pl
 
-   from pygraphdb.graphdb import GraphDB
-   from pygraphdb.kvstores import PyRexStore
-   from pygraphdb.serializers import JSONSerializer
+   from gestaltdb.graphdb import GraphDB
+   from gestaltdb.kvstores import PyRexStore
+   from gestaltdb.serializers import JSONSerializer
 
    graph_db = GraphDB(PyRexStore(path="graph_rocksdb"), JSONSerializer())
    graph_db.ingest_nodes_polars_entities(
@@ -143,9 +143,9 @@ Backend Selection Pattern
 
    from pathlib import Path
 
-   from pygraphdb.graphdb import GraphDB
-   from pygraphdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
-   from pygraphdb.serializers import PickleSerializer
+   from gestaltdb.graphdb import GraphDB
+   from gestaltdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
+   from gestaltdb.serializers import PickleSerializer
 
    def open_graph(path: str, backend: str = "lmdb") -> GraphDB:
        Path(path).parent.mkdir(parents=True, exist_ok=True)

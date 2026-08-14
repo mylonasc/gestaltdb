@@ -2,8 +2,8 @@ import datetime
 
 import pytest
 
-from pygraphdb.graphdb import Edge, GraphDB, Node, TimeIndexedEdge, bytes_to_datetime, datetime_to_bytes
-from pygraphdb.serializers import PickleSerializer
+from gestaltdb.graphdb import Edge, GraphDB, Node, TimeIndexedEdge, bytes_to_datetime, datetime_to_bytes
+from gestaltdb.serializers import PickleSerializer
 
 from .conftest import BACKEND_PARAMS
 

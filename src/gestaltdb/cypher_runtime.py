@@ -1,4 +1,4 @@
-"""Streaming runtime operators for the PyGraphDB Cypher subset."""
+"""Streaming runtime operators for the GestaltDB Cypher subset."""
 
 from __future__ import annotations
 

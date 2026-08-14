@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a small RocksDB tuning campaign for PyGraphDB.
+"""Run a small RocksDB tuning campaign for GestaltDB.
 
 The script benchmarks LevelDB and a matrix of PyRex/RocksDB settings using the
 same public ``benchmarks.py`` workload. It writes machine-readable JSON and CSV
@@ -160,7 +160,7 @@ def write_results(output_dir: Path, results: list[dict[str, object]]) -> None:
 
 def main() -> None:
     """Run the tuning campaign."""
-    parser = argparse.ArgumentParser(description="Tune PyRex/RocksDB for PyGraphDB workloads")
+    parser = argparse.ArgumentParser(description="Tune PyRex/RocksDB for GestaltDB workloads")
     parser.add_argument("--nodes", type=int, default=20_000)
     parser.add_argument("--edges", type=int, default=100_000)
     parser.add_argument("--batch-size", type=int, default=10_000)

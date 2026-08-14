@@ -1183,7 +1183,7 @@ wheels = [
 ]
 
 [[package]]
-name = "pygraphdb"
+name = "gestaltdb"
 version = "0.3.0a0"
 source = { editable = "." }
 dependencies = [

@@ -1,7 +1,7 @@
 import pytest
 
-from pygraphdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
-from pygraphdb.serializers import MessagePackSerializer, ProtobufSerializer
+from gestaltdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
+from gestaltdb.serializers import MessagePackSerializer, ProtobufSerializer
 
 from .conftest import blocked_import
 

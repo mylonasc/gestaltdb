@@ -1,4 +1,4 @@
-"""Logical planning for the PyGraphDB Cypher subset."""
+"""Logical planning for the GestaltDB Cypher subset."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""AST objects for the PyGraphDB Cypher subset."""
+"""AST objects for the GestaltDB Cypher subset."""
 
 from __future__ import annotations
 

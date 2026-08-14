@@ -58,7 +58,7 @@ def _property_value_to_index_bytes(value) -> bytes:
     """
     def normalize(item):
         if isinstance(item, bytes):
-            return {"__pygraphdb_type__": "bytes", "value": base64.b64encode(item).decode("ascii")}
+            return {"__gestaltdb_type__": "bytes", "value": base64.b64encode(item).decode("ascii")}
         if isinstance(item, tuple):
             return [normalize(value) for value in item]
         if isinstance(item, list):
@@ -330,7 +330,7 @@ class GraphEntityDictSerializer:
         serializer: Serializer used for the final bytes conversion.
 
     Examples:
-        >>> from pygraphdb.serializers import JSONSerializer
+        >>> from gestaltdb.serializers import JSONSerializer
         >>> s = GraphEntityDictSerializer(JSONSerializer())
         >>> s.deserialize(s.serialize(Node(node_id="n1"), "Node"), "Node").get_id
         'n1'
@@ -367,7 +367,7 @@ class GraphEntityDictSerializer:
             Serialized bytes.
 
         Examples:
-            >>> from pygraphdb.serializers import PickleSerializer
+            >>> from gestaltdb.serializers import PickleSerializer
             >>> GraphEntityDictSerializer(PickleSerializer()).serialize(Node("n1"), "Node")[:1]
             b'\\x80'
         """
@@ -406,8 +406,8 @@ class GraphDB:
                 to maintain for future writes.
 
         Examples:
-            >>> from pygraphdb.kvstores import LMDBStore
-            >>> from pygraphdb.serializers import PickleSerializer
+            >>> from gestaltdb.kvstores import LMDBStore
+            >>> from gestaltdb.serializers import PickleSerializer
             >>> graph = GraphDB(LMDBStore(path="/tmp/example"), PickleSerializer(), indexed_node_properties=["name"])  # doctest: +SKIP
         """
         self.store = store
@@ -1297,7 +1297,7 @@ class GraphDB:
             List of dictionaries with ``seed`` and sampled ``path`` records.
 
         Examples:
-            >>> from pygraphdb.sampling import SamplingHop, SamplingPattern
+            >>> from gestaltdb.sampling import SamplingHop, SamplingPattern
             >>> pattern = SamplingPattern([SamplingHop("drug-to-protein", sample_size=2)])
             >>> graph_db.sample_typed_paths(["drug-1"], pattern)  # doctest: +SKIP
         """
@@ -2215,12 +2215,12 @@ class GraphDB:
         """Execute a supported read-only Cypher query.
 
         Args:
-            cypher: Query text in the supported PyGraphDB Cypher subset.
+            cypher: Query text in the supported GestaltDB Cypher subset.
             parameters: Optional Cypher parameter values keyed without the
                 leading ``$``.
 
         Returns:
-            ``pygraphdb.cypher.QueryResult`` containing projected records.
+            ``gestaltdb.cypher.QueryResult`` containing projected records.
 
         Examples:
             >>> graph_db.query('MATCH (n:Drug) RETURN n')  # doctest: +SKIP

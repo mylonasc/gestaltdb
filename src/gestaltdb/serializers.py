@@ -137,7 +137,7 @@ class ProtobufSerializer(Serializer):
     values before encoding so Python dictionaries round-trip without losing them.
     """
 
-    _TYPE_KEY = "__pygraphdb_type__"
+    _TYPE_KEY = "__gestaltdb_type__"
     _VALUE_KEY = "value"
 
     def serialize(self, obj: dict) -> bytes:
