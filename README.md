@@ -1,7 +1,6 @@
 # PyGraphDB
 
-<a href="https://pypi.org/project/pygraphdb/"><img src="https://img.shields.io/pypi/v/pygraphdb.svg" alt="PyPI version"></a>
-<img src="https://raw.githubusercontent.com/mylonasc/pygraphdb/refs/heads/main/assets/coverage_badge.svg" alt="Coverage">
+<img src="https://raw.githubusercontent.com/mylonasc/pygraphdb/refs/heads/main/assets/coverage_badge.svg">
 
 PyGraphDB is a pure Python graph database toolkit for attributed graphs. It stores nodes, edges, labels, typed adjacency records, and property indexes on embedded key-value backends.
 
