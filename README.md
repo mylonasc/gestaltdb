@@ -1,7 +1,7 @@
 # GestaltDB
 
-<img src="https://raw.githubusercontent.com/mylonasc/gestaltdb/refs/heads/main/assets/coverage_badge.svg">
-[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://mylonasc.github.io/gestaltdb/)
+![Coverage](https://raw.githubusercontent.com/mylonasc/gestaltdb/refs/heads/main/assets/coverage_badge.svg)
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://mylonasc.github.io/gestaltdb/)
 
 GestaltDB is a pure Python graph database toolkit for attributed graphs. It stores nodes, edges, labels, typed adjacency records, and property indexes on embedded key-value backends.
 
