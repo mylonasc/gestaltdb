@@ -12,6 +12,17 @@ def test_typed_adjacency_filters_type_and_direction(graph_db):
     assert graph_db.neighbors_by_edge_type("drug-1", "drug-to-disease", direction="out") == [b"disease-1"]
 
 
+def test_typed_adjacency_any_deduplicates_self_loops(graph_db):
+    graph_db.put_node(Node(node_id="n1"))
+    graph_db.put_edge(Edge(edge_id="self", source="n1", target="n1", properties={"type": "self"}))
+
+    records = graph_db.get_typed_adjacency("n1", "self", direction="any")
+
+    assert len(records) == 1
+    assert records[0]["edge_id"] == b"self"
+    assert records[0]["neighbor_id"] == b"n1"
+
+
 def test_deleting_typed_edge_removes_typed_adjacency(graph_db):
     populate_typed_graph(graph_db)
 

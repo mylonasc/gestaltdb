@@ -1400,8 +1400,12 @@ class GraphDB:
 
         node_id_bytes = self.node_key_to_bytes(node_id)
         directions = ['out', 'in'] if direction == 'any' else [direction]
+        seen_edge_ids = set()
         for current_direction in directions:
             for edge_id, neighbor_id in self.store.iter_typed_adjacency(node_id_bytes, edge_type, current_direction):
+                if direction == 'any' and edge_id in seen_edge_ids:
+                    continue
+                seen_edge_ids.add(edge_id)
                 if current_direction == 'out':
                     source_id = node_id_bytes
                     target_id = neighbor_id
@@ -2172,14 +2176,17 @@ class GraphDB:
         if return_raw:
             return adj
 
-        if direction == 'forward':
-            return adj.get('target',[]) 
-        if direction == 'backward':
+        if direction in {'forward', 'out'}:
             return adj.get('source',[])
-        if direction == 'any' : 
-            _s = adj.get('source',[])
-            _t = adj.get('target',[])
-            return list(set(_s).union(set(_t)))
+        if direction in {'backward', 'in'}:
+            return adj.get('target',[])
+        if direction == 'any' :
+            edge_ids = []
+            for edge_id in adj.get('source',[]) + adj.get('target',[]):
+                if edge_id not in edge_ids:
+                    edge_ids.append(edge_id)
+            return edge_ids
+        raise ValueError("direction must be 'forward', 'backward', 'out', 'in', or 'any'")
         
     def put_adjacency_list(self, node_id: str, edges_list: list[str]):
         """Stores the adjacency list for node_id."""
@@ -2258,11 +2265,14 @@ class GraphDB:
     # -----------------------
     # BFS Example
     # -----------------------
-    def bfs(self, start_node_id: bytes, direction = 'any', edge_key_serializer = lambda x : x.encode('utf-8'), node_key_serializer = lambda x : x.encode('utf-8')) -> list[str]:
+    def bfs(self, start_node_id: bytes, direction = 'any', edge_key_serializer = None, node_key_serializer = None) -> list[str]:
         """
         Returns a list of node_ids in BFS order starting from `start_node_id`.
         Demonstrates how adjacency is used for graph traversal.
         """
+        edge_key_serializer = edge_key_serializer or self.edge_key_to_bytes
+        node_key_serializer = node_key_serializer or self.node_key_to_bytes
+        start_node_id = self.node_key_to_bytes(start_node_id)
         visited = set()
         queue = [start_node_id]
         result = []

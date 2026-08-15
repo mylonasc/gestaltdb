@@ -143,6 +143,37 @@ def test_bfs_simple(graph_db):
     assert len(bfs_result) == 3
 
 
+def test_legacy_adjacency_direction_semantics(graph_db):
+    graph_db.put_node(Node(node_id="source"))
+    graph_db.put_node(Node(node_id="target"))
+    graph_db.put_edge(Edge(edge_id="e1", source="source", target="target"))
+
+    assert graph_db.get_adjacency_list(b"source", direction="forward") == ["e1"]
+    assert graph_db.get_adjacency_list(b"source", direction="out") == ["e1"]
+    assert graph_db.get_adjacency_list(b"source", direction="backward") == []
+    assert graph_db.get_adjacency_list(b"target", direction="backward") == ["e1"]
+    assert graph_db.get_adjacency_list(b"target", direction="in") == ["e1"]
+    assert graph_db.get_adjacency_list(b"target", direction="forward") == []
+
+
+def test_bfs_direction_semantics(graph_db):
+    graph_db.put_node(Node(node_id="source"))
+    graph_db.put_node(Node(node_id="target"))
+    graph_db.put_edge(Edge(edge_id="e1", source="source", target="target"))
+
+    assert graph_db.bfs(b"source", direction="forward") == [b"source", b"target"]
+    assert graph_db.bfs(b"target", direction="forward") == [b"target"]
+    assert graph_db.bfs(b"target", direction="backward") == [b"target", b"source"]
+
+
+def test_bfs_handles_bulk_adjacency_byte_edge_ids(graph_db):
+    graph_db.put_node(Node(node_id="n1"))
+    graph_db.put_node(Node(node_id="n2"))
+    graph_db.put_edges_bulk([Edge(edge_id="e1", source="n1", target="n2")])
+
+    assert graph_db.bfs(b"n1") == [b"n1", b"n2"]
+
+
 def test_bulk_nodes(graph_db):
     nodes = [Node(properties={"name": f"User{i}"}) for i in range(5)]
 
