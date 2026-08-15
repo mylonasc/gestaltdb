@@ -310,6 +310,162 @@ append-only columnar ingestion and compaction-sensitive raw writes. ArcadeDB can
 be strongest when queries start from an indexed vertex and stay on native
 adjacency chains.
 
+External Graph Database Benchmarks
+----------------------------------
+
+Use ``scripts/benchmark_external_graphdbs.py`` for a unified benchmark against
+GestaltDB/RocksDB, Neo4j, Memgraph, and ArcadeDB. The runner starts disposable
+Neo4j and Memgraph Docker containers by default, waits for Bolt availability,
+loads the same deterministic synthetic graph into each engine, runs the selected
+traversal/sampling workload, and writes raw plus summary CSV/JSONL outputs.
+ArcadeDB is exercised through its embedded Python API package.
+
+The external benchmark intentionally reports both ingestion and query phases. For
+query workloads, each engine loads a fresh database first so traversal results are
+measured on the same graph shape. GestaltDB closes and reopens its RocksDB-backed
+store before counting and querying, so the traversal phase is not reading only
+Python-side objects left alive by ingestion. The summary files include
+``actual_nodes``, ``actual_edges``, and ``count_status`` validation columns; rows
+should only be compared when ``count_status`` is ``ok``.
+
+The workloads are:
+
+- ``ingest``: load deterministic ``Node`` vertices and typed ``RelA``/``RelB``/
+  ``RelC`` directed edges.
+- ``neighbors``: for the first ``iterations`` node IDs, count outgoing ``RelA``
+  neighbors.
+- ``sample_neighbors``: reservoir-sample outgoing ``RelA`` neighbors with a fixed
+  sample size and seed.
+- ``bfs_depth``: client-side typed BFS from ``n0`` over ``RelA``/``RelB``/
+  ``RelC`` up to the configured depth, excluding the seed from the returned
+  count.
+- ``typed_path``: count exact two-hop ``RelA`` then ``RelB`` traversals from the
+  first ``iterations`` seeds, capped by ``path_fanout_limit`` per seed.
+
+Install the optional benchmark dependencies:
+
+.. code-block:: sh
+
+   uv sync --extra fast-ingest --extra external-bench
+
+Run a small smoke benchmark with container-managed Neo4j and Memgraph:
+
+.. code-block:: sh
+
+   uv run python scripts/benchmark_external_graphdbs.py \
+      --engines gestaltdb neo4j memgraph arcadedb \
+      --nodes 1000 \
+      --edges 5000 \
+      --batch-size 1000 \
+      --iterations 10 \
+      --repetitions 1 \
+      --output-dir benchmark_results/external_graphdbs_smoke
+
+Run a larger end-to-end comparison:
+
+.. code-block:: sh
+
+   uv run python scripts/benchmark_external_graphdbs.py \
+      --engines gestaltdb neo4j memgraph arcadedb \
+      --workloads ingest neighbors sample_neighbors bfs_depth typed_path \
+      --nodes 100000 \
+      --edges 500000 \
+      --batch-size 10000 \
+      --iterations 100 \
+      --repetitions 3 \
+      --output-dir benchmark_results/external_graphdbs_YYYYMMDD
+
+Corrected Aligned Large Results
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A local corrected aligned run on 2026-08-15 used 100,000 nodes, 500,000 edges,
+batch size 10,000, 100 traversal seeds, sample size 5, depth 3, and three
+repetitions. Neo4j used ``neo4j:5-community`` through the official Python Bolt
+driver. Memgraph used ``memgraph/memgraph:latest`` through the same Bolt driver.
+ArcadeDB used ``arcadedb-embedded``. GestaltDB used RocksDB/PyRex, JSON payloads,
+Arrow/Polars entity ingestion, deferred secondary-index maintenance, and a
+close/reopen before validation and querying. All corrected rows validated exactly
+100,000 nodes and 500,000 edges.
+
+Mean ingestion phase:
+
+================== =============== ===================== ====================
+Engine             Ingest seconds  Edge ingest rate      Relative to GestaltDB
+================== =============== ===================== ====================
+GestaltDB/RocksDB  2.33 s          214,227 edges/s       1.00x
+ArcadeDB embedded  5.66 s          88,561 edges/s        2.42x slower
+Memgraph           8.61 s          58,098 edges/s        3.69x slower
+Neo4j              13.45 s         37,410 edges/s        5.76x slower
+================== =============== ===================== ====================
+
+Mean query phase on the already-loaded graph:
+
+================ ================ =============== =============== =============== ==================
+Workload         Result count     GestaltDB       ArcadeDB        Memgraph        Neo4j
+================ ================ =============== =============== =============== ==================
+neighbors        167              0.00128 s       0.0176 s        0.0188 s        0.160 s
+sample_neighbors 167              0.00128 s       0.0298 s        0.0210 s        0.166 s
+bfs_depth        3                0.000139 s      0.00383 s       0.00569 s       0.107 s
+typed_path       271              0.00283 s       0.0251 s        0.0256 s        0.190 s
+================ ================ =============== =============== =============== ==================
+
+Relative query phase compared with GestaltDB/RocksDB:
+
+================ =============== =============== ==================
+Workload         ArcadeDB        Memgraph        Neo4j
+================ =============== =============== ==================
+neighbors        13.8x slower    14.7x slower    125x slower
+sample_neighbors 23.3x slower    16.4x slower    130x slower
+bfs_depth        27.5x slower    40.9x slower    767x slower
+typed_path       8.87x slower    9.06x slower    67.0x slower
+================ =============== =============== ==================
+
+Interpretation:
+
+- GestaltDB is fastest on this synthetic append-only workload because it writes
+  directly to an embedded RocksDB key-value layout using columnar batches. The
+  benchmark does not pay a client/server protocol cost for ingestion, and the
+  typed adjacency records used by traversal are written as sorted key prefixes.
+- ArcadeDB embedded also avoids Bolt/network overhead, but its graph batch loader
+  maintains a native graph record layout and then builds a vertex ID index. On
+  this graph shape it loaded about 2.4x slower than GestaltDB but faster than the
+  Bolt-backed servers.
+- Memgraph and Neo4j ingest through batched Cypher over Bolt. That path is a fair
+  Python API path, but it includes client/server round trips, Cypher planning and
+  execution, node lookup by indexed ``id``, and relationship creation in the
+  server. Memgraph was about 1.56x faster than Neo4j for ingestion in this run.
+- Query times favor GestaltDB strongly because each traversal is a small number
+  of direct embedded typed-adjacency prefix scans. Neo4j and Memgraph execute one
+  Bolt query per seed or BFS frontier expansion in this benchmark. That measures
+  realistic Python-driver use for many small traversals, but it also amplifies
+  protocol and query-execution overhead relative to embedded APIs.
+- The BFS workload has a very small reachable set on this deterministic graph
+  shape. Its absolute query times are therefore dominated by per-query overhead;
+  use larger or denser topologies before generalizing BFS ratios.
+- The ``sample_neighbors`` workload uses reservoir sampling for GestaltDB and a
+  Python-side reservoir sampler over streamed neighbor rows for the other engines.
+  This aligns semantics, but different drivers expose rows with different
+  overheads.
+- The table reports ``ingest_seconds`` and ``query_seconds``. GestaltDB's
+  ``reopen_seconds`` averaged roughly 0.48 s and count validation averaged roughly
+  0.32 s; those are recorded separately in the summary file and are not included
+  in ``total_seconds``.
+
+Useful container options:
+
+- Use ``--no-containers`` to connect to already-running Neo4j/Memgraph services.
+- Use ``--neo4j-uri``, ``--neo4j-user``, ``--neo4j-password``, and
+  ``--memgraph-uri`` to override connection settings.
+- Use ``--neo4j-bolt-port`` and ``--memgraph-bolt-port`` if local ports ``7687``
+  or ``7688`` are already in use.
+- Use ``--keep-containers`` only when debugging container startup or database
+  state. The default is to stop containers after each run.
+
+The external runner records skipped rows rather than aborting when Docker, a
+Python driver, or an optional backend is unavailable. For fairer large-result
+comparisons, run on an otherwise idle host and use the generated summary files
+instead of terminal output.
+
 Benchmark Caveats
 -----------------
 
