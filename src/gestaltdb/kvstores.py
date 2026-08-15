@@ -231,6 +231,10 @@ class KVStore:
         """Retrieve multiple serialized edges by key."""
         raise NotImplementedError
 
+    def delete_adjacency(self, node_id: bytes):
+        """Delete a serialized adjacency list for a node."""
+        raise NotImplementedError
+
     def put_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
         """Store typed adjacency records for an edge."""
         raise NotImplementedError
@@ -608,6 +612,11 @@ class LMDBStore(KVStore):
                     results[node_id] = data
         return results
 
+    def delete_adjacency(self, node_id: bytes):
+        """Delete a serialized adjacency list for a node."""
+        with self.env.begin(write=True, db=self.adj_db) as txn:
+            txn.delete(node_id)
+
     # ----- Typed Adjacency Methods -----
     def put_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
         """Store forward and reverse typed adjacency records."""
@@ -907,6 +916,10 @@ class LevelDBStore(KVStore):
             if data is not None:
                 results[node_id] = data
         return results
+
+    def delete_adjacency(self, node_id: bytes):
+        """Delete a serialized adjacency list for a node."""
+        self.db_adj.delete(node_id)
 
     # ----- Typed Adjacency Methods -----
     def put_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
@@ -1220,6 +1233,10 @@ class PyRexStore(KVStore):
             if data is not None:
                 results[node_id] = data
         return results
+
+    def delete_adjacency(self, node_id: bytes):
+        """Delete a serialized adjacency list for a node."""
+        self.db.delete(self._key(b"A", node_id), self.write_options)
 
     def put_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
         """Store forward and reverse typed adjacency records."""

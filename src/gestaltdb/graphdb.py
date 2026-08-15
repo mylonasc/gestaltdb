@@ -568,9 +568,22 @@ class GraphDB:
         Examples:
             >>> graph_db.delete_node(b"drug-1")  # doctest: +SKIP
         """
+        node_id = self.node_key_to_bytes(node_id)
+        incident_edge_ids = []
+        for edge_id in self.store.get_edge_keys_generator():
+            edge = self.get_edge(edge_id)
+            if edge is None:
+                continue
+            if self.node_key_to_bytes(edge.source) == node_id or self.node_key_to_bytes(edge.target) == node_id:
+                incident_edge_ids.append(edge_id)
+
+        for edge_id in incident_edge_ids:
+            self.delete_edge(edge_id)
+
         old_node = self.get_node(node_id)
         if old_node is not None:
             self._delete_node_indexes(old_node)
+        self.store.delete_adjacency(node_id)
         self.store.delete_node(node_id)
 
     def _put_node_indexes(self, node: Node):
@@ -969,6 +982,7 @@ class GraphDB:
         if old_edge is not None:
             self._delete_typed_adjacency_for_edge(old_edge)
             self._delete_edge_indexes(old_edge)
+            self._remove_edge_from_endpoint_adjacencies(old_edge)
         value = self.entity_serializer.serialize(edge,'Edge')
         self.store.put_edge(edge.get_id_bytes, value)
         self._put_typed_adjacency_for_edge(edge)
@@ -986,7 +1000,8 @@ class GraphDB:
                     self.store.put_adjacency(io_node_key, serialized_adj_list)
                 else:
                     adj_edge_list = self.entity_serializer.deserialize(adj_list,'AdjacencyList')
-                    adj_edge_list.setdefault(dict_flag, []).append(edge.get_id)
+                    if edge.get_id not in adj_edge_list.setdefault(dict_flag, []):
+                        adj_edge_list[dict_flag].append(edge.get_id)
                     self.store.put_adjacency(io_node_key, self.serializer.serialize(adj_edge_list))
 
     def _put_typed_adjacency_for_edge(self, edge: Edge):
@@ -2186,18 +2201,35 @@ class GraphDB:
 
         self._delete_typed_adjacency_for_edge(e)
         self._delete_edge_indexes(e)
-
-        # Remove edge_id from adjacency of source
-        _source_edge_bytes = edge_key_serializer(e.source)
-        self._remove_edge_from_adjacency(_source_edge_bytes, edge_id)
-        # Remove edge_id from adjacency of target
-        if e.target != e.source:
-            _target_edge_bytes = edge_key_serializer(e.target)
-            self._remove_edge_from_adjacency(_target_edge_bytes, edge_id)
+        self._remove_edge_from_endpoint_adjacencies(e)
 
         # If your store had a 'delete_edge' method, you'd call it here.
         # We'll assume you add that to KVStore if needed, e.g.:
         self.store.delete_edge(edge_id)
+
+    def _edge_id_variants(self, edge_id):
+        """Return string/byte forms used by legacy adjacency records."""
+        variants = [edge_id]
+        if isinstance(edge_id, bytes):
+            try:
+                edge_id_text = edge_id.decode("utf-8")
+            except UnicodeDecodeError:
+                edge_id_text = None
+            if edge_id_text is not None:
+                variants.append(edge_id_text)
+        elif isinstance(edge_id, str):
+            variants.append(edge_id.encode("utf-8"))
+        return variants
+
+    def _remove_edge_from_endpoint_adjacencies(self, edge: Edge):
+        """Remove an edge from the legacy adjacency blobs for its endpoints."""
+        source_id = self.node_key_to_bytes(edge.source)
+        target_id = self.node_key_to_bytes(edge.target)
+        self._remove_edge_from_adjacency(source_id, edge.get_id)
+        self._remove_edge_from_adjacency(source_id, edge.get_id_bytes)
+        if target_id != source_id:
+            self._remove_edge_from_adjacency(target_id, edge.get_id)
+            self._remove_edge_from_adjacency(target_id, edge.get_id_bytes)
 
     def _remove_edge_from_adjacency(self, node_id: str, edge_id: str):
         """Remove an edge ID from a node's stored adjacency lists.
@@ -2210,13 +2242,18 @@ class GraphDB:
         
         adj_list = self.get_adjacency_list(node_id,return_raw = True)
         _changed = False
+        edge_id_variants = set(self._edge_id_variants(edge_id))
         for _dir in ['source', 'target']:
             if _dir in adj_list:
-                if edge_id in adj_list[_dir]:
-                    adj_list[_dir].remove(edge_id)
+                filtered_edges = [existing_edge_id for existing_edge_id in adj_list[_dir] if existing_edge_id not in edge_id_variants]
+                if len(filtered_edges) != len(adj_list[_dir]):
+                    adj_list[_dir] = filtered_edges
                     _changed = True
         if _changed:
-            self.put_adjacency_list(node_id, adj_list)
+            if not adj_list.get('source') and not adj_list.get('target'):
+                self.store.delete_adjacency(node_id)
+            else:
+                self.put_adjacency_list(node_id, adj_list)
 
     # -----------------------
     # BFS Example
@@ -2280,6 +2317,7 @@ class GraphDB:
                 if old_edge is not None:
                     self._delete_typed_adjacency_for_edge(old_edge)
                     self._delete_edge_indexes(old_edge)
+                    self._remove_edge_from_endpoint_adjacencies(old_edge)
             e_bytes = self.entity_serializer.serialize(e, 'Edge')
             _source = self.node_key_to_bytes(e.source)
             _target = self.node_key_to_bytes(e.target)
