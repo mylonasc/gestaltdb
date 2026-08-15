@@ -323,7 +323,7 @@ class KVStore:
         """Store columnar nodes with caller-provided serialized values."""
         self.put_nodes_bulk(dict(zip(node_list.node_ids, node_list.node_values)))
 
-    def ingest_edges_columnar(self, edge_list, *, append_only: bool = True, native: bool = True):
+    def ingest_edges_columnar(self, edge_list, *, append_only: bool = True, native: bool = True, maintain_indexes: bool = True):
         """Store columnar typed edges with caller-provided serialized values."""
         if not append_only:
             raise NotImplementedError("columnar edge ingestion currently requires append_only=True")
@@ -331,10 +331,11 @@ class KVStore:
         self.put_typed_adjacency_bulk(
             list(zip(edge_list.sources, edge_list.targets, edge_list.edge_types, edge_list.edge_ids))
         )
-        self.put_index_entries_bulk([
-            ("edge_type", [edge_type.encode("utf-8")], edge_id)
-            for edge_type, edge_id in zip(edge_list.edge_types, edge_list.edge_ids)
-        ])
+        if maintain_indexes:
+            self.put_index_entries_bulk([
+                ("edge_type", [edge_type.encode("utf-8")], edge_id)
+                for edge_type, edge_id in zip(edge_list.edge_types, edge_list.edge_ids)
+            ])
 
 # =========================================
 # LMDB Implementation
@@ -1232,7 +1233,7 @@ class PyRexStore(KVStore):
             batch.put(self._typed_key("in", target_id, edge_type, edge_id), source_id)
         self.db.write(batch, self.write_options)
 
-    def ingest_edges_columnar(self, edge_list, *, append_only: bool = True, native: bool = True):
+    def ingest_edges_columnar(self, edge_list, *, append_only: bool = True, native: bool = True, maintain_indexes: bool = True):
         """Store columnar typed edges, using native PyRex ingestion when available."""
         if not append_only:
             raise NotImplementedError("native columnar edge ingestion currently requires append_only=True")
@@ -1252,20 +1253,22 @@ class PyRexStore(KVStore):
             self._write_columnar_batch(edge_keys, edge_values)
             self._write_columnar_batch(out_keys, targets)
             self._write_columnar_batch(in_keys, sources)
-            edge_ids = edge_list.edge_ids_column if edge_list.edge_ids_column is not None else edge_list.edge_ids
-            self._write_columnar_batch(
-                [_index_key("edge_type", [edge_type.encode("utf-8")], edge_id) for edge_type, edge_id in zip(edge_list.edge_types, edge_list.edge_ids)],
-                edge_ids,
-            )
+            if maintain_indexes:
+                edge_ids = edge_list.edge_ids_column if edge_list.edge_ids_column is not None else edge_list.edge_ids
+                self._write_columnar_batch(
+                    [_index_key("edge_type", [edge_type.encode("utf-8")], edge_id) for edge_type, edge_id in zip(edge_list.edge_types, edge_list.edge_ids)],
+                    edge_ids,
+                )
             return
         self.put_edges_bulk(dict(zip(edge_list.edge_ids, edge_list.edge_values)))
         self.put_typed_adjacency_bulk(
             list(zip(edge_list.sources, edge_list.targets, edge_list.edge_types, edge_list.edge_ids))
         )
-        self.put_index_entries_bulk([
-            ("edge_type", [edge_type.encode("utf-8")], edge_id)
-            for edge_type, edge_id in zip(edge_list.edge_types, edge_list.edge_ids)
-        ])
+        if maintain_indexes:
+            self.put_index_entries_bulk([
+                ("edge_type", [edge_type.encode("utf-8")], edge_id)
+                for edge_type, edge_id in zip(edge_list.edge_types, edge_list.edge_ids)
+            ])
 
     def delete_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
         """Delete forward and reverse typed adjacency records."""

@@ -74,26 +74,25 @@ import pyarrow as pa
 from gestaltdb.graphdb import GraphDB
 from gestaltdb.kvstores import LevelDBStore
 from gestaltdb.serializers import JSONSerializer
+from gestaltdb import IndexMaintenanceMode
 
 with TemporaryDirectory() as tmpdir:
     graph = GraphDB(LevelDBStore(path=f"{tmpdir}/graph"), JSONSerializer())
 
-    graph.ingest_nodes_arrow_entities(
-        pa.array(["alice", "bob", "carol"]),
-        labels=pa.array([["Person"], ["Person"], ["Person"]]),
-        properties={
-            "name": pa.array(["Alice", "Bob", "Carol"]),
-            "age": pa.array([34, 36, 29]),
-        },
-    )
+    graph.create_node_property_index("name")
 
-    graph.ingest_edges_arrow_entities(
+    result = graph.ingest_arrow(
+        pa.array(["alice", "bob", "carol"]),
         pa.array(["alice-knows-bob", "bob-knows-carol"]),
         pa.array(["alice", "bob"]),
         pa.array(["bob", "carol"]),
         pa.array(["knows", "knows"]),
-        properties={"since": pa.array([2024, 2025])},
+        labels=pa.array([["Person"], ["Person"], ["Person"]]),
+        node_properties={"name": pa.array(["Alice", "Bob", "Carol"]), "age": pa.array([34, 36, 29])},
+        edge_properties={"since": pa.array([2024, 2025])},
+        index_mode=IndexMaintenanceMode.DEFER_REBUILD,
     )
+    print(result)  # {'nodes': 3, 'edges': 2, 'rebuilt_indexes': ..., 'stale_indexes': ()}
 
     result = graph.query('MATCH (a:Person {name: "Alice"}) MATCH (a)-[:knows]->(b) RETURN a.id, b.name')
     print(result.records)
@@ -113,6 +112,7 @@ import polars as pl
 from gestaltdb.graphdb import GraphDB
 from gestaltdb.kvstores import LevelDBStore
 from gestaltdb.serializers import JSONSerializer
+from gestaltdb import IndexMaintenanceMode
 
 nodes = pl.DataFrame({
     "node_id": ["alice", "bob", "carol"],
@@ -131,9 +131,15 @@ edges = pl.DataFrame({
 
 with TemporaryDirectory() as tmpdir:
     graph = GraphDB(LevelDBStore(path=f"{tmpdir}/graph"), JSONSerializer())
+    graph.create_node_property_index("name")
 
-    graph.ingest_nodes_polars_entities(nodes)
-    graph.ingest_edges_polars_entities(edges)
+    graph.ingest_polars(
+        nodes,
+        edges,
+        node_property_columns=["name", "age"],
+        edge_property_columns=["since"],
+        index_mode=IndexMaintenanceMode.DEFER_REBUILD,
+    )
 
     result = graph.query('MATCH (a:Person) MATCH (a)-[:knows]->(b) RETURN a.name, b.name ORDER BY a.name')
     print(result.records)

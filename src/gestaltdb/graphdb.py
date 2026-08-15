@@ -16,13 +16,16 @@ if TYPE_CHECKING:
 import datetime
 import struct
 
-from .ingestion import EdgeList, NodeList
+from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .sampling import SamplingPattern, as_sampling_pattern
 from .serializers import JSONSerializer
 
 
 _NODE_PROPERTY_INDEXES_METADATA_KEY = b"schema:indexes:node_properties"
 _EDGE_PROPERTY_INDEXES_METADATA_KEY = b"schema:indexes:edge_properties"
+_STALE_INDEXES_METADATA_KEY = b"schema:indexes:stale"
+_VALID_INDEX_MODES = {IndexMaintenanceMode.MAINTAIN.value, IndexMaintenanceMode.DEFER.value}
+_INDEX_REBUILD_BATCH_SIZE = 100_000
 
 
 def _normalize_labels(labels):
@@ -424,6 +427,84 @@ class GraphDB:
         if indexed_edge_properties is not None:
             self._persist_property_index_metadata(_EDGE_PROPERTY_INDEXES_METADATA_KEY, self.indexed_edge_properties)
 
+    def _load_stale_indexes(self) -> set[str]:
+        """Load index families known to be stale after deferred bulk ingestion."""
+        try:
+            payload = self.store.get_metadata(_STALE_INDEXES_METADATA_KEY)
+        except NotImplementedError:
+            return set()
+        if not payload:
+            return set()
+        return set(json.loads(payload.decode("utf-8")))
+
+    def _persist_stale_indexes(self, stale_indexes: set[str]) -> None:
+        """Persist stale index metadata."""
+        payload = json.dumps(sorted(stale_indexes), separators=(",", ":")).encode("utf-8")
+        self.store.put_metadata(_STALE_INDEXES_METADATA_KEY, payload)
+
+    def _mark_indexes_stale(self, *index_names: str) -> None:
+        """Mark index families stale after a deferred bulk load."""
+        if not index_names:
+            return
+        try:
+            stale_indexes = self._load_stale_indexes()
+            stale_indexes.update(index_names)
+            self._persist_stale_indexes(stale_indexes)
+        except NotImplementedError:
+            return
+
+    def _clear_stale_indexes(self, *index_names: str) -> None:
+        """Clear stale markers after rebuilding index families."""
+        try:
+            stale_indexes = self._load_stale_indexes()
+            stale_indexes.difference_update(index_names)
+            self._persist_stale_indexes(stale_indexes)
+        except NotImplementedError:
+            return
+
+    def stale_indexes(self) -> tuple[str, ...]:
+        """Return index families requiring rebuild after deferred ingestion."""
+        return tuple(sorted(self._load_stale_indexes()))
+
+    def _ensure_indexes_current(self, *index_names: str) -> None:
+        """Prevent stale secondary indexes from silently returning wrong results."""
+        stale = self._load_stale_indexes().intersection(index_names)
+        if stale:
+            names = ", ".join(sorted(stale))
+            raise RuntimeError(f"stale indexes require rebuild before query: {names}")
+
+    def _validate_index_mode(self, index_mode: str) -> None:
+        """Validate the columnar ingestion index mode."""
+        if isinstance(index_mode, IndexMaintenanceMode):
+            index_mode = index_mode.value
+        if index_mode not in _VALID_INDEX_MODES:
+            allowed = ", ".join(sorted(_VALID_INDEX_MODES))
+            raise ValueError(f"index_mode must be one of: {allowed}")
+
+    def _low_level_index_mode(self, index_mode: str | IndexMaintenanceMode) -> str:
+        """Return the low-level index mode used by primitive ingestion calls."""
+        if isinstance(index_mode, IndexMaintenanceMode):
+            index_mode = index_mode.value
+        if index_mode == IndexMaintenanceMode.DEFER_REBUILD.value:
+            return IndexMaintenanceMode.DEFER.value
+        self._validate_index_mode(index_mode)
+        index_mode = index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode
+        return index_mode
+
+    def _coerce_columnar_ingestion_mode(self, ingestion_mode: str | ColumnarIngestionMode) -> str:
+        """Normalize a high-level columnar ingestion mode."""
+        if isinstance(ingestion_mode, ColumnarIngestionMode):
+            return ingestion_mode.value
+        values = {mode.value for mode in ColumnarIngestionMode}
+        if ingestion_mode not in values:
+            allowed = ", ".join(sorted(values))
+            raise ValueError(f"ingestion_mode must be one of: {allowed}")
+        return ingestion_mode
+
+    def _should_rebuild_after_ingest(self, index_mode: str | IndexMaintenanceMode) -> bool:
+        """Return whether high-level ingestion should rebuild deferred indexes."""
+        return (index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode) == IndexMaintenanceMode.DEFER_REBUILD.value
+
     def _load_property_index_metadata(self, key: bytes) -> set[str]:
         """Load persisted property index definitions from backend metadata."""
         try:
@@ -550,6 +631,72 @@ class GraphDB:
                     for label in node.labels:
                         self.store.delete_range_index_entry("node_label_property", [label.encode("utf-8"), property_name.encode("utf-8")], range_value, node_id)
 
+    def _flush_index_rebuild_batches(self, entries: list, range_entries: list) -> None:
+        """Write accumulated rebuild entries and clear the buffers."""
+        if entries:
+            self.store.put_index_entries_bulk(entries)
+            entries.clear()
+        if range_entries:
+            self.store.put_range_index_entries_bulk(range_entries)
+            range_entries.clear()
+
+    def rebuild_node_indexes(
+        self,
+        *,
+        labels: bool = True,
+        properties: list[str] | tuple[str, ...] | set[str] | None = None,
+        batch_size: int = _INDEX_REBUILD_BATCH_SIZE,
+    ) -> dict[str, int]:
+        """Rebuild requested node secondary indexes in one node scan."""
+        property_names = sorted(self.indexed_node_properties if properties is None else set(properties))
+        entries = []
+        range_entries = []
+        rebuilt = {"node_label": 0}
+        rebuilt.update({f"node_property:{property_name}": 0 for property_name in property_names})
+
+        for node_id in self.store.get_node_keys_generator():
+            node = self.get_node(node_id)
+            if node is None:
+                continue
+            node_key = node.get_id_bytes
+            if labels:
+                for label in node.labels:
+                    entries.append(("node_label", [label.encode("utf-8")], node_key))
+                    rebuilt["node_label"] += 1
+            for property_name in property_names:
+                if property_name not in node.properties:
+                    continue
+                raw_value = node.properties[property_name]
+                property_value = _property_value_to_index_bytes(raw_value)
+                entries.append(("node_property", [property_name.encode("utf-8"), property_value], node_key))
+                for label in node.labels:
+                    entries.append((
+                        "node_label_property",
+                        [label.encode("utf-8"), property_name.encode("utf-8"), property_value],
+                        node_key,
+                    ))
+                range_value = _property_value_to_range_index_bytes(raw_value)
+                if range_value is not None:
+                    range_entries.append(("node_property", [property_name.encode("utf-8")], range_value, node_key))
+                    for label in node.labels:
+                        range_entries.append((
+                            "node_label_property",
+                            [label.encode("utf-8"), property_name.encode("utf-8")],
+                            range_value,
+                            node_key,
+                        ))
+                rebuilt[f"node_property:{property_name}"] += 1
+            if len(entries) + len(range_entries) >= batch_size:
+                self._flush_index_rebuild_batches(entries, range_entries)
+
+        self._flush_index_rebuild_batches(entries, range_entries)
+        if labels:
+            self._clear_stale_indexes("node_label")
+        if property_names and self.indexed_node_properties.issubset(set(property_names)):
+            self._clear_stale_indexes("node_property")
+        rebuilt["node_property"] = sum(rebuilt[f"node_property:{property_name}"] for property_name in property_names)
+        return rebuilt
+
     def create_node_property_index(self, property_name: str):
         """Register and rebuild an exact-match node property index.
 
@@ -581,30 +728,8 @@ class GraphDB:
             >>> graph_db.rebuild_node_property_index("name")  # doctest: +SKIP
             3
         """
-        rebuilt = 0
-        for node_id in self.store.get_node_keys_generator():
-            node = self.get_node(node_id)
-            if node is None or property_name not in node.properties:
-                continue
-            raw_value = node.properties[property_name]
-            self.store.put_index_entry(
-                "node_property",
-                [property_name.encode("utf-8"), _property_value_to_index_bytes(raw_value)],
-                node.get_id_bytes,
-            )
-            for label in node.labels:
-                self.store.put_index_entry(
-                    "node_label_property",
-                    [label.encode("utf-8"), property_name.encode("utf-8"), _property_value_to_index_bytes(raw_value)],
-                    node.get_id_bytes,
-                )
-            range_value = _property_value_to_range_index_bytes(raw_value)
-            if range_value is not None:
-                self.store.put_range_index_entry("node_property", [property_name.encode("utf-8")], range_value, node.get_id_bytes)
-                for label in node.labels:
-                    self.store.put_range_index_entry("node_label_property", [label.encode("utf-8"), property_name.encode("utf-8")], range_value, node.get_id_bytes)
-            rebuilt += 1
-        return rebuilt
+        rebuilt = self.rebuild_node_indexes(labels=False, properties={property_name})
+        return rebuilt[f"node_property:{property_name}"]
 
     def rebuild_label_index(self):
         """Rebuild the node label index from stored nodes.
@@ -616,15 +741,8 @@ class GraphDB:
             >>> graph_db.rebuild_label_index()  # doctest: +SKIP
             12
         """
-        rebuilt = 0
-        for node_id in self.store.get_node_keys_generator():
-            node = self.get_node(node_id)
-            if node is None:
-                continue
-            for label in node.labels:
-                self.store.put_index_entry("node_label", [label.encode("utf-8")], node.get_id_bytes)
-                rebuilt += 1
-        return rebuilt
+        rebuilt = self.rebuild_node_indexes(labels=True, properties=set())
+        return rebuilt["node_label"]
 
     def iter_node_ids_by_label(self, label: str):
         """Yield node IDs from the label index.
@@ -639,6 +757,7 @@ class GraphDB:
             >>> list(graph_db.iter_node_ids_by_label("Drug"))  # doctest: +SKIP
             [b'drug-1']
         """
+        self._ensure_indexes_current("node_label")
         yield from self.store.iter_index_prefix("node_label", [label.encode("utf-8")])
 
     def nodes_by_label(self, label: str):
@@ -673,6 +792,7 @@ class GraphDB:
             >>> list(graph_db.iter_node_ids_by_property("kind", "drug"))  # doctest: +SKIP
             [b'drug-1']
         """
+        self._ensure_indexes_current("node_property")
         yield from self.store.iter_index_prefix(
             "node_property",
             [property_name.encode("utf-8"), _property_value_to_index_bytes(value)],
@@ -699,6 +819,7 @@ class GraphDB:
 
     def iter_node_ids_by_label_property(self, label: str, property_name: str, value):
         """Yield node IDs from the composite label/property exact-match index."""
+        self._ensure_indexes_current("node_label", "node_property")
         yield from self.store.iter_index_prefix(
             "node_label_property",
             [label.encode("utf-8"), property_name.encode("utf-8"), _property_value_to_index_bytes(value)],
@@ -714,6 +835,7 @@ class GraphDB:
 
     def iter_node_ids_by_property_range(self, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Yield node IDs from a scalar property range index."""
+        self._ensure_indexes_current("node_property")
         start = None if start_value is None else _property_value_to_range_index_bytes(start_value)
         end = None if end_value is None else _property_value_to_range_index_bytes(end_value)
         if (start_value is not None and start is None) or (end_value is not None and end is None):
@@ -739,6 +861,7 @@ class GraphDB:
 
     def iter_node_ids_by_label_property_range(self, label: str, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Yield node IDs from a composite label/property range index."""
+        self._ensure_indexes_current("node_label", "node_property")
         start = None if start_value is None else _property_value_to_range_index_bytes(start_value)
         end = None if end_value is None else _property_value_to_range_index_bytes(end_value)
         if (start_value is not None and start is None) or (end_value is not None and end is None):
@@ -958,6 +1081,63 @@ class GraphDB:
                     if edge_type is not None:
                         self.store.delete_range_index_entry("edge_type_property", [str(edge_type).encode("utf-8"), property_name.encode("utf-8")], range_value, edge_id)
 
+    def rebuild_edge_indexes(
+        self,
+        *,
+        edge_types: bool = True,
+        properties: list[str] | tuple[str, ...] | set[str] | None = None,
+        batch_size: int = _INDEX_REBUILD_BATCH_SIZE,
+    ) -> dict[str, int]:
+        """Rebuild requested edge secondary indexes in one edge scan."""
+        property_names = sorted(self.indexed_edge_properties if properties is None else set(properties))
+        entries = []
+        range_entries = []
+        rebuilt = {"edge_type": 0}
+        rebuilt.update({f"edge_property:{property_name}": 0 for property_name in property_names})
+
+        for edge_id in self.store.get_edge_keys_generator():
+            edge = self.get_edge(edge_id)
+            if edge is None:
+                continue
+            edge_key = edge.get_id_bytes
+            edge_type = self.edge_type(edge)
+            if edge_types and edge_type is not None:
+                entries.append(("edge_type", [str(edge_type).encode("utf-8")], edge_key))
+                rebuilt["edge_type"] += 1
+            for property_name in property_names:
+                if property_name not in edge.properties:
+                    continue
+                raw_value = edge.properties[property_name]
+                property_value = _property_value_to_index_bytes(raw_value)
+                entries.append(("edge_property", [property_name.encode("utf-8"), property_value], edge_key))
+                if edge_type is not None:
+                    entries.append((
+                        "edge_type_property",
+                        [str(edge_type).encode("utf-8"), property_name.encode("utf-8"), property_value],
+                        edge_key,
+                    ))
+                range_value = _property_value_to_range_index_bytes(raw_value)
+                if range_value is not None:
+                    range_entries.append(("edge_property", [property_name.encode("utf-8")], range_value, edge_key))
+                    if edge_type is not None:
+                        range_entries.append((
+                            "edge_type_property",
+                            [str(edge_type).encode("utf-8"), property_name.encode("utf-8")],
+                            range_value,
+                            edge_key,
+                        ))
+                rebuilt[f"edge_property:{property_name}"] += 1
+            if len(entries) + len(range_entries) >= batch_size:
+                self._flush_index_rebuild_batches(entries, range_entries)
+
+        self._flush_index_rebuild_batches(entries, range_entries)
+        if edge_types:
+            self._clear_stale_indexes("edge_type")
+        if property_names and self.indexed_edge_properties.issubset(set(property_names)):
+            self._clear_stale_indexes("edge_property")
+        rebuilt["edge_property"] = sum(rebuilt[f"edge_property:{property_name}"] for property_name in property_names)
+        return rebuilt
+
     def rebuild_relationship_type_index(self):
         """Rebuild the relationship type catalog from stored edges.
 
@@ -968,15 +1148,8 @@ class GraphDB:
             >>> graph_db.rebuild_relationship_type_index()  # doctest: +SKIP
             20
         """
-        rebuilt = 0
-        for edge_id in self.store.get_edge_keys_generator():
-            edge = self.get_edge(edge_id)
-            edge_type = None if edge is None else self.edge_type(edge)
-            if edge_type is None:
-                continue
-            self.store.put_index_entry("edge_type", [str(edge_type).encode("utf-8")], edge.get_id_bytes)
-            rebuilt += 1
-        return rebuilt
+        rebuilt = self.rebuild_edge_indexes(edge_types=True, properties=set())
+        return rebuilt["edge_type"]
 
     def create_edge_property_index(self, property_name: str):
         """Register and rebuild an exact-match edge property index.
@@ -1009,31 +1182,8 @@ class GraphDB:
             >>> graph_db.rebuild_edge_property_index("score")  # doctest: +SKIP
             7
         """
-        rebuilt = 0
-        for edge_id in self.store.get_edge_keys_generator():
-            edge = self.get_edge(edge_id)
-            if edge is None or property_name not in edge.properties:
-                continue
-            raw_value = edge.properties[property_name]
-            self.store.put_index_entry(
-                "edge_property",
-                [property_name.encode("utf-8"), _property_value_to_index_bytes(raw_value)],
-                edge.get_id_bytes,
-            )
-            edge_type = self.edge_type(edge)
-            if edge_type is not None:
-                self.store.put_index_entry(
-                    "edge_type_property",
-                    [str(edge_type).encode("utf-8"), property_name.encode("utf-8"), _property_value_to_index_bytes(raw_value)],
-                    edge.get_id_bytes,
-                )
-            range_value = _property_value_to_range_index_bytes(raw_value)
-            if range_value is not None:
-                self.store.put_range_index_entry("edge_property", [property_name.encode("utf-8")], range_value, edge.get_id_bytes)
-                if edge_type is not None:
-                    self.store.put_range_index_entry("edge_type_property", [str(edge_type).encode("utf-8"), property_name.encode("utf-8")], range_value, edge.get_id_bytes)
-            rebuilt += 1
-        return rebuilt
+        rebuilt = self.rebuild_edge_indexes(edge_types=False, properties={property_name})
+        return rebuilt[f"edge_property:{property_name}"]
 
     def iter_edge_ids_by_type(self, edge_type: str):
         """Yield edge IDs from the relationship type catalog.
@@ -1048,6 +1198,7 @@ class GraphDB:
             >>> list(graph_db.iter_edge_ids_by_type("drug-to-protein"))  # doctest: +SKIP
             [b'd1-p1']
         """
+        self._ensure_indexes_current("edge_type")
         yield from self.store.iter_index_prefix("edge_type", [str(edge_type).encode("utf-8")])
 
     def edges_by_type(self, edge_type: str):
@@ -1082,6 +1233,7 @@ class GraphDB:
             >>> list(graph_db.iter_edge_ids_by_property("score", 1))  # doctest: +SKIP
             [b'e1']
         """
+        self._ensure_indexes_current("edge_property")
         yield from self.store.iter_index_prefix(
             "edge_property",
             [property_name.encode("utf-8"), _property_value_to_index_bytes(value)],
@@ -1108,6 +1260,7 @@ class GraphDB:
 
     def iter_edge_ids_by_type_property(self, edge_type: str, property_name: str, value):
         """Yield edge IDs from the composite type/property exact-match index."""
+        self._ensure_indexes_current("edge_type", "edge_property")
         yield from self.store.iter_index_prefix(
             "edge_type_property",
             [str(edge_type).encode("utf-8"), property_name.encode("utf-8"), _property_value_to_index_bytes(value)],
@@ -1123,6 +1276,7 @@ class GraphDB:
 
     def iter_edge_ids_by_property_range(self, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Yield edge IDs from a scalar property range index."""
+        self._ensure_indexes_current("edge_property")
         start = None if start_value is None else _property_value_to_range_index_bytes(start_value)
         end = None if end_value is None else _property_value_to_range_index_bytes(end_value)
         if (start_value is not None and start is None) or (end_value is not None and end is None):
@@ -1148,6 +1302,7 @@ class GraphDB:
 
     def iter_edge_ids_by_type_property_range(self, edge_type: str, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Yield edge IDs from a composite type/property range index."""
+        self._ensure_indexes_current("edge_type", "edge_property")
         start = None if start_value is None else _property_value_to_range_index_bytes(start_value)
         end = None if end_value is None else _property_value_to_range_index_bytes(end_value)
         if (start_value is not None and start is None) or (end_value is not None and end is None):
@@ -1177,6 +1332,30 @@ class GraphDB:
             "indexed_node_properties": tuple(sorted(self.indexed_node_properties)),
             "indexed_edge_properties": tuple(sorted(self.indexed_edge_properties)),
         }
+
+    def rebuild_deferred_indexes(self) -> dict[str, int]:
+        """Rebuild secondary indexes marked stale by deferred bulk ingestion.
+
+        Returns:
+            Mapping from rebuilt index family/property to entries written.
+        """
+        stale = self._load_stale_indexes()
+        rebuilt: dict[str, int] = {}
+        if stale.intersection({"node_label", "node_property"}):
+            rebuilt.update(
+                self.rebuild_node_indexes(
+                    labels="node_label" in stale,
+                    properties=self.indexed_node_properties if "node_property" in stale else set(),
+                )
+            )
+        if stale.intersection({"edge_type", "edge_property"}):
+            rebuilt.update(
+                self.rebuild_edge_indexes(
+                    edge_types="edge_type" in stale,
+                    properties=self.indexed_edge_properties if "edge_property" in stale else set(),
+                )
+            )
+        return rebuilt
 
     def get_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out'):
         """Return typed adjacency records with clean direction semantics.
@@ -1486,7 +1665,171 @@ class GraphDB:
         if index_entries:
             self.store.put_index_entries_bulk(index_entries)
 
-    def ingest_nodes_arrow(self, node_ids, node_values, *, native: bool = True, chunk_size: int = 100_000):
+    def ingest_polars(
+        self,
+        node_df,
+        edge_df,
+        *,
+        ingestion_mode: str | ColumnarIngestionMode = ColumnarIngestionMode.ENTITY_COLUMNS,
+        index_mode: str | IndexMaintenanceMode = IndexMaintenanceMode.DEFER_REBUILD,
+        node_id: str = "node_id",
+        node_value: str = "node_value",
+        labels: str | list[str] | tuple[str, ...] | None = "labels",
+        node_property_columns: list[str] | tuple[str, ...] | None = None,
+        edge_id: str = "edge_id",
+        source: str = "source",
+        target: str = "target",
+        edge_type: str = "edge_type",
+        edge_value: str = "edge_value",
+        edge_property_columns: list[str] | tuple[str, ...] | None = None,
+        native: bool = True,
+        chunk_size: int = 100_000,
+    ) -> dict[str, object]:
+        """Ingest a graph from Polars DataFrames with bulk-load defaults.
+
+        By default this uses structured entity columns, defers secondary index
+        maintenance during ingestion, and immediately performs a one-pass rebuild
+        before returning. Typed adjacency is maintained during ingestion, so
+        traversal remains correct throughout.
+
+        Example:
+            >>> graph.ingest_polars(nodes, edges, node_property_columns=["kind"], edge_property_columns=["score"])  # doctest: +SKIP
+        """
+        mode = self._coerce_columnar_ingestion_mode(ingestion_mode)
+        low_level_index_mode = self._low_level_index_mode(index_mode)
+        if mode == ColumnarIngestionMode.ENTITY_COLUMNS.value:
+            node_count = self.ingest_nodes_polars_entities(
+                node_df,
+                node_id=node_id,
+                labels=labels,
+                property_columns=node_property_columns,
+                native=native,
+                chunk_size=chunk_size,
+                append_only=True,
+                index_mode=low_level_index_mode,
+            )
+            edge_count = self.ingest_edges_polars_entities(
+                edge_df,
+                edge_id=edge_id,
+                source=source,
+                target=target,
+                edge_type=edge_type,
+                property_columns=edge_property_columns,
+                append_only=True,
+                native=native,
+                chunk_size=chunk_size,
+                index_mode=low_level_index_mode,
+            )
+        else:
+            node_count = self.ingest_nodes_polars(
+                node_df,
+                node_id=node_id,
+                node_value=node_value,
+                native=native,
+                chunk_size=chunk_size,
+                append_only=True,
+                index_mode=low_level_index_mode,
+            )
+            edge_count = self.ingest_edges_polars(
+                edge_df,
+                edge_id=edge_id,
+                source=source,
+                target=target,
+                edge_type=edge_type,
+                edge_value=edge_value,
+                append_only=True,
+                native=native,
+                chunk_size=chunk_size,
+                index_mode=low_level_index_mode,
+            )
+        rebuilt = self.rebuild_deferred_indexes() if self._should_rebuild_after_ingest(index_mode) else {}
+        return {"nodes": node_count, "edges": edge_count, "rebuilt_indexes": rebuilt, "stale_indexes": self.stale_indexes()}
+
+    def ingest_arrow(
+        self,
+        node_ids,
+        edge_ids,
+        sources,
+        targets,
+        edge_types,
+        *,
+        ingestion_mode: str | ColumnarIngestionMode = ColumnarIngestionMode.ENTITY_COLUMNS,
+        index_mode: str | IndexMaintenanceMode = IndexMaintenanceMode.DEFER_REBUILD,
+        node_values=None,
+        edge_values=None,
+        labels=None,
+        node_properties: dict[str, object] | None = None,
+        edge_properties: dict[str, object] | None = None,
+        native: bool = True,
+        chunk_size: int = 100_000,
+    ) -> dict[str, object]:
+        """Ingest a graph from Arrow-like columns with bulk-load defaults.
+
+        ``ENTITY_COLUMNS`` builds payloads from structured node/edge columns.
+        ``SERIALIZED_PAYLOADS`` expects ``node_values`` and ``edge_values`` to
+        contain serializer-compatible payload bytes.
+
+        Example:
+            >>> graph.ingest_arrow(node_ids, edge_ids, sources, targets, edge_types, node_properties={"kind": kinds})  # doctest: +SKIP
+        """
+        mode = self._coerce_columnar_ingestion_mode(ingestion_mode)
+        low_level_index_mode = self._low_level_index_mode(index_mode)
+        if mode == ColumnarIngestionMode.ENTITY_COLUMNS.value:
+            node_count = self.ingest_nodes_arrow_entities(
+                node_ids,
+                labels=labels,
+                properties=node_properties,
+                native=native,
+                chunk_size=chunk_size,
+                append_only=True,
+                index_mode=low_level_index_mode,
+            )
+            edge_count = self.ingest_edges_arrow_entities(
+                edge_ids,
+                sources,
+                targets,
+                edge_types,
+                properties=edge_properties,
+                append_only=True,
+                native=native,
+                chunk_size=chunk_size,
+                index_mode=low_level_index_mode,
+            )
+        else:
+            if node_values is None or edge_values is None:
+                raise ValueError("node_values and edge_values are required for serialized payload ingestion")
+            node_count = self.ingest_nodes_arrow(
+                node_ids,
+                node_values,
+                native=native,
+                chunk_size=chunk_size,
+                append_only=True,
+                index_mode=low_level_index_mode,
+            )
+            edge_count = self.ingest_edges_arrow(
+                edge_ids,
+                sources,
+                targets,
+                edge_types,
+                edge_values,
+                append_only=True,
+                native=native,
+                chunk_size=chunk_size,
+                index_mode=low_level_index_mode,
+            )
+        rebuilt = self.rebuild_deferred_indexes() if self._should_rebuild_after_ingest(index_mode) else {}
+        return {"nodes": node_count, "edges": edge_count, "rebuilt_indexes": rebuilt, "stale_indexes": self.stale_indexes()}
+
+    def ingest_nodes_arrow(
+        self,
+        node_ids,
+        node_values,
+        *,
+        native: bool = True,
+        chunk_size: int = 100_000,
+        append_only: bool = False,
+        index_mode: str = "maintain",
+    ):
         """Ingest attributed nodes from Arrow-like columns.
 
         ``node_values`` is required and must contain serialized node payloads
@@ -1497,15 +1840,26 @@ class GraphDB:
             node_values: Arrow-like or Python column of serialized node bytes.
             native: Use native backend columnar ingestion when available.
             chunk_size: Maximum rows per backend write.
+            append_only: Skip existing-node index deletion for known-new nodes.
+            index_mode: ``"maintain"`` updates secondary indexes immediately;
+                ``"defer"`` writes node records and marks indexes stale.
 
         Returns:
             Number of ingested nodes.
         """
+        self._validate_index_mode(index_mode)
+        index_mode = index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode
         node_list = NodeList.from_arrow(node_ids, node_values)
         for chunk in node_list.chunks(chunk_size):
-            self._delete_existing_node_indexes_for_columnar_chunk(chunk)
+            if index_mode == "maintain" and not append_only:
+                self._delete_existing_node_indexes_for_columnar_chunk(chunk)
             self.store.ingest_nodes_columnar(chunk, native=native)
-            self._put_node_indexes_for_columnar_chunk(chunk)
+            if index_mode == "maintain":
+                self._put_node_indexes_for_columnar_chunk(chunk)
+        if index_mode == "defer":
+            self._mark_indexes_stale("node_label")
+            if self.indexed_node_properties:
+                self._mark_indexes_stale("node_property")
         return len(node_list.node_ids)
 
     def ingest_nodes_polars(
@@ -1516,17 +1870,27 @@ class GraphDB:
         node_value: str = "node_value",
         native: bool = True,
         chunk_size: int = 100_000,
+        append_only: bool = False,
+        index_mode: str = "maintain",
     ):
         """Ingest attributed nodes from a Polars DataFrame.
 
         The ``node_value`` column is required and must contain serialized node
         payload bytes compatible with the current ``GraphDB`` serializer.
         """
+        self._validate_index_mode(index_mode)
+        index_mode = index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode
         node_list = NodeList.from_polars(df, node_id=node_id, node_value=node_value)
         for chunk in node_list.chunks(chunk_size):
-            self._delete_existing_node_indexes_for_columnar_chunk(chunk)
+            if index_mode == "maintain" and not append_only:
+                self._delete_existing_node_indexes_for_columnar_chunk(chunk)
             self.store.ingest_nodes_columnar(chunk, native=native)
-            self._put_node_indexes_for_columnar_chunk(chunk)
+            if index_mode == "maintain":
+                self._put_node_indexes_for_columnar_chunk(chunk)
+        if index_mode == "defer":
+            self._mark_indexes_stale("node_label")
+            if self.indexed_node_properties:
+                self._mark_indexes_stale("node_property")
         return len(node_list.node_ids)
 
     def ingest_nodes_polars_entities(
@@ -1538,6 +1902,8 @@ class GraphDB:
         property_columns: list[str] | tuple[str, ...] | None = None,
         native: bool = True,
         chunk_size: int = 100_000,
+        append_only: bool = False,
+        index_mode: str = "maintain",
     ):
         """Ingest node entity columns from a Polars DataFrame.
 
@@ -1594,7 +1960,14 @@ class GraphDB:
                     )
                 )
 
-        return self.ingest_nodes_arrow(df[node_id].to_arrow(), payloads, native=native, chunk_size=chunk_size)
+        return self.ingest_nodes_arrow(
+            df[node_id].to_arrow(),
+            payloads,
+            native=native,
+            chunk_size=chunk_size,
+            append_only=append_only,
+            index_mode=index_mode,
+        )
 
     def ingest_nodes_arrow_entities(
         self,
@@ -1604,6 +1977,8 @@ class GraphDB:
         properties: dict[str, object] | None = None,
         native: bool = True,
         chunk_size: int = 100_000,
+        append_only: bool = False,
+        index_mode: str = "maintain",
     ):
         """Ingest node entity columns from Arrow-like columns."""
         try:
@@ -1624,6 +1999,8 @@ class GraphDB:
                 property_columns=list((properties or {}).keys()),
                 native=native,
                 chunk_size=chunk_size,
+                append_only=append_only,
+                index_mode=index_mode,
             )
 
         raw_node_ids = node_ids.to_pylist() if hasattr(node_ids, "to_pylist") else list(node_ids)
@@ -1646,7 +2023,14 @@ class GraphDB:
                     )
                 )
             )
-        return self.ingest_nodes_arrow(raw_node_ids, payloads, native=native, chunk_size=chunk_size)
+        return self.ingest_nodes_arrow(
+            raw_node_ids,
+            payloads,
+            native=native,
+            chunk_size=chunk_size,
+            append_only=append_only,
+            index_mode=index_mode,
+        )
 
     def _polars_labels_expr(self, pl, df, labels):
         """Return a Polars expression for node labels."""
@@ -1975,6 +2359,7 @@ class GraphDB:
         append_only: bool = True,
         native: bool = True,
         chunk_size: int = 100_000,
+        index_mode: str = "maintain",
     ):
         """Ingest typed edges from Arrow-like columns.
 
@@ -1992,16 +2377,31 @@ class GraphDB:
             append_only: Columnar ingestion currently requires ``True``.
             native: Use native backend columnar ingestion when available.
             chunk_size: Maximum rows per backend write.
+            index_mode: ``"maintain"`` updates secondary indexes immediately;
+                ``"defer"`` writes edge records and typed adjacency and marks
+                secondary indexes stale.
 
         Returns:
             Number of ingested edges.
         """
         if not append_only:
             raise NotImplementedError("columnar edge ingestion currently requires append_only=True")
+        self._validate_index_mode(index_mode)
+        index_mode = index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode
         edge_list = EdgeList.from_arrow(edge_ids, sources, targets, edge_types, edge_values)
         for chunk in edge_list.chunks(chunk_size):
-            self.store.ingest_edges_columnar(chunk, append_only=append_only, native=native)
-            self._put_edge_property_indexes_for_columnar_chunk(chunk)
+            self.store.ingest_edges_columnar(
+                chunk,
+                append_only=append_only,
+                native=native,
+                maintain_indexes=index_mode == "maintain",
+            )
+            if index_mode == "maintain":
+                self._put_edge_property_indexes_for_columnar_chunk(chunk)
+        if index_mode == "defer":
+            self._mark_indexes_stale("edge_type")
+            if self.indexed_edge_properties:
+                self._mark_indexes_stale("edge_property")
         return len(edge_list.edge_ids)
 
     def ingest_edges_polars(
@@ -2016,6 +2416,7 @@ class GraphDB:
         append_only: bool = True,
         native: bool = True,
         chunk_size: int = 100_000,
+        index_mode: str = "maintain",
     ):
         """Ingest typed edges from a Polars DataFrame.
 
@@ -2024,6 +2425,7 @@ class GraphDB:
         """
         if not append_only:
             raise NotImplementedError("columnar edge ingestion currently requires append_only=True")
+        self._validate_index_mode(index_mode)
         edge_list = EdgeList.from_polars(
             df,
             edge_id=edge_id,
@@ -2033,8 +2435,18 @@ class GraphDB:
             edge_value=edge_value,
         )
         for chunk in edge_list.chunks(chunk_size):
-            self.store.ingest_edges_columnar(chunk, append_only=append_only, native=native)
-            self._put_edge_property_indexes_for_columnar_chunk(chunk)
+            self.store.ingest_edges_columnar(
+                chunk,
+                append_only=append_only,
+                native=native,
+                maintain_indexes=index_mode == "maintain",
+            )
+            if index_mode == "maintain":
+                self._put_edge_property_indexes_for_columnar_chunk(chunk)
+        if index_mode == "defer":
+            self._mark_indexes_stale("edge_type")
+            if self.indexed_edge_properties:
+                self._mark_indexes_stale("edge_property")
         return len(edge_list.edge_ids)
 
     def ingest_edges_polars_entities(
@@ -2049,6 +2461,7 @@ class GraphDB:
         append_only: bool = True,
         native: bool = True,
         chunk_size: int = 100_000,
+        index_mode: str = "maintain",
     ):
         """Ingest edge entity columns from a Polars DataFrame.
 
@@ -2112,6 +2525,7 @@ class GraphDB:
             append_only=append_only,
             native=native,
             chunk_size=chunk_size,
+            index_mode=index_mode,
         )
 
     def ingest_edges_arrow_entities(
@@ -2125,6 +2539,7 @@ class GraphDB:
         append_only: bool = True,
         native: bool = True,
         chunk_size: int = 100_000,
+        index_mode: str = "maintain",
     ):
         """Ingest edge entity columns from Arrow-like columns."""
         try:
@@ -2142,6 +2557,7 @@ class GraphDB:
                 append_only=append_only,
                 native=native,
                 chunk_size=chunk_size,
+                index_mode=index_mode,
             )
 
         raw_edge_ids = edge_ids.to_pylist() if hasattr(edge_ids, "to_pylist") else list(edge_ids)
@@ -2175,6 +2591,7 @@ class GraphDB:
             append_only=append_only,
             native=native,
             chunk_size=chunk_size,
+            index_mode=index_mode,
         )
 
     def _put_edge_property_indexes_for_columnar_chunk(self, chunk: EdgeList) -> None:

@@ -2,10 +2,10 @@ import importlib.util
 
 import pytest
 
-from gestaltdb.ingestion import _column_to_list
+from gestaltdb.ingestion import ColumnarIngestionMode, IndexMaintenanceMode, _column_to_list
 from gestaltdb.graphdb import Edge, GraphDB, Node
 from gestaltdb.ingestion import EdgeList, NodeList
-from gestaltdb.kvstores import LMDBStore, PyRexStore
+from gestaltdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
 from gestaltdb.serializers import JSONSerializer, PickleSerializer
 
 
@@ -222,6 +222,230 @@ def test_columnar_node_ingestion_removes_stale_indexes(tmp_path):
         assert [node.get_id for node in graph_db.nodes_by_label("New")] == ["n1"]
         assert graph_db.nodes_by_property("kind", "old") == []
         assert [node.get_id for node in graph_db.nodes_by_property("kind", "new")] == ["n1"]
+    finally:
+        graph_db.close()
+
+
+def test_deferred_columnar_node_indexes_rebuild_to_correct_results(tmp_path):
+    pytest.importorskip("plyvel")
+    graph_db = GraphDB(LevelDBStore(path=str(tmp_path / "leveldb")), PickleSerializer())
+    try:
+        graph_db.create_node_property_index("kind")
+        nodes = [
+            Node(node_id="drug-1", labels=["Drug"], properties={"kind": "drug"}),
+            Node(node_id="protein-1", labels=["Protein"], properties={"kind": "protein"}),
+        ]
+
+        assert graph_db.ingest_nodes_arrow(
+            [node.get_id for node in nodes],
+            [graph_db.serialize_node_value(node) for node in nodes],
+            append_only=True,
+            index_mode="defer",
+        ) == 2
+
+        assert graph_db.get_node(b"drug-1").properties == {"kind": "drug"}
+        assert set(graph_db.stale_indexes()) == {"node_label", "node_property"}
+        with pytest.raises(RuntimeError, match="node_label"):
+            graph_db.nodes_by_label("Drug")
+        with pytest.raises(RuntimeError, match="node_property"):
+            graph_db.nodes_by_property("kind", "drug")
+
+        rebuilt = graph_db.rebuild_deferred_indexes()
+
+        assert rebuilt["node_label"] == 2
+        assert rebuilt["node_property"] == 2
+        assert graph_db.stale_indexes() == ()
+        assert [node.get_id for node in graph_db.nodes_by_label("Drug")] == ["drug-1"]
+        assert [node.get_id for node in graph_db.nodes_by_property("kind", "drug")] == ["drug-1"]
+    finally:
+        graph_db.close()
+
+
+def test_deferred_columnar_edge_indexes_rebuild_to_correct_results(tmp_path):
+    pytest.importorskip("plyvel")
+    graph_db = GraphDB(LevelDBStore(path=str(tmp_path / "leveldb")), PickleSerializer())
+    try:
+        graph_db.create_edge_property_index("score")
+        edge = Edge(
+            edge_id="e1",
+            source="n1",
+            target="n2",
+            properties={"type": "rel", "score": 1},
+        )
+
+        assert graph_db.ingest_edges_arrow(
+            [edge.get_id],
+            [edge.source],
+            [edge.target],
+            [edge.get_type],
+            [graph_db.serialize_edge_value(edge)],
+            index_mode="defer",
+        ) == 1
+
+        assert graph_db.get_edge(b"e1").properties == {"type": "rel", "score": 1}
+        assert graph_db.neighbors_by_edge_type("n1", "rel", direction="out") == [b"n2"]
+        assert set(graph_db.stale_indexes()) == {"edge_type", "edge_property"}
+        with pytest.raises(RuntimeError, match="edge_type"):
+            graph_db.edges_by_type("rel")
+        with pytest.raises(RuntimeError, match="edge_property"):
+            graph_db.edges_by_property("score", 1)
+
+        rebuilt = graph_db.rebuild_deferred_indexes()
+
+        assert rebuilt["edge_type"] == 1
+        assert rebuilt["edge_property"] == 1
+        assert graph_db.stale_indexes() == ()
+        assert [edge.get_id for edge in graph_db.edges_by_type("rel")] == ["e1"]
+        assert [edge.get_id for edge in graph_db.edges_by_property("score", 1)] == ["e1"]
+    finally:
+        graph_db.close()
+
+
+def test_columnar_ingestion_rejects_unknown_index_mode(tmp_path):
+    pytest.importorskip("plyvel")
+    graph_db = GraphDB(LevelDBStore(path=str(tmp_path / "leveldb")), PickleSerializer())
+    try:
+        with pytest.raises(ValueError, match="index_mode"):
+            graph_db.ingest_nodes_arrow(["n1"], [graph_db.serialize_node_value(Node("n1"))], index_mode="fast")
+        with pytest.raises(ValueError, match="index_mode"):
+            graph_db.ingest_edges_arrow(["e1"], ["n1"], ["n2"], ["rel"], [b"value"], index_mode="fast")
+    finally:
+        graph_db.close()
+
+
+def test_deferred_rebuild_handles_multiple_node_and_edge_property_indexes(tmp_path):
+    pytest.importorskip("plyvel")
+    graph_db = GraphDB(LevelDBStore(path=str(tmp_path / "leveldb")), PickleSerializer())
+    try:
+        graph_db.create_node_property_index("kind")
+        graph_db.create_node_property_index("age")
+        graph_db.create_edge_property_index("score")
+        graph_db.create_edge_property_index("weight")
+        nodes = [
+            Node(node_id="n1", labels=["Entity"], properties={"kind": "drug", "age": 20}),
+            Node(node_id="n2", labels=["Entity"], properties={"kind": "protein", "age": 40}),
+        ]
+        edge = Edge(edge_id="e1", source="n1", target="n2", properties={"type": "rel", "score": 1, "weight": 2})
+
+        graph_db.ingest_nodes_arrow(
+            [node.get_id for node in nodes],
+            [graph_db.serialize_node_value(node) for node in nodes],
+            append_only=True,
+            index_mode="defer",
+        )
+        graph_db.ingest_edges_arrow(
+            [edge.get_id],
+            [edge.source],
+            [edge.target],
+            [edge.get_type],
+            [graph_db.serialize_edge_value(edge)],
+            index_mode="defer",
+        )
+
+        assert set(graph_db.stale_indexes()) == {"node_label", "node_property", "edge_type", "edge_property"}
+
+        rebuilt = graph_db.rebuild_deferred_indexes()
+
+        assert rebuilt["node_label"] == 2
+        assert rebuilt["node_property:kind"] == 2
+        assert rebuilt["node_property:age"] == 2
+        assert rebuilt["edge_type"] == 1
+        assert rebuilt["edge_property:score"] == 1
+        assert rebuilt["edge_property:weight"] == 1
+        assert graph_db.stale_indexes() == ()
+        assert [node.get_id for node in graph_db.nodes_by_property("kind", "drug")] == ["n1"]
+        assert [node.get_id for node in graph_db.nodes_by_property_range("age", 30, 50)] == ["n2"]
+        assert [edge.get_id for edge in graph_db.edges_by_property("score", 1)] == ["e1"]
+        assert [edge.get_id for edge in graph_db.edges_by_property_range("weight", 1, 3)] == ["e1"]
+    finally:
+        graph_db.close()
+
+
+def test_high_level_polars_ingestion_defaults_to_defer_rebuild(tmp_path):
+    pytest.importorskip("plyvel")
+    pl = pytest.importorskip("polars")
+    graph_db = GraphDB(LevelDBStore(path=str(tmp_path / "leveldb")), JSONSerializer())
+    try:
+        graph_db.create_node_property_index("kind")
+        graph_db.create_edge_property_index("score")
+        node_df = pl.DataFrame({"node_id": ["n1", "n2"], "labels": [["Entity"], ["Entity"]], "kind": ["drug", "protein"]})
+        edge_df = pl.DataFrame({"edge_id": ["e1"], "source": ["n1"], "target": ["n2"], "edge_type": ["rel"], "score": [1]})
+
+        result = graph_db.ingest_polars(
+            node_df,
+            edge_df,
+            node_property_columns=["kind"],
+            edge_property_columns=["score"],
+        )
+
+        assert result["nodes"] == 2
+        assert result["edges"] == 1
+        assert result["stale_indexes"] == ()
+        assert [node.get_id for node in graph_db.nodes_by_property("kind", "drug")] == ["n1"]
+        assert [edge.get_id for edge in graph_db.edges_by_property("score", 1)] == ["e1"]
+        assert graph_db.neighbors_by_edge_type("n1", "rel") == [b"n2"]
+    finally:
+        graph_db.close()
+
+
+def test_high_level_arrow_ingestion_supports_defer_without_rebuild(tmp_path):
+    pytest.importorskip("plyvel")
+    pa = pytest.importorskip("pyarrow")
+    graph_db = GraphDB(LevelDBStore(path=str(tmp_path / "leveldb")), JSONSerializer())
+    try:
+        graph_db.create_node_property_index("kind")
+        graph_db.create_edge_property_index("score")
+
+        result = graph_db.ingest_arrow(
+            pa.array(["n1", "n2"]),
+            pa.array(["e1"]),
+            pa.array(["n1"]),
+            pa.array(["n2"]),
+            pa.array(["rel"]),
+            labels=pa.array([["Entity"], ["Entity"]]),
+            node_properties={"kind": pa.array(["drug", "protein"])},
+            edge_properties={"score": pa.array([1])},
+            index_mode=IndexMaintenanceMode.DEFER,
+        )
+
+        assert result["nodes"] == 2
+        assert result["edges"] == 1
+        assert set(result["stale_indexes"]) == {"node_label", "node_property", "edge_type", "edge_property"}
+        assert graph_db.neighbors_by_edge_type("n1", "rel") == [b"n2"]
+        with pytest.raises(RuntimeError, match="node_property"):
+            graph_db.nodes_by_property("kind", "drug")
+
+        graph_db.rebuild_deferred_indexes()
+
+        assert [node.get_id for node in graph_db.nodes_by_property("kind", "drug")] == ["n1"]
+        assert [edge.get_id for edge in graph_db.edges_by_property("score", 1)] == ["e1"]
+    finally:
+        graph_db.close()
+
+
+def test_high_level_arrow_serialized_payload_mode(tmp_path):
+    pytest.importorskip("plyvel")
+    graph_db = GraphDB(LevelDBStore(path=str(tmp_path / "leveldb")), PickleSerializer())
+    try:
+        node = Node(node_id="n1", labels=["Entity"], properties={"kind": "drug"})
+        edge = Edge(edge_id="e1", source="n1", target="n2", properties={"type": "rel"})
+
+        result = graph_db.ingest_arrow(
+            ["n1"],
+            ["e1"],
+            ["n1"],
+            ["n2"],
+            ["rel"],
+            ingestion_mode=ColumnarIngestionMode.SERIALIZED_PAYLOADS,
+            node_values=[graph_db.serialize_node_value(node)],
+            edge_values=[graph_db.serialize_edge_value(edge)],
+            index_mode=IndexMaintenanceMode.DEFER_REBUILD,
+        )
+
+        assert result["nodes"] == 1
+        assert result["edges"] == 1
+        assert graph_db.nodes_by_label("Entity")[0].get_id == "n1"
+        assert graph_db.edges_by_type("rel")[0].get_id == "e1"
     finally:
         graph_db.close()
 
