@@ -10,8 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 project = "GestaltDB"
-author = "GestaltDB contributors"
-copyright = "2026, GestaltDB contributors"
+author = "Mylonas Charilaos"
+copyright = "2026, Mylonas Charilaos"
 release = "0.4.0"
 
 extensions = [

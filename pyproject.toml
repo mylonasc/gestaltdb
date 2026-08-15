@@ -6,6 +6,9 @@ build-backend = "setuptools.build_meta"
 name = "gestaltdb"
 version = "0.4.0"
 description = "A pure Python GraphDB for attributed graphs."
+authors = [
+    { name = "Mylonas Charilaos", email = "mylonas.charilaos@gmail.com" },
+]
 readme = "README.md"
 requires-python = ">=3.9,<3.14"
 dependencies = [
