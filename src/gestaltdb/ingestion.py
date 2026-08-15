@@ -3,6 +3,42 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
+
+
+class ColumnarIngestionMode(str, Enum):
+    """How high-level columnar ingestion should interpret input columns.
+
+    ``ENTITY_COLUMNS`` means node and edge payloads are built from structured
+    entity columns such as IDs, labels, sources, targets, types, and properties.
+    With ``JSONSerializer``, this enables the fast Polars/Arrow JSON payload
+    path.
+
+    ``SERIALIZED_PAYLOADS`` means inputs already contain serializer-compatible
+    ``node_value`` and ``edge_value`` byte payload columns.
+    """
+
+    ENTITY_COLUMNS = "entity_columns"
+    SERIALIZED_PAYLOADS = "serialized_payloads"
+
+
+class IndexMaintenanceMode(str, Enum):
+    """Secondary-index maintenance policy for columnar ingestion.
+
+    ``MAINTAIN`` updates secondary indexes during ingestion. This is safest for
+    incremental writes, but expensive for large append-only bulk loads.
+
+    ``DEFER`` writes canonical graph records and traversal-critical typed
+    adjacency, marks secondary indexes stale, and requires an explicit
+    ``GraphDB.rebuild_deferred_indexes()`` before index-backed queries.
+
+    ``DEFER_REBUILD`` is a high-level convenience mode: defer index maintenance
+    during ingestion, then immediately run the one-pass deferred index rebuild.
+    """
+
+    MAINTAIN = "maintain"
+    DEFER = "defer"
+    DEFER_REBUILD = "defer_rebuild"
 
 
 def _missing_dependency_error(package_name, install_name=None, feature_name=None):

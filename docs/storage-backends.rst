@@ -4,6 +4,34 @@ Storage Backends
 GestaltDB separates graph logic from storage. ``GraphDB`` receives a key-value
 store instance and a serializer instance.
 
+Backend Selection Summary
+-------------------------
+
+The current backend trade-offs are:
+
+==================== ============================ ============================================
+Backend              Best fit                     Main trade-offs
+==================== ============================ ============================================
+``LMDBStore``        Mature embedded storage      Requires choosing a sufficient ``map_size``
+``LevelDBStore``     Simple local graphs          No native Arrow/Polars columnar fast path
+``PyRexStore``       Large writes and ingestion   Optional dependency and RocksDB tuning knobs
+==================== ============================ ============================================
+
+Recommendations for the library as-is:
+
+- Start with ``LevelDBStore`` for small applications, examples, and local testing
+  when you do not need RocksDB's native columnar ingestion path.
+- Use ``PyRexStore`` for bulk loads and append-heavy workloads, especially with
+  ``GraphDB.ingest_arrow`` or ``GraphDB.ingest_polars``.
+- Use ``LMDBStore`` when LMDB's storage model is desirable and the database size
+  is predictable enough to configure ``map_size`` safely.
+- Keep ``disable_wal=False`` for durable RocksDB writes. Consider
+  ``disable_wal=True`` only for disposable benchmark runs or reloadable bulk-load
+  experiments.
+- Benchmark with your actual serializer, index definitions, and graph shape.
+  Backend differences can be hidden by Python object creation, JSON
+  serialization, or index maintenance.
+
 LMDB Backend
 ------------
 
@@ -20,6 +48,11 @@ Use ``LMDBStore`` for a mature embedded backend with named sub-databases.
 
 LMDB keeps separate databases for nodes, edges, adjacency, typed adjacency, and
 sorted indexes. Increase ``map_size`` when loading large graphs.
+
+LMDB is a good fit when you want a mature embedded backend and can provision the
+maximum database size ahead of time. It is not currently the optimized backend
+for native Arrow/Polars columnar ingestion; those paths are designed around
+``PyRexStore`` when PyRex exposes ``write_columnar_batch``.
 
 LevelDB Backend
 ---------------
@@ -38,6 +71,12 @@ Use ``LevelDBStore`` when you want LevelDB through ``plyvel``.
 ``plyvel`` requires compatible CPython wheels or local LevelDB build tooling. If
 installation fails on Python 3.14 or a free-threaded interpreter, create a Python
 3.12 environment and install ``gestaltdb[leveldb]`` there.
+
+LevelDB is the pragmatic default for modest local workloads. It supports the same
+``GraphDB`` API and index semantics, but columnar ingestion falls back to Python
+bulk writes rather than RocksDB's native columnar batch writer. In local
+benchmarks, LevelDB can be close to RocksDB when serialization dominates, but it
+does not get the same write-phase advantage on larger native columnar loads.
 
 RocksDB Backend
 ---------------
@@ -98,6 +137,14 @@ Other serializers use the same entity methods as a convenience API, but fall
 back to Python row-wise serialization. Columnar edge ingestion remains
 append-only.
 
+RocksDB is the backend to choose when ingestion throughput matters. A targeted
+100,000-node and 500,000-edge local benchmark using JSON payloads showed RocksDB
+with native columnar ingestion at 3.400 seconds total versus 3.948 seconds for
+LevelDB on the same Python JSON serialization path, a 1.16x total speedup and a
+1.23x write-phase speedup. The same run showed larger gains from avoiding Python
+JSON serialization with Polars, so pair RocksDB with Polars/Arrow entity-column
+ingestion when your input data is already tabular.
+
 Indexes
 -------
 
@@ -128,6 +175,34 @@ reopened databases continue maintaining the configured property indexes.
 
 Columnar ingestion keeps label, relationship type, property, composite, and range
 indexes current for configured indexed properties.
+
+Columnar ingestion also accepts ``index_mode`` to control when secondary indexes
+are updated:
+
+``IndexMaintenanceMode.MAINTAIN``
+   Updates label, type, property, composite, and range indexes during ingestion.
+   Use this for incremental writes or when index-backed queries must be valid as
+   soon as ingestion returns.
+
+``IndexMaintenanceMode.DEFER``
+   Writes canonical node and edge records plus traversal-critical typed adjacency
+   records, marks affected secondary indexes stale, and requires an explicit
+   ``GraphDB.rebuild_deferred_indexes()`` before indexed queries. Use this when
+   the write window is more important than immediate index readiness.
+
+``IndexMaintenanceMode.DEFER_REBUILD``
+   Defers secondary-index writes during ingestion and immediately rebuilds stale
+   indexes before returning. This is the high-level default for
+   ``GraphDB.ingest_arrow`` and ``GraphDB.ingest_polars``.
+
+On a targeted 100,000-node and 500,000-edge local benchmark with node property
+indexes on ``kind`` and ``group`` plus an edge property index on ``weight``,
+deferred mode reduced the write phase from 12.269 seconds to 1.407 seconds
+(``8.72x`` faster). The immediate rebuild took 12.973 seconds, so total
+ingest-plus-rebuild time was 14.380 seconds, which was 17.2% slower than inline
+maintenance for that subset. Use deferred indexing to move index work out of the
+critical write path; do not assume it always reduces total wall-clock time when a
+full rebuild runs immediately.
 
 Backend Index Interface
 ~~~~~~~~~~~~~~~~~~~~~~~

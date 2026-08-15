@@ -74,26 +74,25 @@ import pyarrow as pa
 from gestaltdb.graphdb import GraphDB
 from gestaltdb.kvstores import LevelDBStore
 from gestaltdb.serializers import JSONSerializer
+from gestaltdb import IndexMaintenanceMode
 
 with TemporaryDirectory() as tmpdir:
     graph = GraphDB(LevelDBStore(path=f"{tmpdir}/graph"), JSONSerializer())
 
-    graph.ingest_nodes_arrow_entities(
-        pa.array(["alice", "bob", "carol"]),
-        labels=pa.array([["Person"], ["Person"], ["Person"]]),
-        properties={
-            "name": pa.array(["Alice", "Bob", "Carol"]),
-            "age": pa.array([34, 36, 29]),
-        },
-    )
+    graph.create_node_property_index("name")
 
-    graph.ingest_edges_arrow_entities(
+    result = graph.ingest_arrow(
+        pa.array(["alice", "bob", "carol"]),
         pa.array(["alice-knows-bob", "bob-knows-carol"]),
         pa.array(["alice", "bob"]),
         pa.array(["bob", "carol"]),
         pa.array(["knows", "knows"]),
-        properties={"since": pa.array([2024, 2025])},
+        labels=pa.array([["Person"], ["Person"], ["Person"]]),
+        node_properties={"name": pa.array(["Alice", "Bob", "Carol"]), "age": pa.array([34, 36, 29])},
+        edge_properties={"since": pa.array([2024, 2025])},
+        index_mode=IndexMaintenanceMode.DEFER_REBUILD,
     )
+    print(result)  # {'nodes': 3, 'edges': 2, 'rebuilt_indexes': ..., 'stale_indexes': ()}
 
     result = graph.query('MATCH (a:Person {name: "Alice"}) MATCH (a)-[:knows]->(b) RETURN a.id, b.name')
     print(result.records)
@@ -113,6 +112,7 @@ import polars as pl
 from gestaltdb.graphdb import GraphDB
 from gestaltdb.kvstores import LevelDBStore
 from gestaltdb.serializers import JSONSerializer
+from gestaltdb import IndexMaintenanceMode
 
 nodes = pl.DataFrame({
     "node_id": ["alice", "bob", "carol"],
@@ -131,9 +131,15 @@ edges = pl.DataFrame({
 
 with TemporaryDirectory() as tmpdir:
     graph = GraphDB(LevelDBStore(path=f"{tmpdir}/graph"), JSONSerializer())
+    graph.create_node_property_index("name")
 
-    graph.ingest_nodes_polars_entities(nodes)
-    graph.ingest_edges_polars_entities(edges)
+    graph.ingest_polars(
+        nodes,
+        edges,
+        node_property_columns=["name", "age"],
+        edge_property_columns=["since"],
+        index_mode=IndexMaintenanceMode.DEFER_REBUILD,
+    )
 
     result = graph.query('MATCH (a:Person) MATCH (a)-[:knows]->(b) RETURN a.name, b.name ORDER BY a.name')
     print(result.records)
@@ -160,6 +166,20 @@ With pip:
 ```sh
 python -m pip install /path/to/gestaltdb
 ```
+
+## Backend and Ingestion Recommendations
+
+For the current library:
+
+- Use `LevelDBStore` for small local graphs, examples, and straightforward embedded use.
+- Use `PyRexStore`/RocksDB for large append-only loads and Arrow/Polars columnar ingestion.
+- Use `LMDBStore` when LMDB's storage model is desirable and you can size `map_size` ahead of loading.
+- Use `JSONSerializer` with `GraphDB.ingest_polars` or `GraphDB.ingest_arrow` when input data is already tabular and JSON-compatible.
+- Use pre-serialized `node_value` and `edge_value` columns when upstream data already has serializer-compatible payload bytes.
+- Keep `IndexMaintenanceMode.MAINTAIN` for incremental writes that need indexes ready immediately.
+- Use `IndexMaintenanceMode.DEFER` or `DEFER_REBUILD` for bulk loads when you want to move secondary-index work out of the write path.
+
+Measured locally on 100k nodes and 500k edges, RocksDB native columnar ingestion was `1.16x` faster end-to-end than LevelDB on the same Python JSON payload path, and Polars JSON payload construction was `1.86x` faster than Python JSON serialization. Deferred indexing made the write phase `8.72x` faster, but immediate full rebuild made total ingest-plus-rebuild `17.2%` slower for that subset. Treat these as workload-specific guidance and benchmark your graph shape, serializer, and indexes.
 
 ## Features
 

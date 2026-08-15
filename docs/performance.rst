@@ -5,6 +5,44 @@ GestaltDB includes benchmark scripts for ingestion, traversal, sampling, RocksDB
 tuning, and an optional ArcadeDB comparison. Treat the included local results as
 directional examples, not universal claims.
 
+Practical Recommendations
+-------------------------
+
+For the library as it exists today, choose ingestion and storage options by the
+shape of the workload rather than by a single global default:
+
+- Use ``PyRexStore``/RocksDB for large append-only loads, columnar ingestion, and
+  write-heavy workloads where native batch writes and RocksDB tuning matter.
+- Use ``LevelDBStore`` for simple local graphs, predictable installs through
+  ``plyvel``, and workloads where the graph is small enough that Python object
+  construction dominates storage I/O.
+- Use ``LMDBStore`` when you want LMDB's mature embedded storage model and can
+  size ``map_size`` ahead of loading. LMDB is not the optimized path for the
+  current Arrow/Polars native columnar ingestion work.
+- Prefer ``JSONSerializer`` with Polars or Arrow entity-column ingestion when
+  data starts as tabular JSON-compatible columns. This avoids constructing
+  ``Node`` and ``Edge`` objects per row and can move payload construction into
+  Polars' vectorized JSON encoder.
+- Prefer pre-serialized ``node_value`` and ``edge_value`` columns when upstream
+  data already has serializer-compatible payload bytes. This isolates the
+  backend write path and avoids repeated serialization in GestaltDB.
+- Use ``IndexMaintenanceMode.MAINTAIN`` for incremental writes or when indexed
+  queries must be valid immediately after each ingestion call.
+- Use ``IndexMaintenanceMode.DEFER`` when the write window matters most and you
+  can explicitly call ``GraphDB.rebuild_deferred_indexes()`` before indexed
+  queries.
+- Use ``IndexMaintenanceMode.DEFER_REBUILD`` as the safest bulk-load convenience
+  mode: it defers secondary-index writes during ingestion and rebuilds stale
+  indexes before returning.
+
+The important deferred-index trade-off is latency placement. Deferring index
+maintenance can make the write phase much faster, but a full rebuild still has to
+scan stored graph records. If you include an immediate rebuild in the same timed
+operation, total wall-clock time may be higher for some graph sizes and index
+sets. The current implementation is best viewed as a way to shorten the critical
+write window and make index rebuilding explicit and safe, not as a universal
+end-to-end speedup.
+
 Install Benchmark Dependencies
 ------------------------------
 
@@ -131,6 +169,54 @@ RocksDB Polars columnar native 929,044/s       250,517 edges/s
 
 Larger append-only workloads with pre-serialized columnar payloads are expected
 to benefit more than small runs dominated by Python object construction.
+
+End-to-End Ingestion Insights
+-----------------------------
+
+``notebooks/06_end_to_end_ingestion_benchmark.ipynb`` measures serialization plus
+ingestion. A targeted local run on this branch used 100,000 nodes, 500,000 edges,
+batch size 10,000, ``JSONSerializer``, RocksDB native columnar ingestion, WAL
+enabled, RocksDB parallelism 4, and a 64 MiB write buffer. Dataset generation and
+database setup/cleanup were excluded.
+
+==================================== ===================== ============= ========= ======== =================
+Case                                 Isolates              Serialization Ingestion Rebuild  Total
+==================================== ===================== ============= ========= ======== =================
+LevelDB + Python JSON                baseline backend      0.882 s       3.066 s   0.000 s  3.948 s
+RocksDB + Python JSON                RocksDB backend       0.916 s       2.484 s   0.000 s  3.400 s
+RocksDB + Polars JSON                serialization path    0.494 s       2.400 s   0.000 s  2.894 s
+RocksDB + Polars, maintain indexes   inline indexes        n/a           12.269 s  0.000 s  12.269 s
+RocksDB + Polars, defer then rebuild deferred indexes      n/a           1.407 s   12.973 s 14.380 s
+==================================== ===================== ============= ========= ======== =================
+
+The same run showed these relative results:
+
+=========================================================== ===============================
+Comparison                                                  Result
+=========================================================== ===============================
+RocksDB vs LevelDB, same Python JSON path                   1.16x faster total
+RocksDB vs LevelDB, ingestion/write phase only              1.23x faster write phase
+Polars JSON vs Python JSON serialization on RocksDB         1.86x faster serialization
+Polars JSON vs Python JSON end-to-end on RocksDB            1.17x faster total
+Deferred index write phase vs inline index maintenance      8.72x faster write phase
+Deferred index plus rebuild vs inline index maintenance     17.2% higher total time
+=========================================================== ===============================
+
+Interpretation:
+
+- RocksDB's native columnar path helped the write phase on the measured workload,
+  but the total gain was moderate because serialization was still a large share
+  of wall-clock time.
+- Polars JSON payload construction reduced serialization time substantially for
+  JSON-compatible tabular inputs.
+- Deferring index construction shifted work out of the write phase. This is useful
+  when ingestion must complete quickly before a later rebuild step, but it was not
+  faster end-to-end when the rebuild was performed immediately for this 100k node
+  and 500k edge subset with node indexes on ``kind`` and ``group`` plus an edge
+  index on ``weight``.
+- Benchmark your actual graph shape and index set before promising absolute
+  speedups. The fastest mode for append-only writes is not always the fastest mode
+  for ingest-plus-query-ready indexes.
 
 RocksDB Tuning and Compaction Benchmarks
 ----------------------------------------
