@@ -12,6 +12,7 @@ __pycache__/
 htmlcov/
 docs/_build/
 benchmark_results/
+log/
 INGESTION_PERFORMANCE_OPTS_ROADMAP.md
 .ipynb_checkpoints/
 graph_lmdb*/
