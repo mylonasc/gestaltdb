@@ -80,6 +80,49 @@ def test_single_edge(graph_db):
     assert graph_db.get_edge(edge_ab.get_id_bytes) is None
 
 
+def test_deleting_edge_removes_legacy_adjacency(graph_db):
+    graph_db.put_node(Node(node_id="n1"))
+    graph_db.put_node(Node(node_id="n2"))
+    graph_db.put_edge(Edge(edge_id="e1", source="n1", target="n2", properties={"type": "rel"}))
+
+    graph_db.delete_edge(b"e1")
+
+    assert graph_db.get_adjacency_list(b"n1", direction="any") == []
+    assert graph_db.get_adjacency_list(b"n2", direction="any") == []
+
+
+def test_replacing_edge_removes_legacy_adjacency_from_old_endpoints(graph_db):
+    for node_id in ["n1", "n2", "n3", "n4"]:
+        graph_db.put_node(Node(node_id=node_id))
+
+    graph_db.put_edge(Edge(edge_id="e1", source="n1", target="n2", properties={"type": "old"}))
+    graph_db.put_edge(Edge(edge_id="e1", source="n3", target="n4", properties={"type": "new"}))
+
+    assert graph_db.get_adjacency_list(b"n1", direction="any") == []
+    assert graph_db.get_adjacency_list(b"n2", direction="any") == []
+    assert graph_db.get_adjacency_list(b"n3", direction="any") == ["e1"]
+    assert graph_db.get_adjacency_list(b"n4", direction="any") == ["e1"]
+
+
+def test_deleting_node_removes_incident_edges_and_edge_indexes(graph_db):
+    graph_db.put_node(Node(node_id="n1"))
+    graph_db.put_node(Node(node_id="n2"))
+    graph_db.put_node(Node(node_id="n3"))
+    graph_db.put_edge(Edge(edge_id="e1", source="n1", target="n2", properties={"type": "rel", "score": 1}))
+    graph_db.put_edge(Edge(edge_id="e2", source="n2", target="n3", properties={"type": "rel", "score": 2}))
+    graph_db.create_edge_property_index("score")
+
+    graph_db.delete_node(b"n2")
+
+    assert graph_db.get_node(b"n2") is None
+    assert graph_db.get_edge(b"e1") is None
+    assert graph_db.get_edge(b"e2") is None
+    assert graph_db.neighbors_by_edge_type("n1", "rel", direction="out") == []
+    assert graph_db.neighbors_by_edge_type("n3", "rel", direction="in") == []
+    assert graph_db.edges_by_type("rel") == []
+    assert graph_db.edges_by_property("score", 1) == []
+
+
 def test_bfs_simple(graph_db):
     node_a = Node(properties={"label": "A"})
     node_b = Node(properties={"label": "B"})

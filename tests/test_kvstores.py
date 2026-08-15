@@ -33,6 +33,7 @@ def test_kvstore_abstract_methods_raise_not_implemented():
         lambda: store.get_nodes_bulk([b"n"]),
         lambda: store.put_edges_bulk({b"e": b"v"}),
         lambda: store.get_edges_bulk([b"e"]),
+        lambda: store.delete_adjacency(b"n"),
         lambda: store.put_typed_adjacency(b"n1", b"n2", "rel", b"e"),
         lambda: store.delete_typed_adjacency(b"n1", b"n2", "rel", b"e"),
         lambda: list(store.iter_typed_adjacency(b"n1", "rel")),
