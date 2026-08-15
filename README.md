@@ -167,6 +167,20 @@ With pip:
 python -m pip install /path/to/gestaltdb
 ```
 
+## Backend and Ingestion Recommendations
+
+For the current library:
+
+- Use `LevelDBStore` for small local graphs, examples, and straightforward embedded use.
+- Use `PyRexStore`/RocksDB for large append-only loads and Arrow/Polars columnar ingestion.
+- Use `LMDBStore` when LMDB's storage model is desirable and you can size `map_size` ahead of loading.
+- Use `JSONSerializer` with `GraphDB.ingest_polars` or `GraphDB.ingest_arrow` when input data is already tabular and JSON-compatible.
+- Use pre-serialized `node_value` and `edge_value` columns when upstream data already has serializer-compatible payload bytes.
+- Keep `IndexMaintenanceMode.MAINTAIN` for incremental writes that need indexes ready immediately.
+- Use `IndexMaintenanceMode.DEFER` or `DEFER_REBUILD` for bulk loads when you want to move secondary-index work out of the write path.
+
+Measured locally on 100k nodes and 500k edges, RocksDB native columnar ingestion was `1.16x` faster end-to-end than LevelDB on the same Python JSON payload path, and Polars JSON payload construction was `1.86x` faster than Python JSON serialization. Deferred indexing made the write phase `8.72x` faster, but immediate full rebuild made total ingest-plus-rebuild `17.2%` slower for that subset. Treat these as workload-specific guidance and benchmark your graph shape, serializer, and indexes.
+
 ## Features
 
 - Attributed `Node` and `Edge` objects with stable IDs.
