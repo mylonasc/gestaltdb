@@ -1432,7 +1432,7 @@ class GraphDB:
         Examples:
             >>> graph_db.neighbors_by_edge_type("drug-1", "drug-to-protein")  # doctest: +SKIP
         """
-        return [record['neighbor_id'] for record in self.get_typed_adjacency(node_id, edge_type, direction)]
+        return [record['neighbor_id'] for record in self.iter_typed_adjacency(node_id, edge_type, direction)]
 
     def edges_by_edge_type(self, node_id, edge_type: str, direction: str = 'out'):
         """Return edge IDs connected by a specific edge type.

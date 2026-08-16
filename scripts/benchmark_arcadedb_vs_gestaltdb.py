@@ -313,7 +313,7 @@ def run_arcadedb_query(db, workload: str, args: argparse.Namespace) -> int:
     if workload == "star_traversal":
         total = 0
         for _ in range(args.iterations):
-            total += arcade_result_count(db.query("sql", "SELECT out('RelA').size() AS degree FROM Node WHERE id = ?", "n0"))
+            total += arcade_result_count(db.query("sql", "SELECT expand(out('RelA')) FROM Node WHERE id = ?", "n0"))
         return total
     if workload == "bfs_depth":
         query = (
