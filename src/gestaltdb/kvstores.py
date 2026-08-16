@@ -155,6 +155,8 @@ def _typed_adjacency_prefix(direction: str, node_id: bytes, edge_type: str) -> b
 class KVStore:
     """Abstract interface for a simple key-value store."""
 
+    supports_transactions = False
+
     # The basic K/V methods:
     def put(self, key: bytes, value: bytes):
         """Store a raw key/value pair."""
@@ -175,6 +177,10 @@ class KVStore:
     def close(self):
         """Close any resources owned by the store."""
         raise NotImplementedError
+
+    def transaction(self, **options):
+        """Return a transaction-bound store when supported."""
+        raise NotImplementedError("transactions are not supported by this KVStore")
 
     def put_metadata(self, key: bytes, value: bytes):
         """Store a metadata key/value pair."""
@@ -402,6 +408,8 @@ class LMDBStore(KVStore):
         >>> store = LMDBStore(path="/tmp/example_graph_lmdb")  # doctest: +SKIP
     """
 
+    supports_transactions = True
+
     def __init__(self, path='graph_lmdb', map_size=10_485_760, map_id = True, map_keys = False):
         """
         Creates/opens an LMDB environment with three named sub-databases:
@@ -462,6 +470,10 @@ class LMDBStore(KVStore):
     def close(self):
         """Close the LMDB environment."""
         self.env.close()
+
+    def transaction(self, write: bool = True, **options):
+        """Open a transaction spanning all LMDB named databases."""
+        return LMDBTransactionStore(self, write=write, **options)
 
     def put_metadata(self, key: bytes, value: bytes):
         """Store a metadata key/value pair."""
@@ -711,6 +723,251 @@ class LMDBStore(KVStore):
                 if end_value is not None and (range_value > end_value or (range_value == end_value and not include_end)):
                     break
                 yield value
+
+
+class LMDBTransactionStore(KVStore):
+    """Transaction-bound LMDB store using one environment transaction."""
+
+    supports_transactions = True
+
+    def __init__(self, parent: LMDBStore, write: bool = True, **options):
+        self.parent = parent
+        self.write = write
+        self.txn = parent.env.begin(write=write, **options)
+        self._active = True
+
+    def _check_active(self):
+        if not self._active:
+            raise RuntimeError("transaction is no longer active")
+
+    def commit(self):
+        self._check_active()
+        self.txn.commit()
+        self._active = False
+
+    def rollback(self):
+        if self._active:
+            self.txn.abort()
+            self._active = False
+
+    def close(self):
+        self.rollback()
+
+    def transaction(self, **options):
+        raise NotImplementedError("nested transactions are not supported")
+
+    def put(self, key: bytes, value: bytes):
+        self._check_active()
+
+    def get(self, key: bytes) -> bytes:
+        self._check_active()
+        return None
+
+    def delete(self, key: bytes):
+        self._check_active()
+
+    def range_iter(self, start_key: bytes, end_key: bytes):
+        self._check_active()
+        cursor = self.txn.cursor(db=self.parent.nodes_db)
+        if not cursor.set_range(start_key):
+            return
+        for key, value in cursor:
+            if key > end_key:
+                break
+            yield key, value
+
+    def put_metadata(self, key: bytes, value: bytes):
+        self._check_active()
+        self.txn.put(key, value, db=self.parent.metadata_db)
+
+    def get_metadata(self, key: bytes) -> bytes:
+        self._check_active()
+        return self.txn.get(key, db=self.parent.metadata_db)
+
+    def delete_metadata(self, key: bytes):
+        self._check_active()
+        self.txn.delete(key, db=self.parent.metadata_db)
+
+    def put_node(self, node_id: bytes, value: bytes):
+        self._check_active()
+        self.txn.put(node_id, value, db=self.parent.nodes_db)
+
+    def get_node(self, node_id: bytes) -> bytes:
+        self._check_active()
+        return self.txn.get(node_id, db=self.parent.nodes_db)
+
+    def delete_node(self, node_id: bytes):
+        self._check_active()
+        self.txn.delete(node_id, db=self.parent.nodes_db)
+
+    def put_edge(self, edge_id: bytes, value: bytes):
+        self._check_active()
+        self.txn.put(edge_id, value, db=self.parent.edges_db)
+
+    def get_edge(self, edge_id: bytes) -> bytes:
+        self._check_active()
+        return self.txn.get(edge_id, db=self.parent.edges_db)
+
+    def delete_edge(self, edge_id: bytes):
+        self._check_active()
+        self.txn.delete(edge_id, db=self.parent.edges_db)
+
+    def put_nodes_bulk(self, keys_and_values: dict[bytes, bytes]):
+        self._check_active()
+        for node_id, value in keys_and_values.items():
+            self.txn.put(node_id, value, db=self.parent.nodes_db)
+
+    def get_nodes_bulk(self, node_ids: list[bytes]) -> dict[bytes, bytes]:
+        self._check_active()
+        results = {}
+        for node_id in node_ids:
+            value = self.txn.get(node_id, db=self.parent.nodes_db)
+            if value is not None:
+                results[node_id] = value
+        return results
+
+    def put_edges_bulk(self, keys_and_values: dict[bytes, bytes]):
+        self._check_active()
+        for edge_id, value in keys_and_values.items():
+            self.txn.put(edge_id, value, db=self.parent.edges_db)
+
+    def get_edges_bulk(self, edge_ids: list[bytes]) -> dict[bytes, bytes]:
+        self._check_active()
+        results = {}
+        for edge_id in edge_ids:
+            value = self.txn.get(edge_id, db=self.parent.edges_db)
+            if value is not None:
+                results[edge_id] = value
+        return results
+
+    def get_edge_keys_generator(self, num_edges=None, key_offset=None):
+        yield from self._key_generator(self.parent.edges_db, num_edges, key_offset)
+
+    def get_node_keys_generator(self, num_nodes=None, key_offset=None):
+        yield from self._key_generator(self.parent.nodes_db, num_nodes, key_offset)
+
+    def _key_generator(self, db, limit=None, key_offset=None):
+        self._check_active()
+        yielded = 0
+        cursor = self.txn.cursor(db=db)
+        if key_offset is not None:
+            if not cursor.set_range(key_offset):
+                return
+        else:
+            if not cursor.first():
+                return
+        for key, _ in cursor:
+            yield key
+            yielded += 1
+            if limit is not None and yielded == limit:
+                break
+
+    def put_adjacency(self, node_id: bytes, value: bytes) -> None:
+        self._check_active()
+        self.txn.put(node_id, value, db=self.parent.adj_db)
+
+    def get_adjacency(self, node_id: bytes) -> Optional[bytes]:
+        self._check_active()
+        if not isinstance(node_id, bytes):
+            raise Exception('Get adjacency requires the bytes! (serialized data)')
+        return self.txn.get(node_id, db=self.parent.adj_db)
+
+    def put_adjacency_bulk(self, adj_dict: Dict[bytes, bytes]) -> None:
+        self._check_active()
+        for node_id, value in adj_dict.items():
+            self.txn.put(node_id, value, db=self.parent.adj_db)
+
+    def get_adjacency_bulk(self, node_ids: List[bytes]) -> Dict[bytes, bytes]:
+        self._check_active()
+        results = {}
+        for node_id in node_ids:
+            value = self.txn.get(node_id, db=self.parent.adj_db)
+            if value is not None:
+                results[node_id] = value
+        return results
+
+    def delete_adjacency(self, node_id: bytes):
+        self._check_active()
+        self.txn.delete(node_id, db=self.parent.adj_db)
+
+    def put_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
+        self.put_typed_adjacency_bulk([(source_id, target_id, edge_type, edge_id)])
+
+    def put_typed_adjacency_bulk(self, records: list[tuple[bytes, bytes, str, bytes]]):
+        self._check_active()
+        for source_id, target_id, edge_type, edge_id in records:
+            self.txn.put(_typed_adjacency_key("out", source_id, edge_type, edge_id), target_id, db=self.parent.typed_adj_db)
+            self.txn.put(_typed_adjacency_key("in", target_id, edge_type, edge_id), source_id, db=self.parent.typed_adj_db)
+
+    def delete_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
+        self._check_active()
+        self.txn.delete(_typed_adjacency_key("out", source_id, edge_type, edge_id), db=self.parent.typed_adj_db)
+        self.txn.delete(_typed_adjacency_key("in", target_id, edge_type, edge_id), db=self.parent.typed_adj_db)
+
+    def iter_typed_adjacency(self, node_id: bytes, edge_type: str, direction: str = "out"):
+        self._check_active()
+        prefix = _typed_adjacency_prefix(direction, node_id, edge_type)
+        cursor = self.txn.cursor(db=self.parent.typed_adj_db)
+        if not cursor.set_range(prefix):
+            return
+        for key, neighbor_id in cursor:
+            if not key.startswith(prefix):
+                break
+            yield key[len(prefix):], neighbor_id
+
+    def put_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
+        self._check_active()
+        self.txn.put(_index_key(index_name, key_parts, value), value, db=self.parent.index_db)
+
+    def put_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes]]):
+        self._check_active()
+        for index_name, key_parts, value in entries:
+            self.txn.put(_index_key(index_name, key_parts, value), value, db=self.parent.index_db)
+
+    def delete_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
+        self._check_active()
+        self.txn.delete(_index_key(index_name, key_parts, value), db=self.parent.index_db)
+
+    def iter_index_prefix(self, index_name: str, key_parts: list[bytes]):
+        self._check_active()
+        prefix = _index_prefix(index_name, key_parts)
+        cursor = self.txn.cursor(db=self.parent.index_db)
+        if not cursor.set_range(prefix):
+            return
+        for key, value in cursor:
+            if not key.startswith(prefix):
+                break
+            yield value
+
+    def put_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes):
+        self._check_active()
+        self.txn.put(_range_index_key(index_name, key_parts, range_value, value), value, db=self.parent.index_db)
+
+    def put_range_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes, bytes]]):
+        self._check_active()
+        for index_name, key_parts, range_value, value in entries:
+            self.txn.put(_range_index_key(index_name, key_parts, range_value, value), value, db=self.parent.index_db)
+
+    def delete_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes):
+        self._check_active()
+        self.txn.delete(_range_index_key(index_name, key_parts, range_value, value), db=self.parent.index_db)
+
+    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True):
+        self._check_active()
+        prefix = _range_index_prefix(index_name, key_parts)
+        start_key = prefix if start_value is None else prefix + start_value
+        cursor = self.txn.cursor(db=self.parent.index_db)
+        if not cursor.set_range(start_key):
+            return
+        for key, value in cursor:
+            if not key.startswith(prefix):
+                break
+            range_value = key[len(prefix):].split(_TYPED_ADJ_SEP, 1)[0]
+            if start_value is not None and (range_value < start_value or (range_value == start_value and not include_start)):
+                continue
+            if end_value is not None and (range_value > end_value or (range_value == end_value and not include_end)):
+                break
+            yield value
 
 
 # =========================================
@@ -1040,6 +1297,8 @@ class PyRexStore(KVStore):
         write_buffer_size=None,
         bloom_bits_per_key=None,
         disable_wal=False,
+        transactional=False,
+        transaction_db_options=None,
     ):
         """Open a PyRex/RocksDB store with optional tuning settings."""
         try:
@@ -1060,9 +1319,26 @@ class PyRexStore(KVStore):
             options.use_block_based_bloom_filter(bloom_bits_per_key)
 
         self._pyrex = pyrex
-        self.db = pyrex.PyRocksDB(path, options)
+        self.transactional = transactional
+        if transactional:
+            if not getattr(pyrex, "has_transactions", False):
+                raise ImportError("PyRexStore transactional mode requires pyrex-rocksdb>=0.4.1")
+            transaction_db_options = transaction_db_options or pyrex.TransactionDBOptions()
+            self.db = pyrex.TransactionDB(path, options, transaction_db_options)
+            self.supports_transactions = True
+        else:
+            self.db = pyrex.PyRocksDB(path, options)
+            self.supports_transactions = False
         self.write_options = pyrex.WriteOptions()
         self.write_options.disable_wal = disable_wal
+
+    def transaction(self, transaction_options=None, **options):
+        """Open a RocksDB transaction-bound store."""
+        if not self.transactional:
+            raise NotImplementedError("PyRexStore transactions require PyRexStore(transactional=True)")
+        transaction_options = transaction_options or self._pyrex.TransactionOptions()
+        txn = self.db.begin_transaction(self.write_options, transaction_options)
+        return PyRexTransactionStore(self, txn)
 
     def _key(self, prefix: bytes, key: bytes) -> bytes:
         """Build a prefixed RocksDB key."""
@@ -1076,6 +1352,35 @@ class PyRexStore(KVStore):
         """Return whether this PyRex runtime exposes native columnar writes."""
         return hasattr(self.db, "write_columnar_batch")
 
+    def _put_raw(self, key: bytes, value: bytes):
+        self.db.put(key, value, self.write_options)
+
+    def _get_raw(self, key: bytes) -> bytes:
+        return self.db.get(key)
+
+    def _delete_raw(self, key: bytes):
+        self.db.delete(key, self.write_options)
+
+    def _write_batch(self, batch):
+        self.db.write(batch, self.write_options)
+
+    def _iter_key_values_from(self, start_key: bytes):
+        temp_txn = None
+        if hasattr(self.db, "new_iterator"):
+            iterator = self.db.new_iterator()
+        else:
+            temp_txn = self.db.begin_transaction(self.write_options)
+            iterator = temp_txn.new_iterator()
+        try:
+            iterator.seek(start_key)
+            while iterator.valid():
+                yield iterator.key(), iterator.value()
+                iterator.next()
+            iterator.check_status()
+        finally:
+            if temp_txn is not None and temp_txn.is_active:
+                temp_txn.rollback()
+
     def _write_columnar_batch(self, keys: list[bytes], values: list[bytes]) -> None:
         """Write key/value lists through PyRex's native columnar API."""
         self.db.write_columnar_batch(keys, values, write_options=self.write_options)
@@ -1084,42 +1389,32 @@ class PyRexStore(KVStore):
         """Yield unprefixed keys for a prefixed key range."""
         yielded = 0
         start_key = prefix if key_offset is None else prefix + key_offset
-        iterator = self.db.new_iterator()
-        iterator.seek(start_key)
-        while iterator.valid():
-            key = iterator.key()
+        for key, _ in self._iter_key_values_from(start_key):
             if not key.startswith(prefix):
                 break
             yield key[len(prefix):]
             yielded += 1
             if limit is not None and yielded == limit:
                 break
-            iterator.next()
-        iterator.check_status()
 
     def put(self, key: bytes, value: bytes):
         """Store a raw key/value pair in the shared RocksDB keyspace."""
-        self.db.put(key, value, self.write_options)
+        self._put_raw(key, value)
 
     def get(self, key: bytes) -> bytes:
         """Return a raw value by key."""
-        return self.db.get(key)
+        return self._get_raw(key)
 
     def delete(self, key: bytes):
         """Delete a raw key/value pair."""
-        self.db.delete(key, self.write_options)
+        self._delete_raw(key)
 
     def range_iter(self, start_key: bytes, end_key: bytes):
         """Yield raw records whose keys fall within an inclusive range."""
-        iterator = self.db.new_iterator()
-        iterator.seek(start_key)
-        while iterator.valid():
-            key = iterator.key()
+        for key, value in self._iter_key_values_from(start_key):
             if key > end_key:
                 break
-            yield key, iterator.value()
-            iterator.next()
-        iterator.check_status()
+            yield key, value
 
     def close(self):
         """Close the RocksDB database."""
@@ -1127,34 +1422,34 @@ class PyRexStore(KVStore):
 
     def put_metadata(self, key: bytes, value: bytes):
         """Store a metadata key/value pair."""
-        self.db.put(self._key(b"M", key), value, self.write_options)
+        self._put_raw(self._key(b"M", key), value)
 
     def get_metadata(self, key: bytes) -> bytes:
         """Return a metadata value by key, or ``None``."""
-        return self.db.get(self._key(b"M", key))
+        return self._get_raw(self._key(b"M", key))
 
     def delete_metadata(self, key: bytes):
         """Delete a metadata key/value pair."""
-        self.db.delete(self._key(b"M", key), self.write_options)
+        self._delete_raw(self._key(b"M", key))
 
     def put_node(self, node_id: bytes, value: bytes):
         """Store a serialized node by byte key."""
-        self.db.put(self._key(b"N", node_id), value, self.write_options)
+        self._put_raw(self._key(b"N", node_id), value)
 
     def get_node(self, node_id: bytes) -> bytes:
         """Return serialized node bytes by key, or ``None``."""
-        return self.db.get(self._key(b"N", node_id))
+        return self._get_raw(self._key(b"N", node_id))
 
     def delete_node(self, node_id: bytes):
         """Delete a node by byte key."""
-        self.db.delete(self._key(b"N", node_id), self.write_options)
+        self._delete_raw(self._key(b"N", node_id))
 
     def put_nodes_bulk(self, keys_and_values: dict[bytes, bytes]):
         """Store many serialized nodes in one RocksDB write batch."""
         batch = self._pyrex.PyWriteBatch()
         for node_id, value in keys_and_values.items():
             batch.put(self._key(b"N", node_id), value)
-        self.db.write(batch, self.write_options)
+        self._write_batch(batch)
 
     def ingest_nodes_columnar(self, node_list, *, native: bool = True):
         """Store columnar nodes, using native PyRex ingestion when available."""
@@ -1176,22 +1471,22 @@ class PyRexStore(KVStore):
 
     def put_edge(self, edge_id: bytes, value: bytes):
         """Store a serialized edge by byte key."""
-        self.db.put(self._key(b"E", edge_id), value, self.write_options)
+        self._put_raw(self._key(b"E", edge_id), value)
 
     def get_edge(self, edge_id: bytes) -> bytes:
         """Return serialized edge bytes by key, or ``None``."""
-        return self.db.get(self._key(b"E", edge_id))
+        return self._get_raw(self._key(b"E", edge_id))
 
     def delete_edge(self, edge_id: bytes):
         """Delete an edge by byte key."""
-        self.db.delete(self._key(b"E", edge_id), self.write_options)
+        self._delete_raw(self._key(b"E", edge_id))
 
     def put_edges_bulk(self, keys_and_values: dict[bytes, bytes]):
         """Store many serialized edges in one RocksDB write batch."""
         batch = self._pyrex.PyWriteBatch()
         for edge_id, value in keys_and_values.items():
             batch.put(self._key(b"E", edge_id), value)
-        self.db.write(batch, self.write_options)
+        self._write_batch(batch)
 
     def get_edges_bulk(self, edge_ids: list[bytes]) -> dict[bytes, bytes]:
         """Return serialized edges for the requested keys."""
@@ -1212,18 +1507,18 @@ class PyRexStore(KVStore):
 
     def put_adjacency(self, node_id: bytes, value: bytes) -> None:
         """Store a serialized adjacency list for a node."""
-        self.db.put(self._key(b"A", node_id), value, self.write_options)
+        self._put_raw(self._key(b"A", node_id), value)
 
     def get_adjacency(self, node_id: bytes) -> Optional[bytes]:
         """Return a serialized adjacency list for a node."""
-        return self.db.get(self._key(b"A", node_id))
+        return self._get_raw(self._key(b"A", node_id))
 
     def put_adjacency_bulk(self, adj_dict: Dict[bytes, bytes]) -> None:
         """Store many serialized adjacency lists in one RocksDB write batch."""
         batch = self._pyrex.PyWriteBatch()
         for node_id, value in adj_dict.items():
             batch.put(self._key(b"A", node_id), value)
-        self.db.write(batch, self.write_options)
+        self._write_batch(batch)
 
     def get_adjacency_bulk(self, node_ids: List[bytes]) -> Dict[bytes, bytes]:
         """Return serialized adjacency lists for the requested nodes."""
@@ -1236,7 +1531,7 @@ class PyRexStore(KVStore):
 
     def delete_adjacency(self, node_id: bytes):
         """Delete a serialized adjacency list for a node."""
-        self.db.delete(self._key(b"A", node_id), self.write_options)
+        self._delete_raw(self._key(b"A", node_id))
 
     def put_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
         """Store forward and reverse typed adjacency records."""
@@ -1248,7 +1543,7 @@ class PyRexStore(KVStore):
         for source_id, target_id, edge_type, edge_id in records:
             batch.put(self._typed_key("out", source_id, edge_type, edge_id), target_id)
             batch.put(self._typed_key("in", target_id, edge_type, edge_id), source_id)
-        self.db.write(batch, self.write_options)
+        self._write_batch(batch)
 
     def ingest_edges_columnar(self, edge_list, *, append_only: bool = True, native: bool = True, maintain_indexes: bool = True):
         """Store columnar typed edges, using native PyRex ingestion when available."""
@@ -1292,81 +1587,125 @@ class PyRexStore(KVStore):
         batch = self._pyrex.PyWriteBatch()
         batch.delete(self._typed_key("out", source_id, edge_type, edge_id))
         batch.delete(self._typed_key("in", target_id, edge_type, edge_id))
-        self.db.write(batch, self.write_options)
+        self._write_batch(batch)
 
     def iter_typed_adjacency(self, node_id: bytes, edge_type: str, direction: str = "out"):
         """Yield typed adjacency ``(edge_id, neighbor_id)`` pairs."""
         prefix = self._typed_key(direction, node_id, edge_type)
-        iterator = self.db.new_iterator()
-        iterator.seek(prefix)
-        while iterator.valid():
-            key = iterator.key()
+        for key, value in self._iter_key_values_from(prefix):
             if not key.startswith(prefix):
                 break
-            yield key[len(prefix):], iterator.value()
-            iterator.next()
-        iterator.check_status()
+            yield key[len(prefix):], value
 
     def put_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
         """Store one sorted index entry."""
-        self.db.put(_index_key(index_name, key_parts, value), value, self.write_options)
+        self._put_raw(_index_key(index_name, key_parts, value), value)
 
     def put_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes]]):
         """Store many sorted index entries in one write batch."""
         batch = self._pyrex.PyWriteBatch()
         for index_name, key_parts, value in entries:
             batch.put(_index_key(index_name, key_parts, value), value)
-        self.db.write(batch, self.write_options)
+        self._write_batch(batch)
 
     def delete_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
         """Delete one sorted index entry."""
-        self.db.delete(_index_key(index_name, key_parts, value), self.write_options)
+        self._delete_raw(_index_key(index_name, key_parts, value))
 
     def iter_index_prefix(self, index_name: str, key_parts: list[bytes]):
         """Yield values whose index key starts with ``key_parts``."""
         prefix = _index_prefix(index_name, key_parts)
-        iterator = self.db.new_iterator()
-        iterator.seek(prefix)
-        while iterator.valid():
-            key = iterator.key()
+        for key, value in self._iter_key_values_from(prefix):
             if not key.startswith(prefix):
                 break
-            yield iterator.value()
-            iterator.next()
-        iterator.check_status()
+            yield value
 
     def put_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes):
         """Store one sorted range index entry."""
-        self.db.put(_range_index_key(index_name, key_parts, range_value, value), value, self.write_options)
+        self._put_raw(_range_index_key(index_name, key_parts, range_value, value), value)
 
     def put_range_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes, bytes]]):
         """Store many sorted range index entries in one write batch."""
         batch = self._pyrex.PyWriteBatch()
         for index_name, key_parts, range_value, value in entries:
             batch.put(_range_index_key(index_name, key_parts, range_value, value), value)
-        self.db.write(batch, self.write_options)
+        self._write_batch(batch)
 
     def delete_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes):
         """Delete one sorted range index entry."""
-        self.db.delete(_range_index_key(index_name, key_parts, range_value, value), self.write_options)
+        self._delete_raw(_range_index_key(index_name, key_parts, range_value, value))
 
     def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True):
         """Yield values whose range index key falls between start and end values."""
         prefix = _range_index_prefix(index_name, key_parts)
         start_key = prefix if start_value is None else prefix + start_value
-        iterator = self.db.new_iterator()
-        iterator.seek(start_key)
-        while iterator.valid():
-            key = iterator.key()
+        for key, value in self._iter_key_values_from(start_key):
             if not key.startswith(prefix):
                 break
             range_value = key[len(prefix):].split(_TYPED_ADJ_SEP, 1)[0]
             if start_value is not None and (range_value < start_value or (range_value == start_value and not include_start)):
-                iterator.next()
                 continue
             if end_value is not None and (range_value > end_value or (range_value == end_value and not include_end)):
                 break
-            yield iterator.value()
+            yield value
+
+
+class PyRexTransactionStore(PyRexStore):
+    """Transaction-bound PyRex/RocksDB store."""
+
+    supports_transactions = True
+
+    def __init__(self, parent: PyRexStore, txn):
+        self.parent = parent
+        self.db = parent.db
+        self.txn = txn
+        self._pyrex = parent._pyrex
+        self.write_options = parent.write_options
+        self.transactional = True
+
+    def _check_active(self):
+        if not self.txn.is_active:
+            raise RuntimeError("transaction is no longer active")
+
+    def commit(self):
+        self._check_active()
+        self.txn.commit(self.write_options)
+
+    def rollback(self):
+        if self.txn.is_active:
+            self.txn.rollback()
+
+    def close(self):
+        self.rollback()
+
+    def transaction(self, **options):
+        raise NotImplementedError("nested transactions are not supported")
+
+    def has_native_columnar_ingestion(self) -> bool:
+        return False
+
+    def _put_raw(self, key: bytes, value: bytes):
+        self._check_active()
+        self.txn.put(key, value)
+
+    def _get_raw(self, key: bytes) -> bytes:
+        self._check_active()
+        return self.txn.get(key)
+
+    def _delete_raw(self, key: bytes):
+        self._check_active()
+        self.txn.delete(key)
+
+    def _write_batch(self, batch):
+        self._check_active()
+        self.txn.write(batch)
+
+    def _iter_key_values_from(self, start_key: bytes):
+        self._check_active()
+        iterator = self.txn.new_iterator()
+        iterator.seek(start_key)
+        while iterator.valid():
+            yield iterator.key(), iterator.value()
             iterator.next()
         iterator.check_status()
 

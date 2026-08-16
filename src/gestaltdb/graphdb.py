@@ -7,6 +7,7 @@ import os
 import random
 import uuid
 import base64
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, List, Optional, Union
 
 if TYPE_CHECKING:
@@ -2684,6 +2685,25 @@ class GraphDB:
         from .cypher import execute
 
         return execute(self, cypher, parameters=parameters)
+
+    @contextmanager
+    def transaction(self, **options):
+        """Run graph operations in a backend transaction when supported.
+
+        The transaction commits on clean context exit and rolls back if an
+        exception leaves the context.
+        """
+        tx_store = self.store.transaction(**options)
+        try:
+            tx_graph = GraphDB(tx_store, self.serializer)
+            tx_graph.indexed_node_properties = set(self.indexed_node_properties)
+            tx_graph.indexed_edge_properties = set(self.indexed_edge_properties)
+            yield tx_graph
+        except Exception:
+            tx_store.rollback()
+            raise
+        else:
+            tx_store.commit()
 
     def close(self):
         """Close the underlying key-value store.

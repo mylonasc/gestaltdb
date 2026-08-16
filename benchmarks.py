@@ -5,6 +5,7 @@ Run examples:
     python benchmarks.py --backend lmdb --nodes 10000 --edges 50000
     python benchmarks.py --backend leveldb --nodes 10000 --edges 50000
     python benchmarks.py --backend rocksdb --nodes 10000 --edges 50000 --rocksdb-bloom-bits 10
+    python benchmarks.py --backend rocksdb --nodes 10000 --edges 50000 --rocksdb-transactional
 
 The benchmark intentionally uses the public API. It is designed to catch large
 performance regressions and compare ingestion modes, not to be a full profiler.
@@ -48,6 +49,7 @@ def open_graph(args, path):
                 write_buffer_size=args.rocksdb_write_buffer_size,
                 bloom_bits_per_key=args.rocksdb_bloom_bits,
                 disable_wal=args.rocksdb_disable_wal,
+                transactional=args.rocksdb_transactional,
             ),
             PickleSerializer(),
         )
@@ -145,6 +147,7 @@ def main():
     parser.add_argument("--rocksdb-write-buffer-size", type=int, default=None)
     parser.add_argument("--rocksdb-bloom-bits", type=float, default=None)
     parser.add_argument("--rocksdb-disable-wal", action="store_true")
+    parser.add_argument("--rocksdb-transactional", action="store_true")
     run_benchmark(parser.parse_args())
 
 

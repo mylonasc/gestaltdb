@@ -145,7 +145,7 @@ def pyarrow_array(values):
     return pa.array(values)
 
 
-def open_gestaltdb(path: Path, args: argparse.Namespace) -> GraphDB:
+def open_gestaltdb(path: Path, args: argparse.Namespace, *, transactional: bool = False) -> GraphDB:
     return GraphDB(
         PyRexStore(
             path=str(path),
@@ -154,6 +154,7 @@ def open_gestaltdb(path: Path, args: argparse.Namespace) -> GraphDB:
             write_buffer_size=args.rocksdb_write_buffer_size,
             bloom_bits_per_key=args.rocksdb_bloom_bits,
             disable_wal=args.rocksdb_disable_wal,
+            transactional=transactional,
         ),
         MessagePackSerializer(),
     )
@@ -375,8 +376,9 @@ def add_rates(row: dict[str, object]) -> None:
         row["queries_per_second"] = row["iterations"] / query_seconds
 
 
-def run_gestaltdb(workload: str, args: argparse.Namespace) -> dict[str, object]:
-    row = base_row("gestaltdb-rocksdb", workload, args)
+def run_gestaltdb(workload: str, args: argparse.Namespace, *, transactional: bool = False) -> dict[str, object]:
+    engine_name = "gestaltdb-rocksdb-transactional" if transactional else "gestaltdb-rocksdb"
+    row = base_row(engine_name, workload, args)
     if importlib.util.find_spec("pyrex") is None:
         row.update({"status": "skipped", "skip_reason": "missing pyrex-rocksdb"})
         return row
@@ -387,7 +389,7 @@ def run_gestaltdb(workload: str, args: argparse.Namespace) -> dict[str, object]:
     path = Path(tempfile.mkdtemp(prefix=f"gestaltdb_arcade_compare_{workload}_", dir=args.tmp_dir))
     graph = None
     try:
-        graph = open_gestaltdb(path, args)
+        graph = open_gestaltdb(path, args, transactional=transactional)
         row["native_columnar"] = bool(getattr(graph.store, "has_native_columnar_ingestion", lambda: False)())
         shape = workload_shape(workload)
         if workload == "rocksdb_compaction":
@@ -559,7 +561,12 @@ def write_summary(output_dir: Path, rows: list[dict[str, object]]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Benchmark gestaltdb/RocksDB against ArcadeDB graph workloads")
-    parser.add_argument("--engines", nargs="+", choices=["gestaltdb", "arcadedb"], default=["gestaltdb", "arcadedb"])
+    parser.add_argument(
+        "--engines",
+        nargs="+",
+        choices=["gestaltdb", "gestaltdb-tx", "arcadedb"],
+        default=["gestaltdb", "gestaltdb-tx", "arcadedb"],
+    )
     parser.add_argument(
         "--workloads",
         nargs="+",
@@ -592,7 +599,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    runners = {"gestaltdb": run_gestaltdb, "arcadedb": run_arcadedb}
+    runners = {
+        "gestaltdb": run_gestaltdb,
+        "gestaltdb-tx": lambda workload, args: run_gestaltdb(workload, args, transactional=True),
+        "arcadedb": run_arcadedb,
+    }
     rows = []
     for repetition in range(1, args.repetitions + 1):
         for workload in args.workloads:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gestaltdb"
-version = "0.4.0"
+version = "0.5.0"
 description = "A pure Python GraphDB for attributed graphs."
 authors = [
     { name = "Mylonas Charilaos", email = "mylonas.charilaos@gmail.com" },
@@ -26,13 +26,13 @@ protobuf = ["protobuf"]
 bloom = ["pybloom-live"]
 coverage = ["coverage", "pytest"]
 docs = ["furo", "myst-parser", "sphinx"]
-rocksdb = ["pyrex-rocksdb>=0.3.0a0"]
+rocksdb = ["pyrex-rocksdb>=0.4.1"]
 arrow = ["pyarrow"]
 polars = ["polars", "pyarrow"]
-fast-ingest = ["pyarrow", "polars", "pyrex-rocksdb>=0.3.0a0"]
+fast-ingest = ["pyarrow", "polars", "pyrex-rocksdb>=0.4.1"]
 external-bench = ["arcadedb-embedded; python_version >= '3.10'", "gqlalchemy", "neo4j"]
-all = ["lmdb", "msgpack", "plyvel", "protobuf", "pybloom-live", "pyrex-rocksdb>=0.3.0a0", "pyarrow", "polars", "arcadedb-embedded; python_version >= '3.10'", "gqlalchemy", "neo4j"]
-dev = ["coverage", "furo", "lmdb", "msgpack", "myst-parser", "plyvel", "protobuf", "pybloom-live", "pyrex-rocksdb>=0.3.0a0", "pyarrow", "polars", "pytest", "sphinx", "arcadedb-embedded; python_version >= '3.10'", "gqlalchemy", "neo4j"]
+all = ["lmdb", "msgpack", "plyvel", "protobuf", "pybloom-live", "pyrex-rocksdb>=0.4.1", "pyarrow", "polars", "arcadedb-embedded; python_version >= '3.10'", "gqlalchemy", "neo4j"]
+dev = ["coverage", "furo", "lmdb", "msgpack", "myst-parser", "plyvel", "protobuf", "pybloom-live", "pyrex-rocksdb>=0.4.1", "pyarrow", "polars", "pytest", "sphinx", "arcadedb-embedded; python_version >= '3.10'", "gqlalchemy", "neo4j"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

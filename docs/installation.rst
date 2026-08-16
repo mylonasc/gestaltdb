@@ -84,7 +84,7 @@ Optional Dependencies
    LevelDB key-value backend through ``plyvel``.
 
 ``rocksdb``
-   RocksDB key-value backend through ``pyrex-rocksdb>=0.3.0a0``.
+   RocksDB key-value backend through ``pyrex-rocksdb>=0.4.1``.
 
 ``arrow``
    Arrow array support through ``pyarrow`` for columnar ingestion helpers.
@@ -94,7 +94,7 @@ Optional Dependencies
 
 ``fast-ingest``
    Convenience extra for ``pyarrow``, ``polars``, and
-   ``pyrex-rocksdb>=0.3.0a0``.
+   ``pyrex-rocksdb>=0.4.1``.
 
 ``msgpack``
    MessagePack serializer.

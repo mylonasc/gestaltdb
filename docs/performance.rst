@@ -13,6 +13,10 @@ shape of the workload rather than by a single global default:
 
 - Use ``PyRexStore``/RocksDB for large append-only loads, columnar ingestion, and
   write-heavy workloads where native batch writes and RocksDB tuning matter.
+- Use ``PyRexStore(transactional=True)`` only when graph-level RocksDB
+  transactions are required. The transaction-capable backend currently cannot use
+  PyRex's native columnar writer, so append-only bulk loads should usually keep
+  the default RocksDB backend.
 - Use ``LevelDBStore`` for simple local graphs, predictable installs through
   ``plyvel``, and workloads where the graph is small enough that Python object
   construction dominates storage I/O.
@@ -60,6 +64,7 @@ workload.
 
    python benchmarks.py --backend leveldb --nodes 20000 --edges 100000 --batch-size 10000 --append-only
    python benchmarks.py --backend rocksdb --nodes 20000 --edges 100000 --batch-size 10000 --append-only
+   python benchmarks.py --backend rocksdb --nodes 20000 --edges 100000 --batch-size 10000 --append-only --rocksdb-transactional
 
 Use ``scripts/benchmark_matrix.py`` for larger matrix runs across graph sizes,
 backends, core counts, and ingestion modes.
@@ -68,6 +73,7 @@ backends, core counts, and ingestion modes.
 
    uv run python scripts/benchmark_matrix.py \
       --sizes 10000 100000 1000000 \
+      --edge-multiplier 1 \
       --cores 1 2 4 \
       --backends leveldb rocksdb \
       --ingestion-modes object arrow polars \
@@ -79,11 +85,29 @@ backends, core counts, and ingestion modes.
 The matrix writes CSV and JSONL outputs and reopens the database before traversal
 workloads so traversal does not only measure Python-side object state.
 
+To compare default RocksDB with transaction-capable RocksDB on the same 5
+edges/node shape used by the local result tables below:
+
+.. code-block:: sh
+
+   python scripts/benchmark_matrix.py \
+      --backends rocksdb \
+      --rocksdb-configs parallel-buffer64mb-bloom10 parallel-buffer64mb-bloom10-transactional \
+      --sizes 10000 100000 \
+      --edge-multiplier 5 \
+      --cores 4 \
+      --ingestion-modes arrow polars \
+      --serializer pickle \
+      --chunk-size 10000 \
+      --samples 100 \
+      --sample-size 5 \
+      --output-dir benchmark_results/transactions_rocksdb_YYYYMMDD
+
 Columnar Ingestion Benchmarks
 -----------------------------
 
 Columnar ingestion accepts already-serialized node and edge payloads. With
-``PyRexStore`` and ``pyrex-rocksdb>=0.3.0a0``, RocksDB can use PyRex's native
+``PyRexStore`` and ``pyrex-rocksdb>=0.4.1``, RocksDB can use PyRex's native
 ``write_columnar_batch`` path. When Arrow-backed string or binary arrays are
 passed, GestaltDB preserves those arrays through chunking and passes value
 columns directly to PyRex instead of materializing Python ``bytes`` for every
@@ -218,6 +242,97 @@ Interpretation:
   speedups. The fastest mode for append-only writes is not always the fastest mode
   for ingest-plus-query-ready indexes.
 
+Transaction-Capable RocksDB Benchmark
+-------------------------------------
+
+``PyRexStore(transactional=True)`` opens RocksDB through PyRex's
+``TransactionDB`` support. It provides graph-level transactions through
+``GraphDB.transaction()``, and regular direct writes still work through the same
+public GestaltDB APIs. The trade-off is that PyRex 0.4.1 exposes native
+``write_columnar_batch`` on ``PyRocksDB`` but not on ``TransactionDB``. The
+transaction-capable backend therefore falls back to Python ``PyWriteBatch`` paths
+for columnar ingestion.
+
+A focused local run on 2026-08-16 used ``pyrex-rocksdb==0.4.1``, 4 cores,
+RocksDB parallelism 4, ``max_background_jobs=4``, a 64 MiB write buffer, Bloom
+filters, Pickle payloads, chunk size 10,000, and 5 edges per node. Dataset
+generation and traversal validation were included in the benchmark script's usual
+way; the table below reports only write-phase times.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Nodes / edges
+     - Mode
+     - RocksDB backend
+     - Native columnar
+     - Node write
+     - Edge write
+   * - 10,000 / 50,000
+     - Arrow
+     - default
+     - yes
+     - 0.041 s
+     - 0.185 s
+   * - 10,000 / 50,000
+     - Arrow
+     - transaction-capable
+     - no
+     - 0.049 s
+     - 0.345 s
+   * - 10,000 / 50,000
+     - Polars
+     - default
+     - yes
+     - 0.046 s
+     - 0.187 s
+   * - 10,000 / 50,000
+     - Polars
+     - transaction-capable
+     - no
+     - 0.050 s
+     - 0.343 s
+   * - 100,000 / 500,000
+     - Arrow
+     - default
+     - yes
+     - 0.457 s
+     - 1.886 s
+   * - 100,000 / 500,000
+     - Arrow
+     - transaction-capable
+     - no
+     - 0.540 s
+     - 3.623 s
+   * - 100,000 / 500,000
+     - Polars
+     - default
+     - yes
+     - 0.429 s
+     - 1.828 s
+   * - 100,000 / 500,000
+     - Polars
+     - transaction-capable
+     - no
+     - 0.545 s
+     - 3.670 s
+
+The same environment's quick object-path benchmark with 20,000 nodes and 100,000
+append-only edges measured 77,571 edges/s on default RocksDB versus 64,649
+edges/s on transaction-capable RocksDB. Treat these results as the expected cost
+of opening the backend in transaction-capable mode, not the cost of wrapping a
+large write in one user transaction.
+
+Operational guidance:
+
+- Use default ``PyRexStore`` for reloadable bulk loads and columnar append-only
+  ingestion.
+- Use ``PyRexStore(transactional=True)`` when mutations must be atomic across
+  nodes, edges, adjacency, secondary indexes, and metadata.
+- If transaction-capable bulk ingestion needs native columnar throughput, PyRex
+  should expose ``TransactionDB.write_columnar_batch`` so GestaltDB can keep the
+  same fast path in transactional mode.
+
 RocksDB Tuning and Compaction Benchmarks
 ----------------------------------------
 
@@ -280,7 +395,7 @@ Include embedded ArcadeDB with ``uv --with``:
 .. code-block:: sh
 
    uv run --with arcadedb-embedded python scripts/benchmark_arcadedb_vs_gestaltdb.py \
-      --engines gestaltdb arcadedb \
+      --engines gestaltdb gestaltdb-tx arcadedb \
       --workloads columnar_ingest star_traversal bfs_depth typed_path rocksdb_compaction \
       --nodes 100000 \
       --edges 500000 \
@@ -293,22 +408,50 @@ The script writes raw rows and summary files grouped by engine and workload. If
 ``arcadedb-embedded`` is not installed, ArcadeDB rows are marked skipped and
 GestaltDB rows still run.
 
-Representative small local results from 2026-06-25:
+Local results from 2026-08-16 used 100,000 nodes, 500,000 edges, batch size
+100,000, 100 query iterations, one repetition, ``pyrex-rocksdb==0.4.1``, and
+``arcadedb-embedded==26.8.1``. ``gestaltdb-tx`` means
+``PyRexStore(transactional=True)``.
 
-=================== ================= ================= ================
-Workload            GestaltDB/RocksDB ArcadeDB embedded Relative result
-=================== ================= ================= ================
-columnar_ingest     0.0358 s          0.0506 s          GestaltDB 1.41x faster
-star_traversal      0.0383 s          0.0333 s          ArcadeDB 1.15x faster
-bfs_depth           0.0303 s          0.0366 s          GestaltDB 1.21x faster
-typed_path          0.0293 s          0.0404 s          GestaltDB 1.38x faster
-rocksdb_compaction  0.0022 s          Not applicable    GestaltDB only
-=================== ================= ================= ================
+.. list-table:: Older ArcadeDB-suite results
+   :header-rows: 1
 
-Interpret these results by workload. RocksDB/GestaltDB tends to show strength on
-append-only columnar ingestion and compaction-sensitive raw writes. ArcadeDB can
-be strongest when queries start from an indexed vertex and stay on native
-adjacency chains.
+   * - Workload
+     - GestaltDB/RocksDB total
+     - GestaltDB/RocksDB tx total
+     - ArcadeDB total
+     - Fastest
+   * - columnar_ingest
+     - 3.131 s
+     - 6.257 s
+     - 5.407 s
+     - GestaltDB/RocksDB
+   * - star_traversal
+     - 51.907 s
+     - 57.456 s
+     - 4.403 s
+     - ArcadeDB
+   * - bfs_depth
+     - 6.844 s
+     - 9.604 s
+     - 5.138 s
+     - ArcadeDB
+   * - typed_path
+     - 6.574 s
+     - 9.380 s
+     - 4.625 s
+     - ArcadeDB
+   * - rocksdb_compaction
+     - 0.438 s
+     - 0.545 s
+     - not applicable
+     - GestaltDB/RocksDB
+
+Interpret these results by workload. RocksDB/GestaltDB remains strongest on
+append-only columnar ingestion and compaction-sensitive raw writes. ArcadeDB is
+stronger in this older suite's traversal shapes, especially ``star_traversal``:
+that workload repeatedly materializes all 500,000 outgoing edges from one hub
+node, which is not representative of sparse point traversals.
 
 External Graph Database Benchmarks
 ----------------------------------
@@ -353,7 +496,7 @@ Run a small smoke benchmark with container-managed Neo4j and Memgraph:
 .. code-block:: sh
 
    uv run python scripts/benchmark_external_graphdbs.py \
-      --engines gestaltdb neo4j memgraph arcadedb \
+      --engines gestaltdb gestaltdb-tx neo4j memgraph arcadedb \
       --nodes 1000 \
       --edges 5000 \
       --batch-size 1000 \
@@ -366,59 +509,128 @@ Run a larger end-to-end comparison:
 .. code-block:: sh
 
    uv run python scripts/benchmark_external_graphdbs.py \
-      --engines gestaltdb neo4j memgraph arcadedb \
+      --engines gestaltdb gestaltdb-tx neo4j memgraph arcadedb \
       --workloads ingest neighbors sample_neighbors bfs_depth typed_path \
       --nodes 100000 \
       --edges 500000 \
       --batch-size 10000 \
       --iterations 100 \
-      --repetitions 3 \
+      --repetitions 1 \
       --output-dir benchmark_results/external_graphdbs_YYYYMMDD
 
 Corrected Aligned Large Results
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A local corrected aligned run on 2026-08-15 used 100,000 nodes, 500,000 edges,
-batch size 10,000, 100 traversal seeds, sample size 5, depth 3, and three
-repetitions. Neo4j used ``neo4j:5-community`` through the official Python Bolt
+A local corrected aligned run on 2026-08-16 used 100,000 nodes, 500,000 edges,
+batch size 10,000, 100 traversal seeds, sample size 5, depth 3, and one
+repetition. Neo4j used ``neo4j:5-community`` through the official Python Bolt
 driver. Memgraph used ``memgraph/memgraph:latest`` through the same Bolt driver.
-ArcadeDB used ``arcadedb-embedded``. GestaltDB used RocksDB/PyRex, JSON payloads,
-Arrow/Polars entity ingestion, deferred secondary-index maintenance, and a
-close/reopen before validation and querying. All corrected rows validated exactly
-100,000 nodes and 500,000 edges.
+ArcadeDB used ``arcadedb-embedded==26.8.1``. GestaltDB used ``pyrex-rocksdb==0.4.1``
+with JSON payloads, Arrow/Polars entity ingestion, deferred secondary-index
+maintenance, and a close/reopen before validation and querying. All rows
+validated exactly 100,000 nodes and 500,000 edges.
 
-Mean ingestion phase:
+Ingestion phase:
 
-================== =============== ===================== ====================
-Engine             Ingest seconds  Edge ingest rate      Relative to GestaltDB
-================== =============== ===================== ====================
-GestaltDB/RocksDB  2.33 s          214,227 edges/s       1.00x
-ArcadeDB embedded  5.66 s          88,561 edges/s        2.42x slower
-Memgraph           8.61 s          58,098 edges/s        3.69x slower
-Neo4j              13.45 s         37,410 edges/s        5.76x slower
-================== =============== ===================== ====================
+.. list-table::
+   :header-rows: 1
 
-Mean query phase on the already-loaded graph:
+   * - Engine
+     - Ingest seconds
+     - Edge ingest rate
+     - Relative to default GestaltDB
+   * - GestaltDB/RocksDB
+     - 1.70 s
+     - 294,727 edges/s
+     - 1.00x
+   * - GestaltDB/RocksDB transactional
+     - 2.85 s
+     - 175,728 edges/s
+     - 1.68x slower
+   * - ArcadeDB embedded
+     - 6.57 s
+     - 76,055 edges/s
+     - 3.88x slower
+   * - Memgraph
+     - 8.62 s
+     - 58,020 edges/s
+     - 5.08x slower
+   * - Neo4j
+     - 13.00 s
+     - 38,468 edges/s
+     - 7.66x slower
 
-================ ================ =============== =============== =============== ==================
-Workload         Result count     GestaltDB       ArcadeDB        Memgraph        Neo4j
-================ ================ =============== =============== =============== ==================
-neighbors        167              0.00128 s       0.0176 s        0.0188 s        0.160 s
-sample_neighbors 167              0.00128 s       0.0298 s        0.0210 s        0.166 s
-bfs_depth        3                0.000139 s      0.00383 s       0.00569 s       0.107 s
-typed_path       271              0.00283 s       0.0251 s        0.0256 s        0.190 s
-================ ================ =============== =============== =============== ==================
+Query phase on the already-loaded graph:
 
-Relative query phase compared with GestaltDB/RocksDB:
+.. list-table::
+   :header-rows: 1
 
-================ =============== =============== ==================
-Workload         ArcadeDB        Memgraph        Neo4j
-================ =============== =============== ==================
-neighbors        13.8x slower    14.7x slower    125x slower
-sample_neighbors 23.3x slower    16.4x slower    130x slower
-bfs_depth        27.5x slower    40.9x slower    767x slower
-typed_path       8.87x slower    9.06x slower    67.0x slower
-================ =============== =============== ==================
+   * - Workload
+     - Result count
+     - GestaltDB
+     - GestaltDB tx
+     - ArcadeDB
+     - Memgraph
+     - Neo4j
+   * - neighbors
+     - 167
+     - 0.00132 s
+     - 0.00154 s
+     - 0.0420 s
+     - 0.0181 s
+     - 0.174 s
+   * - sample_neighbors
+     - 167
+     - 0.00140 s
+     - 0.00168 s
+     - 0.0555 s
+     - 0.0210 s
+     - 0.188 s
+   * - bfs_depth
+     - 3
+     - 0.000144 s
+     - 0.000179 s
+     - 0.00671 s
+     - 0.00479 s
+     - 0.121 s
+   * - typed_path
+     - 271
+     - 0.00307 s
+     - 0.00369 s
+     - 0.0630 s
+     - 0.0293 s
+     - 0.230 s
+
+Relative query phase compared with default GestaltDB/RocksDB:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Workload
+     - GestaltDB tx
+     - ArcadeDB
+     - Memgraph
+     - Neo4j
+   * - neighbors
+     - 1.16x slower
+     - 31.7x slower
+     - 13.6x slower
+     - 131x slower
+   * - sample_neighbors
+     - 1.20x slower
+     - 39.8x slower
+     - 15.1x slower
+     - 135x slower
+   * - bfs_depth
+     - 1.24x slower
+     - 46.5x slower
+     - 33.2x slower
+     - 842x slower
+   * - typed_path
+     - 1.20x slower
+     - 20.5x slower
+     - 9.55x slower
+     - 75.1x slower
 
 Interpretation:
 
@@ -426,9 +638,13 @@ Interpretation:
   directly to an embedded RocksDB key-value layout using columnar batches. The
   benchmark does not pay a client/server protocol cost for ingestion, and the
   typed adjacency records used by traversal are written as sorted key prefixes.
+- The transaction-capable GestaltDB/RocksDB backend validated the same graph but
+  loaded 1.68x slower than the default RocksDB backend. This is consistent with
+  PyRex 0.4.1 exposing native columnar writes on ``PyRocksDB`` but not on
+  ``TransactionDB``.
 - ArcadeDB embedded also avoids Bolt/network overhead, but its graph batch loader
   maintains a native graph record layout and then builds a vertex ID index. On
-  this graph shape it loaded about 2.4x slower than GestaltDB but faster than the
+  this graph shape it loaded about 3.9x slower than default GestaltDB but faster than the
   Bolt-backed servers.
 - Memgraph and Neo4j ingest through batched Cypher over Bolt. That path is a fair
   Python API path, but it includes client/server round trips, Cypher planning and
@@ -447,9 +663,10 @@ Interpretation:
   This aligns semantics, but different drivers expose rows with different
   overheads.
 - The table reports ``ingest_seconds`` and ``query_seconds``. GestaltDB's
-  ``reopen_seconds`` averaged roughly 0.48 s and count validation averaged roughly
-  0.32 s; those are recorded separately in the summary file and are not included
-  in ``total_seconds``.
+  ``reopen_seconds`` was roughly 0.51 s for default RocksDB and 0.57-0.61 s for
+  transaction-capable RocksDB. Count validation was roughly 0.41-0.42 s and
+  0.44-0.45 s respectively. Those values are recorded separately in the summary
+  file and are not included in ``total_seconds``.
 
 Useful container options:
 
