@@ -5,8 +5,8 @@
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Installation" href="installation.html">
 
-    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>PyGraphDB</title>
+    <!-- Generated with Sphinx 9.0.4 and Furo 2025.12.19 -->
+        <title>GestaltDB</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -161,7 +161,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="#"><div class="brand">PyGraphDB</div></a>
+      <a href="#"><div class="brand">GestaltDB</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -182,7 +182,7 @@
       
       <div class="sidebar-sticky"><a class="sidebar-brand" href="#">
   
-  <span class="sidebar-brand-text">PyGraphDB</span>
+  <span class="sidebar-brand-text">GestaltDB</span>
   
 </a><form class="sidebar-search-container" method="get" action="search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -198,7 +198,7 @@
 <li class="toctree-l1"><a class="reference internal" href="serializers.html">Serializers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="typed-sampling.html">Typed Traversal and Sampling</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cypher.html">Cypher Queries</a></li>
-<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance and RocksDB Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance and Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="notebooks.html">Notebook Usage</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
@@ -242,13 +242,14 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="pygraphdb-documentation">
-<h1>PyGraphDB Documentation<a class="headerlink" href="#pygraphdb-documentation" title="Link to this heading">¶</a></h1>
-<p>PyGraphDB is a pure Python graph database toolkit for attributed graphs. It
-stores nodes, edges, adjacency lists, and typed adjacency indexes on key-value
-backends such as LMDB and LevelDB.</p>
-<p>The documentation focuses on practical examples: creating graphs, choosing a
-backend, serializing properties, traversing typed edges, and sampling subgraphs.</p>
+          <section id="gestaltdb-documentation">
+<h1>GestaltDB Documentation<a class="headerlink" href="#gestaltdb-documentation" title="Link to this heading">¶</a></h1>
+<p>GestaltDB is a pure Python graph database toolkit for attributed graphs. It
+stores nodes, edges, labels, typed adjacency records, and indexes on embedded
+key-value backends such as LMDB, LevelDB, and RocksDB/PyRex.</p>
+<p>Start with the quickstart if you want to create a graph and run a query. Use the
+topic pages for backend selection, serializers, Cypher syntax, ingestion,
+sampling, and benchmarks.</p>
 <div class="toctree-wrapper compound">
 <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
 <ul>
@@ -264,20 +265,22 @@ backend, serializing properties, traversing typed edges, and sampling subgraphs.
 </li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="quickstart.html#create-a-graph">Create a Graph</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quickstart.html#bulk-insert-edges">Bulk Insert Edges</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quickstart.html#fetch-nodes-in-bulk">Fetch Nodes in Bulk</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quickstart.html#labels-and-exact-match-indexes">Labels and Exact-Match Indexes</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quickstart.html#columnar-ingestion">Columnar Ingestion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quickstart.html#traverse-with-bfs">Traverse With BFS</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quickstart.html#query-with-cypher">Query With Cypher</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quickstart.html#use-stable-ids">Use Stable IDs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#nodes-and-edges">Nodes and Edges</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#labels-and-indexes">Labels and Indexes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#cypher-query">Cypher Query</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#typed-traversal">Typed Traversal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#bulk-inserts">Bulk Inserts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#close-the-store">Close the Store</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#next-steps">Next Steps</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="storage-backends.html">Storage Backends</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="storage-backends.html#backend-selection-summary">Backend Selection Summary</a></li>
 <li class="toctree-l2"><a class="reference internal" href="storage-backends.html#lmdb-backend">LMDB Backend</a></li>
 <li class="toctree-l2"><a class="reference internal" href="storage-backends.html#leveldb-backend">LevelDB Backend</a></li>
 <li class="toctree-l2"><a class="reference internal" href="storage-backends.html#rocksdb-backend">RocksDB Backend</a></li>
-<li class="toctree-l2"><a class="reference internal" href="storage-backends.html#sorted-indexes">Sorted Indexes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="storage-backends.html#indexes">Indexes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="storage-backends.html#transactions">Transactions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="storage-backends.html#backend-selection-pattern">Backend Selection Pattern</a></li>
 <li class="toctree-l2"><a class="reference internal" href="storage-backends.html#cleanup">Cleanup</a></li>
 </ul>
@@ -303,23 +306,27 @@ backend, serializing properties, traversing typed edges, and sampling subgraphs.
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="cypher.html">Cypher Queries</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="cypher.html#supported-feature-matrix">Supported Feature Matrix</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cypher.html#indexed-label-scans">Indexed Label Scans</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cypher.html#indexed-label-and-property-lookup">Indexed Label and Property Lookup</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cypher.html#anchored-one-hop-traversal">Anchored One-Hop Traversal</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cypher.html#relationship-variables">Relationship Variables</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cypher.html#anchored-multi-hop-traversal">Anchored Multi-Hop Traversal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cypher.html#basic-result-shape">Basic Result Shape</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cypher.html#node-scans">Node Scans</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cypher.html#typed-relationship-traversal">Typed Relationship Traversal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cypher.html#filtering">Filtering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cypher.html#projection-and-result-shaping">Projection and Result Shaping</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cypher.html#chained-match-clauses">Chained MATCH Clauses</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cypher.html#sampling-procedure">Sampling Procedure</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cypher.html#current-cypher-limitations">Current Cypher Limitations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cypher.html#current-limitations">Current Limitations</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance and RocksDB Tuning</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="performance.html#install-optional-dependencies">Install Optional Dependencies</a></li>
-<li class="toctree-l2"><a class="reference internal" href="performance.html#run-backend-benchmarks">Run Backend Benchmarks</a></li>
-<li class="toctree-l2"><a class="reference internal" href="performance.html#tune-rocksdb">Tune RocksDB</a></li>
-<li class="toctree-l2"><a class="reference internal" href="performance.html#columnar-ingestion-benchmark">Columnar Ingestion Benchmark</a></li>
-<li class="toctree-l2"><a class="reference internal" href="performance.html#initial-local-findings">Initial Local Findings</a></li>
-<li class="toctree-l2"><a class="reference internal" href="performance.html#rocksdb-knobs-exposed-by-pyrexstore">RocksDB Knobs Exposed by PyRexStore</a></li>
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance and Benchmarks</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="performance.html#practical-recommendations">Practical Recommendations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="performance.html#install-benchmark-dependencies">Install Benchmark Dependencies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="performance.html#backend-benchmarks">Backend Benchmarks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="performance.html#columnar-ingestion-benchmarks">Columnar Ingestion Benchmarks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="performance.html#structured-json-entity-ingestion">Structured JSON Entity Ingestion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="performance.html#end-to-end-ingestion-insights">End-to-End Ingestion Insights</a></li>
+<li class="toctree-l2"><a class="reference internal" href="performance.html#transaction-capable-rocksdb-benchmark">Transaction-Capable RocksDB Benchmark</a></li>
+<li class="toctree-l2"><a class="reference internal" href="performance.html#rocksdb-tuning-and-compaction-benchmarks">RocksDB Tuning and Compaction Benchmarks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="performance.html#external-graph-database-benchmarks">External Graph Database Benchmarks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="performance.html#benchmark-caveats">Benchmark Caveats</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="notebooks.html">Notebook Usage</a><ul>
@@ -335,26 +342,26 @@ backend, serializing properties, traversing typed edges, and sampling subgraphs.
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="api.html#module-pygraphdb.graphdb">Graph Models and Database</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api.html#module-pygraphdb.sampling">Sampling Configuration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api.html#module-pygraphdb.ingestion">Columnar Ingestion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api.html#module-pygraphdb.cypher">Cypher Queries</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api.html#module-pygraphdb.kvstores">Key-Value Stores</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api.html#module-pygraphdb.serializers">Serializers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-gestaltdb.graphdb">Graph Models and Database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-gestaltdb.sampling">Sampling Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-gestaltdb.ingestion">Columnar Ingestion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-gestaltdb.cypher">Cypher Queries</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-gestaltdb.kvstores">Key-Value Stores</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-gestaltdb.serializers">Serializers</a></li>
 </ul>
 </li>
 </ul>
 </div>
 <section id="quick-example">
 <h2>Quick Example<a class="headerlink" href="#quick-example" title="Link to this heading">¶</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pygraphdb.graphdb</span><span class="w"> </span><span class="kn">import</span> <span class="n">Edge</span><span class="p">,</span> <span class="n">GraphDB</span><span class="p">,</span> <span class="n">Node</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pygraphdb.kvstores</span><span class="w"> </span><span class="kn">import</span> <span class="n">LMDBStore</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pygraphdb.serializers</span><span class="w"> </span><span class="kn">import</span> <span class="n">PickleSerializer</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gestaltdb.graphdb</span><span class="w"> </span><span class="kn">import</span> <span class="n">Edge</span><span class="p">,</span> <span class="n">GraphDB</span><span class="p">,</span> <span class="n">Node</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gestaltdb.kvstores</span><span class="w"> </span><span class="kn">import</span> <span class="n">LMDBStore</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gestaltdb.serializers</span><span class="w"> </span><span class="kn">import</span> <span class="n">PickleSerializer</span>
 
 <span class="n">graph_db</span> <span class="o">=</span> <span class="n">GraphDB</span><span class="p">(</span><span class="n">LMDBStore</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;graph_lmdb_example&quot;</span><span class="p">),</span> <span class="n">PickleSerializer</span><span class="p">())</span>
 
-<span class="n">alice</span> <span class="o">=</span> <span class="n">Node</span><span class="p">(</span><span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">,</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;person&quot;</span><span class="p">})</span>
-<span class="n">bob</span> <span class="o">=</span> <span class="n">Node</span><span class="p">(</span><span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;bob&quot;</span><span class="p">,</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;person&quot;</span><span class="p">})</span>
+<span class="n">alice</span> <span class="o">=</span> <span class="n">Node</span><span class="p">(</span><span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Person&quot;</span><span class="p">],</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Alice&quot;</span><span class="p">})</span>
+<span class="n">bob</span> <span class="o">=</span> <span class="n">Node</span><span class="p">(</span><span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;bob&quot;</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Person&quot;</span><span class="p">],</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Bob&quot;</span><span class="p">})</span>
 <span class="n">graph_db</span><span class="o">.</span><span class="n">put_node</span><span class="p">(</span><span class="n">alice</span><span class="p">)</span>
 <span class="n">graph_db</span><span class="o">.</span><span class="n">put_node</span><span class="p">(</span><span class="n">bob</span><span class="p">)</span>
 
@@ -365,8 +372,8 @@ backend, serializing properties, traversing typed edges, and sampling subgraphs.
     <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;knows&quot;</span><span class="p">,</span> <span class="s2">&quot;since&quot;</span><span class="p">:</span> <span class="mi">2024</span><span class="p">},</span>
 <span class="p">))</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="n">graph_db</span><span class="o">.</span><span class="n">get_node</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;alice&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">properties</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">graph_db</span><span class="o">.</span><span class="n">neighbors_by_edge_type</span><span class="p">(</span><span class="s2">&quot;alice&quot;</span><span class="p">,</span> <span class="s2">&quot;knows&quot;</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="s2">&quot;out&quot;</span><span class="p">))</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (a:Person {name: &quot;Alice&quot;}) MATCH (a)-[:knows]-&gt;(b) RETURN a.id, b.name&#39;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">records</span><span class="p">)</span>
 
 <span class="n">graph_db</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 </pre></div>
@@ -393,7 +400,7 @@ backend, serializing properties, traversing typed edges, and sampling subgraphs.
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2026, PyGraphDB contributors
+                Copyright &#169; 2026, Mylonas Charilaos
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -419,7 +426,7 @@ backend, serializing properties, traversing typed edges, and sampling subgraphs.
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">PyGraphDB Documentation</a><ul>
+<li><a class="reference internal" href="#">GestaltDB Documentation</a><ul>
 <li><a class="reference internal" href="#quick-example">Quick Example</a></li>
 </ul>
 </li>
@@ -432,7 +439,7 @@ backend, serializing properties, traversing typed edges, and sampling subgraphs.
       
     </aside>
   </div>
-</div><script src="_static/documentation_options.js?v=01f34227"></script>
+</div><script src="_static/documentation_options.js?v=1dd76d02"></script>
     <script src="_static/doctools.js?v=fd6eb6e6"></script>
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/scripts/furo.js?v=46bd48cc"></script>

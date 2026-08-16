@@ -4,8 +4,8 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html">
 
-    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>pygraphdb.ingestion - PyGraphDB</title>
+    <!-- Generated with Sphinx 9.0.4 and Furo 2025.12.19 -->
+        <title>gestaltdb.ingestion - GestaltDB</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -160,7 +160,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../../index.html"><div class="brand">PyGraphDB</div></a>
+      <a href="../../index.html"><div class="brand">GestaltDB</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -181,7 +181,7 @@
       
       <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
   
-  <span class="sidebar-brand-text">PyGraphDB</span>
+  <span class="sidebar-brand-text">GestaltDB</span>
   
 </a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -196,7 +196,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../../storage-backends.html">Storage Backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../serializers.html">Serializers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../typed-sampling.html">Typed Traversal and Sampling</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../performance.html">Performance and RocksDB Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../cypher.html">Cypher Queries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../performance.html">Performance and Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../notebooks.html">Notebook Usage</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
@@ -234,12 +235,54 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <h1>Source code for pygraphdb.ingestion</h1><div class="highlight"><pre>
-<span></span><span class="sd">&quot;&quot;&quot;Columnar ingestion containers for PyGraphDB.&quot;&quot;&quot;</span>
+          <h1>Source code for gestaltdb.ingestion</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Columnar ingestion containers for GestaltDB.&quot;&quot;&quot;</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+
+
+<div class="viewcode-block" id="ColumnarIngestionMode">
+<a class="viewcode-back" href="../../api.html#gestaltdb.ingestion.ColumnarIngestionMode">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ColumnarIngestionMode</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Enum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;How high-level columnar ingestion should interpret input columns.</span>
+
+<span class="sd">    ``ENTITY_COLUMNS`` means node and edge payloads are built from structured</span>
+<span class="sd">    entity columns such as IDs, labels, sources, targets, types, and properties.</span>
+<span class="sd">    With ``JSONSerializer``, this enables the fast Polars/Arrow JSON payload</span>
+<span class="sd">    path.</span>
+
+<span class="sd">    ``SERIALIZED_PAYLOADS`` means inputs already contain serializer-compatible</span>
+<span class="sd">    ``node_value`` and ``edge_value`` byte payload columns.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">ENTITY_COLUMNS</span> <span class="o">=</span> <span class="s2">&quot;entity_columns&quot;</span>
+    <span class="n">SERIALIZED_PAYLOADS</span> <span class="o">=</span> <span class="s2">&quot;serialized_payloads&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="IndexMaintenanceMode">
+<a class="viewcode-back" href="../../api.html#gestaltdb.ingestion.IndexMaintenanceMode">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">IndexMaintenanceMode</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Enum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Secondary-index maintenance policy for columnar ingestion.</span>
+
+<span class="sd">    ``MAINTAIN`` updates secondary indexes during ingestion. This is safest for</span>
+<span class="sd">    incremental writes, but expensive for large append-only bulk loads.</span>
+
+<span class="sd">    ``DEFER`` writes canonical graph records and traversal-critical typed</span>
+<span class="sd">    adjacency, marks secondary indexes stale, and requires an explicit</span>
+<span class="sd">    ``GraphDB.rebuild_deferred_indexes()`` before index-backed queries.</span>
+
+<span class="sd">    ``DEFER_REBUILD`` is a high-level convenience mode: defer index maintenance</span>
+<span class="sd">    during ingestion, then immediately run the one-pass deferred index rebuild.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">MAINTAIN</span> <span class="o">=</span> <span class="s2">&quot;maintain&quot;</span>
+    <span class="n">DEFER</span> <span class="o">=</span> <span class="s2">&quot;defer&quot;</span>
+    <span class="n">DEFER_REBUILD</span> <span class="o">=</span> <span class="s2">&quot;defer_rebuild&quot;</span></div>
+
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_missing_dependency_error</span><span class="p">(</span><span class="n">package_name</span><span class="p">,</span> <span class="n">install_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">feature_name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
@@ -297,17 +340,35 @@
     <span class="k">return</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">unique_lengths</span><span class="p">),</span> <span class="mi">0</span><span class="p">)</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_slice_column</span><span class="p">(</span><span class="n">column</span><span class="p">,</span> <span class="n">start</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">length</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Slice Arrow-like columns while preserving Python list fallback behavior.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">column</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">column</span><span class="p">,</span> <span class="s2">&quot;slice&quot;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">column</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">length</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">column</span><span class="p">[</span><span class="n">start</span> <span class="p">:</span> <span class="n">start</span> <span class="o">+</span> <span class="n">length</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_direct_column</span><span class="p">(</span><span class="n">column</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return columns PyRex can consume without Python list materialization.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">column</span><span class="p">,</span> <span class="s2">&quot;buffers&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">column</span><span class="p">,</span> <span class="s2">&quot;type&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">column</span><span class="p">,</span> <span class="s2">&quot;null_count&quot;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">column</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
 <div class="viewcode-block" id="NodeList">
-<a class="viewcode-back" href="../../api.html#pygraphdb.ingestion.NodeList">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.ingestion.NodeList">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">NodeList</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Columnar nodes with caller-provided serialized node values.&quot;&quot;&quot;</span>
 
     <span class="n">node_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]</span>
     <span class="n">node_values</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]</span>
+    <span class="n">node_ids_column</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">node_values_column</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="NodeList.from_arrow">
-<a class="viewcode-back" href="../../api.html#pygraphdb.ingestion.NodeList.from_arrow">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.ingestion.NodeList.from_arrow">[docs]</a>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_arrow</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">node_ids</span><span class="p">,</span> <span class="n">node_values</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a node list from Arrow-like or Python columns.&quot;&quot;&quot;</span>
@@ -319,11 +380,13 @@
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
             <span class="n">node_ids</span><span class="o">=</span><span class="p">[</span><span class="n">_to_bytes</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">&quot;node_ids&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">raw_node_ids</span><span class="p">],</span>
             <span class="n">node_values</span><span class="o">=</span><span class="p">[</span><span class="n">_to_payload_bytes</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">&quot;node_values&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">raw_node_values</span><span class="p">],</span>
+            <span class="n">node_ids_column</span><span class="o">=</span><span class="n">_direct_column</span><span class="p">(</span><span class="n">node_ids</span><span class="p">),</span>
+            <span class="n">node_values_column</span><span class="o">=</span><span class="n">_direct_column</span><span class="p">(</span><span class="n">node_values</span><span class="p">),</span>
         <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NodeList.from_polars">
-<a class="viewcode-back" href="../../api.html#pygraphdb.ingestion.NodeList.from_polars">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.ingestion.NodeList.from_polars">[docs]</a>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_polars</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">df</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;node_id&quot;</span><span class="p">,</span> <span class="n">node_value</span><span class="o">=</span><span class="s2">&quot;node_value&quot;</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a node list from a Polars DataFrame.&quot;&quot;&quot;</span>
@@ -340,20 +403,25 @@
 
 
 <div class="viewcode-block" id="NodeList.chunks">
-<a class="viewcode-back" href="../../api.html#pygraphdb.ingestion.NodeList.chunks">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.ingestion.NodeList.chunks">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">chunks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield fixed-size ``NodeList`` chunks.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">chunk_size</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;chunk_size must be positive&quot;</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">start</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">node_ids</span><span class="p">),</span> <span class="n">chunk_size</span><span class="p">):</span>
             <span class="n">end</span> <span class="o">=</span> <span class="n">start</span> <span class="o">+</span> <span class="n">chunk_size</span>
-            <span class="k">yield</span> <span class="n">NodeList</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">node_ids</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">node_values</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">])</span></div>
+            <span class="k">yield</span> <span class="n">NodeList</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">node_ids</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">],</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">node_values</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">],</span>
+                <span class="n">_slice_column</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">node_ids_column</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">),</span>
+                <span class="n">_slice_column</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">node_values_column</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">),</span>
+            <span class="p">)</span></div>
 </div>
 
 
 
 <div class="viewcode-block" id="EdgeList">
-<a class="viewcode-back" href="../../api.html#pygraphdb.ingestion.EdgeList">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.ingestion.EdgeList">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">EdgeList</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Columnar typed edges with caller-provided serialized edge values.&quot;&quot;&quot;</span>
@@ -363,9 +431,14 @@
     <span class="n">targets</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]</span>
     <span class="n">edge_types</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
     <span class="n">edge_values</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]</span>
+    <span class="n">edge_ids_column</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">sources_column</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">targets_column</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">edge_types_column</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">edge_values_column</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="EdgeList.from_arrow">
-<a class="viewcode-back" href="../../api.html#pygraphdb.ingestion.EdgeList.from_arrow">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.ingestion.EdgeList.from_arrow">[docs]</a>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_arrow</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">edge_ids</span><span class="p">,</span> <span class="n">sources</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">edge_types</span><span class="p">,</span> <span class="n">edge_values</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create an edge list from Arrow-like or Python columns.&quot;&quot;&quot;</span>
@@ -399,11 +472,16 @@
             <span class="n">targets</span><span class="o">=</span><span class="p">[</span><span class="n">_to_bytes</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">&quot;targets&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">raw_targets</span><span class="p">],</span>
             <span class="n">edge_types</span><span class="o">=</span><span class="n">normalized_edge_types</span><span class="p">,</span>
             <span class="n">edge_values</span><span class="o">=</span><span class="p">[</span><span class="n">_to_payload_bytes</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">&quot;edge_values&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">raw_edge_values</span><span class="p">],</span>
+            <span class="n">edge_ids_column</span><span class="o">=</span><span class="n">_direct_column</span><span class="p">(</span><span class="n">edge_ids</span><span class="p">),</span>
+            <span class="n">sources_column</span><span class="o">=</span><span class="n">_direct_column</span><span class="p">(</span><span class="n">sources</span><span class="p">),</span>
+            <span class="n">targets_column</span><span class="o">=</span><span class="n">_direct_column</span><span class="p">(</span><span class="n">targets</span><span class="p">),</span>
+            <span class="n">edge_types_column</span><span class="o">=</span><span class="n">_direct_column</span><span class="p">(</span><span class="n">edge_types</span><span class="p">),</span>
+            <span class="n">edge_values_column</span><span class="o">=</span><span class="n">_direct_column</span><span class="p">(</span><span class="n">edge_values</span><span class="p">),</span>
         <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="EdgeList.from_polars">
-<a class="viewcode-back" href="../../api.html#pygraphdb.ingestion.EdgeList.from_polars">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.ingestion.EdgeList.from_polars">[docs]</a>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_polars</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
@@ -436,7 +514,7 @@
 
 
 <div class="viewcode-block" id="EdgeList.chunks">
-<a class="viewcode-back" href="../../api.html#pygraphdb.ingestion.EdgeList.chunks">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.ingestion.EdgeList.chunks">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">chunks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield fixed-size ``EdgeList`` chunks.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">chunk_size</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
@@ -449,6 +527,11 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">targets</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">],</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">edge_types</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">],</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">edge_values</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">],</span>
+                <span class="n">_slice_column</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">edge_ids_column</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">),</span>
+                <span class="n">_slice_column</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sources_column</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">),</span>
+                <span class="n">_slice_column</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">targets_column</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">),</span>
+                <span class="n">_slice_column</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">edge_types_column</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">),</span>
+                <span class="n">_slice_column</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">edge_values_column</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">),</span>
             <span class="p">)</span></div>
 </div>
 
@@ -464,7 +547,7 @@
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2026, PyGraphDB contributors
+                Copyright &#169; 2026, Mylonas Charilaos
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -484,7 +567,7 @@
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=01f34227"></script>
+</div><script src="../../_static/documentation_options.js?v=1dd76d02"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>

@@ -5,8 +5,8 @@
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Storage Backends" href="storage-backends.html"><link rel="prev" title="Installation" href="installation.html">
 
-    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>Quickstart - PyGraphDB</title>
+    <!-- Generated with Sphinx 9.0.4 and Furo 2025.12.19 -->
+        <title>Quickstart - GestaltDB</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -161,7 +161,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="index.html"><div class="brand">PyGraphDB</div></a>
+      <a href="index.html"><div class="brand">GestaltDB</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -182,7 +182,7 @@
       
       <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
   
-  <span class="sidebar-brand-text">PyGraphDB</span>
+  <span class="sidebar-brand-text">GestaltDB</span>
   
 </a><form class="sidebar-search-container" method="get" action="search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -198,7 +198,7 @@
 <li class="toctree-l1"><a class="reference internal" href="serializers.html">Serializers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="typed-sampling.html">Typed Traversal and Sampling</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cypher.html">Cypher Queries</a></li>
-<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance and RocksDB Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance and Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="notebooks.html">Notebook Usage</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
@@ -244,173 +244,111 @@
         <article role="main" id="furo-main-content">
           <section id="quickstart">
 <h1>Quickstart<a class="headerlink" href="#quickstart" title="Link to this heading">¶</a></h1>
+<p>This page shows the shortest path from an empty database to a useful query.</p>
 <section id="create-a-graph">
 <h2>Create a Graph<a class="headerlink" href="#create-a-graph" title="Link to this heading">¶</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pygraphdb.graphdb</span><span class="w"> </span><span class="kn">import</span> <span class="n">Edge</span><span class="p">,</span> <span class="n">GraphDB</span><span class="p">,</span> <span class="n">Node</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pygraphdb.kvstores</span><span class="w"> </span><span class="kn">import</span> <span class="n">LMDBStore</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pygraphdb.serializers</span><span class="w"> </span><span class="kn">import</span> <span class="n">PickleSerializer</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gestaltdb.graphdb</span><span class="w"> </span><span class="kn">import</span> <span class="n">Edge</span><span class="p">,</span> <span class="n">GraphDB</span><span class="p">,</span> <span class="n">Node</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gestaltdb.kvstores</span><span class="w"> </span><span class="kn">import</span> <span class="n">LMDBStore</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gestaltdb.serializers</span><span class="w"> </span><span class="kn">import</span> <span class="n">PickleSerializer</span>
 
 <span class="n">graph_db</span> <span class="o">=</span> <span class="n">GraphDB</span><span class="p">(</span><span class="n">LMDBStore</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;quickstart_lmdb&quot;</span><span class="p">),</span> <span class="n">PickleSerializer</span><span class="p">())</span>
 
-<span class="n">alice</span> <span class="o">=</span> <span class="n">Node</span><span class="p">(</span><span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Person&quot;</span><span class="p">],</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Alice&quot;</span><span class="p">,</span> <span class="s2">&quot;age&quot;</span><span class="p">:</span> <span class="mi">30</span><span class="p">})</span>
-<span class="n">bob</span> <span class="o">=</span> <span class="n">Node</span><span class="p">(</span><span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;bob&quot;</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Person&quot;</span><span class="p">],</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Bob&quot;</span><span class="p">,</span> <span class="s2">&quot;age&quot;</span><span class="p">:</span> <span class="mi">25</span><span class="p">})</span>
-
-<span class="n">graph_db</span><span class="o">.</span><span class="n">put_node</span><span class="p">(</span><span class="n">alice</span><span class="p">)</span>
-<span class="n">graph_db</span><span class="o">.</span><span class="n">put_node</span><span class="p">(</span><span class="n">bob</span><span class="p">)</span>
-
-<span class="n">edge</span> <span class="o">=</span> <span class="n">Edge</span><span class="p">(</span>
-    <span class="n">edge_id</span><span class="o">=</span><span class="s2">&quot;alice-bob&quot;</span><span class="p">,</span>
-    <span class="n">source</span><span class="o">=</span><span class="n">alice</span><span class="o">.</span><span class="n">get_id</span><span class="p">,</span>
-    <span class="n">target</span><span class="o">=</span><span class="n">bob</span><span class="o">.</span><span class="n">get_id</span><span class="p">,</span>
-    <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;friend&quot;</span><span class="p">,</span> <span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">},</span>
-<span class="p">)</span>
-<span class="n">graph_db</span><span class="o">.</span><span class="n">put_edge</span><span class="p">(</span><span class="n">edge</span><span class="p">)</span>
-
-<span class="nb">print</span><span class="p">(</span><span class="n">graph_db</span><span class="o">.</span><span class="n">get_node</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;alice&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to_dict</span><span class="p">())</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">graph_db</span><span class="o">.</span><span class="n">get_edge</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;alice-bob&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to_dict</span><span class="p">())</span>
-
-<span class="n">graph_db</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
-</pre></div>
-</div>
-</section>
-<section id="bulk-insert-edges">
-<h2>Bulk Insert Edges<a class="headerlink" href="#bulk-insert-edges" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">put_edges_bulk</span></code> stores many edge records and updates adjacency indexes in one
-operation.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">nodes</span> <span class="o">=</span> <span class="p">[</span><span class="n">Node</span><span class="p">(</span><span class="n">node_id</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;user-</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">)]</span>
-<span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">nodes</span><span class="p">:</span>
-    <span class="n">graph_db</span><span class="o">.</span><span class="n">put_node</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
-
-<span class="n">edges</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Edge</span><span class="p">(</span><span class="n">edge_id</span><span class="o">=</span><span class="s2">&quot;u0-u1&quot;</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">&quot;user-0&quot;</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="s2">&quot;user-1&quot;</span><span class="p">,</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;follows&quot;</span><span class="p">}),</span>
-    <span class="n">Edge</span><span class="p">(</span><span class="n">edge_id</span><span class="o">=</span><span class="s2">&quot;u0-u2&quot;</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">&quot;user-0&quot;</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="s2">&quot;user-2&quot;</span><span class="p">,</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;follows&quot;</span><span class="p">}),</span>
-    <span class="n">Edge</span><span class="p">(</span><span class="n">edge_id</span><span class="o">=</span><span class="s2">&quot;u2-u3&quot;</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">&quot;user-2&quot;</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="s2">&quot;user-3&quot;</span><span class="p">,</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;follows&quot;</span><span class="p">}),</span>
-<span class="p">]</span>
-<span class="n">graph_db</span><span class="o">.</span><span class="n">put_edges_bulk</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>For append-only ingestion where edge IDs are known to be new, skip replacement
-checks to avoid one existing-edge read per edge:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">graph_db</span><span class="o">.</span><span class="n">put_edges_bulk</span><span class="p">(</span><span class="n">edges</span><span class="p">,</span> <span class="n">check_existing</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="fetch-nodes-in-bulk">
-<h2>Fetch Nodes in Bulk<a class="headerlink" href="#fetch-nodes-in-bulk" title="Link to this heading">¶</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">fetched</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">get_nodes</span><span class="p">([</span><span class="sa">b</span><span class="s2">&quot;user-0&quot;</span><span class="p">,</span> <span class="sa">b</span><span class="s2">&quot;user-1&quot;</span><span class="p">,</span> <span class="sa">b</span><span class="s2">&quot;missing&quot;</span><span class="p">])</span>
-<span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">fetched</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="kc">None</span> <span class="k">if</span> <span class="n">node</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">node</span><span class="o">.</span><span class="n">get_id</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="labels-and-exact-match-indexes">
-<h2>Labels and Exact-Match Indexes<a class="headerlink" href="#labels-and-exact-match-indexes" title="Link to this heading">¶</a></h2>
-<p>Labels are stored natively on <code class="docutils literal notranslate"><span class="pre">Node</span></code> objects and maintained in a sorted label
-index. Label lookups avoid full node scans.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">graph_db</span><span class="o">.</span><span class="n">put_node</span><span class="p">(</span><span class="n">Node</span><span class="p">(</span><span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;drug-1&quot;</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Drug&quot;</span><span class="p">],</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Aspirin&quot;</span><span class="p">,</span> <span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;drug&quot;</span><span class="p">}))</span>
-<span class="n">graph_db</span><span class="o">.</span><span class="n">put_node</span><span class="p">(</span><span class="n">Node</span><span class="p">(</span><span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;protein-1&quot;</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Protein&quot;</span><span class="p">],</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;PTGS1&quot;</span><span class="p">,</span> <span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;protein&quot;</span><span class="p">}))</span>
-
-<span class="n">drugs</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">nodes_by_label</span><span class="p">(</span><span class="s2">&quot;Drug&quot;</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">([</span><span class="n">node</span><span class="o">.</span><span class="n">get_id</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">drugs</span><span class="p">])</span>
-</pre></div>
-</div>
-<p>Property indexes are explicit so ingestion does not pay for indexes you do not
-need. Register an exact-match node or edge property index before using it for
-performance-sensitive lookup.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">graph_db</span><span class="o">.</span><span class="n">create_node_property_index</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span>
-<span class="n">aspirin</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">nodes_by_property</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;Aspirin&quot;</span><span class="p">)</span>
-
-<span class="n">graph_db</span><span class="o">.</span><span class="n">create_edge_property_index</span><span class="p">(</span><span class="s2">&quot;weight&quot;</span><span class="p">)</span>
-<span class="n">strong_edges</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">edges_by_property</span><span class="p">(</span><span class="s2">&quot;weight&quot;</span><span class="p">,</span> <span class="mf">0.9</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>Relationship types are indexed through the existing <code class="docutils literal notranslate"><span class="pre">edge.properties[&quot;type&quot;]</span></code>
-convention.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">friend_edges</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">edges_by_type</span><span class="p">(</span><span class="s2">&quot;friend&quot;</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="columnar-ingestion">
-<h2>Columnar Ingestion<a class="headerlink" href="#columnar-ingestion" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">ingest_nodes_arrow</span></code> and <code class="docutils literal notranslate"><span class="pre">ingest_edges_arrow</span></code> accept Arrow-like columns or
-plain Python sequences. The first implementation requires caller-provided
-serialized <code class="docutils literal notranslate"><span class="pre">node_value</span></code> and <code class="docutils literal notranslate"><span class="pre">edge_value</span></code> payloads so existing serializer
-behavior remains unchanged.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">nodes</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">Node</span><span class="p">(</span><span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;drug-1&quot;</span><span class="p">,</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;drug&quot;</span><span class="p">}),</span>
-    <span class="n">Node</span><span class="p">(</span><span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;protein-1&quot;</span><span class="p">,</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;protein&quot;</span><span class="p">}),</span>
-<span class="p">]</span>
-<span class="n">graph_db</span><span class="o">.</span><span class="n">ingest_nodes_arrow</span><span class="p">(</span>
-    <span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">get_id</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">nodes</span><span class="p">],</span>
-    <span class="p">[</span><span class="n">graph_db</span><span class="o">.</span><span class="n">serialize_node_value</span><span class="p">(</span><span class="n">node</span><span class="p">)</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">nodes</span><span class="p">],</span>
-<span class="p">)</span>
-
-<span class="n">edge</span> <span class="o">=</span> <span class="n">Edge</span><span class="p">(</span>
-    <span class="n">edge_id</span><span class="o">=</span><span class="s2">&quot;d1-p1&quot;</span><span class="p">,</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">put_node</span><span class="p">(</span><span class="n">Node</span><span class="p">(</span>
+    <span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;drug-1&quot;</span><span class="p">,</span>
+    <span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Drug&quot;</span><span class="p">],</span>
+    <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Aspirin&quot;</span><span class="p">},</span>
+<span class="p">))</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">put_node</span><span class="p">(</span><span class="n">Node</span><span class="p">(</span>
+    <span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;protein-1&quot;</span><span class="p">,</span>
+    <span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Protein&quot;</span><span class="p">],</span>
+    <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;PTGS1&quot;</span><span class="p">},</span>
+<span class="p">))</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">put_edge</span><span class="p">(</span><span class="n">Edge</span><span class="p">(</span>
+    <span class="n">edge_id</span><span class="o">=</span><span class="s2">&quot;drug-1-protein-1&quot;</span><span class="p">,</span>
     <span class="n">source</span><span class="o">=</span><span class="s2">&quot;drug-1&quot;</span><span class="p">,</span>
     <span class="n">target</span><span class="o">=</span><span class="s2">&quot;protein-1&quot;</span><span class="p">,</span>
-    <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;drug-to-protein&quot;</span><span class="p">,</span> <span class="s2">&quot;score&quot;</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">},</span>
-<span class="p">)</span>
-<span class="n">graph_db</span><span class="o">.</span><span class="n">ingest_edges_arrow</span><span class="p">(</span>
-    <span class="p">[</span><span class="n">edge</span><span class="o">.</span><span class="n">get_id</span><span class="p">],</span>
-    <span class="p">[</span><span class="n">edge</span><span class="o">.</span><span class="n">source</span><span class="p">],</span>
-    <span class="p">[</span><span class="n">edge</span><span class="o">.</span><span class="n">target</span><span class="p">],</span>
-    <span class="p">[</span><span class="n">edge</span><span class="o">.</span><span class="n">get_type</span><span class="p">],</span>
-    <span class="p">[</span><span class="n">graph_db</span><span class="o">.</span><span class="n">serialize_edge_value</span><span class="p">(</span><span class="n">edge</span><span class="p">)],</span>
-    <span class="n">append_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="p">)</span>
-</pre></div>
-</div>
-<p>Polars users can use <code class="docutils literal notranslate"><span class="pre">ingest_nodes_polars</span></code> and <code class="docutils literal notranslate"><span class="pre">ingest_edges_polars</span></code> with
-<code class="docutils literal notranslate"><span class="pre">node_value</span></code> and <code class="docutils literal notranslate"><span class="pre">edge_value</span></code> binary columns. With <code class="docutils literal notranslate"><span class="pre">PyRexStore</span></code> and
-<code class="docutils literal notranslate"><span class="pre">pyrex-rocksdb&gt;=0.3.0a0</span></code>, these methods use native RocksDB columnar batch
-writes when available. Other stores use the Python bulk fallback.</p>
-</section>
-<section id="traverse-with-bfs">
-<h2>Traverse With BFS<a class="headerlink" href="#traverse-with-bfs" title="Link to this heading">¶</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">visited</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">bfs</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;user-0&quot;</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="s2">&quot;any&quot;</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">visited</span><span class="p">)</span>
+    <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;binds&quot;</span><span class="p">,</span> <span class="s2">&quot;score&quot;</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">},</span>
+<span class="p">))</span>
 </pre></div>
 </div>
 </section>
-<section id="query-with-cypher">
-<h2>Query With Cypher<a class="headerlink" href="#query-with-cypher" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">GraphDB.query</span></code> supports an initial read-only Cypher subset for indexed label
-scans, anchored typed traversal, and typed path sampling.</p>
+<section id="nodes-and-edges">
+<h2>Nodes and Edges<a class="headerlink" href="#nodes-and-edges" title="Link to this heading">¶</a></h2>
+<p>Fetch records directly when you know their IDs:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">drug</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">get_node</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;drug-1&quot;</span><span class="p">)</span>
+<span class="n">edge</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">get_edge</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;drug-1-protein-1&quot;</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">drug</span><span class="o">.</span><span class="n">properties</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">edge</span><span class="o">.</span><span class="n">properties</span><span class="p">[</span><span class="s2">&quot;score&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
+</section>
+<section id="labels-and-indexes">
+<h2>Labels and Indexes<a class="headerlink" href="#labels-and-indexes" title="Link to this heading">¶</a></h2>
+<p>Labels are indexed automatically. Property indexes are explicit; create them for
+properties you query frequently.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">graph_db</span><span class="o">.</span><span class="n">create_node_property_index</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">create_edge_property_index</span><span class="p">(</span><span class="s2">&quot;score&quot;</span><span class="p">)</span>
+
+<span class="n">drugs</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">nodes_by_label</span><span class="p">(</span><span class="s2">&quot;Drug&quot;</span><span class="p">)</span>
+<span class="n">aspirin</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">nodes_by_property</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;Aspirin&quot;</span><span class="p">)</span>
+<span class="n">strong_edges</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">edges_by_property_range</span><span class="p">(</span><span class="s2">&quot;score&quot;</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="cypher-query">
+<h2>Cypher Query<a class="headerlink" href="#cypher-query" title="Link to this heading">¶</a></h2>
+<p>Use <code class="docutils literal notranslate"><span class="pre">GraphDB.query</span></code> for read-only Cypher queries over labels, typed
+relationships, filters, ordering, and chained <code class="docutils literal notranslate"><span class="pre">MATCH</span></code> clauses.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
-    <span class="s1">&#39;MATCH (drug {id: &quot;drug-1&quot;})-[:drug-to-protein]-&gt;(protein) RETURN drug, protein&#39;</span>
+    <span class="s1">&#39;MATCH (d:Drug {name: &quot;Aspirin&quot;}) &#39;</span>
+    <span class="s1">&#39;MATCH (d)-[r:binds]-&gt;(p) &#39;</span>
+    <span class="s1">&#39;WHERE r.score &gt;= 0.8 &#39;</span>
+    <span class="s1">&#39;RETURN d.id AS drug, p.name AS protein, r.score AS score&#39;</span>
 <span class="p">)</span>
 
 <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;drug&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_id</span><span class="p">,</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;protein&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_id</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">record</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>Indexed labels are available through Cypher as well:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (drug:Drug {name: &quot;Aspirin&quot;}) RETURN drug&#39;</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>Multi-hop typed traversal is supported when each hop is outgoing and has an edge
-type:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
-    <span class="s1">&#39;MATCH (drug {id: &quot;drug-1&quot;})-[:drug-to-protein]-&gt;(protein)-[:protein-to-disease]-&gt;(disease) RETURN drug, protein, disease&#39;</span>
-<span class="p">)</span>
-</pre></div>
-</div>
-<p>See <a class="reference internal" href="cypher.html"><span class="doc">Cypher Queries</span></a> for the full supported subset and current limitations.</p>
 </section>
-<section id="use-stable-ids">
-<h2>Use Stable IDs<a class="headerlink" href="#use-stable-ids" title="Link to this heading">¶</a></h2>
-<p>Stable IDs make notebooks, tests, and serialized records easier to inspect.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">drug</span> <span class="o">=</span> <span class="n">Node</span><span class="p">(</span><span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;drug-1&quot;</span><span class="p">,</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;drug&quot;</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Aspirin&quot;</span><span class="p">})</span>
-<span class="n">protein</span> <span class="o">=</span> <span class="n">Node</span><span class="p">(</span><span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;protein-1&quot;</span><span class="p">,</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;protein&quot;</span><span class="p">})</span>
-<span class="n">edge</span> <span class="o">=</span> <span class="n">Edge</span><span class="p">(</span>
-    <span class="n">edge_id</span><span class="o">=</span><span class="s2">&quot;drug-1-protein-1&quot;</span><span class="p">,</span>
-    <span class="n">source</span><span class="o">=</span><span class="n">drug</span><span class="o">.</span><span class="n">get_id</span><span class="p">,</span>
-    <span class="n">target</span><span class="o">=</span><span class="n">protein</span><span class="o">.</span><span class="n">get_id</span><span class="p">,</span>
-    <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;drug-to-protein&quot;</span><span class="p">},</span>
-<span class="p">)</span>
+<section id="typed-traversal">
+<h2>Typed Traversal<a class="headerlink" href="#typed-traversal" title="Link to this heading">¶</a></h2>
+<p>Relationship types are stored in <code class="docutils literal notranslate"><span class="pre">edge.properties[&quot;type&quot;]</span></code> and maintained in
+typed adjacency indexes.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">neighbors</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">neighbors_by_edge_type</span><span class="p">(</span><span class="s2">&quot;drug-1&quot;</span><span class="p">,</span> <span class="s2">&quot;binds&quot;</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="s2">&quot;out&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">neighbors</span><span class="p">)</span>
 </pre></div>
 </div>
+</section>
+<section id="bulk-inserts">
+<h2>Bulk Inserts<a class="headerlink" href="#bulk-inserts" title="Link to this heading">¶</a></h2>
+<p>Use bulk writes when loading many records.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">graph_db</span><span class="o">.</span><span class="n">put_nodes</span><span class="p">([</span>
+    <span class="n">Node</span><span class="p">(</span><span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;drug-2&quot;</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Drug&quot;</span><span class="p">],</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Ibuprofen&quot;</span><span class="p">}),</span>
+    <span class="n">Node</span><span class="p">(</span><span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;protein-2&quot;</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Protein&quot;</span><span class="p">],</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;PTGS2&quot;</span><span class="p">}),</span>
+<span class="p">])</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">put_edges_bulk</span><span class="p">([</span>
+    <span class="n">Edge</span><span class="p">(</span><span class="n">edge_id</span><span class="o">=</span><span class="s2">&quot;drug-2-protein-2&quot;</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">&quot;drug-2&quot;</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="s2">&quot;protein-2&quot;</span><span class="p">,</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;binds&quot;</span><span class="p">}),</span>
+<span class="p">])</span>
+</pre></div>
+</div>
+</section>
+<section id="close-the-store">
+<h2>Close the Store<a class="headerlink" href="#close-the-store" title="Link to this heading">¶</a></h2>
+<p>Close the database when a script or notebook cell is finished.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">graph_db</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="next-steps">
+<h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>See <a class="reference internal" href="cypher.html"><span class="doc">Cypher Queries</span></a> for the supported query syntax.</p></li>
+<li><p>See <a class="reference internal" href="storage-backends.html"><span class="doc">Storage Backends</span></a> for backend selection.</p></li>
+<li><p>See <a class="reference internal" href="typed-sampling.html"><span class="doc">Typed Traversal and Sampling</span></a> for path and subgraph sampling.</p></li>
+<li><p>See <a class="reference internal" href="performance.html"><span class="doc">Performance and Benchmarks</span></a> for benchmark scripts and caveats.</p></li>
+</ul>
 </section>
 </section>
 
@@ -443,7 +381,7 @@ type:</p>
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2026, PyGraphDB contributors
+                Copyright &#169; 2026, Mylonas Charilaos
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -471,13 +409,13 @@ type:</p>
             <ul>
 <li><a class="reference internal" href="#">Quickstart</a><ul>
 <li><a class="reference internal" href="#create-a-graph">Create a Graph</a></li>
-<li><a class="reference internal" href="#bulk-insert-edges">Bulk Insert Edges</a></li>
-<li><a class="reference internal" href="#fetch-nodes-in-bulk">Fetch Nodes in Bulk</a></li>
-<li><a class="reference internal" href="#labels-and-exact-match-indexes">Labels and Exact-Match Indexes</a></li>
-<li><a class="reference internal" href="#columnar-ingestion">Columnar Ingestion</a></li>
-<li><a class="reference internal" href="#traverse-with-bfs">Traverse With BFS</a></li>
-<li><a class="reference internal" href="#query-with-cypher">Query With Cypher</a></li>
-<li><a class="reference internal" href="#use-stable-ids">Use Stable IDs</a></li>
+<li><a class="reference internal" href="#nodes-and-edges">Nodes and Edges</a></li>
+<li><a class="reference internal" href="#labels-and-indexes">Labels and Indexes</a></li>
+<li><a class="reference internal" href="#cypher-query">Cypher Query</a></li>
+<li><a class="reference internal" href="#typed-traversal">Typed Traversal</a></li>
+<li><a class="reference internal" href="#bulk-inserts">Bulk Inserts</a></li>
+<li><a class="reference internal" href="#close-the-store">Close the Store</a></li>
+<li><a class="reference internal" href="#next-steps">Next Steps</a></li>
 </ul>
 </li>
 </ul>
@@ -489,7 +427,7 @@ type:</p>
       
     </aside>
   </div>
-</div><script src="_static/documentation_options.js?v=01f34227"></script>
+</div><script src="_static/documentation_options.js?v=1dd76d02"></script>
     <script src="_static/doctools.js?v=fd6eb6e6"></script>
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/scripts/furo.js?v=46bd48cc"></script>

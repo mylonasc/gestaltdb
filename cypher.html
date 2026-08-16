@@ -3,10 +3,10 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Performance and RocksDB Tuning" href="performance.html"><link rel="prev" title="Typed Traversal and Sampling" href="typed-sampling.html">
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Performance and Benchmarks" href="performance.html"><link rel="prev" title="Typed Traversal and Sampling" href="typed-sampling.html">
 
-    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>Cypher Queries - PyGraphDB</title>
+    <!-- Generated with Sphinx 9.0.4 and Furo 2025.12.19 -->
+        <title>Cypher Queries - GestaltDB</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -161,7 +161,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="index.html"><div class="brand">PyGraphDB</div></a>
+      <a href="index.html"><div class="brand">GestaltDB</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -182,7 +182,7 @@
       
       <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
   
-  <span class="sidebar-brand-text">PyGraphDB</span>
+  <span class="sidebar-brand-text">GestaltDB</span>
   
 </a><form class="sidebar-search-container" method="get" action="search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -198,7 +198,7 @@
 <li class="toctree-l1"><a class="reference internal" href="serializers.html">Serializers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="typed-sampling.html">Typed Traversal and Sampling</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Cypher Queries</a></li>
-<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance and RocksDB Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance and Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="notebooks.html">Notebook Usage</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
@@ -244,221 +244,122 @@
         <article role="main" id="furo-main-content">
           <section id="cypher-queries">
 <h1>Cypher Queries<a class="headerlink" href="#cypher-queries" title="Link to this heading">¶</a></h1>
-<p>PyGraphDB includes an initial read-only Cypher API through
-<code class="docutils literal notranslate"><span class="pre">GraphDB.query(cypher)</span></code>. The current implementation is intentionally small and
-maps directly to features that already have efficient database APIs: indexed
-label scans, anchored typed traversal, and typed path sampling.</p>
-<p>Relationship types are read from <code class="docutils literal notranslate"><span class="pre">edge.properties[&quot;type&quot;]</span></code>. Node labels are
-stored natively through <code class="docutils literal notranslate"><span class="pre">Node(labels=[...])</span></code> and maintained in a sorted label
-index.</p>
-<section id="supported-feature-matrix">
-<h2>Supported Feature Matrix<a class="headerlink" href="#supported-feature-matrix" title="Link to this heading">¶</a></h2>
-<p>The table below distinguishes features available through the Python database API
-from features exposed through the Cypher API.</p>
-<p>Legend: ✅ supported, 🟡 partially supported, ❌ not supported.</p>
-<div class="table-wrapper colwidths-given docutils container" id="id1">
-<table class="docutils align-default" id="id1">
-<caption><span class="caption-text">Current DB API and Cypher API support</span><a class="headerlink" href="#id1" title="Link to this table">¶</a></caption>
-<colgroup>
-<col style="width: 32.0%" />
-<col style="width: 18.0%" />
-<col style="width: 18.0%" />
-<col style="width: 32.0%" />
-</colgroup>
-<thead>
-<tr class="row-odd"><th class="head"><p>Feature</p></th>
-<th class="head"><p>DB API</p></th>
-<th class="head"><p>Cypher API</p></th>
-<th class="head"><p>Notes</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Node and edge property storage</p></td>
-<td><p>✅</p></td>
-<td><p>🟡</p></td>
-<td><p>Cypher can return bound <code class="docutils literal notranslate"><span class="pre">Node</span></code> and <code class="docutils literal notranslate"><span class="pre">Edge</span></code> objects, but property projections such as <code class="docutils literal notranslate"><span class="pre">RETURN</span> <span class="pre">n.name</span></code> are not implemented yet.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Native node labels</p></td>
-<td><p>✅</p></td>
-<td><p>✅</p></td>
-<td><p>DB API supports <code class="docutils literal notranslate"><span class="pre">Node(labels=[...])</span></code> and <code class="docutils literal notranslate"><span class="pre">nodes_by_label</span></code>. Cypher supports <code class="docutils literal notranslate"><span class="pre">MATCH</span> <span class="pre">(n:Label)</span> <span class="pre">RETURN</span> <span class="pre">n</span></code>.</p></td>
-</tr>
-<tr class="row-even"><td><p>Exact-match node property indexes</p></td>
-<td><p>✅</p></td>
-<td><p>🟡</p></td>
-<td><p>DB API supports explicit indexes via <code class="docutils literal notranslate"><span class="pre">create_node_property_index</span></code>. Cypher uses them for <code class="docutils literal notranslate"><span class="pre">MATCH</span> <span class="pre">(n:Label</span> <span class="pre">{name:</span> <span class="pre">&quot;...&quot;})</span> <span class="pre">RETURN</span> <span class="pre">n</span></code> when registered.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Exact-match edge property indexes</p></td>
-<td><p>✅</p></td>
-<td><p>❌</p></td>
-<td><p>DB API supports explicit indexes via <code class="docutils literal notranslate"><span class="pre">create_edge_property_index</span></code>. Cypher edge property predicates are not implemented yet.</p></td>
-</tr>
-<tr class="row-even"><td><p>Dedicated relationship type field</p></td>
-<td><p>🟡</p></td>
-<td><p>🟡</p></td>
-<td><p>Typed traversal uses <code class="docutils literal notranslate"><span class="pre">edge.properties[&quot;type&quot;]</span></code> instead of a dedicated <code class="docutils literal notranslate"><span class="pre">Edge.type</span></code> field.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Relationship type catalog</p></td>
-<td><p>✅</p></td>
-<td><p>❌</p></td>
-<td><p>DB API supports <code class="docutils literal notranslate"><span class="pre">edges_by_type</span></code>. Cypher does not yet support unanchored <code class="docutils literal notranslate"><span class="pre">MATCH</span> <span class="pre">()-[:TYPE]-&gt;()</span></code> scans.</p></td>
-</tr>
-<tr class="row-even"><td><p>Anchored one-hop typed traversal</p></td>
-<td><p>✅</p></td>
-<td><p>✅</p></td>
-<td><p>DB API uses <code class="docutils literal notranslate"><span class="pre">iter_typed_adjacency</span></code> or <code class="docutils literal notranslate"><span class="pre">neighbors_by_edge_type</span></code>. Cypher supports <code class="docutils literal notranslate"><span class="pre">MATCH</span> <span class="pre">(a</span> <span class="pre">{id:</span> <span class="pre">&quot;...&quot;})-[:TYPE]-&gt;(b)</span></code>.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Anchored multi-hop typed traversal</p></td>
-<td><p>✅</p></td>
-<td><p>✅</p></td>
-<td><p>Cypher supports repeated outgoing typed hops from an anchored start node.</p></td>
-</tr>
-<tr class="row-even"><td><p>Reverse typed traversal</p></td>
-<td><p>✅</p></td>
-<td><p>❌</p></td>
-<td><p>DB API supports <code class="docutils literal notranslate"><span class="pre">direction=&quot;in&quot;</span></code>. Cypher support for <code class="docutils literal notranslate"><span class="pre">&lt;-[:TYPE]-</span></code> is not implemented yet.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Undirected typed traversal</p></td>
-<td><p>✅</p></td>
-<td><p>❌</p></td>
-<td><p>DB API supports <code class="docutils literal notranslate"><span class="pre">direction=&quot;any&quot;</span></code>. Cypher support for <code class="docutils literal notranslate"><span class="pre">-[:TYPE]-</span></code> is not implemented yet.</p></td>
-</tr>
-<tr class="row-even"><td><p>Untyped BFS traversal</p></td>
-<td><p>✅</p></td>
-<td><p>❌</p></td>
-<td><p>Available as <code class="docutils literal notranslate"><span class="pre">GraphDB.bfs</span></code> over legacy adjacency lists.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Single-hop typed neighbor sampling</p></td>
-<td><p>✅</p></td>
-<td><p>❌</p></td>
-<td><p>Available as <code class="docutils literal notranslate"><span class="pre">GraphDB.sample_neighbors</span></code>.</p></td>
-</tr>
-<tr class="row-even"><td><p>Multi-hop typed path sampling</p></td>
-<td><p>✅</p></td>
-<td><p>✅</p></td>
-<td><p>Cypher exposes this through <code class="docutils literal notranslate"><span class="pre">CALL</span> <span class="pre">pg.sample_typed_paths(...)</span> <span class="pre">YIELD</span> <span class="pre">path</span> <span class="pre">RETURN</span> <span class="pre">path</span></code>.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Materialized sampled subgraph</p></td>
-<td><p>✅</p></td>
-<td><p>❌</p></td>
-<td><p>Available as <code class="docutils literal notranslate"><span class="pre">GraphDB.sample_typed_subgraph</span></code>.</p></td>
-</tr>
-<tr class="row-even"><td><p>Property filtering with <code class="docutils literal notranslate"><span class="pre">WHERE</span></code></p></td>
-<td><p>🟡</p></td>
-<td><p>❌</p></td>
-<td><p>DB API has exact-match index lookup helpers, but Cypher <code class="docutils literal notranslate"><span class="pre">WHERE</span></code> parsing is future work.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Mutating Cypher queries</p></td>
-<td><p>✅</p></td>
-<td><p>❌</p></td>
-<td><p>Use <code class="docutils literal notranslate"><span class="pre">put_node</span></code>, <code class="docutils literal notranslate"><span class="pre">put_edge</span></code>, <code class="docutils literal notranslate"><span class="pre">put_edges_bulk</span></code>, and ingestion APIs directly.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
-<section id="indexed-label-scans">
-<h2>Indexed Label Scans<a class="headerlink" href="#indexed-label-scans" title="Link to this heading">¶</a></h2>
-<p>Create nodes with native labels, then query by label without scanning every node.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">graph_db</span><span class="o">.</span><span class="n">put_node</span><span class="p">(</span><span class="n">Node</span><span class="p">(</span><span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;drug-1&quot;</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Drug&quot;</span><span class="p">],</span> <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Aspirin&quot;</span><span class="p">}))</span>
+<p>GestaltDB exposes a read-only Cypher subset through
+<code class="docutils literal notranslate"><span class="pre">GraphDB.query(cypher,</span> <span class="pre">parameters=None)</span></code>. It is designed around the features
+GestaltDB can execute efficiently today: indexed node scans, typed relationship
+expansion, filtering, ordering, and chained <code class="docutils literal notranslate"><span class="pre">MATCH</span></code> clauses.</p>
+<p>Relationship types come from <code class="docutils literal notranslate"><span class="pre">edge.properties[&quot;type&quot;]</span></code>. Node labels are stored
+on <code class="docutils literal notranslate"><span class="pre">Node(labels=[...])</span></code>.</p>
+<section id="basic-result-shape">
+<h2>Basic Result Shape<a class="headerlink" href="#basic-result-shape" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">GraphDB.query</span></code> returns a result with <code class="docutils literal notranslate"><span class="pre">columns</span></code> and <code class="docutils literal notranslate"><span class="pre">records</span></code>. Iterating the
+result yields record dictionaries.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (n:Drug) RETURN n.id, n.name LIMIT 10&#39;</span><span class="p">)</span>
 
-<span class="n">result</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (d:Drug) RETURN d&#39;</span><span class="p">)</span>
-
+<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>
 <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;d&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_id</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;n.id&quot;</span><span class="p">],</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;n.name&quot;</span><span class="p">])</span>
 </pre></div>
 </div>
 </section>
-<section id="indexed-label-and-property-lookup">
-<h2>Indexed Label and Property Lookup<a class="headerlink" href="#indexed-label-and-property-lookup" title="Link to this heading">¶</a></h2>
-<p>Exact-match property indexes are explicit. Register an index before relying on
-it for performance-sensitive lookup.</p>
+<section id="node-scans">
+<h2>Node Scans<a class="headerlink" href="#node-scans" title="Link to this heading">¶</a></h2>
+<p>Label scans use the label index. Inline properties are filtered and can use a
+registered property index.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">graph_db</span><span class="o">.</span><span class="n">create_node_property_index</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span>
 
-<span class="n">result</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (d:Drug {name: &quot;Aspirin&quot;}) RETURN d&#39;</span><span class="p">)</span>
-
-<span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;d&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">properties</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">])</span>
-</pre></div>
-</div>
-<p>If a property index is not registered, Cypher still restricts the search to the
-label index and then filters decoded nodes in Python.</p>
-</section>
-<section id="anchored-one-hop-traversal">
-<h2>Anchored One-Hop Traversal<a class="headerlink" href="#anchored-one-hop-traversal" title="Link to this heading">¶</a></h2>
-<p>Use <code class="docutils literal notranslate"><span class="pre">GraphDB.query</span></code> for an anchored outgoing typed traversal. The start node
-must be constrained by <code class="docutils literal notranslate"><span class="pre">id</span></code>.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
-    <span class="s1">&#39;MATCH (d {id: &quot;drug-1&quot;})-[:drug-to-protein]-&gt;(p) RETURN d, p&#39;</span>
-<span class="p">)</span>
-
-<span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;d&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_id</span><span class="p">,</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;p&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_id</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>The result object exposes <code class="docutils literal notranslate"><span class="pre">columns</span></code> and <code class="docutils literal notranslate"><span class="pre">records</span></code>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>  <span class="c1"># (&quot;d&quot;, &quot;p&quot;)</span>
-<span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">result</span><span class="p">))</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (n:Drug) RETURN n&#39;</span><span class="p">)</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (n:Drug {name: &quot;Aspirin&quot;}) RETURN n.id&#39;</span><span class="p">)</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (n:Drug:Approved) RETURN n.id&#39;</span><span class="p">)</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (n) RETURN n.id LIMIT 5&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
-<section id="relationship-variables">
-<h2>Relationship Variables<a class="headerlink" href="#relationship-variables" title="Link to this heading">¶</a></h2>
-<p>Relationship variables can be bound and returned.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
-    <span class="s1">&#39;MATCH (d {id: &quot;drug-1&quot;})-[r:drug-to-disease]-&gt;(x) RETURN d, r, x&#39;</span>
-<span class="p">)</span>
-
-<span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;r&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_id</span><span class="p">,</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;r&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">properties</span><span class="p">)</span>
+<section id="typed-relationship-traversal">
+<h2>Typed Relationship Traversal<a class="headerlink" href="#typed-relationship-traversal" title="Link to this heading">¶</a></h2>
+<p>Use an anchored pattern when you know the start node ID.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (d {id: &quot;drug-1&quot;})-[:binds]-&gt;(p) RETURN p.id&#39;</span><span class="p">)</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (p {id: &quot;protein-1&quot;})&lt;-[:binds]-(d) RETURN d.id&#39;</span><span class="p">)</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (n {id: &quot;x&quot;})-[:related]-(m) RETURN m.id&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Unanchored typed relationship scans are also supported.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (a)-[r:binds]-&gt;(b) RETURN a.id, r.id, b.id&#39;</span><span class="p">)</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (a)-[r:binds|inhibits]-&gt;(b) RETURN r.id ORDER BY r.id&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
-<section id="anchored-multi-hop-traversal">
-<h2>Anchored Multi-Hop Traversal<a class="headerlink" href="#anchored-multi-hop-traversal" title="Link to this heading">¶</a></h2>
-<p>Cypher supports repeated outgoing typed hops from the anchored start node.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
-    <span class="s1">&#39;MATCH (d {id: &quot;drug-1&quot;})-[:drug-to-protein]-&gt;(p)-[:protein-to-disease]-&gt;(x) RETURN d, p, x&#39;</span>
-<span class="p">)</span>
-
-<span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;d&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_id</span><span class="p">,</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;p&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_id</span><span class="p">,</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_id</span><span class="p">)</span>
+<section id="filtering">
+<h2>Filtering<a class="headerlink" href="#filtering" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">WHERE</span></code> supports equality, inequality, ordered comparisons, <code class="docutils literal notranslate"><span class="pre">AND</span></code>, <code class="docutils literal notranslate"><span class="pre">IN</span></code>,
+<code class="docutils literal notranslate"><span class="pre">IS</span> <span class="pre">NULL</span></code>, and <code class="docutils literal notranslate"><span class="pre">IS</span> <span class="pre">NOT</span> <span class="pre">NULL</span></code> for property references.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (n:Drug) WHERE n.name = &quot;Aspirin&quot; RETURN n.id&#39;</span><span class="p">)</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (n:Person) WHERE n.age &gt;= $age RETURN n.id&#39;</span><span class="p">,</span> <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;age&quot;</span><span class="p">:</span> <span class="mi">35</span><span class="p">})</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (n) WHERE n.kind IN [&quot;drug&quot;, &quot;protein&quot;] RETURN n.id&#39;</span><span class="p">)</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (n) WHERE n.name IS NOT NULL RETURN n.id&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>Relationship variables can be used across multiple hops as well.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
-    <span class="s1">&#39;MATCH (d {id: &quot;drug-1&quot;})-[r1:drug-to-protein]-&gt;(p)-[r2:protein-to-disease]-&gt;(x) RETURN r1, r2, x&#39;</span>
+<p>Relationship predicates work in anchored traversals and unanchored relationship
+scans. When an edge property index exists, exact and range predicates on typed
+relationship scans can use the composite type/property index.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">graph_db</span><span class="o">.</span><span class="n">create_edge_property_index</span><span class="p">(</span><span class="s2">&quot;score&quot;</span><span class="p">)</span>
+
+<span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (a)-[r:binds]-&gt;(b) WHERE r.score &gt;= 0.8 RETURN r.id, b.id&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="projection-and-result-shaping">
+<h2>Projection and Result Shaping<a class="headerlink" href="#projection-and-result-shaping" title="Link to this heading">¶</a></h2>
+<p>Use aliases, <code class="docutils literal notranslate"><span class="pre">RETURN</span> <span class="pre">*</span></code>, <code class="docutils literal notranslate"><span class="pre">DISTINCT</span></code>, <code class="docutils literal notranslate"><span class="pre">ORDER</span> <span class="pre">BY</span></code>, <code class="docutils literal notranslate"><span class="pre">SKIP</span></code>, and <code class="docutils literal notranslate"><span class="pre">LIMIT</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (n:Drug) RETURN n.id AS id, n.name AS name ORDER BY name&#39;</span><span class="p">)</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (n) RETURN DISTINCT n.kind ORDER BY n.kind&#39;</span><span class="p">)</span>
+<span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s1">&#39;MATCH (a)-[r:binds]-&gt;(b) RETURN * LIMIT 10&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Special projections prefer entity identity over user properties:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">n.id</span></code> and <code class="docutils literal notranslate"><span class="pre">r.id</span></code> return entity IDs.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">n.labels</span></code> returns node labels.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">r.source</span></code> and <code class="docutils literal notranslate"><span class="pre">r.target</span></code> return relationship endpoints.</p></li>
+<li><p>Missing properties project as <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+</ul>
+</section>
+<section id="chained-match-clauses">
+<h2>Chained MATCH Clauses<a class="headerlink" href="#chained-match-clauses" title="Link to this heading">¶</a></h2>
+<p>Multiple <code class="docutils literal notranslate"><span class="pre">MATCH</span></code> clauses execute as a row pipeline. Reusing a variable enforces
+that it refers to the same entity.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
+    <span class="s1">&#39;MATCH (d:Drug {name: &quot;Aspirin&quot;}) &#39;</span>
+    <span class="s1">&#39;MATCH (d)-[r:binds]-&gt;(p) &#39;</span>
+    <span class="s1">&#39;RETURN d.id, r.score, p.id&#39;</span>
 <span class="p">)</span>
 </pre></div>
 </div>
 </section>
 <section id="sampling-procedure">
 <h2>Sampling Procedure<a class="headerlink" href="#sampling-procedure" title="Link to this heading">¶</a></h2>
-<p>Typed path sampling is exposed as a PyGraphDB-specific procedure call. This is
-not standard openCypher syntax; it delegates to <code class="docutils literal notranslate"><span class="pre">GraphDB.sample_typed_paths</span></code>.</p>
+<p>GestaltDB also exposes typed path sampling through a project-specific procedure.
+This is not standard openCypher syntax.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">graph_db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
     <span class="s1">&#39;CALL pg.sample_typed_paths([&quot;drug-1&quot;], &#39;</span>
-    <span class="s1">&#39;[{&quot;edge_type&quot;: &quot;drug-to-protein&quot;, &quot;direction&quot;: &quot;out&quot;, &quot;sample_size&quot;: 2}, &#39;</span>
-    <span class="s1">&#39;{&quot;edge_type&quot;: &quot;protein-to-disease&quot;, &quot;direction&quot;: &quot;out&quot;, &quot;sample_size&quot;: 1}]) &#39;</span>
-    <span class="s1">&#39;YIELD path RETURN path&#39;</span>
+    <span class="s1">&#39;[{&quot;edge_type&quot;: &quot;binds&quot;, &quot;direction&quot;: &quot;out&quot;, &quot;sample_size&quot;: 2}]) &#39;</span>
+    <span class="s1">&#39;YIELD path RETURN path LIMIT 1&#39;</span>
 <span class="p">)</span>
-
-<span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;path&quot;</span><span class="p">])</span>
 </pre></div>
 </div>
 </section>
-<section id="current-cypher-limitations">
-<h2>Current Cypher Limitations<a class="headerlink" href="#current-cypher-limitations" title="Link to this heading">¶</a></h2>
-<p>Unsupported Cypher features raise <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> with a message describing the
-supported subset. The current Cypher API does not yet support:</p>
+<section id="current-limitations">
+<h2>Current Limitations<a class="headerlink" href="#current-limitations" title="Link to this heading">¶</a></h2>
+<p>Unsupported syntax raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>. The current Cypher API does not yet
+support:</p>
 <ul class="simple">
-<li><p>Multiple labels in one node pattern, such as <code class="docutils literal notranslate"><span class="pre">(n:Drug:Approved)</span></code>.</p></li>
-<li><p>Reverse or undirected patterns such as <code class="docutils literal notranslate"><span class="pre">&lt;-[:TYPE]-</span></code> or <code class="docutils literal notranslate"><span class="pre">-[:TYPE]-</span></code>.</p></li>
-<li><p>Unanchored all-node scans such as <code class="docutils literal notranslate"><span class="pre">MATCH</span> <span class="pre">(n)</span> <span class="pre">RETURN</span> <span class="pre">n</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">WHERE</span></code> predicates.</p></li>
-<li><p>Property projections such as <code class="docutils literal notranslate"><span class="pre">RETURN</span> <span class="pre">n.name</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">LIMIT</span></code>, <code class="docutils literal notranslate"><span class="pre">ORDER</span> <span class="pre">BY</span></code>, aggregation, joins across separate patterns, or mutation clauses.</p></li>
+<li><p>mutating queries such as <code class="docutils literal notranslate"><span class="pre">CREATE</span></code>, <code class="docutils literal notranslate"><span class="pre">SET</span></code>, <code class="docutils literal notranslate"><span class="pre">DELETE</span></code>, or <code class="docutils literal notranslate"><span class="pre">MERGE</span></code></p></li>
+<li><p>aggregation such as <code class="docutils literal notranslate"><span class="pre">count</span></code> or <code class="docutils literal notranslate"><span class="pre">collect</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">WITH</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">OPTIONAL</span> <span class="pre">MATCH</span></code></p></li>
+<li><p>variable-length paths</p></li>
+<li><p>multiple pattern parts inside one <code class="docutils literal notranslate"><span class="pre">MATCH</span></code> clause</p></li>
+<li><p>path values such as <code class="docutils literal notranslate"><span class="pre">p</span> <span class="pre">=</span> <span class="pre">(a)-[:T]-&gt;(b)</span></code></p></li>
 </ul>
 </section>
 </section>
@@ -473,7 +374,7 @@ supported subset. The current Cypher API does not yet support:</p>
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Performance and RocksDB Tuning</div>
+                <div class="title">Performance and Benchmarks</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
@@ -492,7 +393,7 @@ supported subset. The current Cypher API does not yet support:</p>
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2026, PyGraphDB contributors
+                Copyright &#169; 2026, Mylonas Charilaos
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -519,14 +420,14 @@ supported subset. The current Cypher API does not yet support:</p>
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">Cypher Queries</a><ul>
-<li><a class="reference internal" href="#supported-feature-matrix">Supported Feature Matrix</a></li>
-<li><a class="reference internal" href="#indexed-label-scans">Indexed Label Scans</a></li>
-<li><a class="reference internal" href="#indexed-label-and-property-lookup">Indexed Label and Property Lookup</a></li>
-<li><a class="reference internal" href="#anchored-one-hop-traversal">Anchored One-Hop Traversal</a></li>
-<li><a class="reference internal" href="#relationship-variables">Relationship Variables</a></li>
-<li><a class="reference internal" href="#anchored-multi-hop-traversal">Anchored Multi-Hop Traversal</a></li>
+<li><a class="reference internal" href="#basic-result-shape">Basic Result Shape</a></li>
+<li><a class="reference internal" href="#node-scans">Node Scans</a></li>
+<li><a class="reference internal" href="#typed-relationship-traversal">Typed Relationship Traversal</a></li>
+<li><a class="reference internal" href="#filtering">Filtering</a></li>
+<li><a class="reference internal" href="#projection-and-result-shaping">Projection and Result Shaping</a></li>
+<li><a class="reference internal" href="#chained-match-clauses">Chained MATCH Clauses</a></li>
 <li><a class="reference internal" href="#sampling-procedure">Sampling Procedure</a></li>
-<li><a class="reference internal" href="#current-cypher-limitations">Current Cypher Limitations</a></li>
+<li><a class="reference internal" href="#current-limitations">Current Limitations</a></li>
 </ul>
 </li>
 </ul>
@@ -538,7 +439,7 @@ supported subset. The current Cypher API does not yet support:</p>
       
     </aside>
   </div>
-</div><script src="_static/documentation_options.js?v=01f34227"></script>
+</div><script src="_static/documentation_options.js?v=1dd76d02"></script>
     <script src="_static/doctools.js?v=fd6eb6e6"></script>
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/scripts/furo.js?v=46bd48cc"></script>

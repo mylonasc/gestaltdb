@@ -4,8 +4,8 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html">
 
-    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>pygraphdb.serializers - PyGraphDB</title>
+    <!-- Generated with Sphinx 9.0.4 and Furo 2025.12.19 -->
+        <title>gestaltdb.serializers - GestaltDB</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -160,7 +160,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../../index.html"><div class="brand">PyGraphDB</div></a>
+      <a href="../../index.html"><div class="brand">GestaltDB</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -181,7 +181,7 @@
       
       <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
   
-  <span class="sidebar-brand-text">PyGraphDB</span>
+  <span class="sidebar-brand-text">GestaltDB</span>
   
 </a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -196,6 +196,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../../storage-backends.html">Storage Backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../serializers.html">Serializers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../typed-sampling.html">Typed Traversal and Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../cypher.html">Cypher Queries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../performance.html">Performance and Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../notebooks.html">Notebook Usage</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
@@ -233,7 +235,7 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <h1>Source code for pygraphdb.serializers</h1><div class="highlight"><pre>
+          <h1>Source code for gestaltdb.serializers</h1><div class="highlight"><pre>
 <span></span><span class="c1"># =========================================</span>
 <span class="c1"># 1) Serializer Interfaces and Implementations</span>
 <span class="c1"># =========================================</span>
@@ -265,11 +267,11 @@
     <span class="p">)</span>
 
 <div class="viewcode-block" id="Serializer">
-<a class="viewcode-back" href="../../api.html#pygraphdb.serializers.Serializer">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.serializers.Serializer">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">Serializer</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Abstract base for serialization/deserialization.&quot;&quot;&quot;</span>
 <div class="viewcode-block" id="Serializer.serialize">
-<a class="viewcode-back" href="../../api.html#pygraphdb.serializers.Serializer.serialize">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.serializers.Serializer.serialize">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">serialize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Serialize a dictionary-like object to bytes.</span>
 
@@ -283,7 +285,7 @@
 
     
 <div class="viewcode-block" id="Serializer.deserialize">
-<a class="viewcode-back" href="../../api.html#pygraphdb.serializers.Serializer.deserialize">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.serializers.Serializer.deserialize">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">deserialize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Deserialize bytes into a dictionary-like object.</span>
 
@@ -299,11 +301,11 @@
 
 
 <div class="viewcode-block" id="PickleSerializer">
-<a class="viewcode-back" href="../../api.html#pygraphdb.serializers.PickleSerializer">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.serializers.PickleSerializer">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">PickleSerializer</span><span class="p">(</span><span class="n">Serializer</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Uses Python&#39;s pickle for serialization.&quot;&quot;&quot;</span>
 <div class="viewcode-block" id="PickleSerializer.serialize">
-<a class="viewcode-back" href="../../api.html#pygraphdb.serializers.PickleSerializer.serialize">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.serializers.PickleSerializer.serialize">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">serialize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Serialize an object with pickle.</span>
 
@@ -315,7 +317,7 @@
 
     
 <div class="viewcode-block" id="PickleSerializer.deserialize">
-<a class="viewcode-back" href="../../api.html#pygraphdb.serializers.PickleSerializer.deserialize">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.serializers.PickleSerializer.deserialize">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">deserialize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Deserialize pickle bytes.</span>
 
@@ -329,11 +331,11 @@
 
 
 <div class="viewcode-block" id="JSONSerializer">
-<a class="viewcode-back" href="../../api.html#pygraphdb.serializers.JSONSerializer">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.serializers.JSONSerializer">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">JSONSerializer</span><span class="p">(</span><span class="n">Serializer</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Uses JSON for serialization.&quot;&quot;&quot;</span>
 <div class="viewcode-block" id="JSONSerializer.serialize">
-<a class="viewcode-back" href="../../api.html#pygraphdb.serializers.JSONSerializer.serialize">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.serializers.JSONSerializer.serialize">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">serialize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Serialize a JSON-compatible object.</span>
 
@@ -345,7 +347,7 @@
 
     
 <div class="viewcode-block" id="JSONSerializer.deserialize">
-<a class="viewcode-back" href="../../api.html#pygraphdb.serializers.JSONSerializer.deserialize">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.serializers.JSONSerializer.deserialize">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">deserialize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Deserialize JSON bytes.</span>
 
@@ -359,11 +361,11 @@
 
 
 <div class="viewcode-block" id="MessagePackSerializer">
-<a class="viewcode-back" href="../../api.html#pygraphdb.serializers.MessagePackSerializer">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.serializers.MessagePackSerializer">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">MessagePackSerializer</span><span class="p">(</span><span class="n">Serializer</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Uses MessagePack for serialization.&quot;&quot;&quot;</span>
 <div class="viewcode-block" id="MessagePackSerializer.serialize">
-<a class="viewcode-back" href="../../api.html#pygraphdb.serializers.MessagePackSerializer.serialize">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.serializers.MessagePackSerializer.serialize">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">serialize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Serialize an object with MessagePack.</span>
 
@@ -382,7 +384,7 @@
 
 
 <div class="viewcode-block" id="MessagePackSerializer.deserialize">
-<a class="viewcode-back" href="../../api.html#pygraphdb.serializers.MessagePackSerializer.deserialize">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.serializers.MessagePackSerializer.deserialize">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">deserialize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Deserialize MessagePack bytes.</span>
 
@@ -403,7 +405,7 @@
 
 
 <div class="viewcode-block" id="ProtobufSerializer">
-<a class="viewcode-back" href="../../api.html#pygraphdb.serializers.ProtobufSerializer">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.serializers.ProtobufSerializer">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">ProtobufSerializer</span><span class="p">(</span><span class="n">Serializer</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Uses google.protobuf Struct for JSON-like dictionaries.</span>
 
@@ -411,11 +413,11 @@
 <span class="sd">    values before encoding so Python dictionaries round-trip without losing them.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">_TYPE_KEY</span> <span class="o">=</span> <span class="s2">&quot;__pygraphdb_type__&quot;</span>
+    <span class="n">_TYPE_KEY</span> <span class="o">=</span> <span class="s2">&quot;__gestaltdb_type__&quot;</span>
     <span class="n">_VALUE_KEY</span> <span class="o">=</span> <span class="s2">&quot;value&quot;</span>
 
 <div class="viewcode-block" id="ProtobufSerializer.serialize">
-<a class="viewcode-back" href="../../api.html#pygraphdb.serializers.ProtobufSerializer.serialize">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.serializers.ProtobufSerializer.serialize">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">serialize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Serialize a JSON-like dictionary with protobuf Struct.</span>
 
@@ -439,7 +441,7 @@
 
 
 <div class="viewcode-block" id="ProtobufSerializer.deserialize">
-<a class="viewcode-back" href="../../api.html#pygraphdb.serializers.ProtobufSerializer.deserialize">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.serializers.ProtobufSerializer.deserialize">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">deserialize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Deserialize protobuf Struct bytes.</span>
 
@@ -521,7 +523,7 @@
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2026, PyGraphDB contributors
+                Copyright &#169; 2026, Mylonas Charilaos
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -541,7 +543,7 @@
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=01f34227"></script>
+</div><script src="../../_static/documentation_options.js?v=1dd76d02"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>

@@ -4,8 +4,8 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html">
 
-    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>pygraphdb.sampling - PyGraphDB</title>
+    <!-- Generated with Sphinx 9.0.4 and Furo 2025.12.19 -->
+        <title>gestaltdb.sampling - GestaltDB</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -160,7 +160,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../../index.html"><div class="brand">PyGraphDB</div></a>
+      <a href="../../index.html"><div class="brand">GestaltDB</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -181,7 +181,7 @@
       
       <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
   
-  <span class="sidebar-brand-text">PyGraphDB</span>
+  <span class="sidebar-brand-text">GestaltDB</span>
   
 </a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -196,6 +196,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../../storage-backends.html">Storage Backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../serializers.html">Serializers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../typed-sampling.html">Typed Traversal and Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../cypher.html">Cypher Queries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../performance.html">Performance and Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../notebooks.html">Notebook Usage</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
@@ -233,8 +235,8 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <h1>Source code for pygraphdb.sampling</h1><div class="highlight"><pre>
-<span></span><span class="sd">&quot;&quot;&quot;Typed sampling configuration objects for PyGraphDB.</span>
+          <h1>Source code for gestaltdb.sampling</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Typed sampling configuration objects for GestaltDB.</span>
 
 <span class="sd">The graph sampling APIs accept these objects as a structured alternative to</span>
 <span class="sd">plain dictionaries while preserving dict compatibility.</span>
@@ -247,7 +249,7 @@
 
 
 <div class="viewcode-block" id="SamplingHop">
-<a class="viewcode-back" href="../../api.html#pygraphdb.sampling.SamplingHop">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.sampling.SamplingHop">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">SamplingHop</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration for one typed sampling hop.</span>
@@ -285,7 +287,7 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;sample_size must be at least 1&quot;</span><span class="p">)</span>
 
 <div class="viewcode-block" id="SamplingHop.from_dict">
-<a class="viewcode-back" href="../../api.html#pygraphdb.sampling.SamplingHop.from_dict">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.sampling.SamplingHop.from_dict">[docs]</a>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_dict</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="s2">&quot;SamplingHop&quot;</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a hop from a dictionary-style sampling configuration.</span>
@@ -309,7 +311,7 @@
 
 
 <div class="viewcode-block" id="SamplingHop.to_dict">
-<a class="viewcode-back" href="../../api.html#pygraphdb.sampling.SamplingHop.to_dict">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.sampling.SamplingHop.to_dict">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a dictionary compatible with the original sampling API.</span>
 
@@ -331,7 +333,7 @@
 
 
 <div class="viewcode-block" id="SamplingPattern">
-<a class="viewcode-back" href="../../api.html#pygraphdb.sampling.SamplingPattern">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.sampling.SamplingPattern">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">SamplingPattern</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Ordered typed sampling pattern.</span>
@@ -379,7 +381,7 @@
         <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hops</span><span class="p">)</span>
 
 <div class="viewcode-block" id="SamplingPattern.from_dicts">
-<a class="viewcode-back" href="../../api.html#pygraphdb.sampling.SamplingPattern.from_dicts">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.sampling.SamplingPattern.from_dicts">[docs]</a>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_dicts</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">hops</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="s2">&quot;SamplingPattern&quot;</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a pattern from dictionary-style hop configurations.</span>
@@ -398,7 +400,7 @@
 
 
 <div class="viewcode-block" id="SamplingPattern.to_dicts">
-<a class="viewcode-back" href="../../api.html#pygraphdb.sampling.SamplingPattern.to_dicts">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.sampling.SamplingPattern.to_dicts">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">to_dicts</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return dictionary configurations for all hops.</span>
 
@@ -415,7 +417,7 @@
 
 
 <div class="viewcode-block" id="as_sampling_hop">
-<a class="viewcode-back" href="../../api.html#pygraphdb.sampling.as_sampling_hop">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.sampling.as_sampling_hop">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">as_sampling_hop</span><span class="p">(</span><span class="n">hop</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">SamplingHop</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="n">SamplingHop</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize a hop configuration to ``SamplingHop``.</span>
 
@@ -436,7 +438,7 @@
 
 
 <div class="viewcode-block" id="as_sampling_pattern">
-<a class="viewcode-back" href="../../api.html#pygraphdb.sampling.as_sampling_pattern">[docs]</a>
+<a class="viewcode-back" href="../../api.html#gestaltdb.sampling.as_sampling_pattern">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">as_sampling_pattern</span><span class="p">(</span>
     <span class="n">pattern</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">SamplingPattern</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">SamplingHop</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]]],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SamplingPattern</span><span class="p">:</span>
@@ -468,7 +470,7 @@
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2026, PyGraphDB contributors
+                Copyright &#169; 2026, Mylonas Charilaos
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -488,7 +490,7 @@
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=01f34227"></script>
+</div><script src="../../_static/documentation_options.js?v=1dd76d02"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>

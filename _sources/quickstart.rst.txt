@@ -1,195 +1,121 @@
 Quickstart
 ==========
 
+This page shows the shortest path from an empty database to a useful query.
+
 Create a Graph
 --------------
 
 .. code-block:: python
 
-   from pygraphdb.graphdb import Edge, GraphDB, Node
-   from pygraphdb.kvstores import LMDBStore
-   from pygraphdb.serializers import PickleSerializer
+   from gestaltdb.graphdb import Edge, GraphDB, Node
+   from gestaltdb.kvstores import LMDBStore
+   from gestaltdb.serializers import PickleSerializer
 
    graph_db = GraphDB(LMDBStore(path="quickstart_lmdb"), PickleSerializer())
 
-   alice = Node(node_id="alice", labels=["Person"], properties={"name": "Alice", "age": 30})
-   bob = Node(node_id="bob", labels=["Person"], properties={"name": "Bob", "age": 25})
+   graph_db.put_node(Node(
+       node_id="drug-1",
+       labels=["Drug"],
+       properties={"name": "Aspirin"},
+   ))
+   graph_db.put_node(Node(
+       node_id="protein-1",
+       labels=["Protein"],
+       properties={"name": "PTGS1"},
+   ))
+   graph_db.put_edge(Edge(
+       edge_id="drug-1-protein-1",
+       source="drug-1",
+       target="protein-1",
+       properties={"type": "binds", "score": 0.9},
+   ))
 
-   graph_db.put_node(alice)
-   graph_db.put_node(bob)
+Nodes and Edges
+---------------
 
-   edge = Edge(
-       edge_id="alice-bob",
-       source=alice.get_id,
-       target=bob.get_id,
-       properties={"type": "friend", "weight": 0.9},
-   )
-   graph_db.put_edge(edge)
-
-   print(graph_db.get_node(b"alice").to_dict())
-   print(graph_db.get_edge(b"alice-bob").to_dict())
-
-   graph_db.close()
-
-Bulk Insert Edges
------------------
-
-``put_edges_bulk`` stores many edge records and updates adjacency indexes in one
-operation.
+Fetch records directly when you know their IDs:
 
 .. code-block:: python
 
-   nodes = [Node(node_id=f"user-{idx}") for idx in range(4)]
-   for node in nodes:
-       graph_db.put_node(node)
+   drug = graph_db.get_node(b"drug-1")
+   edge = graph_db.get_edge(b"drug-1-protein-1")
 
-   edges = [
-       Edge(edge_id="u0-u1", source="user-0", target="user-1", properties={"type": "follows"}),
-       Edge(edge_id="u0-u2", source="user-0", target="user-2", properties={"type": "follows"}),
-       Edge(edge_id="u2-u3", source="user-2", target="user-3", properties={"type": "follows"}),
-   ]
-   graph_db.put_edges_bulk(edges)
+   print(drug.properties["name"])
+   print(edge.properties["score"])
 
-For append-only ingestion where edge IDs are known to be new, skip replacement
-checks to avoid one existing-edge read per edge:
+Labels and Indexes
+------------------
 
-.. code-block:: python
-
-   graph_db.put_edges_bulk(edges, check_existing=False)
-
-Fetch Nodes in Bulk
--------------------
-
-.. code-block:: python
-
-   fetched = graph_db.get_nodes([b"user-0", b"user-1", b"missing"])
-   for node in fetched:
-       print(None if node is None else node.get_id)
-
-Labels and Exact-Match Indexes
-------------------------------
-
-Labels are stored natively on ``Node`` objects and maintained in a sorted label
-index. Label lookups avoid full node scans.
-
-.. code-block:: python
-
-   graph_db.put_node(Node(node_id="drug-1", labels=["Drug"], properties={"name": "Aspirin", "kind": "drug"}))
-   graph_db.put_node(Node(node_id="protein-1", labels=["Protein"], properties={"name": "PTGS1", "kind": "protein"}))
-
-   drugs = graph_db.nodes_by_label("Drug")
-   print([node.get_id for node in drugs])
-
-Property indexes are explicit so ingestion does not pay for indexes you do not
-need. Register an exact-match node or edge property index before using it for
-performance-sensitive lookup.
+Labels are indexed automatically. Property indexes are explicit; create them for
+properties you query frequently.
 
 .. code-block:: python
 
    graph_db.create_node_property_index("name")
+   graph_db.create_edge_property_index("score")
+
+   drugs = graph_db.nodes_by_label("Drug")
    aspirin = graph_db.nodes_by_property("name", "Aspirin")
+   strong_edges = graph_db.edges_by_property_range("score", 0.8, None)
 
-   graph_db.create_edge_property_index("weight")
-   strong_edges = graph_db.edges_by_property("weight", 0.9)
+Cypher Query
+------------
 
-Relationship types are indexed through the existing ``edge.properties["type"]``
-convention.
-
-.. code-block:: python
-
-   friend_edges = graph_db.edges_by_type("friend")
-
-Columnar Ingestion
-------------------
-
-``ingest_nodes_arrow`` and ``ingest_edges_arrow`` accept Arrow-like columns or
-plain Python sequences. The first implementation requires caller-provided
-serialized ``node_value`` and ``edge_value`` payloads so existing serializer
-behavior remains unchanged.
-
-.. code-block:: python
-
-   nodes = [
-       Node(node_id="drug-1", properties={"kind": "drug"}),
-       Node(node_id="protein-1", properties={"kind": "protein"}),
-   ]
-   graph_db.ingest_nodes_arrow(
-       [node.get_id for node in nodes],
-       [graph_db.serialize_node_value(node) for node in nodes],
-   )
-
-   edge = Edge(
-       edge_id="d1-p1",
-       source="drug-1",
-       target="protein-1",
-       properties={"type": "drug-to-protein", "score": 0.9},
-   )
-   graph_db.ingest_edges_arrow(
-       [edge.get_id],
-       [edge.source],
-       [edge.target],
-       [edge.get_type],
-       [graph_db.serialize_edge_value(edge)],
-       append_only=True,
-   )
-
-Polars users can use ``ingest_nodes_polars`` and ``ingest_edges_polars`` with
-``node_value`` and ``edge_value`` binary columns. With ``PyRexStore`` and
-``pyrex-rocksdb>=0.3.0a0``, these methods use native RocksDB columnar batch
-writes when available. Other stores use the Python bulk fallback.
-
-Traverse With BFS
------------------
-
-.. code-block:: python
-
-   visited = graph_db.bfs(b"user-0", direction="any")
-   print(visited)
-
-Query With Cypher
------------------
-
-``GraphDB.query`` supports an initial read-only Cypher subset for indexed label
-scans, anchored typed traversal, and typed path sampling.
+Use ``GraphDB.query`` for read-only Cypher queries over labels, typed
+relationships, filters, ordering, and chained ``MATCH`` clauses.
 
 .. code-block:: python
 
    result = graph_db.query(
-       'MATCH (drug {id: "drug-1"})-[:drug-to-protein]->(protein) RETURN drug, protein'
+       'MATCH (d:Drug {name: "Aspirin"}) '
+       'MATCH (d)-[r:binds]->(p) '
+       'WHERE r.score >= 0.8 '
+       'RETURN d.id AS drug, p.name AS protein, r.score AS score'
    )
 
    for record in result:
-       print(record["drug"].get_id, record["protein"].get_id)
+       print(record)
 
-Indexed labels are available through Cypher as well:
+Typed Traversal
+---------------
 
-.. code-block:: python
-
-   result = graph_db.query('MATCH (drug:Drug {name: "Aspirin"}) RETURN drug')
-
-Multi-hop typed traversal is supported when each hop is outgoing and has an edge
-type:
+Relationship types are stored in ``edge.properties["type"]`` and maintained in
+typed adjacency indexes.
 
 .. code-block:: python
 
-   result = graph_db.query(
-       'MATCH (drug {id: "drug-1"})-[:drug-to-protein]->(protein)-[:protein-to-disease]->(disease) RETURN drug, protein, disease'
-   )
+   neighbors = graph_db.neighbors_by_edge_type("drug-1", "binds", direction="out")
+   print(neighbors)
 
-See :doc:`cypher` for the full supported subset and current limitations.
+Bulk Inserts
+------------
 
-Use Stable IDs
---------------
-
-Stable IDs make notebooks, tests, and serialized records easier to inspect.
+Use bulk writes when loading many records.
 
 .. code-block:: python
 
-   drug = Node(node_id="drug-1", properties={"kind": "drug", "name": "Aspirin"})
-   protein = Node(node_id="protein-1", properties={"kind": "protein"})
-   edge = Edge(
-       edge_id="drug-1-protein-1",
-       source=drug.get_id,
-       target=protein.get_id,
-       properties={"type": "drug-to-protein"},
-   )
+   graph_db.put_nodes([
+       Node(node_id="drug-2", labels=["Drug"], properties={"name": "Ibuprofen"}),
+       Node(node_id="protein-2", labels=["Protein"], properties={"name": "PTGS2"}),
+   ])
+   graph_db.put_edges_bulk([
+       Edge(edge_id="drug-2-protein-2", source="drug-2", target="protein-2", properties={"type": "binds"}),
+   ])
+
+Close the Store
+---------------
+
+Close the database when a script or notebook cell is finished.
+
+.. code-block:: python
+
+   graph_db.close()
+
+Next Steps
+----------
+
+- See :doc:`cypher` for the supported query syntax.
+- See :doc:`storage-backends` for backend selection.
+- See :doc:`typed-sampling` for path and subgraph sampling.
+- See :doc:`performance` for benchmark scripts and caveats.

@@ -3,10 +3,10 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Quickstart" href="quickstart.html"><link rel="prev" title="PyGraphDB Documentation" href="index.html">
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Quickstart" href="quickstart.html"><link rel="prev" title="GestaltDB Documentation" href="index.html">
 
-    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>Installation - PyGraphDB</title>
+    <!-- Generated with Sphinx 9.0.4 and Furo 2025.12.19 -->
+        <title>Installation - GestaltDB</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -161,7 +161,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="index.html"><div class="brand">PyGraphDB</div></a>
+      <a href="index.html"><div class="brand">GestaltDB</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -182,7 +182,7 @@
       
       <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
   
-  <span class="sidebar-brand-text">PyGraphDB</span>
+  <span class="sidebar-brand-text">GestaltDB</span>
   
 </a><form class="sidebar-search-container" method="get" action="search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -198,7 +198,7 @@
 <li class="toctree-l1"><a class="reference internal" href="serializers.html">Serializers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="typed-sampling.html">Typed Traversal and Sampling</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cypher.html">Cypher Queries</a></li>
-<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance and RocksDB Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance and Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="notebooks.html">Notebook Usage</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
@@ -246,7 +246,7 @@
 <h1>Installation<a class="headerlink" href="#installation" title="Link to this heading">¶</a></h1>
 <section id="python-version">
 <h2>Python Version<a class="headerlink" href="#python-version" title="Link to this heading">¶</a></h2>
-<p>PyGraphDB targets Python 3.9 through 3.13. The LevelDB backend uses <code class="docutils literal notranslate"><span class="pre">plyvel</span></code>;
+<p>GestaltDB targets Python 3.9 through 3.13. The LevelDB backend uses <code class="docutils literal notranslate"><span class="pre">plyvel</span></code>;
 at the time of writing, <code class="docutils literal notranslate"><span class="pre">plyvel</span></code> wheels are not available for Python 3.14 or
 free-threaded Python builds. Use Python 3.12 or 3.13 for notebooks that need the
 LevelDB backend.</p>
@@ -258,13 +258,13 @@ LevelDB backend.</p>
 </pre></div>
 </div>
 <p>For editable development:</p>
-<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>add<span class="w"> </span>--editable<span class="w"> </span>/path/to/pygraphdb
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>add<span class="w"> </span>--editable<span class="w"> </span>/path/to/gestaltdb
 </pre></div>
 </div>
 <p>Install optional features only when you need them:</p>
-<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>add<span class="w"> </span><span class="s2">&quot;/path/to/pygraphdb[lmdb,msgpack,protobuf]&quot;</span>
-uv<span class="w"> </span>add<span class="w"> </span><span class="s2">&quot;/path/to/pygraphdb[leveldb]&quot;</span>
-uv<span class="w"> </span>add<span class="w"> </span><span class="s2">&quot;/path/to/pygraphdb[fast-ingest]&quot;</span>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>add<span class="w"> </span><span class="s2">&quot;/path/to/gestaltdb[lmdb,msgpack,protobuf]&quot;</span>
+uv<span class="w"> </span>add<span class="w"> </span><span class="s2">&quot;/path/to/gestaltdb[leveldb]&quot;</span>
+uv<span class="w"> </span>add<span class="w"> </span><span class="s2">&quot;/path/to/gestaltdb[fast-ingest]&quot;</span>
 </pre></div>
 </div>
 </section>
@@ -288,7 +288,7 @@ python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </sp
 </section>
 <section id="install-from-github">
 <h2>Install From GitHub<a class="headerlink" href="#install-from-github" title="Link to this heading">¶</a></h2>
-<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;pygraphdb[all] @ git+https://github.com/mylonasc/pygraphdb.git&quot;</span>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;gestaltdb[all] @ git+https://github.com/mylonasc/gestaltdb.git&quot;</span>
 </pre></div>
 </div>
 </section>
@@ -300,7 +300,7 @@ Jupyter:</p>
 uv<span class="w"> </span>venv<span class="w"> </span>--python<span class="w"> </span><span class="m">3</span>.12
 uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>leveldb<span class="w"> </span>--extra<span class="w"> </span>lmdb<span class="w"> </span>--extra<span class="w"> </span>msgpack<span class="w"> </span>--extra<span class="w"> </span>protobuf
 uv<span class="w"> </span>add<span class="w"> </span>--dev<span class="w"> </span>ipykernel
-.venv/bin/python<span class="w"> </span>-m<span class="w"> </span>ipykernel<span class="w"> </span>install<span class="w"> </span>--user<span class="w"> </span>--name<span class="w"> </span>pygraphdb-py312<span class="w"> </span>--display-name<span class="w"> </span><span class="s2">&quot;PyGraphDB Python 3.12&quot;</span>
+.venv/bin/python<span class="w"> </span>-m<span class="w"> </span>ipykernel<span class="w"> </span>install<span class="w"> </span>--user<span class="w"> </span>--name<span class="w"> </span>gestaltdb-py312<span class="w"> </span>--display-name<span class="w"> </span><span class="s2">&quot;GestaltDB Python 3.12&quot;</span>
 </pre></div>
 </div>
 </section>
@@ -311,14 +311,14 @@ uv<span class="w"> </span>add<span class="w"> </span>--dev<span class="w"> </spa
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">leveldb</span></code></dt><dd><p>LevelDB key-value backend through <code class="docutils literal notranslate"><span class="pre">plyvel</span></code>.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">rocksdb</span></code></dt><dd><p>RocksDB key-value backend through <code class="docutils literal notranslate"><span class="pre">pyrex-rocksdb&gt;=0.3.0a0</span></code>.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">rocksdb</span></code></dt><dd><p>RocksDB key-value backend through <code class="docutils literal notranslate"><span class="pre">pyrex-rocksdb&gt;=0.4.1</span></code>.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">arrow</span></code></dt><dd><p>Arrow array support through <code class="docutils literal notranslate"><span class="pre">pyarrow</span></code> for columnar ingestion helpers.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">polars</span></code></dt><dd><p>Polars DataFrame support for columnar ingestion helpers.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">fast-ingest</span></code></dt><dd><p>Convenience extra for <code class="docutils literal notranslate"><span class="pre">pyarrow</span></code>, <code class="docutils literal notranslate"><span class="pre">polars</span></code>, and
-<code class="docutils literal notranslate"><span class="pre">pyrex-rocksdb&gt;=0.3.0a0</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">pyrex-rocksdb&gt;=0.4.1</span></code>.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">msgpack</span></code></dt><dd><p>MessagePack serializer.</p>
 </dd>
@@ -335,7 +335,7 @@ uv<span class="w"> </span>add<span class="w"> </span>--dev<span class="w"> </spa
 <p>Alpha releases use standard Python pre-release versions, for example
 <code class="docutils literal notranslate"><span class="pre">0.2.0a0</span></code>. If a stable release with the same base version exists in the
 future, install alpha builds explicitly:</p>
-<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--pre<span class="w"> </span><span class="s2">&quot;pygraphdb[fast-ingest]&quot;</span>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--pre<span class="w"> </span><span class="s2">&quot;gestaltdb[fast-ingest]&quot;</span>
 </pre></div>
 </div>
 </section>
@@ -370,7 +370,7 @@ future, install alpha builds explicitly:</p>
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2026, PyGraphDB contributors
+                Copyright &#169; 2026, Mylonas Charilaos
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -415,7 +415,7 @@ future, install alpha builds explicitly:</p>
       
     </aside>
   </div>
-</div><script src="_static/documentation_options.js?v=01f34227"></script>
+</div><script src="_static/documentation_options.js?v=1dd76d02"></script>
     <script src="_static/doctools.js?v=fd6eb6e6"></script>
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/scripts/furo.js?v=46bd48cc"></script>

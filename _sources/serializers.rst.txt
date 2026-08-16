@@ -11,7 +11,7 @@ Pickle Serializer
 
 .. code-block:: python
 
-   from pygraphdb.serializers import PickleSerializer
+   from gestaltdb.serializers import PickleSerializer
 
    serializer = PickleSerializer()
    payload = {"id": "node-1", "properties": {"score": 1}}
@@ -24,7 +24,7 @@ JSON Serializer
 
 .. code-block:: python
 
-   from pygraphdb.serializers import JSONSerializer
+   from gestaltdb.serializers import JSONSerializer
 
    serializer = JSONSerializer()
    data = serializer.serialize({"name": "Alice", "active": True})
@@ -37,7 +37,7 @@ MessagePack Serializer
 
 .. code-block:: python
 
-   from pygraphdb.serializers import MessagePackSerializer
+   from gestaltdb.serializers import MessagePackSerializer
 
    serializer = MessagePackSerializer()
    payload = {"edge_ids": [b"e1", b"e2"]}
@@ -57,7 +57,7 @@ they round-trip cleanly through Struct's JSON-like model.
 
 .. code-block:: python
 
-   from pygraphdb.serializers import ProtobufSerializer
+   from gestaltdb.serializers import ProtobufSerializer
 
    serializer = ProtobufSerializer()
    payload = {"count": 3, "raw": b"abc"}
@@ -74,8 +74,8 @@ Using a Serializer With GraphDB
 
 .. code-block:: python
 
-   from pygraphdb.graphdb import GraphDB
-   from pygraphdb.kvstores import LMDBStore
-   from pygraphdb.serializers import MessagePackSerializer
+   from gestaltdb.graphdb import GraphDB
+   from gestaltdb.kvstores import LMDBStore
+   from gestaltdb.serializers import MessagePackSerializer
 
    graph_db = GraphDB(LMDBStore(path="msgpack_lmdb"), MessagePackSerializer())

@@ -4,7 +4,7 @@ Installation
 Python Version
 --------------
 
-PyGraphDB targets Python 3.9 through 3.13. The LevelDB backend uses ``plyvel``;
+GestaltDB targets Python 3.9 through 3.13. The LevelDB backend uses ``plyvel``;
 at the time of writing, ``plyvel`` wheels are not available for Python 3.14 or
 free-threaded Python builds. Use Python 3.12 or 3.13 for notebooks that need the
 LevelDB backend.
@@ -22,15 +22,15 @@ For editable development:
 
 .. code-block:: sh
 
-   uv add --editable /path/to/pygraphdb
+   uv add --editable /path/to/gestaltdb
 
 Install optional features only when you need them:
 
 .. code-block:: sh
 
-    uv add "/path/to/pygraphdb[lmdb,msgpack,protobuf]"
-    uv add "/path/to/pygraphdb[leveldb]"
-    uv add "/path/to/pygraphdb[fast-ingest]"
+    uv add "/path/to/gestaltdb[lmdb,msgpack,protobuf]"
+    uv add "/path/to/gestaltdb[leveldb]"
+    uv add "/path/to/gestaltdb[fast-ingest]"
 
 Install With pip
 ----------------
@@ -58,7 +58,7 @@ Install From GitHub
 
 .. code-block:: sh
 
-   python -m pip install "pygraphdb[all] @ git+https://github.com/mylonasc/pygraphdb.git"
+   python -m pip install "gestaltdb[all] @ git+https://github.com/mylonasc/gestaltdb.git"
 
 Notebook Kernel Example
 -----------------------
@@ -72,7 +72,7 @@ Jupyter:
    uv venv --python 3.12
    uv sync --extra leveldb --extra lmdb --extra msgpack --extra protobuf
    uv add --dev ipykernel
-   .venv/bin/python -m ipykernel install --user --name pygraphdb-py312 --display-name "PyGraphDB Python 3.12"
+   .venv/bin/python -m ipykernel install --user --name gestaltdb-py312 --display-name "GestaltDB Python 3.12"
 
 Optional Dependencies
 ---------------------
@@ -84,7 +84,7 @@ Optional Dependencies
    LevelDB key-value backend through ``plyvel``.
 
 ``rocksdb``
-   RocksDB key-value backend through ``pyrex-rocksdb>=0.3.0a0``.
+   RocksDB key-value backend through ``pyrex-rocksdb>=0.4.1``.
 
 ``arrow``
    Arrow array support through ``pyarrow`` for columnar ingestion helpers.
@@ -94,7 +94,7 @@ Optional Dependencies
 
 ``fast-ingest``
    Convenience extra for ``pyarrow``, ``polars``, and
-   ``pyrex-rocksdb>=0.3.0a0``.
+   ``pyrex-rocksdb>=0.4.1``.
 
 ``msgpack``
    MessagePack serializer.
@@ -117,4 +117,4 @@ future, install alpha builds explicitly:
 
 .. code-block:: sh
 
-   python -m pip install --pre "pygraphdb[fast-ingest]"
+   python -m pip install --pre "gestaltdb[fast-ingest]"

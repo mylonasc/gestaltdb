@@ -5,8 +5,8 @@
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Notebook Usage" href="notebooks.html"><link rel="prev" title="Cypher Queries" href="cypher.html">
 
-    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>Performance and RocksDB Tuning - PyGraphDB</title>
+    <!-- Generated with Sphinx 9.0.4 and Furo 2025.12.19 -->
+        <title>Performance and Benchmarks - GestaltDB</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -161,7 +161,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="index.html"><div class="brand">PyGraphDB</div></a>
+      <a href="index.html"><div class="brand">GestaltDB</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -182,7 +182,7 @@
       
       <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
   
-  <span class="sidebar-brand-text">PyGraphDB</span>
+  <span class="sidebar-brand-text">GestaltDB</span>
   
 </a><form class="sidebar-search-container" method="get" action="search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -198,7 +198,7 @@
 <li class="toctree-l1"><a class="reference internal" href="serializers.html">Serializers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="typed-sampling.html">Typed Traversal and Sampling</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cypher.html">Cypher Queries</a></li>
-<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Performance and RocksDB Tuning</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Performance and Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="notebooks.html">Notebook Usage</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
@@ -242,46 +242,172 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="performance-and-rocksdb-tuning">
-<h1>Performance and RocksDB Tuning<a class="headerlink" href="#performance-and-rocksdb-tuning" title="Link to this heading">¶</a></h1>
-<p>PyGraphDB includes a benchmark script for ingestion and typed sampling, plus a
-RocksDB tuning campaign script for the optional PyRex backend.</p>
-<section id="install-optional-dependencies">
-<h2>Install Optional Dependencies<a class="headerlink" href="#install-optional-dependencies" title="Link to this heading">¶</a></h2>
+          <section id="performance-and-benchmarks">
+<h1>Performance and Benchmarks<a class="headerlink" href="#performance-and-benchmarks" title="Link to this heading">¶</a></h1>
+<p>GestaltDB includes benchmark scripts for ingestion, traversal, sampling, RocksDB
+tuning, and external graph database comparisons. Treat the included results as
+directional examples, not universal claims.</p>
+<section id="practical-recommendations">
+<h2>Practical Recommendations<a class="headerlink" href="#practical-recommendations" title="Link to this heading">¶</a></h2>
+<p>For the library as it exists today, choose ingestion and storage options by the
+shape of the workload rather than by a single global default:</p>
+<ul class="simple">
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">PyRexStore</span></code>/RocksDB for large append-only loads, columnar ingestion, and
+write-heavy workloads where native batch writes and RocksDB tuning matter.</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">PyRexStore(transactional=True)</span></code> only when graph-level RocksDB
+transactions are required. The transaction-capable backend currently cannot use
+PyRex’s native columnar writer, so append-only bulk loads should usually keep
+the default RocksDB backend.</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">LevelDBStore</span></code> for simple local graphs, predictable installs through
+<code class="docutils literal notranslate"><span class="pre">plyvel</span></code>, and workloads where the graph is small enough that Python object
+construction dominates storage I/O.</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">LMDBStore</span></code> when you want LMDB’s mature embedded storage model and can
+size <code class="docutils literal notranslate"><span class="pre">map_size</span></code> ahead of loading. LMDB is not the optimized path for the
+current Arrow/Polars native columnar ingestion work.</p></li>
+<li><p>Prefer <code class="docutils literal notranslate"><span class="pre">JSONSerializer</span></code> with Polars or Arrow entity-column ingestion when
+data starts as tabular JSON-compatible columns. This avoids constructing
+<code class="docutils literal notranslate"><span class="pre">Node</span></code> and <code class="docutils literal notranslate"><span class="pre">Edge</span></code> objects per row and can move payload construction into
+Polars’ vectorized JSON encoder.</p></li>
+<li><p>Prefer pre-serialized <code class="docutils literal notranslate"><span class="pre">node_value</span></code> and <code class="docutils literal notranslate"><span class="pre">edge_value</span></code> columns when upstream
+data already has serializer-compatible payload bytes. This isolates the
+backend write path and avoids repeated serialization in GestaltDB.</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">IndexMaintenanceMode.MAINTAIN</span></code> for incremental writes or when indexed
+queries must be valid immediately after each ingestion call.</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">IndexMaintenanceMode.DEFER</span></code> when the write window matters most and you
+can explicitly call <code class="docutils literal notranslate"><span class="pre">GraphDB.rebuild_deferred_indexes()</span></code> before indexed
+queries.</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">IndexMaintenanceMode.DEFER_REBUILD</span></code> as the safest bulk-load convenience
+mode: it defers secondary-index writes during ingestion and rebuilds stale
+indexes before returning.</p></li>
+</ul>
+<p>The important deferred-index trade-off is latency placement. Deferring index
+maintenance can make the write phase much faster, but a full rebuild still has to
+scan stored graph records. If you include an immediate rebuild in the same timed
+operation, total wall-clock time may be higher for some graph sizes and index
+sets. The current implementation is best viewed as a way to shorten the critical
+write window and make index rebuilding explicit and safe, not as a universal
+end-to-end speedup.</p>
+</section>
+<section id="install-benchmark-dependencies">
+<h2>Install Benchmark Dependencies<a class="headerlink" href="#install-benchmark-dependencies" title="Link to this heading">¶</a></h2>
 <div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[leveldb,rocksdb,fast-ingest]&quot;</span>
 </pre></div>
 </div>
 </section>
-<section id="run-backend-benchmarks">
-<h2>Run Backend Benchmarks<a class="headerlink" href="#run-backend-benchmarks" title="Link to this heading">¶</a></h2>
-<p>Compare the standard backends on the same append-only workload:</p>
+<section id="backend-benchmarks">
+<h2>Backend Benchmarks<a class="headerlink" href="#backend-benchmarks" title="Link to this heading">¶</a></h2>
+<p>Use <code class="docutils literal notranslate"><span class="pre">benchmarks.py</span></code> for a quick backend comparison on the same append-only
+workload.</p>
 <div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>benchmarks.py<span class="w"> </span>--backend<span class="w"> </span>leveldb<span class="w"> </span>--nodes<span class="w"> </span><span class="m">20000</span><span class="w"> </span>--edges<span class="w"> </span><span class="m">100000</span><span class="w"> </span>--batch-size<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--append-only
 python<span class="w"> </span>benchmarks.py<span class="w"> </span>--backend<span class="w"> </span>rocksdb<span class="w"> </span>--nodes<span class="w"> </span><span class="m">20000</span><span class="w"> </span>--edges<span class="w"> </span><span class="m">100000</span><span class="w"> </span>--batch-size<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--append-only
+python<span class="w"> </span>benchmarks.py<span class="w"> </span>--backend<span class="w"> </span>rocksdb<span class="w"> </span>--nodes<span class="w"> </span><span class="m">20000</span><span class="w"> </span>--edges<span class="w"> </span><span class="m">100000</span><span class="w"> </span>--batch-size<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--append-only<span class="w"> </span>--rocksdb-transactional
+</pre></div>
+</div>
+<p>Use <code class="docutils literal notranslate"><span class="pre">scripts/benchmark_matrix.py</span></code> for larger matrix runs across graph sizes,
+backends, core counts, and ingestion modes.</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>scripts/benchmark_matrix.py<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--sizes<span class="w"> </span><span class="m">10000</span><span class="w"> </span><span class="m">100000</span><span class="w"> </span><span class="m">1000000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--edge-multiplier<span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--cores<span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="m">4</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--backends<span class="w"> </span>leveldb<span class="w"> </span>rocksdb<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--ingestion-modes<span class="w"> </span>object<span class="w"> </span>arrow<span class="w"> </span>polars<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--chunk-size<span class="w"> </span><span class="m">100000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--samples<span class="w"> </span><span class="m">1000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--sample-size<span class="w"> </span><span class="m">5</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--output-dir<span class="w"> </span>benchmark_results/matrix_YYYYMMDD
+</pre></div>
+</div>
+<p>The matrix writes CSV and JSONL outputs and reopens the database before traversal
+workloads so traversal does not only measure Python-side object state.</p>
+<p>To compare default RocksDB with transaction-capable RocksDB on a 5 edges/node
+shape:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>scripts/benchmark_matrix.py<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--backends<span class="w"> </span>rocksdb<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--rocksdb-configs<span class="w"> </span>parallel-buffer64mb-bloom10<span class="w"> </span>parallel-buffer64mb-bloom10-transactional<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--sizes<span class="w"> </span><span class="m">10000</span><span class="w"> </span><span class="m">100000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--edge-multiplier<span class="w"> </span><span class="m">5</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--cores<span class="w"> </span><span class="m">4</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--ingestion-modes<span class="w"> </span>arrow<span class="w"> </span>polars<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--serializer<span class="w"> </span>pickle<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--chunk-size<span class="w"> </span><span class="m">10000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--samples<span class="w"> </span><span class="m">100</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--sample-size<span class="w"> </span><span class="m">5</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--output-dir<span class="w"> </span>benchmark_results/transactions_rocksdb_YYYYMMDD
 </pre></div>
 </div>
 </section>
-<section id="tune-rocksdb">
-<h2>Tune RocksDB<a class="headerlink" href="#tune-rocksdb" title="Link to this heading">¶</a></h2>
-<p>Run a small RocksDB tuning matrix against the LevelDB baseline:</p>
-<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>scripts/tune_rocksdb.py<span class="w"> </span>--nodes<span class="w"> </span><span class="m">20000</span><span class="w"> </span>--edges<span class="w"> </span><span class="m">100000</span><span class="w"> </span>--batch-size<span class="w"> </span><span class="m">10000</span>
+<section id="columnar-ingestion-benchmarks">
+<h2>Columnar Ingestion Benchmarks<a class="headerlink" href="#columnar-ingestion-benchmarks" title="Link to this heading">¶</a></h2>
+<p>Columnar ingestion accepts already-serialized node and edge payloads. With
+<code class="docutils literal notranslate"><span class="pre">PyRexStore</span></code> and <code class="docutils literal notranslate"><span class="pre">pyrex-rocksdb&gt;=0.4.1</span></code>, RocksDB can use PyRex’s native
+<code class="docutils literal notranslate"><span class="pre">write_columnar_batch</span></code> path. When Arrow-backed string or binary arrays are
+passed, GestaltDB preserves those arrays through chunking and passes value
+columns directly to PyRex instead of materializing Python <code class="docutils literal notranslate"><span class="pre">bytes</span></code> for every
+stored value.</p>
+</section>
+<section id="structured-json-entity-ingestion">
+<h2>Structured JSON Entity Ingestion<a class="headerlink" href="#structured-json-entity-ingestion" title="Link to this heading">¶</a></h2>
+<p>For <code class="docutils literal notranslate"><span class="pre">JSONSerializer</span></code> workloads, use the structured entity helpers to build
+node and edge payloads from Polars or Arrow columns. GestaltDB uses Polars
+<code class="docutils literal notranslate"><span class="pre">struct</span></code> JSON encoding to serialize the payload column outside the Python
+row loop, then sends the resulting Arrow binary values through the native PyRex
+columnar write path when available.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">polars</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pl</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">gestaltdb.graphdb</span><span class="w"> </span><span class="kn">import</span> <span class="n">GraphDB</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gestaltdb.kvstores</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyRexStore</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gestaltdb.serializers</span><span class="w"> </span><span class="kn">import</span> <span class="n">JSONSerializer</span>
+
+<span class="n">graph</span> <span class="o">=</span> <span class="n">GraphDB</span><span class="p">(</span><span class="n">PyRexStore</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;graph_rocksdb&quot;</span><span class="p">),</span> <span class="n">JSONSerializer</span><span class="p">())</span>
+
+<span class="n">nodes</span> <span class="o">=</span> <span class="n">pl</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+    <span class="s2">&quot;node_id&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;drug-1&quot;</span><span class="p">,</span> <span class="s2">&quot;protein-1&quot;</span><span class="p">],</span>
+    <span class="s2">&quot;labels&quot;</span><span class="p">:</span> <span class="p">[[</span><span class="s2">&quot;Drug&quot;</span><span class="p">],</span> <span class="p">[</span><span class="s2">&quot;Protein&quot;</span><span class="p">]],</span>
+    <span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;drug&quot;</span><span class="p">,</span> <span class="s2">&quot;protein&quot;</span><span class="p">],</span>
+<span class="p">})</span>
+<span class="n">graph</span><span class="o">.</span><span class="n">ingest_nodes_polars_entities</span><span class="p">(</span>
+    <span class="n">nodes</span><span class="p">,</span>
+    <span class="n">property_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;kind&quot;</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="n">edges</span> <span class="o">=</span> <span class="n">pl</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+    <span class="s2">&quot;edge_id&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;d1-p1&quot;</span><span class="p">],</span>
+    <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;drug-1&quot;</span><span class="p">],</span>
+    <span class="s2">&quot;target&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;protein-1&quot;</span><span class="p">],</span>
+    <span class="s2">&quot;edge_type&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;binds&quot;</span><span class="p">],</span>
+    <span class="s2">&quot;score&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.9</span><span class="p">],</span>
+<span class="p">})</span>
+<span class="n">graph</span><span class="o">.</span><span class="n">ingest_edges_polars_entities</span><span class="p">(</span>
+    <span class="n">edges</span><span class="p">,</span>
+    <span class="n">property_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;score&quot;</span><span class="p">],</span>
+<span class="p">)</span>
 </pre></div>
 </div>
-</section>
-<section id="columnar-ingestion-benchmark">
-<h2>Columnar Ingestion Benchmark<a class="headerlink" href="#columnar-ingestion-benchmark" title="Link to this heading">¶</a></h2>
-<p>PyGraphDB <code class="docutils literal notranslate"><span class="pre">0.2.0a0</span></code> adds serialized Arrow/Polars columnar ingestion for
-attributed nodes and typed edges. With <code class="docutils literal notranslate"><span class="pre">PyRexStore</span></code> and
-<code class="docutils literal notranslate"><span class="pre">pyrex-rocksdb&gt;=0.3.0a0</span></code>, the store uses PyRex’s native
-<code class="docutils literal notranslate"><span class="pre">write_columnar_batch</span></code> API when available.</p>
-<p>The new APIs require caller-provided serialized <code class="docutils literal notranslate"><span class="pre">node_value</span></code> and
-<code class="docutils literal notranslate"><span class="pre">edge_value</span></code> payload columns. This keeps <code class="docutils literal notranslate"><span class="pre">get_node</span></code> and <code class="docutils literal notranslate"><span class="pre">get_edge</span></code>
-compatible with the configured serializer and avoids a storage-format migration.
-Edge columnar ingestion is append-only in this first release and writes edge
-records plus typed adjacency records; it intentionally skips legacy adjacency
-blob rewrites.</p>
-<p>See <code class="docutils literal notranslate"><span class="pre">notebooks/05_columnar_ingestion_benchmark.ipynb</span></code> for a runnable
-comparison. A local run on <code class="docutils literal notranslate"><span class="pre">10,000</span></code> nodes and <code class="docutils literal notranslate"><span class="pre">50,000</span></code> edges with batch size
-<code class="docutils literal notranslate"><span class="pre">10,000</span></code> produced:</p>
+<p>This path is most useful when Python serialization dominates ingestion time.
+It avoids constructing <code class="docutils literal notranslate"><span class="pre">Node</span></code> and <code class="docutils literal notranslate"><span class="pre">Edge</span></code> objects per row for JSON-compatible
+payloads. Non-JSON serializers still work through the same methods, but they
+fall back to Python object serialization so they do not get the same
+serialization speedup.</p>
+<p>Arrow inputs can use the same optimized JSON path when Polars is installed:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
+
+<span class="n">graph</span><span class="o">.</span><span class="n">ingest_nodes_arrow_entities</span><span class="p">(</span>
+    <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s2">&quot;n1&quot;</span><span class="p">,</span> <span class="s2">&quot;n2&quot;</span><span class="p">]),</span>
+    <span class="n">labels</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="s2">&quot;Entity&quot;</span><span class="p">],</span> <span class="p">[</span><span class="s2">&quot;Entity&quot;</span><span class="p">]]),</span>
+    <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s2">&quot;drug&quot;</span><span class="p">,</span> <span class="s2">&quot;protein&quot;</span><span class="p">])},</span>
+<span class="p">)</span>
+
+<span class="n">graph</span><span class="o">.</span><span class="n">ingest_edges_arrow_entities</span><span class="p">(</span>
+    <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s2">&quot;e1&quot;</span><span class="p">]),</span>
+    <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s2">&quot;n1&quot;</span><span class="p">]),</span>
+    <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s2">&quot;n2&quot;</span><span class="p">]),</span>
+    <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s2">&quot;binds&quot;</span><span class="p">]),</span>
+    <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;score&quot;</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.9</span><span class="p">])},</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>See <code class="docutils literal notranslate"><span class="pre">notebooks/05_columnar_ingestion_benchmark.ipynb</span></code> for a runnable example.
+Representative rates for 10,000 nodes, 50,000 edges, and batch size 10,000:</p>
 <div class="table-wrapper docutils container">
 <table class="docutils align-default">
 <thead>
@@ -306,81 +432,460 @@ comparison. A local run on <code class="docutils literal notranslate"><span clas
 </tbody>
 </table>
 </div>
-<p>The edge-ingestion speedup was roughly <code class="docutils literal notranslate"><span class="pre">1.5x</span></code> to <code class="docutils literal notranslate"><span class="pre">1.6x</span></code> over the LevelDB
-object-batch baseline for this small benchmark. Larger append-only workloads
-with already-serialized columnar payloads are expected to benefit more because
-the native path avoids per-row backend batch calls.</p>
+<p>Larger append-only workloads with pre-serialized columnar payloads are expected
+to benefit more than small runs dominated by Python object construction.</p>
 </section>
-<section id="initial-local-findings">
-<h2>Initial Local Findings<a class="headerlink" href="#initial-local-findings" title="Link to this heading">¶</a></h2>
-<p>An initial campaign on <code class="docutils literal notranslate"><span class="pre">10,000</span></code> nodes and <code class="docutils literal notranslate"><span class="pre">50,000</span></code> edges found that the
-current RocksDB backend is functional but does not yet beat LevelDB on append-only
-edge ingestion:</p>
+<section id="end-to-end-ingestion-insights">
+<h2>End-to-End Ingestion Insights<a class="headerlink" href="#end-to-end-ingestion-insights" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">notebooks/06_end_to_end_ingestion_benchmark.ipynb</span></code> measures serialization plus
+ingestion. The results below use 100,000 nodes, 500,000 edges, batch size 10,000,
+<code class="docutils literal notranslate"><span class="pre">JSONSerializer</span></code>, RocksDB native columnar ingestion, WAL enabled, RocksDB
+parallelism 4, and a 64 MiB write buffer. Dataset generation and database
+setup/cleanup are excluded.</p>
 <div class="table-wrapper docutils container">
 <table class="docutils align-default">
 <thead>
-<tr class="row-odd"><th class="head"><p>Configuration</p></th>
-<th class="head"><p>Edge insert rate</p></th>
-<th class="head"><p>Neighbor sample rate</p></th>
+<tr class="row-odd"><th class="head"><p>Case</p></th>
+<th class="head"><p>Isolates</p></th>
+<th class="head"><p>Serialization</p></th>
+<th class="head"><p>Ingestion</p></th>
+<th class="head"><p>Rebuild</p></th>
+<th class="head"><p>Total</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>LevelDB</p></td>
-<td><p>168,217 edges/s</p></td>
-<td><p>159,546 seeds/s</p></td>
+<tr class="row-even"><td><p>LevelDB + Python JSON</p></td>
+<td><p>baseline backend</p></td>
+<td><p>0.882 s</p></td>
+<td><p>3.066 s</p></td>
+<td><p>0.000 s</p></td>
+<td><p>3.948 s</p></td>
 </tr>
-<tr class="row-odd"><td><p>RocksDB default</p></td>
-<td><p>121,789 edges/s</p></td>
-<td><p>178,704 seeds/s</p></td>
+<tr class="row-odd"><td><p>RocksDB + Python JSON</p></td>
+<td><p>RocksDB backend</p></td>
+<td><p>0.916 s</p></td>
+<td><p>2.484 s</p></td>
+<td><p>0.000 s</p></td>
+<td><p>3.400 s</p></td>
 </tr>
-<tr class="row-even"><td><p>RocksDB Bloom filter</p></td>
-<td><p>128,184 edges/s</p></td>
-<td><p>183,307 seeds/s</p></td>
+<tr class="row-even"><td><p>RocksDB + Polars JSON</p></td>
+<td><p>serialization path</p></td>
+<td><p>0.494 s</p></td>
+<td><p>2.400 s</p></td>
+<td><p>0.000 s</p></td>
+<td><p>2.894 s</p></td>
 </tr>
-<tr class="row-odd"><td><p>RocksDB parallelism + buffer</p></td>
-<td><p>125,531 edges/s</p></td>
-<td><p>187,759 seeds/s</p></td>
+<tr class="row-odd"><td><p>RocksDB + Polars, maintain indexes</p></td>
+<td><p>inline indexes</p></td>
+<td><p>n/a</p></td>
+<td><p>12.269 s</p></td>
+<td><p>0.000 s</p></td>
+<td><p>12.269 s</p></td>
 </tr>
-<tr class="row-even"><td><p>RocksDB no WAL</p></td>
-<td><p>127,135 edges/s</p></td>
-<td><p>183,348 seeds/s</p></td>
+<tr class="row-even"><td><p>RocksDB + Polars, defer then rebuild</p></td>
+<td><p>deferred indexes</p></td>
+<td><p>n/a</p></td>
+<td><p>1.407 s</p></td>
+<td><p>12.973 s</p></td>
+<td><p>14.380 s</p></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>The first profile of the best RocksDB run showed substantial Python-side time in
-serialization, key construction, string encoding, and adjacency blob merging.
-That suggests the next major RocksDB improvement is not just more RocksDB tuning;
-it is reducing Python overhead and moving toward prefix-key adjacency records
-instead of rewriting serialized adjacency blobs.</p>
-<p>The script writes:</p>
-<dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">benchmark_results/rocksdb_tuning_results.json</span></code></dt><dd><p>Full command output and parsed metrics.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">benchmark_results/rocksdb_tuning_results.csv</span></code></dt><dd><p>A compact table for comparing rates across configurations.</p>
-</dd>
-</dl>
-<p>To collect a <code class="docutils literal notranslate"><span class="pre">cProfile</span></code> file for the best RocksDB configuration:</p>
-<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>scripts/tune_rocksdb.py<span class="w"> </span>--profile
+<p>The same run showed these relative results:</p>
+<div class="table-wrapper docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Comparison</p></th>
+<th class="head"><p>Result</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>RocksDB vs LevelDB, same Python JSON path</p></td>
+<td><p>1.16x faster total</p></td>
+</tr>
+<tr class="row-odd"><td><p>RocksDB vs LevelDB, ingestion/write phase only</p></td>
+<td><p>1.23x faster write phase</p></td>
+</tr>
+<tr class="row-even"><td><p>Polars JSON vs Python JSON serialization on RocksDB</p></td>
+<td><p>1.86x faster serialization</p></td>
+</tr>
+<tr class="row-odd"><td><p>Polars JSON vs Python JSON end-to-end on RocksDB</p></td>
+<td><p>1.17x faster total</p></td>
+</tr>
+<tr class="row-even"><td><p>Deferred index write phase vs inline index maintenance</p></td>
+<td><p>8.72x faster write phase</p></td>
+</tr>
+<tr class="row-odd"><td><p>Deferred index plus rebuild vs inline index maintenance</p></td>
+<td><p>17.2% higher total time</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Interpretation:</p>
+<ul class="simple">
+<li><p>RocksDB’s native columnar path helped the write phase on the measured workload,
+but the total gain was moderate because serialization was still a large share
+of wall-clock time.</p></li>
+<li><p>Polars JSON payload construction reduced serialization time substantially for
+JSON-compatible tabular inputs.</p></li>
+<li><p>Deferring index construction shifted work out of the write phase. This is useful
+when ingestion must complete quickly before a later rebuild step, but it was not
+faster end-to-end when the rebuild was performed immediately for this 100k node
+and 500k edge subset with node indexes on <code class="docutils literal notranslate"><span class="pre">kind</span></code> and <code class="docutils literal notranslate"><span class="pre">group</span></code> plus an edge
+index on <code class="docutils literal notranslate"><span class="pre">weight</span></code>.</p></li>
+<li><p>Benchmark your actual graph shape and index set before promising absolute
+speedups. The fastest mode for append-only writes is not always the fastest mode
+for ingest-plus-query-ready indexes.</p></li>
+</ul>
+</section>
+<section id="transaction-capable-rocksdb-benchmark">
+<h2>Transaction-Capable RocksDB Benchmark<a class="headerlink" href="#transaction-capable-rocksdb-benchmark" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">PyRexStore(transactional=True)</span></code> opens RocksDB through PyRex’s
+<code class="docutils literal notranslate"><span class="pre">TransactionDB</span></code> support. It provides graph-level transactions through
+<code class="docutils literal notranslate"><span class="pre">GraphDB.transaction()</span></code>, and regular direct writes still work through the same
+public GestaltDB APIs. The trade-off is that PyRex 0.4.1 exposes native
+<code class="docutils literal notranslate"><span class="pre">write_columnar_batch</span></code> on <code class="docutils literal notranslate"><span class="pre">PyRocksDB</span></code> but not on <code class="docutils literal notranslate"><span class="pre">TransactionDB</span></code>. The
+transaction-capable backend therefore falls back to Python <code class="docutils literal notranslate"><span class="pre">PyWriteBatch</span></code> paths
+for columnar ingestion.</p>
+<p>The table below reports write-phase times for 5 edges per node, RocksDB
+parallelism 4, <code class="docutils literal notranslate"><span class="pre">max_background_jobs=4</span></code>, a 64 MiB write buffer, Bloom filters,
+Pickle payloads, and chunk size 10,000.</p>
+<div class="table-wrapper docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Nodes / edges</p></th>
+<th class="head"><p>Mode</p></th>
+<th class="head"><p>RocksDB backend</p></th>
+<th class="head"><p>Native columnar</p></th>
+<th class="head"><p>Node write</p></th>
+<th class="head"><p>Edge write</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>10,000 / 50,000</p></td>
+<td><p>Arrow</p></td>
+<td><p>default</p></td>
+<td><p>yes</p></td>
+<td><p>0.041 s</p></td>
+<td><p>0.185 s</p></td>
+</tr>
+<tr class="row-odd"><td><p>10,000 / 50,000</p></td>
+<td><p>Arrow</p></td>
+<td><p>transaction-capable</p></td>
+<td><p>no</p></td>
+<td><p>0.049 s</p></td>
+<td><p>0.345 s</p></td>
+</tr>
+<tr class="row-even"><td><p>10,000 / 50,000</p></td>
+<td><p>Polars</p></td>
+<td><p>default</p></td>
+<td><p>yes</p></td>
+<td><p>0.046 s</p></td>
+<td><p>0.187 s</p></td>
+</tr>
+<tr class="row-odd"><td><p>10,000 / 50,000</p></td>
+<td><p>Polars</p></td>
+<td><p>transaction-capable</p></td>
+<td><p>no</p></td>
+<td><p>0.050 s</p></td>
+<td><p>0.343 s</p></td>
+</tr>
+<tr class="row-even"><td><p>100,000 / 500,000</p></td>
+<td><p>Arrow</p></td>
+<td><p>default</p></td>
+<td><p>yes</p></td>
+<td><p>0.457 s</p></td>
+<td><p>1.886 s</p></td>
+</tr>
+<tr class="row-odd"><td><p>100,000 / 500,000</p></td>
+<td><p>Arrow</p></td>
+<td><p>transaction-capable</p></td>
+<td><p>no</p></td>
+<td><p>0.540 s</p></td>
+<td><p>3.623 s</p></td>
+</tr>
+<tr class="row-even"><td><p>100,000 / 500,000</p></td>
+<td><p>Polars</p></td>
+<td><p>default</p></td>
+<td><p>yes</p></td>
+<td><p>0.429 s</p></td>
+<td><p>1.828 s</p></td>
+</tr>
+<tr class="row-odd"><td><p>100,000 / 500,000</p></td>
+<td><p>Polars</p></td>
+<td><p>transaction-capable</p></td>
+<td><p>no</p></td>
+<td><p>0.545 s</p></td>
+<td><p>3.670 s</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The object-path benchmark with 20,000 nodes and 100,000 append-only edges measured
+77,571 edges/s on default RocksDB versus 64,649 edges/s on transaction-capable
+RocksDB. Treat this as the expected cost of opening the backend in
+transaction-capable mode, not the cost of wrapping a large write in one user
+transaction.</p>
+<p>Operational guidance:</p>
+<ul class="simple">
+<li><p>Use default <code class="docutils literal notranslate"><span class="pre">PyRexStore</span></code> for reloadable bulk loads and columnar append-only
+ingestion.</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">PyRexStore(transactional=True)</span></code> when mutations must be atomic across
+nodes, edges, adjacency, secondary indexes, and metadata.</p></li>
+<li><p>If transaction-capable bulk ingestion needs native columnar throughput, PyRex
+should expose <code class="docutils literal notranslate"><span class="pre">TransactionDB.write_columnar_batch</span></code> so GestaltDB can keep the
+same fast path in transactional mode.</p></li>
+</ul>
+</section>
+<section id="rocksdb-tuning-and-compaction-benchmarks">
+<h2>RocksDB Tuning and Compaction Benchmarks<a class="headerlink" href="#rocksdb-tuning-and-compaction-benchmarks" title="Link to this heading">¶</a></h2>
+<p>Use <code class="docutils literal notranslate"><span class="pre">scripts/tune_rocksdb.py</span></code> for a small RocksDB tuning matrix against a
+LevelDB baseline.</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>scripts/tune_rocksdb.py<span class="w"> </span>--nodes<span class="w"> </span><span class="m">20000</span><span class="w"> </span>--edges<span class="w"> </span><span class="m">100000</span><span class="w"> </span>--batch-size<span class="w"> </span><span class="m">10000</span>
 </pre></div>
 </div>
+<p>Use <code class="docutils literal notranslate"><span class="pre">scripts/benchmark_rocksdb_compaction.py</span></code> for a repeated-overwrite workload
+that creates compaction pressure.</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>scripts/benchmark_rocksdb_compaction.py<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--configs<span class="w"> </span>leveldb<span class="w"> </span>rocksdb-p1-bg1-smallbuf<span class="w"> </span>rocksdb-p4-bg4-smallbuf<span class="w"> </span>rocksdb-p8-bg8-smallbuf<span class="w"> </span>rocksdb-p4-bg4-largebuf<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--keys<span class="w"> </span><span class="m">250000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--passes<span class="w"> </span><span class="m">6</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--batch-size<span class="w"> </span><span class="m">5000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--value-size<span class="w"> </span><span class="m">1024</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--output-dir<span class="w"> </span>benchmark_results/compaction_pressure_YYYYMMDD
+</pre></div>
+</div>
+<p>Representative compaction-pressure result:</p>
+<div class="table-wrapper docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Configuration</p></th>
+<th class="head"><p>Backend</p></th>
+<th class="head"><p>Initial write rate</p></th>
+<th class="head"><p>Overwrite avg rate</p></th>
+<th class="head"><p>Final SSTs</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>LevelDB</p></td>
+<td><p>LevelDB</p></td>
+<td><p>329,433 writes/s</p></td>
+<td><p>114,663 writes/s</p></td>
+<td><p>30</p></td>
+</tr>
+<tr class="row-odd"><td><p>RocksDB p1/bg1 small buffer</p></td>
+<td><p>RocksDB</p></td>
+<td><p>694,105 writes/s</p></td>
+<td><p>262,405 writes/s</p></td>
+<td><p>14</p></td>
+</tr>
+<tr class="row-even"><td><p>RocksDB p4/bg4 small buffer</p></td>
+<td><p>RocksDB</p></td>
+<td><p>1,008,871 writes/s</p></td>
+<td><p>749,948 writes/s</p></td>
+<td><p>47</p></td>
+</tr>
+<tr class="row-odd"><td><p>RocksDB p8/bg8 small buffer</p></td>
+<td><p>RocksDB</p></td>
+<td><p>987,248 writes/s</p></td>
+<td><p>772,436 writes/s</p></td>
+<td><p>17</p></td>
+</tr>
+<tr class="row-even"><td><p>RocksDB p4/bg4 large buffer</p></td>
+<td><p>RocksDB</p></td>
+<td><p>1,088,475 writes/s</p></td>
+<td><p>1,132,815 writes/s</p></td>
+<td><p>7</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>This workload favors RocksDB because it creates overlapping sorted runs that can
+benefit from background compaction parallelism. It should not be generalized to
+all graph workloads.</p>
 </section>
-<section id="rocksdb-knobs-exposed-by-pyrexstore">
-<h2>RocksDB Knobs Exposed by PyRexStore<a class="headerlink" href="#rocksdb-knobs-exposed-by-pyrexstore" title="Link to this heading">¶</a></h2>
-<dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">parallelism</span></code></dt><dd><p>Calls RocksDB’s <code class="docutils literal notranslate"><span class="pre">increase_parallelism</span></code> to raise background thread counts.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">max_background_jobs</span></code></dt><dd><p>Sets the maximum number of RocksDB background jobs.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">write_buffer_size</span></code></dt><dd><p>Sets write buffer sizes for the database and column-family options.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">bloom_bits_per_key</span></code></dt><dd><p>Enables a block-based Bloom filter with the requested bits per key.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">disable_wal</span></code></dt><dd><p>Disables the RocksDB write-ahead log. This can improve ingestion throughput
-in some workloads, but it weakens durability and should be treated as a bulk
-loading mode, not a safe default.</p>
-</dd>
-</dl>
+<section id="external-graph-database-benchmarks">
+<h2>External Graph Database Benchmarks<a class="headerlink" href="#external-graph-database-benchmarks" title="Link to this heading">¶</a></h2>
+<p>Use <code class="docutils literal notranslate"><span class="pre">scripts/benchmark_external_graphdbs.py</span></code> to compare GestaltDB/RocksDB with
+Neo4j, Memgraph, ArcadeDB, and Apache AGE on the same deterministic graph shapes.
+The runner reports ingestion and query phases separately and validates loaded node
+and edge counts before comparing query timings.</p>
+<p>Ingestion paths differ by engine:</p>
+<ul class="simple">
+<li><p>GestaltDB uses Arrow/Polars entity ingestion into RocksDB.</p></li>
+<li><p>Neo4j and Memgraph use batched Cypher over Bolt.</p></li>
+<li><p>ArcadeDB uses the embedded <code class="docutils literal notranslate"><span class="pre">GraphBatch</span></code> API.</p></li>
+<li><p>Apache AGE uses its CSV bulk loader for ingestion and <code class="docutils literal notranslate"><span class="pre">cypher()</span></code> through
+PostgreSQL for queries.</p></li>
+</ul>
+<p>Traversal workloads use each engine’s query interface. GestaltDB uses
+<code class="docutils literal notranslate"><span class="pre">GraphDB.query()</span></code> for neighbor expansion, star traversal, typed paths, and the
+deeper typed traversal. <code class="docutils literal notranslate"><span class="pre">bfs_depth</span></code> is a client-side BFS loop over typed neighbor
+queries for every engine.</p>
+<p>Install the optional benchmark dependencies:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>fast-ingest<span class="w"> </span>--extra<span class="w"> </span>external-bench
+</pre></div>
+</div>
+<p>Representative full comparison:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>scripts/benchmark_external_graphdbs.py<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--engines<span class="w"> </span>gestaltdb<span class="w"> </span>gestaltdb-tx<span class="w"> </span>neo4j<span class="w"> </span>memgraph<span class="w"> </span>arcadedb<span class="w"> </span>age<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--workloads<span class="w"> </span>columnar_ingest<span class="w"> </span>neighbors<span class="w"> </span>sample_neighbors<span class="w"> </span>star_traversal<span class="w"> </span>bfs_depth<span class="w"> </span>typed_path<span class="w"> </span>deep_typed_query<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--nodes<span class="w"> </span><span class="m">100000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--edges<span class="w"> </span><span class="m">500000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--batch-size<span class="w"> </span><span class="m">10000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--iterations<span class="w"> </span><span class="m">10</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--repetitions<span class="w"> </span><span class="m">3</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--output-dir<span class="w"> </span>benchmark_results/external_graphdbs_100k
+</pre></div>
+</div>
+<section id="k-node-results">
+<h3>100k Node Results<a class="headerlink" href="#k-node-results" title="Link to this heading">¶</a></h3>
+<p>These results use 100,000 nodes, 500,000 edges, batch size 10,000, 10 traversal
+seeds, sample size 5, depth 3, and three repetitions. All rows validated exactly
+100,000 nodes and 500,000 edges. Tables report mean ± standard deviation.</p>
+<p>Ingestion phase from the <code class="docutils literal notranslate"><span class="pre">columnar_ingest</span></code> workload:</p>
+<div class="table-wrapper docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Engine</p></th>
+<th class="head"><p>Ingest seconds</p></th>
+<th class="head"><p>Edge ingest rate</p></th>
+<th class="head"><p>Relative to GestaltDB</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>GestaltDB/RocksDB</p></td>
+<td><p>1.854 ± 0.167 s</p></td>
+<td><p>271,137 edges/s</p></td>
+<td><p>1.00x</p></td>
+</tr>
+<tr class="row-odd"><td><p>GestaltDB/RocksDB transactional</p></td>
+<td><p>3.131 ± 0.264 s</p></td>
+<td><p>160,494 edges/s</p></td>
+<td><p>1.69x slower</p></td>
+</tr>
+<tr class="row-even"><td><p>Apache AGE</p></td>
+<td><p>1.868 ± 0.009 s</p></td>
+<td><p>267,651 edges/s</p></td>
+<td><p>1.01x slower</p></td>
+</tr>
+<tr class="row-odd"><td><p>ArcadeDB embedded</p></td>
+<td><p>6.060 ± 0.403 s</p></td>
+<td><p>82,745 edges/s</p></td>
+<td><p>3.27x slower</p></td>
+</tr>
+<tr class="row-even"><td><p>Memgraph</p></td>
+<td><p>8.850 ± 0.171 s</p></td>
+<td><p>56,512 edges/s</p></td>
+<td><p>4.77x slower</p></td>
+</tr>
+<tr class="row-odd"><td><p>Neo4j</p></td>
+<td><p>13.459 ± 0.076 s</p></td>
+<td><p>37,151 edges/s</p></td>
+<td><p>7.26x slower</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Query phase on the already-loaded graph:</p>
+<div class="table-wrapper docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Workload</p></th>
+<th class="head"><p>Result count</p></th>
+<th class="head"><p>GestaltDB</p></th>
+<th class="head"><p>GestaltDB tx</p></th>
+<th class="head"><p>Apache AGE</p></th>
+<th class="head"><p>ArcadeDB</p></th>
+<th class="head"><p>Memgraph</p></th>
+<th class="head"><p>Neo4j</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>neighbors</p></td>
+<td><p>17</p></td>
+<td><p>0.000901 ± 0.000334 s</p></td>
+<td><p>0.000743 ± 0.000011 s</p></td>
+<td><p>0.181 ± 0.00180 s</p></td>
+<td><p>0.0107 ± 0.0106 s</p></td>
+<td><p>0.00494 ± 0.00122 s</p></td>
+<td><p>0.0773 ± 0.00306 s</p></td>
+</tr>
+<tr class="row-odd"><td><p>sample_neighbors</p></td>
+<td><p>17</p></td>
+<td><p>0.000753 ± 0.000052 s</p></td>
+<td><p>0.000764 ± 0.000008 s</p></td>
+<td><p>0.181 ± 0.00412 s</p></td>
+<td><p>0.0143 ± 0.00717 s</p></td>
+<td><p>0.00554 ± 0.000167 s</p></td>
+<td><p>0.0702 ± 0.00218 s</p></td>
+</tr>
+<tr class="row-even"><td><p>star_traversal</p></td>
+<td><p>5,000,000</p></td>
+<td><p>16.172 ± 0.215 s</p></td>
+<td><p>16.738 ± 1.020 s</p></td>
+<td><p>3.800 ± 0.043 s</p></td>
+<td><p>57.905 ± 0.828 s</p></td>
+<td><p>37.946 ± 0.231 s</p></td>
+<td><p>44.500 ± 0.444 s</p></td>
+</tr>
+<tr class="row-odd"><td><p>bfs_depth</p></td>
+<td><p>3</p></td>
+<td><p>0.000575 ± 0.000009 s</p></td>
+<td><p>0.000599 ± 0.000005 s</p></td>
+<td><p>0.164 ± 0.00720 s</p></td>
+<td><p>0.00848 ± 0.00359 s</p></td>
+<td><p>0.00528 ± 0.000744 s</p></td>
+<td><p>0.117 ± 0.00726 s</p></td>
+</tr>
+<tr class="row-even"><td><p>typed_path</p></td>
+<td><p>125</p></td>
+<td><p>0.00107 ± 0.000010 s</p></td>
+<td><p>0.00120 ± 0.000040 s</p></td>
+<td><p>0.168 ± 0.00215 s</p></td>
+<td><p>0.00816 ± 0.000979 s</p></td>
+<td><p>0.00722 ± 0.00141 s</p></td>
+<td><p>0.107 ± 0.00122 s</p></td>
+</tr>
+<tr class="row-odd"><td><p>deep_typed_query</p></td>
+<td><p>105</p></td>
+<td><p>0.00221 ± 0.000073 s</p></td>
+<td><p>0.00245 ± 0.000016 s</p></td>
+<td><p>943.221 ± 2.164 s</p></td>
+<td><p>0.00859 ± 0.00120 s</p></td>
+<td><p>0.00762 ± 0.00206 s</p></td>
+<td><p>0.139 ± 0.00373 s</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Notes:</p>
+<ul class="simple">
+<li><p>GestaltDB and Apache AGE are similar on bulk ingestion in this setup. GestaltDB
+writes directly to RocksDB; AGE uses PostgreSQL-visible CSV files and AGE’s bulk
+load functions.</p></li>
+<li><p>GestaltDB’s traversal timings are dominated by embedded typed-adjacency prefix
+scans. Server engines pay query execution and client/server costs for the small
+seeded traversals.</p></li>
+<li><p>Apache AGE is fast on the star traversal because the query streams one large hub
+expansion efficiently. Its four-hop typed traversal is much slower on this graph
+shape and query form.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">reopen_seconds</span></code> and count validation are recorded separately in summary files
+and are not included in query timings.</p></li>
+</ul>
+</section>
+</section>
+<section id="benchmark-caveats">
+<h2>Benchmark Caveats<a class="headerlink" href="#benchmark-caveats" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Local benchmark results depend on graph shape, storage device, CPU settings,
+Python version, backend versions, and warm-up behavior.</p></li>
+<li><p>Small graphs can be dominated by Python object construction, serialization, and
+key construction rather than backend I/O.</p></li>
+<li><p>Prefer raw CSV/JSONL outputs for comparisons and keep benchmark parameters with
+published results.</p></li>
+</ul>
 </section>
 </section>
 
@@ -413,7 +918,7 @@ loading mode, not a safe default.</p>
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2026, PyGraphDB contributors
+                Copyright &#169; 2026, Mylonas Charilaos
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -439,13 +944,20 @@ loading mode, not a safe default.</p>
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Performance and RocksDB Tuning</a><ul>
-<li><a class="reference internal" href="#install-optional-dependencies">Install Optional Dependencies</a></li>
-<li><a class="reference internal" href="#run-backend-benchmarks">Run Backend Benchmarks</a></li>
-<li><a class="reference internal" href="#tune-rocksdb">Tune RocksDB</a></li>
-<li><a class="reference internal" href="#columnar-ingestion-benchmark">Columnar Ingestion Benchmark</a></li>
-<li><a class="reference internal" href="#initial-local-findings">Initial Local Findings</a></li>
-<li><a class="reference internal" href="#rocksdb-knobs-exposed-by-pyrexstore">RocksDB Knobs Exposed by PyRexStore</a></li>
+<li><a class="reference internal" href="#">Performance and Benchmarks</a><ul>
+<li><a class="reference internal" href="#practical-recommendations">Practical Recommendations</a></li>
+<li><a class="reference internal" href="#install-benchmark-dependencies">Install Benchmark Dependencies</a></li>
+<li><a class="reference internal" href="#backend-benchmarks">Backend Benchmarks</a></li>
+<li><a class="reference internal" href="#columnar-ingestion-benchmarks">Columnar Ingestion Benchmarks</a></li>
+<li><a class="reference internal" href="#structured-json-entity-ingestion">Structured JSON Entity Ingestion</a></li>
+<li><a class="reference internal" href="#end-to-end-ingestion-insights">End-to-End Ingestion Insights</a></li>
+<li><a class="reference internal" href="#transaction-capable-rocksdb-benchmark">Transaction-Capable RocksDB Benchmark</a></li>
+<li><a class="reference internal" href="#rocksdb-tuning-and-compaction-benchmarks">RocksDB Tuning and Compaction Benchmarks</a></li>
+<li><a class="reference internal" href="#external-graph-database-benchmarks">External Graph Database Benchmarks</a><ul>
+<li><a class="reference internal" href="#k-node-results">100k Node Results</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#benchmark-caveats">Benchmark Caveats</a></li>
 </ul>
 </li>
 </ul>
@@ -457,7 +969,7 @@ loading mode, not a safe default.</p>
       
     </aside>
   </div>
-</div><script src="_static/documentation_options.js?v=01f34227"></script>
+</div><script src="_static/documentation_options.js?v=1dd76d02"></script>
     <script src="_static/doctools.js?v=fd6eb6e6"></script>
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/scripts/furo.js?v=46bd48cc"></script>

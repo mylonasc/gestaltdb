@@ -3,10 +3,10 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="API Reference" href="api.html"><link rel="prev" title="Performance and RocksDB Tuning" href="performance.html">
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="API Reference" href="api.html"><link rel="prev" title="Performance and Benchmarks" href="performance.html">
 
-    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>Notebook Usage - PyGraphDB</title>
+    <!-- Generated with Sphinx 9.0.4 and Furo 2025.12.19 -->
+        <title>Notebook Usage - GestaltDB</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -161,7 +161,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="index.html"><div class="brand">PyGraphDB</div></a>
+      <a href="index.html"><div class="brand">GestaltDB</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -182,7 +182,7 @@
       
       <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
   
-  <span class="sidebar-brand-text">PyGraphDB</span>
+  <span class="sidebar-brand-text">GestaltDB</span>
   
 </a><form class="sidebar-search-container" method="get" action="search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -198,7 +198,7 @@
 <li class="toctree-l1"><a class="reference internal" href="serializers.html">Serializers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="typed-sampling.html">Typed Traversal and Sampling</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cypher.html">Cypher Queries</a></li>
-<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance and RocksDB Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance and Benchmarks</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Notebook Usage</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
@@ -264,15 +264,15 @@ Python 3.12 is a safe default.</p>
 uv<span class="w"> </span>venv<span class="w"> </span>--python<span class="w"> </span><span class="m">3</span>.12
 uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>leveldb<span class="w"> </span>--extra<span class="w"> </span>lmdb
 uv<span class="w"> </span>add<span class="w"> </span>--dev<span class="w"> </span>notebook<span class="w"> </span>ipykernel
-.venv/bin/python<span class="w"> </span>-m<span class="w"> </span>ipykernel<span class="w"> </span>install<span class="w"> </span>--user<span class="w"> </span>--name<span class="w"> </span>pygraphdb-py312<span class="w"> </span>--display-name<span class="w"> </span><span class="s2">&quot;PyGraphDB Python 3.12&quot;</span>
+.venv/bin/python<span class="w"> </span>-m<span class="w"> </span>ipykernel<span class="w"> </span>install<span class="w"> </span>--user<span class="w"> </span>--name<span class="w"> </span>gestaltdb-py312<span class="w"> </span>--display-name<span class="w"> </span><span class="s2">&quot;GestaltDB Python 3.12&quot;</span>
 </pre></div>
 </div>
 </section>
 <section id="minimal-notebook-cell">
 <h2>Minimal Notebook Cell<a class="headerlink" href="#minimal-notebook-cell" title="Link to this heading">¶</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pygraphdb.graphdb</span><span class="w"> </span><span class="kn">import</span> <span class="n">Edge</span><span class="p">,</span> <span class="n">GraphDB</span><span class="p">,</span> <span class="n">Node</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pygraphdb.kvstores</span><span class="w"> </span><span class="kn">import</span> <span class="n">LevelDBStore</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pygraphdb.serializers</span><span class="w"> </span><span class="kn">import</span> <span class="n">PickleSerializer</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gestaltdb.graphdb</span><span class="w"> </span><span class="kn">import</span> <span class="n">Edge</span><span class="p">,</span> <span class="n">GraphDB</span><span class="p">,</span> <span class="n">Node</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gestaltdb.kvstores</span><span class="w"> </span><span class="kn">import</span> <span class="n">LevelDBStore</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gestaltdb.serializers</span><span class="w"> </span><span class="kn">import</span> <span class="n">PickleSerializer</span>
 
 <span class="n">graph_db</span> <span class="o">=</span> <span class="n">GraphDB</span><span class="p">(</span><span class="n">LevelDBStore</span><span class="p">(</span><span class="s2">&quot;/tmp/leveldb_notebook_example&quot;</span><span class="p">),</span> <span class="n">PickleSerializer</span><span class="p">())</span>
 
@@ -307,7 +307,7 @@ check the kernel interpreter:</p>
 </pre></div>
 </div>
 <p>If it is Python 3.14 or a free-threaded build, switch the notebook to a Python
-3.12 kernel and install <code class="docutils literal notranslate"><span class="pre">pygraphdb[leveldb]</span></code> there.</p>
+3.12 kernel and install <code class="docutils literal notranslate"><span class="pre">gestaltdb[leveldb]</span></code> there.</p>
 </section>
 </section>
 
@@ -332,7 +332,7 @@ check the kernel interpreter:</p>
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Performance and RocksDB Tuning</div>
+                <div class="title">Performance and Benchmarks</div>
                 
               </div>
             </a>
@@ -340,7 +340,7 @@ check the kernel interpreter:</p>
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2026, PyGraphDB contributors
+                Copyright &#169; 2026, Mylonas Charilaos
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -382,7 +382,7 @@ check the kernel interpreter:</p>
       
     </aside>
   </div>
-</div><script src="_static/documentation_options.js?v=01f34227"></script>
+</div><script src="_static/documentation_options.js?v=1dd76d02"></script>
     <script src="_static/doctools.js?v=fd6eb6e6"></script>
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/scripts/furo.js?v=46bd48cc"></script>

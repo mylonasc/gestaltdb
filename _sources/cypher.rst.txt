@@ -1,213 +1,140 @@
 Cypher Queries
 ==============
 
-PyGraphDB includes an initial read-only Cypher API through
-``GraphDB.query(cypher)``. The current implementation is intentionally small and
-maps directly to features that already have efficient database APIs: indexed
-label scans, anchored typed traversal, and typed path sampling.
+GestaltDB exposes a read-only Cypher subset through
+``GraphDB.query(cypher, parameters=None)``. It is designed around the features
+GestaltDB can execute efficiently today: indexed node scans, typed relationship
+expansion, filtering, ordering, and chained ``MATCH`` clauses.
 
-Relationship types are read from ``edge.properties["type"]``. Node labels are
-stored natively through ``Node(labels=[...])`` and maintained in a sorted label
-index.
+Relationship types come from ``edge.properties["type"]``. Node labels are stored
+on ``Node(labels=[...])``.
 
-Supported Feature Matrix
-------------------------
+Basic Result Shape
+------------------
 
-The table below distinguishes features available through the Python database API
-from features exposed through the Cypher API.
-
-Legend: ✅ supported, 🟡 partially supported, ❌ not supported.
-
-.. list-table:: Current DB API and Cypher API support
-   :header-rows: 1
-   :widths: 32 18 18 32
-
-   * - Feature
-     - DB API
-     - Cypher API
-     - Notes
-   * - Node and edge property storage
-     - ✅
-     - 🟡
-     - Cypher can return bound ``Node`` and ``Edge`` objects, but property projections such as ``RETURN n.name`` are not implemented yet.
-   * - Native node labels
-     - ✅
-     - ✅
-     - DB API supports ``Node(labels=[...])`` and ``nodes_by_label``. Cypher supports ``MATCH (n:Label) RETURN n``.
-   * - Exact-match node property indexes
-     - ✅
-     - 🟡
-     - DB API supports explicit indexes via ``create_node_property_index``. Cypher uses them for ``MATCH (n:Label {name: "..."}) RETURN n`` when registered.
-   * - Exact-match edge property indexes
-     - ✅
-     - ❌
-     - DB API supports explicit indexes via ``create_edge_property_index``. Cypher edge property predicates are not implemented yet.
-   * - Dedicated relationship type field
-     - 🟡
-     - 🟡
-     - Typed traversal uses ``edge.properties["type"]`` instead of a dedicated ``Edge.type`` field.
-   * - Relationship type catalog
-     - ✅
-     - ❌
-     - DB API supports ``edges_by_type``. Cypher does not yet support unanchored ``MATCH ()-[:TYPE]->()`` scans.
-   * - Anchored one-hop typed traversal
-     - ✅
-     - ✅
-     - DB API uses ``iter_typed_adjacency`` or ``neighbors_by_edge_type``. Cypher supports ``MATCH (a {id: "..."})-[:TYPE]->(b)``.
-   * - Anchored multi-hop typed traversal
-     - ✅
-     - ✅
-     - Cypher supports repeated outgoing typed hops from an anchored start node.
-   * - Reverse typed traversal
-     - ✅
-     - ❌
-     - DB API supports ``direction="in"``. Cypher support for ``<-[:TYPE]-`` is not implemented yet.
-   * - Undirected typed traversal
-     - ✅
-     - ❌
-     - DB API supports ``direction="any"``. Cypher support for ``-[:TYPE]-`` is not implemented yet.
-   * - Untyped BFS traversal
-     - ✅
-     - ❌
-     - Available as ``GraphDB.bfs`` over legacy adjacency lists.
-   * - Single-hop typed neighbor sampling
-     - ✅
-     - ❌
-     - Available as ``GraphDB.sample_neighbors``.
-   * - Multi-hop typed path sampling
-     - ✅
-     - ✅
-     - Cypher exposes this through ``CALL pg.sample_typed_paths(...) YIELD path RETURN path``.
-   * - Materialized sampled subgraph
-     - ✅
-     - ❌
-     - Available as ``GraphDB.sample_typed_subgraph``.
-   * - Property filtering with ``WHERE``
-     - 🟡
-     - ❌
-     - DB API has exact-match index lookup helpers, but Cypher ``WHERE`` parsing is future work.
-   * - Mutating Cypher queries
-     - ✅
-     - ❌
-     - Use ``put_node``, ``put_edge``, ``put_edges_bulk``, and ingestion APIs directly.
-
-Indexed Label Scans
--------------------
-
-Create nodes with native labels, then query by label without scanning every node.
+``GraphDB.query`` returns a result with ``columns`` and ``records``. Iterating the
+result yields record dictionaries.
 
 .. code-block:: python
 
-   graph_db.put_node(Node(node_id="drug-1", labels=["Drug"], properties={"name": "Aspirin"}))
+   result = graph_db.query('MATCH (n:Drug) RETURN n.id, n.name LIMIT 10')
 
-   result = graph_db.query('MATCH (d:Drug) RETURN d')
-
+   print(result.columns)
    for record in result:
-       print(record["d"].get_id)
+       print(record["n.id"], record["n.name"])
 
-Indexed Label and Property Lookup
----------------------------------
+Node Scans
+----------
 
-Exact-match property indexes are explicit. Register an index before relying on
-it for performance-sensitive lookup.
+Label scans use the label index. Inline properties are filtered and can use a
+registered property index.
 
 .. code-block:: python
 
    graph_db.create_node_property_index("name")
 
-   result = graph_db.query('MATCH (d:Drug {name: "Aspirin"}) RETURN d')
+   graph_db.query('MATCH (n:Drug) RETURN n')
+   graph_db.query('MATCH (n:Drug {name: "Aspirin"}) RETURN n.id')
+   graph_db.query('MATCH (n:Drug:Approved) RETURN n.id')
+   graph_db.query('MATCH (n) RETURN n.id LIMIT 5')
 
-   for record in result:
-       print(record["d"].properties["name"])
-
-If a property index is not registered, Cypher still restricts the search to the
-label index and then filters decoded nodes in Python.
-
-Anchored One-Hop Traversal
---------------------------
-
-Use ``GraphDB.query`` for an anchored outgoing typed traversal. The start node
-must be constrained by ``id``.
-
-.. code-block:: python
-
-   result = graph_db.query(
-       'MATCH (d {id: "drug-1"})-[:drug-to-protein]->(p) RETURN d, p'
-   )
-
-   for record in result:
-       print(record["d"].get_id, record["p"].get_id)
-
-The result object exposes ``columns`` and ``records``:
-
-.. code-block:: python
-
-   print(result.columns)  # ("d", "p")
-   print(len(result))
-
-Relationship Variables
-----------------------
-
-Relationship variables can be bound and returned.
-
-.. code-block:: python
-
-   result = graph_db.query(
-       'MATCH (d {id: "drug-1"})-[r:drug-to-disease]->(x) RETURN d, r, x'
-   )
-
-   for record in result:
-       print(record["r"].get_id, record["r"].properties)
-
-Anchored Multi-Hop Traversal
+Typed Relationship Traversal
 ----------------------------
 
-Cypher supports repeated outgoing typed hops from the anchored start node.
+Use an anchored pattern when you know the start node ID.
 
 .. code-block:: python
 
-   result = graph_db.query(
-       'MATCH (d {id: "drug-1"})-[:drug-to-protein]->(p)-[:protein-to-disease]->(x) RETURN d, p, x'
-   )
+   graph_db.query('MATCH (d {id: "drug-1"})-[:binds]->(p) RETURN p.id')
+   graph_db.query('MATCH (p {id: "protein-1"})<-[:binds]-(d) RETURN d.id')
+   graph_db.query('MATCH (n {id: "x"})-[:related]-(m) RETURN m.id')
 
-   for record in result:
-       print(record["d"].get_id, record["p"].get_id, record["x"].get_id)
-
-Relationship variables can be used across multiple hops as well.
+Unanchored typed relationship scans are also supported.
 
 .. code-block:: python
 
-   result = graph_db.query(
-       'MATCH (d {id: "drug-1"})-[r1:drug-to-protein]->(p)-[r2:protein-to-disease]->(x) RETURN r1, r2, x'
+   graph_db.query('MATCH (a)-[r:binds]->(b) RETURN a.id, r.id, b.id')
+   graph_db.query('MATCH (a)-[r:binds|inhibits]->(b) RETURN r.id ORDER BY r.id')
+
+Filtering
+---------
+
+``WHERE`` supports equality, inequality, ordered comparisons, ``AND``, ``IN``,
+``IS NULL``, and ``IS NOT NULL`` for property references.
+
+.. code-block:: python
+
+   graph_db.query('MATCH (n:Drug) WHERE n.name = "Aspirin" RETURN n.id')
+   graph_db.query('MATCH (n:Person) WHERE n.age >= $age RETURN n.id', parameters={"age": 35})
+   graph_db.query('MATCH (n) WHERE n.kind IN ["drug", "protein"] RETURN n.id')
+   graph_db.query('MATCH (n) WHERE n.name IS NOT NULL RETURN n.id')
+
+Relationship predicates work in anchored traversals and unanchored relationship
+scans. When an edge property index exists, exact and range predicates on typed
+relationship scans can use the composite type/property index.
+
+.. code-block:: python
+
+   graph_db.create_edge_property_index("score")
+
+   graph_db.query('MATCH (a)-[r:binds]->(b) WHERE r.score >= 0.8 RETURN r.id, b.id')
+
+Projection and Result Shaping
+-----------------------------
+
+Use aliases, ``RETURN *``, ``DISTINCT``, ``ORDER BY``, ``SKIP``, and ``LIMIT``.
+
+.. code-block:: python
+
+   graph_db.query('MATCH (n:Drug) RETURN n.id AS id, n.name AS name ORDER BY name')
+   graph_db.query('MATCH (n) RETURN DISTINCT n.kind ORDER BY n.kind')
+   graph_db.query('MATCH (a)-[r:binds]->(b) RETURN * LIMIT 10')
+
+Special projections prefer entity identity over user properties:
+
+- ``n.id`` and ``r.id`` return entity IDs.
+- ``n.labels`` returns node labels.
+- ``r.source`` and ``r.target`` return relationship endpoints.
+- Missing properties project as ``None``.
+
+Chained MATCH Clauses
+---------------------
+
+Multiple ``MATCH`` clauses execute as a row pipeline. Reusing a variable enforces
+that it refers to the same entity.
+
+.. code-block:: python
+
+   graph_db.query(
+       'MATCH (d:Drug {name: "Aspirin"}) '
+       'MATCH (d)-[r:binds]->(p) '
+       'RETURN d.id, r.score, p.id'
    )
 
 Sampling Procedure
 ------------------
 
-Typed path sampling is exposed as a PyGraphDB-specific procedure call. This is
-not standard openCypher syntax; it delegates to ``GraphDB.sample_typed_paths``.
+GestaltDB also exposes typed path sampling through a project-specific procedure.
+This is not standard openCypher syntax.
 
 .. code-block:: python
 
    result = graph_db.query(
        'CALL pg.sample_typed_paths(["drug-1"], '
-       '[{"edge_type": "drug-to-protein", "direction": "out", "sample_size": 2}, '
-       '{"edge_type": "protein-to-disease", "direction": "out", "sample_size": 1}]) '
-       'YIELD path RETURN path'
+       '[{"edge_type": "binds", "direction": "out", "sample_size": 2}]) '
+       'YIELD path RETURN path LIMIT 1'
    )
 
-   for record in result:
-       print(record["path"])
+Current Limitations
+-------------------
 
-Current Cypher Limitations
---------------------------
+Unsupported syntax raises ``ValueError``. The current Cypher API does not yet
+support:
 
-Unsupported Cypher features raise ``ValueError`` with a message describing the
-supported subset. The current Cypher API does not yet support:
-
-- Multiple labels in one node pattern, such as ``(n:Drug:Approved)``.
-- Reverse or undirected patterns such as ``<-[:TYPE]-`` or ``-[:TYPE]-``.
-- Unanchored all-node scans such as ``MATCH (n) RETURN n``.
-- ``WHERE`` predicates.
-- Property projections such as ``RETURN n.name``.
-- ``LIMIT``, ``ORDER BY``, aggregation, joins across separate patterns, or mutation clauses.
+- mutating queries such as ``CREATE``, ``SET``, ``DELETE``, or ``MERGE``
+- aggregation such as ``count`` or ``collect``
+- ``WITH``
+- ``OPTIONAL MATCH``
+- variable-length paths
+- multiple pattern parts inside one ``MATCH`` clause
+- path values such as ``p = (a)-[:T]->(b)``

@@ -4,7 +4,7 @@ API Reference
 Graph Models and Database
 -------------------------
 
-.. automodule:: pygraphdb.graphdb
+.. automodule:: gestaltdb.graphdb
    :members:
    :undoc-members:
    :show-inheritance:
@@ -12,7 +12,7 @@ Graph Models and Database
 Sampling Configuration
 ----------------------
 
-.. automodule:: pygraphdb.sampling
+.. automodule:: gestaltdb.sampling
    :members:
    :undoc-members:
    :show-inheritance:
@@ -20,7 +20,7 @@ Sampling Configuration
 Columnar Ingestion
 ------------------
 
-.. automodule:: pygraphdb.ingestion
+.. automodule:: gestaltdb.ingestion
    :members:
    :undoc-members:
    :show-inheritance:
@@ -28,7 +28,7 @@ Columnar Ingestion
 Cypher Queries
 --------------
 
-.. automodule:: pygraphdb.cypher
+.. automodule:: gestaltdb.cypher
    :members:
    :undoc-members:
    :show-inheritance:
@@ -36,7 +36,7 @@ Cypher Queries
 Key-Value Stores
 ----------------
 
-.. automodule:: pygraphdb.kvstores
+.. automodule:: gestaltdb.kvstores
    :members:
    :undoc-members:
    :show-inheritance:
@@ -44,7 +44,7 @@ Key-Value Stores
 Serializers
 -----------
 
-.. automodule:: pygraphdb.serializers
+.. automodule:: gestaltdb.serializers
    :members:
    :undoc-members:
    :show-inheritance:
