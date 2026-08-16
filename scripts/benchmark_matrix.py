@@ -311,12 +311,21 @@ def set_thread_env(cores: int) -> None:
 def rocksdb_configs(selected: list[str], cores: int) -> list[tuple[str, dict[str, object]]]:
     configs = {
         "default": {},
+        "transactional": {"transactional": True},
         "parallel": {"parallelism": cores, "max_background_jobs": cores},
+        "parallel-transactional": {"parallelism": cores, "max_background_jobs": cores, "transactional": True},
         "parallel-buffer64mb-bloom10": {
             "parallelism": cores,
             "max_background_jobs": cores,
             "write_buffer_size": 64 * 1024 * 1024,
             "bloom_bits_per_key": 10,
+        },
+        "parallel-buffer64mb-bloom10-transactional": {
+            "parallelism": cores,
+            "max_background_jobs": cores,
+            "write_buffer_size": 64 * 1024 * 1024,
+            "bloom_bits_per_key": 10,
+            "transactional": True,
         },
         "parallel-buffer64mb-bloom10-nowal": {
             "parallelism": cores,
@@ -347,7 +356,7 @@ def validate_dependencies(backend: str, ingestion_mode: str, serializer: str) ->
     return None
 
 
-def base_result(args, backend: str, config_name: str, cores: int, nodes: int, ingestion_mode: str) -> dict[str, object]:
+def base_result(args, backend: str, config_name: str, cores: int, nodes: int, edges: int, ingestion_mode: str) -> dict[str, object]:
     semantics = "full_object_indexes_legacy_adjacency" if ingestion_mode == "object" else "append_only_typed_adjacency_only"
     return {
         "status": "ok",
@@ -356,7 +365,7 @@ def base_result(args, backend: str, config_name: str, cores: int, nodes: int, in
         "backend_config": config_name,
         "cores": cores,
         "nodes": nodes,
-        "edges": nodes,
+        "edges": edges,
         "ingestion_mode": ingestion_mode,
         "ingestion_semantics": semantics,
         "serializer": args.serializer,
@@ -370,7 +379,8 @@ def base_result(args, backend: str, config_name: str, cores: int, nodes: int, in
 
 
 def run_one(args, backend: str, config_name: str, rocksdb_options: dict[str, object], cores: int, nodes: int, ingestion_mode: str):
-    result = base_result(args, backend, config_name, cores, nodes, ingestion_mode)
+    edges = nodes * args.edge_multiplier
+    result = base_result(args, backend, config_name, cores, nodes, edges, ingestion_mode)
     skip_reason = validate_dependencies(backend, ingestion_mode, args.serializer)
     if skip_reason:
         result.update({"status": "skipped", "skip_reason": skip_reason})
@@ -384,9 +394,9 @@ def run_one(args, backend: str, config_name: str, rocksdb_options: dict[str, obj
             graph = open_graph(db_path, backend, args.serializer, rocksdb_options)
             result["native_columnar"] = bool(getattr(graph.store, "has_native_columnar_ingestion", lambda: False)())
             if ingestion_mode == "object":
-                result.update(ingest_object(graph, nodes, nodes, args.chunk_size))
+                result.update(ingest_object(graph, nodes, edges, args.chunk_size))
             else:
-                result.update(ingest_columnar(graph, nodes, nodes, args.chunk_size, ingestion_mode))
+                result.update(ingest_columnar(graph, nodes, edges, args.chunk_size, ingestion_mode))
             graph.close()
             graph = None
 
@@ -405,11 +415,11 @@ def run_one(args, backend: str, config_name: str, rocksdb_options: dict[str, obj
         if not args.keep_dbs:
             shutil.rmtree(db_path, ignore_errors=True)
 
-    add_rates(result, nodes)
+    add_rates(result, nodes, edges)
     return result
 
 
-def add_rates(result: dict[str, object], nodes: int) -> None:
+def add_rates(result: dict[str, object], nodes: int, edges: int) -> None:
     for key, numerator_key, rate_key in (
         ("node_ingest_seconds", None, "node_ingest_rate"),
         ("edge_ingest_seconds", None, "edge_ingest_rate"),
@@ -421,7 +431,7 @@ def add_rates(result: dict[str, object], nodes: int) -> None:
         if not isinstance(elapsed, (int, float)) or elapsed <= 0:
             result[rate_key] = ""
             continue
-        numerator = result.get(numerator_key) if numerator_key else nodes
+        numerator = result.get(numerator_key) if numerator_key else (edges if key == "edge_ingest_seconds" else nodes)
         result[rate_key] = float(numerator) / elapsed if isinstance(numerator, (int, float)) else ""
 
 
@@ -443,6 +453,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run GestaltDB benchmark matrix")
     parser.add_argument("--backends", nargs="+", choices=["leveldb", "rocksdb"], default=["leveldb", "rocksdb"])
     parser.add_argument("--sizes", nargs="+", type=int, default=[10_000, 100_000, 1_000_000])
+    parser.add_argument("--edge-multiplier", type=int, default=1)
     parser.add_argument("--cores", nargs="+", type=int, default=[1, 2, 4])
     parser.add_argument("--ingestion-modes", nargs="+", choices=["object", "arrow", "polars"], default=["object", "arrow", "polars"])
     parser.add_argument("--serializer", choices=["pickle", "msgpack", "json", "protobuf"], default="msgpack")
@@ -457,7 +468,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--rocksdb-configs",
         nargs="+",
-        choices=["default", "parallel", "parallel-buffer64mb-bloom10", "parallel-buffer64mb-bloom10-nowal"],
+        choices=[
+            "default",
+            "transactional",
+            "parallel",
+            "parallel-transactional",
+            "parallel-buffer64mb-bloom10",
+            "parallel-buffer64mb-bloom10-transactional",
+            "parallel-buffer64mb-bloom10-nowal",
+        ],
         default=["default", "parallel", "parallel-buffer64mb-bloom10"],
     )
     return parser.parse_args()

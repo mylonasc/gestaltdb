@@ -281,7 +281,7 @@ def add_rates(row: dict[str, object]) -> None:
     row["total_seconds"] = float(row.get("ingest_seconds") or 0.0) + float(row.get("query_seconds") or 0.0)
 
 
-def open_gestaltdb(path: Path, args: argparse.Namespace) -> GraphDB:
+def open_gestaltdb(path: Path, args: argparse.Namespace, *, transactional: bool = False) -> GraphDB:
     return GraphDB(
         PyRexStore(
             path=str(path),
@@ -290,13 +290,15 @@ def open_gestaltdb(path: Path, args: argparse.Namespace) -> GraphDB:
             write_buffer_size=args.rocksdb_write_buffer_size,
             bloom_bits_per_key=args.rocksdb_bloom_bits,
             disable_wal=args.rocksdb_disable_wal,
+            transactional=transactional,
         ),
         JSONSerializer(),
     )
 
 
-def run_gestaltdb(workload: str, args: argparse.Namespace) -> dict[str, object]:
-    row = base_row("gestaltdb-rocksdb", workload, args)
+def run_gestaltdb(workload: str, args: argparse.Namespace, *, transactional: bool = False) -> dict[str, object]:
+    engine_name = "gestaltdb-rocksdb-transactional" if transactional else "gestaltdb-rocksdb"
+    row = base_row(engine_name, workload, args)
     if importlib.util.find_spec("pyrex") is None:
         row.update({"status": "skipped", "skip_reason": "missing pyrex-rocksdb"})
         return row
@@ -312,7 +314,7 @@ def run_gestaltdb(workload: str, args: argparse.Namespace) -> dict[str, object]:
     path = Path(tempfile.mkdtemp(prefix="gestaltdb_external_bench_", dir=args.tmp_dir))
     graph = None
     try:
-        graph = open_gestaltdb(path, args)
+        graph = open_gestaltdb(path, args, transactional=transactional)
 
         def ingest() -> None:
             for start, end in chunks(args.nodes, args.batch_size):
@@ -341,7 +343,7 @@ def run_gestaltdb(workload: str, args: argparse.Namespace) -> dict[str, object]:
         _, row["ingest_seconds"] = seconds(ingest)
         graph.close()
         graph = None
-        graph, row["reopen_seconds"] = seconds(lambda: open_gestaltdb(path, args))
+        graph, row["reopen_seconds"] = seconds(lambda: open_gestaltdb(path, args, transactional=transactional))
         (row["actual_nodes"], row["actual_edges"]), row["count_seconds"] = seconds(lambda: count_gestaltdb(graph))
         row["count_status"] = count_status(row, args)
         result_count, row["query_seconds"] = seconds(lambda: run_gestaltdb_workload(graph, workload, args))
@@ -748,7 +750,12 @@ def run_with_container(engine: str, workload: str, args: argparse.Namespace, run
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Benchmark GestaltDB against Neo4j, Memgraph, and ArcadeDB")
-    parser.add_argument("--engines", nargs="+", choices=["gestaltdb", "neo4j", "memgraph", "arcadedb"], default=["gestaltdb", "neo4j", "memgraph", "arcadedb"])
+    parser.add_argument(
+        "--engines",
+        nargs="+",
+        choices=["gestaltdb", "gestaltdb-tx", "neo4j", "memgraph", "arcadedb"],
+        default=["gestaltdb", "gestaltdb-tx", "neo4j", "memgraph", "arcadedb"],
+    )
     parser.add_argument("--workloads", nargs="+", choices=["ingest", "neighbors", "sample_neighbors", "bfs_depth", "typed_path"], default=["ingest", "neighbors", "sample_neighbors", "bfs_depth", "typed_path"])
     parser.add_argument("--nodes", type=int, default=10_000)
     parser.add_argument("--edges", type=int, default=50_000)
@@ -789,6 +796,7 @@ def main() -> None:
     rows = []
     runners = {
         "gestaltdb": lambda workload, args: run_gestaltdb(workload, args),
+        "gestaltdb-tx": lambda workload, args: run_gestaltdb(workload, args, transactional=True),
         "neo4j": lambda workload, args: run_with_container("neo4j", workload, args, run_bolt_engine),
         "memgraph": lambda workload, args: run_with_container("memgraph", workload, args, run_bolt_engine),
         "arcadedb": lambda workload, args: run_arcadedb(workload, args),

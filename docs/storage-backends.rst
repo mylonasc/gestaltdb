@@ -9,13 +9,21 @@ Backend Selection Summary
 
 The current backend trade-offs are:
 
-==================== ============================ ============================================
-Backend              Best fit                     Main trade-offs
-==================== ============================ ============================================
-``LMDBStore``        Mature embedded storage      Requires choosing a sufficient ``map_size``
-``LevelDBStore``     Simple local graphs          No native Arrow/Polars columnar fast path
-``PyRexStore``       Large writes and ingestion   Optional dependency and RocksDB tuning knobs
-==================== ============================ ============================================
+.. list-table::
+   :header-rows: 1
+
+   * - Backend
+     - Best fit
+     - Main trade-offs
+   * - ``LMDBStore``
+     - Mature embedded storage
+     - Requires choosing a sufficient ``map_size``
+   * - ``LevelDBStore``
+     - Simple local graphs
+     - No native Arrow/Polars columnar fast path
+   * - ``PyRexStore``
+     - Large writes and ingestion
+     - Optional dependency, RocksDB tuning knobs, opt-in transactions
 
 Recommendations for the library as-is:
 
@@ -103,7 +111,7 @@ several RocksDB tuning knobs.
 ``disable_wal=True`` can be useful for bulk-loading experiments, but it weakens
 durability and should not be used as a safe default.
 
-When installed with ``pyrex-rocksdb>=0.3.0a0``, ``PyRexStore`` can use PyRex's
+When installed with ``pyrex-rocksdb>=0.4.1``, ``PyRexStore`` can use PyRex's
 native ``write_columnar_batch`` API through ``GraphDB.ingest_nodes_arrow`` and
 ``GraphDB.ingest_edges_arrow``. Serialized ``node_value`` and ``edge_value``
 columns backed by Arrow binary arrays are passed directly to PyRex's native
@@ -210,6 +218,57 @@ Backend Index Interface
 Backend implementations expose lower-level sorted index methods such as
 ``put_index_entry``, ``delete_index_entry``, ``iter_index_prefix``, and range
 index equivalents. Most users should prefer the ``GraphDB`` helpers above.
+
+Transactions
+------------
+
+GestaltDB exposes optional graph-level transactions for backends that can commit
+all graph records and indexes atomically:
+
+.. code-block:: python
+
+   with graph_db.transaction() as tx:
+       tx.put_node(Node(node_id="n1"))
+       tx.put_edge(Edge(edge_id="e1", source="n1", target="n2", properties={"type": "rel"}))
+
+The context commits on clean exit and rolls back if an exception leaves the
+block. ``LMDBStore`` supports transactions directly because LMDB transactions
+span all named sub-databases in the environment.
+
+``PyRexStore`` supports transactions when opened in transaction-capable mode with
+``pyrex-rocksdb>=0.4.1``:
+
+.. code-block:: python
+
+   store = PyRexStore(path="graph_rocksdb", transactional=True)
+   graph_db = GraphDB(store, PickleSerializer())
+
+The default ``PyRexStore`` mode remains the fastest non-transactional path and
+keeps native columnar ingestion available. Transactional PyRex writes still use
+RocksDB ``PyWriteBatch`` internally for bulk methods, but the current PyRex
+``TransactionDB`` API does not expose the native columnar writer.
+
+A focused local benchmark on this branch used 100,000 nodes, 500,000 edges,
+Pickle payloads, chunk size 10,000, four RocksDB background threads, a 64 MiB
+write buffer, and Bloom filters. The transaction-capable RocksDB backend was
+opened with ``PyRexStore(transactional=True)`` and used the same public ingestion
+API, not one giant user transaction.
+
+=========================================== ========== ========== =================
+RocksDB backend                             Node write Edge write Native columnar
+=========================================== ========== ========== =================
+default, Arrow payloads                     0.457 s    1.886 s    yes
+transaction-capable, Arrow payloads         0.540 s    3.623 s    no
+default, Polars payloads                    0.429 s    1.828 s    yes
+transaction-capable, Polars payloads        0.545 s    3.670 s    no
+=========================================== ========== ========== =================
+
+Use transaction-capable RocksDB when graph-level atomicity is required. Keep the
+default RocksDB backend for append-only bulk loads where native columnar
+ingestion is the priority.
+
+The current ``LevelDBStore`` layout uses multiple physical LevelDB databases, so
+graph-level transactions are intentionally unsupported there.
 
 Backend Selection Pattern
 -------------------------
