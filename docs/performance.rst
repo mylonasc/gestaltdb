@@ -413,7 +413,7 @@ Local results from 2026-08-16 used 100,000 nodes, 500,000 edges, batch size
 ``arcadedb-embedded==26.8.1``. ``gestaltdb-tx`` means
 ``PyRexStore(transactional=True)``.
 
-.. list-table:: Older ArcadeDB-suite results
+.. list-table:: Older ArcadeDB-suite results, excluding corrected star traversal
    :header-rows: 1
 
    * - Workload
@@ -426,11 +426,6 @@ Local results from 2026-08-16 used 100,000 nodes, 500,000 edges, batch size
      - 6.257 s
      - 5.407 s
      - GestaltDB/RocksDB
-   * - star_traversal
-     - 51.907 s
-     - 57.456 s
-     - 4.403 s
-     - ArcadeDB
    * - bfs_depth
      - 6.844 s
      - 9.604 s
@@ -447,11 +442,43 @@ Local results from 2026-08-16 used 100,000 nodes, 500,000 edges, batch size
      - not applicable
      - GestaltDB/RocksDB
 
+The original star-traversal row from this campaign is intentionally omitted from
+the table above. It compared non-equivalent work: GestaltDB materialized all
+500,000 outgoing ``RelA`` neighbors from the hub node, while the ArcadeDB query
+used ``out('RelA').size()`` and measured an optimized degree/count operation.
+The benchmark now uses ``SELECT expand(out('RelA'))`` for ArcadeDB so both engines
+materialize the outgoing neighbors.
+
+A corrected focused run of the star workload on the same 100,000-node and
+500,000-edge graph used 10 query iterations. The result count was 5,000,000 for
+all engines:
+
+.. list-table:: Corrected star traversal materialization
+   :header-rows: 1
+
+   * - Engine
+     - Ingest seconds
+     - Query seconds
+     - Total seconds
+   * - GestaltDB/RocksDB
+     - 5.957 s
+     - 3.787 s
+     - 9.744 s
+   * - GestaltDB/RocksDB transactional
+     - 8.599 s
+     - 4.017 s
+     - 12.616 s
+   * - ArcadeDB
+     - 3.777 s
+     - 38.549 s
+     - 42.326 s
+
 Interpret these results by workload. RocksDB/GestaltDB remains strongest on
-append-only columnar ingestion and compaction-sensitive raw writes. ArcadeDB is
-stronger in this older suite's traversal shapes, especially ``star_traversal``:
-that workload repeatedly materializes all 500,000 outgoing edges from one hub
-node, which is not representative of sparse point traversals.
+append-only columnar ingestion, compaction-sensitive raw writes, and materialized
+hub-neighbor scans. ArcadeDB remains competitive on other traversal shapes in this
+older suite. The star graph is pathological for most graph applications: it
+repeatedly materializes all 500,000 outgoing edges from one hub node, so use it as
+a stress test rather than as a general traversal proxy.
 
 External Graph Database Benchmarks
 ----------------------------------
