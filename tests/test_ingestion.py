@@ -388,6 +388,75 @@ def test_high_level_polars_ingestion_defaults_to_defer_rebuild(tmp_path):
         graph_db.close()
 
 
+def test_high_level_polars_ingestion_accepts_lazyframes(tmp_path):
+    pytest.importorskip("plyvel")
+    pl = pytest.importorskip("polars")
+    graph_db = GraphDB(LevelDBStore(path=str(tmp_path / "leveldb")), JSONSerializer())
+    try:
+        graph_db.create_node_property_index("kind")
+        graph_db.create_edge_property_index("score")
+        node_df = pl.DataFrame(
+            {
+                "node_id": ["n1", "n2", "n3"],
+                "labels": [["Entity"], ["Entity"], ["Entity"]],
+                "kind": ["drug", "protein", "disease"],
+            }
+        ).lazy()
+        edge_df = pl.DataFrame(
+            {
+                "edge_id": ["e1", "e2"],
+                "source": ["n1", "n2"],
+                "target": ["n2", "n3"],
+                "edge_type": ["binds", "associated_with"],
+                "score": [1, 2],
+            }
+        ).lazy()
+
+        result = graph_db.ingest_polars(node_df, edge_df, chunk_size=1)
+
+        assert result["nodes"] == 3
+        assert result["edges"] == 2
+        assert result["stale_indexes"] == ()
+        assert [node.get_id for node in graph_db.nodes_by_property("kind", "drug")] == ["n1"]
+        assert [edge.get_id for edge in graph_db.edges_by_property("score", 2)] == ["e2"]
+        assert graph_db.neighbors_by_edge_type("n1", "binds") == [b"n2"]
+    finally:
+        graph_db.close()
+
+
+def test_polars_serialized_payload_ingestion_accepts_lazyframes(tmp_path):
+    pytest.importorskip("plyvel")
+    pl = pytest.importorskip("polars")
+    graph_db = GraphDB(LevelDBStore(path=str(tmp_path / "leveldb")), PickleSerializer())
+    try:
+        node = Node(node_id="n1", labels=["Entity"], properties={"kind": "drug"})
+        edge = Edge(edge_id="e1", source="n1", target="n2", properties={"type": "rel", "score": 1})
+        node_df = pl.DataFrame(
+            {
+                "node_id": [node.get_id],
+                "node_value": [graph_db.serialize_node_value(node)],
+            }
+        ).lazy()
+        edge_df = pl.DataFrame(
+            {
+                "edge_id": [edge.get_id],
+                "source": [edge.source],
+                "target": [edge.target],
+                "edge_type": [edge.get_type],
+                "edge_value": [graph_db.serialize_edge_value(edge)],
+            }
+        ).lazy()
+
+        assert graph_db.ingest_nodes_polars(node_df, chunk_size=1) == 1
+        assert graph_db.ingest_edges_polars(edge_df, chunk_size=1) == 1
+
+        assert graph_db.get_node(b"n1").properties == {"kind": "drug"}
+        assert graph_db.get_edge(b"e1").properties == {"type": "rel", "score": 1}
+        assert graph_db.neighbors_by_edge_type("n1", "rel") == [b"n2"]
+    finally:
+        graph_db.close()
+
+
 def test_high_level_arrow_ingestion_supports_defer_without_rebuild(tmp_path):
     pytest.importorskip("plyvel")
     pa = pytest.importorskip("pyarrow")
