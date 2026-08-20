@@ -384,7 +384,9 @@ Ingestion paths differ by engine:
 - Neo4j and Memgraph use batched Cypher over Bolt.
 - ArcadeDB uses the embedded ``GraphBatch`` API.
 - Apache AGE uses its CSV bulk loader for ingestion and ``cypher()`` through
-  PostgreSQL for queries.
+  PostgreSQL for queries. AGE benchmark ingestion includes building a GIN
+  property index on ``Node.properties`` so seeded ``node_id`` lookups use AGE's
+  PostgreSQL-backed indexing path.
 
 Traversal workloads use each engine's query interface. GestaltDB uses
 ``GraphDB.query()`` for neighbor expansion, star traversal, typed paths, and the
@@ -409,7 +411,16 @@ Representative full comparison:
       --batch-size 10000 \
       --iterations 10 \
       --repetitions 3 \
+      --age-require-index \
       --output-dir benchmark_results/external_graphdbs_100k
+
+Generate the documentation plots from one or more summary files:
+
+.. code-block:: sh
+
+   python scripts/plot_external_graphdbs.py \
+      benchmark_results/external_graphdbs_100k/external_graphdbs_summary.jsonl \
+      --output-dir docs/_static
 
 100k Node Results
 ~~~~~~~~~~~~~~~~~
@@ -417,6 +428,12 @@ Representative full comparison:
 These results use 100,000 nodes, 500,000 edges, batch size 10,000, 10 traversal
 seeds, sample size 5, depth 3, and three repetitions. All rows validated exactly
 100,000 nodes and 500,000 edges. Tables report mean ± standard deviation.
+
+.. image:: _static/external_graphdb_ingest_100k.svg
+   :alt: Ingestion time comparison across external graph database engines.
+
+.. image:: _static/external_graphdb_queries_100k.svg
+   :alt: Query time heatmap across external graph database engines and workloads.
 
 Ingestion phase from the ``columnar_ingest`` workload:
 
@@ -436,9 +453,9 @@ Ingestion phase from the ``columnar_ingest`` workload:
      - 160,494 edges/s
      - 1.69x slower
    * - Apache AGE
-     - 1.868 ± 0.009 s
-     - 267,651 edges/s
-     - 1.01x slower
+     - 2.794 ± 0.040 s
+     - 179,005 edges/s
+     - 1.51x slower
    * - ArcadeDB embedded
      - 6.060 ± 0.403 s
      - 82,745 edges/s
@@ -469,7 +486,7 @@ Query phase on the already-loaded graph:
      - 17
      - 0.000901 ± 0.000334 s
      - 0.000743 ± 0.000011 s
-     - 0.181 ± 0.00180 s
+     - 0.00333 ± 0.000471 s
      - 0.0107 ± 0.0106 s
      - 0.00494 ± 0.00122 s
      - 0.0773 ± 0.00306 s
@@ -477,7 +494,7 @@ Query phase on the already-loaded graph:
      - 17
      - 0.000753 ± 0.000052 s
      - 0.000764 ± 0.000008 s
-     - 0.181 ± 0.00412 s
+     - 0.00324 ± 0.000758 s
      - 0.0143 ± 0.00717 s
      - 0.00554 ± 0.000167 s
      - 0.0702 ± 0.00218 s
@@ -485,7 +502,7 @@ Query phase on the already-loaded graph:
      - 5,000,000
      - 16.172 ± 0.215 s
      - 16.738 ± 1.020 s
-     - 3.800 ± 0.043 s
+     - 3.762 ± 0.058 s
      - 57.905 ± 0.828 s
      - 37.946 ± 0.231 s
      - 44.500 ± 0.444 s
@@ -493,7 +510,7 @@ Query phase on the already-loaded graph:
      - 3
      - 0.000575 ± 0.000009 s
      - 0.000599 ± 0.000005 s
-     - 0.164 ± 0.00720 s
+     - 0.00271 ± 0.000419 s
      - 0.00848 ± 0.00359 s
      - 0.00528 ± 0.000744 s
      - 0.117 ± 0.00726 s
@@ -501,7 +518,7 @@ Query phase on the already-loaded graph:
      - 125
      - 0.00107 ± 0.000010 s
      - 0.00120 ± 0.000040 s
-     - 0.168 ± 0.00215 s
+     - 0.00964 ± 0.00160 s
      - 0.00816 ± 0.000979 s
      - 0.00722 ± 0.00141 s
      - 0.107 ± 0.00122 s
@@ -509,22 +526,23 @@ Query phase on the already-loaded graph:
      - 105
      - 0.00221 ± 0.000073 s
      - 0.00245 ± 0.000016 s
-     - 943.221 ± 2.164 s
+     - 0.425 ± 0.00626 s
      - 0.00859 ± 0.00120 s
      - 0.00762 ± 0.00206 s
      - 0.139 ± 0.00373 s
 
 Notes:
 
-- GestaltDB and Apache AGE are similar on bulk ingestion in this setup. GestaltDB
-  writes directly to RocksDB; AGE uses PostgreSQL-visible CSV files and AGE's bulk
-  load functions.
+- GestaltDB remains fastest on ingestion in this setup. AGE uses PostgreSQL-visible
+  CSV files, AGE's bulk load functions, and a post-load GIN property index on
+  ``Node.properties``; the AGE ingest time includes that index build.
 - GestaltDB's traversal timings are dominated by embedded typed-adjacency prefix
   scans. Server engines pay query execution and client/server costs for the small
   seeded traversals.
 - Apache AGE is fast on the star traversal because the query streams one large hub
-  expansion efficiently. Its four-hop typed traversal is much slower on this graph
-  shape and query form.
+  expansion efficiently. The seeded AGE workloads require the ``Node.properties``
+  GIN index; without it, ``node_id`` predicates can devolve into label scans and
+  produce invalidly pessimistic timings.
 - ``reopen_seconds`` and count validation are recorded separately in summary files
   and are not included in query timings.
 

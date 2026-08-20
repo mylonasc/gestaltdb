@@ -71,6 +71,8 @@ CSV_FIELDS = [
     "container_image",
     "container_name",
     "uri",
+    "age_property_index",
+    "age_node_index_used",
     "python",
     "platform",
 ]
@@ -110,6 +112,8 @@ SUMMARY_FIELDS = [
     "actual_edges_std",
     "db_bytes_mean",
     "db_bytes_std",
+    "age_property_index",
+    "age_node_index_used",
     "skip_reason",
 ]
 
@@ -303,7 +307,7 @@ def wait_for_bolt(uri: str, auth: tuple[str, str] | None, timeout_seconds: int) 
 
 
 def base_row(engine: str, workload: str, args: argparse.Namespace) -> dict[str, object]:
-    return {
+    row = {
         "status": "ok",
         "skip_reason": "",
         "engine": engine,
@@ -320,6 +324,9 @@ def base_row(engine: str, workload: str, args: argparse.Namespace) -> dict[str, 
         "python": sys.version.split()[0],
         "platform": platform.platform(),
     }
+    if engine in {"age", "apache-age"}:
+        row["age_property_index"] = args.age_property_index
+    return row
 
 
 def add_rates(row: dict[str, object]) -> None:
@@ -853,6 +860,10 @@ def age_graph_name(args: argparse.Namespace) -> str:
     return graph
 
 
+def sql_identifier(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
 def age_string(value: str) -> str:
     return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
@@ -909,6 +920,10 @@ def run_age(workload: str, args: argparse.Namespace) -> dict[str, object]:
         _, row["ingest_seconds"] = seconds(lambda: ingest_age(conn, workload, args))
         (row["actual_nodes"], row["actual_edges"]), row["count_seconds"] = seconds(lambda: count_age(conn, args))
         row["count_status"] = count_status(row, args)
+        index_used = age_node_index_used(conn, args) if args.age_property_index != "none" else False
+        row["age_node_index_used"] = index_used
+        if args.age_require_index and not index_used:
+            raise RuntimeError("Apache AGE did not use the Node.properties GIN index for node_id lookup")
         result_count, row["query_seconds"] = seconds(lambda: run_age_workload(conn, workload, args))
         row["result_count"] = result_count
     except Exception as exc:
@@ -973,6 +988,29 @@ def ingest_age(conn, workload: str, args: argparse.Namespace) -> None:
             handle.close()
     for edge_type in EDGE_TYPES:
         conn.execute(f"SELECT * FROM ag_catalog.load_edges_from_file('{graph}', '{edge_type}', '{container_dir}/{edge_type}.csv')")
+    create_age_indexes(conn, args)
+
+
+def create_age_indexes(conn, args: argparse.Namespace) -> None:
+    if args.age_property_index == "none":
+        return
+    graph = age_graph_name(args)
+    schema = sql_identifier(graph)
+    conn.execute(f'CREATE INDEX {sql_identifier("node_properties_gin_idx")} ON {schema}.{sql_identifier("Node")} USING gin (properties)')
+    conn.execute(f'ANALYZE {schema}.{sql_identifier("Node")}')
+    for edge_type in EDGE_TYPES:
+        conn.execute(f'ANALYZE {schema}.{sql_identifier(edge_type)}')
+
+
+def age_explain_plan(conn, args: argparse.Namespace, query: str) -> str:
+    graph = age_graph_name(args)
+    rows = age_execute(conn, graph, f"EXPLAIN (costs off) {query}", "plan agtype")
+    return "\n".join(age_text(row[0]) for row in rows)
+
+
+def age_node_index_used(conn, args: argparse.Namespace) -> bool:
+    plan = age_explain_plan(conn, args, "MATCH (:Node {node_id: 'n0'}) RETURN count(*)")
+    return "node_properties_gin_idx" in plan
 
 
 def run_age_workload(conn, workload: str, args: argparse.Namespace) -> int:
@@ -1100,6 +1138,8 @@ def write_summary(output_dir: Path, rows: list[dict[str, object]]) -> None:
                 "graph_shape": first.get("graph_shape", ""),
                 "sample_size": first.get("sample_size", ""),
                 "depth": first.get("depth", ""),
+                "age_property_index": first.get("age_property_index", ""),
+                "age_node_index_used": first.get("age_node_index_used", ""),
                 "skip_reason": "" if ok_rows else first.get("skip_reason", ""),
             }
             for key in ("ingest_seconds", "query_seconds", "reopen_seconds", "count_seconds", "total_seconds", "nodes_per_second", "edges_per_second", "queries_per_second", "result_count", "actual_nodes", "actual_edges", "db_bytes"):
@@ -1173,6 +1213,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--age-password", default="gestaltdb-bench-password")
     parser.add_argument("--age-graph", default="gestaltdb_bench")
     parser.add_argument("--age-batch-size", type=int, default=500)
+    parser.add_argument("--age-property-index", choices=["gin", "none"], default="gin", help="Apache AGE property index to build after CSV bulk loading")
+    parser.add_argument("--age-require-index", action="store_true", help="Fail AGE runs if EXPLAIN does not show the node_id property index")
     parser.add_argument("--rocksdb-parallelism", type=int, default=4)
     parser.add_argument("--rocksdb-background-jobs", type=int, default=4)
     parser.add_argument("--rocksdb-write-buffer-size", type=int, default=64 * 1024 * 1024)
