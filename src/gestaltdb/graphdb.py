@@ -1894,20 +1894,30 @@ class GraphDB:
         The ``node_value`` column is required and must contain serialized node
         payload bytes compatible with the current ``GraphDB`` serializer.
         """
+        try:
+            import polars as pl
+        except ImportError as exc:
+            from .ingestion import _missing_dependency_error
+
+            raise _missing_dependency_error("polars", feature_name="GraphDB.ingest_nodes_polars") from exc
         self._validate_index_mode(index_mode)
         index_mode = index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode
-        node_list = NodeList.from_polars(df, node_id=node_id, node_value=node_value)
-        for chunk in node_list.chunks(chunk_size):
-            if index_mode == "maintain" and not append_only:
-                self._delete_existing_node_indexes_for_columnar_chunk(chunk)
-            self.store.ingest_nodes_columnar(chunk, native=native)
-            if index_mode == "maintain":
-                self._put_node_indexes_for_columnar_chunk(chunk)
+        self._validate_polars_frame(pl, df, "GraphDB.ingest_nodes_polars")
+        total = 0
+        for df_chunk in self._iter_polars_chunks(pl, df, chunk_size):
+            node_list = NodeList.from_polars(df_chunk, node_id=node_id, node_value=node_value)
+            for chunk in node_list.chunks(chunk_size):
+                if index_mode == "maintain" and not append_only:
+                    self._delete_existing_node_indexes_for_columnar_chunk(chunk)
+                self.store.ingest_nodes_columnar(chunk, native=native)
+                if index_mode == "maintain":
+                    self._put_node_indexes_for_columnar_chunk(chunk)
+            total += len(node_list.node_ids)
         if index_mode == "defer":
             self._mark_indexes_stale("node_label")
             if self.indexed_node_properties:
                 self._mark_indexes_stale("node_property")
-        return len(node_list.node_ids)
+        return total
 
     def ingest_nodes_polars_entities(
         self,
@@ -1932,58 +1942,61 @@ class GraphDB:
             from .ingestion import _missing_dependency_error
 
             raise _missing_dependency_error("polars", feature_name="GraphDB.ingest_nodes_polars_entities") from exc
-        if not isinstance(df, pl.DataFrame):
-            raise TypeError("df must be a polars.DataFrame")
-        if node_id not in df.columns:
+        self._validate_polars_frame(pl, df, "GraphDB.ingest_nodes_polars_entities")
+        columns = self._polars_columns(pl, df)
+        if node_id not in columns:
             raise ValueError(f"missing required columns: {node_id}")
 
         if property_columns is None:
             excluded = {node_id}
             if isinstance(labels, str):
                 excluded.add(labels)
-            property_columns = [column for column in df.columns if column not in excluded]
-        missing = [column for column in property_columns if column not in df.columns]
+            property_columns = [column for column in columns if column not in excluded]
+        missing = [column for column in property_columns if column not in columns]
         if missing:
             raise ValueError(f"missing property columns: {', '.join(missing)}")
 
-        if isinstance(self.serializer, JSONSerializer):
-            label_expr = self._polars_labels_expr(pl, df, labels)
-            value_expr = pl.struct(
-                [
-                    pl.col(node_id).alias("id"),
-                    self._polars_properties_expr(pl, property_columns).alias("properties"),
-                    label_expr.alias("labels"),
-                ]
-            ).struct.json_encode()
-            payloads = df.select(value_expr.alias("node_value"))["node_value"].to_arrow().cast("binary")
-        else:
-            payloads = []
-            selected = [node_id, *property_columns]
-            label_column = labels if isinstance(labels, str) and labels in df.columns else None
-            if label_column is not None:
-                selected.append(label_column)
-            for row in df.select(selected).rows(named=True):
-                node_labels = row[label_column] if label_column is not None else ([] if labels is None or isinstance(labels, str) else labels)
-                if isinstance(node_labels, str):
-                    node_labels = [node_labels]
-                payloads.append(
-                    self.serialize_node_value(
-                        Node(
-                            node_id=row[node_id],
-                            labels=node_labels,
-                            properties={column: row[column] for column in property_columns},
+        total = 0
+        for df_chunk in self._iter_polars_chunks(pl, df, chunk_size):
+            if isinstance(self.serializer, JSONSerializer):
+                label_expr = self._polars_labels_expr(pl, df_chunk, labels)
+                value_expr = pl.struct(
+                    [
+                        pl.col(node_id).alias("id"),
+                        self._polars_properties_expr(pl, property_columns).alias("properties"),
+                        label_expr.alias("labels"),
+                    ]
+                ).struct.json_encode()
+                payloads = df_chunk.select(value_expr.alias("node_value"))["node_value"].to_arrow().cast("binary")
+            else:
+                payloads = []
+                selected = [node_id, *property_columns]
+                label_column = labels if isinstance(labels, str) and labels in df_chunk.columns else None
+                if label_column is not None:
+                    selected.append(label_column)
+                for row in df_chunk.select(selected).rows(named=True):
+                    node_labels = row[label_column] if label_column is not None else ([] if labels is None or isinstance(labels, str) else labels)
+                    if isinstance(node_labels, str):
+                        node_labels = [node_labels]
+                    payloads.append(
+                        self.serialize_node_value(
+                            Node(
+                                node_id=row[node_id],
+                                labels=node_labels,
+                                properties={column: row[column] for column in property_columns},
+                            )
                         )
                     )
-                )
 
-        return self.ingest_nodes_arrow(
-            df[node_id].to_arrow(),
-            payloads,
-            native=native,
-            chunk_size=chunk_size,
-            append_only=append_only,
-            index_mode=index_mode,
-        )
+            total += self.ingest_nodes_arrow(
+                df_chunk[node_id].to_arrow(),
+                payloads,
+                native=native,
+                chunk_size=chunk_size,
+                append_only=append_only,
+                index_mode=index_mode,
+            )
+        return total
 
     def ingest_nodes_arrow_entities(
         self,
@@ -2061,6 +2074,36 @@ class GraphDB:
         if not property_columns:
             return pl.lit({})
         return pl.struct(list(property_columns))
+
+    def _validate_polars_frame(self, pl, df, feature_name: str) -> None:
+        """Validate that input is a Polars eager or lazy frame."""
+        if not isinstance(df, (pl.DataFrame, pl.LazyFrame)):
+            raise TypeError(f"df must be a polars.DataFrame or polars.LazyFrame for {feature_name}")
+
+    def _polars_columns(self, pl, df) -> list[str]:
+        """Return column names without collecting LazyFrame data."""
+        if isinstance(df, pl.LazyFrame):
+            return df.collect_schema().names()
+        return df.columns
+
+    def _iter_polars_chunks(self, pl, df, chunk_size: int):
+        """Yield eager DataFrame chunks from eager or lazy Polars input."""
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be positive")
+        if isinstance(df, pl.DataFrame):
+            for start in range(0, df.height, chunk_size):
+                yield df.slice(start, chunk_size)
+            return
+
+        offset = 0
+        while True:
+            chunk = df.slice(offset, chunk_size).collect()
+            if chunk.height == 0:
+                break
+            yield chunk
+            if chunk.height < chunk_size:
+                break
+            offset += chunk_size
 
     def _delete_existing_node_indexes_for_columnar_chunk(self, chunk: NodeList) -> None:
         """Remove stale indexes before opaque columnar node upserts."""
@@ -2464,29 +2507,40 @@ class GraphDB:
         """
         if not append_only:
             raise NotImplementedError("columnar edge ingestion currently requires append_only=True")
+        try:
+            import polars as pl
+        except ImportError as exc:
+            from .ingestion import _missing_dependency_error
+
+            raise _missing_dependency_error("polars", feature_name="GraphDB.ingest_edges_polars") from exc
         self._validate_index_mode(index_mode)
-        edge_list = EdgeList.from_polars(
-            df,
-            edge_id=edge_id,
-            source=source,
-            target=target,
-            edge_type=edge_type,
-            edge_value=edge_value,
-        )
-        for chunk in edge_list.chunks(chunk_size):
-            self.store.ingest_edges_columnar(
-                chunk,
-                append_only=append_only,
-                native=native,
-                maintain_indexes=index_mode == "maintain",
+        index_mode = index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode
+        self._validate_polars_frame(pl, df, "GraphDB.ingest_edges_polars")
+        total = 0
+        for df_chunk in self._iter_polars_chunks(pl, df, chunk_size):
+            edge_list = EdgeList.from_polars(
+                df_chunk,
+                edge_id=edge_id,
+                source=source,
+                target=target,
+                edge_type=edge_type,
+                edge_value=edge_value,
             )
-            if index_mode == "maintain":
-                self._put_edge_property_indexes_for_columnar_chunk(chunk)
+            for chunk in edge_list.chunks(chunk_size):
+                self.store.ingest_edges_columnar(
+                    chunk,
+                    append_only=append_only,
+                    native=native,
+                    maintain_indexes=index_mode == "maintain",
+                )
+                if index_mode == "maintain":
+                    self._put_edge_property_indexes_for_columnar_chunk(chunk)
+            total += len(edge_list.edge_ids)
         if index_mode == "defer":
             self._mark_indexes_stale("edge_type")
             if self.indexed_edge_properties:
                 self._mark_indexes_stale("edge_property")
-        return len(edge_list.edge_ids)
+        return total
 
     def ingest_edges_polars_entities(
         self,
@@ -2513,59 +2567,62 @@ class GraphDB:
             from .ingestion import _missing_dependency_error
 
             raise _missing_dependency_error("polars", feature_name="GraphDB.ingest_edges_polars_entities") from exc
-        if not isinstance(df, pl.DataFrame):
-            raise TypeError("df must be a polars.DataFrame")
+        self._validate_polars_frame(pl, df, "GraphDB.ingest_edges_polars_entities")
+        columns = self._polars_columns(pl, df)
         required = [edge_id, source, target, edge_type]
-        missing = [column for column in required if column not in df.columns]
+        missing = [column for column in required if column not in columns]
         if missing:
             raise ValueError(f"missing required columns: {', '.join(missing)}")
         if property_columns is None:
             excluded = set(required)
-            property_columns = [column for column in df.columns if column not in excluded]
-        missing = [column for column in property_columns if column not in df.columns]
+            property_columns = [column for column in columns if column not in excluded]
+        missing = [column for column in property_columns if column not in columns]
         if missing:
             raise ValueError(f"missing property columns: {', '.join(missing)}")
 
-        if isinstance(self.serializer, JSONSerializer):
-            property_exprs = [pl.col(edge_type).alias("type")]
-            property_exprs.extend(pl.col(column) for column in property_columns if column != "type")
-            value_expr = pl.struct(
-                [
-                    pl.col(edge_id).alias("id"),
-                    pl.col(source).alias("source"),
-                    pl.col(target).alias("target"),
-                    pl.struct(property_exprs).alias("properties"),
-                ]
-            ).struct.json_encode()
-            payloads = df.select(value_expr.alias("edge_value"))["edge_value"].to_arrow().cast("binary")
-        else:
-            payloads = []
-            selected = [edge_id, source, target, edge_type, *property_columns]
-            for row in df.select(selected).rows(named=True):
-                properties = {column: row[column] for column in property_columns if column != "type"}
-                properties["type"] = row[edge_type]
-                payloads.append(
-                    self.serialize_edge_value(
-                        Edge(
-                            edge_id=row[edge_id],
-                            source=row[source],
-                            target=row[target],
-                            properties=properties,
+        total = 0
+        for df_chunk in self._iter_polars_chunks(pl, df, chunk_size):
+            if isinstance(self.serializer, JSONSerializer):
+                property_exprs = [pl.col(edge_type).alias("type")]
+                property_exprs.extend(pl.col(column) for column in property_columns if column != "type")
+                value_expr = pl.struct(
+                    [
+                        pl.col(edge_id).alias("id"),
+                        pl.col(source).alias("source"),
+                        pl.col(target).alias("target"),
+                        pl.struct(property_exprs).alias("properties"),
+                    ]
+                ).struct.json_encode()
+                payloads = df_chunk.select(value_expr.alias("edge_value"))["edge_value"].to_arrow().cast("binary")
+            else:
+                payloads = []
+                selected = [edge_id, source, target, edge_type, *property_columns]
+                for row in df_chunk.select(selected).rows(named=True):
+                    properties = {column: row[column] for column in property_columns if column != "type"}
+                    properties["type"] = row[edge_type]
+                    payloads.append(
+                        self.serialize_edge_value(
+                            Edge(
+                                edge_id=row[edge_id],
+                                source=row[source],
+                                target=row[target],
+                                properties=properties,
+                            )
                         )
                     )
-                )
 
-        return self.ingest_edges_arrow(
-            df[edge_id].to_arrow(),
-            df[source].to_arrow(),
-            df[target].to_arrow(),
-            df[edge_type].to_arrow(),
-            payloads,
-            append_only=append_only,
-            native=native,
-            chunk_size=chunk_size,
-            index_mode=index_mode,
-        )
+            total += self.ingest_edges_arrow(
+                df_chunk[edge_id].to_arrow(),
+                df_chunk[source].to_arrow(),
+                df_chunk[target].to_arrow(),
+                df_chunk[edge_type].to_arrow(),
+                payloads,
+                append_only=append_only,
+                native=native,
+                chunk_size=chunk_size,
+                index_mode=index_mode,
+            )
+        return total
 
     def ingest_edges_arrow_entities(
         self,
