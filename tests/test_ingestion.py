@@ -457,6 +457,42 @@ def test_polars_serialized_payload_ingestion_accepts_lazyframes(tmp_path):
         graph_db.close()
 
 
+def test_polars_ingestion_progress_fallback_reports_rows(tmp_path, monkeypatch, capsys):
+    pytest.importorskip("plyvel")
+    pl = pytest.importorskip("polars")
+    graph_db = GraphDB(LevelDBStore(path=str(tmp_path / "leveldb")), JSONSerializer())
+    real_import = __import__
+
+    def import_without_tqdm(name, *args, **kwargs):
+        if name.startswith("tqdm"):
+            raise ImportError("no tqdm")
+        return real_import(name, *args, **kwargs)
+
+    try:
+        monkeypatch.setattr("builtins.__import__", import_without_tqdm)
+        node_df = pl.DataFrame({"node_id": ["n1", "n2"], "labels": [["Entity"], ["Entity"]], "kind": ["drug", "protein"]})
+        edge_df = pl.DataFrame({"edge_id": ["e1"], "source": ["n1"], "target": ["n2"], "edge_type": ["rel"]})
+
+        result = graph_db.ingest_polars(
+            node_df,
+            edge_df,
+            node_property_columns=["kind"],
+            edge_property_columns=[],
+            index_mode=IndexMaintenanceMode.DEFER,
+            chunk_size=1,
+            progress=True,
+        )
+
+        captured = capsys.readouterr()
+        assert result["nodes"] == 2
+        assert result["edges"] == 1
+        assert "ingest nodes" in captured.err
+        assert "ingest edges" in captured.err
+        assert "rows/s" in captured.err
+    finally:
+        graph_db.close()
+
+
 def test_high_level_arrow_ingestion_supports_defer_without_rebuild(tmp_path):
     pytest.importorskip("plyvel")
     pa = pytest.importorskip("pyarrow")
