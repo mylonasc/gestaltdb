@@ -71,6 +71,8 @@ CSV_FIELDS = [
     "container_image",
     "container_name",
     "uri",
+    "cypher_query_mode",
+    "cypher_node_index_used",
     "age_property_index",
     "age_node_index_used",
     "python",
@@ -112,6 +114,8 @@ SUMMARY_FIELDS = [
     "actual_edges_std",
     "db_bytes_mean",
     "db_bytes_std",
+    "cypher_query_mode",
+    "cypher_node_index_used",
     "age_property_index",
     "age_node_index_used",
     "skip_reason",
@@ -326,6 +330,8 @@ def base_row(engine: str, workload: str, args: argparse.Namespace) -> dict[str, 
     }
     if engine in {"age", "apache-age"}:
         row["age_property_index"] = args.age_property_index
+    if engine in {"neo4j", "memgraph"}:
+        row["cypher_query_mode"] = args.cypher_query_mode
     return row
 
 
@@ -543,11 +549,17 @@ def run_bolt_engine(engine: str, workload: str, args: argparse.Namespace) -> dic
     try:
         wait_for_bolt(uri, auth, args.container_wait_timeout)
         driver = cypher_driver(uri, auth)
-        with driver.session() as session:
+        database = args.neo4j_database if engine == "neo4j" else args.memgraph_database
+        session_kwargs = {"database": database} if database else {}
+        with driver.session(**session_kwargs) as session:
             setup_cypher_graph(session, engine)
             _, row["ingest_seconds"] = seconds(lambda: ingest_cypher(session, workload, args))
             (row["actual_nodes"], row["actual_edges"]), row["count_seconds"] = seconds(lambda: count_cypher(session))
             row["count_status"] = count_status(row, args)
+            index_used = cypher_node_index_used(session, engine)
+            row["cypher_node_index_used"] = index_used
+            if args.cypher_require_index and not index_used:
+                raise RuntimeError(f"{engine} did not use the Node.id index for seeded lookup")
             result_count, row["query_seconds"] = seconds(lambda: run_cypher_workload(session, workload, args))
             row["result_count"] = result_count
         driver.close()
@@ -561,6 +573,7 @@ def setup_cypher_graph(session, engine: str) -> None:
     session.run("MATCH (n) DETACH DELETE n").consume()
     if engine == "neo4j":
         session.run("CREATE INDEX node_id IF NOT EXISTS FOR (n:Node) ON (n.id)").consume()
+        session.run("CALL db.awaitIndexes()").consume()
     else:
         try:
             session.run("CREATE INDEX ON :Node(id)").consume()
@@ -590,6 +603,8 @@ def ingest_cypher(session, workload: str, args: argparse.Namespace) -> None:
 def run_cypher_workload(session, workload: str, args: argparse.Namespace) -> int:
     if workload in {"ingest", "columnar_ingest"}:
         return args.nodes + args.edges
+    if args.cypher_query_mode == "batched":
+        return run_cypher_workload_batched(session, workload, args)
     seeds = seed_ids(args)
     if workload == "neighbors":
         total = 0
@@ -633,6 +648,63 @@ def run_cypher_workload(session, workload: str, args: argparse.Namespace) -> int
     raise ValueError(f"unknown workload: {workload}")
 
 
+def run_cypher_workload_batched(session, workload: str, args: argparse.Namespace) -> int:
+    seeds = seed_ids(args)
+    if workload == "neighbors":
+        record = session.run(
+            "UNWIND $seeds AS seed MATCH (:Node {id: seed})-[:RelA]->(n:Node) RETURN count(n) AS count",
+            seeds=seeds,
+        ).single()
+        return int(record["count"] if record else 0)
+    if workload == "star_traversal":
+        rows = session.run(
+            "UNWIND range(1, $iterations) AS _ MATCH (:Node {id: $seed})-[:RelA]->(n:Node) RETURN n.id AS id",
+            seed="n0",
+            iterations=args.iterations,
+        )
+        return sum(1 for _ in rows)
+    if workload == "sample_neighbors":
+        rng = random.Random(args.seed)
+        rows = session.run(
+            "UNWIND $seeds AS seed MATCH (:Node {id: seed})-[:RelA]->(n:Node) RETURN seed AS seed, n.id AS id",
+            seeds=seeds,
+        )
+        buckets = {seed: [] for seed in seeds}
+        seen = {seed: 0 for seed in seeds}
+        for row in rows:
+            seed = str(row["seed"])
+            seen[seed] += 1
+            sample = buckets[seed]
+            if len(sample) < args.sample_size:
+                sample.append(row["id"])
+                continue
+            replacement_idx = rng.randrange(seen[seed])
+            if replacement_idx < args.sample_size:
+                sample[replacement_idx] = row["id"]
+        return sum(len(sample) for sample in buckets.values())
+    if workload == "typed_path":
+        query = (
+            "UNWIND $seeds AS seed "
+            "CALL { WITH seed MATCH (:Node {id: seed})-[:RelA]->(:Node)-[:RelB]->(n:Node) "
+            "RETURN n.id AS id LIMIT $limit } "
+            "RETURN count(id) AS count"
+        )
+        record = session.run(query, seeds=seeds, limit=args.path_fanout_limit).single()
+        return int(record["count"] if record else 0)
+    if workload == "deep_typed_query":
+        query = (
+            "UNWIND $seeds AS seed "
+            "CALL { WITH seed MATCH (:Node {id: seed})-[:RelA]->(:Node)-[:RelB]->(:Node)-[:RelC]->(:Node)-[:RelA]->(n:Node) "
+            "RETURN n.id AS id LIMIT $limit } "
+            "RETURN count(id) AS count"
+        )
+        record = session.run(query, seeds=seeds, limit=args.path_fanout_limit).single()
+        return int(record["count"] if record else 0)
+    if workload == "bfs_depth":
+        return typed_bfs_cypher_batched(session, "n0", args.depth, args.bfs_limit)
+    raise ValueError(f"unknown workload: {workload}")
+
+
 def deep_typed_query_cypher(session, seeds: list[str], path_fanout_limit: int) -> int:
     total = 0
     query = (
@@ -654,6 +726,14 @@ def cypher_neighbors(session, node_id: str, edge_type: str) -> list[str]:
     ]
 
 
+def cypher_neighbors_batched(session, node_ids: list[str], edge_type: str) -> list[str]:
+    rows = session.run(
+        f"UNWIND $node_ids AS node_id MATCH (:Node {{id: node_id}})-[:{edge_type}]->(n:Node) RETURN n.id AS id",
+        node_ids=node_ids,
+    )
+    return [str(row["id"]) for row in rows]
+
+
 def typed_bfs_cypher(session, start_node: str, depth: int, limit: int) -> int:
     visited = set()
     queue = deque([(start_node, 0)])
@@ -669,6 +749,40 @@ def typed_bfs_cypher(session, start_node: str, depth: int, limit: int) -> int:
                 if neighbor not in visited:
                     queue.append((neighbor, current_depth + 1))
     return min(max(0, len(visited) - 1), limit)
+
+
+def typed_bfs_cypher_batched(session, start_node: str, depth: int, limit: int) -> int:
+    visited = set()
+    frontier = [start_node]
+    current_depth = 0
+    while frontier and len(visited) <= limit:
+        next_frontier = []
+        current_nodes = [node for node in frontier if node not in visited]
+        for node in current_nodes:
+            visited.add(node)
+        if current_depth >= depth or not current_nodes:
+            break
+        for edge_type in EDGE_TYPES:
+            for neighbor in cypher_neighbors_batched(session, current_nodes, edge_type):
+                if neighbor not in visited:
+                    next_frontier.append(neighbor)
+        frontier = next_frontier
+        current_depth += 1
+    return min(max(0, len(visited) - 1), limit)
+
+
+def cypher_node_index_used(session, engine: str) -> bool:
+    try:
+        result = session.run("EXPLAIN MATCH (:Node {id: $seed}) RETURN count(*) AS count", seed="n0")
+        summary = result.consume()
+        plan_text = str(getattr(summary, "plan", ""))
+        if engine == "neo4j":
+            return "NodeIndexSeek" in plan_text or "node_id" in plan_text
+        if "ScanAll" in plan_text or "ScanAllByLabel" in plan_text:
+            return False
+        return "ScanAllByLabelPropertyValue" in plan_text or "index" in plan_text.lower()
+    except Exception:
+        return False
 
 
 def count_cypher(session) -> tuple[int, int]:
@@ -1138,6 +1252,8 @@ def write_summary(output_dir: Path, rows: list[dict[str, object]]) -> None:
                 "graph_shape": first.get("graph_shape", ""),
                 "sample_size": first.get("sample_size", ""),
                 "depth": first.get("depth", ""),
+                "cypher_query_mode": first.get("cypher_query_mode", ""),
+                "cypher_node_index_used": first.get("cypher_node_index_used", ""),
                 "age_property_index": first.get("age_property_index", ""),
                 "age_node_index_used": first.get("age_node_index_used", ""),
                 "skip_reason": "" if ok_rows else first.get("skip_reason", ""),
@@ -1198,11 +1314,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--neo4j-image", default="neo4j:5-community")
     parser.add_argument("--neo4j-uri", default="bolt://localhost:7687")
     parser.add_argument("--neo4j-bolt-port", type=int, default=7687)
+    parser.add_argument("--neo4j-database", default="neo4j")
     parser.add_argument("--neo4j-user", default="neo4j")
     parser.add_argument("--neo4j-password", default="gestaltdb-bench-password")
     parser.add_argument("--memgraph-image", default="memgraph/memgraph:latest")
     parser.add_argument("--memgraph-uri", default="bolt://localhost:7688")
     parser.add_argument("--memgraph-bolt-port", type=int, default=7688)
+    parser.add_argument("--memgraph-database", default="", help="Optional Memgraph database name for the Bolt session")
+    parser.add_argument("--cypher-query-mode", choices=["batched", "per-seed"], default="batched", help="Run Neo4j/Memgraph seeded query workloads as one batched query or one query per seed")
+    parser.add_argument("--cypher-require-index", action="store_true", help="Fail Neo4j/Memgraph runs if EXPLAIN does not show indexed Node.id lookup")
     parser.add_argument("--arcadedb-heap-size", default="2g")
     parser.add_argument("--age-image", default="apache/age:latest")
     parser.add_argument("--age-dsn", default="", help="psycopg connection string for an existing PostgreSQL/AGE service")
