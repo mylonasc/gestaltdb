@@ -493,6 +493,38 @@ def test_polars_ingestion_progress_fallback_reports_rows(tmp_path, monkeypatch, 
         graph_db.close()
 
 
+def test_lazyframe_ingestion_uses_collect_batches(tmp_path, monkeypatch):
+    pytest.importorskip("plyvel")
+    pl = pytest.importorskip("polars")
+    graph_db = GraphDB(LevelDBStore(path=str(tmp_path / "leveldb")), JSONSerializer())
+    calls = {"collect_batches": 0}
+    original_collect_batches = pl.LazyFrame.collect_batches
+
+    def collect_batches_spy(self, *args, **kwargs):
+        calls["collect_batches"] += 1
+        yield from original_collect_batches(self, *args, **kwargs)
+
+    try:
+        monkeypatch.setattr(pl.LazyFrame, "collect_batches", collect_batches_spy)
+        node_df = pl.DataFrame({"node_id": ["n1", "n2"], "labels": [["Entity"], ["Entity"]], "kind": ["drug", "protein"]}).lazy()
+        edge_df = pl.DataFrame({"edge_id": ["e1"], "source": ["n1"], "target": ["n2"], "edge_type": ["rel"]}).lazy()
+
+        result = graph_db.ingest_polars(
+            node_df,
+            edge_df,
+            node_property_columns=["kind"],
+            edge_property_columns=[],
+            index_mode=IndexMaintenanceMode.DEFER,
+            chunk_size=1,
+        )
+
+        assert result["nodes"] == 2
+        assert result["edges"] == 1
+        assert calls["collect_batches"] == 2
+    finally:
+        graph_db.close()
+
+
 def test_high_level_arrow_ingestion_supports_defer_without_rebuild(tmp_path):
     pytest.importorskip("plyvel")
     pa = pytest.importorskip("pyarrow")

@@ -2169,6 +2169,12 @@ class GraphDB:
                 yield df.slice(start, chunk_size)
             return
 
+        if hasattr(df, "collect_batches"):
+            for chunk in df.collect_batches(chunk_size=chunk_size):
+                if chunk.height:
+                    yield chunk
+            return
+
         offset = 0
         while True:
             chunk = df.slice(offset, chunk_size).collect()

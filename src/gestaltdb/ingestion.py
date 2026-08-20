@@ -62,6 +62,24 @@ def _column_to_list(column, name: str):
     return values
 
 
+def _identifier_column_to_bytes_list(column, name: str):
+    """Convert identifier columns to bytes, using Arrow casts when possible."""
+    if hasattr(column, "null_count") and column.null_count:
+        raise ValueError(f"{name} contains null values")
+    if hasattr(column, "to_pylist"):
+        if str(getattr(column, "type", "")) in {"string", "large_string"} and hasattr(column, "cast"):
+            values = column.cast("binary").to_pylist()
+        else:
+            values = column.to_pylist()
+        if any(value is None for value in values):
+            raise ValueError(f"{name} contains null values")
+        return [_to_bytes(value, name) for value in values] if any(not isinstance(value, bytes) for value in values) else values
+    values = list(column)
+    if any(value is None for value in values):
+        raise ValueError(f"{name} contains null values")
+    return [_to_bytes(value, name) for value in values]
+
+
 def _to_bytes(value, name: str) -> bytes:
     """Normalize a string/bytes identifier to bytes."""
     if isinstance(value, bytes):
@@ -126,11 +144,11 @@ class NodeList:
         """Create a node list from Arrow-like or Python columns."""
         if node_values is None:
             raise ValueError("node_values is required for columnar node ingestion")
-        raw_node_ids = _column_to_list(node_ids, "node_ids")
+        normalized_node_ids = _identifier_column_to_bytes_list(node_ids, "node_ids")
         raw_node_values = _column_to_list(node_values, "node_values")
-        _validate_equal_lengths({"node_ids": raw_node_ids, "node_values": raw_node_values})
+        _validate_equal_lengths({"node_ids": normalized_node_ids, "node_values": raw_node_values})
         return cls(
-            node_ids=[_to_bytes(value, "node_ids") for value in raw_node_ids],
+            node_ids=normalized_node_ids,
             node_values=[_to_payload_bytes(value, "node_values") for value in raw_node_values],
             node_ids_column=_direct_column(node_ids),
             node_values_column=_direct_column(node_values),
@@ -184,16 +202,16 @@ class EdgeList:
         """Create an edge list from Arrow-like or Python columns."""
         if edge_values is None:
             raise ValueError("edge_values is required for columnar edge ingestion")
-        raw_edge_ids = _column_to_list(edge_ids, "edge_ids")
-        raw_sources = _column_to_list(sources, "sources")
-        raw_targets = _column_to_list(targets, "targets")
+        normalized_edge_ids = _identifier_column_to_bytes_list(edge_ids, "edge_ids")
+        normalized_sources = _identifier_column_to_bytes_list(sources, "sources")
+        normalized_targets = _identifier_column_to_bytes_list(targets, "targets")
         raw_edge_types = _column_to_list(edge_types, "edge_types")
         raw_edge_values = _column_to_list(edge_values, "edge_values")
         _validate_equal_lengths(
             {
-                "edge_ids": raw_edge_ids,
-                "sources": raw_sources,
-                "targets": raw_targets,
+                "edge_ids": normalized_edge_ids,
+                "sources": normalized_sources,
+                "targets": normalized_targets,
                 "edge_types": raw_edge_types,
                 "edge_values": raw_edge_values,
             }
@@ -207,9 +225,9 @@ class EdgeList:
             else:
                 raise TypeError(f"edge_types values must be str or bytes, got {type(value).__name__}")
         return cls(
-            edge_ids=[_to_bytes(value, "edge_ids") for value in raw_edge_ids],
-            sources=[_to_bytes(value, "sources") for value in raw_sources],
-            targets=[_to_bytes(value, "targets") for value in raw_targets],
+            edge_ids=normalized_edge_ids,
+            sources=normalized_sources,
+            targets=normalized_targets,
             edge_types=normalized_edge_types,
             edge_values=[_to_payload_bytes(value, "edge_values") for value in raw_edge_values],
             edge_ids_column=_direct_column(edge_ids),

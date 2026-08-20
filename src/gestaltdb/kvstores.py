@@ -1348,6 +1348,10 @@ class PyRexStore(KVStore):
         """Build a typed adjacency key in the shared RocksDB keyspace."""
         return self._SEP.join([b"T", direction.encode("utf-8"), node_id, edge_type.encode("utf-8"), edge_id])
 
+    def _typed_key_bytes(self, direction_prefix: bytes, node_id: bytes, edge_type: bytes, edge_id: bytes) -> bytes:
+        """Build a typed adjacency key when direction and type are already encoded."""
+        return direction_prefix + node_id + self._SEP + edge_type + self._SEP + edge_id
+
     def has_native_columnar_ingestion(self) -> bool:
         """Return whether this PyRex runtime exposes native columnar writes."""
         return hasattr(self.db, "write_columnar_batch")
@@ -1550,13 +1554,17 @@ class PyRexStore(KVStore):
         if not append_only:
             raise NotImplementedError("native columnar edge ingestion currently requires append_only=True")
         if native and self.has_native_columnar_ingestion():
-            edge_keys = [self._key(b"E", edge_id) for edge_id in edge_list.edge_ids]
+            edge_prefix = b"E" + self._SEP
+            out_prefix = b"T" + self._SEP + b"out" + self._SEP
+            in_prefix = b"T" + self._SEP + b"in" + self._SEP
+            edge_type_bytes = {edge_type: edge_type.encode("utf-8") for edge_type in set(edge_list.edge_types)}
+            edge_keys = [edge_prefix + edge_id for edge_id in edge_list.edge_ids]
             out_keys = [
-                self._typed_key("out", source_id, edge_type, edge_id)
+                self._typed_key_bytes(out_prefix, source_id, edge_type_bytes[edge_type], edge_id)
                 for source_id, edge_type, edge_id in zip(edge_list.sources, edge_list.edge_types, edge_list.edge_ids)
             ]
             in_keys = [
-                self._typed_key("in", target_id, edge_type, edge_id)
+                self._typed_key_bytes(in_prefix, target_id, edge_type_bytes[edge_type], edge_id)
                 for target_id, edge_type, edge_id in zip(edge_list.targets, edge_list.edge_types, edge_list.edge_ids)
             ]
             edge_values = edge_list.edge_values_column if edge_list.edge_values_column is not None else edge_list.edge_values
