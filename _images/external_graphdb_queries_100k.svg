@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="922" height="442" viewBox="0 0 922 442" role="img" aria-labelledby="title desc">
+<title id="title">External graph database query latency heatmap</title>
+<desc id="desc">Mean query time by workload and database engine on a log color scale, lower is better.</desc>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="24" y="34" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#111827">Query time by workload</text>
+<text x="24" y="56" font-family="Inter, Arial, sans-serif" font-size="13" fill="#4b5563">Mean seconds over 3 repetitions. Color uses log scale; lighter cells are faster.</text>
+<text x="217.0" y="78" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">GestaltDB</text>
+<text x="339.0" y="78" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">GestaltDB tx</text>
+<text x="461.0" y="78" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">Apache AGE</text>
+<text x="583.0" y="78" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">ArcadeDB</text>
+<text x="705.0" y="78" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">Memgraph</text>
+<text x="827.0" y="78" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">Neo4j</text>
+<text x="24" y="116" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">neighbors</text>
+<rect x="156" y="86" width="116" height="42" rx="6" fill="#d7e3fd"/>
+<text x="214.0" y="113" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">0.9ms</text>
+<rect x="278" y="86" width="116" height="42" rx="6" fill="#d8e6fd"/>
+<text x="336.0" y="113" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">0.7ms</text>
+<rect x="400" y="86" width="116" height="42" rx="6" fill="#cccffb"/>
+<text x="458.0" y="113" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">3.3ms</text>
+<rect x="522" y="86" width="116" height="42" rx="6" fill="#c2bdf9"/>
+<text x="580.0" y="113" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">11ms</text>
+<rect x="644" y="86" width="116" height="42" rx="6" fill="#c9c9fa"/>
+<text x="702.0" y="113" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">4.9ms</text>
+<rect x="766" y="86" width="116" height="42" rx="6" fill="#b29ff6"/>
+<text x="824.0" y="113" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">77ms</text>
+<text x="24" y="164" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">sample neighbors</text>
+<rect x="156" y="134" width="116" height="42" rx="6" fill="#d8e5fd"/>
+<text x="214.0" y="161" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">0.8ms</text>
+<rect x="278" y="134" width="116" height="42" rx="6" fill="#d8e5fd"/>
+<text x="336.0" y="161" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">0.8ms</text>
+<rect x="400" y="134" width="116" height="42" rx="6" fill="#cccffb"/>
+<text x="458.0" y="161" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">3.2ms</text>
+<rect x="522" y="134" width="116" height="42" rx="6" fill="#c0b8f9"/>
+<text x="580.0" y="161" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">14ms</text>
+<rect x="644" y="134" width="116" height="42" rx="6" fill="#c8c7fa"/>
+<text x="702.0" y="161" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">5.5ms</text>
+<rect x="766" y="134" width="116" height="42" rx="6" fill="#b3a0f6"/>
+<text x="824.0" y="161" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">70ms</text>
+<text x="24" y="212" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">typed path</text>
+<rect x="156" y="182" width="116" height="42" rx="6" fill="#d5e0fd"/>
+<text x="214.0" y="209" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">1.1ms</text>
+<rect x="278" y="182" width="116" height="42" rx="6" fill="#d4defc"/>
+<text x="336.0" y="209" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">1.2ms</text>
+<rect x="400" y="182" width="116" height="42" rx="6" fill="#c3bef9"/>
+<text x="458.0" y="209" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">9.6ms</text>
+<rect x="522" y="182" width="116" height="42" rx="6" fill="#c5c1fa"/>
+<text x="580.0" y="209" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">8.2ms</text>
+<rect x="644" y="182" width="116" height="42" rx="6" fill="#c6c3fa"/>
+<text x="702.0" y="209" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">7.2ms</text>
+<rect x="766" y="182" width="116" height="42" rx="6" fill="#af9af6"/>
+<text x="824.0" y="209" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">107ms</text>
+<text x="24" y="260" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">deep typed</text>
+<rect x="156" y="230" width="116" height="42" rx="6" fill="#cfd5fc"/>
+<text x="214.0" y="257" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">2.2ms</text>
+<rect x="278" y="230" width="116" height="42" rx="6" fill="#cfd3fb"/>
+<text x="336.0" y="257" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">2.5ms</text>
+<rect x="400" y="230" width="116" height="42" rx="6" fill="#a485f4"/>
+<text x="458.0" y="257" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">425ms</text>
+<rect x="522" y="230" width="116" height="42" rx="6" fill="#c4c0fa"/>
+<text x="580.0" y="257" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">8.6ms</text>
+<rect x="644" y="230" width="116" height="42" rx="6" fill="#c5c2fa"/>
+<text x="702.0" y="257" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">7.6ms</text>
+<rect x="766" y="230" width="116" height="42" rx="6" fill="#ad96f5"/>
+<text x="824.0" y="257" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">139ms</text>
+<text x="24" y="308" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">BFS depth</text>
+<rect x="156" y="278" width="116" height="42" rx="6" fill="#dbeafe"/>
+<text x="214.0" y="305" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">0.6ms</text>
+<rect x="278" y="278" width="116" height="42" rx="6" fill="#dae9fd"/>
+<text x="336.0" y="305" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">0.6ms</text>
+<rect x="400" y="278" width="116" height="42" rx="6" fill="#ced2fb"/>
+<text x="458.0" y="305" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">2.7ms</text>
+<rect x="522" y="278" width="116" height="42" rx="6" fill="#c4c0fa"/>
+<text x="580.0" y="305" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">8.5ms</text>
+<rect x="644" y="278" width="116" height="42" rx="6" fill="#c8c8fa"/>
+<text x="702.0" y="305" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">5.3ms</text>
+<rect x="766" y="278" width="116" height="42" rx="6" fill="#af98f6"/>
+<text x="824.0" y="305" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#111827">117ms</text>
+<text x="24" y="356" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">star traversal</text>
+<rect x="156" y="326" width="116" height="42" rx="6" fill="#864dee"/>
+<text x="214.0" y="353" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#ffffff">16.2s</text>
+<rect x="278" y="326" width="116" height="42" rx="6" fill="#864cee"/>
+<text x="336.0" y="353" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#ffffff">16.7s</text>
+<rect x="400" y="326" width="116" height="42" rx="6" fill="#9263f1"/>
+<text x="458.0" y="353" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#ffffff">3.76s</text>
+<rect x="522" y="326" width="116" height="42" rx="6" fill="#7c3aed"/>
+<text x="580.0" y="353" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#ffffff">57.9s</text>
+<rect x="644" y="326" width="116" height="42" rx="6" fill="#7f40ed"/>
+<text x="702.0" y="353" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#ffffff">37.9s</text>
+<rect x="766" y="326" width="116" height="42" rx="6" fill="#7e3eed"/>
+<text x="824.0" y="353" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600" fill="#ffffff">44.5s</text>
+<text x="24" y="418" font-family="Inter, Arial, sans-serif" font-size="12" fill="#4b5563">Lower is better. Star traversal returns 5,000,000 rows; other workloads return small seeded traversals.</text>
+</svg>

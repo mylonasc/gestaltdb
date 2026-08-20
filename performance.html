@@ -717,7 +717,9 @@ and edge counts before comparing query timings.</p>
 <li><p>Neo4j and Memgraph use batched Cypher over Bolt.</p></li>
 <li><p>ArcadeDB uses the embedded <code class="docutils literal notranslate"><span class="pre">GraphBatch</span></code> API.</p></li>
 <li><p>Apache AGE uses its CSV bulk loader for ingestion and <code class="docutils literal notranslate"><span class="pre">cypher()</span></code> through
-PostgreSQL for queries.</p></li>
+PostgreSQL for queries. AGE benchmark ingestion includes building a GIN
+property index on <code class="docutils literal notranslate"><span class="pre">Node.properties</span></code> so seeded <code class="docutils literal notranslate"><span class="pre">node_id</span></code> lookups use AGE’s
+PostgreSQL-backed indexing path.</p></li>
 </ul>
 <p>Traversal workloads use each engine’s query interface. GestaltDB uses
 <code class="docutils literal notranslate"><span class="pre">GraphDB.query()</span></code> for neighbor expansion, star traversal, typed paths, and the
@@ -736,7 +738,14 @@ queries for every engine.</p>
 <span class="w">   </span>--batch-size<span class="w"> </span><span class="m">10000</span><span class="w"> </span><span class="se">\</span>
 <span class="w">   </span>--iterations<span class="w"> </span><span class="m">10</span><span class="w"> </span><span class="se">\</span>
 <span class="w">   </span>--repetitions<span class="w"> </span><span class="m">3</span><span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--age-require-index<span class="w"> </span><span class="se">\</span>
 <span class="w">   </span>--output-dir<span class="w"> </span>benchmark_results/external_graphdbs_100k
+</pre></div>
+</div>
+<p>Generate the documentation plots from one or more summary files:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>scripts/plot_external_graphdbs.py<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>benchmark_results/external_graphdbs_100k/external_graphdbs_summary.jsonl<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--output-dir<span class="w"> </span>docs/_static
 </pre></div>
 </div>
 <section id="k-node-results">
@@ -744,6 +753,8 @@ queries for every engine.</p>
 <p>These results use 100,000 nodes, 500,000 edges, batch size 10,000, 10 traversal
 seeds, sample size 5, depth 3, and three repetitions. All rows validated exactly
 100,000 nodes and 500,000 edges. Tables report mean ± standard deviation.</p>
+<img alt="Ingestion time comparison across external graph database engines." src="_images/external_graphdb_ingest_100k.svg" />
+<img alt="Query time heatmap across external graph database engines and workloads." src="_images/external_graphdb_queries_100k.svg" />
 <p>Ingestion phase from the <code class="docutils literal notranslate"><span class="pre">columnar_ingest</span></code> workload:</p>
 <div class="table-wrapper docutils container">
 <table class="docutils align-default">
@@ -766,9 +777,9 @@ seeds, sample size 5, depth 3, and three repetitions. All rows validated exactly
 <td><p>1.69x slower</p></td>
 </tr>
 <tr class="row-even"><td><p>Apache AGE</p></td>
-<td><p>1.868 ± 0.009 s</p></td>
-<td><p>267,651 edges/s</p></td>
-<td><p>1.01x slower</p></td>
+<td><p>2.794 ± 0.040 s</p></td>
+<td><p>179,005 edges/s</p></td>
+<td><p>1.51x slower</p></td>
 </tr>
 <tr class="row-odd"><td><p>ArcadeDB embedded</p></td>
 <td><p>6.060 ± 0.403 s</p></td>
@@ -807,7 +818,7 @@ seeds, sample size 5, depth 3, and three repetitions. All rows validated exactly
 <td><p>17</p></td>
 <td><p>0.000901 ± 0.000334 s</p></td>
 <td><p>0.000743 ± 0.000011 s</p></td>
-<td><p>0.181 ± 0.00180 s</p></td>
+<td><p>0.00333 ± 0.000471 s</p></td>
 <td><p>0.0107 ± 0.0106 s</p></td>
 <td><p>0.00494 ± 0.00122 s</p></td>
 <td><p>0.0773 ± 0.00306 s</p></td>
@@ -816,7 +827,7 @@ seeds, sample size 5, depth 3, and three repetitions. All rows validated exactly
 <td><p>17</p></td>
 <td><p>0.000753 ± 0.000052 s</p></td>
 <td><p>0.000764 ± 0.000008 s</p></td>
-<td><p>0.181 ± 0.00412 s</p></td>
+<td><p>0.00324 ± 0.000758 s</p></td>
 <td><p>0.0143 ± 0.00717 s</p></td>
 <td><p>0.00554 ± 0.000167 s</p></td>
 <td><p>0.0702 ± 0.00218 s</p></td>
@@ -825,7 +836,7 @@ seeds, sample size 5, depth 3, and three repetitions. All rows validated exactly
 <td><p>5,000,000</p></td>
 <td><p>16.172 ± 0.215 s</p></td>
 <td><p>16.738 ± 1.020 s</p></td>
-<td><p>3.800 ± 0.043 s</p></td>
+<td><p>3.762 ± 0.058 s</p></td>
 <td><p>57.905 ± 0.828 s</p></td>
 <td><p>37.946 ± 0.231 s</p></td>
 <td><p>44.500 ± 0.444 s</p></td>
@@ -834,7 +845,7 @@ seeds, sample size 5, depth 3, and three repetitions. All rows validated exactly
 <td><p>3</p></td>
 <td><p>0.000575 ± 0.000009 s</p></td>
 <td><p>0.000599 ± 0.000005 s</p></td>
-<td><p>0.164 ± 0.00720 s</p></td>
+<td><p>0.00271 ± 0.000419 s</p></td>
 <td><p>0.00848 ± 0.00359 s</p></td>
 <td><p>0.00528 ± 0.000744 s</p></td>
 <td><p>0.117 ± 0.00726 s</p></td>
@@ -843,7 +854,7 @@ seeds, sample size 5, depth 3, and three repetitions. All rows validated exactly
 <td><p>125</p></td>
 <td><p>0.00107 ± 0.000010 s</p></td>
 <td><p>0.00120 ± 0.000040 s</p></td>
-<td><p>0.168 ± 0.00215 s</p></td>
+<td><p>0.00964 ± 0.00160 s</p></td>
 <td><p>0.00816 ± 0.000979 s</p></td>
 <td><p>0.00722 ± 0.00141 s</p></td>
 <td><p>0.107 ± 0.00122 s</p></td>
@@ -852,7 +863,7 @@ seeds, sample size 5, depth 3, and three repetitions. All rows validated exactly
 <td><p>105</p></td>
 <td><p>0.00221 ± 0.000073 s</p></td>
 <td><p>0.00245 ± 0.000016 s</p></td>
-<td><p>943.221 ± 2.164 s</p></td>
+<td><p>0.425 ± 0.00626 s</p></td>
 <td><p>0.00859 ± 0.00120 s</p></td>
 <td><p>0.00762 ± 0.00206 s</p></td>
 <td><p>0.139 ± 0.00373 s</p></td>
@@ -862,15 +873,16 @@ seeds, sample size 5, depth 3, and three repetitions. All rows validated exactly
 </div>
 <p>Notes:</p>
 <ul class="simple">
-<li><p>GestaltDB and Apache AGE are similar on bulk ingestion in this setup. GestaltDB
-writes directly to RocksDB; AGE uses PostgreSQL-visible CSV files and AGE’s bulk
-load functions.</p></li>
+<li><p>GestaltDB remains fastest on ingestion in this setup. AGE uses PostgreSQL-visible
+CSV files, AGE’s bulk load functions, and a post-load GIN property index on
+<code class="docutils literal notranslate"><span class="pre">Node.properties</span></code>; the AGE ingest time includes that index build.</p></li>
 <li><p>GestaltDB’s traversal timings are dominated by embedded typed-adjacency prefix
 scans. Server engines pay query execution and client/server costs for the small
 seeded traversals.</p></li>
 <li><p>Apache AGE is fast on the star traversal because the query streams one large hub
-expansion efficiently. Its four-hop typed traversal is much slower on this graph
-shape and query form.</p></li>
+expansion efficiently. The seeded AGE workloads require the <code class="docutils literal notranslate"><span class="pre">Node.properties</span></code>
+GIN index; without it, <code class="docutils literal notranslate"><span class="pre">node_id</span></code> predicates can devolve into label scans and
+produce invalidly pessimistic timings.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">reopen_seconds</span></code> and count validation are recorded separately in summary files
 and are not included in query timings.</p></li>
 </ul>
