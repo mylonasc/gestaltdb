@@ -381,7 +381,8 @@ and edge counts before comparing query timings.
 Ingestion paths differ by engine:
 
 - GestaltDB uses Arrow/Polars entity ingestion into RocksDB.
-- Neo4j and Memgraph use batched Cypher over Bolt.
+- Neo4j and Memgraph use batched Cypher over Bolt for ingestion and batched
+  seed queries with ``UNWIND`` for traversal workloads.
 - ArcadeDB uses the embedded ``GraphBatch`` API.
 - Apache AGE uses its CSV bulk loader for ingestion and ``cypher()`` through
   PostgreSQL for queries. AGE benchmark ingestion includes building a GIN
@@ -391,7 +392,10 @@ Ingestion paths differ by engine:
 Traversal workloads use each engine's query interface. GestaltDB uses
 ``GraphDB.query()`` for neighbor expansion, star traversal, typed paths, and the
 deeper typed traversal. ``bfs_depth`` is a client-side BFS loop over typed neighbor
-queries for every engine.
+queries for every engine. These are end-to-end query API timings, not raw
+storage-layer timings. Neo4j and Memgraph do not expose a stable public storage
+API comparable to direct RocksDB writes, so storage-only comparisons should be
+kept separate from this benchmark.
 
 Install the optional benchmark dependencies:
 
@@ -411,6 +415,7 @@ Representative full comparison:
       --batch-size 10000 \
       --iterations 10 \
       --repetitions 3 \
+      --cypher-query-mode batched \
       --age-require-index \
       --output-dir benchmark_results/external_graphdbs_100k
 
@@ -461,13 +466,13 @@ Ingestion phase from the ``columnar_ingest`` workload:
      - 82,745 edges/s
      - 3.27x slower
    * - Memgraph
-     - 8.850 ± 0.171 s
-     - 56,512 edges/s
-     - 4.77x slower
+     - 8.625 ± 0.069 s
+     - 57,970 edges/s
+     - 4.65x slower
    * - Neo4j
-     - 13.459 ± 0.076 s
-     - 37,151 edges/s
-     - 7.26x slower
+     - 13.024 ± 0.197 s
+     - 38,396 edges/s
+     - 7.02x slower
 
 Query phase on the already-loaded graph:
 
@@ -488,48 +493,48 @@ Query phase on the already-loaded graph:
      - 0.000743 ± 0.000011 s
      - 0.00333 ± 0.000471 s
      - 0.0107 ± 0.0106 s
-     - 0.00494 ± 0.00122 s
-     - 0.0773 ± 0.00306 s
+     - 0.000485 ± 0.0000128 s
+     - 0.0540 ± 0.00516 s
    * - sample_neighbors
      - 17
      - 0.000753 ± 0.000052 s
      - 0.000764 ± 0.000008 s
      - 0.00324 ± 0.000758 s
      - 0.0143 ± 0.00717 s
-     - 0.00554 ± 0.000167 s
-     - 0.0702 ± 0.00218 s
+     - 0.000996 ± 0.000114 s
+     - 0.0574 ± 0.00121 s
    * - star_traversal
      - 5,000,000
      - 16.172 ± 0.215 s
      - 16.738 ± 1.020 s
      - 3.762 ± 0.058 s
      - 57.905 ± 0.828 s
-     - 37.946 ± 0.231 s
-     - 44.500 ± 0.444 s
+     - 40.381 ± 0.575 s
+     - 47.696 ± 1.123 s
    * - bfs_depth
      - 3
      - 0.000575 ± 0.000009 s
      - 0.000599 ± 0.000005 s
      - 0.00271 ± 0.000419 s
      - 0.00848 ± 0.00359 s
-     - 0.00528 ± 0.000744 s
-     - 0.117 ± 0.00726 s
+     - 0.00531 ± 0.000902 s
+     - 0.241 ± 0.00739 s
    * - typed_path
      - 125
      - 0.00107 ± 0.000010 s
      - 0.00120 ± 0.000040 s
      - 0.00964 ± 0.00160 s
      - 0.00816 ± 0.000979 s
-     - 0.00722 ± 0.00141 s
-     - 0.107 ± 0.00122 s
+     - 0.00249 ± 0.000150 s
+     - 0.108 ± 0.00352 s
    * - deep_typed_query
      - 105
      - 0.00221 ± 0.000073 s
      - 0.00245 ± 0.000016 s
      - 0.425 ± 0.00626 s
      - 0.00859 ± 0.00120 s
-     - 0.00762 ± 0.00206 s
-     - 0.139 ± 0.00373 s
+     - 0.00265 ± 0.0000471 s
+     - 0.137 ± 0.00405 s
 
 Notes:
 
@@ -538,13 +543,17 @@ Notes:
   ``Node.properties``; the AGE ingest time includes that index build.
 - GestaltDB's traversal timings are dominated by embedded typed-adjacency prefix
   scans. Server engines pay query execution and client/server costs for the small
-  seeded traversals.
+  seeded traversals. Neo4j and Memgraph rows use batched Cypher seed queries to
+  avoid one Bolt round-trip per seed.
 - Apache AGE is fast on the star traversal because the query streams one large hub
   expansion efficiently. The seeded AGE workloads require the ``Node.properties``
   GIN index; without it, ``node_id`` predicates can devolve into label scans and
   produce invalidly pessimistic timings.
 - ``reopen_seconds`` and count validation are recorded separately in summary files
   and are not included in query timings.
+- The star traversal deliberately materializes 5,000,000 rows to the client, so
+  it measures server traversal plus result streaming and client decoding. Use a
+  count-only workload if you want to isolate server-side traversal execution.
 
 Benchmark Caveats
 -----------------
