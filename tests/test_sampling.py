@@ -3,10 +3,53 @@ import random
 import pytest
 
 from gestaltdb.graphdb import Edge, Node
-from gestaltdb.sampling import SamplingHop, SamplingPattern
+from gestaltdb.sampling import AsyncBatchFeeder, HardNegativeConfig, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
 from gestaltdb.sampling import as_sampling_pattern
 
-from .conftest import populate_typed_graph
+from .conftest import blocked_import, populate_typed_graph
+
+
+class _FakeSamplerStore:
+    def __init__(self, nodes, edges):
+        self.nodes = {node.get_id_bytes: node for node in nodes}
+        self.edges = {edge.get_id_bytes: edge for edge in edges}
+
+    def get_node_keys_generator(self):
+        return iter(self.nodes.keys())
+
+    def get_edge_keys_generator(self):
+        return iter(self.edges.keys())
+
+
+class _FakeSamplerGraph:
+    def __init__(self):
+        nodes = [
+            Node(node_id="drug-1", properties={"kind": "drug"}),
+            Node(node_id="drug-2", properties={"kind": "drug"}),
+            Node(node_id="protein-1", properties={"kind": "protein"}),
+            Node(node_id="protein-2", properties={"kind": "protein"}),
+            Node(node_id="disease-1", properties={"kind": "disease"}),
+        ]
+        edges = [
+            Edge(edge_id="d1-p1", source="drug-1", target="protein-1", properties={"type": "drug-to-protein"}),
+            Edge(edge_id="d1-p2", source="drug-1", target="protein-2", properties={"type": "drug-to-protein"}),
+            Edge(edge_id="p1-dis1", source="protein-1", target="disease-1", properties={"type": "protein-to-disease"}),
+        ]
+        self.store = _FakeSamplerStore(nodes, edges)
+
+    def get_node(self, node_key):
+        return self.store.nodes.get(node_key)
+
+    def get_edge(self, edge_key):
+        return self.store.edges.get(edge_key)
+
+    def key_to_string(self, key):
+        return key.decode("utf-8") if isinstance(key, bytes) else key
+
+    def build_sampler_snapshot(self, output_path, **kwargs):
+        from gestaltdb.sampling import SamplerSnapshot
+
+        return SamplerSnapshot.build(self, output_path, **kwargs)
 
 
 def test_sampling_hop_round_trips_dict_config():
@@ -43,6 +86,135 @@ def test_sampling_hop_validates_values():
         SamplingHop("drug-to-protein", direction="sideways")
     with pytest.raises(ValueError, match="sample_size"):
         SamplingHop("drug-to-protein", sample_size=0)
+
+
+def test_sampler_snapshot_and_engine_without_optional_backend(tmp_path):
+    graph = _FakeSamplerGraph()
+
+    snapshot = graph.build_sampler_snapshot(tmp_path / "sampler")
+    engine = SamplerEngine.load(snapshot.path, seed=7)
+    node_id = snapshot.external_node_ids.tolist().index("drug-1")
+    rel_id = snapshot.external_relation_ids.tolist().index("drug-to-protein")
+
+    sample = engine.sample_neighbors([node_id], fanout=10, direction="out", relations=[rel_id])
+    neighbor_names = set(snapshot.external_node_ids[sample.neighbor_nodes].tolist())
+    seed_edge = snapshot.external_edge_ids.tolist().index("d1-p1")
+    batch = engine.sample_subgraph([seed_edge], fanouts=[2], direction="any")
+
+    assert snapshot.num_nodes == 5
+    assert snapshot.num_edges == 3
+    assert neighbor_names == {"protein-1", "protein-2"}
+    assert engine.is_positive(node_id, rel_id, snapshot.external_node_ids.tolist().index("protein-1"))
+    assert batch.positives.shape == (1, 3)
+    assert batch.n_edges >= 1
+
+
+def test_sampler_snapshot_from_edge_arrays_derives_type_constraints(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "array_snapshot",
+        external_node_ids=["drug-1", "drug-2", "protein-1"],
+        external_edge_ids=["d1-p1", "d2-p1"],
+        external_relation_ids=["drug-to-protein"],
+        src_int=[0, 1],
+        dst_int=[2, 2],
+        rel_int=[0, 0],
+        node_type_values=["drug", "drug", "protein"],
+        edge_src_type_values=["drug", "drug"],
+        edge_dst_type_values=["protein", "protein"],
+    )
+
+    assert snapshot.num_nodes == 3
+    assert snapshot.num_edges == 2
+    assert snapshot.relation_src_type_ids.tolist() == [snapshot.node_type_ids[0]]
+    assert snapshot.relation_dst_type_ids.tolist() == [snapshot.node_type_ids[2]]
+    assert snapshot.metadata["node_type_values"] == {"0": "drug", "1": "protein"}
+
+
+def test_sampler_engine_memmap_loads_snapshot(tmp_path):
+    graph = _FakeSamplerGraph()
+    snapshot = graph.build_sampler_snapshot(tmp_path / "sampler")
+
+    engine = SamplerEngine.load(snapshot.path, mode="memmap", seed=11)
+    node_id = engine.snapshot.external_node_ids.tolist().index("drug-1")
+    rel_id = engine.snapshot.external_relation_ids.tolist().index("drug-to-protein")
+    sample = engine.sample_neighbors([node_id], fanout=1, direction="out", relations=[rel_id])
+
+    assert sample.edge_indices.shape == (1,)
+    assert engine.snapshot.src_int.shape == snapshot.src_int.shape
+
+
+def test_sampler_engine_hard_negatives_reject_known_positives(tmp_path):
+    graph = _FakeSamplerGraph()
+    snapshot = graph.build_sampler_snapshot(tmp_path / "sampler")
+    engine = SamplerEngine(snapshot, seed=13)
+    seed_edge = snapshot.external_edge_ids.tolist().index("d1-p1")
+
+    batch = engine.sample_subgraph(
+        [seed_edge],
+        fanouts=[2],
+        direction="any",
+        negative_config=HardNegativeConfig(negatives_per_positive=3, source="random", reject_known_positives=True),
+    )
+    global_negatives = batch.node_ids_global[batch.negatives[..., [0, 2]]]
+
+    assert batch.negatives.shape == (1, 3, 3)
+    for neg_idx in range(batch.negatives.shape[1]):
+        src = int(global_negatives[0, neg_idx, 0])
+        rel = int(batch.negatives[0, neg_idx, 1])
+        dst = int(global_negatives[0, neg_idx, 1])
+        assert not engine.is_positive(src, rel, dst)
+
+
+def test_sampler_engine_relation_endpoint_type_negatives(tmp_path):
+    graph = _FakeSamplerGraph()
+    snapshot = graph.build_sampler_snapshot(tmp_path / "sampler")
+    engine = SamplerEngine(snapshot, seed=19)
+    seed_edge = snapshot.external_edge_ids.tolist().index("d1-p1")
+    rel_id = snapshot.external_relation_ids.tolist().index("drug-to-protein")
+
+    batch = engine.sample_subgraph(
+        [seed_edge],
+        fanouts=[1],
+        negative_config=HardNegativeConfig(
+            negatives_per_positive=1,
+            relation_endpoint_types=True,
+            head_probability=1.0,
+        ),
+    )
+    global_head = int(batch.node_ids_global[batch.negatives[0, 0, 0]])
+
+    assert snapshot.relation_src_type_ids[rel_id] == snapshot.node_type_ids[global_head]
+
+
+def test_sampled_batch_optional_adapter_dependency_errors(tmp_path):
+    graph = _FakeSamplerGraph()
+    snapshot = graph.build_sampler_snapshot(tmp_path / "sampler")
+    engine = SamplerEngine(snapshot, seed=23)
+    seed_edge = snapshot.external_edge_ids.tolist().index("d1-p1")
+    batch = engine.sample_subgraph([seed_edge], fanouts=[1])
+
+    with blocked_import("pyarrow"):
+        with pytest.raises(ImportError, match="pyarrow"):
+            batch.to_arrow()
+    with blocked_import("tensorflow"):
+        with pytest.raises(ImportError, match="tensorflow"):
+            batch.to_tf_gnns()
+    with blocked_import("torch"):
+        with pytest.raises(ImportError, match="torch"):
+            batch.to_pyg()
+
+
+def test_async_batch_feeder_prefetches_batches(tmp_path):
+    graph = _FakeSamplerGraph()
+    snapshot = graph.build_sampler_snapshot(tmp_path / "sampler")
+    engine = SamplerEngine(snapshot, seed=17)
+    seed_edge = snapshot.external_edge_ids.tolist().index("d1-p1")
+
+    with AsyncBatchFeeder(lambda: engine.sample_subgraph([seed_edge], fanouts=[1]), max_prefetch=1) as feeder:
+        batch = feeder.get(timeout=2)
+
+    assert batch.positives.shape == (1, 3)
+    assert batch.n_nodes >= 2
 
 
 def test_sample_neighbors_uses_typed_frontier(graph_db):
@@ -153,3 +325,65 @@ def test_put_edges_bulk_uses_bulk_typed_adjacency_writer(graph_db):
     )
 
     assert graph_db.neighbors_by_edge_type("drug-1", "drug-to-protein", direction="out") == [b"protein-1"]
+
+
+def test_build_sampler_snapshot_exports_compact_arrays(graph_db, tmp_path):
+    populate_typed_graph(graph_db)
+
+    snapshot = graph_db.build_sampler_snapshot(tmp_path / "sampler")
+
+    assert snapshot.num_nodes == 8
+    assert snapshot.num_edges == 7
+    assert set(snapshot.external_relation_ids.tolist()) == {"drug-to-disease", "drug-to-protein", "protein-to-disease"}
+    assert snapshot.out.indptr.shape == (snapshot.num_nodes + 1,)
+    assert snapshot.in_.indptr.shape == (snapshot.num_nodes + 1,)
+    assert snapshot.incident.indptr.shape == (snapshot.num_nodes + 1,)
+    assert snapshot.positive_triples.shape == (7, 3)
+
+
+def test_sampler_engine_samples_relation_aware_neighbors(graph_db, tmp_path):
+    populate_typed_graph(graph_db)
+    snapshot = graph_db.build_sampler_snapshot(tmp_path / "sampler")
+    engine = SamplerEngine.load(snapshot.path, seed=7)
+    node_id = snapshot.external_node_ids.tolist().index("drug-1")
+    rel_id = snapshot.external_relation_ids.tolist().index("drug-to-protein")
+
+    sample = engine.sample_neighbors([node_id], fanout=10, direction="out", relations=[rel_id])
+
+    neighbor_names = set(snapshot.external_node_ids[sample.neighbor_nodes].tolist())
+
+    assert sample.offsets.tolist() == [0, 2]
+    assert neighbor_names == {"protein-1", "protein-2"}
+    assert set(snapshot.rel_int[sample.edge_indices].tolist()) == {rel_id}
+
+
+def test_sampler_engine_exact_positive_membership(graph_db, tmp_path):
+    populate_typed_graph(graph_db)
+    snapshot = graph_db.build_sampler_snapshot(tmp_path / "sampler")
+    engine = SamplerEngine(snapshot)
+    nodes = snapshot.external_node_ids.tolist()
+    relations = snapshot.external_relation_ids.tolist()
+
+    drug = nodes.index("drug-1")
+    protein = nodes.index("protein-1")
+    disease = nodes.index("disease-1")
+    rel = relations.index("drug-to-protein")
+
+    assert engine.is_positive(drug, rel, protein)
+    assert not engine.is_positive(drug, rel, disease)
+
+
+def test_sampler_engine_sample_subgraph_returns_local_batch(graph_db, tmp_path):
+    populate_typed_graph(graph_db)
+    snapshot = graph_db.build_sampler_snapshot(tmp_path / "sampler")
+    engine = SamplerEngine(snapshot, seed=3)
+    seed_edge = snapshot.external_edge_ids.tolist().index("d1-p1")
+
+    batch = engine.sample_subgraph([seed_edge], fanouts=[2], direction="any")
+
+    arrays = batch.to_numpy()
+
+    assert batch.n_nodes >= 2
+    assert batch.n_edges >= 1
+    assert arrays["positives"].shape == (1, 3)
+    assert arrays["senders"].shape == arrays["receivers"].shape

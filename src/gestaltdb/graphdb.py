@@ -1413,6 +1413,20 @@ class GraphDB:
             )
         return rebuilt
 
+    def build_sampler_snapshot(self, output_path, **kwargs):
+        """Build a read-optimized array sampler snapshot from this graph.
+
+        Args:
+            output_path: Directory where snapshot arrays and metadata are written.
+            **kwargs: Options forwarded to ``SamplerSnapshot.build``.
+
+        Returns:
+            A loaded ``SamplerSnapshot`` instance.
+        """
+        from .sampling import SamplerSnapshot
+
+        return SamplerSnapshot.build(self, output_path, **kwargs)
+
     def get_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out'):
         """Return typed adjacency records with clean direction semantics.
 
