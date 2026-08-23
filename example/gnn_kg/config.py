@@ -62,8 +62,6 @@ class SamplerConfig:
     engine_negative_source: Literal["random", "context_relation_neighbors", "non_visited_relation_neighbors"] = "context_relation_neighbors"
     max_negative_retries: int = 64
     seed: int = 13
-    use_array_backend: bool = True
-    backend: Literal["graphdb", "array", "engine"] = "array"
 
 
 @dataclass(slots=True)
