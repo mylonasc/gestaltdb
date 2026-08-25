@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
@@ -110,6 +111,8 @@ class SamplerSnapshot:
         reverse_relation_policy: str = "adjacency_only",
         storage: str = "npy",
         layout: str = "csr",
+        source_db: dict | None = None,
+        source_artifacts: dict | None = None,
     ) -> "SamplerSnapshot":
         """Build and persist a static sampler snapshot from a ``GraphDB``.
 
@@ -235,6 +238,10 @@ class SamplerSnapshot:
             "layout": layout,
             "dtypes": {"ids": "str", "indices": "int64"},
         }
+        if source_db is not None:
+            metadata["source_db"] = cls._normalize_source_reference(source_db, path)
+        if source_artifacts is not None:
+            metadata["source_artifacts"] = cls._normalize_artifact_references(source_artifacts, path)
 
         cls._write(path, metadata, node_ids, node_type_ids, edge_ids, relations, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, out, in_, incident, relation_out, relation_in, positive_triples)
         return cls.load(path)
@@ -256,6 +263,8 @@ class SamplerSnapshot:
         edge_dst_type_values: Sequence[object] | None = None,
         relation_src_type_ids=None,
         relation_dst_type_ids=None,
+        source_db: dict | None = None,
+        source_artifacts: dict | None = None,
         metadata: dict | None = None,
     ) -> "SamplerSnapshot":
         """Build and persist a snapshot from generic edge arrays.
@@ -351,6 +360,11 @@ class SamplerSnapshot:
             )
 
         snapshot_metadata = dict(metadata or {})
+        path = Path(output_path)
+        if source_db is not None:
+            snapshot_metadata["source_db"] = cls._normalize_source_reference(source_db, path)
+        if source_artifacts is not None:
+            snapshot_metadata["source_artifacts"] = cls._normalize_artifact_references(source_artifacts, path)
         if type_mapping is not None:
             snapshot_metadata.setdefault("node_type_values", {str(idx): value for value, idx in type_mapping.items()})
         return cls.from_arrays(
@@ -381,6 +395,8 @@ class SamplerSnapshot:
         rel_int,
         relation_src_type_ids=None,
         relation_dst_type_ids=None,
+        source_db: dict | None = None,
+        source_artifacts: dict | None = None,
         metadata: dict | None = None,
     ) -> "SamplerSnapshot":
         """Build and persist a snapshot from fully encoded compact arrays.
@@ -464,6 +480,10 @@ class SamplerSnapshot:
         }
         if metadata:
             snapshot_metadata.update(metadata)
+        if source_db is not None:
+            snapshot_metadata["source_db"] = cls._normalize_source_reference(source_db, path)
+        if source_artifacts is not None:
+            snapshot_metadata["source_artifacts"] = cls._normalize_artifact_references(source_artifacts, path)
         cls._write(path, snapshot_metadata, external_node_ids, node_type_ids, external_edge_ids, external_relation_ids, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, out, in_, incident, relation_out, relation_in, positive_triples)
         return cls.load(path)
 
@@ -520,6 +540,68 @@ class SamplerSnapshot:
             positive_triples=load_array("positive_triples"),
         )
 
+    def source_graph_exists(self, *, base_path=None) -> bool:
+        """Return whether the referenced source graph path exists without opening it."""
+        try:
+            return self._resolve_source_graph_path(base_path=base_path).exists()
+        except ValueError:
+            return False
+
+    def open_source_graph(self, *, base_path=None, backend_options=None):
+        """Open the ``GraphDB`` referenced by this snapshot's source metadata."""
+        source_path = self._resolve_source_graph_path(base_path=base_path)
+        if not source_path.exists():
+            raise ValueError(f"SamplerSnapshot source DB path does not exist: {source_path}")
+        from gestaltdb.graphdb import GraphDB
+
+        return GraphDB.open(source_path, backend_options=backend_options)
+
+    def external_node_id(self, node_int) -> str:
+        return str(self.external_node_ids[int(node_int)])
+
+    def external_edge_id(self, edge_int) -> str:
+        return str(self.external_edge_ids[int(edge_int)])
+
+    def external_relation_id(self, rel_int) -> str:
+        return str(self.external_relation_ids[int(rel_int)])
+
+    def global_triple_to_external(self, triple) -> tuple[str, str, str]:
+        src, rel, dst = np.asarray(triple, dtype=np.int64).tolist()
+        return (self.external_node_id(src), self.external_relation_id(rel), self.external_node_id(dst))
+
+    def local_triple_to_external(self, batch, triple) -> tuple[str, str, str]:
+        src, rel, dst = np.asarray(triple, dtype=np.int64).tolist()
+        return (
+            self.external_node_id(batch.node_ids_global[int(src)]),
+            self.external_relation_id(rel),
+            self.external_node_id(batch.node_ids_global[int(dst)]),
+        )
+
+    def get_node(self, graph, node_int):
+        return graph.get_node(self.external_node_id(node_int).encode("utf-8"))
+
+    def get_edge(self, graph, edge_int):
+        return graph.get_edge(self.external_edge_id(edge_int).encode("utf-8"))
+
+    def _resolve_source_graph_path(self, *, base_path=None) -> Path:
+        source_db = self.metadata.get("source_db")
+        if not source_db:
+            raise ValueError("SamplerSnapshot has no source_db metadata. Rebuild it with source_db=... or pass a GraphDB handle explicitly.")
+        raw_path = source_db.get("path")
+        if not raw_path:
+            raise ValueError("SamplerSnapshot source_db metadata is missing a path")
+        path_type = source_db.get("path_type", "relative_to_snapshot")
+        raw_path = Path(raw_path)
+        if path_type == "absolute":
+            return raw_path
+        if path_type == "relative_to_snapshot":
+            return (self.path / raw_path).resolve()
+        if path_type == "relative_to_project":
+            if base_path is None:
+                raise ValueError("base_path is required to resolve source_db path_type='relative_to_project'")
+            return (Path(base_path) / raw_path).resolve()
+        raise ValueError(f"unknown source_db path_type: {path_type}")
+
     @staticmethod
     def _validate_edge_arrays(external_node_ids, external_edge_ids, external_relation_ids, src_int, dst_int, rel_int) -> None:
         if not (src_int.size == dst_int.size == rel_int.size == external_edge_ids.size):
@@ -532,6 +614,36 @@ class SamplerSnapshot:
             raise ValueError("src_int and dst_int must reference external_node_ids")
         if rel_int.max() >= external_relation_ids.size:
             raise ValueError("rel_int must reference external_relation_ids")
+
+    @staticmethod
+    def _normalize_source_reference(source_db: dict, snapshot_path: Path) -> dict:
+        source = dict(source_db)
+        if "path" not in source:
+            raise ValueError("source_db must include a path")
+        path = Path(source["path"])
+        path_type = source.get("path_type")
+        if path_type is None:
+            path_type = "absolute" if path.is_absolute() else "relative_to_snapshot"
+        if path_type == "relative_to_snapshot" and path.is_absolute():
+            path = Path(os.path.relpath(path, start=snapshot_path))
+        elif path_type == "absolute":
+            path = path.resolve()
+        elif path_type not in {"relative_to_snapshot", "relative_to_project"}:
+            raise ValueError("source_db path_type must be 'relative_to_snapshot', 'relative_to_project', or 'absolute'")
+        source["path"] = str(path)
+        source["path_type"] = path_type
+        if "manifest_path" not in source and path_type != "relative_to_project":
+            source["manifest_path"] = str(path / "gestaltdb_manifest.json")
+        source.setdefault("graph_fingerprint", None)
+        return source
+
+    @staticmethod
+    def _normalize_artifact_references(source_artifacts: dict, snapshot_path: Path) -> dict:
+        artifacts = {}
+        for name, raw_path in source_artifacts.items():
+            path = Path(raw_path)
+            artifacts[name] = str(Path(os.path.relpath(path, start=snapshot_path)) if path.is_absolute() else path)
+        return artifacts
 
     @staticmethod
     def _derive_relation_endpoint_types(node_type_ids, src_int, dst_int, rel_int, relation_count, *, node_type_mapping=None, edge_src_type_values=None, edge_dst_type_values=None):

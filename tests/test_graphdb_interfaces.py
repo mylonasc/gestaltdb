@@ -1,8 +1,9 @@
 import datetime
+import json
 
 import pytest
 
-from gestaltdb.graphdb import Edge, GraphDB, Node, TimeIndexedEdge, bytes_to_datetime, datetime_to_bytes
+from gestaltdb.graphdb import Edge, GraphDB, MANIFEST_FILENAME, Node, TimeIndexedEdge, bytes_to_datetime, datetime_to_bytes
 from gestaltdb.serializers import PickleSerializer
 
 from .conftest import BACKEND_PARAMS
@@ -220,6 +221,84 @@ def test_edge_property_index_definitions_persist_after_reopen(backend, tmp_path)
         assert [edge.get_id for edge in reopened.edges_by_property("score", 1)] == ["e1"]
     finally:
         reopened.close()
+
+
+@pytest.mark.parametrize("backend", BACKEND_PARAMS, ids=lambda param: param[0] if isinstance(param, tuple) else str(param))
+def test_graphdb_create_writes_manifest_and_open_rehydrates(backend, tmp_path):
+    backend_name, _store_cls = backend
+    path = tmp_path / backend_name
+    graph = GraphDB.create(path, backend=backend_name, serializer="json", indexed_node_properties=["kind"])
+    try:
+        graph.put_node(Node(node_id="drug-1", properties={"kind": "drug"}))
+        graph.put_node(Node(node_id="protein-1", properties={"kind": "protein"}))
+        graph.put_edge(Edge(edge_id="e1", source="drug-1", target="protein-1", properties={"type": "binds"}))
+        assert (path / MANIFEST_FILENAME).exists()
+        manifest = json.loads((path / MANIFEST_FILENAME).read_text(encoding="utf-8"))
+        assert manifest["backend"]["name"] == backend_name
+        assert manifest["serializer"]["name"] == "json"
+        assert manifest["graph"]["indexed_node_properties"] == ["kind"]
+    finally:
+        graph.close()
+
+    reopened = GraphDB.open(path)
+    try:
+        assert reopened.get_node(b"drug-1").properties["kind"] == "drug"
+        assert reopened.get_edge(b"e1").properties["type"] == "binds"
+        assert reopened.manifest["backend"]["name"] == backend_name
+    finally:
+        reopened.close()
+
+
+@pytest.mark.parametrize("backend", BACKEND_PARAMS, ids=lambda param: param[0] if isinstance(param, tuple) else str(param))
+def test_graphdb_save_manifest_migrates_explicit_store(backend, tmp_path):
+    backend_name, store_cls = backend
+    path = tmp_path / f"manual_{backend_name}"
+    graph = GraphDB(store_cls(path=str(path)), PickleSerializer())
+    try:
+        graph.create_edge_property_index("score")
+        manifest = graph.save_manifest(path=path)
+        assert manifest["backend"]["name"] == backend_name
+        assert manifest["serializer"]["name"] == "pickle"
+        assert manifest["graph"]["indexed_edge_properties"] == ["score"]
+    finally:
+        graph.close()
+
+    reopened = GraphDB.open(path)
+    try:
+        assert "score" in reopened.indexed_edge_properties
+    finally:
+        reopened.close()
+
+
+def test_graphdb_open_missing_manifest_is_actionable(tmp_path):
+    path = tmp_path / "missing_manifest"
+    path.mkdir()
+
+    with pytest.raises(ValueError, match="missing GestaltDB manifest"):
+        GraphDB.open(path)
+
+
+@pytest.mark.parametrize("backend", BACKEND_PARAMS, ids=lambda param: param[0] if isinstance(param, tuple) else str(param))
+def test_managed_graph_build_sampler_snapshot_records_source_db(backend, tmp_path):
+    backend_name, _store_cls = backend
+    db_path = tmp_path / "db"
+    graph = GraphDB.create(db_path, backend=backend_name, serializer="json")
+    try:
+        graph.put_node(Node(node_id="n1", properties={"kind": "drug"}))
+        graph.put_node(Node(node_id="n2", properties={"kind": "protein"}))
+        graph.put_edge(Edge(edge_id="e1", source="n1", target="n2", properties={"type": "binds"}))
+        snapshot = graph.build_sampler_snapshot(tmp_path / "artifacts" / "sampler")
+        assert snapshot.metadata["source_db"]["backend"] == backend_name
+        assert snapshot.metadata["source_db"]["serializer"] == "json"
+        assert snapshot.source_graph_exists()
+    finally:
+        graph.close()
+
+    source_graph = snapshot.open_source_graph()
+    try:
+        assert source_graph.get_node(b"n1").properties["kind"] == "drug"
+    finally:
+        source_graph.close()
 
 
 def test_update_node_creates_or_merges_properties(graph_db):

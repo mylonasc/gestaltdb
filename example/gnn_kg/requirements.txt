@@ -1,0 +1,9 @@
+gestaltdb[fast-ingest]
+polars
+pyarrow
+numpy
+tqdm
+keras>=3
+ipykernel
+tf_gnns
+tensorflow[and-cuda]>=2.17
