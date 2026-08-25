@@ -5,11 +5,14 @@ import pickle
 import json
 import os
 import random
+import shutil
 import sys
 import time
 import uuid
 import base64
 from contextlib import contextmanager
+from importlib import metadata as importlib_metadata
+from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Union
 
 if TYPE_CHECKING:
@@ -27,8 +30,50 @@ from .serializers import JSONSerializer
 _NODE_PROPERTY_INDEXES_METADATA_KEY = b"schema:indexes:node_properties"
 _EDGE_PROPERTY_INDEXES_METADATA_KEY = b"schema:indexes:edge_properties"
 _STALE_INDEXES_METADATA_KEY = b"schema:indexes:stale"
+_MANIFEST_METADATA_KEY = b"schema:manifest"
+MANIFEST_FILENAME = "gestaltdb_manifest.json"
+MANIFEST_FORMAT_VERSION = 1
 _VALID_INDEX_MODES = {IndexMaintenanceMode.MAINTAIN.value, IndexMaintenanceMode.DEFER.value}
 _INDEX_REBUILD_BATCH_SIZE = 100_000
+
+
+def _utc_now_iso() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _gestaltdb_version() -> str | None:
+    try:
+        return importlib_metadata.version("gestaltdb")
+    except importlib_metadata.PackageNotFoundError:
+        return None
+
+
+def _backend_registry():
+    from .kvstores import LMDBStore, LevelDBStore, PyRexStore
+
+    return {
+        "lmdb": LMDBStore,
+        "leveldb": LevelDBStore,
+        "pyrex": PyRexStore,
+    }
+
+
+def _serializer_registry():
+    from .serializers import JSONSerializer, MessagePackSerializer, PickleSerializer, ProtobufSerializer
+
+    return {
+        "pickle": PickleSerializer,
+        "json": JSONSerializer,
+        "messagepack": MessagePackSerializer,
+        "protobuf": ProtobufSerializer,
+    }
+
+
+def _registry_name_for_instance(instance, registry: dict[str, type]) -> str | None:
+    for name, cls in registry.items():
+        if isinstance(instance, cls):
+            return name
+    return None
 
 
 class _SimpleProgress:
@@ -439,6 +484,10 @@ class GraphDB:
         """
         self.store = store
         self.serializer = serializer
+        self._store_path: Path | None = None
+        self._backend_name: str | None = _registry_name_for_instance(store, _backend_registry())
+        self._serializer_name: str | None = _registry_name_for_instance(serializer, _serializer_registry())
+        self._manifest: dict | None = None
         self.entity_serializer = GraphEntityDictSerializer(
             self.serializer
         )
@@ -450,6 +499,179 @@ class GraphDB:
             self._persist_property_index_metadata(_NODE_PROPERTY_INDEXES_METADATA_KEY, self.indexed_node_properties)
         if indexed_edge_properties is not None:
             self._persist_property_index_metadata(_EDGE_PROPERTY_INDEXES_METADATA_KEY, self.indexed_edge_properties)
+
+    @classmethod
+    def create(
+        cls,
+        path,
+        *,
+        backend="pyrex",
+        serializer="json",
+        backend_options=None,
+        indexed_node_properties=None,
+        indexed_edge_properties=None,
+        overwrite=False,
+    ) -> "GraphDB":
+        """Create a self-describing graph store and return an open handle."""
+        path = Path(path)
+        backend_cls = cls._backend_class(backend)
+        serializer_cls = cls._serializer_class(serializer)
+        backend_options = dict(backend_options or {})
+
+        if path.exists() and any(path.iterdir()):
+            if not overwrite:
+                raise ValueError(f"store directory is not empty: {path}. Pass overwrite=True to replace it.")
+            shutil.rmtree(path)
+        path.mkdir(parents=True, exist_ok=True)
+
+        store = backend_cls(path=str(path), **backend_options)
+        graph = cls(
+            store,
+            serializer_cls(),
+            indexed_node_properties=indexed_node_properties,
+            indexed_edge_properties=indexed_edge_properties,
+        )
+        graph._store_path = path
+        graph._backend_name = backend
+        graph._serializer_name = serializer
+        graph.save_manifest(path)
+        return graph
+
+    @classmethod
+    def open(cls, path, *, backend_options=None, validate_manifest=True) -> "GraphDB":
+        """Open a self-describing graph store from a directory."""
+        path = Path(path)
+        manifest_path = path / MANIFEST_FILENAME
+        if not manifest_path.exists():
+            raise ValueError(f"missing GestaltDB manifest: {manifest_path}. Migrate an existing DB with graph.save_manifest().")
+        manifest = cls._read_manifest(manifest_path)
+        backend_name = manifest.get("backend", {}).get("name")
+        serializer_name = manifest.get("serializer", {}).get("name")
+        backend_cls = cls._backend_class(backend_name)
+        serializer_cls = cls._serializer_class(serializer_name)
+        options = dict(manifest.get("backend", {}).get("options") or {})
+        options.update(backend_options or {})
+
+        graph_metadata = manifest.get("graph", {})
+        store = backend_cls(path=str(path), **options)
+        graph = cls(
+            store,
+            serializer_cls(),
+            indexed_node_properties=graph_metadata.get("indexed_node_properties") or [],
+            indexed_edge_properties=graph_metadata.get("indexed_edge_properties") or [],
+        )
+        graph._store_path = path
+        graph._backend_name = backend_name
+        graph._serializer_name = serializer_name
+        graph._manifest = graph._manifest_from_current(created_at=manifest.get("created_at"))
+
+        if validate_manifest:
+            graph._validate_backend_manifest(manifest)
+        return graph
+
+    @property
+    def manifest(self) -> dict:
+        """Return the loaded or generated manifest for this graph."""
+        self._manifest = self._manifest_from_current(
+            created_at=(self._manifest or {}).get("created_at") if self._manifest else None
+        )
+        return dict(self._manifest)
+
+    def save_manifest(self, path=None) -> dict:
+        """Write or update the root manifest for this graph."""
+        if path is not None:
+            self._store_path = Path(path)
+        if self._store_path is None:
+            raise ValueError("cannot save manifest without a store path; pass graph.save_manifest(path=...)")
+        if self._backend_name is None:
+            self._backend_name = _registry_name_for_instance(self.store, _backend_registry())
+        if self._serializer_name is None:
+            self._serializer_name = _registry_name_for_instance(self.serializer, _serializer_registry())
+        if self._backend_name is None:
+            raise ValueError("cannot infer backend name for manifest; use GraphDB.create/open for managed stores")
+        if self._serializer_name is None:
+            raise ValueError("cannot infer serializer name for manifest; use an allowlisted serializer")
+
+        manifest = self._manifest_from_current(created_at=(self._manifest or {}).get("created_at") if self._manifest else None)
+        self._store_path.mkdir(parents=True, exist_ok=True)
+        with (self._store_path / MANIFEST_FILENAME).open("w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, indent=2, sort_keys=True)
+        try:
+            self.store.put_metadata(_MANIFEST_METADATA_KEY, json.dumps(manifest, sort_keys=True).encode("utf-8"))
+        except NotImplementedError:
+            pass
+        self._manifest = manifest
+        return dict(manifest)
+
+    @staticmethod
+    def _backend_class(name: str):
+        registry = _backend_registry()
+        if name not in registry:
+            allowed = ", ".join(sorted(registry))
+            raise ValueError(f"unknown GestaltDB backend '{name}'. Expected one of: {allowed}")
+        return registry[name]
+
+    @staticmethod
+    def _serializer_class(name: str):
+        registry = _serializer_registry()
+        if name not in registry:
+            allowed = ", ".join(sorted(registry))
+            raise ValueError(f"unknown GestaltDB serializer '{name}'. Expected one of: {allowed}")
+        return registry[name]
+
+    @staticmethod
+    def _read_manifest(path: Path) -> dict:
+        with path.open("r", encoding="utf-8") as handle:
+            manifest = json.load(handle)
+        if manifest.get("format_version") != MANIFEST_FORMAT_VERSION:
+            raise ValueError("unsupported GestaltDB manifest format version")
+        return manifest
+
+    def _manifest_from_current(self, *, created_at: str | None = None) -> dict:
+        backend_name = self._backend_name or _registry_name_for_instance(self.store, _backend_registry())
+        serializer_name = self._serializer_name or _registry_name_for_instance(self.serializer, _serializer_registry())
+        if backend_name is None or serializer_name is None:
+            raise ValueError("cannot build manifest for unknown backend or serializer")
+        backend_cls = self._backend_class(backend_name)
+        serializer_cls = self._serializer_class(serializer_name)
+        backend_options = {}
+        if backend_name == "pyrex" and getattr(self.store, "transactional", False):
+            backend_options["transactional"] = True
+        return {
+            "format_version": MANIFEST_FORMAT_VERSION,
+            "gestaltdb_version": _gestaltdb_version(),
+            "backend": {
+                "name": backend_name,
+                "class": f"{backend_cls.__module__}.{backend_cls.__name__}",
+                "layout_version": 1,
+                "options": backend_options,
+            },
+            "serializer": {
+                "name": serializer_name,
+                "class": f"{serializer_cls.__module__}.{serializer_cls.__name__}",
+                "format_version": 1,
+            },
+            "graph": {
+                "node_count": None,
+                "edge_count": None,
+                "indexed_node_properties": list(sorted(self.indexed_node_properties)),
+                "indexed_edge_properties": list(sorted(self.indexed_edge_properties)),
+            },
+            "created_at": created_at or _utc_now_iso(),
+        }
+
+    def _validate_backend_manifest(self, root_manifest: dict) -> None:
+        try:
+            payload = self.store.get_metadata(_MANIFEST_METADATA_KEY)
+        except NotImplementedError:
+            return
+        if not payload:
+            return
+        backend_manifest = json.loads(payload.decode("utf-8"))
+        if backend_manifest.get("backend", {}).get("name") != root_manifest.get("backend", {}).get("name"):
+            raise ValueError("GestaltDB manifest/backend metadata mismatch for backend name")
+        if backend_manifest.get("serializer", {}).get("name") != root_manifest.get("serializer", {}).get("name"):
+            raise ValueError("GestaltDB manifest/backend metadata mismatch for serializer name")
 
     def _load_stale_indexes(self) -> set[str]:
         """Load index families known to be stale after deferred bulk ingestion."""
@@ -1413,7 +1635,15 @@ class GraphDB:
             )
         return rebuilt
 
-    def build_sampler_snapshot(self, output_path, **kwargs):
+    def build_sampler_snapshot(
+        self,
+        output_path,
+        *,
+        source_db_reference: bool = True,
+        source_db_path=None,
+        source_db_path_mode: str = "relative",
+        **kwargs,
+    ):
         """Build a read-optimized array sampler snapshot from this graph.
 
         Args:
@@ -1425,6 +1655,18 @@ class GraphDB:
         """
         from .sampling import SamplerSnapshot
 
+        if source_db_reference and "source_db" not in kwargs:
+            resolved_source_path = Path(source_db_path) if source_db_path is not None else self._store_path
+            if resolved_source_path is not None:
+                if source_db_path_mode not in {"relative", "absolute", "relative_to_snapshot", "relative_to_project"}:
+                    raise ValueError("source_db_path_mode must be 'relative', 'absolute', 'relative_to_snapshot', or 'relative_to_project'")
+                path_type = "relative_to_snapshot" if source_db_path_mode == "relative" else source_db_path_mode
+                kwargs["source_db"] = {
+                    "path": str(resolved_source_path),
+                    "path_type": path_type,
+                    "backend": self._backend_name,
+                    "serializer": self._serializer_name,
+                }
         return SamplerSnapshot.build(self, output_path, **kwargs)
 
     def get_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out'):
@@ -2867,6 +3109,10 @@ class GraphDB:
             tx_graph = GraphDB(tx_store, self.serializer)
             tx_graph.indexed_node_properties = set(self.indexed_node_properties)
             tx_graph.indexed_edge_properties = set(self.indexed_edge_properties)
+            tx_graph._store_path = self._store_path
+            tx_graph._backend_name = self._backend_name
+            tx_graph._serializer_name = self._serializer_name
+            tx_graph._manifest = self._manifest
             yield tx_graph
         except Exception:
             tx_store.rollback()

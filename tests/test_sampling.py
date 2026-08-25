@@ -130,6 +130,78 @@ def test_sampler_snapshot_from_edge_arrays_derives_type_constraints(tmp_path):
     assert snapshot.metadata["node_type_values"] == {"0": "drug", "1": "protein"}
 
 
+def test_sampler_snapshot_from_edge_arrays_records_source_metadata(tmp_path):
+    db_path = tmp_path / "db"
+    db_path.mkdir()
+
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "artifacts" / "array_snapshot",
+        external_node_ids=["drug-1", "protein-1"],
+        external_edge_ids=["d1-p1"],
+        external_relation_ids=["binds"],
+        src_int=[0],
+        dst_int=[1],
+        rel_int=[0],
+        source_db={"path": db_path, "path_type": "relative_to_snapshot", "backend": "pyrex", "serializer": "json"},
+        source_artifacts={"edge_arrays": tmp_path / "edge_arrays.npz"},
+    )
+
+    loaded = SamplerSnapshot.load(snapshot.path)
+
+    assert loaded.metadata["source_db"]["path_type"] == "relative_to_snapshot"
+    assert loaded.metadata["source_db"]["backend"] == "pyrex"
+    assert loaded.source_graph_exists()
+    assert loaded.metadata["source_artifacts"]["edge_arrays"] == "../../edge_arrays.npz"
+
+
+def test_sampler_snapshot_without_source_metadata_still_loads(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "array_snapshot",
+        external_node_ids=["n1", "n2"],
+        external_edge_ids=["e1"],
+        external_relation_ids=["rel"],
+        src_int=[0],
+        dst_int=[1],
+        rel_int=[0],
+    )
+
+    loaded = SamplerSnapshot.load(snapshot.path)
+
+    assert "source_db" not in loaded.metadata
+    assert not loaded.source_graph_exists()
+    with pytest.raises(ValueError, match="no source_db metadata"):
+        loaded.open_source_graph()
+
+
+def test_sampler_snapshot_inspection_helpers_hydrate_external_ids(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "array_snapshot",
+        external_node_ids=["drug-1", "protein-1"],
+        external_edge_ids=["d1-p1"],
+        external_relation_ids=["binds"],
+        src_int=[0],
+        dst_int=[1],
+        rel_int=[0],
+    )
+    engine = SamplerEngine(snapshot, seed=1)
+    batch = engine.sample_subgraph([0], fanouts=[0])
+
+    class HydrationGraph:
+        def get_node(self, node_id):
+            return Node(node_id=node_id.decode("utf-8"))
+
+        def get_edge(self, edge_id):
+            return Edge(edge_id=edge_id.decode("utf-8"), source="drug-1", target="protein-1")
+
+    assert snapshot.external_node_id(0) == "drug-1"
+    assert snapshot.external_edge_id(0) == "d1-p1"
+    assert snapshot.external_relation_id(0) == "binds"
+    assert snapshot.global_triple_to_external([0, 0, 1]) == ("drug-1", "binds", "protein-1")
+    assert snapshot.local_triple_to_external(batch, batch.positives[0]) == ("drug-1", "binds", "protein-1")
+    assert snapshot.get_node(HydrationGraph(), 0).get_id == "drug-1"
+    assert snapshot.get_edge(HydrationGraph(), 0).get_id == "d1-p1"
+
+
 def test_sampler_engine_memmap_loads_snapshot(tmp_path):
     graph = _FakeSamplerGraph()
     snapshot = graph.build_sampler_snapshot(tmp_path / "sampler")

@@ -88,6 +88,18 @@ class SamplerEngineKGNeighborhoodSampler:
                 node_type_values=node_map["kind"].to_list(),
                 edge_src_type_values=arrays["node1_type"].astype(str),
                 edge_dst_type_values=arrays["node2_type"].astype(str),
+                source_db={
+                    "path": cfg.paths.db_path,
+                    "path_type": "relative_to_snapshot",
+                },
+                source_artifacts={
+                    "edge_arrays": cfg.paths.edge_arrays_path,
+                    "node_map": cfg.paths.node_map_path,
+                    "node_info": cfg.paths.node_info_path,
+                    "node_mappings": cfg.paths.node_mappings_path,
+                    "relation_map": cfg.paths.relation_map_path,
+                    "edge_mappings": cfg.paths.edge_mappings_path,
+                },
                 metadata={"source": "example/gnn_kg edge_arrays.npz"},
             )
         return SamplerSnapshot.load(path, mmap=mode == "memmap")

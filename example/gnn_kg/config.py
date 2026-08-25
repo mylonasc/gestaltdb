@@ -16,6 +16,9 @@ class PathsConfig:
     artifacts_dir: Path = data_root / "artifacts"
     selected_nodes_path: Path = artifacts_dir / "nodes_selected.parquet"
     selected_edges_path: Path = artifacts_dir / "edges_selected.parquet"
+    node_info_path: Path = artifacts_dir / "node_info.parquet"
+    node_mappings_path: Path = artifacts_dir / "node_mappings.parquet"
+    edge_mappings_path: Path = artifacts_dir / "edge_mappings.parquet"
     node_map_path: Path = artifacts_dir / "node_map.parquet"
     relation_map_path: Path = artifacts_dir / "relation_map.parquet"
     edge_arrays_path: Path = artifacts_dir / "edge_arrays.npz"
@@ -66,10 +69,10 @@ class SamplerConfig:
 
 @dataclass(slots=True)
 class ModelConfig:
-    node_id_embedding_dim: int = 64
-    node_type_embedding_dim: int = 32
-    relation_embedding_dim: int = 64
-    hidden_dim: int = 256
+    node_id_embedding_dim: int = 128
+    node_type_embedding_dim: int = 128
+    relation_embedding_dim: int = 128
+    hidden_dim: int = 512
     mp_steps: int = 3
     dropout: float = 0.0
     aggregation_function: str = "mean"
