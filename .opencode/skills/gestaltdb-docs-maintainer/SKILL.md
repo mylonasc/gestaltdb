@@ -1,93 +1,107 @@
 ---
 name: gestaltdb-docs-maintainer
-description: Use when creating or maintaining GestaltDB agent-facing documentation, especially AGENTS.md, EXAMPLES.md, and src/gestaltdb/__init__.py package docs.
+description: Use when creating or maintaining GestaltDB agent-facing documentation, especially AGENTS.md, EXAMPLES.md, modular reference guides, and src/gestaltdb/__init__.py package docs.
 ---
 
 # GestaltDB Docs Maintainer
 
-Use this skill only for documentation work that teaches agents or developers how to use GestaltDB. It is specifically for `AGENTS.md`, `EXAMPLES.md`, and the package docstring in `src/gestaltdb/__init__.py`, plus consistency checks against Sphinx docs in `docs/`.
+Use this skill when creating or maintaining documentation for GestaltDB developers and AI agents. It governs `AGENTS.md`, `EXAMPLES.md`, modular topic guides in `references/`, the package docstring in `src/gestaltdb/__init__.py`, and consistency with user-facing Sphinx docs in `docs/`.
 
-## Required Context Pass
+---
 
-Before editing these docs, inspect the current implementation and existing docs rather than relying on memory:
+## 1. Fast-Path: Documentation Tools & Verification
 
-- Read `src/gestaltdb/__init__.py` to see the package-root exports.
-- Read `src/gestaltdb/graphdb.py` for `Node`, `Edge`, `GraphDB`, indexes, ingestion, Cypher entry points, and typed traversal methods.
-- Read `src/gestaltdb/kvstores.py` for backend names and optional dependency behavior.
-- Read `src/gestaltdb/serializers.py` for serializer names and constraints.
-- Read `src/gestaltdb/ingestion.py` for `ColumnarIngestionMode`, `IndexMaintenanceMode`, `NodeList`, and `EdgeList`.
-- Read `src/gestaltdb/sampling/__init__.py`, `snapshot.py`, `engine.py`, and `batch.py` for sampling APIs and ID mapping semantics.
-- Read `docs/index.rst`, `docs/quickstart.rst`, `docs/storage-backends.rst`, `docs/serializers.rst`, `docs/typed-sampling.rst`, and `docs/cypher.rst` for public narrative guidance.
-- Search tests for changed behavior, especially `tests/test_graphdb_interfaces.py`, `tests/test_ingestion.py`, `tests/test_cypher.py`, and `tests/test_sampling.py`.
+This skill is equipped with automated Python tools to eliminate context bloat, manual verification, and documentation drift.
 
-## AGENTS.md Rules
+### Available Scripts
+All scripts are located in `.opencode/skills/gestaltdb-docs-maintainer/scripts/`:
 
-`AGENTS.md` should be a concise map for coding agents. Keep it factual and implementation-aligned.
+1. **`doc_tool.py` (CLI for Retrieval & Testing):**
+   - List topics & triggers:
+     ```bash
+     uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py list
+     ```
+   - Retrieve a targeted documentation module (avoids loading the entire codebase):
+     ```bash
+     uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py get <topic>
+     ```
+     Use `--examples` to extract only runnable code blocks, or `--rules` for conceptual rules only.
+   - Search across docs without dumping files:
+     ```bash
+     uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py search "<keyword>"
+     ```
+   - Execute all documentation examples in isolated tests:
+     ```bash
+     uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py test-examples
+     ```
 
-Include:
+2. **`check_docs.py` (Automated Drift & API Checker):**
+   - Run complete automated consistency check:
+     ```bash
+     uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/check_docs.py
+     ```
+     Automatically verifies:
+     - Root exports in `gestaltdb.__all__` vs imported symbols.
+     - Backend registry (`lmdb`, `leveldb`, `pyrex`) and serializer registry (`pickle`, `json`, `messagepack`, `protobuf`).
+     - AST syntax and import validity of all Python code blocks across all markdown docs.
+     - Public method signatures on `GraphDB`, `Node`, `Edge`, `SamplerEngine`, and `SamplerSnapshot`.
+     - Existence of referenced Sphinx `.rst` documentation files.
 
-- Source, docs, tests, and important module paths.
-- Correct import paths, distinguishing package-root re-exports from submodule imports.
-- Core object model: `Node`, `Edge`, `GraphDB`, `KVStore`, serializers, typed edge property.
-- Backend selection guidance for `LMDBStore`, `LevelDBStore`, and `PyRexStore`.
-- Indexing rules: automatic label/type indexes, explicit property indexes, range indexes, deferred index rebuilds.
-- Ingestion rules: object writes, Arrow/Polars entity columns, serialized payload columns, index maintenance modes.
-- Read-only Cypher support and explicit limitations.
-- Sampling distinction between `GraphDB` typed traversal sampling and array-native `SamplerSnapshot`/`SamplerEngine`.
-- Development commands for tests and Sphinx builds.
-- Documentation maintenance checklist.
+---
 
-Do not include long tutorials in `AGENTS.md`; put runnable code in `EXAMPLES.md`.
+## 2. Lazy-Loading Protocol (Prevent Context Bloat)
 
-## EXAMPLES.md Rules
+**Do NOT dump the entire repository and all Sphinx docs into context at once.**
 
-`EXAMPLES.md` should be runnable-oriented. Prefer short examples that demonstrate real API paths.
+Follow this lazy-loading workflow:
+1. Identify the topic you need to read or update.
+2. Read **only** the corresponding modular sub-file under `.opencode/skills/gestaltdb-docs-maintainer/references/`:
+   - `references/backends.md`: `LevelDBStore`, `LMDBStore`, `PyRexStore`, transactional vs non-transactional mode, manifests (`create`/`open`).
+   - `references/indexing.md`: Native labels, relationship types, property indexes, exact/range lookups, index maintenance.
+   - `references/ingestion.md`: Arrow & Polars columnar ingest, `ColumnarIngestionMode`, `IndexMaintenanceMode`.
+   - `references/cypher.md`: Supported read-only Cypher subset, syntax rules, limitations, and `QueryResult`.
+   - `references/sampling.md`: Graph traversal sampling vs array-native `SamplerSnapshot`/`SamplerEngine` for GNNs.
+3. Inspect relevant source files only when deep implementation details or test cases are needed:
+   - Backends: `src/gestaltdb/kvstores.py`
+   - Cypher: `src/gestaltdb/cypher.py` and `src/gestaltdb/cypher_*.py`
+   - Ingestion: `src/gestaltdb/ingestion.py`
+   - Sampling: `src/gestaltdb/sampling/`
+   - Core API: `src/gestaltdb/graphdb.py`
 
-Include examples for:
+---
 
-- Creating a graph with `GraphDB(store, serializer)`.
-- Creating and opening a manifest-backed graph with `GraphDB.create` and `GraphDB.open`.
-- Backend and serializer selection.
-- Property indexes, label/type lookups, and range lookups.
-- Read-only Cypher with parameters and iteration over `QueryResult`.
-- Typed traversal and typed path/subgraph sampling.
-- Arrow ingestion with `IndexMaintenanceMode.DEFER_REBUILD`.
-- Polars ingestion with entity columns.
-- `SamplerSnapshot`/`SamplerEngine` usage, including compact ID lookup and `SampledSubgraphBatch.to_numpy()`.
+## 3. Documentation Roles & Structure
 
-Example style:
+### Root `AGENTS.md`
+- **Role:** High-level concise index and architecture map for coding agents.
+- Keep it factual and brief (~120 lines).
+- Distinguish submodule imports (e.g. `from gestaltdb.graphdb import GraphDB`) from root exports (`from gestaltdb import ...`).
+- Refer agents to `references/*.md` for in-depth guidance on specific subsystems.
 
-- Use explicit submodule imports for `GraphDB`, `Node`, `Edge`, backends, and serializers.
-- Use `TemporaryDirectory` where examples create stores.
-- Always close graph handles with `try/finally` or clearly show `graph.close()`.
-- Keep Cypher examples within the documented read-only subset.
-- Use `properties={"type": "..."}` for typed relationships.
-- Do not imply that unsupported optional frameworks are required; frame `to_pyg`, `to_dgl`, `to_tf_gnns`, Arrow, and Polars as optional dependency paths.
+### Root `EXAMPLES.md`
+- **Role:** Curated, copy-pasteable, end-to-end usage patterns.
+- Prefer self-contained snippets using `TemporaryDirectory`.
+- Always close graph handles in `try/finally` blocks.
+- Explicitly import classes from their submodules.
 
-## Package Docstring Rules
+### Modular `references/*.md`
+- **Role:** Deep-dive subsystem reference guides.
+- Contain detailed conceptual rules, caveats, edge cases, and dedicated runnable examples.
+- When an API or subsystem changes, update its specific modular reference file first.
 
-The `src/gestaltdb/__init__.py` docstring should guide developers and agents at import time. It should not become a full manual.
+### Package Docstring (`src/gestaltdb/__init__.py`)
+- **Role:** Guide developers at import time.
+- Keep minimal: high-level summary, import guidance, one minimal create/query snippet, pointers to `AGENTS.md` and `docs/`.
+- Do not modify `__all__` unless intentionally changing the public API export surface.
 
-Include:
+---
 
-- One-sentence description of GestaltDB.
-- Explicit import guidance: core classes from `gestaltdb.graphdb`, backends from `gestaltdb.kvstores`, serializers from `gestaltdb.serializers`, sampling helpers from `gestaltdb.sampling` or package root.
-- A minimal create/write/query/close example.
-- Notes that edge type comes from `edge.properties["type"]`, Cypher is read-only and partial, property indexes are explicit, and bulk ingestion/sampling have dedicated helpers.
-- Pointers to `AGENTS.md`, `EXAMPLES.md`, and `docs/`.
+## 4. Verification Workflow
 
-Do not change `__all__` unless the task explicitly asks for an API change.
+Before completing any documentation or code change:
+1. Run `uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/check_docs.py` to ensure zero drift.
+2. Run `uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py test-examples` to verify all documentation code snippets execute cleanly.
+3. Run focused pytest tests: `uv run pytest tests/test_graphdb_interfaces.py tests/test_cypher.py tests/test_sampling.py -q`.
+4. If Sphinx docs were modified and Sphinx is installed: `uv run sphinx-build -b html docs docs/_build/html`.
 
-## Accuracy Checks
-
-Before finishing:
-
-- Confirm every documented import path exists.
-- Confirm every documented method exists and signatures are broadly correct.
-- Confirm examples do not depend on unsupported Cypher syntax.
-- Confirm backend names match `GraphDB.create` registry names: `lmdb`, `leveldb`, and `pyrex`.
-- Confirm serializer names match the registry: `pickle`, `json`, `messagepack`, and `protobuf`.
-- Run at least a focused docs sanity check when practical: `uv run pytest tests/test_graphdb_interfaces.py tests/test_cypher.py tests/test_sampling.py -q`.
-- If Sphinx dependencies are installed, run `uv run sphinx-build -b html docs docs/_build/html` after changing Sphinx docs.
-
-After creating or changing this skill, remind the user to restart opencode so the running session can load it.
+After modifying this skill, remind the user to restart opencode so the running session loads the updated skill definition.

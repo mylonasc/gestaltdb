@@ -16,6 +16,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Sampling API: `src/gestaltdb/sampling/`
 - Sphinx docs: `docs/`
 - Tests: `tests/`
+- Modular subsystem guides: `.opencode/skills/gestaltdb-docs-maintainer/references/`
 
 ## Import Map
 
@@ -105,6 +106,8 @@ There are two sampling layers:
 
 - Run tests: `uv run pytest`
 - Run a focused test: `uv run pytest tests/test_cypher.py -q`
+- Check documentation & API drift: `uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/check_docs.py`
+- Test documentation examples: `uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py test-examples`
 - Build Sphinx docs: `uv run sphinx-build -b html docs docs/_build/html`
 - Install docs extras when needed: `python -m pip install ".[docs]"`
 
