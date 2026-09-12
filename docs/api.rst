@@ -13,8 +13,42 @@ Sampling Configuration
 ----------------------
 
 .. automodule:: gestaltdb.sampling
+   :members: SamplingHop, SamplingPattern, as_sampling_hop, as_sampling_pattern
+   :show-inheritance:
+
+Sampling Engine
+---------------
+
+.. automodule:: gestaltdb.sampling.engine
    :members:
-   :undoc-members:
+   :show-inheritance:
+
+Sampling Snapshots
+------------------
+
+.. automodule:: gestaltdb.sampling.snapshot
+   :members:
+   :show-inheritance:
+
+Sampled Batches
+---------------
+
+.. automodule:: gestaltdb.sampling.batch
+   :members:
+   :show-inheritance:
+
+Sampling Negatives
+------------------
+
+.. automodule:: gestaltdb.sampling.negatives
+   :members:
+   :show-inheritance:
+
+Sampling Feeders
+----------------
+
+.. automodule:: gestaltdb.sampling.feeder
+   :members:
    :show-inheritance:
 
 Columnar Ingestion
