@@ -403,6 +403,26 @@ Install the optional benchmark dependencies:
 
    uv sync --extra fast-ingest --extra external-bench
 
+Embedded Python Graph Databases
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use ``scripts/benchmark_embedded_graphdbs.py`` for a local embedded-engine
+comparison between GestaltDB/RocksDB, LatticeDB, and LadybugDB. LatticeDB uses
+its native Python transaction API. LadybugDB uses the PyPI ``ladybug`` package,
+CSV ``COPY`` ingestion, and Cypher traversal queries.
+
+.. code-block:: sh
+
+   uv run python scripts/benchmark_embedded_graphdbs.py \
+      --engines gestaltdb latticedb ladybugdb \
+      --workloads ingest neighbors sample_neighbors star_traversal bfs_depth typed_path \
+      --nodes 100000 \
+      --edges 500000 \
+      --batch-size 10000 \
+      --iterations 10 \
+      --repetitions 3 \
+      --output-dir benchmark_results/embedded_graphdbs_100k
+
 Representative full comparison:
 
 .. code-block:: sh
