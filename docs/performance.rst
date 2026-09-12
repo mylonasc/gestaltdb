@@ -57,21 +57,21 @@ Install Benchmark Dependencies
 Backend Benchmarks
 ------------------
 
-Use ``benchmarks.py`` for a quick backend comparison on the same append-only
+Use ``benchmarks/quick.py`` (or ``python -m benchmarks quick``; ``benchmarks.py`` is retained as a compatibility forwarder) for a quick backend comparison on the same append-only
 workload.
 
 .. code-block:: sh
 
-   python benchmarks.py --backend leveldb --nodes 20000 --edges 100000 --batch-size 10000 --append-only
-   python benchmarks.py --backend rocksdb --nodes 20000 --edges 100000 --batch-size 10000 --append-only
-   python benchmarks.py --backend rocksdb --nodes 20000 --edges 100000 --batch-size 10000 --append-only --rocksdb-transactional
+   python -m benchmarks quick --backend leveldb --nodes 20000 --edges 100000 --batch-size 10000 --append-only
+   python -m benchmarks quick --backend rocksdb --nodes 20000 --edges 100000 --batch-size 10000 --append-only
+   python -m benchmarks quick --backend rocksdb --nodes 20000 --edges 100000 --batch-size 10000 --append-only --rocksdb-transactional
 
-Use ``scripts/benchmark_matrix.py`` for larger matrix runs across graph sizes,
+Use ``benchmarks/matrix.py`` (or ``python -m benchmarks matrix``) for larger matrix runs across graph sizes,
 backends, core counts, and ingestion modes.
 
 .. code-block:: sh
 
-   uv run python scripts/benchmark_matrix.py \
+   uv run python -m benchmarks matrix \
       --sizes 10000 100000 1000000 \
       --edge-multiplier 1 \
       --cores 1 2 4 \
@@ -90,7 +90,7 @@ shape:
 
 .. code-block:: sh
 
-   python scripts/benchmark_matrix.py \
+   python -m benchmarks matrix \
       --backends rocksdb \
       --rocksdb-configs parallel-buffer64mb-bloom10 parallel-buffer64mb-bloom10-transactional \
       --sizes 10000 100000 \
@@ -334,19 +334,19 @@ Operational guidance:
 RocksDB Tuning and Compaction Benchmarks
 ----------------------------------------
 
-Use ``scripts/tune_rocksdb.py`` for a small RocksDB tuning matrix against a
+Use ``benchmarks/tuning.py`` (or ``python -m benchmarks tuning``) for a small RocksDB tuning matrix against a
 LevelDB baseline.
 
 .. code-block:: sh
 
-   python scripts/tune_rocksdb.py --nodes 20000 --edges 100000 --batch-size 10000
+   python -m benchmarks tuning --nodes 20000 --edges 100000 --batch-size 10000
 
-Use ``scripts/benchmark_rocksdb_compaction.py`` for a repeated-overwrite workload
+Use ``benchmarks/compaction.py`` (or ``python -m benchmarks compaction``) for a repeated-overwrite workload
 that creates compaction pressure.
 
 .. code-block:: sh
 
-   uv run python scripts/benchmark_rocksdb_compaction.py \
+   uv run python -m benchmarks compaction \
       --configs leveldb rocksdb-p1-bg1-smallbuf rocksdb-p4-bg4-smallbuf rocksdb-p8-bg8-smallbuf rocksdb-p4-bg4-largebuf \
       --keys 250000 \
       --passes 6 \
@@ -373,7 +373,7 @@ all graph workloads.
 External Graph Database Benchmarks
 ----------------------------------
 
-Use ``scripts/benchmark_external_graphdbs.py`` to compare GestaltDB/RocksDB with
+Use ``benchmarks/external.py`` (or ``python -m benchmarks external``) to compare GestaltDB/RocksDB with
 Neo4j, Memgraph, ArcadeDB, and Apache AGE on the same deterministic graph shapes.
 The runner reports ingestion and query phases separately and validates loaded node
 and edge counts before comparing query timings.
@@ -406,14 +406,14 @@ Install the optional benchmark dependencies:
 Embedded Python Graph Databases
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Use ``scripts/benchmark_embedded_graphdbs.py`` for a local embedded-engine
+Use ``benchmarks/embedded.py`` (or ``python -m benchmarks embedded``) for a local embedded-engine
 comparison between GestaltDB/RocksDB, LatticeDB, and LadybugDB. LatticeDB uses
 its native Python transaction API. LadybugDB uses the PyPI ``ladybug`` package,
 CSV ``COPY`` ingestion, and Cypher traversal queries.
 
 .. code-block:: sh
 
-   uv run python scripts/benchmark_embedded_graphdbs.py \
+   uv run python -m benchmarks embedded \
       --engines gestaltdb latticedb ladybugdb \
       --workloads ingest neighbors sample_neighbors star_traversal bfs_depth typed_path \
       --nodes 100000 \
@@ -427,7 +427,7 @@ Representative full comparison:
 
 .. code-block:: sh
 
-   uv run python scripts/benchmark_external_graphdbs.py \
+   uv run python -m benchmarks external \
       --engines gestaltdb gestaltdb-tx neo4j memgraph arcadedb age \
       --workloads columnar_ingest neighbors sample_neighbors star_traversal bfs_depth typed_path deep_typed_query \
       --nodes 100000 \
@@ -443,7 +443,7 @@ Generate the documentation plots from one or more summary files:
 
 .. code-block:: sh
 
-   python scripts/plot_external_graphdbs.py \
+   python -m benchmarks plotting \
       benchmark_results/external_graphdbs_100k/external_graphdbs_summary.jsonl \
       --output-dir docs/_static
 
