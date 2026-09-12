@@ -176,7 +176,7 @@ Legacy script invocations from repository root and `scripts/` are preserved as f
   - **Neo4j**: Bolt connection, batched Cypher UNWIND ingestion and queries.
   - **Memgraph**: In-memory property graph with Bolt and Cypher.
   - **ArcadeDB**: Embedded Java-based graph database.
-  - **Apache AGE**: PostgreSQL extension for graph queries with CSV loading and GIN indexing.
+  - **Apache AGE**: PostgreSQL extension for graph queries through `cypher()`; optional GIN indexing is enabled with `--age-require-index`.
 - **Outputs**: `external_graphdbs_raw.csv` and `external_graphdbs_summary.csv`.
 - **Example**:
   ```bash
@@ -222,6 +222,21 @@ Legacy script invocations from repository root and `scripts/` are preserved as f
   ```bash
   python -m benchmarks plotting benchmark_results/external_graphdbs/external_graphdbs_summary.jsonl --output-dir docs/_static
   ```
+
+---
+
+## Validation Notes
+
+The benchmark package was validated with `uv sync --extra all` on small smoke-test graph sizes. The following command paths completed locally:
+
+- `quick` across LevelDB, RocksDB, and LMDB.
+- `matrix` across LevelDB/RocksDB and object, Arrow, and Polars ingestion modes.
+- `compaction`, `sampler`, `tuning`, `profiling`, and `plotting`.
+- `embedded` across GestaltDB, LatticeDB, and LadybugDB using the current `ladybug.Connection(db)` API.
+- `arcadedb` and external ArcadeDB using the current `arcadedb_embedded.create_database` API.
+- `external` across GestaltDB, transactional GestaltDB, ArcadeDB, Neo4j, and Memgraph for all advertised workloads.
+
+Apache AGE rows are recorded as benchmark failures when the configured Docker image is unavailable. Inspect `status` and `skip_reason` in raw CSV/JSONL outputs before interpreting timings.
 
 ---
 

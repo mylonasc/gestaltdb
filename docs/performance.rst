@@ -384,10 +384,9 @@ Ingestion paths differ by engine:
 - Neo4j and Memgraph use batched Cypher over Bolt for ingestion and batched
   seed queries with ``UNWIND`` for traversal workloads.
 - ArcadeDB uses the embedded ``GraphBatch`` API.
-- Apache AGE uses its CSV bulk loader for ingestion and ``cypher()`` through
-  PostgreSQL for queries. AGE benchmark ingestion includes building a GIN
-  property index on ``Node.properties`` so seeded ``node_id`` lookups use AGE's
-  PostgreSQL-backed indexing path.
+- Apache AGE uses ``cypher()`` through PostgreSQL for ingestion and queries. Pass
+  ``--age-require-index`` when you want the runner to add a GIN property index on
+  ``Node.properties`` before query timing.
 
 Traversal workloads use each engine's query interface. GestaltDB uses
 ``GraphDB.query()`` for neighbor expansion, star traversal, typed paths, and the
@@ -402,6 +401,56 @@ Install the optional benchmark dependencies:
 .. code-block:: sh
 
    uv sync --extra fast-ingest --extra external-bench
+
+Benchmark Suite Validation
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The modular benchmark runners were validated locally with the repository's
+optional benchmark extras installed via ``uv sync --extra all``. The validation
+used small graph sizes to exercise every command path without treating the
+numbers as representative performance claims:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Runner
+     - Parameters
+     - Result
+   * - ``quick``
+     - 200 nodes, 1,000 edges; LevelDB, RocksDB, LMDB
+     - completed successfully for all three backends
+   * - ``matrix``
+     - 200 nodes, 5 edges/node; LevelDB and RocksDB; object, Arrow, Polars
+     - 12/12 rows reported ``status=ok``
+   * - ``compaction``
+     - 200 keys, 2 passes; LevelDB and RocksDB small-buffer preset
+     - completed and wrote CSV/JSONL outputs
+   * - ``sampler``
+     - 200 nodes, 1,000 edges, 20 iterations
+     - completed; tiny graphs are dominated by setup overhead, so do not use this run for speedup claims
+   * - ``tuning``
+     - 200 nodes, 1,000 edges across the RocksDB preset sweep
+     - completed and wrote JSON/CSV outputs
+   * - ``profiling``
+     - 200 nodes, 1,000 edges; LevelDB pickle and RocksDB JSON/Polars cases
+     - completed and wrote profile summaries
+   * - ``embedded``
+     - 200 nodes, 1,000 edges; GestaltDB, LatticeDB, LadybugDB
+     - GestaltDB and LatticeDB completed; LadybugDB completed after adapting to the current ``ladybug`` connection API
+   * - ``arcadedb``
+     - 200 nodes, 1,000 edges; GestaltDB, transactional GestaltDB, ArcadeDB
+     - completed after adapting to ``arcadedb-embedded``'s current ``create_database`` API
+   * - ``external``
+     - 100 nodes, 300 edges; GestaltDB, transactional GestaltDB, ArcadeDB, Neo4j, Memgraph, AGE
+     - GestaltDB, ArcadeDB, Neo4j, and Memgraph completed all workloads; AGE rows failed because the default ``apache/age:PG16-v1.5.0`` image was unavailable in Docker Hub
+   * - ``plotting``
+     - generated SVG files from an external benchmark summary JSONL file
+     - completed successfully
+
+When validating a new environment, inspect the raw ``status`` and
+``skip_reason`` columns before comparing timings. Optional engines can fail for
+reasons outside GestaltDB itself, such as unavailable Docker images or upstream
+Python API changes.
 
 Embedded Python Graph Databases
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

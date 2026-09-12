@@ -304,7 +304,7 @@ def deep_typed_query_gestaltdb(graph: GraphDB, seeds: list[str], path_fanout_lim
     total = 0
     for seed in seeds:
         query = (
-            f"MATCH (a {{id: {cypher_string(seed)}}})-[:RelA]->(b)-[:RelB]->(c)-[:RelC]->(d)-[:RelA]->(n) "
+            f"MATCH (a {{id: {cypher_string(seed)}}})-[:RelA]->(b)-[:RelB]->(c)-[:RelC]->(n) "
             f"RETURN n.id AS id LIMIT {path_fanout_limit}"
         )
         total += len(graph.query(query))
@@ -481,11 +481,31 @@ def run_cypher_workload(session: Any, workload: str, args: argparse.Namespace) -
             rec = session.run("MATCH (:Node {id: $seed})-[:RelA]->(b) RETURN count(b) AS c", seed=seed).single()
             total += rec["c"]
         return total
+    if workload == "sample_neighbors":
+        total = 0
+        for seed in seeds:
+            res = session.run(
+                "MATCH (:Node {id: $seed})-[:RelA]->(b) RETURN b.id AS nid LIMIT $limit",
+                seed=seed,
+                limit=args.sample_size,
+            )
+            total += sum(1 for _ in res)
+        return total
     if workload == "typed_path":
         total = 0
         for seed in seeds:
             res = session.run(
                 "MATCH (:Node {id: $seed})-[:RelA]->()-[:RelB]->(b) RETURN b.id AS nid LIMIT $limit",
+                seed=seed,
+                limit=args.path_fanout_limit,
+            )
+            total += sum(1 for _ in res)
+        return total
+    if workload == "deep_typed_query":
+        total = 0
+        for seed in seeds:
+            res = session.run(
+                "MATCH (:Node {id: $seed})-[:RelA]->()-[:RelB]->()-[:RelC]->(b) RETURN b.id AS nid LIMIT $limit",
                 seed=seed,
                 limit=args.path_fanout_limit,
             )
@@ -512,9 +532,26 @@ def run_cypher_workload_batched(session: Any, workload: str, args: argparse.Name
     if workload == "neighbors":
         rec = session.run("UNWIND $seeds AS s MATCH (:Node {id: s})-[:RelA]->(b) RETURN count(b) AS c", seeds=seeds).single()
         return rec["c"]
+    if workload == "sample_neighbors":
+        total = 0
+        for seed in seeds:
+            res = session.run(
+                "MATCH (:Node {id: $seed})-[:RelA]->(b) RETURN b.id AS nid LIMIT $limit",
+                seed=seed,
+                limit=args.sample_size,
+            )
+            total += sum(1 for _ in res)
+        return total
     if workload == "typed_path":
         res = session.run(
             "UNWIND $seeds AS s MATCH (:Node {id: s})-[:RelA]->()-[:RelB]->(b) RETURN b.id AS nid LIMIT $limit",
+            seeds=seeds,
+            limit=args.path_fanout_limit * len(seeds),
+        )
+        return sum(1 for _ in res)
+    if workload == "deep_typed_query":
+        res = session.run(
+            "UNWIND $seeds AS s MATCH (:Node {id: s})-[:RelA]->()-[:RelB]->()-[:RelC]->(b) RETURN b.id AS nid LIMIT $limit",
             seeds=seeds,
             limit=args.path_fanout_limit * len(seeds),
         )
@@ -575,12 +612,12 @@ def run_arcadedb(workload: str, args: argparse.Namespace) -> dict[str, Any]:
     if importlib.util.find_spec("arcadedb_embedded") is None:
         row.update({"status": "skipped", "skip_reason": "missing arcadedb-embedded package"})
         return row
-    from arcadedb_embedded import ArcadeDB
+    import arcadedb_embedded
 
     path = Path(tempfile.mkdtemp(prefix="arcadedb_ext_bench_", dir=args.tmp_dir)) / "benchmark.arcadedb"
     db = None
     try:
-        db = ArcadeDB(str(path), heap_size=args.arcadedb_heap_size)
+        db = arcadedb_embedded.create_database(str(path), jvm_kwargs={"heap_size": args.arcadedb_heap_size})
         setup_arcadedb(db)
         _, row["ingest_seconds"] = seconds(lambda: ingest_arcadedb(db, workload, args))
         (row["actual_nodes"], row["actual_edges"]), row["count_seconds"] = seconds(lambda: count_arcadedb(db))
@@ -662,11 +699,26 @@ def run_arcadedb_workload(db: Any, workload: str, args: argparse.Namespace) -> i
             res = db.query("sql", f"SELECT expand(out('RelA')) FROM Node WHERE id = '{seed}'").to_list()
             total += len(res)
         return total
+    if workload == "sample_neighbors":
+        total = 0
+        for seed in seeds:
+            res = db.query("sql", f"SELECT expand(out('RelA')) FROM Node WHERE id = '{seed}' LIMIT {args.sample_size}").to_list()
+            total += len(res)
+        return total
     if workload == "typed_path":
         total = 0
         for seed in seeds:
             res = db.query("sql", f"MATCH {{type: Node, where: (id = '{seed}')}}.out('RelA'){{}}.out('RelB'){{as: n}} RETURN n LIMIT {args.path_fanout_limit}").to_list()
             total += len(res)
+        return total
+    if workload == "deep_typed_query":
+        total = 0
+        for seed in seeds:
+            query = (
+                f"MATCH {{type: Node, where: (id = '{seed}')}}.out('RelA'){{}}.out('RelB'){{}}"
+                f".out('RelC'){{as: n}} RETURN n LIMIT {args.path_fanout_limit}"
+            )
+            total += len(db.query("sql", query).to_list())
         return total
     if workload == "bfs_depth":
         query = f"MATCH {{type: Node, where: (id = 'n0')}}.out('RelA'){{as: n, while: ($depth < {args.depth}), where: ($depth > 0)}} RETURN n LIMIT {args.bfs_limit}"
@@ -683,9 +735,9 @@ def run_age(workload: str, args: argparse.Namespace) -> dict[str, Any]:
         row.update({"status": "skipped", "skip_reason": "docker unavailable"})
         return row
 
-    with managed_container("age", args) as container_meta:
-        row.update(container_meta)
-        try:
+    try:
+        with managed_container("age", args) as container_meta:
+            row.update(container_meta)
             import psycopg
 
             conn_info = f"host=localhost port={args.age_port} user={args.age_user} password={args.age_password} dbname={args.age_database}"
@@ -717,8 +769,8 @@ def run_age(workload: str, args: argparse.Namespace) -> dict[str, Any]:
                 row["count_status"] = count_status(row, args.nodes, args.edges)
                 row["result_count"], row["query_seconds"] = seconds(lambda: run_age_workload(cur, workload, args))
             conn.close()
-        except Exception as exc:
-            row.update({"status": "failed", "skip_reason": f"{type(exc).__name__}: {exc}"})
+    except Exception as exc:
+        row.update({"status": "failed", "skip_reason": f"{type(exc).__name__}: {exc}"})
     add_rates(row)
     return row
 

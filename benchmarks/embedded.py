@@ -328,9 +328,10 @@ def run_ladybugdb(workload: str, args: argparse.Namespace) -> dict[str, Any]:
 
     path = Path(tempfile.mkdtemp(prefix="ladybugdb_embedded_bench_", dir=args.tmp_dir)) / "graph.ladybug"
     db = None
+    conn = None
     try:
         db = lb.Database(str(path))
-        conn = db.connect()
+        conn = db.connect() if hasattr(db, "connect") else lb.Connection(db)
         _, row["ingest_seconds"] = seconds(lambda: ingest_ladybugdb(conn, workload, args, path.parent))
         (row["actual_nodes"], row["actual_edges"]), row["count_seconds"] = seconds(lambda: count_ladybugdb(conn))
         row["count_status"] = count_status(row, args.nodes, args.edges)
@@ -339,8 +340,13 @@ def run_ladybugdb(workload: str, args: argparse.Namespace) -> dict[str, Any]:
     except Exception as exc:
         row.update({"status": "failed", "skip_reason": f"{type(exc).__name__}: {exc}"})
     finally:
+        if conn is not None and hasattr(conn, "close"):
+            conn.close()
         if db is not None:
-            del db
+            if hasattr(db, "close"):
+                db.close()
+            else:
+                del db
         if not args.keep_dbs:
             shutil.rmtree(path.parent, ignore_errors=True)
     add_rates(row)
@@ -349,7 +355,7 @@ def run_ladybugdb(workload: str, args: argparse.Namespace) -> dict[str, Any]:
 
 def ingest_ladybugdb(conn: Any, workload: str, args: argparse.Namespace, work_dir: Path) -> None:
     """Ingest data into LadybugDB using CSV files."""
-    conn.execute("CREATE NODE TABLE Node(id STRING, group INT64, PRIMARY KEY (id));")
+    conn.execute("CREATE NODE TABLE Node(id STRING, node_group INT64, PRIMARY KEY (id));")
     for et in NAMED_EDGE_TYPES:
         conn.execute(f"CREATE REL TABLE {et}(FROM Node TO Node, weight INT64);")
 
@@ -406,6 +412,19 @@ def run_ladybugdb_workload(conn: Any, workload: str, args: argparse.Namespace) -
             res = conn.execute(f"MATCH (a:Node {{id: '{seed}'}})-[:RelA]->(b:Node) RETURN count(b);")
             total += res.get_next()[0]
         return total
+    if workload == "sample_neighbors":
+        total = 0
+        for seed in seed_ids(args.iterations, args.nodes):
+            res = conn.execute(
+                f"MATCH (a:Node {{id: '{seed}'}})-[:RelA]->(b:Node) RETURN b.id LIMIT {args.sample_size};"
+            )
+            total += res.get_num_tuples()
+        return total
+    if workload == "bfs_depth":
+        total = 0
+        for seed in seed_ids(args.iterations, args.nodes):
+            total += bfs_ladybugdb(conn, seed, args.depth, args.bfs_limit)
+        return total
     if workload == "typed_path":
         total = 0
         for seed in seed_ids(args.iterations, args.nodes):
@@ -413,6 +432,26 @@ def run_ladybugdb_workload(conn: Any, workload: str, args: argparse.Namespace) -
             total += res.get_next()[0]
         return total
     raise ValueError(f"workload {workload} not implemented for LadybugDB")
+
+
+def bfs_ladybugdb(conn: Any, start_node: str, depth: int, limit: int) -> int:
+    """BFS traversal over LadybugDB using typed outgoing-edge queries."""
+    visited: set[str] = set()
+    queue = deque([(start_node, 0)])
+    while queue and len(visited) <= limit:
+        current, current_depth = queue.popleft()
+        if current in visited:
+            continue
+        visited.add(current)
+        if current_depth >= depth:
+            continue
+        for edge_type in NAMED_EDGE_TYPES:
+            res = conn.execute(f"MATCH (a:Node {{id: '{current}'}})-[:{edge_type}]->(b:Node) RETURN b.id;")
+            while res.has_next():
+                neighbor = res.get_next()[0]
+                if neighbor not in visited:
+                    queue.append((neighbor, current_depth + 1))
+    return min(max(0, len(visited) - 1), limit)
 
 
 def run_engine_workload(engine: str, workload: str, args: argparse.Namespace) -> dict[str, Any]:

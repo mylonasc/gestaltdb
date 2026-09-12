@@ -302,12 +302,12 @@ def run_arcadedb(workload: str, shape: str, args: argparse.Namespace) -> dict[st
     if importlib.util.find_spec("arcadedb_embedded") is None:
         row.update({"status": "skipped", "skip_reason": "missing arcadedb-embedded package"})
         return row
-    from arcadedb_embedded import ArcadeDB
+    import arcadedb_embedded
 
     path = Path(tempfile.mkdtemp(prefix="arcadedb_bench_", dir=args.tmp_dir)) / "benchmark.arcadedb"
     db = None
     try:
-        db = ArcadeDB(str(path), heap_size=args.arcadedb_heap_size)
+        db = arcadedb_embedded.create_database(str(path), jvm_kwargs={"heap_size": args.arcadedb_heap_size})
         setup_arcadedb(db)
         _, row["ingest_seconds"] = seconds(lambda: ingest_arcadedb(db, shape, args.nodes, args.edges, args.batch_size, args.arcadedb_parallel))
         if workload != "columnar_ingest":
