@@ -1,0 +1,121 @@
+# GestaltDB Agent Guide
+
+This repository contains `gestaltdb`, a pure Python graph database toolkit for attributed graphs. It stores nodes, directed edges, native node labels, typed adjacency records, secondary indexes, and read-optimized sampler snapshots on embedded key-value backends.
+
+Use this file when you are an agent trying to understand or modify the library with minimal probing. For runnable snippets, see `EXAMPLES.md`. For user-facing narrative docs, see `docs/`.
+
+## Start Here
+
+- Core package: `src/gestaltdb/`
+- Public graph model and database: `src/gestaltdb/graphdb.py`
+- Storage backends: `src/gestaltdb/kvstores.py`
+- Serializers: `src/gestaltdb/serializers.py`
+- Columnar ingestion containers and enums: `src/gestaltdb/ingestion.py`
+- Cypher facade: `src/gestaltdb/cypher.py`
+- Cypher parser/planner/runtime internals: `src/gestaltdb/cypher_*.py`
+- Sampling API: `src/gestaltdb/sampling/`
+- Sphinx docs: `docs/`
+- Tests: `tests/`
+
+## Import Map
+
+Prefer explicit submodule imports for core graph objects:
+
+```python
+from gestaltdb.graphdb import Edge, GraphDB, Node
+from gestaltdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
+from gestaltdb.serializers import JSONSerializer, PickleSerializer
+```
+
+The package root currently re-exports selected ingestion, Cypher result, and sampling helpers:
+
+```python
+from gestaltdb import EdgeList, IndexMaintenanceMode, NodeList, QueryResult
+from gestaltdb import HardNegativeConfig, SamplerEngine, SamplerSnapshot
+from gestaltdb import SamplingHop, SamplingPattern
+```
+
+Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes are available from `import gestaltdb`; import them from their modules unless the API is intentionally changed.
+
+## Core Concepts
+
+- `Node(node_id=..., labels=[...], properties={...})` stores a stable ID, deduplicated native labels, and arbitrary properties.
+- `Edge(edge_id=..., source=..., target=..., properties={"type": ...})` stores a directed edge. Typed traversal and relationship Cypher use `edge.properties["type"]`.
+- `GraphDB(store, serializer, indexed_node_properties=None, indexed_edge_properties=None)` is the main object for reads, writes, indexes, Cypher, ingestion, and sampling snapshot creation.
+- `GraphDB.create(path, backend="pyrex", serializer="json", ...)` creates a self-describing database directory with `gestaltdb_manifest.json`; `GraphDB.open(path)` reopens it.
+- Backends implement the `KVStore` interface. Current backends are `LMDBStore`, `LevelDBStore`, and `PyRexStore`.
+- Serializers convert graph entities to bytes. Current serializers are `PickleSerializer`, `JSONSerializer`, `MessagePackSerializer`, and `ProtobufSerializer`.
+
+## Backend Guidance
+
+- Use `LevelDBStore` for small local graphs, tests, and examples when LevelDB/plyvel is available.
+- Use `LMDBStore` when LMDB's embedded storage model is desirable and `map_size` can be chosen ahead of time.
+- Use `PyRexStore` for RocksDB-backed bulk ingestion and append-heavy workloads, especially with Arrow/Polars columnar ingestion.
+- Use `PyRexStore(transactional=True)` only when graph-level atomicity is required; the default non-transactional path keeps the native columnar writer available.
+- Always close `GraphDB` handles in scripts and notebooks with `graph.close()` or a `try/finally`.
+
+## Indexing Rules
+
+- Node labels are indexed automatically by `put_node`, `put_nodes`, and columnar ingestion.
+- Relationship types are indexed automatically when edges have `properties["type"]`.
+- Property indexes are explicit. Call `create_node_property_index("name")` or `create_edge_property_index("score")` before relying on index-backed property lookups.
+- Exact lookup helpers include `nodes_by_property`, `nodes_by_label_property`, `edges_by_property`, and `edges_by_type_property`.
+- Range helpers include `nodes_by_property_range`, `nodes_by_label_property_range`, `edges_by_property_range`, and `edges_by_type_property_range`.
+- Deferred columnar ingestion can mark secondary indexes stale. Run `rebuild_deferred_indexes()` before index-backed queries if using `IndexMaintenanceMode.DEFER`.
+
+## Ingestion Rules
+
+- Use object writes (`put_node`, `put_edge`, `put_nodes`, `put_edges_bulk`) for incremental updates and simple examples.
+- Use `ingest_arrow` or `ingest_polars` for tabular bulk loads.
+- `ColumnarIngestionMode.ENTITY_COLUMNS` builds payloads from structured ID, label, type, and property columns.
+- `ColumnarIngestionMode.SERIALIZED_PAYLOADS` expects `node_value` and `edge_value` columns that already contain serializer-compatible bytes.
+- `IndexMaintenanceMode.MAINTAIN` keeps secondary indexes valid immediately.
+- `IndexMaintenanceMode.DEFER` writes canonical records and typed adjacency but leaves secondary indexes stale until `rebuild_deferred_indexes()`.
+- `IndexMaintenanceMode.DEFER_REBUILD` defers during ingest and rebuilds before returning; it is the high-level default for `ingest_arrow` and `ingest_polars`.
+- Columnar edge ingestion is append-only and maintains typed adjacency, but intentionally skips legacy adjacency blobs.
+
+## Cypher Support
+
+Use `GraphDB.query(cypher, parameters=None)` for read-only Cypher. It returns `QueryResult(columns, records)`, and iterating over the result yields record dictionaries.
+
+Supported features include:
+
+- Node scans by label, multiple labels, inline properties, and parameters.
+- Typed relationship traversal using `edge.properties["type"]`.
+- Anchored and unanchored typed relationship patterns.
+- `WHERE` with equality, inequality, ordered comparisons, `AND`, `IN`, `IS NULL`, and `IS NOT NULL`.
+- `RETURN`, aliases, `RETURN *`, `DISTINCT`, `ORDER BY`, `SKIP`, and `LIMIT`.
+- Chained `MATCH` clauses.
+- GestaltDB-specific `CALL pg.sample_typed_paths(...) YIELD path RETURN path`.
+
+Unsupported Cypher currently includes mutating clauses, aggregation, `WITH`, `OPTIONAL MATCH`, variable-length paths, multiple pattern parts inside one `MATCH`, and path binding such as `p = (a)-[:T]->(b)`.
+
+## Sampling APIs
+
+There are two sampling layers:
+
+- `GraphDB` typed traversal sampling uses stored typed adjacency and external node IDs. Use `SamplingHop`, `SamplingPattern`, `sample_neighbors`, `sample_typed_paths`, and `sample_typed_subgraph`.
+- `SamplerSnapshot` plus `SamplerEngine` is array-native and optimized for ML training. It uses compact integer node, edge, and relation IDs.
+
+`SamplerSnapshot.build(graph, output_path, ...)` and `graph.build_sampler_snapshot(output_path, ...)` persist immutable `.npy` arrays and metadata. `SamplerEngine.load(path, mode="ram"|"memmap", seed=...)` loads the arrays for neighbor, multihop, subgraph, positive-triple, and hard-negative sampling.
+
+`SampledSubgraphBatch` uses local node IDs in `senders`, `receivers`, `positives`, and `negatives`. Use `node_ids_global` to map local batch rows back to compact global snapshot IDs, and use `snapshot.external_node_id(...)` or `snapshot.global_triple_to_external(...)` to recover external IDs.
+
+## Development Commands
+
+- Run tests: `uv run pytest`
+- Run a focused test: `uv run pytest tests/test_cypher.py -q`
+- Build Sphinx docs: `uv run sphinx-build -b html docs docs/_build/html`
+- Install docs extras when needed: `python -m pip install ".[docs]"`
+
+Optional backend dependencies may be missing in a local environment. If a failure is dependency-related, inspect `tests/conftest.py` and optional dependency tests before changing production code.
+
+## Documentation Maintenance
+
+- Keep `AGENTS.md` as the shortest reliable map for coding agents.
+- Keep `EXAMPLES.md` runnable, compact, and aligned with tested APIs.
+- Keep `src/gestaltdb/__init__.py` focused on package-level orientation and import guidance, not full tutorials.
+- When changing core APIs, update Sphinx docs under `docs/`, then update `AGENTS.md`, `EXAMPLES.md`, and the package docstring if import paths or workflows changed.
+- Prefer examples using temporary directories or clearly disposable paths.
+- Do not document unsupported Cypher syntax or unimplemented backend behavior as available.
+- If unsure, verify behavior against tests or implementation before editing docs.
