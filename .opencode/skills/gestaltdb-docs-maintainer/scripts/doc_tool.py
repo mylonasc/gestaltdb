@@ -8,6 +8,7 @@ automated drift checking, and example execution for agents and developers.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 from pathlib import Path
 import re
 import subprocess
@@ -18,6 +19,15 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
 REPO_ROOT = SKILL_DIR.parents[2]
 REFERENCES_DIR = SKILL_DIR / "references"
+
+OPTIONAL_SNIPPET_MODULES = {
+    "LMDBStore": ("lmdb", "lmdb"),
+    "PyRexStore": ("pyrex", "pyrex-rocksdb"),
+    "import pyarrow": ("pyarrow", "pyarrow"),
+    "from pyarrow": ("pyarrow", "pyarrow"),
+    "import polars": ("polars", "polars"),
+    "from polars": ("polars", "polars"),
+}
 
 
 class TopicMetadata(NamedTuple):
@@ -96,6 +106,14 @@ def extract_rules_only(content: str) -> str:
         if not in_code:
             out_lines.append(line)
     return "\n".join(out_lines).strip()
+
+
+def missing_optional_dependency(snippet: str) -> str | None:
+    """Return a human-readable missing optional dependency reason, if any."""
+    for trigger, (module_name, package_name) in OPTIONAL_SNIPPET_MODULES.items():
+        if trigger in snippet and importlib.util.find_spec(module_name) is None:
+            return f"{package_name} not installed"
+    return None
 
 
 def cmd_list(args):
@@ -212,14 +230,11 @@ def cmd_test_examples(args):
             total_run += 1
             print(f"  Testing [{topic}] snippet {idx}...", end=" ", flush=True)
 
-            # Check for optional dependency preconditions
-            if "LMDBStore" in snip:
-                try:
-                    import lmdb
-                except ImportError:
-                    print("SKIPPED (lmdb not installed)")
-                    skipped += 1
-                    continue
+            missing_dependency = missing_optional_dependency(snip)
+            if missing_dependency:
+                print(f"SKIPPED ({missing_dependency})")
+                skipped += 1
+                continue
 
             # Execute snippet in a separate python process
             proc = subprocess.run(

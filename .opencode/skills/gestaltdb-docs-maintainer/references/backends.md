@@ -10,14 +10,9 @@ All GestaltDB storage backends implement the `KVStore` interface from `gestaltdb
 
 Key design characteristics:
 - Keys and values are raw bytes (`bytes`).
-- Backends provide prefix scanning via `iterator(prefix=b"...")`.
-- Batch atomic updates are supported via `write_batch()` or `put_batch()`.
-- Standardized namespaces:
-  - Node records: `N:<node_id_bytes>`
-  - Edge records: `E:<edge_id_bytes>`
-  - Typed adjacency: `A:<type>:<dir>:<node_id>`
-  - Secondary indexes: `I:<index_name>:...`
-  - Metadata: `M:<key>`
+- Backends expose specialized graph methods such as `put_node`, `get_node`, `put_edge`, `get_edge`, `iter_typed_adjacency`, and `iter_index_prefix`.
+- Bulk updates are exposed through helpers such as `put_nodes_bulk`, `put_edges_bulk`, `put_typed_adjacency_bulk`, and `put_index_entries_bulk`.
+- Logical storage areas are node records, edge records, legacy adjacency, typed adjacency, secondary indexes, and metadata. Concrete key prefixes and physical databases differ by backend.
 
 ---
 
@@ -30,8 +25,6 @@ Key design characteristics:
 - **Best for:** Local development, small to medium graphs, CI testing.
 - **Parameters:**
   - `path`: Directory path for LevelDB storage.
-  - `create_if_missing`: Boolean (default `True`).
-  - `compression`: Default `snappy`.
 
 ### LMDBStore
 - **Import:** `from gestaltdb.kvstores import LMDBStore`
@@ -41,8 +34,8 @@ Key design characteristics:
 - **Parameters:**
   - `path`: Directory path for LMDB.
   - `map_size`: Maximum virtual memory size in bytes (e.g. `2**30` for 1GB). Must be specified adequately up front.
-  - `max_dbs`: Maximum named sub-databases (default `10`).
-  - `sync`: Sync policy (default `True`).
+  - `map_id`: Compatibility option for mapped IDs.
+  - `map_keys`: Enables extra key mapping databases.
 
 ### PyRexStore
 - **Import:** `from gestaltdb.kvstores import PyRexStore`
@@ -51,8 +44,9 @@ Key design characteristics:
 - **Best for:** Bulk data ingestion, high-throughput writes, large production datasets.
 - **Parameters:**
   - `path`: Directory path for RocksDB storage.
+  - `parallelism`, `max_background_jobs`, `write_buffer_size`, `bloom_bits_per_key`, `disable_wal`: Optional RocksDB tuning settings.
   - `transactional`: Boolean (default `False`). When `False`, uses high-speed direct batch writers and enables native columnar ingestion. When `True`, wraps database in `PyRexTransactionStore` for multi-operation ACID atomicity.
-  - `db_options`: Optional RocksDB tuning options dictionary.
+  - `transaction_db_options`: Optional PyRex transaction DB options used only with `transactional=True`.
 
 ---
 
