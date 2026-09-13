@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import fnmatch
 import json
 from pathlib import Path
 import shutil
@@ -224,14 +225,15 @@ class BenchmarkRunner:
 
     def _run_validation(self, benchmark: AgentBenchmark, worktree: Path, run_dir: Path) -> ValidationResult:
         if not benchmark.validation_commands:
-            return ValidationResult(status="not_run")
+            command_result = ValidationResult(status="not_run")
+            return self._apply_allowed_path_check(benchmark, worktree, run_dir, command_result)
         command = " && ".join(benchmark.validation_commands)
         stdout = run_dir / "validation.stdout"
         stderr = run_dir / "validation.stderr"
         started = time.monotonic()
         proc = self._run_shell(command, worktree, stdout, stderr, check=False)
         duration = time.monotonic() - started
-        return ValidationResult(
+        result = ValidationResult(
             status="passed" if proc.returncode == 0 else "failed",
             command=command,
             returncode=proc.returncode,
@@ -239,6 +241,46 @@ class BenchmarkRunner:
             stderr_path=str(stderr),
             duration_seconds=duration,
         )
+        return self._apply_allowed_path_check(benchmark, worktree, run_dir, result)
+
+    def _apply_allowed_path_check(
+        self,
+        benchmark: AgentBenchmark,
+        worktree: Path,
+        run_dir: Path,
+        result: ValidationResult,
+    ) -> ValidationResult:
+        if self.config.dry_run or not benchmark.allowed_paths:
+            return result
+        changed = [path for path in self._changed_paths(worktree) if path != ".opencode/opencode.json"]
+        violations = [path for path in changed if not _path_allowed(path, benchmark.allowed_paths)]
+        if not violations:
+            return result
+        result.status = "failed"
+        message = "\nChanged files outside allowed_paths:\n" + "\n".join(f"- {path}" for path in violations) + "\n"
+        stderr_path = Path(result.stderr_path) if result.stderr_path else run_dir / "validation.stderr"
+        with stderr_path.open("a", encoding="utf-8") as stderr_file:
+            stderr_file.write(message)
+        result.stderr_path = str(stderr_path)
+        return result
+
+    def _changed_paths(self, worktree: Path) -> list[str]:
+        proc = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=worktree,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        paths: list[str] = []
+        for line in proc.stdout.splitlines():
+            if len(line) < 4:
+                continue
+            path = line[3:]
+            if " -> " in path:
+                path = path.split(" -> ", 1)[1]
+            paths.append(path)
+        return paths
 
     def _run_judge_if_enabled(
         self,
@@ -324,3 +366,7 @@ def _benchmark_permissions() -> dict[str, object]:
             "git worktree *": "deny",
         },
     }
+
+
+def _path_allowed(path: str, allowed_patterns: list[str]) -> bool:
+    return any(fnmatch.fnmatch(path, pattern) for pattern in allowed_patterns)
