@@ -57,21 +57,21 @@ Install Benchmark Dependencies
 Backend Benchmarks
 ------------------
 
-Use ``benchmarks.py`` for a quick backend comparison on the same append-only
+Use ``benchmarks/quick.py`` (or ``python -m benchmarks quick``; ``benchmarks.py`` is retained as a compatibility forwarder) for a quick backend comparison on the same append-only
 workload.
 
 .. code-block:: sh
 
-   python benchmarks.py --backend leveldb --nodes 20000 --edges 100000 --batch-size 10000 --append-only
-   python benchmarks.py --backend rocksdb --nodes 20000 --edges 100000 --batch-size 10000 --append-only
-   python benchmarks.py --backend rocksdb --nodes 20000 --edges 100000 --batch-size 10000 --append-only --rocksdb-transactional
+   python -m benchmarks quick --backend leveldb --nodes 20000 --edges 100000 --batch-size 10000 --append-only
+   python -m benchmarks quick --backend rocksdb --nodes 20000 --edges 100000 --batch-size 10000 --append-only
+   python -m benchmarks quick --backend rocksdb --nodes 20000 --edges 100000 --batch-size 10000 --append-only --rocksdb-transactional
 
-Use ``scripts/benchmark_matrix.py`` for larger matrix runs across graph sizes,
+Use ``benchmarks/matrix.py`` (or ``python -m benchmarks matrix``) for larger matrix runs across graph sizes,
 backends, core counts, and ingestion modes.
 
 .. code-block:: sh
 
-   uv run python scripts/benchmark_matrix.py \
+   uv run python -m benchmarks matrix \
       --sizes 10000 100000 1000000 \
       --edge-multiplier 1 \
       --cores 1 2 4 \
@@ -90,7 +90,7 @@ shape:
 
 .. code-block:: sh
 
-   python scripts/benchmark_matrix.py \
+   python -m benchmarks matrix \
       --backends rocksdb \
       --rocksdb-configs parallel-buffer64mb-bloom10 parallel-buffer64mb-bloom10-transactional \
       --sizes 10000 100000 \
@@ -334,19 +334,19 @@ Operational guidance:
 RocksDB Tuning and Compaction Benchmarks
 ----------------------------------------
 
-Use ``scripts/tune_rocksdb.py`` for a small RocksDB tuning matrix against a
+Use ``benchmarks/tuning.py`` (or ``python -m benchmarks tuning``) for a small RocksDB tuning matrix against a
 LevelDB baseline.
 
 .. code-block:: sh
 
-   python scripts/tune_rocksdb.py --nodes 20000 --edges 100000 --batch-size 10000
+   python -m benchmarks tuning --nodes 20000 --edges 100000 --batch-size 10000
 
-Use ``scripts/benchmark_rocksdb_compaction.py`` for a repeated-overwrite workload
+Use ``benchmarks/compaction.py`` (or ``python -m benchmarks compaction``) for a repeated-overwrite workload
 that creates compaction pressure.
 
 .. code-block:: sh
 
-   uv run python scripts/benchmark_rocksdb_compaction.py \
+   uv run python -m benchmarks compaction \
       --configs leveldb rocksdb-p1-bg1-smallbuf rocksdb-p4-bg4-smallbuf rocksdb-p8-bg8-smallbuf rocksdb-p4-bg4-largebuf \
       --keys 250000 \
       --passes 6 \
@@ -373,7 +373,7 @@ all graph workloads.
 External Graph Database Benchmarks
 ----------------------------------
 
-Use ``scripts/benchmark_external_graphdbs.py`` to compare GestaltDB/RocksDB with
+Use ``benchmarks/external.py`` (or ``python -m benchmarks external``) to compare GestaltDB/RocksDB with
 Neo4j, Memgraph, ArcadeDB, and Apache AGE on the same deterministic graph shapes.
 The runner reports ingestion and query phases separately and validates loaded node
 and edge counts before comparing query timings.
@@ -384,10 +384,9 @@ Ingestion paths differ by engine:
 - Neo4j and Memgraph use batched Cypher over Bolt for ingestion and batched
   seed queries with ``UNWIND`` for traversal workloads.
 - ArcadeDB uses the embedded ``GraphBatch`` API.
-- Apache AGE uses its CSV bulk loader for ingestion and ``cypher()`` through
-  PostgreSQL for queries. AGE benchmark ingestion includes building a GIN
-  property index on ``Node.properties`` so seeded ``node_id`` lookups use AGE's
-  PostgreSQL-backed indexing path.
+- Apache AGE uses ``cypher()`` through PostgreSQL for ingestion and queries. Pass
+  ``--age-require-index`` when you want the runner to add a GIN property index on
+  ``Node.properties`` before query timing.
 
 Traversal workloads use each engine's query interface. GestaltDB uses
 ``GraphDB.query()`` for neighbor expansion, star traversal, typed paths, and the
@@ -403,12 +402,95 @@ Install the optional benchmark dependencies:
 
    uv sync --extra fast-ingest --extra external-bench
 
+Benchmark Suite Validation
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The modular benchmark runners were validated locally with the repository's
+optional benchmark extras installed via ``uv sync --extra all``. Smoke tests used
+small graph sizes to exercise every command path, and the documented 100k node /
+500k edge comparison runs were executed for engines that complete at that scale.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Runner
+     - Parameters
+     - Result
+   * - ``quick``
+     - 200 nodes, 1,000 edges; LevelDB, RocksDB, LMDB
+     - completed successfully for all three backends
+   * - ``matrix``
+     - 200 nodes, 5 edges/node; LevelDB and RocksDB; object, Arrow, Polars
+     - 12/12 rows reported ``status=ok``
+   * - ``compaction``
+     - 200 keys, 2 passes; LevelDB and RocksDB small-buffer preset
+     - completed and wrote CSV/JSONL outputs
+   * - ``sampler``
+     - 200 nodes, 1,000 edges, 20 iterations
+     - completed; tiny graphs are dominated by setup overhead, so do not use this run for speedup claims
+   * - ``tuning``
+     - 200 nodes, 1,000 edges across the RocksDB preset sweep
+     - completed and wrote JSON/CSV outputs
+   * - ``profiling``
+     - 200 nodes, 1,000 edges; LevelDB pickle and RocksDB JSON/Polars cases
+     - completed and wrote profile summaries
+   * - ``embedded``
+     - 200 nodes, 1,000 edges; GestaltDB, LatticeDB, LadybugDB
+     - GestaltDB and LatticeDB completed; LadybugDB completed after adapting to the current ``ladybug`` connection API
+   * - ``arcadedb``
+     - 200 nodes, 1,000 edges; GestaltDB, transactional GestaltDB, ArcadeDB
+     - completed after adapting to ``arcadedb-embedded``'s current ``create_database`` API
+   * - ``external``
+     - 100 nodes, 300 edges; GestaltDB, transactional GestaltDB, ArcadeDB, Neo4j, Memgraph, AGE
+     - all engines completed after switching AGE to the available ``apache/age:latest`` image and using AGE-compatible Cypher literals
+   * - ``plotting``
+     - generated SVG files from an external benchmark summary JSONL file
+     - completed successfully
+
+Full-scale runs completed for:
+
+- ``external``: 100,000 nodes, 500,000 edges, 10 traversal seeds, three
+  repetitions for GestaltDB, transactional GestaltDB, Neo4j, Memgraph, and
+  ArcadeDB across all advertised workloads.
+- ``embedded``: 100,000 nodes, 500,000 edges, 10 traversal seeds, three
+  repetitions for GestaltDB, LatticeDB, and LadybugDB across all advertised
+  embedded workloads.
+- Apache AGE completed the 100,000 node / 500,000 edge ingest workload, but its
+  row-wise ``cypher()`` ingestion path took 13,318.887 seconds for a single run.
+  The all-workload AGE run did not complete within a 6-hour timeout and is
+  excluded from the 100k comparison tables below.
+
+When validating a new environment, inspect the raw ``status`` and
+``skip_reason`` columns before comparing timings. Optional engines can fail for
+reasons outside GestaltDB itself, such as unavailable Docker images or upstream
+Python API changes.
+
+Embedded Python Graph Databases
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use ``benchmarks/embedded.py`` (or ``python -m benchmarks embedded``) for a local embedded-engine
+comparison between GestaltDB/RocksDB, LatticeDB, and LadybugDB. LatticeDB uses
+its native Python transaction API. LadybugDB uses the PyPI ``ladybug`` package,
+CSV ``COPY`` ingestion, and Cypher traversal queries.
+
+.. code-block:: sh
+
+   uv run python -m benchmarks embedded \
+      --engines gestaltdb latticedb ladybugdb \
+      --workloads ingest neighbors sample_neighbors star_traversal bfs_depth typed_path \
+      --nodes 100000 \
+      --edges 500000 \
+      --batch-size 10000 \
+      --iterations 10 \
+      --repetitions 3 \
+      --output-dir benchmark_results/embedded_graphdbs_100k
+
 Representative full comparison:
 
 .. code-block:: sh
 
-   uv run python scripts/benchmark_external_graphdbs.py \
-      --engines gestaltdb gestaltdb-tx neo4j memgraph arcadedb age \
+   uv run python -m benchmarks external \
+      --engines gestaltdb gestaltdb-tx neo4j memgraph arcadedb \
       --workloads columnar_ingest neighbors sample_neighbors star_traversal bfs_depth typed_path deep_typed_query \
       --nodes 100000 \
       --edges 500000 \
@@ -423,7 +505,7 @@ Generate the documentation plots from one or more summary files:
 
 .. code-block:: sh
 
-   python scripts/plot_external_graphdbs.py \
+   python -m benchmarks plotting \
       benchmark_results/external_graphdbs_100k/external_graphdbs_summary.jsonl \
       --output-dir docs/_static
 
@@ -431,8 +513,9 @@ Generate the documentation plots from one or more summary files:
 ~~~~~~~~~~~~~~~~~
 
 These results use 100,000 nodes, 500,000 edges, batch size 10,000, 10 traversal
-seeds, sample size 5, depth 3, and three repetitions. All rows validated exactly
-100,000 nodes and 500,000 edges. Tables report mean ± standard deviation.
+seeds, sample size 5, depth 3, and three repetitions. All included rows
+validated exactly 100,000 nodes and 500,000 edges. Tables report mean ± standard
+deviation.
 
 .. image:: _static/external_graphdb_ingest_100k.svg
    :alt: Ingestion time comparison across external graph database engines.
@@ -450,29 +533,25 @@ Ingestion phase from the ``columnar_ingest`` workload:
      - Edge ingest rate
      - Relative to GestaltDB
    * - GestaltDB/RocksDB
-     - 1.854 ± 0.167 s
-     - 271,137 edges/s
+     - 2.320 ± 0.126 s
+     - 215,983 edges/s
      - 1.00x
    * - GestaltDB/RocksDB transactional
-     - 3.131 ± 0.264 s
-     - 160,494 edges/s
-     - 1.69x slower
-   * - Apache AGE
-     - 2.794 ± 0.040 s
-     - 179,005 edges/s
-     - 1.51x slower
+     - 3.703 ± 0.377 s
+     - 136,027 edges/s
+     - 1.60x slower
    * - ArcadeDB embedded
-     - 6.060 ± 0.403 s
-     - 82,745 edges/s
-     - 3.27x slower
+     - 5.706 ± 0.161 s
+     - 87,672 edges/s
+     - 2.46x slower
    * - Memgraph
-     - 8.625 ± 0.069 s
-     - 57,970 edges/s
-     - 4.65x slower
+     - 10.946 ± 0.218 s
+     - 45,691 edges/s
+     - 4.72x slower
    * - Neo4j
-     - 13.024 ± 0.197 s
-     - 38,396 edges/s
-     - 7.02x slower
+     - 15.019 ± 0.032 s
+     - 33,292 edges/s
+     - 6.47x slower
 
 Query phase on the already-loaded graph:
 
@@ -483,77 +562,132 @@ Query phase on the already-loaded graph:
      - Result count
      - GestaltDB
      - GestaltDB tx
-     - Apache AGE
      - ArcadeDB
      - Memgraph
      - Neo4j
    * - neighbors
      - 17
-     - 0.000901 ± 0.000334 s
-     - 0.000743 ± 0.000011 s
-     - 0.00333 ± 0.000471 s
-     - 0.0107 ± 0.0106 s
-     - 0.000485 ± 0.0000128 s
-     - 0.0540 ± 0.00516 s
+     - 0.000923 ± 0.000366 s
+     - 0.000769 ± 0.000023 s
+     - 0.010 ± 0.009 s
+     - 0.000735 ± 0.000259 s
+     - 0.057 ± 0.005 s
    * - sample_neighbors
      - 17
-     - 0.000753 ± 0.000052 s
-     - 0.000764 ± 0.000008 s
-     - 0.00324 ± 0.000758 s
-     - 0.0143 ± 0.00717 s
-     - 0.000996 ± 0.000114 s
-     - 0.0574 ± 0.00121 s
+     - 0.000732 ± 0.000037 s
+     - 0.000752 ± 0.000006 s
+     - 0.004819 ± 0.002178 s
+     - 0.006972 ± 0.001713 s
+     - 0.066 ± 0.001 s
    * - star_traversal
      - 5,000,000
-     - 16.172 ± 0.215 s
-     - 16.738 ± 1.020 s
-     - 3.762 ± 0.058 s
-     - 57.905 ± 0.828 s
-     - 40.381 ± 0.575 s
-     - 47.696 ± 1.123 s
+     - 15.595 ± 2.881 s
+     - 15.918 ± 2.731 s
+     - 41.286 ± 0.455 s
+     - 0.338 ± 0.018 s
+     - 0.357 ± 0.016 s
    * - bfs_depth
      - 3
-     - 0.000575 ± 0.000009 s
-     - 0.000599 ± 0.000005 s
-     - 0.00271 ± 0.000419 s
-     - 0.00848 ± 0.00359 s
-     - 0.00531 ± 0.000902 s
-     - 0.241 ± 0.00739 s
+     - 0.000573 ± 0.000020 s
+     - 0.000601 ± 0.000018 s
+     - 0.006133 ± 0.008613 s
+     - 0.002087 ± 0.000402 s
+     - 0.084 ± 0.003 s
    * - typed_path
      - 125
-     - 0.00107 ± 0.000010 s
-     - 0.00120 ± 0.000040 s
-     - 0.00964 ± 0.00160 s
-     - 0.00816 ± 0.000979 s
-     - 0.00249 ± 0.000150 s
-     - 0.108 ± 0.00352 s
+     - 0.001069 ± 0.000023 s
+     - 0.001195 ± 0.000046 s
+     - 0.007271 ± 0.001547 s
+     - 0.002314 ± 0.000053 s
+     - 0.077 ± 0.004 s
    * - deep_typed_query
-     - 105
-     - 0.00221 ± 0.000073 s
-     - 0.00245 ± 0.000016 s
-     - 0.425 ± 0.00626 s
-     - 0.00859 ± 0.00120 s
-     - 0.00265 ± 0.0000471 s
-     - 0.137 ± 0.00405 s
+     - 57
+     - 0.001523 ± 0.000006 s
+     - 0.001673 ± 0.000047 s
+     - 0.006489 ± 0.001029 s
+     - 0.001751 ± 0.000125 s
+     - 0.080 ± 0.003 s
 
 Notes:
 
-- GestaltDB remains fastest on ingestion in this setup. AGE uses PostgreSQL-visible
-  CSV files, AGE's bulk load functions, and a post-load GIN property index on
-  ``Node.properties``; the AGE ingest time includes that index build.
+- GestaltDB remains fastest on ingestion among the engines included in the full
+  100k comparison table. AGE's row-wise ``cypher()`` path is currently much
+  slower at this scale and is not included in the full comparison table.
 - GestaltDB's traversal timings are dominated by embedded typed-adjacency prefix
   scans. Server engines pay query execution and client/server costs for the small
   seeded traversals. Neo4j and Memgraph rows use batched Cypher seed queries to
   avoid one Bolt round-trip per seed.
-- Apache AGE is fast on the star traversal because the query streams one large hub
-  expansion efficiently. The seeded AGE workloads require the ``Node.properties``
-  GIN index; without it, ``node_id`` predicates can devolve into label scans and
-  produce invalidly pessimistic timings.
+- For AGE, the 100k ``columnar_ingest`` workload completed one run in
+  13,318.887 seconds, or 37.5 edges/s. That result identifies the current AGE
+  adapter as unsuitable for full-scale comparisons until it uses a true bulk load
+  path.
 - ``reopen_seconds`` and count validation are recorded separately in summary files
   and are not included in query timings.
 - The star traversal deliberately materializes 5,000,000 rows to the client, so
   it measures server traversal plus result streaming and client decoding. Use a
   count-only workload if you want to isolate server-side traversal execution.
+
+Embedded 100k Node Results
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The embedded comparison uses 100,000 nodes, 500,000 edges, batch size 10,000,
+10 traversal seeds, sample size 5, depth 3, and three repetitions. All rows
+reported ``status=ok`` and validated the expected node and edge counts.
+
+.. list-table:: Ingestion phase from the ``ingest`` workload
+   :header-rows: 1
+
+   * - Engine
+     - Ingest seconds
+     - Edge ingest rate
+   * - GestaltDB/RocksDB
+     - 7.848 ± 0.027 s
+     - 63,709 edges/s
+   * - LatticeDB
+     - 122.191 ± 0.724 s
+     - 4,092 edges/s
+   * - LadybugDB
+     - 0.966 ± 0.022 s
+     - 517,582 edges/s
+
+.. list-table:: Query phase on the already-loaded embedded graph
+   :header-rows: 1
+
+   * - Workload
+     - Result count
+     - GestaltDB
+     - LatticeDB
+     - LadybugDB
+   * - neighbors
+     - 17
+     - 0.000258 ± 0.000007 s
+     - 0.001698 ± 0.000347 s
+     - 0.006641 ± 0.000845 s
+   * - sample_neighbors
+     - 17
+     - 0.000273 ± 0.000005 s
+     - 0.001812 ± 0.000051 s
+     - 0.007306 ± 0.001363 s
+   * - star_traversal
+     - 5,000,000
+     - 3.183 ± 0.018 s
+     - 25.100 ± 0.154 s
+     - 0.011 ± 0.000 s
+   * - bfs_depth
+     - engine-specific
+     - 0.000158 ± 0.000003 s
+     - 0.001882 ± 0.000059 s
+     - 0.053 ± 0.001 s
+   * - typed_path
+     - 125
+     - 0.000470 ± 0.000005 s
+     - 0.002386 ± 0.000178 s
+     - 0.016 ± 0.001 s
+
+LadybugDB's full-scale result is very fast on this benchmark shape because its
+CSV ``COPY`` ingest and query execution path fit the generated workload well.
+As with all benchmark rows here, compare against your own graph shape and query
+mix before generalizing.
 
 Benchmark Caveats
 -----------------

@@ -1,31 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="940" height="404" viewBox="0 0 940 404" role="img" aria-labelledby="title desc">
-<title id="title">External graph database ingestion time</title>
-<desc id="desc">Mean ingestion time for a 100000 node and 500000 edge benchmark, lower is better.</desc>
-<rect width="100%" height="100%" fill="#ffffff"/>
-<text x="24" y="34" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#111827">Ingestion time: 100k nodes / 500k edges</text>
-<text x="24" y="56" font-family="Inter, Arial, sans-serif" font-size="13" fill="#4b5563">Mean seconds over 3 repetitions. AGE includes CSV bulk load plus GIN index build.</text>
-<text x="24" y="99" font-family="Inter, Arial, sans-serif" font-size="14" fill="#111827">GestaltDB</text>
-<rect x="220" y="80" width="79.7" height="24" rx="4" fill="#2563eb"/>
-<text x="309.7" y="98" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">1.854s +/- 0.167s</text>
-<text x="795" y="98" font-family="Inter, Arial, sans-serif" font-size="12" fill="#4b5563">271,137 edges/s</text>
-<text x="24" y="145" font-family="Inter, Arial, sans-serif" font-size="14" fill="#111827">Apache AGE</text>
-<rect x="220" y="126" width="120.1" height="24" rx="4" fill="#7c3aed"/>
-<text x="350.1" y="144" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">2.794s +/- 0.040s</text>
-<text x="795" y="144" font-family="Inter, Arial, sans-serif" font-size="12" fill="#4b5563">179,005 edges/s</text>
-<text x="24" y="191" font-family="Inter, Arial, sans-serif" font-size="14" fill="#111827">GestaltDB tx</text>
-<rect x="220" y="172" width="134.6" height="24" rx="4" fill="#94a3b8"/>
-<text x="364.6" y="190" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">3.131s +/- 0.264s</text>
-<text x="795" y="190" font-family="Inter, Arial, sans-serif" font-size="12" fill="#4b5563">160,494 edges/s</text>
-<text x="24" y="237" font-family="Inter, Arial, sans-serif" font-size="14" fill="#111827">ArcadeDB</text>
-<rect x="220" y="218" width="260.6" height="24" rx="4" fill="#94a3b8"/>
-<text x="490.6" y="236" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">6.060s +/- 0.403s</text>
-<text x="795" y="236" font-family="Inter, Arial, sans-serif" font-size="12" fill="#4b5563">82,745 edges/s</text>
-<text x="24" y="283" font-family="Inter, Arial, sans-serif" font-size="14" fill="#111827">Memgraph</text>
-<rect x="220" y="264" width="370.9" height="24" rx="4" fill="#94a3b8"/>
-<text x="600.9" y="282" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">8.625s +/- 0.069s</text>
-<text x="795" y="282" font-family="Inter, Arial, sans-serif" font-size="12" fill="#4b5563">57,970 edges/s</text>
-<text x="24" y="329" font-family="Inter, Arial, sans-serif" font-size="14" fill="#111827">Neo4j</text>
-<rect x="220" y="310" width="560.0" height="24" rx="4" fill="#94a3b8"/>
-<text x="790.0" y="328" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">13.024s +/- 0.197s</text>
-<text x="795" y="328" font-family="Inter, Arial, sans-serif" font-size="12" fill="#4b5563">38,396 edges/s</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="300" viewBox="0 0 680 300">
+<style>
+  text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  .title { font-size: 16px; font-weight: 600; fill: #1f2328; }
+  .subtitle { font-size: 12px; fill: #656d76; }
+  .label { font-size: 13px; fill: #1f2328; text-anchor: end; }
+  .bar { fill: #0969da; rx: 4px; }
+  .bar-baseline { fill: #1a7f37; rx: 4px; }
+  .value { font-size: 12px; fill: #1f2328; font-variant-numeric: tabular-nums; }
+  .relative { font-size: 11px; fill: #656d76; }
+</style>
+<rect width="680" height="300" fill="#ffffff" />
+<text x="24" y="28" class="title">100k Node / 500k Edge Ingestion Time</text>
+<text x="24" y="46" class="subtitle">Lower is faster · Mean wall-clock seconds across 3 runs</text>
+<text x="170" y="80" class="label">GestaltDB</text>
+<rect x="180" y="66" width="58.7" height="22" class="bar-baseline" />
+<text x="248.7" y="81" class="value">2.32s ±0.13s</text>
+<text x="388.7" y="81" class="relative">(1.0x)</text>
+<text x="170" y="122" class="label">GestaltDB tx</text>
+<rect x="180" y="108" width="93.7" height="22" class="bar" />
+<text x="283.7" y="123" class="value">3.70s ±0.38s</text>
+<text x="423.7" y="123" class="relative">(1.6x)</text>
+<text x="170" y="164" class="label">ArcadeDB</text>
+<rect x="180" y="150" width="144.4" height="22" class="bar" />
+<text x="334.4" y="165" class="value">5.71s ±0.16s</text>
+<text x="474.4" y="165" class="relative">(2.5x)</text>
+<text x="170" y="206" class="label">Memgraph</text>
+<rect x="180" y="192" width="276.9" height="22" class="bar" />
+<text x="466.9" y="207" class="value">10.95s ±0.22s</text>
+<text x="606.9" y="207" class="relative">(4.7x)</text>
+<text x="170" y="248" class="label">Neo4j</text>
+<rect x="180" y="234" width="380.0" height="22" class="bar" />
+<text x="570.0" y="249" class="value">15.02s ±0.03s</text>
+<text x="710.0" y="249" class="relative">(6.5x)</text>
 </svg>

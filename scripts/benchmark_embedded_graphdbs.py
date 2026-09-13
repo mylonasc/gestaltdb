@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper forwarding to benchmarks.external."""
+"""Compatibility wrapper forwarding to benchmarks.embedded."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ for p in (str(SRC), str(ROOT)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from benchmarks.external import main
+from benchmarks.embedded import main
 
 if __name__ == "__main__":
     main()

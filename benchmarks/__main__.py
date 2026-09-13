@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-"""Compatibility wrapper forwarding to benchmarks.external."""
+"""Module entry point for `python -m benchmarks`."""
 
 from __future__ import annotations
 
@@ -12,7 +11,7 @@ for p in (str(SRC), str(ROOT)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from benchmarks.external import main
+from benchmarks.cli import main
 
 if __name__ == "__main__":
     main()
