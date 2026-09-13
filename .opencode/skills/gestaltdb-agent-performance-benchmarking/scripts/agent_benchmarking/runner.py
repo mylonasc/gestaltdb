@@ -195,14 +195,14 @@ class BenchmarkRunner:
             "agent": {
                 self.config.agent_name: {
                     "description": "Runs isolated GestaltDB agentic benchmark coding tasks.",
-                    "mode": "subagent",
+                    "mode": "primary",
                     "model": self.config.model,
                     "permission": _benchmark_permissions(),
                     "prompt": "You are a careful benchmarked coding agent. Keep changes minimal, inspect the repository before editing, and validate with the requested commands.",
                 },
                 self.config.judge_agent_name: {
                     "description": "Judges GestaltDB benchmark patches with a fixed rubric.",
-                    "mode": "subagent",
+                    "mode": "primary",
                     "model": self.config.effective_judge_model,
                     "permission": {
                         "read": "allow",
