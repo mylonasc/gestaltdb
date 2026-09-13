@@ -113,6 +113,15 @@ There are two sampling layers:
 
 Optional backend dependencies may be missing in a local environment. If a failure is dependency-related, inspect `tests/conftest.py` and optional dependency tests before changing production code.
 
+## Release Workflow
+
+- This repository publishes to PyPI through GitHub Actions Trusted Publishing. Do not run local `twine upload` unless explicitly asked and credentials are intentionally available.
+- The remote `Publish` workflow triggers on a published GitHub release and supports `workflow_dispatch`. Inspect it with `gh workflow view Publish --yaml` if local `.github/workflows/` files are absent.
+- To release a tagged version, first ensure the version is committed on `main`, tests and docs checks passed, and local build artifacts pass `twine check`; then create the GitHub release, e.g. `gh release create vX.Y.Z --target main --title "gestaltdb X.Y.Z" --notes "..."`.
+- After creating a release, watch the publish run with `gh run list --workflow Publish --limit 5` and `gh run watch <run-id> --exit-status`; verify PyPI with `https://pypi.org/project/gestaltdb/X.Y.Z/` or the PyPI JSON API.
+- Verify installed wheels against the declared Python range, not the agent host default if it is outside `requires-python`. Use `uv run --python 3.12 --with gestaltdb==X.Y.Z ...` for release smoke tests.
+- Do not assume package attributes or helper names during smoke tests. Inspect or use documented APIs, e.g. `importlib.metadata.version("gestaltdb")`, `python -m gestaltdb.agent_docs list`, `agent_docs.read_skill()`, and `agent_docs.read_topic("quickstart")`.
+
 ## Documentation Maintenance
 
 - Keep `AGENTS.md` as the shortest reliable map for coding agents.
