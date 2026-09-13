@@ -12,6 +12,15 @@ def test_typed_adjacency_filters_type_and_direction(graph_db):
     assert graph_db.neighbors_by_edge_type("drug-1", "drug-to-disease", direction="out") == [b"disease-1"]
 
 
+def test_count_typed_adjacency_matches_directional_traversal(graph_db):
+    populate_typed_graph(graph_db)
+
+    assert graph_db.count_typed_adjacency("drug-1", "drug-to-protein", direction="out") == 2
+    assert graph_db.count_typed_adjacency("protein-1", "drug-to-protein", direction="in") == 1
+    assert graph_db.count_typed_adjacency("drug-1", "drug-to-protein", direction="any") == 2
+    assert graph_db.count_typed_adjacency("drug-1", "missing", direction="out") == 0
+
+
 def test_deleting_typed_edge_removes_typed_adjacency(graph_db):
     populate_typed_graph(graph_db)
 
