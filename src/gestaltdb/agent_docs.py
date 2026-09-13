@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import argparse
 from importlib import resources
+from pathlib import Path
 import re
+import shutil
 import sys
 from typing import NamedTuple, Sequence
 
@@ -24,8 +26,14 @@ TOPICS: dict[str, Topic] = {
     "quickstart": Topic(
         "quickstart",
         "Quickstart For Library Users",
-        "Creating graphs, adding nodes/edges, imports, relationship types, and close discipline.",
+        "Creating graphs, adding nodes/edges, imports, persistence, inspection, relationship types, and close discipline.",
         "references/quickstart.md",
+    ),
+    "backends": Topic(
+        "backends",
+        "Backends, Persistence, And Inspection",
+        "GraphDB.create/open, manifest-backed DBs, LevelDB, PyRex/RocksDB, and inspecting index metadata/properties.",
+        "references/backends.md",
     ),
     "cypher": Topic(
         "cypher",
@@ -61,6 +69,27 @@ def read_skill() -> str:
 def read_topic(topic_id: str) -> str:
     topic = TOPICS[topic_id]
     return (resources.files("gestaltdb.agent_skill") / topic.resource).read_text(encoding="utf-8")
+
+
+def install_opencode_skill(target_dir: str | Path = ".", *, skill_name: str = "gestaltdb-user-guide", force: bool = False) -> Path:
+    """Install the packaged GestaltDB user skill into a project-local opencode skill directory."""
+    target = Path(target_dir).expanduser().resolve() / ".opencode" / "skills" / skill_name
+    if target.exists():
+        if not force:
+            raise FileExistsError(f"opencode skill already exists: {target}; pass --force to overwrite packaged files")
+        if not target.is_dir():
+            raise NotADirectoryError(target)
+    target.mkdir(parents=True, exist_ok=True)
+
+    source_root = resources.files("gestaltdb.agent_skill")
+    for resource in source_root.iterdir():
+        destination = target / resource.name
+        if resource.is_dir():
+            shutil.copytree(resource, destination, dirs_exist_ok=True)
+        else:
+            with resources.as_file(resource) as source_path:
+                shutil.copy2(source_path, destination)
+    return target
 
 
 def extract_python_examples(markdown: str) -> list[str]:
@@ -125,21 +154,50 @@ def cmd_get(args: argparse.Namespace) -> int:
 def cmd_search(args: argparse.Namespace) -> int:
     pattern = re.compile(args.query, re.IGNORECASE)
     documents = [("skill", read_skill())] + [(topic_id, read_topic(topic_id)) for topic_id in TOPICS]
-    matches = 0
+    hits: list[tuple[int, str, str, int, list[str]]] = []
     for name, content in documents:
-        file_matches = []
-        for line_number, line in enumerate(content.splitlines(), 1):
+        lines = content.splitlines()
+        topic = TOPICS.get(name)
+        header = f"{topic.title} | when: {topic.when_to_read}" if topic else "Packaged skill overview and routing rules."
+        for line_number, line in enumerate(lines, 1):
             if pattern.search(line):
-                file_matches.append((line_number, line.strip()))
-        if file_matches:
-            print(f"[{name}] {len(file_matches)} match(es)")
-            for line_number, line in file_matches[:8]:
-                print(f"  {line_number}: {line}")
-            if len(file_matches) > 8:
-                print(f"  ... {len(file_matches) - 8} more")
-            matches += len(file_matches)
-    print(f"total matches: {matches}")
-    return 0 if matches else 1
+                start = max(1, line_number - args.context)
+                end = min(len(lines), line_number + args.context)
+                snippet = [f"{number}: {lines[number - 1]}" for number in range(start, end + 1)]
+                score = 0 if pattern.search(name) else 1
+                hits.append((score, name, header, line_number, snippet))
+    hits.sort(key=lambda hit: (hit[0], hit[1], hit[3]))
+    total = len(hits)
+    if total == 0:
+        print("total matches: 0")
+        return 1
+    limit = max(1, args.limit)
+    page = max(1, args.page)
+    start_index = (page - 1) * limit
+    end_index = start_index + limit
+    shown = hits[start_index:end_index]
+    page_count = (total + limit - 1) // limit
+    print(f"total matches: {total}; page {page}/{page_count}; showing {len(shown)}; limit {limit}; context {args.context}")
+    if page < page_count:
+        print(f"next page: python -m gestaltdb.agent_docs search {args.query!r} --page {page + 1} --limit {limit} --context {args.context}")
+    for _score, name, header, line_number, snippet in shown:
+        print()
+        print(f"[{name}] line {line_number}")
+        print(f"why: {header}")
+        print("snippet:")
+        for snippet_line in snippet:
+            print(f"  {snippet_line}")
+    return 0
+
+
+def cmd_install_opencode_skill(args: argparse.Namespace) -> int:
+    try:
+        destination = install_opencode_skill(args.target, skill_name=args.name, force=args.force)
+    except (FileExistsError, NotADirectoryError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    print(f"installed GestaltDB opencode skill: {destination}")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -157,7 +215,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     search_parser = subparsers.add_parser("search", help="search packaged docs")
     search_parser.add_argument("query", help="regular expression to search for")
+    search_parser.add_argument("--limit", type=int, default=10, help="maximum matches to print per page; defaults to 10")
+    search_parser.add_argument("--page", type=int, default=1, help="1-based results page to print; defaults to 1")
+    search_parser.add_argument("--context", type=int, default=2, help="context lines before and after each match; defaults to 2")
     search_parser.set_defaults(func=cmd_search)
+
+    install_parser = subparsers.add_parser(
+        "install-opencode-skill",
+        help="copy the packaged GestaltDB user skill into .opencode/skills",
+    )
+    install_parser.add_argument("--target", default=".", help="project directory to install into; defaults to cwd")
+    install_parser.add_argument("--name", default="gestaltdb-user-guide", help="opencode skill directory name")
+    install_parser.add_argument("--force", action="store_true", help="overwrite packaged skill files if the skill already exists")
+    install_parser.set_defaults(func=cmd_install_opencode_skill)
     return parser
 
 

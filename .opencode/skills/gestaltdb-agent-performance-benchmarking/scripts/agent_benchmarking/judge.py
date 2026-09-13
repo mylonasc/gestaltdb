@@ -130,7 +130,19 @@ Use score >= {benchmark.minimum_judge_score} for passed unless the deterministic
 
 
 def _extract_judge_json(raw: str) -> dict[str, object]:
-    candidates = re.findall(r"\{.*?\}", raw, flags=re.DOTALL)
+    candidates: list[str] = []
+    for line in raw.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        part = event.get("part")
+        text = part.get("text") if isinstance(part, dict) else event.get("text")
+        if isinstance(text, str):
+            candidates.extend(_json_candidates_from_text(text))
+    candidates.extend(_json_candidates_from_text(raw))
     for candidate in reversed(candidates):
         try:
             value = json.loads(candidate)
@@ -139,3 +151,15 @@ def _extract_judge_json(raw: str) -> dict[str, object]:
         if isinstance(value, dict) and "score" in value:
             return value
     return {}
+
+
+def _json_candidates_from_text(text: str) -> list[str]:
+    candidates = re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", text, flags=re.DOTALL | re.IGNORECASE)
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"\{", text):
+        try:
+            _, end = decoder.raw_decode(text[match.start() :])
+        except json.JSONDecodeError:
+            continue
+        candidates.append(text[match.start() : match.start() + end])
+    return candidates

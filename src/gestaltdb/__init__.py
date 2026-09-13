@@ -43,12 +43,14 @@ Important usage notes for agents and developers:
   ingestion, and use ``SamplerSnapshot``/``SamplerEngine`` for ML-oriented
   array-native sampling.
 
-GestaltDB also ships a packaged agent skill and queryable user examples. Run
+GestaltDB also ships a packaged opencode skill and queryable user examples. In
+an application project that uses GestaltDB, run ``python -m gestaltdb.agent_docs
+install-opencode-skill`` to copy the packaged skill into
+``.opencode/skills/gestaltdb-user-guide/SKILL.md``. Agents can also run
 ``python -m gestaltdb.agent_docs list`` or ``python -m gestaltdb.agent_docs get
 cypher --examples`` to retrieve focused guidance from an installed package.
-See ``SKILL.md``/``AGENTS.md`` in the repository for contributor guidance,
-``EXAMPLES.md`` for runnable usage patterns, and ``docs/`` for the Sphinx user
-guide.
+See repository ``AGENTS.md`` for contributor guidance, ``EXAMPLES.md`` for
+runnable usage patterns, and ``docs/`` for the Sphinx user guide.
 """
 
 from .sampling import AsyncBatchFeeder, HardNegativeConfig, SampledSubgraphBatch, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern

@@ -12,15 +12,19 @@ Use this packaged skill when you are an agentic coding assistant writing code th
 GestaltDB ships a small retrieval CLI for agents and developer tooling:
 
 ```bash
+python -m gestaltdb.agent_docs install-opencode-skill
 python -m gestaltdb.agent_docs list
 python -m gestaltdb.agent_docs get quickstart
 python -m gestaltdb.agent_docs get cypher --examples
 python -m gestaltdb.agent_docs search "IndexMaintenanceMode.DEFER"
 ```
 
+Run `python -m gestaltdb.agent_docs install-opencode-skill` from an application project to copy this packaged skill to `.opencode/skills/gestaltdb-user-guide/SKILL.md`, where opencode can load it as a project-local skill.
+
 Available topics:
 
 - `quickstart`: imports, graph lifecycle, node/edge creation, close discipline.
+- `backends`: `GraphDB.create/open`, manifests, LevelDB/PyRex/RocksDB, and inspection.
 - `cypher`: supported read-only Cypher syntax and common unsupported forms.
 - `indexing`: explicit property indexes, range lookups, deferred rebuilds.
 - `sampling`: typed traversal sampling vs snapshot/engine sampling.
@@ -33,7 +37,7 @@ Prefer explicit submodule imports for core classes:
 ```python
 from gestaltdb.graphdb import Edge, GraphDB, Node
 from gestaltdb.kvstores import LevelDBStore
-from gestaltdb.serializers import JSONSerializer
+from gestaltdb.serializers import JSONSerializer, PickleSerializer
 ```
 
 The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storage backends, or serializers. The root does export selected ingestion, Cypher result, and sampling helpers such as `IndexMaintenanceMode`, `QueryResult`, `SamplingHop`, and `SamplingPattern`.
@@ -41,6 +45,8 @@ The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storag
 ## Core Usage Rules
 
 - Use `GraphDB.create(path, backend="leveldb", serializer="json")` for a self-describing database directory, or construct `GraphDB(store, serializer)` directly.
+- Use `GraphDB.open(path)` to reopen a self-describing database created with `GraphDB.create`.
+- Use `graph.index_statistics()` and `graph.manifest` for inspection; inspect retrieved `Node.properties` and `Edge.properties` for property names/values.
 - Always close graph handles with `graph.close()` in a `finally` block.
 - Store relationship types as `Edge(properties={"type": "REL_TYPE"})`.
 - Create property indexes explicitly before index-backed property lookups.
@@ -76,7 +82,7 @@ with TemporaryDirectory() as tmpdir:
             'RETURN a.id AS source, b.name AS target',
             parameters={"name": "Alice"},
         )
-        assert result.columns == ["source", "target"]
+        assert tuple(result.columns) == ("source", "target")
         assert result.records == [{"source": "alice", "target": "Bob"}]
     finally:
         graph.close()
