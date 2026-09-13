@@ -61,6 +61,7 @@ class BenchmarkRunner:
             worktree = self._prepare_worktree(run_id)
             metadata["worktree_path"] = str(worktree if self.config.preserve_worktrees else "")
             self._write_opencode_config(worktree)
+            self._install_packaged_user_skill(worktree)
             if self.config.dry_run:
                 return self._run_dry(benchmark, repetition, run_id, run_dir, worktree, metadata)
             self._run_setup(benchmark, worktree, run_dir)
@@ -134,6 +135,8 @@ class BenchmarkRunner:
             "parallelism_mode": self.config.parallelism,
             "auto_approve": self.config.auto,
             "run_dir": str(run_dir),
+            "model_context_configured": _configured_context_limit(self.config.model),
+            "model_context_available": _available_context_limit(self.config.model),
         }
 
     def _run_dry(
@@ -213,7 +216,7 @@ class BenchmarkRunner:
         config = {
             "$schema": "https://opencode.ai/config.json",
             "model": self.config.model,
-            "provider": _ollama_gemma_provider_config(),
+            "provider": _ollama_provider_config(),
             "agent": {
                 self.config.agent_name: {
                     "description": "Runs isolated GestaltDB agentic benchmark coding tasks.",
@@ -240,6 +243,11 @@ class BenchmarkRunner:
             },
         }
         (config_dir / "opencode.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
+
+    def _install_packaged_user_skill(self, worktree: Path) -> None:
+        from gestaltdb import agent_docs
+
+        agent_docs.install_opencode_skill(worktree, force=True)
 
     def _run_setup(self, benchmark: AgentBenchmark, worktree: Path, run_dir: Path) -> None:
         for index, command in enumerate(benchmark.setup_commands, 1):
@@ -274,7 +282,7 @@ class BenchmarkRunner:
     ) -> ValidationResult:
         if self.config.dry_run or not benchmark.allowed_paths:
             return result
-        changed = [path for path in self._changed_paths(worktree) if path != ".opencode/opencode.json"]
+        changed = [path for path in self._changed_paths(worktree) if not path.startswith(".opencode/")]
         violations = [path for path in changed if not _path_allowed(path, benchmark.allowed_paths)]
         if not violations:
             return result
@@ -397,25 +405,61 @@ def _benchmark_permissions() -> dict[str, object]:
     }
 
 
-def _ollama_gemma_provider_config() -> dict[str, object]:
+def _ollama_provider_config() -> dict[str, object]:
     models: dict[str, object] = {}
-    for model_id, name in (
-        ("gemma4:latest", "Gemma 4"),
-        ("gemma4:26b", "Gemma 4 26B"),
-        ("gemma4:31b", "Gemma 4 31B"),
+    for model_id, name, family in (
+        ("gemma4:latest", "Gemma 4", "gemma4"),
+        ("gemma4:26b", "Gemma 4 26B", "gemma4"),
+        ("gemma4:31b", "Gemma 4 31B", "gemma4"),
+        ("qwen3.8:latest", "Qwen 3 27B", "qwen3"),
     ):
+        limit = {"context": 8192, "output": 4096}
+        if model_id == "qwen3.8:latest":
+            limit = {"context": 262144, "output": 32768}
         models[model_id] = {
             "id": model_id,
             "name": name,
-            "family": "gemma4",
+            "family": family,
             "status": "active",
             "reasoning": True,
             "tool_call": True,
             "temperature": True,
             "cost": {"input": 0, "output": 0},
-            "limit": {"context": 8192, "output": 4096},
+            "limit": limit,
         }
     return {"ollama": {"models": models}}
+
+
+def _configured_context_limit(model: str) -> int | None:
+    provider, _, model_id = model.partition("/")
+    if provider != "ollama" or not model_id:
+        return None
+    models = _ollama_provider_config()["ollama"]["models"]  # type: ignore[index]
+    model_config = models.get(model_id) if isinstance(models, dict) else None
+    if not isinstance(model_config, dict):
+        return None
+    limit = model_config.get("limit")
+    if not isinstance(limit, dict):
+        return None
+    context = limit.get("context")
+    return context if isinstance(context, int) else None
+
+
+def _available_context_limit(model: str) -> int | None:
+    provider, _, model_id = model.partition("/")
+    if provider != "ollama" or not model_id:
+        return None
+    proc = subprocess.run(["ollama", "show", model_id], text=True, capture_output=True, check=False)
+    if proc.returncode != 0:
+        return None
+    for line in proc.stdout.splitlines():
+        fields = line.strip().split()
+        if len(fields) >= 3 and fields[0] == "context" and fields[1] == "length":
+            try:
+                return int(fields[2])
+            except ValueError:
+                return None
+    return None
 
 
 def _path_allowed(path: str, allowed_patterns: list[str]) -> bool:

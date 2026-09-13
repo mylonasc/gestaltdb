@@ -1,0 +1,34 @@
+id: pyrex-polars-ingestion-usage-script
+name: PyRex RocksDB Polars Ingestion Usage Script
+description: Build a standalone script that uses the PyRex/RocksDB backend with Polars ingestion and typed traversal.
+timeout_seconds: 300
+tags:
+  - pyrex
+  - rocksdb
+  - polars
+  - ingestion
+  - traversal
+  - deterministic-validation
+allowed_paths:
+  - agent_benchmark_solutions/pyrex_polars_ingestion_usage.py
+setup_commands: []
+validation_commands:
+  - uv run python agent_benchmark_solutions/pyrex_polars_ingestion_usage.py
+prompt: |
+  You are working as a user of the GestaltDB library. First read `.opencode/skills/gestaltdb-user-guide/SKILL.md` if it exists. Also use `python -m gestaltdb.agent_docs search "pyrex|RocksDB|ingest_polars|backend" --limit 5` if you need targeted docs. Create a standalone script at `agent_benchmark_solutions/pyrex_polars_ingestion_usage.py`.
+
+  The script must:
+  - Use `TemporaryDirectory` for all database files and temporary CSV artifacts.
+  - Use Polars to create small node and edge tables, write them to CSV files inside the temporary directory, then read them back with `pl.read_csv` before ingestion.
+  - Use `GraphDB.create(..., backend="pyrex", serializer="json", backend_options={"disable_wal": True}, indexed_node_properties=["kind"], indexed_edge_properties=["score"])`.
+  - Ingest the Polars DataFrames with `graph.ingest_polars(...)`, passing `node_property_columns=["kind", "name"]`, `edge_property_columns=["score"]`, and a small `chunk_size`.
+  - Include three nodes: one drug and two proteins. Include two typed `TARGETS` edges from the drug to both proteins with numeric scores.
+  - Assert ingestion counts are 3 nodes and 2 edges.
+  - Assert `graph.manifest["backend"]["name"] == "pyrex"` and `graph.index_statistics()` includes `kind` and `score`.
+  - Assert `nodes_by_property("kind", "drug")` returns the drug, `edges_by_type_property_range("TARGETS", "score", 0.8, None)` returns the high-scoring edge, and `neighbors_by_edge_type("drug", "TARGETS")` returns both protein IDs.
+  - Close the graph handle in a `finally` block.
+
+  If the optional `pyrex` or `polars` dependency is unavailable, raise `SystemExit` with a clear message starting with `SKIPPED optional dependency:`. Do not modify files under `src/`, `tests/`, docs, or benchmark runner code. Validate with `uv run python agent_benchmark_solutions/pyrex_polars_ingestion_usage.py`.
+judge_rubric: |
+  Score from 1 to 5. Award high scores for a concise, runnable public-API usage script that exercises the PyRex/RocksDB backend, creates and reads CSV artifacts with Polars, uses ingest_polars with explicit property columns and indexed properties, validates ingestion counts, checks index-backed lookup/range lookup, validates typed traversal, and closes resources. Penalize falling back to LevelDB when pyrex is available, editing library code, missing assertions, ignoring relationship type conventions, or using undocumented internals.
+minimum_judge_score: 4

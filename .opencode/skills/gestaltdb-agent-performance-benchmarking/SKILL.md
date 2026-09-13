@@ -69,6 +69,8 @@ Initial tasks cover:
 - Creating a script that uses `GraphDB.query(...)` and the documented read-only Cypher subset.
 - Creating a script that uses typed sampling APIs with external node IDs correctly.
 - Creating a script that uses property indexes and deferred index rebuild APIs correctly.
+- Creating a script that stores, reopens, and inspects a manifest-backed database with `GraphDB.create/open`, `manifest`, `index_statistics`, and entity properties.
+- Creating a script that uses the PyRex/RocksDB backend with Polars CSV artifacts, `ingest_polars`, property indexes, and typed traversal.
 
 ## Outputs
 
@@ -112,6 +114,11 @@ uv run python .opencode/skills/gestaltdb-agent-performance-benchmarking/scripts/
 ```
 
 The inspector looks for signals such as repeated self-correction, runtime errors, unsupported Cypher syntax, wrong import paths, stale deferred index use, ID-space confusion in sampling, and edits outside the allowed usage-script scope. It writes `trace-inspection-summary.json` with suggested remediation actions such as updating `AGENTS.md`, `EXAMPLES.md`, or relevant API docstrings.
+
+## Lessons Learned
+
+- Validate the effective context limit before diagnosing agent loops. Model documentation or local model metadata may advertise a large context window, while opencode provider config can impose a smaller `limit.context`. Compare the model's advertised context, the opencode configured context, and trace compaction events before attributing repeated reads or summaries to API confusion.
+- For Ollama models, check both `ollama show <model>` and the generated benchmark `.opencode/opencode.json`. A model can advertise 250k+ tokens while the benchmark actually runs with an 8k context cap, triggering frequent compaction and loop-like behavior.
 
 ## Verification
 

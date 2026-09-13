@@ -1,7 +1,7 @@
 id: sampling-usage-script
 name: Typed Sampling Usage Script
-description: Build a standalone script that uses GestaltDB typed sampling APIs correctly.
-timeout_seconds: 900
+description: Build a tiny standalone script that samples typed neighbors from a GestaltDB graph.
+timeout_seconds: 300
 tags:
   - sampling
   - typed-traversal
@@ -13,15 +13,16 @@ setup_commands: []
 validation_commands:
   - uv run python agent_benchmark_solutions/sampling_usage.py
 prompt: |
-  You are working in the GestaltDB repository as a user of the library, not as a GestaltDB developer. Create a standalone script at `agent_benchmark_solutions/sampling_usage.py` that demonstrates correct use of GestaltDB typed traversal sampling APIs.
+  You are working as a user of the GestaltDB library. First read `.opencode/skills/gestaltdb-user-guide/SKILL.md` if it exists. Create a tiny standalone script at `agent_benchmark_solutions/sampling_usage.py`.
 
   The script must:
   - Use `TemporaryDirectory` for all database files.
   - Import `GraphDB`, `Node`, and `Edge` from `gestaltdb.graphdb`.
-  - Import `SamplingHop` and `SamplingPattern` from the documented public API surface.
-  - Create a small typed graph with at least two relationship types, such as `FOLLOWS` and `LIKES`.
-  - Use `sample_neighbors`, `sample_typed_paths`, or `sample_typed_subgraph` with deterministic seeds or assertions that tolerate sampling order.
-  - Assert that sampled paths/subgraphs use the expected external node IDs and relationship types.
+  - Use `LevelDBStore` and `PickleSerializer` directly.
+  - Create exactly three nodes: `alice`, `bob`, and `carol`.
+  - Add two outgoing `FOLLOWS` edges from Alice to Bob and Alice to Carol.
+  - Call `graph.sample_neighbors("alice", "FOLLOWS", sample_size=10)`.
+  - Assert the sampled neighbor IDs are exactly `{"bob", "carol"}` and every returned record has edge type `FOLLOWS`.
   - Close the graph handle in a `finally` block.
 
   Do not build or edit `SamplerSnapshot` internals unless needed for public API usage. Do not modify files under `src/`, `tests/`, docs, or benchmark runner code. Validate with `uv run python agent_benchmark_solutions/sampling_usage.py`.

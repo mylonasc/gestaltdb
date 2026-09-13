@@ -1,7 +1,7 @@
 id: cypher-usage-script
 name: Cypher Usage Script
-description: Build a standalone script that uses GestaltDB's documented Cypher API correctly.
-timeout_seconds: 900
+description: Build a tiny standalone script that uses one documented GestaltDB Cypher query correctly.
+timeout_seconds: 300
 tags:
   - cypher
   - library-usage
@@ -12,14 +12,15 @@ setup_commands: []
 validation_commands:
   - uv run python agent_benchmark_solutions/cypher_usage.py
 prompt: |
-  You are working in the GestaltDB repository as a user of the library, not as a GestaltDB developer. Create a standalone script at `agent_benchmark_solutions/cypher_usage.py` that demonstrates correct use of GestaltDB's public API and documented read-only Cypher subset.
+  You are working as a user of the GestaltDB library. First read `.opencode/skills/gestaltdb-user-guide/SKILL.md` if it exists. Create a tiny standalone script at `agent_benchmark_solutions/cypher_usage.py`.
 
   The script must:
   - Use `TemporaryDirectory` for all database files.
   - Import `GraphDB`, `Node`, and `Edge` from `gestaltdb.graphdb`, not from the package root.
-  - Create a small graph with at least three `Person` nodes and typed `KNOWS` edges.
-  - Query the graph with `GraphDB.query(...)` using labels, inline node properties, typed relationship traversal, parameters, `ORDER BY`, and `LIMIT` within the documented supported Cypher subset.
-  - Include Python assertions that verify returned columns, records, ordering, and matched node/edge properties.
+  - Use `LevelDBStore` and `PickleSerializer` directly.
+  - Create exactly two `Person` nodes, `alice` and `bob`, and one typed `KNOWS` edge from Alice to Bob.
+  - Run one supported read-only query: `MATCH (a:Person {name: $name}) MATCH (a)-[:KNOWS]->(b) RETURN a.id AS source, b.name AS target`.
+  - Assert `tuple(result.columns) == ("source", "target")` and `result.records == [{"source": "alice", "target": "Bob"}]`.
   - Close the graph handle in a `finally` block.
 
   Do not modify files under `src/`, `tests/`, docs, or benchmark runner code. Validate with `uv run python agent_benchmark_solutions/cypher_usage.py`.

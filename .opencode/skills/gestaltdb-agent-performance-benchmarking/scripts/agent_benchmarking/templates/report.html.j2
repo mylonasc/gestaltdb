@@ -16,6 +16,13 @@
     .muted { color: #777; }
     details { margin: 0.75rem 0; }
     pre { overflow-x: auto; background: #7771; padding: 0.75rem; }
+    .trace-event { border: 1px solid #9995; border-radius: 0.5rem; padding: 0.7rem; margin: 0.75rem 0; }
+    .trace-meta { display: flex; flex-wrap: wrap; gap: 0.8rem; color: #777; font-size: 0.9rem; }
+    .trace-tool { border-left: 0.3rem solid #4f46e5; }
+    .trace-text { border-left: 0.3rem solid #0891b2; }
+    .trace-error { border-left: 0.3rem solid #b00020; }
+    .trace-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); }
+    .raw-json summary { cursor: pointer; }
   </style>
 </head>
 <body>
@@ -46,7 +53,7 @@
   <table>
     <thead>
       <tr>
-        <th>Run</th><th>Started</th><th>Benchmark</th><th>Status</th><th>Model</th><th>Judge</th><th>Seconds</th><th>Tokens</th><th>Tools</th><th>Trace Analysis</th><th>Artifacts</th>
+        <th>Run</th><th>Started</th><th>Benchmark</th><th>Status</th><th>Model</th><th>Judge</th><th>Seconds</th><th>Tokens</th><th>Context</th><th>Tools</th><th>Trace Analysis</th><th>Artifacts</th>
       </tr>
     </thead>
     <tbody>
@@ -60,6 +67,7 @@
         <td>{{ result.judge.status }}{% if result.judge.score is not none %} ({{ result.judge.score }}/{{ result.judge.max_score }}){% endif %}</td>
         <td>{{ "%.2f"|format(result.wall_seconds) if result.wall_seconds is not none else "" }}</td>
         <td>{{ result.tokens_total if result.tokens_total is not none else "" }}</td>
+        <td>{% if result.model_context_configured %}configured {{ result.model_context_configured }}{% endif %}{% if result.model_context_available %}<br>available {{ result.model_context_available }}{% endif %}</td>
         <td>{{ result.tool_call_count }} {{ result.tool_call_counts }}</td>
         <td>{{ result.analysis.summary }}</td>
         <td>
@@ -98,6 +106,56 @@
     {% if result.analysis.remediation_actions %}<p>Remediation actions: {{ result.analysis.remediation_actions }}</p>{% endif %}
     {% if result.error %}<pre>{{ result.error }}</pre>{% endif %}
     <pre>{{ result.tool_call_trace }}</pre>
+  </details>
+  {% endfor %}
+
+  <h2>Trace Viewer</h2>
+  <p class="muted">Each event is parsed from the run's <code>opencode-events.jsonl</code>. Tool outputs and raw JSON are truncated in the page for readability; full artifacts remain linked above.</p>
+  {% for result in results %}
+  {% set trace = trace_views[result.run_id] %}
+  <details>
+    <summary><code>{{ result.run_id }}</code> trace - {{ trace.events|length }} event(s)</summary>
+    <p class="muted">Context: configured {{ trace.context_configured if trace.context_configured is not none else "unknown" }}; advertised {{ trace.context_available if trace.context_available is not none else "unknown" }}.</p>
+    {% if trace.raw_error %}<p class="failed">Trace parse warning: {{ trace.raw_error }}</p>{% endif %}
+    {% if not trace.events %}
+    <p class="muted">No trace events found.</p>
+    {% endif %}
+    {% for event in trace.events %}
+    <section class="trace-event {% if event.tool %}trace-tool{% elif event.text %}trace-text{% else %}trace-error{% endif %}">
+      <div class="trace-meta">
+        <span>#{{ event.index }}</span>
+        <span>{{ event.timestamp }}</span>
+        <span><code>{{ event.title }}</code></span>
+        {% if event.status %}<span>status: <code>{{ event.status }}</code></span>{% endif %}
+        <span>context configured: <code>{{ event.context_configured if event.context_configured is not none else "unknown" }}</code></span>
+        <span>context advertised: <code>{{ event.context_available if event.context_available is not none else "unknown" }}</code></span>
+        <span>context used: <code>{{ event.context_used if event.context_used is not none else "unknown" }}</code></span>
+        {% if event.event_tokens is not none %}<span>event tokens: <code>{{ event.event_tokens }}</code></span>{% endif %}
+      </div>
+      {% if event.text %}
+      <h4>Text</h4>
+      <pre>{{ event.text }}</pre>
+      {% endif %}
+      <div class="trace-grid">
+        {% if event.input %}
+        <div>
+          <h4>Tool Input</h4>
+          <pre>{{ event.input }}</pre>
+        </div>
+        {% endif %}
+        {% if event.output %}
+        <div>
+          <h4>Tool Output</h4>
+          <pre>{{ event.output }}</pre>
+        </div>
+        {% endif %}
+      </div>
+      <details class="raw-json">
+        <summary>Raw JSON</summary>
+        <pre>{{ event.raw }}</pre>
+      </details>
+    </section>
+    {% endfor %}
   </details>
   {% endfor %}
 </body>

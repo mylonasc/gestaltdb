@@ -73,6 +73,8 @@ class AgentBenchmarkResult:
     tokens_input: int | None = None
     tokens_output: int | None = None
     tokens_total: int | None = None
+    model_context_configured: int | None = None
+    model_context_available: int | None = None
     cost_usd: float | None = None
     tool_call_count: int = 0
     tool_call_counts: dict[str, int] = field(default_factory=dict)
