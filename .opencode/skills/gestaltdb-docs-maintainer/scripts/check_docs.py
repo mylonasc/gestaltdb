@@ -300,10 +300,14 @@ class DocChecker:
         md_files = [
             self.repo_root / "AGENTS.md",
             self.repo_root / "EXAMPLES.md",
+            self.repo_root / "src/gestaltdb/agent_skill/SKILL.md",
         ]
         ref_dir = self.repo_root / ".opencode/skills/gestaltdb-docs-maintainer/references"
         if ref_dir.exists():
             md_files.extend(ref_dir.glob("*.md"))
+        shipped_ref_dir = self.repo_root / "src/gestaltdb/agent_skill/references"
+        if shipped_ref_dir.exists():
+            md_files.extend(shipped_ref_dir.glob("*.md"))
 
         if extra_markdown_paths:
             md_files.extend(extra_markdown_paths)

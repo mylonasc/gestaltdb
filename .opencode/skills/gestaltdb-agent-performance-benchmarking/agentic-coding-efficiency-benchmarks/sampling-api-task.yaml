@@ -1,0 +1,30 @@
+id: sampling-usage-script
+name: Typed Sampling Usage Script
+description: Build a standalone script that uses GestaltDB typed sampling APIs correctly.
+timeout_seconds: 900
+tags:
+  - sampling
+  - typed-traversal
+  - library-usage
+  - deterministic-validation
+allowed_paths:
+  - agent_benchmark_solutions/sampling_usage.py
+setup_commands: []
+validation_commands:
+  - uv run python agent_benchmark_solutions/sampling_usage.py
+prompt: |
+  You are working in the GestaltDB repository as a user of the library, not as a GestaltDB developer. Create a standalone script at `agent_benchmark_solutions/sampling_usage.py` that demonstrates correct use of GestaltDB typed traversal sampling APIs.
+
+  The script must:
+  - Use `TemporaryDirectory` for all database files.
+  - Import `GraphDB`, `Node`, and `Edge` from `gestaltdb.graphdb`.
+  - Import `SamplingHop` and `SamplingPattern` from the documented public API surface.
+  - Create a small typed graph with at least two relationship types, such as `FOLLOWS` and `LIKES`.
+  - Use `sample_neighbors`, `sample_typed_paths`, or `sample_typed_subgraph` with deterministic seeds or assertions that tolerate sampling order.
+  - Assert that sampled paths/subgraphs use the expected external node IDs and relationship types.
+  - Close the graph handle in a `finally` block.
+
+  Do not build or edit `SamplerSnapshot` internals unless needed for public API usage. Do not modify files under `src/`, `tests/`, docs, or benchmark runner code. Validate with `uv run python agent_benchmark_solutions/sampling_usage.py`.
+judge_rubric: |
+  Score from 1 to 5. Award high scores for a concise, runnable public-API usage script that correctly uses typed sampling with external node IDs, meaningful assertions, deterministic or order-tolerant checks, documented imports, and proper cleanup. Penalize library source edits, confusing external IDs with compact snapshot IDs, brittle random assertions, missing assertions, or unnecessary internal implementation access.
+minimum_judge_score: 4

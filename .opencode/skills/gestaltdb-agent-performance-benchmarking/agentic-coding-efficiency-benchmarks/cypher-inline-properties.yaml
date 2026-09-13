@@ -1,0 +1,28 @@
+id: cypher-usage-script
+name: Cypher Usage Script
+description: Build a standalone script that uses GestaltDB's documented Cypher API correctly.
+timeout_seconds: 900
+tags:
+  - cypher
+  - library-usage
+  - deterministic-validation
+allowed_paths:
+  - agent_benchmark_solutions/cypher_usage.py
+setup_commands: []
+validation_commands:
+  - uv run python agent_benchmark_solutions/cypher_usage.py
+prompt: |
+  You are working in the GestaltDB repository as a user of the library, not as a GestaltDB developer. Create a standalone script at `agent_benchmark_solutions/cypher_usage.py` that demonstrates correct use of GestaltDB's public API and documented read-only Cypher subset.
+
+  The script must:
+  - Use `TemporaryDirectory` for all database files.
+  - Import `GraphDB`, `Node`, and `Edge` from `gestaltdb.graphdb`, not from the package root.
+  - Create a small graph with at least three `Person` nodes and typed `KNOWS` edges.
+  - Query the graph with `GraphDB.query(...)` using labels, inline node properties, typed relationship traversal, parameters, `ORDER BY`, and `LIMIT` within the documented supported Cypher subset.
+  - Include Python assertions that verify returned columns, records, ordering, and matched node/edge properties.
+  - Close the graph handle in a `finally` block.
+
+  Do not modify files under `src/`, `tests/`, docs, or benchmark runner code. Validate with `uv run python agent_benchmark_solutions/cypher_usage.py`.
+judge_rubric: |
+  Score from 1 to 5. Award high scores for a concise, runnable script that uses GestaltDB's public API correctly, imports from documented submodules, closes resources, uses only supported Cypher syntax, and has meaningful assertions. Penalize library source edits, unsupported Cypher syntax, missing assertions, leaked graph handles, package-root imports for core classes, or code that only works by accident.
+minimum_judge_score: 4

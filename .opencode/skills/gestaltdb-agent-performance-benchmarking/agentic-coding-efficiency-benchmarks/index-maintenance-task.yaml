@@ -1,0 +1,29 @@
+id: index-maintenance-usage-script
+name: Deferred Index Maintenance Usage Script
+description: Build a standalone script that uses GestaltDB indexes and deferred rebuild APIs correctly.
+timeout_seconds: 900
+tags:
+  - ingestion
+  - indexing
+  - library-usage
+  - deterministic-validation
+allowed_paths:
+  - agent_benchmark_solutions/index_maintenance_usage.py
+setup_commands: []
+validation_commands:
+  - uv run python agent_benchmark_solutions/index_maintenance_usage.py
+prompt: |
+  You are working in the GestaltDB repository as a user of the library, not as a GestaltDB developer. Create a standalone script at `agent_benchmark_solutions/index_maintenance_usage.py` that demonstrates correct use of GestaltDB property indexes and deferred index rebuild behavior.
+
+  The script must:
+  - Use `TemporaryDirectory` for all database files.
+  - Import `GraphDB`, `Node`, and `Edge` from `gestaltdb.graphdb`.
+  - Import `IndexMaintenanceMode` and any columnar containers from their documented public locations.
+  - Create a graph, create at least one node property index and one edge property or type-property lookup scenario, then verify exact and range lookups with assertions.
+  - Demonstrate deferred maintenance by using `IndexMaintenanceMode.DEFER` or `IndexMaintenanceMode.DEFER_REBUILD` through a documented ingestion API, then call `rebuild_deferred_indexes()` when required before relying on index-backed queries.
+  - Close the graph handle in a `finally` block.
+
+  Do not modify files under `src/`, `tests/`, docs, or benchmark runner code. Validate with `uv run python agent_benchmark_solutions/index_maintenance_usage.py`.
+judge_rubric: |
+  Score from 1 to 5. Award high scores for a concise, runnable public-API usage script that creates indexes explicitly, demonstrates exact/range lookups, handles deferred index maintenance correctly, uses documented imports, and closes resources. Penalize library source edits, relying on stale deferred indexes, undocumented internal APIs, missing assertions, or examples that obscure when `rebuild_deferred_indexes()` is required.
+minimum_judge_score: 4
