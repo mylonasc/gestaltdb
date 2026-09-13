@@ -1,0 +1,23 @@
+id: sampling-api-task
+name: Typed Sampling API Task
+description: Improve or test typed sampling API behavior while respecting GestaltDB's external node ID and snapshot ID conventions.
+timeout_seconds: 900
+tags:
+  - sampling
+  - typed-traversal
+  - deterministic-validation
+allowed_paths:
+  - src/gestaltdb/graphdb.py
+  - src/gestaltdb/sampling/**
+  - tests/test_sampling.py
+  - tests/test_typed_traversal.py
+setup_commands: []
+validation_commands:
+  - uv run pytest tests/test_sampling.py tests/test_typed_traversal.py -q
+prompt: |
+  You are working in the GestaltDB repository. Implement a focused improvement, bug fix, or missing test around typed sampling APIs. Respect the existing distinction between GraphDB typed traversal sampling with external node IDs and SamplerSnapshot/SamplerEngine compact integer IDs. Keep the implementation minimal and add focused tests.
+
+  Inspect the current sampling implementation and tests before editing. Validate with `uv run pytest tests/test_sampling.py tests/test_typed_traversal.py -q`.
+judge_rubric: |
+  Score from 1 to 5. Award high scores for correct use of SamplingHop, SamplingPattern, GraphDB typed traversal, SamplerSnapshot/SamplerEngine ID mapping, and targeted tests. Penalize confusing external IDs with compact snapshot IDs, overbroad rewrites, nondeterministic tests, or undocumented behavior changes.
+minimum_judge_score: 4

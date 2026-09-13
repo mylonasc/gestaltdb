@@ -1,0 +1,23 @@
+id: index-maintenance-task
+name: Deferred Index Maintenance Task
+description: Improve deferred index maintenance behavior or tests around columnar ingestion and secondary indexes.
+timeout_seconds: 900
+tags:
+  - ingestion
+  - indexing
+  - deterministic-validation
+allowed_paths:
+  - src/gestaltdb/graphdb.py
+  - src/gestaltdb/ingestion.py
+  - tests/test_ingestion.py
+  - tests/test_graphdb_interfaces.py
+setup_commands: []
+validation_commands:
+  - uv run pytest tests/test_ingestion.py tests/test_graphdb_interfaces.py -q
+prompt: |
+  You are working in the GestaltDB repository. Implement a focused improvement, bug fix, or missing test around deferred secondary index maintenance. Preserve the documented behavior of IndexMaintenanceMode.MAINTAIN, DEFER, and DEFER_REBUILD. In particular, deferred ingestion may leave secondary indexes stale until rebuild_deferred_indexes() is run.
+
+  Inspect the ingestion and indexing implementation before editing. Keep the change minimal and validate with `uv run pytest tests/test_ingestion.py tests/test_graphdb_interfaces.py -q`.
+judge_rubric: |
+  Score from 1 to 5. Award high scores for preserving deferred index semantics, correct use of rebuild_deferred_indexes(), targeted tests, and minimal implementation changes. Penalize changes that silently make stale indexes appear valid, skip relationship type/native label maintenance, or alter public API behavior without need.
+minimum_judge_score: 4

@@ -1,0 +1,22 @@
+id: cypher-inline-properties
+name: Cypher Inline Properties
+description: Add or fix a small Cypher inline property behavior while preserving the documented read-only Cypher subset.
+timeout_seconds: 900
+tags:
+  - cypher
+  - parser
+  - deterministic-validation
+allowed_paths:
+  - src/gestaltdb/cypher.py
+  - src/gestaltdb/cypher_*.py
+  - tests/test_cypher.py
+setup_commands: []
+validation_commands:
+  - uv run pytest tests/test_cypher.py -q
+prompt: |
+  You are working in the GestaltDB repository. Implement a focused improvement or bug fix related to Cypher inline property matching, using the existing documented read-only Cypher subset. Keep the change minimal and add or update focused tests in tests/test_cypher.py. Do not introduce unsupported Cypher features such as mutation, aggregation, WITH, OPTIONAL MATCH, variable-length paths, or path binding.
+
+  Before editing, inspect the existing Cypher parser/runtime and tests. Prefer explicit imports and repository conventions. Validate with `uv run pytest tests/test_cypher.py -q`.
+judge_rubric: |
+  Score from 1 to 5. Award high scores for a minimal, correct, well-tested change that preserves the documented Cypher subset and follows existing parser/runtime conventions. Penalize unsupported Cypher scope expansion, broad rewrites, missing tests, brittle parsing, or changes outside the task scope.
+minimum_judge_score: 4

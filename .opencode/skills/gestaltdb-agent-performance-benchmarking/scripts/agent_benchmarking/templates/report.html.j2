@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GestaltDB Agent Benchmark Report</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    body { margin: 2rem; line-height: 1.45; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }
+    th, td { border: 1px solid #9995; padding: 0.45rem 0.55rem; text-align: left; vertical-align: top; }
+    th { background: #7772; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .passed { color: #087f23; font-weight: 700; }
+    .failed, .error, .timeout, .judge_failed { color: #b00020; font-weight: 700; }
+    .muted { color: #777; }
+    details { margin: 0.75rem 0; }
+    pre { overflow-x: auto; background: #7771; padding: 0.75rem; }
+  </style>
+</head>
+<body>
+  <h1>GestaltDB Agent Benchmark Report</h1>
+  <p class="muted">Total runs: {{ summary.total_runs }}. Passed: {{ summary.passed_runs }}. Failed: {{ summary.failed_runs }}.</p>
+
+  <h2>Summary By Benchmark</h2>
+  <table>
+    <thead>
+      <tr><th>Benchmark</th><th>Runs</th><th>Passed</th><th>Failed</th><th>Mean Seconds</th><th>Mean Tokens</th></tr>
+    </thead>
+    <tbody>
+    {% for benchmark_id, item in summary.by_benchmark.items() %}
+      <tr>
+        <td><code>{{ benchmark_id }}</code></td>
+        <td>{{ item.runs }}</td>
+        <td>{{ item.passed }}</td>
+        <td>{{ item.failed }}</td>
+        <td>{{ "%.2f"|format(item.wall_seconds_mean) if item.wall_seconds_mean is not none else "" }}</td>
+        <td>{{ "%.0f"|format(item.tokens_total_mean) if item.tokens_total_mean is not none else "" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Runs</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Run</th><th>Benchmark</th><th>Status</th><th>Model</th><th>Judge</th><th>Seconds</th><th>Tokens</th><th>Tools</th><th>Artifacts</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for result in results %}
+      <tr>
+        <td><code>{{ result.run_id }}</code></td>
+        <td>{{ result.benchmark_name }}</td>
+        <td class="{{ result.status }}">{{ result.status }}</td>
+        <td><code>{{ result.model }}</code></td>
+        <td>{{ result.judge.status }}{% if result.judge.score is not none %} ({{ result.judge.score }}/{{ result.judge.max_score }}){% endif %}</td>
+        <td>{{ "%.2f"|format(result.wall_seconds) if result.wall_seconds is not none else "" }}</td>
+        <td>{{ result.tokens_total if result.tokens_total is not none else "" }}</td>
+        <td>{{ result.tool_call_count }} {{ result.tool_call_counts }}</td>
+        <td>
+          {% if result.patch_path %}<div>patch: <code>{{ result.patch_path }}</code></div>{% endif %}
+          {% if result.events_path %}<div>events: <code>{{ result.events_path }}</code></div>{% endif %}
+          {% if result.session_export_path %}<div>session: <code>{{ result.session_export_path }}</code></div>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Run Details</h2>
+  {% for result in results %}
+  <details>
+    <summary><code>{{ result.run_id }}</code> - {{ result.status }}</summary>
+    <p>Commit: <code>{{ result.repo_commit_hash }}</code>. Dirty: {{ result.repo_dirty }}. Skill version: {{ result.benchmark_skill_version }}.</p>
+    <p>Validation: {{ result.validation.status }} <code>{{ result.validation.command }}</code></p>
+    <p>Judge reasoning: {{ result.judge.reasoning }}</p>
+    {% if result.error %}<pre>{{ result.error }}</pre>{% endif %}
+    <pre>{{ result.tool_call_trace }}</pre>
+  </details>
+  {% endfor %}
+</body>
+</html>
