@@ -39,6 +39,7 @@ RESULT_FIELDS = [
     "patch_path",
     "session_export_path",
     "events_path",
+    "trace_path",
     "error",
 ]
 
@@ -70,6 +71,7 @@ def summarize_results(results: list[AgentBenchmarkResult]) -> dict[str, Any]:
         "passed_runs": sum(1 for result in results if result.status == "passed"),
         "failed_runs": sum(1 for result in results if result.status != "passed"),
         "by_benchmark": {},
+        "remediation_actions": [],
     }
     grouped: dict[str, list[AgentBenchmarkResult]] = {}
     for result in results:
@@ -84,6 +86,13 @@ def summarize_results(results: list[AgentBenchmarkResult]) -> dict[str, Any]:
             "wall_seconds_mean": statistics.mean(wall) if wall else None,
             "tokens_total_mean": statistics.mean(tokens) if tokens else None,
         }
+    summary["remediation_actions"] = sorted(
+        {
+            action
+            for result in results
+            for action in result.analysis.remediation_actions
+        }
+    )
     return summary
 
 

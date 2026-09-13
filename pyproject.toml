@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gestaltdb"
-version = "0.6.0"
+version = "0.6.1"
 description = "A pure Python GraphDB for attributed graphs."
 authors = [
     { name = "Mylonas Charilaos", email = "mylonas.charilaos@gmail.com" },
@@ -37,6 +37,9 @@ dev = ["coverage", "lmdb", "msgpack", "myst-parser", "plyvel", "protobuf", "pybl
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+gestaltdb = ["agent_skill/**/*.md"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

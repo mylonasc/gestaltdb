@@ -20,6 +20,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--parallelism", choices=("sequential", "parallel"), default="sequential")
     parser.add_argument("--max-workers", type=int, default=1, help="parallel worker count when --parallelism parallel")
     parser.add_argument("--output-dir", type=Path, default=Path("agent_benchmark_results"))
+    parser.add_argument(
+        "--db-path",
+        type=Path,
+        default=None,
+        help="SQLite database path; defaults to agent_benchmark_results/agent_benchmarks.sqlite",
+    )
     parser.add_argument("--worktree-base", type=Path, default=None, help="directory for temporary git worktrees")
     parser.add_argument("--preserve-worktrees", action="store_true", help="keep worktrees after each run")
     parser.add_argument("--html", action="store_true", help="render index.html report")
@@ -46,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
         repo_root=repo_root,
         skill_root=skill_root,
         output_dir=args.output_dir,
+        db_path=args.db_path,
         model=args.model,
         judge_model=args.judge_model,
         benchmarks=args.benchmarks,
@@ -64,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     passed = sum(1 for result in results if result.status == "passed")
     print(f"agent benchmarks complete: {passed}/{len(results)} passed")
     print(f"results: {config.output_dir}")
+    print(f"sqlite db: {config.effective_db_path}")
     return 0 if passed == len(results) else 1
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,21 @@ class JudgeResult:
 
 
 @dataclass
+class TraceAnalysis:
+    """Offline analysis of an agent trace and benchmark artifacts."""
+
+    status: str = "not_run"
+    summary: str = ""
+    self_correction_count: int = 0
+    suspected_error_patterns: list[str] = field(default_factory=list)
+    library_misuse_signals: list[str] = field(default_factory=list)
+    invalid_code_signals: list[str] = field(default_factory=list)
+    documentation_gaps: list[str] = field(default_factory=list)
+    remediation_actions: list[str] = field(default_factory=list)
+    evidence: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
 class AgentBenchmarkResult:
     """Serializable result for one benchmark repetition."""
 
@@ -51,6 +67,8 @@ class AgentBenchmarkResult:
     opencode_version: str
     parallelism_mode: str
     auto_approve: bool
+    run_started_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    run_finished_at: str = ""
     wall_seconds: float | None = None
     tokens_input: int | None = None
     tokens_output: int | None = None
@@ -67,6 +85,8 @@ class AgentBenchmarkResult:
     patch_path: str = ""
     session_export_path: str = ""
     events_path: str = ""
+    trace_path: str = ""
+    analysis: TraceAnalysis = field(default_factory=TraceAnalysis)
     error: str = ""
 
     def to_dict(self) -> dict[str, Any]:

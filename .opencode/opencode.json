@@ -1,0 +1,60 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ollama": {
+      "models": {
+        "gemma4:latest": {
+          "id": "gemma4:latest",
+          "name": "Gemma 4",
+          "family": "gemma4",
+          "status": "active",
+          "reasoning": true,
+          "tool_call": true,
+          "temperature": true,
+          "cost": {
+            "input": 0,
+            "output": 0
+          },
+          "limit": {
+            "context": 8192,
+            "output": 4096
+          }
+        },
+        "gemma4:26b": {
+          "id": "gemma4:26b",
+          "name": "Gemma 4 26B",
+          "family": "gemma4",
+          "status": "active",
+          "reasoning": true,
+          "tool_call": true,
+          "temperature": true,
+          "cost": {
+            "input": 0,
+            "output": 0
+          },
+          "limit": {
+            "context": 8192,
+            "output": 4096
+          }
+        },
+        "gemma4:31b": {
+          "id": "gemma4:31b",
+          "name": "Gemma 4 31B",
+          "family": "gemma4",
+          "status": "active",
+          "reasoning": true,
+          "tool_call": true,
+          "temperature": true,
+          "cost": {
+            "input": 0,
+            "output": 0
+          },
+          "limit": {
+            "context": 8192,
+            "output": 4096
+          }
+        }
+      }
+    }
+  }
+}

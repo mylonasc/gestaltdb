@@ -21,6 +21,7 @@
 <body>
   <h1>GestaltDB Agent Benchmark Report</h1>
   <p class="muted">Total runs: {{ summary.total_runs }}. Passed: {{ summary.passed_runs }}. Failed: {{ summary.failed_runs }}.</p>
+  {% if summary.sqlite_db_path %}<p>SQLite index: <code>{{ summary.sqlite_db_path }}</code></p>{% endif %}
 
   <h2>Summary By Benchmark</h2>
   <table>
@@ -45,13 +46,14 @@
   <table>
     <thead>
       <tr>
-        <th>Run</th><th>Benchmark</th><th>Status</th><th>Model</th><th>Judge</th><th>Seconds</th><th>Tokens</th><th>Tools</th><th>Artifacts</th>
+        <th>Run</th><th>Started</th><th>Benchmark</th><th>Status</th><th>Model</th><th>Judge</th><th>Seconds</th><th>Tokens</th><th>Tools</th><th>Trace Analysis</th><th>Artifacts</th>
       </tr>
     </thead>
     <tbody>
     {% for result in results %}
       <tr>
         <td><code>{{ result.run_id }}</code></td>
+        <td>{{ result.run_started_at }}</td>
         <td>{{ result.benchmark_name }}</td>
         <td class="{{ result.status }}">{{ result.status }}</td>
         <td><code>{{ result.model }}</code></td>
@@ -59,23 +61,41 @@
         <td>{{ "%.2f"|format(result.wall_seconds) if result.wall_seconds is not none else "" }}</td>
         <td>{{ result.tokens_total if result.tokens_total is not none else "" }}</td>
         <td>{{ result.tool_call_count }} {{ result.tool_call_counts }}</td>
+        <td>{{ result.analysis.summary }}</td>
         <td>
           {% if result.patch_path %}<div>patch: <code>{{ result.patch_path }}</code></div>{% endif %}
           {% if result.events_path %}<div>events: <code>{{ result.events_path }}</code></div>{% endif %}
           {% if result.session_export_path %}<div>session: <code>{{ result.session_export_path }}</code></div>{% endif %}
+          {% if result.trace_path %}<div>trace: <code>{{ result.trace_path }}</code></div>{% endif %}
         </td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
 
+  <h2>Remediation Actions</h2>
+  {% if summary.remediation_actions %}
+  <ul>
+    {% for action in summary.remediation_actions %}
+    <li>{{ action }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No remediation actions were detected by the trace analyzer.</p>
+  {% endif %}
+
   <h2>Run Details</h2>
   {% for result in results %}
   <details>
     <summary><code>{{ result.run_id }}</code> - {{ result.status }}</summary>
+    <p>Started: {{ result.run_started_at }}. Finished: {{ result.run_finished_at }}.</p>
     <p>Commit: <code>{{ result.repo_commit_hash }}</code>. Dirty: {{ result.repo_dirty }}. Skill version: {{ result.benchmark_skill_version }}.</p>
     <p>Validation: {{ result.validation.status }} <code>{{ result.validation.command }}</code></p>
     <p>Judge reasoning: {{ result.judge.reasoning }}</p>
+    <p>Trace analysis: {{ result.analysis.summary }}</p>
+    {% if result.analysis.library_misuse_signals %}<p>Library misuse signals: {{ result.analysis.library_misuse_signals }}</p>{% endif %}
+    {% if result.analysis.invalid_code_signals %}<p>Invalid code signals: {{ result.analysis.invalid_code_signals }}</p>{% endif %}
+    {% if result.analysis.remediation_actions %}<p>Remediation actions: {{ result.analysis.remediation_actions }}</p>{% endif %}
     {% if result.error %}<pre>{{ result.error }}</pre>{% endif %}
     <pre>{{ result.tool_call_trace }}</pre>
   </details>

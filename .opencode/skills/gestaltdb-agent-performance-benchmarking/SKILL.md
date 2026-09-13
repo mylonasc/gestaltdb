@@ -55,6 +55,8 @@ Each run records:
 - Ordered tool call trace.
 - Model, judge model, opencode version, skill version, task hash, commit hash, dirty status, and runner configuration.
 - Validation stdout/stderr, session export, patch diff, changed-path scope checks, and judge result.
+- Full trace bundles in `trace.json` plus deterministic trace analysis in `trace-analysis.json`.
+- A repo-local SQLite index at `agent_benchmark_results/agent_benchmarks.sqlite` unless `--db-path` is provided.
 
 Token and cost fields may be null for local providers that do not report usage.
 
@@ -74,6 +76,7 @@ The default output directory is `agent_benchmark_results/`:
 
 ```text
 agent_benchmark_results/
+├── agent_benchmarks.sqlite
 ├── results.jsonl
 ├── results.csv
 ├── summary.json
@@ -85,8 +88,30 @@ agent_benchmark_results/
         ├── patch.diff
         ├── validation.stdout
         ├── validation.stderr
+        ├── trace.json
+        ├── trace-analysis.json
         └── judge.json
 ```
+
+Browse the SQLite index with standard tools or the bundled helper:
+
+```bash
+uv run python .opencode/skills/gestaltdb-agent-performance-benchmarking/scripts/browse_benchmark_db.py recent --limit 20
+uv run python .opencode/skills/gestaltdb-agent-performance-benchmarking/scripts/browse_benchmark_db.py remediation
+sqlite3 agent_benchmark_results/agent_benchmarks.sqlite '.tables'
+```
+
+The SQLite DB stores structured metadata: run timestamps, commit hashes, model/config, token and tool counts, statuses, validation/judge state, trace-analysis summaries, artifact paths, and remediation actions. Large artifacts remain editable files under each run directory.
+
+## Trace Inspection
+
+Each run stores the opencode JSON event stream, session export, patch, validation output, judge output, and deterministic trace analysis. Use the inspector on any existing results directory to regenerate analysis and aggregate remediation actions:
+
+```bash
+uv run python .opencode/skills/gestaltdb-agent-performance-benchmarking/scripts/inspect_agent_traces.py agent_benchmark_results/<run-dir>
+```
+
+The inspector looks for signals such as repeated self-correction, runtime errors, unsupported Cypher syntax, wrong import paths, stale deferred index use, ID-space confusion in sampling, and edits outside the allowed usage-script scope. It writes `trace-inspection-summary.json` with suggested remediation actions such as updating `AGENTS.md`, `EXAMPLES.md`, or relevant API docstrings.
 
 ## Verification
 

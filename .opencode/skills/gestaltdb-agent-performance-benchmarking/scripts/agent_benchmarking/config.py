@@ -13,6 +13,7 @@ class BenchmarkRunnerConfig:
     repo_root: Path
     skill_root: Path
     output_dir: Path
+    db_path: Path | None = None
     model: str = "ollama/gemma4:26b"
     judge_model: str | None = None
     benchmarks: list[str] | None = None
@@ -36,6 +37,10 @@ class BenchmarkRunnerConfig:
     @property
     def benchmark_dir(self) -> Path:
         return self.skill_root / "agentic-coding-efficiency-benchmarks"
+
+    @property
+    def effective_db_path(self) -> Path:
+        return self.db_path or (self.repo_root / "agent_benchmark_results" / "agent_benchmarks.sqlite")
 
     @property
     def skill_version(self) -> str:

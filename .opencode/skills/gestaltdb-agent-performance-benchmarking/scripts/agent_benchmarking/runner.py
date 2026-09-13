@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 import fnmatch
 import json
 from pathlib import Path
@@ -17,6 +18,8 @@ from .judge import dry_run_judge, run_judge
 from .opencode_runner import export_session, parse_opencode_events, run_opencode_task
 from .reporting import BenchmarkResultWriter, render_html_report, summarize_results, write_summary
 from .results import AgentBenchmarkResult, JudgeResult, ValidationResult
+from .storage import BenchmarkDB
+from .trace_analysis import analyze_trace, write_trace_bundle
 
 
 class BenchmarkRunner:
@@ -38,16 +41,21 @@ class BenchmarkRunner:
         results.sort(key=lambda item: (item.benchmark_id, item.repetition, item.run_id))
         BenchmarkResultWriter(self.config.output_dir).write(results)
         summary = summarize_results(results)
+        summary["sqlite_db_path"] = str(self.config.effective_db_path)
         write_summary(self.config.output_dir, summary)
+        with BenchmarkDB(self.config.effective_db_path) as db:
+            db.upsert_results(results)
         if self.config.html:
             render_html_report(self.config.skill_root, self.config.output_dir, results, summary)
         return results
 
     def _run_one(self, benchmark: AgentBenchmark, repetition: int) -> AgentBenchmarkResult:
+        started_at = datetime.now(timezone.utc).isoformat()
         run_id = f"{benchmark.benchmark_id}-r{repetition}-{uuid.uuid4().hex[:8]}"
         run_dir = self.config.output_dir / "runs" / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         metadata = self._base_metadata(benchmark, repetition, run_id, run_dir)
+        metadata["run_started_at"] = started_at
         worktree: Path | None = None
         try:
             worktree = self._prepare_worktree(run_id)
@@ -71,8 +79,12 @@ class BenchmarkRunner:
                 export_session(opencode_result.session_id, worktree, session_export_path)
             patch_path = run_dir / "patch.diff"
             patch_text = self._write_patch(worktree, patch_path)
-            validation = self._run_validation(benchmark, worktree, run_dir)
-            judge = self._run_judge_if_enabled(benchmark, worktree, run_dir, patch_text, validation)
+            if opencode_result.timed_out:
+                validation = ValidationResult(status="not_run", command="skipped after opencode timeout")
+                judge = JudgeResult(enabled=self.config.judge_enabled, status="skipped", passed=False if self.config.judge_enabled else None)
+            else:
+                validation = self._run_validation(benchmark, worktree, run_dir)
+                judge = self._run_judge_if_enabled(benchmark, worktree, run_dir, patch_text, validation)
             status = self._combined_status(opencode_result.returncode, validation, judge)
             result = AgentBenchmarkResult(
                 **metadata,
@@ -91,11 +103,15 @@ class BenchmarkRunner:
                 patch_path=str(patch_path),
                 session_export_path=str(session_export_path if session_export_path.exists() else ""),
                 events_path=str(events_path),
+                error="opencode timed out" if opencode_result.timed_out else "",
             )
+            result.run_finished_at = datetime.now(timezone.utc).isoformat()
+            trace_path = write_trace_bundle(run_dir, result)
+            result.trace_path = str(trace_path)
+            result.analysis = analyze_trace(run_dir, result)
+            write_trace_bundle(run_dir, result)
             result.write_json(run_dir / "result.json")
             return result
-        except subprocess.TimeoutExpired as exc:
-            return self._error_result(metadata, "timeout", f"command timed out: {exc}", run_dir)
         except Exception as exc:  # noqa: BLE001 - benchmark runner should record failures.
             return self._error_result(metadata, "error", str(exc), run_dir)
         finally:
@@ -155,6 +171,11 @@ class BenchmarkRunner:
             patch_path=str(patch_path),
             events_path=str(events_path),
         )
+        result.run_finished_at = datetime.now(timezone.utc).isoformat()
+        trace_path = write_trace_bundle(run_dir, result)
+        result.trace_path = str(trace_path)
+        result.analysis = analyze_trace(run_dir, result)
+        write_trace_bundle(run_dir, result)
         result.write_json(run_dir / "result.json")
         return result
 
@@ -192,6 +213,7 @@ class BenchmarkRunner:
         config = {
             "$schema": "https://opencode.ai/config.json",
             "model": self.config.model,
+            "provider": _ollama_gemma_provider_config(),
             "agent": {
                 self.config.agent_name: {
                     "description": "Runs isolated GestaltDB agentic benchmark coding tasks.",
@@ -312,6 +334,8 @@ class BenchmarkRunner:
         return proc.stdout
 
     def _combined_status(self, opencode_returncode: int, validation: ValidationResult, judge: JudgeResult) -> str:
+        if opencode_returncode == 124:
+            return "timeout"
         if opencode_returncode != 0:
             return "error"
         if validation.status not in {"passed", "not_run"}:
@@ -322,6 +346,11 @@ class BenchmarkRunner:
 
     def _error_result(self, metadata: dict[str, object], status: str, error: str, run_dir: Path) -> AgentBenchmarkResult:
         result = AgentBenchmarkResult(**metadata, status=status, error=error)
+        result.run_finished_at = datetime.now(timezone.utc).isoformat()
+        trace_path = write_trace_bundle(run_dir, result)
+        result.trace_path = str(trace_path)
+        result.analysis = analyze_trace(run_dir, result)
+        write_trace_bundle(run_dir, result)
         result.write_json(run_dir / "result.json")
         return result
 
@@ -366,6 +395,27 @@ def _benchmark_permissions() -> dict[str, object]:
             "git worktree *": "deny",
         },
     }
+
+
+def _ollama_gemma_provider_config() -> dict[str, object]:
+    models: dict[str, object] = {}
+    for model_id, name in (
+        ("gemma4:latest", "Gemma 4"),
+        ("gemma4:26b", "Gemma 4 26B"),
+        ("gemma4:31b", "Gemma 4 31B"),
+    ):
+        models[model_id] = {
+            "id": model_id,
+            "name": name,
+            "family": "gemma4",
+            "status": "active",
+            "reasoning": True,
+            "tool_call": True,
+            "temperature": True,
+            "cost": {"input": 0, "output": 0},
+            "limit": {"context": 8192, "output": 4096},
+        }
+    return {"ollama": {"models": models}}
 
 
 def _path_allowed(path: str, allowed_patterns: list[str]) -> bool:

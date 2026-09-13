@@ -6,4 +6,8 @@ The benchmark tasks are about using the library, not developing the library. Age
 
 The runner creates temporary git worktrees, writes a benchmark-specific opencode config, invokes `opencode run --format json`, validates the resulting patch, optionally judges the solution with an LLM, and writes machine-readable plus HTML reports.
 
+Every run also writes a full `trace.json` bundle and `trace-analysis.json` file. The trace analyzer is designed to identify concrete agent failure modes and documentation remediation actions, such as missing import guidance, unclear deferred-index rebuild rules, unsupported Cypher syntax use, or sampling ID-space confusion.
+
+Structured run metadata is indexed in `agent_benchmark_results/agent_benchmarks.sqlite` by default. Use `scripts/browse_benchmark_db.py recent` or any SQLite browser to inspect timestamps, commit hashes, statuses, token/tool counts, artifact paths, trace analysis, and remediation actions.
+
 See `SKILL.md` for usage.

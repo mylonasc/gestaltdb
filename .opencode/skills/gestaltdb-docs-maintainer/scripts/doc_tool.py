@@ -172,6 +172,8 @@ def cmd_search(args):
     search_files = [
         REPO_ROOT / "AGENTS.md",
         REPO_ROOT / "EXAMPLES.md",
+        REPO_ROOT / "src/gestaltdb/agent_skill/SKILL.md",
+        *(REPO_ROOT / "src/gestaltdb/agent_skill/references").glob("*.md"),
         *REFERENCES_DIR.glob("*.md"),
     ]
 

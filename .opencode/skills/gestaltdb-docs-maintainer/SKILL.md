@@ -5,7 +5,7 @@ description: Use when creating or maintaining GestaltDB agent-facing documentati
 
 # GestaltDB Docs Maintainer
 
-Use this skill when creating or maintaining documentation for GestaltDB developers and AI agents. It governs `AGENTS.md`, `EXAMPLES.md`, modular topic guides in `references/`, the package docstring in `src/gestaltdb/__init__.py`, and consistency with user-facing Sphinx docs in `docs/`.
+Use this skill when creating or maintaining documentation for GestaltDB developers and AI agents. It governs `AGENTS.md`, `EXAMPLES.md`, modular topic guides in `references/`, the shipped library-user skill under `src/gestaltdb/agent_skill/`, the packaged retrieval CLI `src/gestaltdb/agent_docs.py`, the package docstring in `src/gestaltdb/__init__.py`, and consistency with user-facing Sphinx docs in `docs/`.
 
 ---
 
@@ -26,10 +26,16 @@ All scripts are located in `.opencode/skills/gestaltdb-docs-maintainer/scripts/`
      uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py get <topic>
      ```
      Use `--examples` to extract only runnable code blocks, or `--rules` for conceptual rules only.
-   - Search across docs without dumping files:
-     ```bash
-     uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py search "<keyword>"
-     ```
+    - Search across docs without dumping files:
+      ```bash
+      uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py search "<keyword>"
+      ```
+    - Query shipped library-user docs exactly as installed users and agents can:
+      ```bash
+      uv run python -m gestaltdb.agent_docs list
+      uv run python -m gestaltdb.agent_docs get cypher --examples
+      uv run python -m gestaltdb.agent_docs search "rebuild_deferred_indexes"
+      ```
    - Execute all documentation examples in isolated tests:
      ```bash
      uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py test-examples
@@ -60,7 +66,8 @@ Follow this lazy-loading workflow:
    - `references/indexing.md`: Native labels, relationship types, property indexes, exact/range lookups, index maintenance.
    - `references/ingestion.md`: Arrow & Polars columnar ingest, `ColumnarIngestionMode`, `IndexMaintenanceMode`.
    - `references/cypher.md`: Supported read-only Cypher subset, syntax rules, limitations, and `QueryResult`.
-   - `references/sampling.md`: Graph traversal sampling vs array-native `SamplerSnapshot`/`SamplerEngine` for GNNs.
+    - `references/sampling.md`: Graph traversal sampling vs array-native `SamplerSnapshot`/`SamplerEngine` for GNNs.
+    - `src/gestaltdb/agent_skill/references/*.md`: Short shipped, user-focused retrieval docs for installed-library coding agents.
 3. Inspect relevant source files only when deep implementation details or test cases are needed:
    - Backends: `src/gestaltdb/kvstores.py`
    - Cypher: `src/gestaltdb/cypher.py` and `src/gestaltdb/cypher_*.py`
@@ -84,6 +91,17 @@ Follow this lazy-loading workflow:
 - Always close graph handles in `try/finally` blocks.
 - Explicitly import classes from their submodules.
 
+### Packaged `src/gestaltdb/agent_skill/SKILL.md`
+- **Role:** Shipped skill for coding assistants that consume GestaltDB as an installed library.
+- Keep it user-focused: public imports, graph lifecycle, supported Cypher, explicit indexes, ingestion modes, and sampling ID rules.
+- Do not include repository-development instructions or internal parser/backend modification guidance.
+- Point agents to `python -m gestaltdb.agent_docs` for targeted retrieval.
+
+### Packaged `src/gestaltdb/agent_docs.py`
+- **Role:** Zero-extra-dependency retrieval CLI available after install.
+- Must support `list`, `get <topic>`, `get <topic> --examples`, `get <topic> --rules`, and `search <regex>`.
+- Must read packaged resources via `importlib.resources`, not filesystem-relative repository paths.
+
 ### Modular `references/*.md`
 - **Role:** Deep-dive subsystem reference guides.
 - Contain detailed conceptual rules, caveats, edge cases, and dedicated runnable examples.
@@ -91,7 +109,7 @@ Follow this lazy-loading workflow:
 
 ### Package Docstring (`src/gestaltdb/__init__.py`)
 - **Role:** Guide developers at import time.
-- Keep minimal: high-level summary, import guidance, one minimal create/query snippet, pointers to `AGENTS.md` and `docs/`.
+- Keep minimal: high-level summary, import guidance, one minimal create/query snippet, pointers to `python -m gestaltdb.agent_docs`, `EXAMPLES.md`, and `docs/`.
 - Do not modify `__all__` unless intentionally changing the public API export surface.
 
 ---

@@ -28,6 +28,7 @@ class OpencodeRunResult:
     cost_usd: float | None = None
     tool_call_counts: dict[str, int] = field(default_factory=dict)
     tool_call_trace: list[dict[str, Any]] = field(default_factory=list)
+    timed_out: bool = False
 
     @property
     def tool_call_count(self) -> int:
@@ -61,21 +62,30 @@ def run_opencode_task(
     cmd.append(benchmark.prompt)
 
     started = time.monotonic()
-    proc = subprocess.run(
+    proc = subprocess.Popen(
         cmd,
         cwd=worktree,
         text=True,
-        capture_output=True,
-        timeout=timeout_seconds,
-        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
+    timed_out = False
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        proc.kill()
+        stdout, stderr = proc.communicate()
     wall = time.monotonic() - started
-    events_path.write_text(proc.stdout, encoding="utf-8")
-    parsed = parse_opencode_events(proc.stdout)
-    parsed.returncode = proc.returncode
+    events_path.write_text(stdout or "", encoding="utf-8")
+    stderr_path = events_path.with_suffix(".stderr")
+    stderr_path.write_text(stderr or "", encoding="utf-8")
+    parsed = parse_opencode_events(stdout or "")
+    parsed.returncode = 124 if timed_out else int(proc.returncode or 0)
     parsed.wall_seconds = wall
-    parsed.stdout = proc.stdout
-    parsed.stderr = proc.stderr
+    parsed.stdout = stdout or ""
+    parsed.stderr = stderr or ""
+    parsed.timed_out = timed_out
     return parsed
 
 
@@ -139,6 +149,9 @@ def _collect_usage(event: dict[str, Any], result: OpencodeRunResult) -> None:
         message = event.get("message")
         usage = message.get("usage") if isinstance(message, dict) else None
     if not isinstance(usage, dict):
+        part = event.get("part")
+        usage = part.get("tokens") if isinstance(part, dict) else None
+    if not isinstance(usage, dict):
         return
     input_tokens = _first_int(usage, "input", "input_tokens", "prompt_tokens", "prompt")
     output_tokens = _first_int(usage, "output", "output_tokens", "completion_tokens", "completion")
@@ -161,6 +174,13 @@ def _collect_tool_call(event: dict[str, Any], result: OpencodeRunResult) -> None
         tool = event["tool"]
     elif isinstance(event.get("tool"), dict):
         tool = event["tool"].get("name") or event["tool"].get("id")
+    elif isinstance(event.get("part"), dict):
+        part = event["part"]
+        if part.get("type") == "tool":
+            tool = part.get("tool") or part.get("name")
+            state = part.get("state")
+            if isinstance(state, dict):
+                status = str(state.get("status", status))
     elif isinstance(event.get("call"), dict):
         call = event["call"]
         tool = call.get("tool") or call.get("name")
@@ -179,7 +199,7 @@ def _looks_like_tool_start(event: dict[str, Any]) -> bool:
     status = str(event.get("status", "")).lower()
     event_type = str(event.get("type", "")).lower()
     phase = str(event.get("phase", "")).lower()
-    if any(marker in event_type for marker in ("tool.execute", "tool_call", "tool.call")):
+    if any(marker in event_type for marker in ("tool.execute", "tool_call", "tool.call", "tool_use")):
         return not any(done in event_type for done in ("after", "result", "complete", "finish"))
     return status in {"started", "running", "pending"} or phase in {"start", "before"}
 
