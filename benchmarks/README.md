@@ -227,16 +227,17 @@ Legacy script invocations from repository root and `scripts/` are preserved as f
 
 ## Validation Notes
 
-The benchmark package was validated with `uv sync --extra all` on small smoke-test graph sizes. The following command paths completed locally:
+The benchmark package was validated with `uv sync --extra all` on small smoke-test graph sizes and with the documented 100k node / 500k edge benchmark sizes. The following command paths completed locally:
 
 - `quick` across LevelDB, RocksDB, and LMDB.
 - `matrix` across LevelDB/RocksDB and object, Arrow, and Polars ingestion modes.
 - `compaction`, `sampler`, `tuning`, `profiling`, and `plotting`.
 - `embedded` across GestaltDB, LatticeDB, and LadybugDB using the current `ladybug.Connection(db)` API.
 - `arcadedb` and external ArcadeDB using the current `arcadedb_embedded.create_database` API.
-- `external` across GestaltDB, transactional GestaltDB, ArcadeDB, Neo4j, and Memgraph for all advertised workloads.
+- `external` across GestaltDB, transactional GestaltDB, ArcadeDB, Neo4j, and Memgraph for all advertised workloads at 100k nodes / 500k edges with three repetitions.
+- `embedded` across GestaltDB, LatticeDB, and LadybugDB at 100k nodes / 500k edges with three repetitions.
 
-Apache AGE rows are recorded as benchmark failures when the configured Docker image is unavailable. Inspect `status` and `skip_reason` in raw CSV/JSONL outputs before interpreting timings.
+Apache AGE smoke tests pass with `apache/age:latest`, and the 100k node / 500k edge ingest workload completed. The all-workload full-scale AGE run did not complete within a 6-hour timeout because the current adapter uses row-wise `cypher()` ingestion. Inspect `status` and `skip_reason` in raw CSV/JSONL outputs before interpreting timings.
 
 ---
 

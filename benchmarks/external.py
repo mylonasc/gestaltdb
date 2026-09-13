@@ -780,16 +780,25 @@ def ingest_age(cur: Any, workload: str, args: argparse.Namespace) -> None:
     for start, end in chunks(args.nodes, args.batch_size):
         for i in range(start, end):
             cur.execute(
-                "SELECT * FROM cypher('bench', $$ CREATE (:Node {id: %s, \"group\": %s}) $$) as (v agtype);",
-                (f"n{i}", i % 128),
+                f"SELECT * FROM cypher('bench', $$ CREATE (:Node {{id: {age_string(f'n{i}')}, node_group: {i % 128}}}) $$) as (v agtype);"
             )
     for start, end in chunks(args.edges, args.batch_size):
         e_rows = edge_rows(start, end, args.nodes, shape, NAMED_EDGE_TYPES)
         for r in e_rows:
             cur.execute(
-                f"SELECT * FROM cypher('bench', $$ MATCH (a:Node {{id: %s}}), (b:Node {{id: %s}}) CREATE (a)-[:{r['edge_type']} {{weight: %s}}]->(b) $$) as (e agtype);",
-                (r["source"], r["target"], r["weight"]),
+                f"SELECT * FROM cypher('bench', $$ MATCH (a:Node {{id: {age_string(r['source'])}}}), (b:Node {{id: {age_string(r['target'])}}}) CREATE (a)-[:{r['edge_type']} {{weight: {r['weight']}}}]->(b) $$) as (e agtype);"
             )
+
+
+def age_string(value: str) -> str:
+    """Return a Cypher string literal inside an AGE cypher() call."""
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+def age_scalar(value: Any) -> Any:
+    if isinstance(value, str):
+        return value.strip('"')
+    return value
 
 
 def count_age(cur: Any) -> tuple[int, int]:
@@ -811,21 +820,61 @@ def run_age_workload(cur: Any, workload: str, args: argparse.Namespace) -> int:
         total = 0
         for s in seeds:
             cur.execute(
-                "SELECT * FROM cypher('bench', $$ MATCH (:Node {id: %s})-[:RelA]->(b) RETURN count(b) $$) as (c agtype);",
-                (s,),
+                f"SELECT * FROM cypher('bench', $$ MATCH (:Node {{id: {age_string(s)}}})-[:RelA]->(b) RETURN count(b) $$) as (c agtype);"
             )
             total += int(cur.fetchone()[0])
+        return total
+    if workload == "sample_neighbors":
+        total = 0
+        for s in seeds:
+            cur.execute(
+                f"SELECT * FROM cypher('bench', $$ MATCH (:Node {{id: {age_string(s)}}})-[:RelA]->(b) RETURN b.id LIMIT {args.sample_size} $$) as (id agtype);"
+            )
+            total += len(cur.fetchall())
         return total
     if workload == "typed_path":
         total = 0
         for s in seeds:
             cur.execute(
-                f"SELECT * FROM cypher('bench', $$ MATCH (:Node {{id: %s}})-[:RelA]->()-[:RelB]->(b) RETURN count(b) $$) as (c agtype);",
-                (s,),
+                f"SELECT * FROM cypher('bench', $$ MATCH (:Node {{id: {age_string(s)}}})-[:RelA]->()-[:RelB]->(b) RETURN count(b) $$) as (c agtype);"
             )
             total += int(cur.fetchone()[0])
         return total
+    if workload == "deep_typed_query":
+        total = 0
+        for s in seeds:
+            cur.execute(
+                f"SELECT * FROM cypher('bench', $$ MATCH (:Node {{id: {age_string(s)}}})-[:RelA]->()-[:RelB]->()-[:RelC]->(b) RETURN count(b) $$) as (c agtype);"
+            )
+            total += int(cur.fetchone()[0])
+        return total
+    if workload == "bfs_depth":
+        total = 0
+        for s in seeds:
+            total += bfs_age(cur, s, args.depth, args.bfs_limit)
+        return total
     raise ValueError(f"unsupported age query workload: {workload}")
+
+
+def bfs_age(cur: Any, start_node: str, depth: int, limit: int) -> int:
+    visited: set[str] = set()
+    queue = deque([(start_node, 0)])
+    while queue and len(visited) <= limit:
+        current, current_depth = queue.popleft()
+        if current in visited:
+            continue
+        visited.add(current)
+        if current_depth >= depth:
+            continue
+        for edge_type in NAMED_EDGE_TYPES:
+            cur.execute(
+                f"SELECT * FROM cypher('bench', $$ MATCH (:Node {{id: {age_string(current)}}})-[:{edge_type}]->(b) RETURN b.id $$) as (id agtype);"
+            )
+            for row in cur.fetchall():
+                neighbor = str(age_scalar(row[0]))
+                if neighbor not in visited:
+                    queue.append((neighbor, current_depth + 1))
+    return min(max(0, len(visited) - 1), limit)
 
 
 def run_engine_workload(engine: str, workload: str, args: argparse.Namespace) -> dict[str, Any]:
@@ -870,7 +919,7 @@ def build_parser(subparser: argparse.ArgumentParser | None = None) -> argparse.A
     parser.add_argument("--path-fanout-limit", type=int, default=10_000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--cypher-query-mode", choices=["single", "batched"], default="batched")
-    parser.add_argument("--age-require-index", action="store_true", default=True)
+    parser.add_argument("--age-require-index", action="store_true")
     parser.add_argument("--output-dir", type=Path, default=Path("benchmark_results/external_graphdbs"))
     parser.add_argument("--tmp-dir", type=Path, default=None)
     parser.add_argument("--keep-dbs", action="store_true")
@@ -896,7 +945,7 @@ def build_parser(subparser: argparse.ArgumentParser | None = None) -> argparse.A
     parser.add_argument("--arcadedb-heap-size", default="4g")
     parser.add_argument("--arcadedb-parallel", type=int, default=4)
     # Apache AGE options
-    parser.add_argument("--age-image", default="apache/age:PG16-v1.5.0")
+    parser.add_argument("--age-image", default="apache/age:latest")
     parser.add_argument("--age-port", type=int, default=5433)
     parser.add_argument("--age-user", default="postgres")
     parser.add_argument("--age-password", default="gestaltdb_test")
