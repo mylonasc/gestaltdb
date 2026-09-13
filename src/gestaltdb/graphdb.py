@@ -491,6 +491,7 @@ class GraphDB:
         self.entity_serializer = GraphEntityDictSerializer(
             self.serializer
         )
+        self._typed_adjacency_count_cache: dict[tuple[str, bytes, str], int] = {}
         persisted_node_indexes = self._load_property_index_metadata(_NODE_PROPERTY_INDEXES_METADATA_KEY)
         persisted_edge_indexes = self._load_property_index_metadata(_EDGE_PROPERTY_INDEXES_METADATA_KEY)
         self.indexed_node_properties = set(persisted_node_indexes).union(indexed_node_properties or [])
@@ -1276,12 +1277,10 @@ class GraphDB:
         edge_type = self.edge_type(edge)
         if edge_type is None:
             return
-        self.store.put_typed_adjacency(
-            self.node_key_to_bytes(edge.source),
-            self.node_key_to_bytes(edge.target),
-            edge_type,
-            edge.get_id_bytes,
-        )
+        source_id = self.node_key_to_bytes(edge.source)
+        target_id = self.node_key_to_bytes(edge.target)
+        self.store.put_typed_adjacency(source_id, target_id, edge_type, edge.get_id_bytes)
+        self._update_typed_adjacency_count_cache([(source_id, target_id, edge_type, edge.get_id_bytes)], 1)
 
     def _delete_typed_adjacency_for_edge(self, edge: Edge):
         """Remove typed adjacency index records for an edge.
@@ -1292,12 +1291,24 @@ class GraphDB:
         edge_type = self.edge_type(edge)
         if edge_type is None:
             return
-        self.store.delete_typed_adjacency(
-            self.node_key_to_bytes(edge.source),
-            self.node_key_to_bytes(edge.target),
-            edge_type,
-            edge.get_id_bytes,
-        )
+        source_id = self.node_key_to_bytes(edge.source)
+        target_id = self.node_key_to_bytes(edge.target)
+        self.store.delete_typed_adjacency(source_id, target_id, edge_type, edge.get_id_bytes)
+        self._update_typed_adjacency_count_cache([(source_id, target_id, edge_type, edge.get_id_bytes)], -1)
+
+    def _update_typed_adjacency_count_cache(self, records, delta: int) -> None:
+        """Update cached typed adjacency counts for writes made by this graph handle."""
+        out_deltas: dict[tuple[str, bytes, str], int] = {}
+        invalidated_in: set[tuple[str, bytes, str]] = set()
+        for source_id, target_id, edge_type, _ in records:
+            out_key = ("out", source_id, edge_type)
+            out_deltas[out_key] = out_deltas.get(out_key, 0) + delta
+            invalidated_in.add(("in", target_id, edge_type))
+        for out_key, out_delta in out_deltas.items():
+            current = self._typed_adjacency_count_cache.get(out_key, 0)
+            self._typed_adjacency_count_cache[out_key] = max(0, current + out_delta)
+        for in_key in invalidated_in:
+            self._typed_adjacency_count_cache.pop(in_key, None)
 
     def _put_edge_indexes(self, edge: Edge):
         """Maintain relationship type and configured property indexes."""
@@ -1677,6 +1688,34 @@ class GraphDB:
         """
         return list(self.iter_typed_adjacency(node_id, edge_type, direction))
 
+    def count_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out') -> int:
+        """Count typed adjacency records without materializing traversal records.
+
+        Args:
+            node_id: Node ID as string or bytes.
+            edge_type: Edge type to traverse.
+            direction: ``"out"``, ``"in"``, or ``"any"``.
+
+        Returns:
+            Number of typed adjacency records matching the node, edge type, and
+            direction.
+        """
+        if direction not in {'out', 'in', 'any'}:
+            raise ValueError("direction must be 'out', 'in', or 'any'")
+
+        node_id_bytes = self.node_key_to_bytes(node_id)
+        if direction == 'any':
+            return self.count_typed_adjacency(node_id_bytes, edge_type, 'out') + self.count_typed_adjacency(node_id_bytes, edge_type, 'in')
+
+        cache_key = (direction, node_id_bytes, edge_type)
+        cached = self._typed_adjacency_count_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        count = self.store.count_typed_adjacency(node_id_bytes, edge_type, direction)
+        self._typed_adjacency_count_cache[cache_key] = count
+        return count
+
     def iter_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out'):
         """Yield typed adjacency records with clean direction semantics.
 
@@ -1866,6 +1905,7 @@ class GraphDB:
             >>> graph_db.rebuild_typed_adjacency()  # doctest: +SKIP
         """
         rebuilt = 0
+        self._typed_adjacency_count_cache.clear()
         for edge_id in self.store.get_edge_keys_generator():
             edge = self.get_edge(edge_id)
             if edge is None or self.edge_type(edge) is None:
@@ -2729,6 +2769,7 @@ class GraphDB:
         # 3) Use the store's put_edges_bulk
         self.store.put_edges_bulk(edge_dict)
         self.store.put_typed_adjacency_bulk(typed_adjacency_records)
+        self._update_typed_adjacency_count_cache(typed_adjacency_records, 1)
         if index_entries:
             self.store.put_index_entries_bulk(index_entries)
 
@@ -2815,6 +2856,10 @@ class GraphDB:
                     append_only=append_only,
                     native=native,
                     maintain_indexes=index_mode == "maintain",
+                )
+                self._update_typed_adjacency_count_cache(
+                    zip(chunk.sources, chunk.targets, chunk.edge_types, chunk.edge_ids),
+                    1,
                 )
                 if index_mode == "maintain":
                     self._put_edge_property_indexes_for_columnar_chunk(chunk)

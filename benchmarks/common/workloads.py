@@ -84,11 +84,7 @@ def gestaltdb_star_traversal(
     iterations: int = 1,
 ) -> int:
     """Traverse a high-degree star hub repeatedly."""
-    total = 0
-    seed_bytes = graph.node_key_to_bytes(seed_id)
-    for _ in range(iterations):
-        total += sum(1 for _ in graph.iter_typed_adjacency(seed_bytes, edge_type, direction="out"))
-    return total
+    return sum(graph.count_typed_adjacency(seed_id, edge_type, direction="out") for _ in range(iterations))
 
 
 def gestaltdb_typed_path(

@@ -258,6 +258,10 @@ class KVStore:
         """Yield typed adjacency records for a node and edge type."""
         raise NotImplementedError
 
+    def count_typed_adjacency(self, node_id: bytes, edge_type: str, direction: str = "out") -> int:
+        """Count typed adjacency records for a node and edge type."""
+        return sum(1 for _ in self.iter_typed_adjacency(node_id, edge_type, direction))
+
     def put_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
         """Store one sorted index entry.
 
@@ -1604,6 +1608,16 @@ class PyRexStore(KVStore):
             if not key.startswith(prefix):
                 break
             yield key[len(prefix):], value
+
+    def count_typed_adjacency(self, node_id: bytes, edge_type: str, direction: str = "out") -> int:
+        """Count typed adjacency records without constructing record dictionaries."""
+        prefix = self._typed_key(direction, node_id, edge_type)
+        total = 0
+        for key, _ in self._iter_key_values_from(prefix):
+            if not key.startswith(prefix):
+                break
+            total += 1
+        return total
 
     def put_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
         """Store one sorted index entry."""

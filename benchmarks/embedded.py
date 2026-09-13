@@ -28,9 +28,10 @@ for p in (str(SRC), str(ROOT)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from gestaltdb.graphdb import Edge, GraphDB, Node
+from gestaltdb.graphdb import GraphDB
+from gestaltdb.ingestion import IndexMaintenanceMode
 from gestaltdb.kvstores import PyRexStore
-from gestaltdb.serializers import MessagePackSerializer
+from gestaltdb.serializers import JSONSerializer
 from benchmarks.common.datasets import (
     NAMED_EDGE_TYPES,
     chunks,
@@ -146,7 +147,7 @@ def run_gestaltdb(workload: str, args: argparse.Namespace) -> dict[str, Any]:
                 bloom_bits_per_key=args.rocksdb_bloom_bits,
                 disable_wal=args.rocksdb_disable_wal,
             ),
-            MessagePackSerializer(),
+            JSONSerializer(),
         )
         _, row["ingest_seconds"] = seconds(lambda: ingest_gestaltdb(graph, workload, args))
         (row["actual_nodes"], row["actual_edges"]), row["count_seconds"] = seconds(lambda: count_gestaltdb(graph))
@@ -165,22 +166,51 @@ def run_gestaltdb(workload: str, args: argparse.Namespace) -> dict[str, Any]:
 
 
 def ingest_gestaltdb(graph: GraphDB, workload: str, args: argparse.Namespace) -> None:
-    """Ingest synthetic nodes and edges into GestaltDB."""
+    """Ingest synthetic nodes and edges into GestaltDB using native columnar writes."""
+    import polars as pl
+
     shape = workload_graph_shape(workload, args.graph_shape)
     for start, end in chunks(args.nodes, args.batch_size):
-        graph.put_nodes([
-            Node(node_id=f"n{index}", labels=("Node",), properties={"id": f"n{index}", "group": index % 128})
-            for index in range(start, end)
-        ])
+        indexes = list(range(start, end))
+        graph.ingest_nodes_polars_entities(
+            pl.DataFrame(
+                {
+                    "node_id": [f"n{index}" for index in indexes],
+                    "labels": [["Node"] for _ in indexes],
+                    "id": [f"n{index}" for index in indexes],
+                    "group": [index % 128 for index in indexes],
+                }
+            ),
+            property_columns=["id", "group"],
+            chunk_size=args.batch_size,
+            index_mode=IndexMaintenanceMode.MAINTAIN,
+        )
     for start, end in chunks(args.edges, args.batch_size):
-        graph.put_edges_bulk(
-            [
-                Edge(edge_id=edge_id, source=source, target=target, properties={"type": edge_type, "weight": index % 1000})
-                for index, (edge_id, source, target, edge_type) in (
-                    (index, edge_parts(index, args.nodes, shape)) for index in range(start, end)
-                )
-            ],
-            check_existing=False,
+        edge_ids = []
+        sources = []
+        targets = []
+        edge_types = []
+        weights = []
+        for index in range(start, end):
+            edge_id, source, target, edge_type = edge_parts(index, args.nodes, shape)
+            edge_ids.append(edge_id)
+            sources.append(source)
+            targets.append(target)
+            edge_types.append(edge_type)
+            weights.append(index % 1000)
+        graph.ingest_edges_polars_entities(
+            pl.DataFrame(
+                {
+                    "edge_id": edge_ids,
+                    "source": sources,
+                    "target": targets,
+                    "edge_type": edge_types,
+                    "weight": weights,
+                }
+            ),
+            property_columns=["weight"],
+            chunk_size=args.batch_size,
+            index_mode=IndexMaintenanceMode.MAINTAIN,
         )
 
 
