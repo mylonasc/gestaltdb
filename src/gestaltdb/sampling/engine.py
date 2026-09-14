@@ -13,6 +13,27 @@ from .negatives import HardNegativeConfig
 from .snapshot import SamplerSnapshot
 
 
+@dataclass(frozen=True)
+class NeighborSamplingSpec:
+    """Sampling policy for one layer of neighborhood expansion."""
+
+    fanout: int
+    direction: str = "out"
+    relations: Sequence[int] | None = None
+    replace: bool = False
+    strategy: str = "uniform"
+
+    def __post_init__(self):
+        _validate_count(self.fanout, "fanout")
+        if self.direction not in {"out", "in", "any"}:
+            raise ValueError("direction must be 'out', 'in', or 'any'")
+        if self.strategy not in {"uniform", "weighted"}:
+            raise ValueError("strategy must be 'uniform' or 'weighted'")
+        if self.relations is not None:
+            relations = _integer_array(self.relations, "relations")
+            object.__setattr__(self, "relations", tuple(int(rel) for rel in relations))
+
+
 @dataclass(slots=True)
 class SampledNeighbors:
     """Batched neighbor-sampling result.
@@ -40,6 +61,14 @@ class SampledNeighbors:
     offsets: np.ndarray
 
 
+@dataclass(slots=True)
+class LayeredSampleBatch:
+    """Neighbor samples with one result block preserved per requested layer."""
+
+    seed_nodes: np.ndarray
+    layers: tuple[SampledNeighbors, ...]
+
+
 class SamplerEngine:
     """High-throughput sampler over a static ``SamplerSnapshot``.
 
@@ -62,6 +91,10 @@ class SamplerEngine:
 
     def __init__(self, snapshot: SamplerSnapshot, *, seed: int | None = None):
         self.snapshot = snapshot
+        if snapshot.edge_weights.size == 0 and snapshot.num_edges:
+            snapshot.edge_weights = np.ones(snapshot.num_edges, dtype=np.float64)
+        else:
+            snapshot.edge_weights = self._validated_weights(snapshot.edge_weights, snapshot.num_edges, "snapshot.edge_weights")
         self.rng = np.random.default_rng(seed)
         self._positive_codes = self._build_positive_codes()
 
@@ -98,6 +131,7 @@ class SamplerEngine:
         direction: str = "out",
         relations: Sequence[int] | np.ndarray | None = None,
         replace: bool = False,
+        strategy: str = "uniform",
     ) -> SampledNeighbors:
         """Sample neighbors for each input node.
 
@@ -108,6 +142,8 @@ class SamplerEngine:
                 target-to-source, or ``"any"`` for incident traversal.
             relations: Optional compact relation IDs to restrict traversal.
             replace: Whether to sample with replacement.
+            strategy: ``"uniform"`` or ``"weighted"``. Weighted sampling uses
+                the snapshot's edge weights.
 
         Returns:
             ``SampledNeighbors`` with concatenated edge and neighbor arrays.
@@ -122,28 +158,23 @@ class SamplerEngine:
                     [drug_id], fanout=10, direction="out", relations=[binds_id]
                 )
         """
-        if fanout < 0:
-            raise ValueError("fanout must be non-negative")
+        _validate_count(fanout, "fanout")
         if direction not in {"out", "in", "any"}:
             raise ValueError("direction must be 'out', 'in', or 'any'")
-        input_nodes = np.asarray(nodes, dtype=np.int64)
+        if strategy not in {"uniform", "weighted"}:
+            raise ValueError("strategy must be 'uniform' or 'weighted'")
+        input_nodes = self._validated_ids(nodes, self.snapshot.num_nodes, "nodes")
         offsets = [0]
         sampled_edges: list[np.ndarray] = []
         sampled_neighbors: list[np.ndarray] = []
-        relation_filter = None if relations is None else set(np.asarray(relations, dtype=np.int64).tolist())
+        relation_filter = None
+        if relations is not None:
+            relation_filter = set(self._validated_ids(relations, self.snapshot.num_relations, "relations").tolist())
 
         for node in input_nodes.tolist():
             candidates = self._candidate_edges(node, direction, relation_filter)
-            if fanout == 0 or candidates.size == 0:
-                chosen = np.empty(0, dtype=np.int64)
-            elif replace:
-                positions = self.rng.integers(candidates.size, size=fanout)
-                chosen = candidates[positions]
-            elif candidates.size <= fanout:
-                chosen = candidates
-            else:
-                positions = self.rng.choice(candidates.size, size=fanout, replace=False)
-                chosen = candidates[positions]
+            weights = self.snapshot.edge_weights[candidates] if strategy == "weighted" else None
+            chosen = self._choose_candidates(candidates, fanout, replace=replace, weights=weights)
             sampled_edges.append(chosen.astype(np.int64, copy=False))
             sampled_neighbors.append(self._neighbors_for_edges(node, chosen, direction))
             offsets.append(offsets[-1] + int(chosen.size))
@@ -151,6 +182,86 @@ class SamplerEngine:
         edge_indices = np.concatenate(sampled_edges) if sampled_edges else np.empty(0, dtype=np.int64)
         neighbor_nodes = np.concatenate(sampled_neighbors) if sampled_neighbors else np.empty(0, dtype=np.int64)
         return SampledNeighbors(input_nodes, edge_indices, neighbor_nodes, np.asarray(offsets, dtype=np.int64))
+
+    def sample_nodes(
+        self,
+        count: int,
+        *,
+        node_types: Sequence[int] | np.ndarray | None = None,
+        replace: bool = False,
+        strategy: str = "uniform",
+        weights: Sequence[float] | np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Sample compact node IDs, optionally restricted by node type."""
+        candidates = np.arange(self.snapshot.num_nodes, dtype=np.int64)
+        if node_types is not None:
+            types = self._validated_nonnegative_ids(node_types, "node_types")
+            candidates = candidates[np.isin(self.snapshot.node_type_ids, types)]
+        if strategy == "degree":
+            if weights is not None:
+                raise ValueError("weights cannot be combined with strategy='degree'")
+            weights_array = np.diff(self.snapshot.incident.indptr).astype(np.float64)[candidates]
+        elif strategy == "weighted":
+            if weights is None:
+                raise ValueError("weights are required for strategy='weighted'")
+            all_weights = self._validated_weights(weights, self.snapshot.num_nodes, "weights")
+            weights_array = all_weights[candidates]
+        elif strategy == "uniform":
+            if weights is not None:
+                raise ValueError("weights require strategy='weighted'")
+            weights_array = None
+        else:
+            raise ValueError("strategy must be 'uniform', 'weighted', or 'degree'")
+        return self._choose_candidates(candidates, count, replace=replace, weights=weights_array)
+
+    def sample_edges(
+        self,
+        count: int,
+        *,
+        relations: Sequence[int] | np.ndarray | None = None,
+        replace: bool = False,
+        strategy: str = "uniform",
+        weights: Sequence[float] | np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Sample compact edge IDs, optionally restricted by relation."""
+        candidates = np.arange(self.snapshot.num_edges, dtype=np.int64)
+        if relations is not None:
+            relation_ids = self._validated_ids(relations, self.snapshot.num_relations, "relations")
+            candidates = candidates[np.isin(self.snapshot.rel_int, relation_ids)]
+        if strategy == "weighted":
+            all_weights = self.snapshot.edge_weights if weights is None else self._validated_weights(weights, self.snapshot.num_edges, "weights")
+            candidate_weights = all_weights[candidates]
+        elif strategy == "uniform":
+            if weights is not None:
+                raise ValueError("weights require strategy='weighted'")
+            candidate_weights = None
+        else:
+            raise ValueError("strategy must be 'uniform' or 'weighted'")
+        return self._choose_candidates(candidates, count, replace=replace, weights=candidate_weights)
+
+    def sample_layers(
+        self,
+        seed_nodes: Sequence[int] | np.ndarray,
+        layers: Sequence[NeighborSamplingSpec],
+    ) -> LayeredSampleBatch:
+        """Sample a heterogeneous neighborhood while preserving layer blocks."""
+        seeds = self._validated_ids(seed_nodes, self.snapshot.num_nodes, "seed_nodes")
+        frontier = seeds
+        sampled_layers: list[SampledNeighbors] = []
+        for layer in layers:
+            if not isinstance(layer, NeighborSamplingSpec):
+                raise TypeError("layers must contain NeighborSamplingSpec values")
+            sampled = self.sample_neighbors(
+                frontier,
+                layer.fanout,
+                direction=layer.direction,
+                relations=layer.relations,
+                replace=layer.replace,
+                strategy=layer.strategy,
+            )
+            sampled_layers.append(sampled)
+            frontier = np.unique(sampled.neighbor_nodes)
+        return LayeredSampleBatch(seed_nodes=seeds, layers=tuple(sampled_layers))
 
     def sample_multihop(
         self,
@@ -176,13 +287,14 @@ class SamplerEngine:
 
                 batch = engine.sample_multihop([u, v], [15, 10], direction="any")
         """
-        nodes = {int(node) for node in np.asarray(seeds, dtype=np.int64).tolist()}
+        seed_ids = self._validated_ids(seeds, self.snapshot.num_nodes, "seeds")
+        nodes = {int(node) for node in seed_ids.tolist()}
         edges: set[int] = set()
         frontier = np.asarray(sorted(nodes), dtype=np.int64)
         for fanout in fanouts:
             sampled = self.sample_neighbors(frontier, fanout, direction=direction, relations=relations)
             edges.update(int(edge) for edge in sampled.edge_indices.tolist())
-            next_frontier = [int(node) for node in sampled.neighbor_nodes.tolist() if int(node) not in nodes]
+            next_frontier = sorted({int(node) for node in sampled.neighbor_nodes.tolist() if int(node) not in nodes})
             nodes.update(next_frontier)
             frontier = np.asarray(next_frontier, dtype=np.int64)
             if frontier.size == 0:
@@ -222,7 +334,7 @@ class SamplerEngine:
                     negative_config=HardNegativeConfig(negatives_per_positive=8),
                 )
         """
-        seed_edges = np.asarray(seed_edges, dtype=np.int64)
+        seed_edges = self._validated_ids(seed_edges, self.snapshot.num_edges, "seed_edges")
         seed_nodes = set(self.snapshot.src_int[seed_edges].astype(np.int64).tolist())
         seed_nodes.update(self.snapshot.dst_int[seed_edges].astype(np.int64).tolist())
         batch = self.sample_multihop(sorted(seed_nodes), fanouts, direction=direction, relations=relations)
@@ -256,6 +368,9 @@ class SamplerEngine:
         Returns:
             ``True`` if ``(src, rel, dst)`` exists in the snapshot positives.
         """
+        self._validated_ids([src], self.snapshot.num_nodes, "src")
+        self._validated_ids([rel], self.snapshot.num_relations, "rel")
+        self._validated_ids([dst], self.snapshot.num_nodes, "dst")
         return int(self._pack_triple(src, rel, dst)) in self._positive_codes
 
     def sample_hard_negatives(
@@ -284,14 +399,22 @@ class SamplerEngine:
                 the configured retry budget.
         """
         config = config or HardNegativeConfig()
-        positives = np.asarray(positive_triples, dtype=np.int64)
-        if positives.size == 0 or config.negatives_per_positive == 0:
-            return np.empty((positives.shape[0] if positives.ndim else 0, 0, 3), dtype=np.int64)
-        if positives.ndim != 2 or positives.shape[1] != 3:
+        raw_positives = np.asarray(positive_triples)
+        if raw_positives.ndim != 2 or raw_positives.shape[1] != 3:
             raise ValueError("positive_triples must have shape (n, 3)")
-        context = set(int(node) for node in context_nodes) if context_nodes is not None else set()
+        positives = _integer_array(raw_positives.reshape(-1), "positive_triples").reshape(raw_positives.shape)
+        self._validated_ids(positives[:, 0], self.snapshot.num_nodes, "positive sources")
+        self._validated_ids(positives[:, 1], self.snapshot.num_relations, "positive relations")
+        self._validated_ids(positives[:, 2], self.snapshot.num_nodes, "positive destinations")
+        if positives.size == 0 or config.negatives_per_positive == 0:
+            return np.empty((positives.shape[0], 0, 3), dtype=np.int64)
+        context = (
+            set(self._validated_ids(list(context_nodes), self.snapshot.num_nodes, "context_nodes").tolist())
+            if context_nodes is not None
+            else set()
+        )
         result = np.empty((positives.shape[0], config.negatives_per_positive, 3), dtype=np.int64)
-        candidate_cache: dict[tuple[int, bool], list[int]] = {}
+        candidate_cache: dict[tuple[int, int, int, bool], list[int]] = {}
 
         for row_idx, (src, rel, dst) in enumerate(positives.tolist()):
             group_seen: set[tuple[int, int, int]] = set()
@@ -317,6 +440,9 @@ class SamplerEngine:
             candidates = self.snapshot.in_.edge_range(node)
         else:
             candidates = self.snapshot.incident.edge_range(node)
+            if candidates.size:
+                _, first_positions = np.unique(candidates, return_index=True)
+                candidates = candidates[np.sort(first_positions)]
         if relation_filter is None or candidates.size == 0:
             return candidates
         mask = np.isin(self.snapshot.rel_int[candidates], np.fromiter(relation_filter, dtype=np.int64))
@@ -330,11 +456,11 @@ class SamplerEngine:
         context_nodes: set[int],
         config: HardNegativeConfig,
         group_seen: set[tuple[int, int, int]],
-        candidate_cache: dict[tuple[int, bool], list[int]],
+        candidate_cache: dict[tuple[int, int, int, bool], list[int]],
     ) -> tuple[int, int, int]:
         first_direction = bool(self.rng.random() < config.head_probability)
         for corrupt_head in (first_direction, not first_direction):
-            cache_key = (rel, corrupt_head)
+            cache_key = (src, rel, dst, corrupt_head)
             if cache_key not in candidate_cache:
                 candidate_cache[cache_key] = self._negative_candidates(src, rel, dst, context_nodes, corrupt_head, config)
             candidates = candidate_cache[cache_key]
@@ -417,6 +543,48 @@ class SamplerEngine:
         dst = self.snapshot.dst_int[edge_indices]
         return np.where(src == int(node), dst, src).astype(np.int64, copy=False)
 
+    def _choose_candidates(self, candidates: np.ndarray, count: int, *, replace: bool, weights: np.ndarray | None) -> np.ndarray:
+        _validate_count(count, "count")
+        if count == 0 or candidates.size == 0:
+            return np.empty(0, dtype=np.int64)
+        probabilities = None
+        if weights is not None:
+            maximum = float(np.max(weights))
+            if maximum <= 0:
+                raise ValueError("sampling weights must contain a positive value in the candidate set")
+            positive = weights > 0
+            candidates = candidates[positive]
+            weights = weights[positive]
+            scaled_weights = weights / float(np.max(weights))
+            probabilities = scaled_weights / float(np.sum(scaled_weights))
+        if not replace and candidates.size <= count:
+            return candidates.astype(np.int64, copy=True)
+        positions = self.rng.choice(candidates.size, size=count, replace=replace, p=probabilities)
+        return candidates[positions].astype(np.int64, copy=False)
+
+    @staticmethod
+    def _validated_ids(values, upper_bound: int, name: str) -> np.ndarray:
+        ids = _integer_array(values, name)
+        if ids.size and (ids.min() < 0 or ids.max() >= upper_bound):
+            raise ValueError(f"{name} contain IDs outside [0, {upper_bound})")
+        return ids
+
+    @staticmethod
+    def _validated_nonnegative_ids(values, name: str) -> np.ndarray:
+        ids = _integer_array(values, name)
+        if ids.size and ids.min() < 0:
+            raise ValueError(f"{name} must contain one-dimensional non-negative IDs")
+        return ids
+
+    @staticmethod
+    def _validated_weights(values, expected_size: int, name: str) -> np.ndarray:
+        weights = np.asarray(values, dtype=np.float64)
+        if weights.ndim != 1 or weights.size != expected_size:
+            raise ValueError(f"{name} length must be {expected_size}")
+        if not np.all(np.isfinite(weights)) or np.any(weights < 0):
+            raise ValueError(f"{name} must be finite and non-negative")
+        return weights
+
     def _batch_from_edges(self, nodes: Iterable[int], edges: Iterable[int], *, positives: np.ndarray, negatives: np.ndarray) -> SampledSubgraphBatch:
         ordered_nodes = np.asarray(sorted(set(int(node) for node in nodes)), dtype=np.int64)
         ordered_edges = np.asarray(sorted(set(int(edge) for edge in edges)), dtype=np.int64)
@@ -456,3 +624,19 @@ class SamplerEngine:
             raise OverflowError("positive triple packing exceeds uint64")
         codes = [int(self._pack_triple(src, rel, dst)) for src, rel, dst in triples.tolist()]
         return set(codes)
+
+
+def _integer_array(values, name: str) -> np.ndarray:
+    ids = np.asarray(values)
+    if ids.ndim != 1:
+        raise ValueError(f"{name} must be one-dimensional")
+    if ids.size and (np.issubdtype(ids.dtype, np.bool_) or not np.issubdtype(ids.dtype, np.integer)):
+        raise ValueError(f"{name} must contain integer IDs")
+    return ids.astype(np.int64, copy=False)
+
+
+def _validate_count(value, name: str) -> None:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{name} must be an integer")
+    if value < 0:
+        raise ValueError(f"{name} must be non-negative")

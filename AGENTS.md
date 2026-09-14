@@ -32,7 +32,7 @@ The package root currently re-exports selected ingestion, Cypher result, and sam
 
 ```python
 from gestaltdb import EdgeList, IndexMaintenanceMode, NodeList, QueryResult
-from gestaltdb import HardNegativeConfig, SamplerEngine, SamplerSnapshot
+from gestaltdb import HardNegativeConfig, NeighborSamplingSpec, SamplerEngine, SamplerSnapshot
 from gestaltdb import SamplingHop, SamplingPattern
 ```
 
@@ -98,7 +98,7 @@ There are two sampling layers:
 - `GraphDB` typed traversal sampling uses stored typed adjacency and external node IDs. Use `SamplingHop`, `SamplingPattern`, `sample_neighbors`, `sample_typed_paths`, and `sample_typed_subgraph`.
 - `SamplerSnapshot` plus `SamplerEngine` is array-native and optimized for ML training. It uses compact integer node, edge, and relation IDs.
 
-`SamplerSnapshot.build(graph, output_path, ...)` and `graph.build_sampler_snapshot(output_path, ...)` persist immutable `.npy` arrays and metadata. `SamplerEngine.load(path, mode="ram"|"memmap", seed=...)` loads the arrays for neighbor, multihop, subgraph, positive-triple, and hard-negative sampling.
+`SamplerSnapshot.build(graph, output_path, ...)` and `graph.build_sampler_snapshot(output_path, ...)` persist immutable `.npy` arrays and metadata. Snapshots may include edge weights for weighted neighbor and edge sampling. `SamplerEngine.load(path, mode="ram"|"memmap", seed=...)` loads the arrays for node/edge seed, neighbor, heterogeneous layer, multihop, subgraph, positive-triple, and hard-negative sampling.
 
 `SampledSubgraphBatch` uses local node IDs in `senders`, `receivers`, `positives`, and `negatives`. Use `node_ids_global` to map local batch rows back to compact global snapshot IDs, and use `snapshot.external_node_id(...)` or `snapshot.global_triple_to_external(...)` to recover external IDs.
 

@@ -249,7 +249,7 @@ from tempfile import TemporaryDirectory
 
 from gestaltdb.graphdb import Edge, GraphDB, Node
 from gestaltdb.kvstores import LevelDBStore
-from gestaltdb.sampling import HardNegativeConfig, SamplerEngine
+from gestaltdb.sampling import HardNegativeConfig, NeighborSamplingSpec, SamplerEngine
 from gestaltdb.serializers import PickleSerializer
 
 with TemporaryDirectory() as tmpdir:
@@ -261,17 +261,21 @@ with TemporaryDirectory() as tmpdir:
             Node(node_id="disease-1", properties={"kind": "disease"}),
         ])
         graph.put_edges_bulk([
-            Edge(edge_id="d1-p1", source="drug-1", target="protein-1", properties={"type": "binds"}),
-            Edge(edge_id="p1-dis1", source="protein-1", target="disease-1", properties={"type": "associated_with"}),
+            Edge(edge_id="d1-p1", source="drug-1", target="protein-1", properties={"type": "binds", "confidence": 0.9}),
+            Edge(edge_id="p1-dis1", source="protein-1", target="disease-1", properties={"type": "associated_with", "confidence": 0.7}),
         ])
 
-        snapshot = graph.build_sampler_snapshot(f"{tmpdir}/sampler")
+        snapshot = graph.build_sampler_snapshot(f"{tmpdir}/sampler", edge_weight_property="confidence")
         engine = SamplerEngine.load(snapshot.path, mode="ram", seed=13)
 
         drug_id = snapshot.external_node_ids.tolist().index("drug-1")
         binds_id = snapshot.external_relation_ids.tolist().index("binds")
-        sample = engine.sample_neighbors([drug_id], fanout=10, direction="out", relations=[binds_id])
+        sample = engine.sample_neighbors([drug_id], fanout=10, direction="out", relations=[binds_id], strategy="weighted")
         print(snapshot.external_node_ids[sample.neighbor_nodes].tolist())
+
+        seeds = engine.sample_nodes(1, node_types=[snapshot.node_type_ids[drug_id]])
+        layers = engine.sample_layers(seeds, [NeighborSamplingSpec(fanout=5, relations=[binds_id])])
+        print(layers.layers[0].neighbor_nodes)
 
         seed_edge = snapshot.external_edge_ids.tolist().index("d1-p1")
         batch = engine.sample_subgraph(

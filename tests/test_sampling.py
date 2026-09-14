@@ -3,7 +3,7 @@ import random
 import pytest
 
 from gestaltdb.graphdb import Edge, Node
-from gestaltdb.sampling import AsyncBatchFeeder, HardNegativeConfig, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
+from gestaltdb.sampling import AsyncBatchFeeder, HardNegativeConfig, NeighborSamplingSpec, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
 from gestaltdb.sampling import as_sampling_pattern
 
 from .conftest import blocked_import, populate_typed_graph
@@ -128,6 +128,170 @@ def test_sampler_snapshot_from_edge_arrays_derives_type_constraints(tmp_path):
     assert snapshot.relation_src_type_ids.tolist() == [snapshot.node_type_ids[0]]
     assert snapshot.relation_dst_type_ids.tolist() == [snapshot.node_type_ids[2]]
     assert snapshot.metadata["node_type_values"] == {"0": "drug", "1": "protein"}
+
+
+def test_sampler_snapshot_persists_edge_weights(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "weighted_snapshot",
+        external_node_ids=["source", "left", "right"],
+        external_edge_ids=["left-edge", "right-edge"],
+        external_relation_ids=["links"],
+        src_int=[0, 0],
+        dst_int=[1, 2],
+        rel_int=[0, 0],
+        edge_weights=[0.0, 4.0],
+    )
+
+    loaded = SamplerSnapshot.load(snapshot.path, mmap=True)
+
+    assert loaded.edge_weights.tolist() == [0.0, 4.0]
+
+    (snapshot.path / "edge_weights.npy").unlink()
+    legacy = SamplerSnapshot.load(snapshot.path)
+    assert legacy.edge_weights.tolist() == [1.0, 1.0]
+
+
+def test_sampler_engine_weighted_neighbors_use_snapshot_weights(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "weighted_snapshot",
+        external_node_ids=["source", "left", "right"],
+        external_edge_ids=["left-edge", "right-edge"],
+        external_relation_ids=["links"],
+        src_int=[0, 0],
+        dst_int=[1, 2],
+        rel_int=[0, 0],
+        edge_weights=[0.0, 1.0],
+    )
+    engine = SamplerEngine(snapshot, seed=5)
+
+    sampled = engine.sample_neighbors([0], fanout=1, strategy="weighted")
+
+    assert sampled.edge_indices.tolist() == [1]
+    assert sampled.neighbor_nodes.tolist() == [2]
+
+    snapshot.edge_weights[:] = 0
+    with pytest.raises(ValueError, match="positive value"):
+        SamplerEngine(snapshot, seed=5).sample_neighbors([0], fanout=10, strategy="weighted")
+
+
+def test_sampler_engine_normalizes_large_weights_without_overflow(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "weighted_snapshot",
+        external_node_ids=["source", "left", "right"],
+        external_edge_ids=["left-edge", "right-edge"],
+        external_relation_ids=["links"],
+        src_int=[0, 0],
+        dst_int=[1, 2],
+        rel_int=[0, 0],
+        edge_weights=[1e308, 1e308],
+    )
+
+    sampled = SamplerEngine(snapshot, seed=5).sample_neighbors([0], fanout=1, strategy="weighted")
+
+    assert sampled.edge_indices[0] in {0, 1}
+
+
+def test_sampler_engine_samples_filtered_node_and_edge_seeds(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "seed_snapshot",
+        external_node_ids=["drug-1", "drug-2", "protein-1", "disease-1"],
+        external_edge_ids=["targets-1", "targets-2", "associated-1"],
+        external_relation_ids=["targets", "associated"],
+        src_int=[0, 1, 2],
+        dst_int=[2, 2, 3],
+        rel_int=[0, 0, 1],
+        node_type_ids=[0, 0, 1, 2],
+    )
+    engine = SamplerEngine(snapshot, seed=7)
+
+    nodes = engine.sample_nodes(10, node_types=[0])
+    edges = engine.sample_edges(10, relations=[1])
+
+    assert nodes.tolist() == [0, 1]
+    assert edges.tolist() == [2]
+
+
+def test_sampler_engine_preserves_heterogeneous_layer_blocks(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "layer_snapshot",
+        external_node_ids=["drug", "protein", "disease"],
+        external_edge_ids=["targets", "associated"],
+        external_relation_ids=["targets", "associated"],
+        src_int=[0, 1],
+        dst_int=[1, 2],
+        rel_int=[0, 1],
+    )
+    engine = SamplerEngine(snapshot, seed=11)
+
+    batch = engine.sample_layers(
+        [0, 0],
+        [
+            NeighborSamplingSpec(fanout=2, relations=[0]),
+            NeighborSamplingSpec(fanout=2, relations=[1]),
+        ],
+    )
+
+    assert batch.seed_nodes.tolist() == [0, 0]
+    assert len(batch.layers) == 2
+    assert batch.layers[0].input_nodes.tolist() == [0, 0]
+    assert batch.layers[0].neighbor_nodes.tolist() == [1, 1]
+    assert batch.layers[1].input_nodes.tolist() == [1]
+    assert batch.layers[1].neighbor_nodes.tolist() == [2]
+
+
+def test_sampler_engine_rejects_invalid_compact_ids(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "snapshot",
+        external_node_ids=["source", "target"],
+        external_edge_ids=["edge"],
+        external_relation_ids=["rel"],
+        src_int=[0],
+        dst_int=[1],
+        rel_int=[0],
+    )
+    engine = SamplerEngine(snapshot)
+
+    with pytest.raises(ValueError, match="nodes"):
+        engine.sample_neighbors([-1], fanout=1)
+    with pytest.raises(ValueError, match="integer IDs"):
+        engine.sample_neighbors([0.5], fanout=1)
+    with pytest.raises(ValueError, match="seed_edges"):
+        engine.sample_subgraph([1], fanouts=[1])
+    with pytest.raises(ValueError, match="count must be an integer"):
+        engine.sample_nodes(1.5)
+    with pytest.raises(ValueError, match="integer IDs"):
+        NeighborSamplingSpec(fanout=1, relations=[0.5])
+    with pytest.raises(ValueError, match="integer IDs"):
+        engine.sample_hard_negatives([[0.5, 0, 1]])
+
+
+def test_sampler_snapshot_rejects_fractional_compact_ids(tmp_path):
+    with pytest.raises(ValueError, match="src_int must contain integer IDs"):
+        SamplerSnapshot.from_edge_arrays(
+            tmp_path / "snapshot",
+            external_node_ids=["source", "target"],
+            external_edge_ids=["edge"],
+            external_relation_ids=["rel"],
+            src_int=[0.5],
+            dst_int=[1],
+            rel_int=[0],
+        )
+
+
+def test_sampler_engine_incident_self_loop_is_one_candidate(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "self_loop_snapshot",
+        external_node_ids=["node"],
+        external_edge_ids=["loop"],
+        external_relation_ids=["rel"],
+        src_int=[0],
+        dst_int=[0],
+        rel_int=[0],
+    )
+
+    sampled = SamplerEngine(snapshot, seed=3).sample_neighbors([0], fanout=2, direction="any")
+
+    assert sampled.edge_indices.tolist() == [0]
 
 
 def test_sampler_snapshot_from_edge_arrays_records_source_metadata(tmp_path):

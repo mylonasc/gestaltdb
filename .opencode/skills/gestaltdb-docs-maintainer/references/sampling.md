@@ -49,9 +49,19 @@ This generates binary `.npy` CSR-style arrays (`row_ptr`, `col_idx`, `relations`
 - `SamplerEngine.load(snapshot_path, mode="memmap", seed=42)`: Memory-maps arrays via `numpy.memmap`. Ideal for multi-worker PyTorch DataLoader setups and datasets larger than RAM.
 
 ### Sampling Primitives
+- `engine.sample_nodes(512, node_types=[type_id])`
+- `engine.sample_edges(128, relations=[rel_id], strategy="weighted")`
 - `engine.sample_neighbors(seed_nodes, fanout=15, direction="out", relations=[rel_id])`
+- `engine.sample_neighbors(seed_nodes, fanout=15, strategy="weighted")`
+- `engine.sample_layers(seed_nodes, [NeighborSamplingSpec(15, relations=[rel_id]), ...])`
 - `engine.sample_multihop(seed_nodes, fanouts=[15, 10], direction="out")`
 - `engine.sample_subgraph(seed_edges, fanouts=[10, 5], negative_config=HardNegativeConfig(...))`
+
+`SamplerSnapshot.from_edge_arrays(..., edge_weights=weights)` persists edge
+weights directly. For graph-backed snapshots, use
+`graph.build_sampler_snapshot(..., edge_weight_property="confidence")`. Missing
+weights default to `1.0`. Weighted sampling excludes zero-weight candidates and
+rejects candidate sets in which every weight is zero.
 
 ### Mapping IDs Back to External Graph
 `SampledSubgraphBatch` local arrays index nodes locally within the batch (`senders`, `receivers`, `positives`, `negatives`).

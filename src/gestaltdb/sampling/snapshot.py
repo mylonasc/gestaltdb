@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Sequence
 
@@ -42,6 +42,7 @@ class SamplerSnapshot:
         src_int: Source compact node ID for each edge.
         dst_int: Target compact node ID for each edge.
         rel_int: Relation compact ID for each edge.
+        edge_weights: Non-negative sampling weight for each edge.
         out: Source-to-edge CSR adjacency.
         in_: Target-to-edge CSR adjacency.
         incident: Undirected incident edge CSR adjacency.
@@ -83,6 +84,7 @@ class SamplerSnapshot:
     relation_out: CSRAdjacency
     relation_in: CSRAdjacency
     positive_triples: np.ndarray
+    edge_weights: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=np.float64))
 
     @property
     def num_nodes(self) -> int:
@@ -105,6 +107,7 @@ class SamplerSnapshot:
         node_filter: Callable[[object], bool] | None = None,
         edge_filter: Callable[[object], bool] | None = None,
         edge_type_property: str = "type",
+        edge_weight_property: str | None = None,
         node_type_property: str = "kind",
         directed: bool = True,
         include_reverse: bool = True,
@@ -127,6 +130,8 @@ class SamplerSnapshot:
             edge_filter: Optional predicate receiving each edge object. Edges for
                 which the predicate returns ``False`` are omitted.
             edge_type_property: Edge property containing the relation identifier.
+            edge_weight_property: Optional edge property containing a finite,
+                non-negative sampling weight. Missing values default to ``1.0``.
             node_type_property: Node property containing the semantic node type.
             directed: Stored in metadata for consumers; current adjacency arrays
                 preserve directed source/target endpoints and also build an
@@ -180,6 +185,7 @@ class SamplerSnapshot:
         src_values: list[int] = []
         dst_values: list[int] = []
         rel_values: list[str] = []
+        edge_weights: list[float] = []
         for edge_key in graph.store.get_edge_keys_generator():
             edge = graph.get_edge(edge_key)
             if edge is None or (edge_filter is not None and not edge_filter(edge)):
@@ -195,12 +201,15 @@ class SamplerSnapshot:
             src_values.append(node_to_int[src])
             dst_values.append(node_to_int[dst])
             rel_values.append(str(relation))
+            weight = 1.0 if edge_weight_property is None else edge.properties.get(edge_weight_property, 1.0)
+            edge_weights.append(_validate_weight(weight))
 
         relations = sorted(set(rel_values))
         rel_to_int = {relation: idx for idx, relation in enumerate(relations)}
         src_int = np.asarray(src_values, dtype=np.int64)
         dst_int = np.asarray(dst_values, dtype=np.int64)
         rel_int = np.asarray([rel_to_int[relation] for relation in rel_values], dtype=np.int64)
+        edge_weights_array = np.asarray(edge_weights, dtype=np.float64)
         relation_src_type_ids = np.full(len(relations), -1, dtype=np.int64)
         relation_dst_type_ids = np.full(len(relations), -1, dtype=np.int64)
         for relation, rel_idx in rel_to_int.items():
@@ -230,6 +239,7 @@ class SamplerSnapshot:
             "relation_count": len(relations),
             "node_type_count": len(type_values),
             "edge_type_property": edge_type_property,
+            "edge_weight_property": edge_weight_property,
             "node_type_property": node_type_property,
             "directed": directed,
             "include_reverse": include_reverse,
@@ -243,7 +253,7 @@ class SamplerSnapshot:
         if source_artifacts is not None:
             metadata["source_artifacts"] = cls._normalize_artifact_references(source_artifacts, path)
 
-        cls._write(path, metadata, node_ids, node_type_ids, edge_ids, relations, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, out, in_, incident, relation_out, relation_in, positive_triples)
+        cls._write(path, metadata, node_ids, node_type_ids, edge_ids, relations, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, edge_weights_array, out, in_, incident, relation_out, relation_in, positive_triples)
         return cls.load(path)
 
     @classmethod
@@ -257,6 +267,7 @@ class SamplerSnapshot:
         src_int,
         dst_int,
         rel_int,
+        edge_weights=None,
         node_type_values: Sequence[object] | None = None,
         node_type_ids=None,
         edge_src_type_values: Sequence[object] | None = None,
@@ -292,6 +303,7 @@ class SamplerSnapshot:
             src_int: Source compact node ID per edge.
             dst_int: Target compact node ID per edge.
             rel_int: Relation compact ID per edge.
+            edge_weights: Optional finite, non-negative sampling weight per edge.
             node_type_values: Optional semantic node type values ordered by
                 compact node ID. Values are encoded to integer IDs.
             node_type_ids: Optional already encoded node type IDs ordered by
@@ -332,10 +344,11 @@ class SamplerSnapshot:
         external_node_ids = np.asarray(external_node_ids, dtype=str)
         external_edge_ids = np.asarray(external_edge_ids, dtype=str)
         external_relation_ids = np.asarray(external_relation_ids, dtype=str)
-        src_int = np.asarray(src_int, dtype=np.int64)
-        dst_int = np.asarray(dst_int, dtype=np.int64)
-        rel_int = np.asarray(rel_int, dtype=np.int64)
+        src_int = _integer_id_array(src_int, "src_int")
+        dst_int = _integer_id_array(dst_int, "dst_int")
+        rel_int = _integer_id_array(rel_int, "rel_int")
         cls._validate_edge_arrays(external_node_ids, external_edge_ids, external_relation_ids, src_int, dst_int, rel_int)
+        edge_weights = _normalize_edge_weights(edge_weights, src_int.size)
 
         type_mapping = None
         if node_type_values is not None:
@@ -343,7 +356,7 @@ class SamplerSnapshot:
         elif node_type_ids is None:
             node_type_ids = np.full(external_node_ids.size, -1, dtype=np.int64)
         else:
-            node_type_ids = np.asarray(node_type_ids, dtype=np.int64)
+            node_type_ids = _integer_id_array(node_type_ids, "node_type_ids")
             if node_type_ids.size != external_node_ids.size:
                 raise ValueError("node_type_ids length must match external_node_ids")
 
@@ -376,6 +389,7 @@ class SamplerSnapshot:
             src_int=src_int,
             dst_int=dst_int,
             rel_int=rel_int,
+            edge_weights=edge_weights,
             relation_src_type_ids=relation_src_type_ids,
             relation_dst_type_ids=relation_dst_type_ids,
             metadata=snapshot_metadata,
@@ -393,6 +407,7 @@ class SamplerSnapshot:
         src_int,
         dst_int,
         rel_int,
+        edge_weights=None,
         relation_src_type_ids=None,
         relation_dst_type_ids=None,
         source_db: dict | None = None,
@@ -411,6 +426,7 @@ class SamplerSnapshot:
             src_int: Source compact node ID per edge.
             dst_int: Target compact node ID per edge.
             rel_int: Relation compact ID per edge.
+            edge_weights: Optional finite, non-negative sampling weight per edge.
             relation_src_type_ids: Optional source endpoint type ID per relation.
             relation_dst_type_ids: Optional target endpoint type ID per relation.
             metadata: Optional metadata merged into generated metadata.
@@ -435,12 +451,16 @@ class SamplerSnapshot:
         path = Path(output_path)
         path.mkdir(parents=True, exist_ok=True)
         external_node_ids = np.asarray(external_node_ids, dtype=str)
-        node_type_ids = np.asarray(node_type_ids, dtype=np.int64)
+        node_type_ids = _integer_id_array(node_type_ids, "node_type_ids")
         external_edge_ids = np.asarray(external_edge_ids, dtype=str)
         external_relation_ids = np.asarray(external_relation_ids, dtype=str)
-        src_int = np.asarray(src_int, dtype=np.int64)
-        dst_int = np.asarray(dst_int, dtype=np.int64)
-        rel_int = np.asarray(rel_int, dtype=np.int64)
+        src_int = _integer_id_array(src_int, "src_int")
+        dst_int = _integer_id_array(dst_int, "dst_int")
+        rel_int = _integer_id_array(rel_int, "rel_int")
+        cls._validate_edge_arrays(external_node_ids, external_edge_ids, external_relation_ids, src_int, dst_int, rel_int)
+        if node_type_ids.size != external_node_ids.size:
+            raise ValueError("node_type_ids length must match external_node_ids")
+        edge_weights = _normalize_edge_weights(edge_weights, src_int.size)
         edge_indices = np.arange(src_int.size, dtype=np.int64)
 
         relation_count = int(external_relation_ids.size)
@@ -454,8 +474,10 @@ class SamplerSnapshot:
                 relation_src_type_ids[rel_idx] = src_types.pop() if len(src_types) == 1 else -1
                 relation_dst_type_ids[rel_idx] = dst_types.pop() if len(dst_types) == 1 else -1
         else:
-            relation_src_type_ids = np.asarray(relation_src_type_ids, dtype=np.int64)
-            relation_dst_type_ids = np.asarray(relation_dst_type_ids, dtype=np.int64)
+            relation_src_type_ids = _integer_id_array(relation_src_type_ids, "relation_src_type_ids")
+            relation_dst_type_ids = _integer_id_array(relation_dst_type_ids, "relation_dst_type_ids")
+            if relation_src_type_ids.size != relation_count or relation_dst_type_ids.size != relation_count:
+                raise ValueError("relation endpoint type arrays must match external_relation_ids")
 
         out = build_csr(src_int, edge_indices, external_node_ids.size)
         in_ = build_csr(dst_int, edge_indices, external_node_ids.size)
@@ -484,7 +506,7 @@ class SamplerSnapshot:
             snapshot_metadata["source_db"] = cls._normalize_source_reference(source_db, path)
         if source_artifacts is not None:
             snapshot_metadata["source_artifacts"] = cls._normalize_artifact_references(source_artifacts, path)
-        cls._write(path, snapshot_metadata, external_node_ids, node_type_ids, external_edge_ids, external_relation_ids, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, out, in_, incident, relation_out, relation_in, positive_triples)
+        cls._write(path, snapshot_metadata, external_node_ids, node_type_ids, external_edge_ids, external_relation_ids, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, edge_weights, out, in_, incident, relation_out, relation_in, positive_triples)
         return cls.load(path)
 
     @classmethod
@@ -520,6 +542,10 @@ class SamplerSnapshot:
         def load_array(name: str) -> np.ndarray:
             return np.load(path / f"{name}.npy", mmap_mode=mmap_mode, allow_pickle=False)
 
+        edge_weights_path = path / "edge_weights.npy"
+        edge_weights = load_array("edge_weights") if edge_weights_path.exists() else np.ones(int(metadata["edge_count"]), dtype=np.float64)
+        edge_weights = _normalize_edge_weights(edge_weights, int(metadata["edge_count"]))
+
         return cls(
             path=path,
             metadata=metadata,
@@ -532,6 +558,7 @@ class SamplerSnapshot:
             src_int=load_array("src_int"),
             dst_int=load_array("dst_int"),
             rel_int=load_array("rel_int"),
+            edge_weights=edge_weights,
             out=CSRAdjacency(load_array("out_indptr"), load_array("out_edge_indices")),
             in_=CSRAdjacency(load_array("in_indptr"), load_array("in_edge_indices")),
             incident=CSRAdjacency(load_array("incident_indptr"), load_array("incident_edge_indices")),
@@ -666,7 +693,7 @@ class SamplerSnapshot:
         return relation_src_type_ids, relation_dst_type_ids
 
     @staticmethod
-    def _write(path: Path, metadata: dict, node_ids, node_type_ids, edge_ids, relations, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, out, in_, incident, relation_out, relation_in, positive_triples) -> None:
+    def _write(path: Path, metadata: dict, node_ids, node_type_ids, edge_ids, relations, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, edge_weights, out, in_, incident, relation_out, relation_in, positive_triples) -> None:
         with (path / "metadata.json").open("w", encoding="utf-8") as handle:
             json.dump(metadata, handle, indent=2, sort_keys=True)
         arrays = {
@@ -679,6 +706,7 @@ class SamplerSnapshot:
             "src_int": src_int,
             "dst_int": dst_int,
             "rel_int": rel_int,
+            "edge_weights": edge_weights,
             "out_indptr": out.indptr,
             "out_edge_indices": out.edge_indices,
             "in_indptr": in_.indptr,
@@ -707,3 +735,33 @@ def _encode_type_values(values, *, expected_size: int) -> tuple[np.ndarray, dict
 
 def _encode_with_mapping(values, mapping: dict[str, int]) -> np.ndarray:
     return np.asarray([mapping.get(str(value), -1) if value is not None else -1 for value in values], dtype=np.int64)
+
+
+def _validate_weight(value) -> float:
+    try:
+        weight = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("edge weights must be numeric") from exc
+    if not np.isfinite(weight) or weight < 0:
+        raise ValueError("edge weights must be finite and non-negative")
+    return weight
+
+
+def _normalize_edge_weights(edge_weights, edge_count: int) -> np.ndarray:
+    if edge_weights is None:
+        return np.ones(edge_count, dtype=np.float64)
+    weights = np.asarray(edge_weights, dtype=np.float64)
+    if weights.ndim != 1 or weights.size != edge_count:
+        raise ValueError("edge_weights length must match the number of edges")
+    if not np.all(np.isfinite(weights)) or np.any(weights < 0):
+        raise ValueError("edge_weights must be finite and non-negative")
+    return weights
+
+
+def _integer_id_array(values, name: str) -> np.ndarray:
+    ids = np.asarray(values)
+    if ids.ndim != 1:
+        raise ValueError(f"{name} must be one-dimensional")
+    if ids.size and (np.issubdtype(ids.dtype, np.bool_) or not np.issubdtype(ids.dtype, np.integer)):
+        raise ValueError(f"{name} must contain integer IDs")
+    return ids.astype(np.int64, copy=False)
