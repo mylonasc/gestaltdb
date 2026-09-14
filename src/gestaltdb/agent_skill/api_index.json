@@ -1,0 +1,1054 @@
+{
+  "generated_from": {
+    "path": "src/gestaltdb/graphdb.py",
+    "sha256": "bcdbfdf81ef2dcdaf2b99e1b0b3cd9948fd19a76ea19e53c4e5b6121024a4970"
+  },
+  "methods": [
+    {
+      "examples": [],
+      "line": 2681,
+      "name": "bfs",
+      "returns": "Demonstrates how adjacency is used for graph traversal.",
+      "signature": "bfs(start_node_id: bytes, direction='any', edge_key_serializer=lambda x: x.encode('utf-8'), node_key_serializer=lambda x: x.encode('utf-8'))",
+      "summary": "Returns a list of node_ids in BFS order starting from `start_node_id`.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [],
+      "line": 1649,
+      "name": "build_sampler_snapshot",
+      "returns": "A loaded ``SamplerSnapshot`` instance.",
+      "signature": "build_sampler_snapshot(output_path, source_db_reference: bool=True, source_db_path=None, source_db_path_mode: str='relative', **kwargs)",
+      "summary": "Build a read-optimized array sampler snapshot from this graph.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [
+        {
+          "doc": "skill",
+          "example": 2
+        },
+        {
+          "doc": "backends",
+          "example": 1
+        },
+        {
+          "doc": "backends",
+          "example": 2
+        },
+        {
+          "doc": "backends",
+          "example": 3
+        },
+        {
+          "doc": "cypher",
+          "example": 1
+        },
+        {
+          "doc": "indexing",
+          "example": 1
+        },
+        {
+          "doc": "ingestion",
+          "example": 1
+        },
+        {
+          "doc": "quickstart",
+          "example": 1
+        },
+        {
+          "doc": "sampling",
+          "example": 1
+        },
+        {
+          "doc": "sampling",
+          "example": 2
+        }
+      ],
+      "line": 3168,
+      "name": "close",
+      "returns": "",
+      "signature": "close()",
+      "summary": "Close the underlying key-value store.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [],
+      "line": 1546,
+      "name": "count_edges_by_property",
+      "returns": "",
+      "signature": "count_edges_by_property(property_name: str, value)",
+      "summary": "Return the number of edges currently indexed for an exact property value.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1588,
+      "name": "count_edges_by_property_range",
+      "returns": "",
+      "signature": "count_edges_by_property_range(property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
+      "summary": "Return the number of edges indexed in a scalar property range.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1507,
+      "name": "count_edges_by_type",
+      "returns": "",
+      "signature": "count_edges_by_type(edge_type: str)",
+      "summary": "Return the number of edges currently indexed for a relationship type.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1562,
+      "name": "count_edges_by_type_property",
+      "returns": "",
+      "signature": "count_edges_by_type_property(edge_type: str, property_name: str, value)",
+      "summary": "Return the number of edges indexed for a type and exact property value.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1614,
+      "name": "count_edges_by_type_property_range",
+      "returns": "",
+      "signature": "count_edges_by_type_property_range(edge_type: str, property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
+      "summary": "Return the number of edges indexed for a type/property range.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1054,
+      "name": "count_nodes_by_label",
+      "returns": "",
+      "signature": "count_nodes_by_label(label: str)",
+      "summary": "Return the number of nodes currently indexed for a label.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1109,
+      "name": "count_nodes_by_label_property",
+      "returns": "",
+      "signature": "count_nodes_by_label_property(label: str, property_name: str, value)",
+      "summary": "Return the number of nodes indexed for a label and exact property value.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1161,
+      "name": "count_nodes_by_label_property_range",
+      "returns": "",
+      "signature": "count_nodes_by_label_property_range(label: str, property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
+      "summary": "Return the number of nodes indexed for a label/property range.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1093,
+      "name": "count_nodes_by_property",
+      "returns": "",
+      "signature": "count_nodes_by_property(property_name: str, value)",
+      "summary": "Return the number of nodes currently indexed for an exact property value.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1135,
+      "name": "count_nodes_by_property_range",
+      "returns": "",
+      "signature": "count_nodes_by_property_range(property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
+      "summary": "Return the number of nodes indexed in a scalar property range.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1691,
+      "name": "count_typed_adjacency",
+      "returns": "Number of typed adjacency records matching the node, edge type, and",
+      "signature": "count_typed_adjacency(node_id, edge_type: str, direction: str='out')",
+      "summary": "Count typed adjacency records without materializing traversal records.",
+      "topic": "sampling"
+    },
+    {
+      "examples": [
+        {
+          "doc": "backends",
+          "example": 1
+        },
+        {
+          "doc": "backends",
+          "example": 2
+        },
+        {
+          "doc": "backends",
+          "example": 3
+        },
+        {
+          "doc": "ingestion",
+          "example": 1
+        }
+      ],
+      "line": 505,
+      "name": "create",
+      "returns": "",
+      "signature": "create(path, backend='pyrex', serializer='json', backend_options=None, indexed_node_properties=None, indexed_edge_properties=None, overwrite=False)",
+      "summary": "Create a self-describing graph store and return an open handle.",
+      "topic": "backends"
+    },
+    {
+      "examples": [
+        {
+          "doc": "indexing",
+          "example": 1
+        }
+      ],
+      "line": 1443,
+      "name": "create_edge_property_index",
+      "returns": "Number of existing edges added to the index.",
+      "signature": "create_edge_property_index(property_name: str)",
+      "summary": "Register and rebuild an exact-match edge property index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [
+        {
+          "doc": "indexing",
+          "example": 1
+        },
+        {
+          "doc": "ingestion",
+          "example": 1
+        }
+      ],
+      "line": 977,
+      "name": "create_node_property_index",
+      "returns": "Number of existing nodes added to the index.",
+      "signature": "create_node_property_index(property_name: str)",
+      "summary": "Register and rebuild an exact-match node property index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 2612,
+      "name": "delete_edge",
+      "returns": "",
+      "signature": "delete_edge(edge_id: str, edge_key_serializer=lambda x: x.encode('utf-8'))",
+      "summary": "Removes the edge from the edge store, and from adjacency",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [],
+      "line": 826,
+      "name": "delete_node",
+      "returns": "",
+      "signature": "delete_node(node_id)",
+      "summary": "Delete a node by byte key.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [],
+      "line": 1182,
+      "name": "edge_key_to_bytes",
+      "returns": "UTF-8 encoded bytes.",
+      "signature": "edge_key_to_bytes(edge_key)",
+      "summary": "Normalize an edge key to bytes.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [],
+      "line": 1216,
+      "name": "edge_type",
+      "returns": "Edge type string, or ``None``.",
+      "signature": "edge_type(edge: Edge)",
+      "summary": "Return the type used by typed traversal for an edge.",
+      "topic": "sampling"
+    },
+    {
+      "examples": [],
+      "line": 1772,
+      "name": "edges_by_edge_type",
+      "returns": "List of edge ID bytes.",
+      "signature": "edges_by_edge_type(node_id, edge_type: str, direction: str='out')",
+      "summary": "Return edge IDs connected by a specific edge type.",
+      "topic": "sampling"
+    },
+    {
+      "examples": [
+        {
+          "doc": "backends",
+          "example": 1
+        }
+      ],
+      "line": 1531,
+      "name": "edges_by_property",
+      "returns": "List of decoded ``Edge`` objects.",
+      "signature": "edges_by_property(property_name: str, value)",
+      "summary": "Return edges using an exact-match property index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1584,
+      "name": "edges_by_property_range",
+      "returns": "",
+      "signature": "edges_by_property_range(property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
+      "summary": "Return edges using a scalar property range index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1493,
+      "name": "edges_by_type",
+      "returns": "List of decoded ``Edge`` objects.",
+      "signature": "edges_by_type(edge_type: str)",
+      "summary": "Return edges using the relationship type catalog.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1558,
+      "name": "edges_by_type_property",
+      "returns": "",
+      "signature": "edges_by_type_property(edge_type: str, property_name: str, value)",
+      "summary": "Return edges using the composite type/property exact-match index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [
+        {
+          "doc": "indexing",
+          "example": 1
+        }
+      ],
+      "line": 1610,
+      "name": "edges_by_type_property_range",
+      "returns": "",
+      "signature": "edges_by_type_property_range(edge_type: str, property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
+      "summary": "Return edges using a composite type/property range index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 2576,
+      "name": "get_adjacency_list",
+      "returns": "If none found, returns an empty list.",
+      "signature": "get_adjacency_list(node_id: bytes, direction='forward', return_raw=False)",
+      "summary": "Returns the list of edge IDs connected to node_id.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [
+        {
+          "doc": "backends",
+          "example": 1
+        }
+      ],
+      "line": 1917,
+      "name": "get_edge",
+      "returns": "The decoded edge, or ``None`` when absent.",
+      "signature": "get_edge(edge_id)",
+      "summary": "Return an edge by byte key.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [
+        {
+          "doc": "backends",
+          "example": 1
+        },
+        {
+          "doc": "quickstart",
+          "example": 1
+        }
+      ],
+      "line": 806,
+      "name": "get_node",
+      "returns": "The decoded node, or ``None`` when absent.",
+      "signature": "get_node(node_id)",
+      "summary": "Return a node by byte key.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [],
+      "line": 2547,
+      "name": "get_node_keys_generator",
+      "returns": "Generator of node key bytes.",
+      "signature": "get_node_keys_generator(num_nodes=None, key_offset=None)",
+      "summary": "Yield node keys from the backing store.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [],
+      "line": 2532,
+      "name": "get_nodes",
+      "returns": "",
+      "signature": "get_nodes(node_ids: list[str])",
+      "summary": "Use store.get_nodes_bulk(...) and deserialize each one.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [],
+      "line": 1683,
+      "name": "get_typed_adjacency",
+      "returns": "",
+      "signature": "get_typed_adjacency(node_id, edge_type: str, direction: str='out')",
+      "summary": "Return typed adjacency records with clean direction semantics.",
+      "topic": "sampling"
+    },
+    {
+      "examples": [
+        {
+          "doc": "backends",
+          "example": 1
+        }
+      ],
+      "line": 1618,
+      "name": "index_statistics",
+      "returns": "",
+      "signature": "index_statistics()",
+      "summary": "Return persisted index definitions visible to the query planner.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [
+        {
+          "doc": "ingestion",
+          "example": 1
+        }
+      ],
+      "line": 2105,
+      "name": "ingest_arrow",
+      "returns": "",
+      "signature": "ingest_arrow(node_ids, edge_ids, sources, targets, edge_types, ingestion_mode: str | ColumnarIngestionMode=ColumnarIngestionMode.ENTITY_COLUMNS, index_mode: str | IndexMaintenanceMode=IndexMaintenanceMode.DEFER_REBUILD, node_values=None, edge_values=None, labels=None, node_properties: dict[str, object] | None=None, edge_properties: dict[str, object] | None=None, native: bool=True, chunk_size: int=100000, progress: bool=False)",
+      "summary": "Ingest a graph from Arrow-like columns with bulk-load defaults.",
+      "topic": "ingestion"
+    },
+    {
+      "examples": [],
+      "line": 2810,
+      "name": "ingest_edges_arrow",
+      "returns": "Number of ingested edges.",
+      "signature": "ingest_edges_arrow(edge_ids, sources, targets, edge_types, edge_values, append_only: bool=True, native: bool=True, chunk_size: int=100000, index_mode: str='maintain', progress: bool=False)",
+      "summary": "Ingest typed edges from Arrow-like columns.",
+      "topic": "ingestion"
+    },
+    {
+      "examples": [],
+      "line": 3023,
+      "name": "ingest_edges_arrow_entities",
+      "returns": "",
+      "signature": "ingest_edges_arrow_entities(edge_ids, sources, targets, edge_types, properties: dict[str, object] | None=None, append_only: bool=True, native: bool=True, chunk_size: int=100000, index_mode: str='maintain', progress: bool=False)",
+      "summary": "Ingest edge entity columns from Arrow-like columns.",
+      "topic": "ingestion"
+    },
+    {
+      "examples": [],
+      "line": 2874,
+      "name": "ingest_edges_polars",
+      "returns": "",
+      "signature": "ingest_edges_polars(df, edge_id: str='edge_id', source: str='source', target: str='target', edge_type: str='edge_type', edge_value: str='edge_value', append_only: bool=True, native: bool=True, chunk_size: int=100000, index_mode: str='maintain', progress: bool=False)",
+      "summary": "Ingest typed edges from a Polars DataFrame.",
+      "topic": "ingestion"
+    },
+    {
+      "examples": [],
+      "line": 2935,
+      "name": "ingest_edges_polars_entities",
+      "returns": "",
+      "signature": "ingest_edges_polars_entities(df, edge_id: str='edge_id', source: str='source', target: str='target', edge_type: str='edge_type', property_columns: list[str] | tuple[str, ...] | None=None, append_only: bool=True, native: bool=True, chunk_size: int=100000, index_mode: str='maintain', progress: bool=False)",
+      "summary": "Ingest edge entity columns from a Polars DataFrame.",
+      "topic": "ingestion"
+    },
+    {
+      "examples": [],
+      "line": 2185,
+      "name": "ingest_nodes_arrow",
+      "returns": "Number of ingested nodes.",
+      "signature": "ingest_nodes_arrow(node_ids, node_values, native: bool=True, chunk_size: int=100000, append_only: bool=False, index_mode: str='maintain', progress: bool=False)",
+      "summary": "Ingest attributed nodes from Arrow-like columns.",
+      "topic": "ingestion"
+    },
+    {
+      "examples": [],
+      "line": 2362,
+      "name": "ingest_nodes_arrow_entities",
+      "returns": "",
+      "signature": "ingest_nodes_arrow_entities(node_ids, labels=None, properties: dict[str, object] | None=None, native: bool=True, chunk_size: int=100000, append_only: bool=False, index_mode: str='maintain', progress: bool=False)",
+      "summary": "Ingest node entity columns from Arrow-like columns.",
+      "topic": "ingestion"
+    },
+    {
+      "examples": [],
+      "line": 2231,
+      "name": "ingest_nodes_polars",
+      "returns": "",
+      "signature": "ingest_nodes_polars(df, node_id: str='node_id', node_value: str='node_value', native: bool=True, chunk_size: int=100000, append_only: bool=False, index_mode: str='maintain', progress: bool=False)",
+      "summary": "Ingest attributed nodes from a Polars DataFrame.",
+      "topic": "ingestion"
+    },
+    {
+      "examples": [],
+      "line": 2277,
+      "name": "ingest_nodes_polars_entities",
+      "returns": "",
+      "signature": "ingest_nodes_polars_entities(df, node_id: str='node_id', labels: str | list[str] | tuple[str, ...] | None='labels', property_columns: list[str] | tuple[str, ...] | None=None, native: bool=True, chunk_size: int=100000, append_only: bool=False, index_mode: str='maintain', progress: bool=False)",
+      "summary": "Ingest node entity columns from a Polars DataFrame.",
+      "topic": "ingestion"
+    },
+    {
+      "examples": [
+        {
+          "doc": "backends",
+          "example": 2
+        },
+        {
+          "doc": "backends",
+          "example": 3
+        }
+      ],
+      "line": 2020,
+      "name": "ingest_polars",
+      "returns": "",
+      "signature": "ingest_polars(node_df, edge_df, ingestion_mode: str | ColumnarIngestionMode=ColumnarIngestionMode.ENTITY_COLUMNS, index_mode: str | IndexMaintenanceMode=IndexMaintenanceMode.DEFER_REBUILD, node_id: str='node_id', node_value: str='node_value', labels: str | list[str] | tuple[str, ...] | None='labels', node_property_columns: list[str] | tuple[str, ...] | None=None, edge_id: str='edge_id', source: str='source', target: str='target', edge_type: str='edge_type', edge_value: str='edge_value', edge_property_columns: list[str] | tuple[str, ...] | None=None, native: bool=True, chunk_size: int=100000, progress: bool=False)",
+      "summary": "Ingest a graph from Polars DataFrames with bulk-load defaults.",
+      "topic": "ingestion"
+    },
+    {
+      "examples": [],
+      "line": 1511,
+      "name": "iter_edge_ids_by_property",
+      "returns": "",
+      "signature": "iter_edge_ids_by_property(property_name: str, value)",
+      "summary": "Yield edge IDs from an exact-match edge property index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1566,
+      "name": "iter_edge_ids_by_property_range",
+      "returns": "",
+      "signature": "iter_edge_ids_by_property_range(property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
+      "summary": "Yield edge IDs from a scalar property range index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1477,
+      "name": "iter_edge_ids_by_type",
+      "returns": "",
+      "signature": "iter_edge_ids_by_type(edge_type: str)",
+      "summary": "Yield edge IDs from the relationship type catalog.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1550,
+      "name": "iter_edge_ids_by_type_property",
+      "returns": "",
+      "signature": "iter_edge_ids_by_type_property(edge_type: str, property_name: str, value)",
+      "summary": "Yield edge IDs from the composite type/property exact-match index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1592,
+      "name": "iter_edge_ids_by_type_property_range",
+      "returns": "",
+      "signature": "iter_edge_ids_by_type_property_range(edge_type: str, property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
+      "summary": "Yield edge IDs from a composite type/property range index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1024,
+      "name": "iter_node_ids_by_label",
+      "returns": "",
+      "signature": "iter_node_ids_by_label(label: str)",
+      "summary": "Yield node IDs from the label index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1097,
+      "name": "iter_node_ids_by_label_property",
+      "returns": "",
+      "signature": "iter_node_ids_by_label_property(label: str, property_name: str, value)",
+      "summary": "Yield node IDs from the composite label/property exact-match index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1139,
+      "name": "iter_node_ids_by_label_property_range",
+      "returns": "",
+      "signature": "iter_node_ids_by_label_property_range(label: str, property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
+      "summary": "Yield node IDs from a composite label/property range index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1058,
+      "name": "iter_node_ids_by_property",
+      "returns": "",
+      "signature": "iter_node_ids_by_property(property_name: str, value)",
+      "summary": "Yield node IDs from an exact-match property index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1113,
+      "name": "iter_node_ids_by_property_range",
+      "returns": "",
+      "signature": "iter_node_ids_by_property_range(property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
+      "summary": "Yield node IDs from a scalar property range index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1719,
+      "name": "iter_typed_adjacency",
+      "returns": "",
+      "signature": "iter_typed_adjacency(node_id, edge_type: str, direction: str='out')",
+      "summary": "Yield typed adjacency records with clean direction semantics.",
+      "topic": "sampling"
+    },
+    {
+      "examples": [
+        {
+          "doc": "sampling",
+          "example": 1
+        }
+      ],
+      "line": 1199,
+      "name": "key_to_string",
+      "returns": "String key.",
+      "signature": "key_to_string(key)",
+      "summary": "Normalize a key to a string.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [],
+      "line": 574,
+      "name": "manifest",
+      "returns": "",
+      "signature": "manifest()",
+      "summary": "Return the loaded or generated manifest for this graph.",
+      "topic": "backends"
+    },
+    {
+      "examples": [
+        {
+          "doc": "backends",
+          "example": 2
+        },
+        {
+          "doc": "backends",
+          "example": 3
+        },
+        {
+          "doc": "quickstart",
+          "example": 1
+        }
+      ],
+      "line": 1756,
+      "name": "neighbors_by_edge_type",
+      "returns": "List of neighbor ID bytes.",
+      "signature": "neighbors_by_edge_type(node_id, edge_type: str, direction: str='out')",
+      "summary": "Return neighbor IDs connected by a specific edge type.",
+      "topic": "sampling"
+    },
+    {
+      "examples": [],
+      "line": 1165,
+      "name": "node_key_to_bytes",
+      "returns": "UTF-8 encoded bytes.",
+      "signature": "node_key_to_bytes(node_key)",
+      "summary": "Normalize a node key to bytes.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [],
+      "line": 1040,
+      "name": "nodes_by_label",
+      "returns": "List of decoded ``Node`` objects.",
+      "signature": "nodes_by_label(label: str)",
+      "summary": "Return nodes with a label using the label index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1105,
+      "name": "nodes_by_label_property",
+      "returns": "",
+      "signature": "nodes_by_label_property(label: str, property_name: str, value)",
+      "summary": "Return nodes using the composite label/property exact-match index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [
+        {
+          "doc": "indexing",
+          "example": 1
+        }
+      ],
+      "line": 1157,
+      "name": "nodes_by_label_property_range",
+      "returns": "",
+      "signature": "nodes_by_label_property_range(label: str, property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
+      "summary": "Return nodes using a composite label/property range index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [
+        {
+          "doc": "backends",
+          "example": 1
+        },
+        {
+          "doc": "ingestion",
+          "example": 1
+        }
+      ],
+      "line": 1078,
+      "name": "nodes_by_property",
+      "returns": "List of decoded ``Node`` objects.",
+      "signature": "nodes_by_property(property_name: str, value)",
+      "summary": "Return nodes using an exact-match property index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1131,
+      "name": "nodes_by_property_range",
+      "returns": "",
+      "signature": "nodes_by_property_range(property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
+      "summary": "Return nodes using a scalar property range index.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [
+        {
+          "doc": "backends",
+          "example": 1
+        }
+      ],
+      "line": 542,
+      "name": "open",
+      "returns": "",
+      "signature": "open(path, backend_options=None, validate_manifest=True)",
+      "summary": "Open a self-describing graph store from a directory.",
+      "topic": "backends"
+    },
+    {
+      "examples": [],
+      "line": 2604,
+      "name": "put_adjacency_list",
+      "returns": "",
+      "signature": "put_adjacency_list(node_id: str, edges_list: list[str])",
+      "summary": "Stores the adjacency list for node_id.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [
+        {
+          "doc": "skill",
+          "example": 2
+        },
+        {
+          "doc": "backends",
+          "example": 1
+        },
+        {
+          "doc": "indexing",
+          "example": 1
+        },
+        {
+          "doc": "quickstart",
+          "example": 1
+        }
+      ],
+      "line": 1234,
+      "name": "put_edge",
+      "returns": "",
+      "signature": "put_edge(edge: Edge, update_adjacency=True)",
+      "summary": "Store an edge and update adjacency indexes.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [
+        {
+          "doc": "cypher",
+          "example": 1
+        },
+        {
+          "doc": "sampling",
+          "example": 1
+        },
+        {
+          "doc": "sampling",
+          "example": 2
+        }
+      ],
+      "line": 2714,
+      "name": "put_edges_bulk",
+      "returns": "",
+      "signature": "put_edges_bulk(edges: List[Edge], check_existing: bool=True)",
+      "summary": "Store multiple edges and update adjacency indexes in bulk.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [
+        {
+          "doc": "skill",
+          "example": 2
+        },
+        {
+          "doc": "backends",
+          "example": 1
+        }
+      ],
+      "line": 790,
+      "name": "put_node",
+      "returns": "",
+      "signature": "put_node(node: Node)",
+      "summary": "Store a node.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [
+        {
+          "doc": "cypher",
+          "example": 1
+        },
+        {
+          "doc": "indexing",
+          "example": 1
+        },
+        {
+          "doc": "quickstart",
+          "example": 1
+        },
+        {
+          "doc": "sampling",
+          "example": 1
+        },
+        {
+          "doc": "sampling",
+          "example": 2
+        }
+      ],
+      "line": 1984,
+      "name": "put_nodes",
+      "returns": "",
+      "signature": "put_nodes(nodes: list[Node])",
+      "summary": "Store multiple nodes and maintain label/property indexes.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [
+        {
+          "doc": "skill",
+          "example": 2
+        },
+        {
+          "doc": "cypher",
+          "example": 1
+        }
+      ],
+      "line": 3126,
+      "name": "query",
+      "returns": "``gestaltdb.cypher.QueryResult`` containing projected records.",
+      "signature": "query(cypher: str, parameters: Optional[dict[str, object]]=None)",
+      "summary": "Execute a supported read-only Cypher query.",
+      "topic": "cypher"
+    },
+    {
+      "examples": [],
+      "line": 1939,
+      "name": "range_query_nodes",
+      "returns": "",
+      "signature": "range_query_nodes(property_name: str, start_val, end_val)",
+      "summary": "Example stub: You might rely on the underlying store to handle indexing for nodes.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [],
+      "line": 1625,
+      "name": "rebuild_deferred_indexes",
+      "returns": "Mapping from rebuilt index family/property to entries written.",
+      "signature": "rebuild_deferred_indexes()",
+      "summary": "Rebuild secondary indexes marked stale by deferred bulk ingestion.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1373,
+      "name": "rebuild_edge_indexes",
+      "returns": "",
+      "signature": "rebuild_edge_indexes(edge_types: bool=True, properties: list[str] | tuple[str, ...] | set[str] | None=None, batch_size: int=_INDEX_REBUILD_BATCH_SIZE)",
+      "summary": "Rebuild requested edge secondary indexes in one edge scan.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1461,
+      "name": "rebuild_edge_property_index",
+      "returns": "Number of indexed edge records.",
+      "signature": "rebuild_edge_property_index(property_name: str)",
+      "summary": "Rebuild an exact-match edge property index from stored edges.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1011,
+      "name": "rebuild_label_index",
+      "returns": "Number of label index entries written.",
+      "signature": "rebuild_label_index()",
+      "summary": "Rebuild the node label index from stored nodes.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 920,
+      "name": "rebuild_node_indexes",
+      "returns": "",
+      "signature": "rebuild_node_indexes(labels: bool=True, properties: list[str] | tuple[str, ...] | set[str] | None=None, batch_size: int=_INDEX_REBUILD_BATCH_SIZE)",
+      "summary": "Rebuild requested node secondary indexes in one node scan.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 995,
+      "name": "rebuild_node_property_index",
+      "returns": "Number of indexed node records.",
+      "signature": "rebuild_node_property_index(property_name: str)",
+      "summary": "Rebuild an exact-match node property index from stored nodes.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1430,
+      "name": "rebuild_relationship_type_index",
+      "returns": "Number of typed edge records indexed.",
+      "signature": "rebuild_relationship_type_index()",
+      "summary": "Rebuild the relationship type catalog from stored edges.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 1898,
+      "name": "rebuild_typed_adjacency",
+      "returns": "Number of typed edges indexed.",
+      "signature": "rebuild_typed_adjacency()",
+      "summary": "Rebuild typed adjacency indexes from stored edge records.",
+      "topic": "sampling"
+    },
+    {
+      "examples": [
+        {
+          "doc": "sampling",
+          "example": 1
+        }
+      ],
+      "line": 1788,
+      "name": "sample_neighbors",
+      "returns": "List of typed adjacency records.",
+      "signature": "sample_neighbors(node_id, edge_type: str, direction: str='out', sample_size: int=10, rng=None)",
+      "summary": "Sample typed neighbors using reservoir sampling.",
+      "topic": "sampling"
+    },
+    {
+      "examples": [
+        {
+          "doc": "sampling",
+          "example": 2
+        }
+      ],
+      "line": 1817,
+      "name": "sample_typed_paths",
+      "returns": "List of dictionaries with ``seed`` and sampled ``path`` records.",
+      "signature": "sample_typed_paths(seed_ids, pattern: Union[SamplingPattern, list[dict]], rng=None)",
+      "summary": "Sample paths that follow an ordered typed edge pattern.",
+      "topic": "sampling"
+    },
+    {
+      "examples": [
+        {
+          "doc": "sampling",
+          "example": 2
+        }
+      ],
+      "line": 1867,
+      "name": "sample_typed_subgraph",
+      "returns": "Dictionary with ``nodes``, ``edges``, and ``paths`` entries.",
+      "signature": "sample_typed_subgraph(seed_ids, pattern: Union[SamplingPattern, list[dict]], rng=None)",
+      "summary": "Sample and materialize a typed subgraph around seed nodes.",
+      "topic": "sampling"
+    },
+    {
+      "examples": [],
+      "line": 581,
+      "name": "save_manifest",
+      "returns": "",
+      "signature": "save_manifest(path=None)",
+      "summary": "Write or update the root manifest for this graph.",
+      "topic": "backends"
+    },
+    {
+      "examples": [],
+      "line": 2528,
+      "name": "serialize_edge_value",
+      "returns": "",
+      "signature": "serialize_edge_value(edge: Edge)",
+      "summary": "Serialize an edge for use with columnar edge ingestion.",
+      "topic": "ingestion"
+    },
+    {
+      "examples": [],
+      "line": 2524,
+      "name": "serialize_node_value",
+      "returns": "",
+      "signature": "serialize_node_value(node: Node)",
+      "summary": "Serialize a node for use with columnar node ingestion.",
+      "topic": "ingestion"
+    },
+    {
+      "examples": [],
+      "line": 712,
+      "name": "stale_indexes",
+      "returns": "",
+      "signature": "stale_indexes()",
+      "summary": "Return index families requiring rebuild after deferred ingestion.",
+      "topic": "indexing"
+    },
+    {
+      "examples": [],
+      "line": 3146,
+      "name": "transaction",
+      "returns": "",
+      "signature": "transaction(**options)",
+      "summary": "Run graph operations in a backend transaction when supported.",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [],
+      "line": 1967,
+      "name": "update_edge",
+      "returns": "",
+      "signature": "update_edge(edge_id: str, new_data: dict, merge_func)",
+      "summary": "Similar approach for edges. The new_data might include new properties,",
+      "topic": "quickstart"
+    },
+    {
+      "examples": [],
+      "line": 1952,
+      "name": "update_node",
+      "returns": "",
+      "signature": "update_node(node_id: str, new_data: dict, merge_func)",
+      "summary": "Fetch existing node (if any). If none found, treat as new or handle gracefully.",
+      "topic": "quickstart"
+    }
+  ]
+}

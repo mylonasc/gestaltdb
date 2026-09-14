@@ -39,7 +39,7 @@ dev = ["coverage", "lmdb", "msgpack", "myst-parser", "plyvel", "protobuf", "pybl
 where = ["src"]
 
 [tool.setuptools.package-data]
-gestaltdb = ["agent_skill/**/*.md"]
+gestaltdb = ["agent_skill/**/*.md", "agent_skill/api_index.json"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

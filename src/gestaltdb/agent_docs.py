@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 from importlib import resources
+import json
 from pathlib import Path
 import re
 import shutil
@@ -151,24 +152,75 @@ def cmd_get(args: argparse.Namespace) -> int:
     return 0
 
 
+def read_api_index() -> dict:
+    """Return the generated GraphDB API index, or an empty mapping if unavailable."""
+    try:
+        return json.loads((resources.files("gestaltdb.agent_skill") / "api_index.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, TypeError):
+        return {}
+
+
+def _example_spans(lines: list[str]) -> list[tuple[int, int]]:
+    """Return (start, end) 1-based line spans of fenced Python examples."""
+    spans = []
+    start = None
+    for number, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if stripped.startswith("```python"):
+            start = number
+        elif stripped == "```" and start is not None:
+            spans.append((start, number))
+            start = None
+    return spans
+
+
+def _span_for_line(spans: list[tuple[int, int]], line_number: int) -> tuple[int, int] | None:
+    for span in spans:
+        if span[0] <= line_number <= span[1]:
+            return span
+    return None
+
+
 def cmd_search(args: argparse.Namespace) -> int:
     pattern = re.compile(args.query, re.IGNORECASE)
     documents = [("skill", read_skill())] + [(topic_id, read_topic(topic_id)) for topic_id in TOPICS]
-    hits: list[tuple[int, str, str, int, list[str]]] = []
+    api_cards = _api_cards(pattern)
+    for card in api_cards[:5]:
+        print()
+        print(f"API: GraphDB.{card['signature']}")
+        if card["summary"]:
+            print(f"  {card['summary']}")
+        if card["returns"]:
+            print(f"  returns: {card['returns']}")
+        print(f"  topic: {card['topic']}")
+        for example in card["examples"][:3]:
+            print(f"  example: `python -m gestaltdb.agent_docs get {example['doc']} --examples` (example {example['example']})")
+        if not card["examples"]:
+            print(f"  example: `python -m gestaltdb.agent_docs get {card['topic']} --examples`")
+    hits: list[tuple[int, int, str, str, int, list[str]]] = []
     for name, content in documents:
         lines = content.splitlines()
+        spans = _example_spans(lines)
         topic = TOPICS.get(name)
         header = f"{topic.title} | when: {topic.when_to_read}" if topic else "Packaged skill overview and routing rules."
         for line_number, line in enumerate(lines, 1):
             if pattern.search(line):
-                start = max(1, line_number - args.context)
-                end = min(len(lines), line_number + args.context)
-                snippet = [f"{number}: {lines[number - 1]}" for number in range(start, end + 1)]
+                span = _span_for_line(spans, line_number)
+                if args.examples_only and span is None:
+                    continue
+                if span is not None:
+                    snippet = [f"{number}: {lines[number - 1]}" for number in range(span[0], min(span[1], span[0] + 79) + 1)]
+                    in_example = 0
+                else:
+                    start = max(1, line_number - args.context)
+                    end = min(len(lines), line_number + args.context)
+                    snippet = [f"{number}: {lines[number - 1]}" for number in range(start, end + 1)]
+                    in_example = 1
                 score = 0 if pattern.search(name) else 1
-                hits.append((score, name, header, line_number, snippet))
-    hits.sort(key=lambda hit: (hit[0], hit[1], hit[3]))
+                hits.append((in_example, score, name, header, line_number, snippet))
+    hits.sort(key=lambda hit: (hit[0], hit[1], hit[2], hit[4]))
     total = len(hits)
-    if total == 0:
+    if total == 0 and not api_cards:
         print("total matches: 0")
         return 1
     limit = max(1, args.limit)
@@ -176,11 +228,11 @@ def cmd_search(args: argparse.Namespace) -> int:
     start_index = (page - 1) * limit
     end_index = start_index + limit
     shown = hits[start_index:end_index]
-    page_count = (total + limit - 1) // limit
+    page_count = (total + limit - 1) // limit if total else 1
     print(f"total matches: {total}; page {page}/{page_count}; showing {len(shown)}; limit {limit}; context {args.context}")
     if page < page_count:
         print(f"next page: python -m gestaltdb.agent_docs search {args.query!r} --page {page + 1} --limit {limit} --context {args.context}")
-    for _score, name, header, line_number, snippet in shown:
+    for _in_example, _score, name, header, line_number, snippet in shown:
         print()
         print(f"[{name}] line {line_number}")
         print(f"why: {header}")
@@ -188,6 +240,14 @@ def cmd_search(args: argparse.Namespace) -> int:
         for snippet_line in snippet:
             print(f"  {snippet_line}")
     return 0
+
+
+def _api_cards(pattern: "re.Pattern[str]") -> list[dict]:
+    index = read_api_index()
+    methods = index.get("methods") if isinstance(index, dict) else None
+    if not methods:
+        return []
+    return [entry for entry in methods if pattern.search(entry.get("name", ""))]
 
 
 def cmd_install_opencode_skill(args: argparse.Namespace) -> int:
@@ -218,6 +278,7 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("--limit", type=int, default=10, help="maximum matches to print per page; defaults to 10")
     search_parser.add_argument("--page", type=int, default=1, help="1-based results page to print; defaults to 1")
     search_parser.add_argument("--context", type=int, default=2, help="context lines before and after each match; defaults to 2")
+    search_parser.add_argument("--examples-only", action="store_true", help="show only matches inside runnable Python examples, with the full example attached")
     search_parser.set_defaults(func=cmd_search)
 
     install_parser = subparsers.add_parser(

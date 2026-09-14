@@ -43,7 +43,42 @@ def test_agent_docs_search_pagination_and_context(capsys):
     output = capsys.readouterr().out
     assert "page 2/" in output
     assert "snippet:" in output
-    assert output.count("[") <= 2
+    assert output.count("\n[") <= 2
+
+
+def test_agent_docs_search_shows_api_card_with_example(capsys):
+    assert agent_docs.main(["search", "sample_neighbors", "--limit", "1"]) == 0
+    output = capsys.readouterr().out
+    assert "API: GraphDB.sample_neighbors(" in output
+    assert "topic: sampling" in output
+    assert "get sampling --examples" in output
+
+
+def test_agent_docs_search_examples_only(capsys):
+    assert agent_docs.main(["search", "sample_neighbors", "--examples-only", "--limit", "5"]) == 0
+    output = capsys.readouterr().out
+    assert "API: GraphDB.sample_neighbors(" in output
+    assert "```python" in output
+    assert "Use this for application code" not in output
+
+
+def test_agent_docs_api_index_is_fresh():
+    import importlib.util
+    import json
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[1]
+    generator_path = (
+        repo_root / ".opencode" / "skills" / "gestaltdb-docs-maintainer" / "scripts" / "generate_api_index.py"
+    )
+    spec = importlib.util.spec_from_file_location("generate_api_index", generator_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    expected = module.build_index()
+    committed = json.loads((repo_root / "src" / "gestaltdb" / "agent_skill" / "api_index.json").read_text())
+    assert committed == expected
+    assert {entry["topic"] for entry in committed["methods"]} <= set(agent_docs.TOPICS)
 
 
 def test_agent_docs_install_opencode_skill(tmp_path):

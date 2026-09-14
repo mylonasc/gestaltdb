@@ -30,6 +30,12 @@ Available topics:
 - `sampling`: typed traversal sampling vs snapshot/engine sampling.
 - `ingestion`: Arrow/Polars ingestion and index maintenance modes.
 
+## Agent Workflow
+
+- Write the solution file first, then validate and iterate; do not exhaustively explore library internals before writing code.
+- Prefer `python -m gestaltdb.agent_docs get <topic> --examples` for copy-pasteable patterns over reading `src/` files.
+- Use `python -m gestaltdb.agent_docs search "<API name>" --examples-only` to get an API signature card plus the runnable example that covers it.
+
 ## Import Rules
 
 Prefer explicit submodule imports for core classes:
@@ -47,6 +53,7 @@ The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storag
 - Use `GraphDB.create(path, backend="leveldb", serializer="json")` for a self-describing database directory, or construct `GraphDB(store, serializer)` directly.
 - Use `GraphDB.open(path)` to reopen a self-describing database created with `GraphDB.create`.
 - Use `graph.index_statistics()` and `graph.manifest` for inspection; inspect retrieved `Node.properties` and `Edge.properties` for property names/values.
+- Traversal records carry byte IDs under `neighbor_id`/`edge_id`/`source_id`/`target_id`; decode with `graph.key_to_string(...)` and compare ID sets, since lookup order is not guaranteed.
 - Always close graph handles with `graph.close()` in a `finally` block.
 - Store relationship types as `Edge(properties={"type": "REL_TYPE"})`.
 - Create property indexes explicitly before index-backed property lookups.

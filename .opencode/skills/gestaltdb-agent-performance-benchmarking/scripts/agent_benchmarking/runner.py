@@ -223,7 +223,7 @@ class BenchmarkRunner:
                     "mode": "primary",
                     "model": self.config.model,
                     "permission": _benchmark_permissions(),
-                    "prompt": "You are a careful benchmarked coding agent. Keep changes minimal, inspect the repository before editing, and validate with the requested commands.",
+                    "prompt": "You are a careful benchmarked coding agent. Write the required solution file first (creating parent directories as needed), then validate with the requested commands and iterate on failures. Prefer `python -m gestaltdb.agent_docs` for API guidance over reading library source files, and keep changes minimal.",
                 },
                 self.config.judge_agent_name: {
                     "description": "Judges GestaltDB benchmark patches with a fixed rubric.",

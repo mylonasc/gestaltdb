@@ -35,7 +35,7 @@ SIGNAL_RULES = [
     ),
     (
         "unsupported Cypher syntax likely used",
-        r"\b(OPTIONAL\s+MATCH|WITH\b|CREATE\b|MERGE\b|DELETE\b|SET\b|COUNT\s*\(|MATCH\s+\w+\s*=|\*\d*)",
+        r"\b(OPTIONAL\s+MATCH|WITH\b|CREATE\b|MERGE\b|DELETE\b|SET\b|COUNT\s*\(|MATCH\s+\w+\s*=|\*\d+)",
         "Cypher docs and AGENTS.md should make unsupported syntax more discoverable for application authors.",
     ),
     (
@@ -54,6 +54,17 @@ SIGNAL_RULES = [
         "Sampling docs should contrast GraphDB external IDs with SamplerSnapshot compact IDs in task-oriented examples.",
     ),
 ]
+
+
+def _solution_patch(patch_text: str) -> str:
+    """Return patch hunks excluding benchmark harness config under .opencode/.
+
+    The runner rewrites ``.opencode/opencode.json`` in every worktree, so its
+    prose (permissions, prompts) must not trigger solution-code signals.
+    """
+    hunks = re.split(r"(?m)^(?=diff --git )", patch_text)
+    kept = [hunk for hunk in hunks if not re.match(r"diff --git a/\.opencode/", hunk)]
+    return "".join(kept)
 
 
 def write_trace_bundle(run_dir: Path, result: AgentBenchmarkResult) -> Path:
@@ -84,6 +95,11 @@ def analyze_trace(run_dir: Path, result: AgentBenchmarkResult) -> TraceAnalysis:
         _read_text(Path(result.validation.stdout_path)) if result.validation.stdout_path else "",
         _read_text(Path(result.validation.stderr_path)) if result.validation.stderr_path else "",
     ])
+    solution_corpus = "\n".join([
+        _solution_patch(_read_text(Path(result.patch_path))) if result.patch_path else "",
+        _read_text(Path(result.validation.stdout_path)) if result.validation.stdout_path else "",
+        _read_text(Path(result.validation.stderr_path)) if result.validation.stderr_path else "",
+    ])
     corpus = "\n".join([assistant_corpus, signal_corpus])
     execution_text = "\n".join([corpus, result.error])
     analysis = TraceAnalysis(status="ok")
@@ -101,7 +117,9 @@ def analyze_trace(run_dir: Path, result: AgentBenchmarkResult) -> TraceAnalysis:
         analysis.suspected_error_patterns.append("opencode/provider failed before agent work could be evaluated")
 
     for label, pattern, remediation in SIGNAL_RULES:
-        if re.search(pattern, signal_corpus, flags=re.IGNORECASE | re.DOTALL):
+        # The Cypher rule must only see solution code, not harness config prose.
+        corpus_to_scan = solution_corpus if label == "unsupported Cypher syntax likely used" else signal_corpus
+        if re.search(pattern, corpus_to_scan, flags=re.IGNORECASE | re.DOTALL):
             analysis.library_misuse_signals.append(label)
             if remediation not in analysis.remediation_actions:
                 analysis.remediation_actions.append(remediation)

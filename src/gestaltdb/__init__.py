@@ -53,7 +53,7 @@ See repository ``AGENTS.md`` for contributor guidance, ``EXAMPLES.md`` for
 runnable usage patterns, and ``docs/`` for the Sphinx user guide.
 """
 
-from .sampling import AsyncBatchFeeder, HardNegativeConfig, LayeredSampleBatch, NeighborSamplingSpec, SampledSubgraphBatch, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
+from .sampling import AsyncBatchFeeder, ExternalNeighborSamplingSpec, HardNegativeConfig, LayeredSampleBatch, NeighborSamplingSpec, RandomWalkBatch, SampledSubgraphBatch, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .cypher import QueryResult
 
@@ -64,9 +64,11 @@ __all__ = [
     "NodeList",
     "QueryResult",
     "AsyncBatchFeeder",
+    "ExternalNeighborSamplingSpec",
     "HardNegativeConfig",
     "LayeredSampleBatch",
     "NeighborSamplingSpec",
+    "RandomWalkBatch",
     "SampledSubgraphBatch",
     "SamplerEngine",
     "SamplerSnapshot",

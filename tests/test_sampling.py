@@ -1,9 +1,10 @@
 import random
 
+import numpy as np
 import pytest
 
 from gestaltdb.graphdb import Edge, Node
-from gestaltdb.sampling import AsyncBatchFeeder, HardNegativeConfig, NeighborSamplingSpec, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
+from gestaltdb.sampling import AsyncBatchFeeder, ExternalNeighborSamplingSpec, HardNegativeConfig, NeighborSamplingSpec, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
 from gestaltdb.sampling import as_sampling_pattern
 
 from .conftest import blocked_import, populate_typed_graph
@@ -151,6 +152,149 @@ def test_sampler_snapshot_persists_edge_weights(tmp_path):
     assert legacy.edge_weights.tolist() == [1.0, 1.0]
 
 
+def test_sampler_snapshot_resolves_external_ids_in_ram_and_memmap_modes(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "lookup_snapshot",
+        external_node_ids=["z-node", "a-node", "m-node"],
+        external_edge_ids=["z-edge", "a-edge"],
+        external_relation_ids=["z-rel", "a-rel"],
+        src_int=[0, 1],
+        dst_int=[2, 2],
+        rel_int=[0, 1],
+    )
+
+    assert snapshot.node_int("a-node") == 1
+    assert snapshot.node_ints(["m-node", "z-node"]).tolist() == [2, 0]
+    assert snapshot.edge_int("a-edge") == 1
+    assert snapshot.edge_ints(["z-edge", "a-edge"]).tolist() == [0, 1]
+    assert snapshot.relation_int("a-rel") == 1
+    assert snapshot.relation_ints(["z-rel", "a-rel"]).tolist() == [0, 1]
+
+    loaded = SamplerSnapshot.load(snapshot.path, mmap=True)
+    assert loaded.node_ints(["a-node", "z-node"]).tolist() == [1, 0]
+    assert loaded.edge_int("z-edge") == 0
+    assert isinstance(loaded.node_lookup_ids, np.memmap)
+    assert isinstance(loaded.node_lookup_order, np.memmap)
+
+
+def test_sampler_snapshot_legacy_load_derives_external_id_lookups(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "lookup_snapshot",
+        external_node_ids=["z-node", "a-node"],
+        external_edge_ids=["edge"],
+        external_relation_ids=["rel"],
+        src_int=[0],
+        dst_int=[1],
+        rel_int=[0],
+    )
+    for entity in ["node", "edge", "relation"]:
+        (snapshot.path / f"{entity}_lookup_ids.npy").unlink()
+        (snapshot.path / f"{entity}_lookup_order.npy").unlink()
+
+    loaded = SamplerSnapshot.load(snapshot.path, mmap=True)
+
+    assert loaded.node_int("a-node") == 1
+    assert loaded.edge_int("edge") == 0
+    assert loaded.relation_int("rel") == 0
+
+
+def test_sampler_snapshot_legacy_duplicate_ids_load_but_resolve_as_ambiguous(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "lookup_snapshot",
+        external_node_ids=["first", "second"],
+        external_edge_ids=[],
+        external_relation_ids=[],
+        src_int=[],
+        dst_int=[],
+        rel_int=[],
+    )
+    np.save(snapshot.path / "external_node_ids.npy", np.asarray(["duplicate", "duplicate"], dtype=str))
+    for name in ["node_lookup_ids", "node_lookup_order"]:
+        (snapshot.path / f"{name}.npy").unlink()
+
+    loaded = SamplerSnapshot.load(snapshot.path)
+
+    with pytest.raises(ValueError, match="ambiguous external node IDs"):
+        loaded.node_int("duplicate")
+
+
+def test_sampler_snapshot_rejects_unsorted_persisted_lookup(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "lookup_snapshot",
+        external_node_ids=["b-node", "a-node"],
+        external_edge_ids=[],
+        external_relation_ids=[],
+        src_int=[],
+        dst_int=[],
+        rel_int=[],
+    )
+    np.save(snapshot.path / "node_lookup_ids.npy", np.asarray(["b-node", "a-node"], dtype=str))
+
+    with pytest.raises(ValueError, match="node_lookup_ids must be sorted"):
+        SamplerSnapshot.load(snapshot.path)
+
+
+def test_sampler_snapshot_rejects_mismatched_persisted_lookup(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "lookup_snapshot",
+        external_node_ids=["a-node", "b-node"],
+        external_edge_ids=[],
+        external_relation_ids=[],
+        src_int=[],
+        dst_int=[],
+        rel_int=[],
+    )
+    np.save(snapshot.path / "node_lookup_ids.npy", np.asarray(["a-node", "a-node"], dtype=str))
+    np.save(snapshot.path / "node_lookup_order.npy", np.asarray([0, 0], dtype=np.int64))
+
+    with pytest.raises(ValueError, match="permutation"):
+        SamplerSnapshot.load(snapshot.path)
+
+
+def test_sampler_snapshot_lazily_builds_lookups_for_direct_objects(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "lookup_snapshot",
+        external_node_ids=["b-node", "a-node"],
+        external_edge_ids=[],
+        external_relation_ids=[],
+        src_int=[],
+        dst_int=[],
+        rel_int=[],
+    )
+    snapshot.node_lookup_ids = np.empty(0, dtype=str)
+    snapshot.node_lookup_order = np.empty(0, dtype=np.int64)
+
+    assert snapshot.node_int("a-node") == 1
+
+
+def test_sampler_snapshot_external_id_resolution_lists_missing_ids(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "lookup_snapshot",
+        external_node_ids=["known"],
+        external_edge_ids=[],
+        external_relation_ids=[],
+        src_int=[],
+        dst_int=[],
+        rel_int=[],
+    )
+
+    with pytest.raises(KeyError, match="missing-a.*missing-b"):
+        snapshot.node_ints(["missing-a", "missing-b", "missing-a"])
+
+
+def test_sampler_snapshot_rejects_duplicate_external_ids(tmp_path):
+    with pytest.raises(ValueError, match="external node IDs must be unique"):
+        SamplerSnapshot.from_edge_arrays(
+            tmp_path / "lookup_snapshot",
+            external_node_ids=["duplicate", "duplicate"],
+            external_edge_ids=[],
+            external_relation_ids=[],
+            src_int=[],
+            dst_int=[],
+            rel_int=[],
+        )
+
+
 def test_sampler_engine_weighted_neighbors_use_snapshot_weights(tmp_path):
     snapshot = SamplerSnapshot.from_edge_arrays(
         tmp_path / "weighted_snapshot",
@@ -239,6 +383,160 @@ def test_sampler_engine_preserves_heterogeneous_layer_blocks(tmp_path):
     assert batch.layers[1].neighbor_nodes.tolist() == [2]
 
 
+def test_sampler_engine_external_id_sampling_wrappers_and_conversions(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "external_snapshot",
+        external_node_ids=["drug", "protein", "disease"],
+        external_edge_ids=["targets-edge", "associated-edge"],
+        external_relation_ids=["targets", "associated"],
+        src_int=[0, 1],
+        dst_int=[1, 2],
+        rel_int=[0, 1],
+    )
+    engine = SamplerEngine(snapshot, seed=11)
+
+    neighbors = engine.sample_neighbors_external(["drug"], 2, relations=["targets"])
+    external_neighbors = neighbors.to_external(snapshot)
+    layers = engine.sample_layers_external(
+        ["drug"],
+        [
+            ExternalNeighborSamplingSpec(2, relations=["targets"]),
+            ExternalNeighborSamplingSpec(2, relations=["associated"]),
+        ],
+    )
+    walks = engine.sample_random_walks_external(
+        ["drug"],
+        2,
+        metapath=["targets", "associated"],
+    )
+    subgraph = engine.sample_subgraph_external(["targets-edge"], fanouts=[0])
+
+    assert external_neighbors["input_nodes"].tolist() == ["drug"]
+    assert external_neighbors["edge_ids"].tolist() == ["targets-edge"]
+    assert external_neighbors["neighbor_nodes"].tolist() == ["protein"]
+    assert layers.to_external(snapshot)["layers"][1]["neighbor_nodes"].tolist() == ["disease"]
+    assert walks.to_external(snapshot)["node_ids"].tolist() == [["drug", "protein", "disease"]]
+    assert subgraph.edge_ids_global.tolist() == [0]
+
+    bytes_layers = engine.sample_layers_external(
+        [b"drug"],
+        [ExternalNeighborSamplingSpec(2, relations=[b"targets"])],
+    )
+    assert bytes_layers.layers[0].neighbor_nodes.tolist() == [1]
+
+
+def test_sampler_engine_random_walk_follows_repeating_metapath(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "walk_snapshot",
+        external_node_ids=["drug", "protein", "disease", "gene"],
+        external_edge_ids=["targets", "associated", "expresses", "retargets"],
+        external_relation_ids=["targets", "associated", "expresses"],
+        src_int=[0, 1, 2, 3],
+        dst_int=[1, 2, 3, 0],
+        rel_int=[0, 1, 2, 0],
+    )
+
+    walks = SamplerEngine(snapshot, seed=2).sample_random_walks([0], 4, metapath=[0, 1, 2])
+
+    assert walks.node_ids.tolist() == [[0, 1, 2, 3, 0]]
+    assert walks.edge_indices.tolist() == [[0, 1, 2, 3]]
+    assert walks.relation_ids.tolist() == [[0, 1, 2, 0]]
+    assert walks.lengths.tolist() == [4]
+    assert walks.to_numpy()["node_ids"] is walks.node_ids
+
+
+def test_sampler_engine_random_walk_relation_filter_terminates_at_dead_end(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "walk_snapshot",
+        external_node_ids=["source", "middle", "target"],
+        external_edge_ids=["allowed", "blocked"],
+        external_relation_ids=["allowed", "blocked"],
+        src_int=[0, 1],
+        dst_int=[1, 2],
+        rel_int=[0, 1],
+    )
+
+    walks = SamplerEngine(snapshot, seed=2).sample_random_walks([0], 3, relations=[0])
+
+    assert walks.node_ids.tolist() == [[0, 1, -1, -1]]
+    assert walks.edge_indices.tolist() == [[0, -1, -1]]
+    assert walks.lengths.tolist() == [1]
+    assert walks.to_external(snapshot)["node_ids"].tolist() == [["source", "middle", None, None]]
+
+
+def test_sampler_engine_random_walk_records_restart_transitions(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "walk_snapshot",
+        external_node_ids=["source", "target"],
+        external_edge_ids=["edge"],
+        external_relation_ids=["rel"],
+        src_int=[0],
+        dst_int=[1],
+        rel_int=[0],
+    )
+
+    walks = SamplerEngine(snapshot, seed=2).sample_random_walks([0], 2, restart_probability=1.0)
+
+    assert walks.node_ids.tolist() == [[0, 0, 0]]
+    assert walks.edge_indices.tolist() == [[-1, -1]]
+    assert walks.relation_ids.tolist() == [[-1, -1]]
+    assert walks.lengths.tolist() == [2]
+
+
+def test_sampler_engine_random_walk_can_restart_from_dead_end(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "walk_snapshot",
+        external_node_ids=["source", "target"],
+        external_edge_ids=["edge"],
+        external_relation_ids=["rel"],
+        src_int=[0],
+        dst_int=[1],
+        rel_int=[0],
+    )
+
+    walks = SamplerEngine(snapshot, seed=2).sample_random_walks([0], 3, dead_end="restart")
+
+    assert walks.node_ids.tolist() == [[0, 1, 0, 1]]
+    assert walks.edge_indices.tolist() == [[0, -1, 0]]
+    assert walks.lengths.tolist() == [3]
+
+
+def test_sampler_engine_random_walk_restarts_isolated_seed(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "walk_snapshot",
+        external_node_ids=["isolated"],
+        external_edge_ids=[],
+        external_relation_ids=["rel"],
+        src_int=[],
+        dst_int=[],
+        rel_int=[],
+    )
+
+    walks = SamplerEngine(snapshot, seed=2).sample_random_walks([0], 2, dead_end="restart")
+
+    assert walks.node_ids.tolist() == [[0, 0, 0]]
+    assert walks.edge_indices.tolist() == [[-1, -1]]
+    assert walks.lengths.tolist() == [2]
+
+
+def test_sampler_engine_weighted_random_walk_uses_edge_weights(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "walk_snapshot",
+        external_node_ids=["source", "left", "right"],
+        external_edge_ids=["left-edge", "right-edge"],
+        external_relation_ids=["rel"],
+        src_int=[0, 0],
+        dst_int=[1, 2],
+        rel_int=[0, 0],
+        edge_weights=[0.0, 1.0],
+    )
+
+    walks = SamplerEngine(snapshot, seed=2).sample_random_walks([0], 1, strategy="weighted")
+
+    assert walks.node_ids.tolist() == [[0, 2]]
+    assert walks.edge_indices.tolist() == [[1]]
+
+
 def test_sampler_engine_rejects_invalid_compact_ids(tmp_path):
     snapshot = SamplerSnapshot.from_edge_arrays(
         tmp_path / "snapshot",
@@ -263,6 +561,12 @@ def test_sampler_engine_rejects_invalid_compact_ids(tmp_path):
         NeighborSamplingSpec(fanout=1, relations=[0.5])
     with pytest.raises(ValueError, match="integer IDs"):
         engine.sample_hard_negatives([[0.5, 0, 1]])
+    with pytest.raises(ValueError, match="walk_length must be an integer"):
+        engine.sample_random_walks([0], 1.5)
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        engine.sample_random_walks([0], 1, relations=[0], metapath=[0])
+    with pytest.raises(ValueError, match="at least one relation"):
+        engine.sample_random_walks([0], 1, metapath=[])
 
 
 def test_sampler_snapshot_rejects_fractional_compact_ids(tmp_path):

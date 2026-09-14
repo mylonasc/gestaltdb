@@ -34,6 +34,29 @@ class NeighborSamplingSpec:
             object.__setattr__(self, "relations", tuple(int(rel) for rel in relations))
 
 
+@dataclass(frozen=True)
+class ExternalNeighborSamplingSpec:
+    """Sampling policy using external relation IDs for one layer."""
+
+    fanout: int
+    direction: str = "out"
+    relations: Sequence[object] | None = None
+    replace: bool = False
+    strategy: str = "uniform"
+
+    def __post_init__(self):
+        _validate_count(self.fanout, "fanout")
+        if self.direction not in {"out", "in", "any"}:
+            raise ValueError("direction must be 'out', 'in', or 'any'")
+        if self.strategy not in {"uniform", "weighted"}:
+            raise ValueError("strategy must be 'uniform' or 'weighted'")
+        if self.relations is not None:
+            if isinstance(self.relations, (str, bytes)):
+                raise TypeError("relations must be a sequence, not a scalar string")
+            normalized = np.asarray(list(self.relations), dtype=str).tolist()
+            object.__setattr__(self, "relations", tuple(normalized))
+
+
 @dataclass(slots=True)
 class SampledNeighbors:
     """Batched neighbor-sampling result.
@@ -60,6 +83,15 @@ class SampledNeighbors:
     neighbor_nodes: np.ndarray
     offsets: np.ndarray
 
+    def to_external(self, snapshot: SamplerSnapshot) -> dict[str, np.ndarray]:
+        """Convert compact node and edge IDs to external IDs."""
+        return {
+            "input_nodes": _external_id_array(self.input_nodes, snapshot.external_node_ids),
+            "edge_ids": _external_id_array(self.edge_indices, snapshot.external_edge_ids),
+            "neighbor_nodes": _external_id_array(self.neighbor_nodes, snapshot.external_node_ids),
+            "offsets": self.offsets,
+        }
+
 
 @dataclass(slots=True)
 class LayeredSampleBatch:
@@ -68,14 +100,56 @@ class LayeredSampleBatch:
     seed_nodes: np.ndarray
     layers: tuple[SampledNeighbors, ...]
 
+    def to_external(self, snapshot: SamplerSnapshot) -> dict[str, object]:
+        """Convert compact IDs in every layer to external IDs."""
+        return {
+            "seed_nodes": _external_id_array(self.seed_nodes, snapshot.external_node_ids),
+            "layers": tuple(layer.to_external(snapshot) for layer in self.layers),
+        }
+
+
+@dataclass(slots=True)
+class RandomWalkBatch:
+    """Fixed-width random walks over compact snapshot IDs.
+
+    ``node_ids`` has shape ``(walks, walk_length + 1)``. ``edge_indices`` and
+    ``relation_ids`` have shape ``(walks, walk_length)``. Unused positions and
+    restart transitions use ``-1`` edge and relation IDs. ``lengths`` counts
+    populated transitions, including restart transitions.
+    """
+
+    node_ids: np.ndarray
+    edge_indices: np.ndarray
+    relation_ids: np.ndarray
+    lengths: np.ndarray
+
+    def to_numpy(self) -> dict[str, np.ndarray]:
+        """Return the walk arrays without copying them."""
+        return {
+            "node_ids": self.node_ids,
+            "edge_indices": self.edge_indices,
+            "relation_ids": self.relation_ids,
+            "lengths": self.lengths,
+        }
+
+    def to_external(self, snapshot: SamplerSnapshot) -> dict[str, np.ndarray]:
+        """Convert compact walk IDs to external IDs, preserving ``None`` gaps."""
+        return {
+            "node_ids": _external_id_array(self.node_ids, snapshot.external_node_ids),
+            "edge_ids": _external_id_array(self.edge_indices, snapshot.external_edge_ids),
+            "relation_ids": _external_id_array(self.relation_ids, snapshot.external_relation_ids),
+            "lengths": self.lengths,
+        }
+
 
 class SamplerEngine:
     """High-throughput sampler over a static ``SamplerSnapshot``.
 
     The engine samples compact integer arrays instead of materializing GraphDB
     ``Node``/``Edge`` objects. It supports direction-aware traversal,
-    relation-aware traversal, multihop subgraph sampling, exact positive triple
-    checks, and configurable hard-negative generation.
+    relation-aware traversal, heterogeneous layers, first-order random walks,
+    multihop subgraph sampling, exact positive triple checks, and configurable
+    hard-negative generation.
 
     Args:
         snapshot: Loaded sampler snapshot.
@@ -183,6 +257,28 @@ class SamplerEngine:
         neighbor_nodes = np.concatenate(sampled_neighbors) if sampled_neighbors else np.empty(0, dtype=np.int64)
         return SampledNeighbors(input_nodes, edge_indices, neighbor_nodes, np.asarray(offsets, dtype=np.int64))
 
+    def sample_neighbors_external(
+        self,
+        nodes: Sequence[object],
+        fanout: int,
+        *,
+        direction: str = "out",
+        relations: Sequence[object] | None = None,
+        replace: bool = False,
+        strategy: str = "uniform",
+    ) -> SampledNeighbors:
+        """Sample neighbors using external node and relation IDs as input."""
+        compact_nodes = self.snapshot.node_ints(nodes)
+        compact_relations = None if relations is None else self.snapshot.relation_ints(relations)
+        return self.sample_neighbors(
+            compact_nodes,
+            fanout,
+            direction=direction,
+            relations=compact_relations,
+            replace=replace,
+            strategy=strategy,
+        )
+
     def sample_nodes(
         self,
         count: int,
@@ -262,6 +358,139 @@ class SamplerEngine:
             sampled_layers.append(sampled)
             frontier = np.unique(sampled.neighbor_nodes)
         return LayeredSampleBatch(seed_nodes=seeds, layers=tuple(sampled_layers))
+
+    def sample_layers_external(
+        self,
+        seed_nodes: Sequence[object],
+        layers: Sequence[ExternalNeighborSamplingSpec],
+    ) -> LayeredSampleBatch:
+        """Sample heterogeneous layers using external node and relation IDs."""
+        compact_layers: list[NeighborSamplingSpec] = []
+        for layer in layers:
+            if not isinstance(layer, ExternalNeighborSamplingSpec):
+                raise TypeError("layers must contain ExternalNeighborSamplingSpec values")
+            relations = None if layer.relations is None else self.snapshot.relation_ints(layer.relations)
+            compact_layers.append(
+                NeighborSamplingSpec(
+                    fanout=layer.fanout,
+                    direction=layer.direction,
+                    relations=relations,
+                    replace=layer.replace,
+                    strategy=layer.strategy,
+                )
+            )
+        return self.sample_layers(self.snapshot.node_ints(seed_nodes), compact_layers)
+
+    def sample_random_walks(
+        self,
+        start_nodes: Sequence[int] | np.ndarray,
+        walk_length: int,
+        *,
+        direction: str = "out",
+        relations: Sequence[int] | np.ndarray | None = None,
+        metapath: Sequence[int] | np.ndarray | None = None,
+        restart_probability: float = 0.0,
+        strategy: str = "uniform",
+        dead_end: str = "terminate",
+    ) -> RandomWalkBatch:
+        """Sample fixed-width first-order random walks.
+
+        A metapath is repeated cyclically and advances only when an edge is
+        traversed. Random restart and ``dead_end="restart"`` transitions move to
+        the walk's start node and are represented by ``-1`` edge/relation IDs.
+        ``relations`` and ``metapath`` are mutually exclusive.
+        """
+        _validate_count(walk_length, "walk_length")
+        if direction not in {"out", "in", "any"}:
+            raise ValueError("direction must be 'out', 'in', or 'any'")
+        if strategy not in {"uniform", "weighted"}:
+            raise ValueError("strategy must be 'uniform' or 'weighted'")
+        if dead_end not in {"terminate", "restart"}:
+            raise ValueError("dead_end must be 'terminate' or 'restart'")
+        if isinstance(restart_probability, (bool, np.bool_)) or not isinstance(restart_probability, (int, float, np.integer, np.floating)):
+            raise ValueError("restart_probability must be a number between 0 and 1")
+        restart_probability = float(restart_probability)
+        if not np.isfinite(restart_probability) or not 0.0 <= restart_probability <= 1.0:
+            raise ValueError("restart_probability must be between 0 and 1")
+        if relations is not None and metapath is not None:
+            raise ValueError("relations and metapath are mutually exclusive")
+
+        starts = self._validated_ids(start_nodes, self.snapshot.num_nodes, "start_nodes")
+        relation_filter = None
+        if relations is not None:
+            relation_filter = set(self._validated_ids(relations, self.snapshot.num_relations, "relations").tolist())
+        metapath_ids = None
+        if metapath is not None:
+            metapath_ids = self._validated_ids(metapath, self.snapshot.num_relations, "metapath")
+            if metapath_ids.size == 0:
+                raise ValueError("metapath must contain at least one relation")
+
+        node_ids = np.full((starts.size, walk_length + 1), -1, dtype=np.int64)
+        edge_indices = np.full((starts.size, walk_length), -1, dtype=np.int64)
+        relation_ids = np.full((starts.size, walk_length), -1, dtype=np.int64)
+        lengths = np.zeros(starts.size, dtype=np.int64)
+        if starts.size:
+            node_ids[:, 0] = starts
+
+        for row, start in enumerate(starts.tolist()):
+            current = int(start)
+            traversed_edges = 0
+            for step in range(walk_length):
+                if restart_probability > 0 and self.rng.random() < restart_probability:
+                    current = int(start)
+                    node_ids[row, step + 1] = current
+                    lengths[row] = step + 1
+                    continue
+
+                step_relations = relation_filter
+                if metapath_ids is not None:
+                    step_relations = {int(metapath_ids[traversed_edges % metapath_ids.size])}
+                candidates = self._candidate_edges(current, direction, step_relations)
+                if candidates.size == 0:
+                    if dead_end == "restart":
+                        current = int(start)
+                        node_ids[row, step + 1] = current
+                        lengths[row] = step + 1
+                        continue
+                    break
+
+                weights = self.snapshot.edge_weights[candidates] if strategy == "weighted" else None
+                chosen = self._choose_candidates(candidates, 1, replace=False, weights=weights)
+                edge = int(chosen[0])
+                current = int(self._neighbors_for_edges(current, chosen, direction)[0])
+                edge_indices[row, step] = edge
+                relation_ids[row, step] = int(self.snapshot.rel_int[edge])
+                node_ids[row, step + 1] = current
+                lengths[row] = step + 1
+                traversed_edges += 1
+
+        return RandomWalkBatch(node_ids, edge_indices, relation_ids, lengths)
+
+    def sample_random_walks_external(
+        self,
+        start_nodes: Sequence[object],
+        walk_length: int,
+        *,
+        direction: str = "out",
+        relations: Sequence[object] | None = None,
+        metapath: Sequence[object] | None = None,
+        restart_probability: float = 0.0,
+        strategy: str = "uniform",
+        dead_end: str = "terminate",
+    ) -> RandomWalkBatch:
+        """Sample random walks using external node and relation IDs as input."""
+        compact_relations = None if relations is None else self.snapshot.relation_ints(relations)
+        compact_metapath = None if metapath is None else self.snapshot.relation_ints(metapath)
+        return self.sample_random_walks(
+            self.snapshot.node_ints(start_nodes),
+            walk_length,
+            direction=direction,
+            relations=compact_relations,
+            metapath=compact_metapath,
+            restart_probability=restart_probability,
+            strategy=strategy,
+            dead_end=dead_end,
+        )
 
     def sample_multihop(
         self,
@@ -356,6 +585,25 @@ class SamplerEngine:
     def sample_subgraphs(self, *args, **kwargs) -> SampledSubgraphBatch:
         """Batched alias for ``sample_subgraph``."""
         return self.sample_subgraph(*args, **kwargs)
+
+    def sample_subgraph_external(
+        self,
+        seed_edges: Sequence[object],
+        fanouts: Sequence[int],
+        *,
+        direction: str = "any",
+        relations: Sequence[object] | None = None,
+        negative_config: HardNegativeConfig | None = None,
+    ) -> SampledSubgraphBatch:
+        """Sample a training subgraph using external seed edge IDs."""
+        compact_relations = None if relations is None else self.snapshot.relation_ints(relations)
+        return self.sample_subgraph(
+            self.snapshot.edge_ints(seed_edges),
+            fanouts,
+            direction=direction,
+            relations=compact_relations,
+            negative_config=negative_config,
+        )
 
     def is_positive(self, src: int, rel: int, dst: int) -> bool:
         """Return whether a triple is a known positive in the snapshot.
@@ -640,3 +888,15 @@ def _validate_count(value, name: str) -> None:
         raise ValueError(f"{name} must be an integer")
     if value < 0:
         raise ValueError(f"{name} must be non-negative")
+
+
+def _external_id_array(compact_ids: np.ndarray, external_ids: np.ndarray) -> np.ndarray:
+    compact_ids = np.asarray(compact_ids, dtype=np.int64)
+    result = np.full(compact_ids.shape, None, dtype=object)
+    valid = compact_ids >= 0
+    if np.any(valid):
+        selected = compact_ids[valid]
+        if selected.max() >= external_ids.size:
+            raise ValueError("compact IDs are outside the snapshot ID range")
+        result[valid] = external_ids[selected]
+    return result

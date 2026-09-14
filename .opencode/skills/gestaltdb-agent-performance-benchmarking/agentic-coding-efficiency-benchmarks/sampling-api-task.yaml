@@ -13,7 +13,7 @@ setup_commands: []
 validation_commands:
   - uv run python agent_benchmark_solutions/sampling_usage.py
 prompt: |
-  You are working as a user of the GestaltDB library. First read `.opencode/skills/gestaltdb-user-guide/SKILL.md` if it exists. Create a tiny standalone script at `agent_benchmark_solutions/sampling_usage.py`.
+  You are working as a user of the GestaltDB library. First read `.opencode/skills/gestaltdb-user-guide/SKILL.md` if it exists. Run `python -m gestaltdb.agent_docs get sampling --examples` and adapt the `sample_neighbors` example; it shows the exact record shape and byte-ID decoding. Create a tiny standalone script at `agent_benchmark_solutions/sampling_usage.py`.
 
   The script must:
   - Use `TemporaryDirectory` for all database files.
