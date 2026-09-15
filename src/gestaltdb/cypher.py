@@ -9,16 +9,11 @@ The supported subset maps directly to existing typed adjacency and sampling APIs
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from .cypher_ast import (
-    MatchQuery,
-    MultiMatchQuery,
-    NodeScanQuery,
     Query,
-    RelationshipScanQuery,
-    ReturnClause,
     SampleTypedPathsCall,
-    WithClause,
 )
 from .cypher_parser import parse as _parse_query
 from .cypher_parser import parse_ast as _parse_ast
@@ -28,7 +23,14 @@ from .cypher_runtime import (
     QueryContext,
     execute_plan,
 )
-from .cypher_semantics import contains_function_call
+
+if TYPE_CHECKING:
+    from .cypher_ast import (  # noqa: F401
+        MatchQuery,
+        MultiMatchQuery,
+        NodeScanQuery,
+        RelationshipScanQuery,
+    )
 
 
 @dataclass(frozen=True)
@@ -82,26 +84,16 @@ def parse_ast(query: str) -> Query | SampleTypedPathsCall:
     return _parse_ast(query)
 
 
-def _is_staged_query(canonical: Query | SampleTypedPathsCall) -> bool:
-    """Return whether a canonical query requires staged execution."""
-    if not isinstance(canonical, Query):
-        return False
-    for clause in canonical.clauses:
-        if isinstance(clause, WithClause):
-            return True
-        if isinstance(clause, (WithClause, ReturnClause)) and any(
-            contains_function_call(item.expression) for item in clause.items
-        ):
-            return True
-    return False
-
-
 def plan(query: str) -> LogicalPlan:
-    """Return the logical plan for a supported Cypher query."""
+    """Return the logical plan for a supported Cypher query.
+
+    Every canonical clause query plans to the staged operator pipeline; only
+    the sampling procedure call keeps its dedicated source-backed plan.
+    """
     canonical = _parse_ast(query)
-    if _is_staged_query(canonical):
-        return plan_staged_query(canonical)
-    return plan_query(parse(query))
+    if isinstance(canonical, SampleTypedPathsCall):
+        return plan_query(canonical)
+    return plan_staged_query(canonical)
 
 
 def execute(graph, query: str, parameters: dict[str, object] | None = None) -> QueryResult:
@@ -118,10 +110,10 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
         >>> execute(graph_db, 'MATCH (n:Drug) RETURN n')  # doctest: +SKIP
     """
     canonical = _parse_ast(query)
-    if _is_staged_query(canonical):
-        logical_plan = plan_staged_query(canonical)
+    if isinstance(canonical, SampleTypedPathsCall):
+        logical_plan = plan_query(canonical)
     else:
-        logical_plan = plan_query(parse(query))
+        logical_plan = plan_staged_query(canonical)
     records = execute_plan(
         logical_plan,
         QueryContext(graph=graph, parameters=parameters or {}),

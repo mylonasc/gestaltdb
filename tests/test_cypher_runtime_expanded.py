@@ -4,11 +4,8 @@ from gestaltdb.cypher import execute, parse, plan
 from gestaltdb.cypher_ast import Parameter
 from gestaltdb.cypher_plan import (
     Distinct,
-    Expand,
-    FilterNodeLabels,
-    FilterNodeProperty,
     Limit,
-    NodeByIdSeek,
+    MatchStep,
     Skip,
     Sort,
 )
@@ -127,10 +124,11 @@ def test_logical_plan_represents_all_result_shaping_operators():
 def test_logical_plan_represents_general_path_filters():
     logical_plan = plan("MATCH (a {id: 'a'})-->(b:Target {active: true}) RETURN b")
 
-    assert isinstance(logical_plan.operators[0], NodeByIdSeek)
-    assert any(isinstance(operator, Expand) for operator in logical_plan.operators)
-    assert any(isinstance(operator, FilterNodeLabels) for operator in logical_plan.operators)
-    assert any(isinstance(operator, FilterNodeProperty) for operator in logical_plan.operators)
+    step = logical_plan.operators[0]
+    assert isinstance(step, MatchStep)
+    assert ("id", "a") in step.patterns[0].source.properties
+    assert step.patterns[0].hops[0].target.labels == ("Target",)
+    assert ("active", True) in step.patterns[0].hops[0].target.properties
 
 
 def test_dynamic_comparison_does_not_use_property_index(graph_db):

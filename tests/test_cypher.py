@@ -4,24 +4,13 @@ from gestaltdb.cypher import QueryResult, _split_top_level_args, execute, parse,
 from gestaltdb.cypher_ast import MultiMatchQuery, Parameter
 from gestaltdb.cypher_parser import parse_literal
 from gestaltdb.cypher_plan import (
-    Expand,
+    FilterExpression,
     Limit,
-    NodeAllScan,
-    NodeByIdSeek,
-    NodeLabelScan,
-    NodePropertySeek,
+    MatchStep,
     ProcedureCall,
-    Project,
-    RelationshipPropertyRangeSeek,
-    RelationshipPropertySeek,
-    RelationshipTypeScan,
+    ProjectItems,
 )
-from gestaltdb.cypher_runtime import (
-    QueryContext,
-    execute_match,
-    execute_node_scan,
-    expand_typed,
-)
+from gestaltdb.cypher_runtime import QueryContext
 from gestaltdb.graphdb import Edge, Node
 
 from .conftest import populate_typed_graph
@@ -1078,38 +1067,43 @@ def test_parse_literal_supports_cypher_literals_and_parameters():
 def test_logical_plan_for_node_scan():
     logical_plan = plan("MATCH (n:Drug {name: $name}) RETURN n.id LIMIT 1")
 
-    assert isinstance(logical_plan.operators[0], NodeLabelScan)
-    assert isinstance(logical_plan.operators[1], NodePropertySeek)
-    assert isinstance(logical_plan.operators[-2], Project)
+    assert logical_plan.staged is True
+    assert isinstance(logical_plan.operators[0], MatchStep)
+    assert isinstance(logical_plan.operators[-2], ProjectItems)
     assert isinstance(logical_plan.operators[-1], Limit)
 
 
 def test_logical_plan_for_node_scan_where():
     logical_plan = plan('MATCH (n:Drug) WHERE n.name = "Aspirin" RETURN n.id')
 
-    assert isinstance(logical_plan.operators[0], NodeLabelScan)
-    assert isinstance(logical_plan.operators[-1], Project)
+    assert isinstance(logical_plan.operators[0], MatchStep)
+    assert isinstance(logical_plan.operators[1], FilterExpression)
+    assert isinstance(logical_plan.operators[-1], ProjectItems)
 
 
 def test_logical_plan_for_multi_label_node_scan():
     logical_plan = plan("MATCH (n:Drug:Approved) RETURN n.id")
 
-    assert logical_plan.operators[0].labels == ("Drug", "Approved")
+    step = logical_plan.operators[0]
+    assert isinstance(step, MatchStep)
+    assert step.patterns[0].source.labels == ("Drug", "Approved")
 
 
 def test_logical_plan_for_all_node_scan():
     logical_plan = plan("MATCH (n) RETURN n.id LIMIT 1")
 
-    assert isinstance(logical_plan.operators[0], NodeAllScan)
+    assert isinstance(logical_plan.operators[0], MatchStep)
     assert isinstance(logical_plan.operators[-1], Limit)
 
 
 def test_logical_plan_for_anchored_traversal():
     logical_plan = plan('MATCH (a {id: "n1"})-[:T]->(b) RETURN b.id')
 
-    assert isinstance(logical_plan.operators[0], NodeByIdSeek)
-    assert isinstance(logical_plan.operators[1], Expand)
-    assert isinstance(logical_plan.operators[-1], Project)
+    step = logical_plan.operators[0]
+    assert isinstance(step, MatchStep)
+    assert ("id", "n1") in step.patterns[0].source.properties
+    assert len(step.patterns[0].hops) == 1
+    assert isinstance(logical_plan.operators[-1], ProjectItems)
 
 
 def test_logical_plan_for_sampling_call():
@@ -1124,26 +1118,34 @@ def test_logical_plan_for_sampling_call():
 def test_logical_plan_for_relationship_scan():
     logical_plan = plan("MATCH (a)-[r:A|B]->(b) RETURN r.id")
 
-    assert isinstance(logical_plan.operators[0], RelationshipTypeScan)
-    assert logical_plan.operators[0].edge_types == ("A", "B")
+    step = logical_plan.operators[0]
+    assert isinstance(step, MatchStep)
+    assert step.patterns[0].hops[0].edge_types == ("A", "B")
 
 
 def test_logical_plan_for_relationship_scan_property_predicates():
     exact_plan = plan("MATCH (a)-[r:T]->(b) WHERE r.score = 1 RETURN r.id")
     range_plan = plan("MATCH (a)-[r:T]->(b) WHERE r.score >= 1 RETURN r.id")
 
-    assert isinstance(exact_plan.operators[1], RelationshipPropertySeek)
-    assert exact_plan.operators[1].property_name == "score"
-    assert isinstance(range_plan.operators[1], RelationshipPropertyRangeSeek)
-    assert range_plan.operators[1].operator == ">="
+    exact_filters = [
+        operator for operator in exact_plan.operators if isinstance(operator, FilterExpression)
+    ]
+    range_filters = [
+        operator for operator in range_plan.operators if isinstance(operator, FilterExpression)
+    ]
+    assert len(exact_filters) == 1
+    assert exact_filters[0].expression.operator == "="
+    assert len(range_filters) == 1
+    assert range_filters[0].expression.operator == ">="
 
 
 def test_logical_plan_for_multiple_match_clauses():
     logical_plan = plan("MATCH (d:Drug) MATCH (d)-[r:T]->(p) RETURN d.id, p.id LIMIT 1")
 
-    assert isinstance(logical_plan.operators[0], NodeLabelScan)
-    assert isinstance(logical_plan.operators[1], RelationshipTypeScan)
-    assert isinstance(logical_plan.operators[-2], Project)
+    steps = [operator for operator in logical_plan.operators if isinstance(operator, MatchStep)]
+    assert len(steps) == 2
+    assert steps[0].group_id != steps[1].group_id
+    assert isinstance(logical_plan.operators[-2], ProjectItems)
     assert isinstance(logical_plan.operators[-1], Limit)
 
 
@@ -1180,11 +1182,10 @@ def test_runtime_node_scan_streams_until_limit_without_backend():
     graph = FakeCypherGraph()
     graph.put_node(Node(node_id="drug-1", labels=["Drug"]))
     graph.put_node(Node(node_id="drug-2", labels=["Drug"]))
-    parsed = parse("MATCH (n:Drug) RETURN n.id LIMIT 1")
 
-    records = execute_node_scan(parsed, QueryContext(graph))
+    result = execute(graph, "MATCH (n:Drug) RETURN n.id LIMIT 1")
 
-    assert records == [{"n.id": "drug-1"}]
+    assert result.records == [{"n.id": "drug-1"}]
     assert graph.label_yields == [b"drug-1"]
 
 
@@ -1193,15 +1194,10 @@ def test_runtime_expand_operator_binds_relationships_without_backend():
     graph.put_node(Node(node_id="n1"))
     graph.put_node(Node(node_id="n2"))
     graph.put_edge(Edge(edge_id="e1", source="n1", target="n2", properties={"type": "T"}))
-    parsed = parse('MATCH (a {id: "n1"})-[r:T]->(b) RETURN r.id, b.id')
-    context = QueryContext(graph)
-    rows = [{"current_node_id": b"n1", "bindings": {"a": graph.get_node(b"n1")}}]
 
-    expanded = list(expand_typed(context, rows, parsed.hops[0]))
+    result = execute(graph, 'MATCH (a {id: "n1"})-[r:T]->(b) RETURN r.id, b.id')
 
-    assert len(expanded) == 1
-    assert expanded[0]["bindings"]["r"].get_id == "e1"
-    assert expanded[0]["bindings"]["b"].get_id == "n2"
+    assert result.records == [{"r.id": "e1", "b.id": "n2"}]
 
 
 def test_runtime_match_operator_respects_limit_without_backend():
@@ -1211,11 +1207,10 @@ def test_runtime_match_operator_respects_limit_without_backend():
     graph.put_node(Node(node_id="n3"))
     graph.put_edge(Edge(edge_id="e1", source="n1", target="n2", properties={"type": "T"}))
     graph.put_edge(Edge(edge_id="e2", source="n1", target="n3", properties={"type": "T"}))
-    parsed = parse('MATCH (a {id: "n1"})-[:T]->(b) RETURN b.id LIMIT 1')
 
-    records = execute_match(parsed, QueryContext(graph))
+    result = execute(graph, 'MATCH (a {id: "n1"})-[:T]->(b) RETURN b.id LIMIT 1')
 
-    assert records == [{"b.id": "n2"}]
+    assert result.records == [{"b.id": "n2"}]
 
 
 def test_cypher_untyped_relationship_query(graph_db):

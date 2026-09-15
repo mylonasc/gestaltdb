@@ -9,16 +9,12 @@ from itertools import islice
 from typing import Protocol
 
 from .cypher_ast import (
-    AnchoredPatternClause,
     AndExpression,
     ArithmeticExpression,
     ComparisonExpression,
     InExpression,
     ListExpression,
     MapExpression,
-    MatchQuery,
-    MultiMatchQuery,
-    NodePatternClause,
     NodeScanQuery,
     NotExpression,
     NullPredicate,
@@ -27,8 +23,6 @@ from .cypher_ast import (
     PathPatternClause,
     PatternHop,
     PropertyRef,
-    RelationshipPatternClause,
-    RelationshipScanQuery,
     StringPredicate,
     UnaryExpression,
     Variable,
@@ -36,25 +30,11 @@ from .cypher_ast import (
 )
 from .cypher_plan import Aggregate as LogicalAggregate
 from .cypher_plan import (
-    AnchoredMatchSource,
-    Expand,
-    FilterNodeLabels,
-    FilterNodeProperty,
     LogicalPlan,
     MatchStep,
-    MultiMatchSource,
-    NodeAllScan,
-    NodeByIdSeek,
-    NodeLabelScan,
-    NodePropertySeek,
-    NodeScanSource,
     ProcedureCall,
     ProcedureSource,
     ProjectItems,
-    RelationshipPropertyRangeSeek,
-    RelationshipPropertySeek,
-    RelationshipScanSource,
-    RelationshipTypeScan,
 )
 from .cypher_plan import Distinct as LogicalDistinct
 from .cypher_plan import FilterExpression as LogicalFilterExpression
@@ -101,35 +81,29 @@ class QueryContext:
 
 
 @dataclass(frozen=True, slots=True)
-class BindingRow(Mapping[str, object]):
+class BindingRow:
     """Typed variable bindings and traversal state for one runtime row.
 
-    The mapping interface keeps direct runtime-helper callers compatible while
-    the execution pipeline migrates away from implicit dictionary row shapes.
+    Rows are plain immutable value objects threaded through the operator
+    pipeline (see ``Operator``). Attribute access is the only supported
+    interface: ``bindings`` maps variable names to entities, ``current_node_id``
+    tracks the traversal cursor, and ``used_relationship_ids`` enforces
+    per-``MATCH`` relationship isomorphism.
     """
 
     bindings: dict[str, object]
     current_node_id: bytes | None = None
     used_relationship_ids: frozenset[bytes] = frozenset()
 
-    def __getitem__(self, key: str) -> object:
-        if key == "bindings":
-            return self.bindings
-        if key == "current_node_id":
-            return self.current_node_id
-        if key == "used_relationship_ids":
-            return self.used_relationship_ids
-        raise KeyError(key)
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(("bindings", "current_node_id", "used_relationship_ids"))
-
-    def __len__(self) -> int:
-        return 3
-
     @classmethod
     def from_row(cls, row: BindingRow | Mapping[str, object]) -> BindingRow:
-        """Return ``row`` as a typed binding row."""
+        """Return ``row`` as a typed binding row.
+
+        Plain ``BindingRow`` instances pass through unchanged. Legacy
+        ``{"bindings": ..., "current_node_id": ...}`` dictionaries are still
+        adapted, but that path is deprecated and will be removed once all
+        operators emit ``BindingRow`` directly (see ``[cypher-02]``).
+        """
         if isinstance(row, cls):
             return row
         return cls(
@@ -161,35 +135,52 @@ class BindingRow(Mapping[str, object]):
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectedRow(Mapping[str, object]):
-    """Typed projected values with optional source bindings for ordering."""
+class ProjectedRow:
+    """Typed projected values with optional source bindings for ordering.
+
+    ``values`` maps output column names to projected values. ``source_bindings``
+    retains the pre-projection variable bindings so ``ORDER BY`` can reference
+    hidden (non-projected) expressions.
+    """
 
     values: dict[str, object]
     source_bindings: dict[str, object] | None = None
 
-    def __getitem__(self, key: str) -> object:
-        return self.values[key]
 
-    def __iter__(self) -> Iterator[str]:
-        return iter(self.values)
+def bindings_of(row: BindingRow | ProjectedRow | Mapping[str, object]) -> dict[str, object]:
+    """Return the variable-binding mapping carried by a pipeline row."""
+    if isinstance(row, BindingRow):
+        return row.bindings
+    if isinstance(row, ProjectedRow):
+        return row.values
+    return BindingRow.from_row(row).bindings
 
-    def __len__(self) -> int:
-        return len(self.values)
+
+class Operator(Protocol):
+    """Contract for one stage of the executable operator pipeline.
+
+    Every operator consumes an iterable of rows and lazily yields rows for the
+    next stage. Binding stages yield ``BindingRow``; projection stages yield
+    ``ProjectedRow``. The phase-specific protocols below document which row
+    kind each operator consumes and produces.
+    """
+
+    def execute(self, rows: Iterable[object], context: QueryContext) -> Iterable[object]: ...
 
 
-class BindingOperator(Protocol):
+class BindingOperator(Operator, Protocol):
     """Contract for an operator that transforms binding rows."""
 
     def execute(self, rows: Iterable[BindingRow], context: QueryContext) -> Iterator[BindingRow]: ...
 
 
-class ProjectionOperator(Protocol):
+class ProjectionOperator(Operator, Protocol):
     """Contract for an operator that projects binding rows."""
 
     def execute(self, rows: Iterable[BindingRow], context: QueryContext) -> Iterator[ProjectedRow]: ...
 
 
-class ResultOperator(Protocol):
+class ResultOperator(Operator, Protocol):
     """Contract for an operator that transforms projected rows."""
 
     def execute(self, rows: Iterable[ProjectedRow], context: QueryContext) -> Iterable[ProjectedRow]: ...
@@ -208,10 +199,7 @@ class ProjectOperator:
     ) -> Iterator[ProjectedRow]:
         projection_items = self.projections or self.returns
         for source_row in rows:
-            if isinstance(source_row, ProjectedRow):
-                bindings = source_row.values
-            else:
-                bindings = BindingRow.from_row(source_row).bindings
+            bindings = bindings_of(source_row)
             if self.projection_expressions:
                 values = {
                     column: evaluate_expression(expression, bindings, context)
@@ -303,119 +291,36 @@ class LimitOperator:
         return islice(rows, self.count)
 
 
-def execute_match(parsed: MatchQuery, context: QueryContext) -> list[dict[str, object]]:
-    """Execute an anchored typed traversal plan and return projected records."""
-    rows = _match_rows(parsed, context)
-    if parsed.where is not None:
-        rows = filter_expression(rows, parsed.where, context)
-    return materialize_results(rows, parsed, context)
-
-
-def _match_rows(parsed: MatchQuery, context: QueryContext) -> Iterable[BindingRow]:
-    """Produce unprojected rows for an anchored typed traversal."""
-    rows = anchored_node_seek(context, parsed.source_id, parsed.source_var)
-    for hop in parsed.hops:
-        rows = expand_typed(context, rows, hop)
-    return rows
-
-
-def execute_node_scan(parsed: NodeScanQuery, context: QueryContext) -> list[dict[str, object]]:
-    """Execute a label scan plan and return projected records."""
-    rows = _node_scan_rows(parsed, context)
-    if parsed.where is not None:
-        rows = filter_expression(rows, parsed.where, context)
-    return materialize_results(rows, parsed, context)
-
-
-def _node_scan_rows(
-    parsed: NodeScanQuery, context: QueryContext
-) -> Iterable[BindingRow]:
-    """Produce unprojected rows for a node scan and inline properties."""
-    node_ids = node_scan_ids(parsed, context)
-    rows = hydrate_node_ids(context, node_ids, parsed.variable)
-    for property_name, property_value in parsed.properties or (
-        ((parsed.property_name, parsed.property_value),) if parsed.property_name is not None else ()
-    ):
-        rows = filter_node_property(rows, parsed.variable, property_name, context.resolve(property_value))
-    return rows
-
-
-def execute_relationship_scan(parsed: RelationshipScanQuery, context: QueryContext) -> list[dict[str, object]]:
-    """Execute an unanchored typed relationship scan."""
-    rows = _relationship_rows(parsed, context)
-    if parsed.where is not None:
-        rows = filter_expression(rows, parsed.where, context)
-    return materialize_results(rows, parsed, context)
-
-
-def _relationship_rows(
-    parsed: RelationshipScanQuery, context: QueryContext
-) -> Iterable[BindingRow]:
-    """Produce unprojected rows for a relationship scan."""
-    return relationship_scan_rows(parsed, context)
-
-
-def execute_multi_match(parsed: MultiMatchQuery, context: QueryContext) -> list[dict[str, object]]:
-    """Execute multiple MATCH clauses as a streaming row pipeline."""
-    rows = _multi_match_rows(parsed, context)
-    if parsed.where is not None:
-        rows = filter_expression(rows, parsed.where, context)
-    return materialize_results(rows, parsed, context)
-
-
-def _multi_match_rows(
-    parsed: MultiMatchQuery, context: QueryContext
-) -> Iterable[BindingRow]:
-    """Produce unprojected rows for generalized and chained MATCH clauses."""
-    rows = iter([BindingRow(bindings={})])
-    group_ids = parsed.match_group_ids or tuple(range(len(parsed.clauses)))
-    previous_group = None
-    for clause, group_id in zip(parsed.clauses, group_ids):
-        if group_id != previous_group:
-            rows = _reset_used_relationships(rows)
-        if isinstance(clause, NodePatternClause):
-            rows = apply_node_pattern_clause(rows, clause, context)
-        elif isinstance(clause, RelationshipPatternClause):
-            rows = apply_relationship_pattern_clause(rows, clause, context)
-        elif isinstance(clause, AnchoredPatternClause):
-            rows = apply_anchored_pattern_clause(rows, clause, context)
-        elif isinstance(clause, PathPatternClause):
-            rows = apply_path_pattern_clause(rows, clause, context)
-        else:
-            raise TypeError(f"Unsupported MATCH clause type: {type(clause).__name__}")
-        previous_group = group_id
-    rows = _reset_used_relationships(rows)
-    return rows
-
-
 def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, object]]:
-    """Execute an authoritative logical plan against one query context."""
+    """Execute an authoritative logical plan against one query context.
+
+    Staged clause pipelines run in ``_execute_staged``. Procedure-call plans
+    seed binding rows from ``plan.source`` through their leading
+    ``ProcedureCall`` operator and then run the same result-shaping operators.
+    Every other operator executes directly: unknown operators raise
+    ``TypeError`` instead of being silently skipped.
+    """
     if plan.staged or any(
         isinstance(operator, (MatchStep, ProjectItems, LogicalAggregate)) for operator in plan.operators
     ):
         return _execute_staged(plan, context)
-    parsed, rows = _plan_source_rows(plan, context)
-    stream: Iterable[BindingRow] | Iterable[ProjectedRow] = rows
+    if not isinstance(plan.source, ProcedureSource):
+        raise TypeError(f"Unsupported plan source: {type(plan.source).__name__}")
+    stream: Iterable[BindingRow] | Iterable[ProjectedRow] | None = None
     projected = False
     for operator in plan.operators:
-        if isinstance(operator, LogicalFilterExpression):
-            if projected:
-                raise TypeError("FilterExpression cannot execute after projection")
-            stream = filter_expression(stream, operator.expression, context)
+        if isinstance(operator, ProcedureCall):
+            if stream is not None or projected:
+                raise TypeError("ProcedureCall must seed the plan before projection")
+            stream = _procedure_rows(plan.source, context)
         elif isinstance(operator, LogicalProject):
-            if projected:
+            if projected or stream is None:
                 raise TypeError("Logical plan contains multiple projections")
-            stream = ProjectOperator(
-                returns=operator.returns,
-                projections=getattr(parsed, "projections", ()),
-                projection_expressions=getattr(
-                    parsed, "projection_expressions", ()
-                ),
-            ).execute(stream, context)
+            stream = ProjectOperator(returns=operator.returns).execute(stream, context)
             projected = True
         elif isinstance(operator, LogicalSort):
             _require_projected(projected, operator)
-            stream = SortOperator(operator.items, parsed).execute(stream, context)
+            stream = SortOperator(operator.items, ProjectionView(plan.columns)).execute(stream, context)
         elif isinstance(operator, LogicalDistinct):
             _require_projected(projected, operator)
             stream = DistinctOperator(plan.columns).execute(stream, context)
@@ -427,30 +332,21 @@ def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, obj
             _require_projected(projected, operator)
             count = _resolve_pagination(operator.limit, context, "LIMIT")
             stream = LimitOperator(count or 0).execute(stream, context)
-        elif isinstance(
-            operator,
-            (
-                NodeByIdSeek,
-                NodeLabelScan,
-                NodeAllScan,
-                NodePropertySeek,
-                RelationshipTypeScan,
-                RelationshipPropertySeek,
-                RelationshipPropertyRangeSeek,
-                FilterNodeProperty,
-                FilterNodeLabels,
-                Expand,
-                ProcedureCall,
-            ),
-        ):
-            continue
         else:
             raise TypeError(
                 f"Unsupported logical operator: {type(operator).__name__}"
             )
-    if not projected:
+    if not projected or stream is None:
         raise TypeError("Logical plan does not contain a projection")
     return [dict(row.values) for row in stream]
+
+
+def _procedure_rows(source: ProcedureSource, context: QueryContext) -> Iterator[BindingRow]:
+    """Seed binding rows from a sampling procedure call."""
+    paths = context.graph.sample_typed_paths(
+        source.query.seed_ids, source.query.pattern
+    )
+    return (BindingRow(bindings={"path": path}) for path in paths)
 
 
 def apply_match_step(
@@ -459,7 +355,7 @@ def apply_match_step(
     """Match one textual ``MATCH`` clause with a fresh isomorphism scope."""
     staged: Iterable[BindingRow] = _reset_used_relationships(rows)
     for pattern in step.patterns:
-        staged = apply_path_pattern_clause(staged, pattern, context)
+        staged = apply_path_pattern_clause(staged, pattern, context, step.where)
     return staged
 
 
@@ -475,10 +371,7 @@ class AggregateOperator:
         groups: dict[tuple[object, ...], dict[str, object]] = {}
         order: list[tuple[object, ...]] = []
         for source_row in rows:
-            if isinstance(source_row, ProjectedRow):
-                bindings = source_row.values
-            else:
-                bindings = BindingRow.from_row(source_row).bindings
+            bindings = bindings_of(source_row)
             key_values = [
                 evaluate_expression(expression, bindings, context)
                 for _, expression in self.aggregate.keys
@@ -556,7 +449,7 @@ def filter_projected(
 ) -> Iterator[ProjectedRow]:
     """Yield projected rows whose output values satisfy a ``WHERE`` filter."""
     for row in rows:
-        values = row.values if isinstance(row, ProjectedRow) else BindingRow.from_row(row).bindings
+        values = bindings_of(row)
         if evaluate_expression(expression, values, context) is True:
             yield row
 
@@ -626,28 +519,6 @@ def _execute_staged(plan: LogicalPlan, context: QueryContext) -> list[dict[str, 
     return [dict(row.values) for row in projected]
 
 
-def _plan_source_rows(
-    plan: LogicalPlan, context: QueryContext
-) -> tuple[object, Iterable[BindingRow]]:
-    source = plan.source
-    if isinstance(source, NodeScanSource):
-        return source.query, _node_scan_rows(source.query, context)
-    if isinstance(source, AnchoredMatchSource):
-        return source.query, _match_rows(source.query, context)
-    if isinstance(source, RelationshipScanSource):
-        return source.query, _relationship_rows(source.query, context)
-    if isinstance(source, MultiMatchSource):
-        return source.query, _multi_match_rows(source.query, context)
-    if isinstance(source, ProcedureSource):
-        paths = context.graph.sample_typed_paths(
-            source.query.seed_ids, source.query.pattern
-        )
-        return source.query, (
-            BindingRow(bindings={"path": path}) for path in paths
-        )
-    raise TypeError("Logical plan does not define a supported binding source")
-
-
 def _require_projected(projected: bool, operator: object) -> None:
     if not projected:
         raise TypeError(
@@ -659,15 +530,6 @@ def _reset_used_relationships(rows):
     for row in rows:
         typed_row = BindingRow.from_row(row)
         yield typed_row.with_bindings(dict(typed_row.bindings), used_relationship_ids=frozenset())
-
-
-def anchored_node_seek(context: QueryContext, source_id: str, source_var: str):
-    """Yield one initial row for an ID lookup when the source node exists."""
-    source_id_bytes = context.node_key_to_bytes(source_id)
-    source_node = context.get_node(source_id_bytes)
-    if source_node is None:
-        return
-    yield BindingRow(current_node_id=source_id_bytes, bindings={source_var: source_node})
 
 
 def node_scan_ids(parsed: NodeScanQuery, context: QueryContext):
@@ -762,106 +624,75 @@ def _node_ids_for_labels(parsed: NodeScanQuery, context: QueryContext):
     return iter(sorted(matching_ids or set()))
 
 
-def hydrate_node_ids(context: QueryContext, node_ids, variable: str):
-    """Hydrate node IDs into binding rows."""
-    for node_id in node_ids:
-        node = context.get_node(node_id)
-        if node is None:
-            continue
-        yield BindingRow(current_node_id=node_id, bindings={variable: node})
+def apply_path_pattern_clause(rows, clause: PathPatternClause, context: QueryContext, where=None):
+    """Apply a generalized fixed-length path pattern to incoming rows.
 
-
-def apply_node_pattern_clause(rows, clause: NodePatternClause, context: QueryContext):
-    """Apply a node pattern to incoming rows."""
-    scan = NodeScanQuery(
-        variable=clause.variable,
-        label=clause.label,
-        property_name=clause.property_name,
-        property_value=clause.property_value,
-        returns=(clause.variable,),
-        labels=clause.labels,
-        properties=clause.properties,
-    )
+    When the clause-local ``WHERE`` holds an index-eligible predicate on the
+    first relationship, the first hop is served from the composite
+    type/property edge index instead of scanning node adjacency. The trailing
+    ``FilterExpression`` operator always re-applies the full predicate, so
+    index selection never changes results.
+    """
     for row in rows:
         row = BindingRow.from_row(row)
-        bound_node = row.bindings.get(clause.variable)
-        if bound_node is not None:
-            if _node_matches_clause(bound_node, clause, context):
-                yield row
-            continue
-        for node_id in node_scan_ids(scan, context):
-            node = context.get_node(node_id)
-            if node is None:
+        indexed = _indexed_first_hop_rows(row, clause, context, where)
+        if indexed is None:
+            expanded = _path_start_rows(row, clause, context, where)
+            remaining = clause.hops
+        else:
+            expanded = indexed
+            remaining = clause.hops[1:]
+        for hop in remaining:
+            expanded = _expand_pattern_hop(context, expanded, hop)
+        yield from expanded
+
+
+def _indexed_first_hop_rows(row, clause: PathPatternClause, context: QueryContext, where):
+    """Yield first-hop rows from an edge property index, or ``None``.
+
+    Returns ``None`` when the pattern cannot use the composite type/property
+    edge index (bound source, anonymous or untyped relationship, or no
+    eligible predicate), in which case the caller falls back to adjacency
+    expansion.
+    """
+    if where is None or not clause.hops:
+        return None
+    hop = clause.hops[0]
+    source = clause.source
+    if hop.rel_var is None or not hop.edge_types:
+        return None
+    if source.variable is not None and source.variable in row.bindings:
+        return None
+    if any(name == "id" for name, _ in source.properties):
+        return None
+    spec = _edge_seek_spec(hop.rel_var, where, context)
+    if spec is None:
+        return None
+    return _iter_indexed_first_hop(row, clause, hop, context, spec)
+
+
+def _iter_indexed_first_hop(row, clause: PathPatternClause, hop: PatternHop, context: QueryContext, spec):
+    """Iterate index-backed candidate edges for the first pattern hop."""
+    seen = set()
+    for edge_type in hop.edge_types:
+        if spec[0] == "exact":
+            _, property_name, value = spec
+            edge_ids = context.graph.iter_edge_ids_by_type_property(edge_type, property_name, value)
+        else:
+            _, property_name, start_value, end_value, include_start, include_end = spec
+            edge_ids = context.graph.iter_edge_ids_by_type_property_range(
+                edge_type, property_name, start_value, end_value, include_start, include_end
+            )
+        for edge_id in edge_ids:
+            if edge_id in seen or edge_id in row.used_relationship_ids:
                 continue
-            if not _node_matches_clause(node, clause, context):
-                continue
-            bindings = dict(row.bindings)
-            bindings[clause.variable] = node
-            yield row.with_bindings(bindings, current_node_id=node_id, preserve_current_node=False)
+            seen.add(edge_id)
+            yield from _hydrate_indexed_edge(row, clause, hop, context, edge_id)
 
 
-def _node_matches_clause(node, clause: NodePatternClause, context: QueryContext) -> bool:
-    labels = clause.labels or ((clause.label,) if clause.label is not None else ())
-    if labels and not set(labels).issubset(set(getattr(node, "labels", ()))):
-        return False
-    properties = clause.properties or (
-        ((clause.property_name, clause.property_value),) if clause.property_name is not None else ()
-    )
-    for property_name, property_value in properties:
-        if _cypher_equals(node.properties.get(property_name), context.resolve(property_value)) is not True:
-            return False
-    return True
-
-
-def apply_relationship_pattern_clause(rows, clause: RelationshipPatternClause, context: QueryContext):
-    """Apply a relationship pattern to incoming rows."""
-    for row in rows:
-        row = BindingRow.from_row(row)
-        source_node = row.bindings.get(clause.source_var)
-        target_node = row.bindings.get(clause.target_var)
-        if source_node is not None:
-            yield from _expand_relationship_from_source(row, source_node, clause, context)
-            continue
-        if target_node is not None:
-            yield from _expand_relationship_from_target(row, target_node, clause, context)
-            continue
-        scan = RelationshipScanQuery(
-            source_var=clause.source_var,
-            rel_var=clause.rel_var,
-            edge_type=clause.edge_type,
-            target_var=clause.target_var,
-            returns=(clause.source_var, clause.target_var),
-            direction=clause.direction,
-            edge_types=clause.edge_types,
-        )
-        for scanned_row in relationship_scan_rows(scan, context):
-            bindings = dict(row.bindings)
-            if _merge_bindings(bindings, scanned_row.bindings):
-                yield row.with_bindings(
-                    bindings,
-                    current_node_id=scanned_row.current_node_id,
-                    preserve_current_node=False,
-                )
-
-
-def _expand_relationship_from_source(row, source_node, clause: RelationshipPatternClause, context: QueryContext):
-    source_id = context.node_key_to_bytes(source_node.get_id)
-    direction = "any" if clause.direction == "any" else "out"
-    for edge_type in clause.edge_types or (clause.edge_type,):
-        for adjacency in context.graph.iter_typed_adjacency(source_id, edge_type, direction=direction):
-            yield from _merge_relationship_adjacency(row, clause, context, adjacency, "source")
-
-
-def _expand_relationship_from_target(row, target_node, clause: RelationshipPatternClause, context: QueryContext):
-    target_id = context.node_key_to_bytes(target_node.get_id)
-    direction = "any" if clause.direction == "any" else "in"
-    for edge_type in clause.edge_types or (clause.edge_type,):
-        for adjacency in context.graph.iter_typed_adjacency(target_id, edge_type, direction=direction):
-            yield from _merge_relationship_adjacency(row, clause, context, adjacency, "target")
-
-
-def _merge_relationship_adjacency(row, clause: RelationshipPatternClause, context: QueryContext, adjacency, bound_endpoint):
-    edge = context.get_edge(adjacency["edge_id"])
+def _hydrate_indexed_edge(row, clause: PathPatternClause, hop: PatternHop, context: QueryContext, edge_id: bytes):
+    """Bind one indexed edge to its endpoint nodes following hop direction."""
+    edge = context.get_edge(edge_id)
     if edge is None:
         return
     source_id = context.node_key_to_bytes(edge.source)
@@ -870,70 +701,101 @@ def _merge_relationship_adjacency(row, clause: RelationshipPatternClause, contex
     target_node = context.get_node(target_id)
     if source_node is None or target_node is None:
         return
-    if clause.direction == "any":
-        bound_variable = clause.source_var if bound_endpoint == "source" else clause.target_var
-        bound_node = row.bindings[bound_variable]
-        neighbor_node = context.get_node(adjacency["neighbor_id"])
-        if neighbor_node is None:
-            return
-        if bound_endpoint == "source":
-            new_bindings = {clause.source_var: bound_node, clause.target_var: neighbor_node}
-        else:
-            new_bindings = {clause.source_var: neighbor_node, clause.target_var: bound_node}
+    if hop.direction == "in":
+        orientations = [(target_node, source_node, target_id, source_id)]
     else:
-        new_bindings = {clause.source_var: source_node, clause.target_var: target_node}
-    if clause.rel_var is not None:
-        new_bindings[clause.rel_var] = edge
-    bindings = dict(row.bindings)
-    if not _merge_bindings(bindings, new_bindings):
-        return
-    current_node_id = target_id if clause.direction == "out" else source_id
-    typed_row = BindingRow.from_row(row)
-    yield typed_row.with_bindings(bindings, current_node_id=current_node_id, preserve_current_node=False)
-
-
-def apply_anchored_pattern_clause(rows, clause: AnchoredPatternClause, context: QueryContext):
-    """Apply an anchored traversal clause to incoming rows."""
-    source_id_bytes = context.node_key_to_bytes(clause.source_id)
-    source_node = context.get_node(source_id_bytes)
-    if source_node is None:
-        return
-    for row in rows:
-        row = BindingRow.from_row(row)
-        bindings = dict(row.bindings)
-        if clause.source_var in bindings and not same_entity(bindings[clause.source_var], source_node):
+        orientations = [(source_node, target_node, source_id, target_id)]
+        if hop.direction == "any" and source_id != target_id:
+            orientations.append((target_node, source_node, target_id, source_id))
+    for start_node, neighbor_node, _, neighbor_id in orientations:
+        if not _node_matches_pattern(start_node, clause.source.labels, clause.source.properties, context):
             continue
-        bindings[clause.source_var] = source_node
-        expanded = iter(
-            [
-                row.with_bindings(
-                    bindings,
-                    current_node_id=source_id_bytes,
-                    preserve_current_node=False,
-                    used_relationship_ids=frozenset(),
-                )
-            ]
+        if not _node_matches_pattern(neighbor_node, hop.target.labels, hop.target.properties, context):
+            continue
+        bindings = dict(row.bindings)
+        if clause.source.variable is not None:
+            bound_source = bindings.get(clause.source.variable)
+            if bound_source is not None and not same_entity(bound_source, start_node):
+                continue
+            bindings[clause.source.variable] = start_node
+        if hop.target.variable is not None:
+            bound_target = bindings.get(hop.target.variable)
+            if bound_target is not None and not same_entity(bound_target, neighbor_node):
+                continue
+            bindings[hop.target.variable] = neighbor_node
+        bound_edge = bindings.get(hop.rel_var)
+        if bound_edge is not None and not same_entity(bound_edge, edge):
+            continue
+        bindings[hop.rel_var] = edge
+        yield row.with_bindings(
+            bindings,
+            current_node_id=neighbor_id,
+            preserve_current_node=False,
+            used_relationship_ids=row.used_relationship_ids.union((edge_id,)),
         )
-        for hop in clause.hops:
-            expanded = expand_typed(context, expanded, hop)
-        for expanded_row in expanded:
-            yield BindingRow.from_row(expanded_row).with_bindings(
-                dict(expanded_row.bindings), used_relationship_ids=frozenset()
-            )
 
 
-def apply_path_pattern_clause(rows, clause: PathPatternClause, context: QueryContext):
-    """Apply a generalized fixed-length path pattern to incoming rows."""
-    for row in rows:
-        row = BindingRow.from_row(row)
-        starts = _path_start_rows(row, clause, context)
-        expanded = starts
-        for hop in clause.hops:
-            expanded = _expand_pattern_hop(context, expanded, hop)
-        yield from expanded
+def _edge_seek_spec(rel_var: str, where, context: QueryContext):
+    """Return an edge property index scan spec for one relationship variable.
+
+    Only ``AND``-ed exact (``=``) or single-property range predicates against
+    indexed edge properties qualify. Returns ``None`` when no predicate can
+    use the composite type/property index.
+    """
+    indexed = getattr(context.graph, "indexed_edge_properties", set())
+    expressions = where.expressions if isinstance(where, AndExpression) else (where,)
+    for expression in expressions:
+        if (
+            isinstance(expression, ComparisonExpression)
+            and isinstance(expression.left, PropertyRef)
+            and expression.left.variable == rel_var
+            and expression.operator == "="
+            and _is_seek_value(expression.right)
+            and expression.left.property_name in indexed
+            and hasattr(context.graph, "iter_edge_ids_by_type_property")
+        ):
+            return ("exact", expression.left.property_name, context.resolve(expression.right))
+    property_name = None
+    start_value = None
+    end_value = None
+    include_start = True
+    include_end = True
+    found = False
+    for expression in expressions:
+        if not isinstance(expression, ComparisonExpression):
+            continue
+        if not isinstance(expression.left, PropertyRef):
+            continue
+        if not _is_seek_value(expression.right):
+            continue
+        if expression.left.variable != rel_var:
+            continue
+        if expression.operator not in {"<", "<=", ">", ">="}:
+            continue
+        if expression.left.property_name not in indexed:
+            continue
+        current_property = expression.left.property_name
+        if property_name is not None and property_name != current_property:
+            continue
+        property_name = current_property
+        found = True
+        value = context.resolve(expression.right)
+        if expression.operator in {">", ">="}:
+            start_value = value
+            include_start = expression.operator == ">="
+        else:
+            end_value = value
+            include_end = expression.operator == "<="
+    if not found or not hasattr(context.graph, "iter_edge_ids_by_type_property_range"):
+        return None
+    return ("range", property_name, start_value, end_value, include_start, include_end)
 
 
-def _path_start_rows(row, clause: PathPatternClause, context: QueryContext):
+def _is_seek_value(value) -> bool:
+    return value is None or isinstance(value, (Parameter, str, int, float, bool, list, dict))
+
+
+def _path_start_rows(row, clause: PathPatternClause, context: QueryContext, where=None):
     source = clause.source
     identity = next((value for name, value in source.properties if name == "id"), None)
     properties = tuple(item for item in source.properties if item[0] != "id") if identity is not None else source.properties
@@ -967,6 +829,7 @@ def _path_start_rows(row, clause: PathPatternClause, context: QueryContext):
         returns=(),
         labels=source.labels,
         properties=properties,
+        where=where,
     )
     for node_id in node_scan_ids(scan, context):
         node = context.get_node(node_id)
@@ -1046,138 +909,6 @@ def _node_matches_pattern(node, labels, properties, context: QueryContext) -> bo
 
 def _is_node(value) -> bool:
     return hasattr(value, "labels") and hasattr(value, "properties") and hasattr(value, "get_id")
-
-
-def _merge_bindings(bindings: dict[str, object], new_bindings: dict[str, object]) -> bool:
-    for variable, value in new_bindings.items():
-        if variable in bindings and not same_entity(bindings[variable], value):
-            return False
-        bindings[variable] = value
-    return True
-
-
-def relationship_scan_rows(parsed: RelationshipScanQuery, context: QueryContext):
-    """Yield binding rows from relationship type/property index scans."""
-    seen = set()
-    for edge_type in parsed.edge_types or (parsed.edge_type,):
-        for edge_id in _relationship_scan_edge_ids(parsed, context, edge_type):
-            if edge_id in seen:
-                continue
-            seen.add(edge_id)
-            yield from _hydrate_relationship_scan_edge(context, parsed, edge_id)
-
-
-def _relationship_scan_edge_ids(parsed: RelationshipScanQuery, context: QueryContext, edge_type: str):
-    exact_scan = _relationship_exact_scan(parsed, context, edge_type)
-    if exact_scan is not None:
-        return exact_scan
-    range_scan = _relationship_range_scan(parsed, context, edge_type)
-    if range_scan is not None:
-        return range_scan
-    return context.graph.iter_edge_ids_by_type(edge_type)
-
-
-def _relationship_exact_scan(parsed: RelationshipScanQuery, context: QueryContext, edge_type: str):
-    if parsed.rel_var is None or parsed.where is None:
-        return None
-    expressions = parsed.where.expressions if isinstance(parsed.where, AndExpression) else (parsed.where,)
-    for expression in expressions:
-        if not isinstance(expression, ComparisonExpression):
-            continue
-        if not isinstance(expression.left, PropertyRef):
-            continue
-        if not _is_seek_value(expression.right):
-            continue
-        if expression.left.variable != parsed.rel_var or expression.operator != "=":
-            continue
-        if expression.left.property_name not in getattr(context.graph, "indexed_edge_properties", set()):
-            continue
-        if hasattr(context.graph, "iter_edge_ids_by_type_property"):
-            return context.graph.iter_edge_ids_by_type_property(edge_type, expression.left.property_name, context.resolve(expression.right))
-    return None
-
-
-def _relationship_range_scan(parsed: RelationshipScanQuery, context: QueryContext, edge_type: str):
-    bounds = _range_bounds_for_relationship_scan(parsed, context)
-    if bounds is None:
-        return None
-    property_name, start_value, end_value, include_start, include_end = bounds
-    if hasattr(context.graph, "iter_edge_ids_by_type_property_range"):
-        return context.graph.iter_edge_ids_by_type_property_range(edge_type, property_name, start_value, end_value, include_start, include_end)
-    return None
-
-
-def _range_bounds_for_relationship_scan(parsed: RelationshipScanQuery, context: QueryContext):
-    if parsed.rel_var is None or parsed.where is None:
-        return None
-    expressions = parsed.where.expressions if isinstance(parsed.where, AndExpression) else (parsed.where,)
-    property_name = None
-    start_value = None
-    end_value = None
-    include_start = True
-    include_end = True
-    found = False
-    for expression in expressions:
-        if not isinstance(expression, ComparisonExpression):
-            continue
-        if not isinstance(expression.left, PropertyRef):
-            continue
-        if not _is_seek_value(expression.right):
-            continue
-        if expression.left.variable != parsed.rel_var:
-            continue
-        if expression.operator not in {"<", "<=", ">", ">="}:
-            continue
-        if expression.left.property_name not in getattr(context.graph, "indexed_edge_properties", set()):
-            continue
-        current_property = expression.left.property_name
-        if property_name is not None and property_name != current_property:
-            continue
-        property_name = current_property
-        found = True
-        value = context.resolve(expression.right)
-        if expression.operator in {">", ">="}:
-            start_value = value
-            include_start = expression.operator == ">="
-        else:
-            end_value = value
-            include_end = expression.operator == "<="
-    if not found:
-        return None
-    return property_name, start_value, end_value, include_start, include_end
-
-
-def _hydrate_relationship_scan_edge(context: QueryContext, parsed: RelationshipScanQuery, edge_id: bytes):
-    edge = context.get_edge(edge_id)
-    if edge is None:
-        return
-    source_id = context.node_key_to_bytes(edge.source)
-    target_id = context.node_key_to_bytes(edge.target)
-    source_node = context.get_node(source_id)
-    target_node = context.get_node(target_id)
-    if source_node is None or target_node is None:
-        return
-    orientations = [(source_node, target_node, target_id)]
-    if parsed.direction == "any" and source_id != target_id:
-        orientations.append((target_node, source_node, source_id))
-    for left_node, right_node, current_node_id in orientations:
-        bindings = {}
-        if not _merge_bindings(bindings, {parsed.source_var: left_node}):
-            continue
-        if not _merge_bindings(bindings, {parsed.target_var: right_node}):
-            continue
-        if parsed.rel_var is not None and not _merge_bindings(bindings, {parsed.rel_var: edge}):
-            continue
-        yield BindingRow(current_node_id=current_node_id, bindings=bindings)
-
-
-def filter_node_property(rows, variable: str, property_name: str, property_value):
-    """Yield rows whose bound node has an exact property value."""
-    for row in rows:
-        row = BindingRow.from_row(row)
-        node = row.bindings[variable]
-        if _cypher_equals(node.properties.get(property_name), property_value) is True:
-            yield row
 
 
 def filter_expression(rows, expression, context: QueryContext):
@@ -1344,94 +1075,6 @@ def _require_number(value, operator: str) -> None:
         raise TypeError(f"{operator} expects numeric operands")
 
 
-def expand_typed(context: QueryContext, rows, hop):
-    """Expand rows through one typed relationship hop."""
-    for row in rows:
-        row = BindingRow.from_row(row)
-        seen = set()
-        for edge_type in hop.edge_types or (hop.edge_type,):
-            for adjacency in context.graph.iter_typed_adjacency(
-                row.current_node_id,
-                edge_type,
-                direction=hop.direction,
-            ):
-                edge_id = adjacency["edge_id"]
-                occurrence = (edge_id, adjacency["neighbor_id"])
-                if occurrence in seen or edge_id in row.used_relationship_ids:
-                    continue
-                seen.add(occurrence)
-                target_node = context.get_node(adjacency["neighbor_id"])
-                if target_node is None:
-                    continue
-                bindings = dict(row.bindings)
-                if hop.target_var in bindings and not same_entity(bindings[hop.target_var], target_node):
-                    continue
-                bindings[hop.target_var] = target_node
-                if hop.rel_var is not None:
-                    edge = context.get_edge(adjacency["edge_id"])
-                    if edge is None:
-                        continue
-                    if hop.rel_var in bindings and not same_entity(bindings[hop.rel_var], edge):
-                        continue
-                    bindings[hop.rel_var] = edge
-                yield row.with_bindings(
-                    bindings,
-                    current_node_id=adjacency["neighbor_id"],
-                    preserve_current_node=False,
-                    used_relationship_ids=row.used_relationship_ids.union((edge_id,)),
-                )
-
-
-def limit_rows(rows, limit: int | None):
-    """Limit a streaming row source."""
-    if limit is None:
-        return rows
-    return islice(rows, limit)
-
-
-def project_rows(rows, returns: tuple[str, ...], projections: tuple[str, ...] = (), projection_expressions=(), limit: int | None = None, context: QueryContext | None = None):
-    """Project binding rows into result records."""
-    limited_rows = limit_rows(rows, limit)
-    projection_items = projections or returns
-    for row in limited_rows:
-        row = BindingRow.from_row(row)
-        if projection_expressions and context is not None:
-            yield {
-                column: evaluate_expression(expression, row.bindings, context)
-                for column, expression in zip(returns, projection_expressions)
-            }
-        else:
-            yield {
-                column: project_value(row.bindings, projection)
-                for column, projection in zip(returns, projection_items)
-            }
-
-
-def materialize_results(rows, parsed, context: QueryContext) -> list[dict[str, object]]:
-    """Apply result shaping and return projected records."""
-    skip = _resolve_pagination(parsed.skip, context, "SKIP")
-    limit = _resolve_pagination(parsed.limit, context, "LIMIT")
-    projection_expressions = getattr(parsed, "projection_expressions", ())
-    projected_rows: Iterable[ProjectedRow] = ProjectOperator(
-        returns=parsed.returns,
-        projections=parsed.projections,
-        projection_expressions=projection_expressions,
-    ).execute(rows, context)
-    if parsed.order_by:
-        projected_rows = SortOperator(parsed.order_by, parsed).execute(
-            projected_rows, context
-        )
-    if parsed.distinct:
-        projected_rows = DistinctOperator(parsed.returns).execute(
-            projected_rows, context
-        )
-    if skip is not None:
-        projected_rows = SkipOperator(skip).execute(projected_rows, context)
-    if limit is not None:
-        projected_rows = LimitOperator(limit).execute(projected_rows, context)
-    return [dict(row.values) for row in projected_rows]
-
-
 def _order_value(bindings, order_item, parsed, context):
     expression = getattr(order_item, "expression_ast", None)
     alias = None
@@ -1459,10 +1102,6 @@ def _resolve_pagination(value, context: QueryContext, clause: str) -> int | None
     if isinstance(resolved, bool) or not isinstance(resolved, int) or resolved < 0:
         raise ValueError(f"{clause} must be a non-negative integer")
     return resolved
-
-
-def _is_seek_value(value) -> bool:
-    return value is None or isinstance(value, (Parameter, str, int, float, bool, list, dict))
 
 
 def _sortable_value(value):

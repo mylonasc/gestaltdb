@@ -6,13 +6,10 @@ import pytest
 
 from gestaltdb.cypher import execute, parse, plan
 from gestaltdb.cypher_plan import (
-    AnchoredMatchSource,
     Distinct,
     FilterExpression,
-    MultiMatchSource,
-    NodeScanSource,
+    MatchStep,
     ProcedureSource,
-    RelationshipScanSource,
     Sort,
 )
 from gestaltdb.cypher_runtime import (
@@ -26,26 +23,21 @@ from gestaltdb.cypher_runtime import (
     SortOperator,
     cypher_value_key,
     execute_plan,
-    expand_typed,
 )
 from gestaltdb.graphdb import Edge, Node
 from tests.test_cypher import FakeCypherGraph
 
 
-def test_binding_row_preserves_legacy_mapping_access():
+def test_binding_row_exposes_typed_attributes():
     row = BindingRow(
         bindings={"n": "node"},
         current_node_id=b"n",
         used_relationship_ids=frozenset({b"e"}),
     )
 
-    assert row["bindings"] == {"n": "node"}
-    assert row.get("current_node_id") == b"n"
-    assert dict(row) == {
-        "bindings": {"n": "node"},
-        "current_node_id": b"n",
-        "used_relationship_ids": frozenset({b"e"}),
-    }
+    assert row.bindings == {"n": "node"}
+    assert row.current_node_id == b"n"
+    assert row.used_relationship_ids == frozenset({b"e"})
 
 
 def test_binding_row_adapts_legacy_dictionary_without_mutating_it():
@@ -76,29 +68,23 @@ def test_binding_row_traversal_updates_return_new_rows():
         updated.current_node_id = b"changed"  # type: ignore[misc]
 
 
-def test_expand_typed_accepts_legacy_rows_and_emits_typed_rows():
+def test_match_step_binds_relationships_through_staged_plan():
     graph = FakeCypherGraph()
     graph.put_node(Node(node_id="n1"))
     graph.put_node(Node(node_id="n2"))
     graph.put_edge(
         Edge(edge_id="e1", source="n1", target="n2", properties={"type": "T"})
     )
-    parsed = parse('MATCH (a {id: "n1"})-[r:T]->(b) RETURN r.id, b.id')
-    rows = [{"current_node_id": b"n1", "bindings": {"a": graph.get_node(b"n1")}}]
 
-    expanded = list(expand_typed(QueryContext(graph), rows, parsed.hops[0]))
+    result = execute(graph, 'MATCH (a {id: "n1"})-[r:T]->(b) RETURN r.id, b.id')
 
-    assert len(expanded) == 1
-    assert isinstance(expanded[0], BindingRow)
-    assert expanded[0]["bindings"]["r"].get_id == "e1"
-    assert expanded[0]["bindings"]["b"].get_id == "n2"
-    assert expanded[0].used_relationship_ids == frozenset({b"e1"})
+    assert result.records == [{"r.id": "e1", "b.id": "n2"}]
 
 
-def test_projected_row_is_a_result_mapping_with_optional_source_bindings():
+def test_projected_row_exposes_values_with_optional_source_bindings():
     row = ProjectedRow(values={"name": "Alice"}, source_bindings={"n": "node"})
 
-    assert dict(row) == {"name": "Alice"}
+    assert row.values == {"name": "Alice"}
     assert row.source_bindings == {"n": "node"}
 
 
@@ -181,26 +167,25 @@ def test_sort_operator_uses_hidden_source_expression_and_is_stable():
 
 
 @pytest.mark.parametrize(
-    ("query", "source_type"),
+    "query",
     [
-        ("MATCH (n:Person) RETURN n", NodeScanSource),
-        (
-            'MATCH (n {id: "n"})-[:T]->(m) RETURN m',
-            AnchoredMatchSource,
-        ),
-        ("MATCH (n)-[:T]->(m) RETURN m", RelationshipScanSource),
-        (
-            "MATCH (n:Person), (m:Person) RETURN n, m",
-            MultiMatchSource,
-        ),
-        (
-            'CALL pg.sample_typed_paths(["n"], []) YIELD path RETURN path',
-            ProcedureSource,
-        ),
+        "MATCH (n:Person) RETURN n",
+        'MATCH (n {id: "n"})-[:T]->(m) RETURN m',
+        "MATCH (n)-[:T]->(m) RETURN m",
+        "MATCH (n:Person), (m:Person) RETURN n, m",
     ],
 )
-def test_plans_define_typed_binding_sources(query, source_type):
-    assert isinstance(plan(query).source, source_type)
+def test_clause_queries_plan_to_staged_match_steps(query):
+    logical_plan = plan(query)
+
+    assert logical_plan.staged is True
+    assert any(isinstance(operator, MatchStep) for operator in logical_plan.operators)
+
+
+def test_procedure_call_plans_to_a_source_backed_plan():
+    logical_plan = plan('CALL pg.sample_typed_paths(["n"], []) YIELD path RETURN path')
+
+    assert isinstance(logical_plan.source, ProcedureSource)
 
 
 def test_execute_obeys_the_generated_logical_plan(monkeypatch):
@@ -218,7 +203,7 @@ def test_execute_obeys_the_generated_logical_plan(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "gestaltdb.cypher.plan_query", lambda parsed: plan_without_filter
+        "gestaltdb.cypher.plan_staged_query", lambda canonical: plan_without_filter
     )
 
     result = execute(graph, query)
@@ -226,7 +211,7 @@ def test_execute_obeys_the_generated_logical_plan(monkeypatch):
     assert result.records == [{"n.id": "alice"}, {"n.id": "bob"}]
 
 
-def test_logical_result_operator_order_matches_compatible_execution_order():
+def test_staged_result_operator_order_applies_distinct_before_sort():
     logical_plan = plan("MATCH (n) RETURN DISTINCT n.kind ORDER BY n.kind")
     result_operators = [
         operator
@@ -234,7 +219,7 @@ def test_logical_result_operator_order_matches_compatible_execution_order():
         if isinstance(operator, (Sort, Distinct))
     ]
 
-    assert [type(operator) for operator in result_operators] == [Sort, Distinct]
+    assert [type(operator) for operator in result_operators] == [Distinct, Sort]
 
 
 def test_execute_plan_rejects_unknown_logical_operator():
@@ -243,7 +228,7 @@ def test_execute_plan_rejects_unknown_logical_operator():
         logical_plan, operators=(object(), *logical_plan.operators)
     )
 
-    with pytest.raises(TypeError, match="Unsupported logical operator: object"):
+    with pytest.raises(TypeError, match="Unsupported staged operator: object"):
         execute_plan(invalid_plan, QueryContext(FakeCypherGraph()))
 
 
