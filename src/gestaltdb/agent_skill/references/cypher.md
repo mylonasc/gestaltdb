@@ -4,15 +4,19 @@ Use `graph.query(cypher, parameters=None)` for read-only Cypher. It returns `Que
 
 ## Supported
 
-- Node labels and inline properties: `MATCH (p:Person {name: $name})`.
-- Typed traversal: `MATCH (a)-[:KNOWS]->(b)`.
-- `WHERE` comparisons, `AND`, `IN`, `IS NULL`, `IS NOT NULL`.
-- `RETURN`, aliases, `RETURN *`, `DISTINCT`, `ORDER BY`, `SKIP`, `LIMIT`.
+- Node labels and multi-entry inline property maps: `MATCH (p:Person {name: $name, active: true})`.
+- Typed and untyped fixed traversal: `MATCH (a)-[:KNOWS]->(b)` and `MATCH (a)-->(b)`.
+- Anonymous pattern elements, endpoint labels/properties, unanchored multi-hop paths, and comma-separated pattern parts.
+- `WHERE` arithmetic and comparisons, `NOT`/`AND`/`XOR`/`OR`, `IN`, null predicates, string predicates, and `=~`.
+- Cypher three-valued null logic; use `IS NULL` rather than `= null`.
+- `RETURN`, aliases, `RETURN *`, `DISTINCT`, alias-aware `ORDER BY`, and literal or parameterized `SKIP`/`LIMIT`.
 - Chained `MATCH` clauses.
+- In chained queries, place all `MATCH` clauses before the shared `WHERE` clause.
+- `{id: $id}` on the first node of a relationship path addresses the stable entity ID as a GestaltDB extension; elsewhere `id` is an ordinary property filter.
 
 ## Unsupported
 
-Do not use `CREATE`, `MERGE`, `SET`, `DELETE`, aggregation such as `COUNT`, `WITH`, `OPTIONAL MATCH`, variable-length paths, path binding, or multiple pattern parts in one `MATCH`.
+Do not use `CREATE`, `MERGE`, `SET`, `DELETE`, aggregation such as `COUNT`, `WITH`, `OPTIONAL MATCH`, variable-length paths, relationship property maps, or path binding.
 
 ## Example
 

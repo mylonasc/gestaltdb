@@ -10,9 +10,9 @@ GestaltDB includes an embedded, read-only Cypher query processor:
 - `graph.query(cypher_str, parameters=None)` returns a `QueryResult(columns, records)`.
 - Iterating over `result` yields dictionaries mapping column names to values.
 - Internal pipeline:
-  - `cypher_parser.py`: Generates an abstract syntax tree (`CypherQuery`, `MatchClause`, `WhereClause`, `ReturnClause`).
-  - `cypher_plan.py`: Builds a cost-aware physical execution plan utilizing label and property indexes.
-  - `cypher_runtime.py`: Executes plan steps against the underlying `GraphDB` store.
+  - `cypher_parser.py`: Uses a Lark grammar and lowers parsed queries into runtime-compatible AST objects.
+  - `cypher_plan.py`: Builds a rule-based logical plan for inspection and validation.
+  - `cypher_runtime.py`: Executes AST-specific streaming scans and expansions against `GraphDB`.
 
 ---
 
@@ -20,11 +20,14 @@ GestaltDB includes an embedded, read-only Cypher query processor:
 
 ### Node Matching
 - Labels: `MATCH (a:Person)` or multiple labels `MATCH (a:Person:Employee)`
-- Inline property filters: `MATCH (a:Person {status: "active"})`
+- Multi-entry inline property filters: `MATCH (a:Person {status: "active", level: 2})`
 - Parameterized inline filters: `MATCH (a:Person {country: $country})`
 
 ### Relationship Patterns
-- Directed traversal: `MATCH (a:Person)-[:works_at]->(b:Company)` (scans all matching relationships)
+- Directed typed or untyped traversal: `MATCH (a)-[:works_at]->(b)` or `MATCH (a)-->(b)`.
+- Anonymous elements: `MATCH ()-[r:works_at]->() RETURN r`.
+- Labels and properties may appear on every node in a fixed path.
+- Unanchored multi-hop paths and comma-separated pattern parts are supported.
 - Chained traversal (endpoints bound by variable):
   ```cypher
   MATCH (a:Person {name: "Alice"})
@@ -32,14 +35,16 @@ GestaltDB includes an embedded, read-only Cypher query processor:
   MATCH (a)-[:works_at]->(b)
   RETURN a.name, b.name
   ```
-- Undirected traversal: `MATCH (a:Person)-[:knows]-(b:Person)`
+- Undirected traversal: `MATCH (a)-[:knows]-(b)`.
 - Anchored pattern: `MATCH (a {id: "drug-1"})-[:targets]->(b) RETURN b.id`
-- **Important syntax rule:** In chained traversal matches, write `MATCH (a)-[:TYPE]->(b)` with bare variable identifiers. Do not put inline labels on the target inside the traversal step (e.g. avoid `(a)-[:T]->(b:Label)`; use `MATCH (b:Label) MATCH (a)-[:T]->(b)` instead).
 - **Important WHERE placement:** In multi-match queries, all `MATCH` clauses must precede the `WHERE` clause: `MATCH (...) MATCH (...) WHERE ... RETURN ...`.
+- Untyped relationship patterns scan canonical edge records and are slower than typed adjacency expansion.
 
 ### WHERE Clauses
-- Comparisons: `=`, `<>`, `<`, `<=`, `>`, `>=`
-- Logical `AND`
+- Comparisons: `=`, `<>`, `!=`, `<`, `<=`, `>`, `>=`, and `=~`
+- Arithmetic and property-to-property comparisons
+- Logical `NOT`, `AND`, `XOR`, and `OR`, with parentheses and standard precedence
+- String predicates: `STARTS WITH`, `ENDS WITH`, and `CONTAINS`
 - Membership: `WHERE a.department IN ["Engineering", "Product"]`
 - Nullity: `WHERE a.manager IS NOT NULL` and `WHERE b.closed_at IS NULL`
 - Query parameters: `$param_name`
@@ -47,13 +52,13 @@ GestaltDB includes an embedded, read-only Cypher query processor:
 ### RETURN and Modifiers
 - Property projection: `RETURN a.name AS full_name, b.id AS target_id`
 - Star projection: `RETURN *`
-- Modifiers: `DISTINCT`, `ORDER BY <variable>.<prop> [ASC|DESC]`, `SKIP <n>`, `LIMIT <n>`
-- Note on `ORDER BY`: Cypher expressions sort on binding variables (e.g. `ORDER BY a.name ASC`), not output projection aliases.
+- Modifiers: `DISTINCT`, `ORDER BY <variable>.<prop-or-alias> [ASC|DESC]`, `SKIP <n-or-parameter>`, `LIMIT <n-or-parameter>`
+- Predicates use Cypher three-valued null logic. Use `IS NULL`, not `= null`.
 
 ### Custom GestaltDB Procedures
 - Path sampling procedure:
   ```cypher
-  CALL pg.sample_typed_paths($seeds, $pattern) YIELD path RETURN path
+  CALL pg.sample_typed_paths(["p1"], [{"edge_type": "knows", "sample_size": 2}]) YIELD path RETURN path
   ```
 
 ---
@@ -66,8 +71,8 @@ Do **not** document or expect the following syntax to work:
 - ❌ Grouping or pipelining (`WITH`, `GROUP BY`)
 - ❌ Optional matches (`OPTIONAL MATCH`)
 - ❌ Variable-length path expansion (`[:KNOWS*1..3]`)
-- ❌ Multiple pattern parts inside a single `MATCH` (e.g. `MATCH (a)-[:T1]->(b), (c)-[:T2]->(d)`)
 - ❌ Path binding variables (e.g. `p = (a)-[:T]->(b)`)
+- ❌ Relationship property maps
 
 ---
 

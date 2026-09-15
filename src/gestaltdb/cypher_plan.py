@@ -4,7 +4,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .cypher_ast import AnchoredPatternClause, AndExpression, ComparisonExpression, MatchQuery, MultiMatchQuery, NodePatternClause, NodeScanQuery, RelationshipPatternClause, RelationshipScanQuery, SampleTypedPathsCall, TraversalHop
+from .cypher_ast import (
+    AnchoredPatternClause,
+    AndExpression,
+    ComparisonExpression,
+    MatchQuery,
+    MultiMatchQuery,
+    NodePatternClause,
+    NodeScanQuery,
+    PathPatternClause,
+    PatternHop,
+    PropertyRef,
+    RelationshipPatternClause,
+    RelationshipScanQuery,
+    SampleTypedPathsCall,
+    TraversalHop,
+)
 
 
 @dataclass(frozen=True)
@@ -83,6 +98,14 @@ class FilterNodeProperty:
 
 
 @dataclass(frozen=True)
+class FilterNodeLabels:
+    """Filter a bound node by required labels."""
+
+    variable: str | None
+    labels: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class FilterExpression:
     """Filter rows by a boolean expression."""
 
@@ -93,7 +116,7 @@ class FilterExpression:
 class Expand:
     """Expand rows through one typed relationship hop."""
 
-    hop: TraversalHop
+    hop: TraversalHop | PatternHop
 
 
 @dataclass(frozen=True)
@@ -104,10 +127,29 @@ class Project:
 
 
 @dataclass(frozen=True)
+class Distinct:
+    """Remove duplicate projected records."""
+
+
+@dataclass(frozen=True)
+class Sort:
+    """Sort rows by the query's ORDER BY items."""
+
+    items: tuple[object, ...]
+
+
+@dataclass(frozen=True)
+class Skip:
+    """Skip result rows."""
+
+    count: object
+
+
+@dataclass(frozen=True)
 class Limit:
     """Limit result rows."""
 
-    limit: int
+    limit: object
 
 
 @dataclass(frozen=True)
@@ -129,8 +171,7 @@ def plan_query(parsed) -> LogicalPlan:
         return _plan_multi_match(parsed)
     if isinstance(parsed, SampleTypedPathsCall):
         operators = [ProcedureCall("pg.sample_typed_paths"), Project(parsed.returns)]
-        if parsed.limit is not None:
-            operators.append(Limit(parsed.limit))
+        _append_result_operators(operators, parsed)
         return LogicalPlan(tuple(operators))
     raise TypeError(f"unsupported parsed query type: {type(parsed).__name__}")
 
@@ -146,8 +187,7 @@ def _plan_node_scan(parsed: NodeScanQuery) -> LogicalPlan:
     if parsed.where is not None:
         operators.append(FilterExpression(parsed.where))
     operators.append(Project(parsed.returns))
-    if parsed.limit is not None:
-        operators.append(Limit(parsed.limit))
+    _append_result_operators(operators, parsed)
     return LogicalPlan(tuple(operators))
 
 
@@ -157,8 +197,7 @@ def _plan_match(parsed: MatchQuery) -> LogicalPlan:
     if parsed.where is not None:
         operators.append(FilterExpression(parsed.where))
     operators.append(Project(parsed.returns))
-    if parsed.limit is not None:
-        operators.append(Limit(parsed.limit))
+    _append_result_operators(operators, parsed)
     return LogicalPlan(tuple(operators))
 
 
@@ -168,10 +207,7 @@ def _plan_relationship_scan(parsed: RelationshipScanQuery) -> LogicalPlan:
     if parsed.where is not None:
         operators.append(FilterExpression(parsed.where))
     operators.append(Project(parsed.returns))
-    if parsed.skip is not None:
-        operators.append(Limit(parsed.skip))
-    if parsed.limit is not None:
-        operators.append(Limit(parsed.limit))
+    _append_result_operators(operators, parsed)
     return LogicalPlan(tuple(operators))
 
 
@@ -191,11 +227,33 @@ def _plan_multi_match(parsed: MultiMatchQuery) -> LogicalPlan:
         elif isinstance(clause, AnchoredPatternClause):
             operators.append(NodeByIdSeek(clause.source_id, clause.source_var))
             operators.extend(Expand(hop) for hop in clause.hops)
+        elif isinstance(clause, PathPatternClause):
+            variable = clause.source.variable or ""
+            source_properties = dict(clause.source.properties)
+            if "id" in source_properties:
+                operators.append(NodeByIdSeek(source_properties.pop("id"), variable))
+            elif clause.source.labels:
+                operators.append(NodeLabelScan(clause.source.labels[0], variable, clause.source.labels))
+            else:
+                operators.append(NodeAllScan(variable))
+            if clause.source.labels:
+                operators.append(FilterNodeLabels(clause.source.variable, clause.source.labels))
+            operators.extend(
+                FilterNodeProperty(variable, property_name, property_value)
+                for property_name, property_value in source_properties.items()
+            )
+            for hop in clause.hops:
+                operators.append(Expand(hop))
+                if hop.target.labels:
+                    operators.append(FilterNodeLabels(hop.target.variable, hop.target.labels))
+                operators.extend(
+                    FilterNodeProperty(hop.target.variable or "", property_name, property_value)
+                    for property_name, property_value in hop.target.properties
+                )
     if parsed.where is not None:
         operators.append(FilterExpression(parsed.where))
     operators.append(Project(parsed.returns))
-    if parsed.limit is not None:
-        operators.append(Limit(parsed.limit))
+    _append_result_operators(operators, parsed)
     return LogicalPlan(tuple(operators))
 
 
@@ -207,6 +265,10 @@ def _relationship_property_seek_operators(parsed: RelationshipScanQuery) -> list
     for expression in expressions:
         if not isinstance(expression, ComparisonExpression):
             continue
+        if not isinstance(expression.left, PropertyRef):
+            continue
+        if not _is_seek_value(expression.right):
+            continue
         if expression.left.variable != parsed.rel_var:
             continue
         if expression.operator == "=":
@@ -214,3 +276,20 @@ def _relationship_property_seek_operators(parsed: RelationshipScanQuery) -> list
         elif expression.operator in {"<", "<=", ">", ">="}:
             operators.append(RelationshipPropertyRangeSeek(parsed.rel_var, expression.left.property_name, expression.operator, expression.right))
     return operators
+
+
+def _append_result_operators(operators: list[object], parsed) -> None:
+    if getattr(parsed, "distinct", False):
+        operators.append(Distinct())
+    if getattr(parsed, "order_by", ()):
+        operators.append(Sort(parsed.order_by))
+    if getattr(parsed, "skip", None) is not None:
+        operators.append(Skip(parsed.skip))
+    if parsed.limit is not None:
+        operators.append(Limit(parsed.limit))
+
+
+def _is_seek_value(value) -> bool:
+    from .cypher_ast import Parameter
+
+    return value is None or isinstance(value, (Parameter, str, int, float, bool, list, dict))

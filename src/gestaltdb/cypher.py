@@ -1,4 +1,4 @@
-"""Minimal read-only Cypher support for GestaltDB.
+"""Read-only openCypher-oriented query support for GestaltDB.
 
 The supported subset maps directly to existing typed adjacency and sampling APIs:
 
@@ -10,10 +10,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .cypher_ast import MatchQuery, MultiMatchQuery, NodeScanQuery, RelationshipScanQuery, SampleTypedPathsCall
+from .cypher_ast import (
+    MatchQuery,
+    MultiMatchQuery,
+    NodeScanQuery,
+    RelationshipScanQuery,
+    SampleTypedPathsCall,
+)
+from .cypher_parser import parse as _parse_query
+from .cypher_parser import split_top_level_args as _split_top_level_args  # noqa: F401
 from .cypher_plan import LogicalPlan, plan_query
-from .cypher_parser import parse as _parse_query, split_top_level_args as _split_top_level_args
-from .cypher_runtime import QueryContext, execute_match, execute_multi_match, execute_node_scan, execute_relationship_scan
+from .cypher_runtime import (
+    QueryContext,
+    execute_match,
+    execute_multi_match,
+    execute_node_scan,
+    execute_relationship_scan,
+)
 
 
 @dataclass(frozen=True)
@@ -86,7 +99,10 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
     if isinstance(parsed, SampleTypedPathsCall):
         paths = graph.sample_typed_paths(parsed.seed_ids, parsed.pattern)
         if parsed.limit is not None:
-            paths = paths[:parsed.limit]
+            limit = QueryContext(graph=graph, parameters=parameters).resolve(parsed.limit)
+            if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
+                raise ValueError("LIMIT must be a non-negative integer")
+            paths = paths[:limit]
         return QueryResult(
             columns=parsed.returns,
             records=[{"path": path} for path in paths],

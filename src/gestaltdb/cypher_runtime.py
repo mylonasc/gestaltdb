@@ -2,10 +2,36 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from itertools import islice
 
-from .cypher_ast import AnchoredPatternClause, AndExpression, ComparisonExpression, InExpression, MatchQuery, MultiMatchQuery, NodePatternClause, NodeScanQuery, NullPredicate, Parameter, RelationshipPatternClause, RelationshipScanQuery
+from .cypher_ast import (
+    AnchoredPatternClause,
+    AndExpression,
+    ArithmeticExpression,
+    ComparisonExpression,
+    InExpression,
+    ListExpression,
+    MapExpression,
+    MatchQuery,
+    MultiMatchQuery,
+    NodePatternClause,
+    NodeScanQuery,
+    NotExpression,
+    NullPredicate,
+    OrExpression,
+    Parameter,
+    PathPatternClause,
+    PatternHop,
+    PropertyRef,
+    RelationshipPatternClause,
+    RelationshipScanQuery,
+    StringPredicate,
+    UnaryExpression,
+    Variable,
+    XorExpression,
+)
 
 
 @dataclass
@@ -35,6 +61,12 @@ class QueryContext:
             if value.name not in self.parameters:
                 raise ValueError(f"Missing Cypher parameter: ${value.name}")
             return self.parameters[value.name]
+        if isinstance(value, list):
+            return [self.resolve(item) for item in value]
+        if isinstance(value, tuple):
+            return tuple(self.resolve(item) for item in value)
+        if isinstance(value, dict):
+            return {key: self.resolve(item) for key, item in value.items()}
         return value
 
 
@@ -43,24 +75,22 @@ def execute_match(parsed: MatchQuery, context: QueryContext) -> list[dict[str, o
     rows = anchored_node_seek(context, parsed.source_id, parsed.source_var)
     for hop in parsed.hops:
         rows = expand_typed(context, rows, hop)
-        can_push_limit = parsed.where is None and not parsed.order_by and parsed.skip is None and not parsed.distinct
-        if parsed.limit is not None and can_push_limit:
-            rows = limit_rows(rows, parsed.limit)
     if parsed.where is not None:
         rows = filter_expression(rows, parsed.where, context)
-    return materialize_results(rows, parsed)
+    return materialize_results(rows, parsed, context)
 
 
 def execute_node_scan(parsed: NodeScanQuery, context: QueryContext) -> list[dict[str, object]]:
     """Execute a label scan plan and return projected records."""
     node_ids = node_scan_ids(parsed, context)
     rows = hydrate_node_ids(context, node_ids, parsed.variable)
-    if parsed.property_name is not None:
-        property_value = context.resolve(parsed.property_value)
-        rows = filter_node_property(rows, parsed.variable, parsed.property_name, property_value)
+    for property_name, property_value in parsed.properties or (
+        ((parsed.property_name, parsed.property_value),) if parsed.property_name is not None else ()
+    ):
+        rows = filter_node_property(rows, parsed.variable, property_name, context.resolve(property_value))
     if parsed.where is not None:
         rows = filter_expression(rows, parsed.where, context)
-    return materialize_results(rows, parsed)
+    return materialize_results(rows, parsed, context)
 
 
 def execute_relationship_scan(parsed: RelationshipScanQuery, context: QueryContext) -> list[dict[str, object]]:
@@ -68,24 +98,39 @@ def execute_relationship_scan(parsed: RelationshipScanQuery, context: QueryConte
     rows = relationship_scan_rows(parsed, context)
     if parsed.where is not None:
         rows = filter_expression(rows, parsed.where, context)
-    return materialize_results(rows, parsed)
+    return materialize_results(rows, parsed, context)
 
 
 def execute_multi_match(parsed: MultiMatchQuery, context: QueryContext) -> list[dict[str, object]]:
     """Execute multiple MATCH clauses as a streaming row pipeline."""
     rows = iter([{"current_node_id": None, "bindings": {}}])
-    for clause in parsed.clauses:
+    group_ids = parsed.match_group_ids or tuple(range(len(parsed.clauses)))
+    previous_group = None
+    for clause, group_id in zip(parsed.clauses, group_ids):
+        if group_id != previous_group:
+            rows = _reset_used_relationships(rows)
         if isinstance(clause, NodePatternClause):
             rows = apply_node_pattern_clause(rows, clause, context)
         elif isinstance(clause, RelationshipPatternClause):
             rows = apply_relationship_pattern_clause(rows, clause, context)
         elif isinstance(clause, AnchoredPatternClause):
             rows = apply_anchored_pattern_clause(rows, clause, context)
+        elif isinstance(clause, PathPatternClause):
+            rows = apply_path_pattern_clause(rows, clause, context)
         else:
-            raise ValueError(f"Unsupported MATCH clause type: {type(clause).__name__}")
+            raise TypeError(f"Unsupported MATCH clause type: {type(clause).__name__}")
+        previous_group = group_id
+    rows = _reset_used_relationships(rows)
     if parsed.where is not None:
         rows = filter_expression(rows, parsed.where, context)
-    return materialize_results(rows, parsed)
+    return materialize_results(rows, parsed, context)
+
+
+def _reset_used_relationships(rows):
+    for row in rows:
+        reset = dict(row)
+        reset["used_relationship_ids"] = frozenset()
+        yield reset
 
 
 def anchored_node_seek(context: QueryContext, source_id: str, source_var: str):
@@ -151,6 +196,10 @@ def _range_bounds_for_node_scan(parsed: NodeScanQuery, context: QueryContext):
     for expression in expressions:
         if not isinstance(expression, ComparisonExpression):
             continue
+        if not isinstance(expression.left, PropertyRef):
+            continue
+        if not _is_seek_value(expression.right):
+            continue
         if expression.left.variable != parsed.variable:
             continue
         if expression.operator not in {"<", "<=", ">", ">="}:
@@ -209,6 +258,7 @@ def apply_node_pattern_clause(rows, clause: NodePatternClause, context: QueryCon
         property_value=clause.property_value,
         returns=(clause.variable,),
         labels=clause.labels,
+        properties=clause.properties,
     )
     for row in rows:
         bound_node = row["bindings"].get(clause.variable)
@@ -231,8 +281,12 @@ def _node_matches_clause(node, clause: NodePatternClause, context: QueryContext)
     labels = clause.labels or ((clause.label,) if clause.label is not None else ())
     if labels and not set(labels).issubset(set(getattr(node, "labels", ()))):
         return False
-    if clause.property_name is not None:
-        return node.properties.get(clause.property_name) == context.resolve(clause.property_value)
+    properties = clause.properties or (
+        ((clause.property_name, clause.property_value),) if clause.property_name is not None else ()
+    )
+    for property_name, property_value in properties:
+        if _cypher_equals(node.properties.get(property_name), context.resolve(property_value)) is not True:
+            return False
     return True
 
 
@@ -264,20 +318,21 @@ def apply_relationship_pattern_clause(rows, clause: RelationshipPatternClause, c
 
 def _expand_relationship_from_source(row, source_node, clause: RelationshipPatternClause, context: QueryContext):
     source_id = context.node_key_to_bytes(source_node.get_id)
+    direction = "any" if clause.direction == "any" else "out"
     for edge_type in clause.edge_types or (clause.edge_type,):
-        for adjacency in context.graph.iter_typed_adjacency(source_id, edge_type, direction=clause.direction):
-            yield from _merge_relationship_adjacency(row, clause, context, adjacency)
+        for adjacency in context.graph.iter_typed_adjacency(source_id, edge_type, direction=direction):
+            yield from _merge_relationship_adjacency(row, clause, context, adjacency, "source")
 
 
 def _expand_relationship_from_target(row, target_node, clause: RelationshipPatternClause, context: QueryContext):
     target_id = context.node_key_to_bytes(target_node.get_id)
-    direction = {"out": "in", "in": "out"}.get(clause.direction, "any")
+    direction = "any" if clause.direction == "any" else "in"
     for edge_type in clause.edge_types or (clause.edge_type,):
         for adjacency in context.graph.iter_typed_adjacency(target_id, edge_type, direction=direction):
-            yield from _merge_relationship_adjacency(row, clause, context, adjacency)
+            yield from _merge_relationship_adjacency(row, clause, context, adjacency, "target")
 
 
-def _merge_relationship_adjacency(row, clause: RelationshipPatternClause, context: QueryContext, adjacency):
+def _merge_relationship_adjacency(row, clause: RelationshipPatternClause, context: QueryContext, adjacency, bound_endpoint):
     edge = context.get_edge(adjacency["edge_id"])
     if edge is None:
         return
@@ -287,7 +342,18 @@ def _merge_relationship_adjacency(row, clause: RelationshipPatternClause, contex
     target_node = context.get_node(target_id)
     if source_node is None or target_node is None:
         return
-    new_bindings = {clause.source_var: source_node, clause.target_var: target_node}
+    if clause.direction == "any":
+        bound_variable = clause.source_var if bound_endpoint == "source" else clause.target_var
+        bound_node = row["bindings"][bound_variable]
+        neighbor_node = context.get_node(adjacency["neighbor_id"])
+        if neighbor_node is None:
+            return
+        if bound_endpoint == "source":
+            new_bindings = {clause.source_var: bound_node, clause.target_var: neighbor_node}
+        else:
+            new_bindings = {clause.source_var: neighbor_node, clause.target_var: bound_node}
+    else:
+        new_bindings = {clause.source_var: source_node, clause.target_var: target_node}
     if clause.rel_var is not None:
         new_bindings[clause.rel_var] = edge
     bindings = dict(row["bindings"])
@@ -308,10 +374,141 @@ def apply_anchored_pattern_clause(rows, clause: AnchoredPatternClause, context: 
         if clause.source_var in bindings and not same_entity(bindings[clause.source_var], source_node):
             continue
         bindings[clause.source_var] = source_node
-        expanded = iter([{"current_node_id": source_id_bytes, "bindings": bindings}])
+        expanded = iter([{"current_node_id": source_id_bytes, "bindings": bindings, "used_relationship_ids": frozenset()}])
         for hop in clause.hops:
             expanded = expand_typed(context, expanded, hop)
+        for expanded_row in expanded:
+            expanded_row.pop("used_relationship_ids", None)
+            yield expanded_row
+
+
+def apply_path_pattern_clause(rows, clause: PathPatternClause, context: QueryContext):
+    """Apply a generalized fixed-length path pattern to incoming rows."""
+    for row in rows:
+        starts = _path_start_rows(row, clause, context)
+        expanded = starts
+        for hop in clause.hops:
+            expanded = _expand_pattern_hop(context, expanded, hop)
         yield from expanded
+
+
+def _path_start_rows(row, clause: PathPatternClause, context: QueryContext):
+    source = clause.source
+    identity = next((value for name, value in source.properties if name == "id"), None)
+    properties = tuple(item for item in source.properties if item[0] != "id") if identity is not None else source.properties
+    bound_node = row["bindings"].get(source.variable) if source.variable is not None else None
+    if bound_node is not None:
+        identity_matches = identity is None or _cypher_equals(bound_node.get_id, context.resolve(identity)) is True
+        if _is_node(bound_node) and identity_matches and _node_matches_pattern(bound_node, source.labels, properties, context):
+            started = dict(row)
+            started["current_node_id"] = context.node_key_to_bytes(bound_node.get_id)
+            yield started
+        return
+
+    if identity is not None:
+        node_id = context.node_key_to_bytes(context.resolve(identity))
+        node = context.get_node(node_id)
+        if node is not None and _node_matches_pattern(node, source.labels, properties, context):
+            bindings = dict(row["bindings"])
+            if source.variable is not None:
+                bindings[source.variable] = node
+            yield {
+                "current_node_id": node_id,
+                "bindings": bindings,
+                "used_relationship_ids": row.get("used_relationship_ids", frozenset()),
+            }
+        return
+
+    first_name, first_value = properties[0] if properties else (None, None)
+    scan = NodeScanQuery(
+        variable=source.variable or "",
+        label=source.labels[0] if source.labels else None,
+        property_name=first_name,
+        property_value=first_value,
+        returns=(),
+        labels=source.labels,
+        properties=properties,
+    )
+    for node_id in node_scan_ids(scan, context):
+        node = context.get_node(node_id)
+        if node is None or not _node_matches_pattern(node, source.labels, properties, context):
+            continue
+        bindings = dict(row["bindings"])
+        if source.variable is not None:
+            bindings[source.variable] = node
+        yield {
+            "current_node_id": node_id,
+            "bindings": bindings,
+            "used_relationship_ids": row.get("used_relationship_ids", frozenset()),
+        }
+
+
+def _expand_pattern_hop(context: QueryContext, rows, hop: PatternHop):
+    for row in rows:
+        seen = set()
+        for adjacency in _iter_pattern_adjacency(context, row["current_node_id"], hop):
+            edge_id = adjacency["edge_id"]
+            occurrence = (edge_id, adjacency["neighbor_id"])
+            if occurrence in seen or edge_id in row.get("used_relationship_ids", ()):
+                continue
+            seen.add(occurrence)
+            target_node = context.get_node(adjacency["neighbor_id"])
+            if target_node is None or not _node_matches_pattern(
+                target_node, hop.target.labels, hop.target.properties, context
+            ):
+                continue
+            bindings = dict(row["bindings"])
+            if hop.target.variable is not None:
+                bound_target = bindings.get(hop.target.variable)
+                if bound_target is not None and not same_entity(bound_target, target_node):
+                    continue
+                bindings[hop.target.variable] = target_node
+            if hop.rel_var is not None:
+                edge = context.get_edge(edge_id)
+                if edge is None:
+                    continue
+                bound_edge = bindings.get(hop.rel_var)
+                if bound_edge is not None and not same_entity(bound_edge, edge):
+                    continue
+                bindings[hop.rel_var] = edge
+            yield {
+                "current_node_id": adjacency["neighbor_id"],
+                "bindings": bindings,
+                "used_relationship_ids": row.get("used_relationship_ids", frozenset()).union((edge_id,)),
+            }
+
+
+def _iter_pattern_adjacency(context: QueryContext, node_id: bytes, hop: PatternHop):
+    if hop.edge_types:
+        for edge_type in hop.edge_types:
+            yield from context.graph.iter_typed_adjacency(node_id, edge_type, direction=hop.direction)
+        return
+    for edge_id in context.graph.iter_edge_ids():
+        edge = context.get_edge(edge_id)
+        if edge is None:
+            continue
+        source_id = context.node_key_to_bytes(edge.source)
+        target_id = context.node_key_to_bytes(edge.target)
+        if hop.direction in {"out", "any"} and source_id == node_id:
+            yield {"edge_id": edge_id, "neighbor_id": target_id}
+        if (
+            hop.direction == "in" and target_id == node_id
+            or hop.direction == "any" and target_id == node_id and source_id != target_id
+        ):
+            yield {"edge_id": edge_id, "neighbor_id": source_id}
+
+
+def _node_matches_pattern(node, labels, properties, context: QueryContext) -> bool:
+    if labels and not set(labels).issubset(set(getattr(node, "labels", ()))):
+        return False
+    for property_name, property_value in properties:
+        if _cypher_equals(node.properties.get(property_name), context.resolve(property_value)) is not True:
+            return False
+    return True
+
+
+def _is_node(value) -> bool:
+    return hasattr(value, "labels") and hasattr(value, "properties") and hasattr(value, "get_id")
 
 
 def _merge_bindings(bindings: dict[str, object], new_bindings: dict[str, object]) -> bool:
@@ -324,8 +521,12 @@ def _merge_bindings(bindings: dict[str, object], new_bindings: dict[str, object]
 
 def relationship_scan_rows(parsed: RelationshipScanQuery, context: QueryContext):
     """Yield binding rows from relationship type/property index scans."""
+    seen = set()
     for edge_type in parsed.edge_types or (parsed.edge_type,):
         for edge_id in _relationship_scan_edge_ids(parsed, context, edge_type):
+            if edge_id in seen:
+                continue
+            seen.add(edge_id)
             yield from _hydrate_relationship_scan_edge(context, parsed, edge_id)
 
 
@@ -345,6 +546,10 @@ def _relationship_exact_scan(parsed: RelationshipScanQuery, context: QueryContex
     expressions = parsed.where.expressions if isinstance(parsed.where, AndExpression) else (parsed.where,)
     for expression in expressions:
         if not isinstance(expression, ComparisonExpression):
+            continue
+        if not isinstance(expression.left, PropertyRef):
+            continue
+        if not _is_seek_value(expression.right):
             continue
         if expression.left.variable != parsed.rel_var or expression.operator != "=":
             continue
@@ -377,6 +582,10 @@ def _range_bounds_for_relationship_scan(parsed: RelationshipScanQuery, context: 
     found = False
     for expression in expressions:
         if not isinstance(expression, ComparisonExpression):
+            continue
+        if not isinstance(expression.left, PropertyRef):
+            continue
+        if not _is_seek_value(expression.right):
             continue
         if expression.left.variable != parsed.rel_var:
             continue
@@ -411,78 +620,206 @@ def _hydrate_relationship_scan_edge(context: QueryContext, parsed: RelationshipS
     target_node = context.get_node(target_id)
     if source_node is None or target_node is None:
         return
-    bindings = {
-        parsed.source_var: source_node,
-        parsed.target_var: target_node,
-    }
-    if parsed.rel_var is not None:
-        bindings[parsed.rel_var] = edge
-    current_node_id = target_id if parsed.direction == "out" else source_id
-    yield {
-        "current_node_id": current_node_id,
-        "bindings": bindings,
-    }
+    orientations = [(source_node, target_node, target_id)]
+    if parsed.direction == "any" and source_id != target_id:
+        orientations.append((target_node, source_node, source_id))
+    for left_node, right_node, current_node_id in orientations:
+        bindings = {}
+        if not _merge_bindings(bindings, {parsed.source_var: left_node}):
+            continue
+        if not _merge_bindings(bindings, {parsed.target_var: right_node}):
+            continue
+        if parsed.rel_var is not None and not _merge_bindings(bindings, {parsed.rel_var: edge}):
+            continue
+        yield {"current_node_id": current_node_id, "bindings": bindings}
 
 
 def filter_node_property(rows, variable: str, property_name: str, property_value):
     """Yield rows whose bound node has an exact property value."""
     for row in rows:
         node = row["bindings"][variable]
-        if node.properties.get(property_name) == property_value:
+        if _cypher_equals(node.properties.get(property_name), property_value) is True:
             yield row
 
 
 def filter_expression(rows, expression, context: QueryContext):
     """Yield rows that satisfy a supported boolean expression."""
     for row in rows:
-        if evaluate_expression(expression, row["bindings"], context):
+        if evaluate_expression(expression, row["bindings"], context) is True:
             yield row
 
 
-def evaluate_expression(expression, bindings: dict[str, object], context: QueryContext) -> bool:
-    """Evaluate a supported expression against one row of bindings."""
+def evaluate_expression(expression, bindings: dict[str, object], context: QueryContext):
+    """Evaluate an expression using Cypher null propagation and boolean logic."""
+    if isinstance(expression, Parameter):
+        return context.resolve(expression)
+    if isinstance(expression, Variable):
+        return bindings[expression.name]
+    if isinstance(expression, PropertyRef):
+        return project_value(bindings, f"{expression.variable}.{expression.property_name}")
+    if isinstance(expression, ListExpression):
+        return [evaluate_expression(item, bindings, context) for item in expression.items]
+    if isinstance(expression, MapExpression):
+        return {key: evaluate_expression(value, bindings, context) for key, value in expression.items}
+    if isinstance(expression, list):
+        return [evaluate_expression(item, bindings, context) for item in expression]
+    if isinstance(expression, dict):
+        return {key: evaluate_expression(value, bindings, context) for key, value in expression.items()}
+    if isinstance(expression, NotExpression):
+        value = _boolean_value(evaluate_expression(expression.expression, bindings, context))
+        return None if value is None else not value
     if isinstance(expression, AndExpression):
-        return all(evaluate_expression(part, bindings, context) for part in expression.expressions)
+        result = True
+        for part in expression.expressions:
+            value = _boolean_value(evaluate_expression(part, bindings, context))
+            if value is False:
+                return False
+            if value is None:
+                result = None
+        return result
+    if isinstance(expression, OrExpression):
+        result = False
+        for part in expression.expressions:
+            value = _boolean_value(evaluate_expression(part, bindings, context))
+            if value is True:
+                return True
+            if value is None:
+                result = None
+        return result
+    if isinstance(expression, XorExpression):
+        values = [_boolean_value(evaluate_expression(part, bindings, context)) for part in expression.expressions]
+        if any(value is None for value in values):
+            return None
+        return sum(value is True for value in values) % 2 == 1
     if isinstance(expression, InExpression):
-        left_value = project_value(bindings, f"{expression.left.variable}.{expression.left.property_name}")
-        values = context.resolve(expression.values)
-        if not isinstance(values, (list, tuple, set)):
-            raise ValueError("IN expects a list, tuple, or set value")
-        return left_value in values
+        left_value = evaluate_expression(expression.left, bindings, context)
+        values = evaluate_expression(expression.values, bindings, context)
+        if values is None:
+            return None
+        if not isinstance(values, (list, tuple)):
+            raise TypeError("IN expects a list value")
+        saw_null = left_value is None
+        for value in values:
+            equal = _cypher_equals(left_value, value)
+            if equal is True:
+                return True
+            saw_null = saw_null or equal is None
+        return None if saw_null else False
     if isinstance(expression, NullPredicate):
-        value = project_value(bindings, f"{expression.expression.variable}.{expression.expression.property_name}")
+        value = evaluate_expression(expression.expression, bindings, context)
         return value is not None if expression.negated else value is None
-    if not isinstance(expression, ComparisonExpression):
-        raise ValueError(f"Unsupported expression type: {type(expression).__name__}")
-    left_value = project_value(bindings, f"{expression.left.variable}.{expression.left.property_name}")
-    right_value = context.resolve(expression.right)
-    operator = expression.operator
-    if operator == "=":
-        return left_value == right_value
-    if operator in {"!=", "<>"}:
-        return left_value != right_value
-    if left_value is None or right_value is None:
+    if isinstance(expression, StringPredicate):
+        left_value = evaluate_expression(expression.left, bindings, context)
+        right_value = evaluate_expression(expression.right, bindings, context)
+        if left_value is None or right_value is None:
+            return None
+        if not isinstance(left_value, str) or not isinstance(right_value, str):
+            raise TypeError(f"{expression.operator} expects string operands")
+        if expression.operator == "STARTS WITH":
+            return left_value.startswith(right_value)
+        if expression.operator == "ENDS WITH":
+            return left_value.endswith(right_value)
+        return right_value in left_value
+    if isinstance(expression, UnaryExpression):
+        value = evaluate_expression(expression.expression, bindings, context)
+        if value is None:
+            return None
+        _require_number(value, expression.operator)
+        return value if expression.operator == "+" else -value
+    if isinstance(expression, ArithmeticExpression):
+        left_value = evaluate_expression(expression.left, bindings, context)
+        right_value = evaluate_expression(expression.right, bindings, context)
+        if left_value is None or right_value is None:
+            return None
+        if expression.operator == "+" and (isinstance(left_value, str) or isinstance(right_value, str)):
+            if not isinstance(left_value, str) or not isinstance(right_value, str):
+                raise TypeError("+ expects two strings or two numbers")
+            return left_value + right_value
+        _require_number(left_value, expression.operator)
+        _require_number(right_value, expression.operator)
+        operations = {
+            "+": lambda: left_value + right_value,
+            "-": lambda: left_value - right_value,
+            "*": lambda: left_value * right_value,
+            "/": lambda: left_value / right_value,
+            "%": lambda: left_value % right_value,
+        }
+        return operations[expression.operator]()
+    if isinstance(expression, ComparisonExpression):
+        left_value = evaluate_expression(expression.left, bindings, context)
+        right_value = evaluate_expression(expression.right, bindings, context)
+        operator = expression.operator
+        if operator == "=":
+            return _cypher_equals(left_value, right_value)
+        if operator in {"!=", "<>"}:
+            equal = _cypher_equals(left_value, right_value)
+            return None if equal is None else not equal
+        if left_value is None or right_value is None:
+            return None
+        if operator == "=~":
+            if not isinstance(left_value, str) or not isinstance(right_value, str):
+                raise TypeError("=~ expects string operands")
+            return re.fullmatch(right_value, left_value) is not None
+        try:
+            return {
+                "<": lambda: left_value < right_value,
+                "<=": lambda: left_value <= right_value,
+                ">": lambda: left_value > right_value,
+                ">=": lambda: left_value >= right_value,
+            }[operator]()
+        except TypeError as exc:
+            raise TypeError(f"Cannot compare {type(left_value).__name__} and {type(right_value).__name__}") from exc
+    return expression
+
+
+def _cypher_equals(left, right):
+    if left is None or right is None:
+        return None
+    if isinstance(left, bool) != isinstance(right, bool):
         return False
-    if operator == "<":
-        return left_value < right_value
-    if operator == "<=":
-        return left_value <= right_value
-    if operator == ">":
-        return left_value > right_value
-    if operator == ">=":
-        return left_value >= right_value
-    raise ValueError(f"Unsupported comparison operator: {operator}")
+    if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
+        if len(left) != len(right):
+            return False
+        comparisons = [_cypher_equals(left_item, right_item) for left_item, right_item in zip(left, right)]
+        if False in comparisons:
+            return False
+        return None if None in comparisons else True
+    if isinstance(left, dict) and isinstance(right, dict):
+        if left.keys() != right.keys():
+            return False
+        comparisons = [_cypher_equals(left[key], right[key]) for key in left]
+        if False in comparisons:
+            return False
+        return None if None in comparisons else True
+    return left == right
+
+
+def _boolean_value(value):
+    if value is None or isinstance(value, bool):
+        return value
+    raise TypeError(f"Expected boolean expression, got {type(value).__name__}")
+
+
+def _require_number(value, operator: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"{operator} expects numeric operands")
 
 
 def expand_typed(context: QueryContext, rows, hop):
     """Expand rows through one typed relationship hop."""
     for row in rows:
+        seen = set()
         for edge_type in hop.edge_types or (hop.edge_type,):
             for adjacency in context.graph.iter_typed_adjacency(
                 row["current_node_id"],
                 edge_type,
                 direction=hop.direction,
             ):
+                edge_id = adjacency["edge_id"]
+                occurrence = (edge_id, adjacency["neighbor_id"])
+                if occurrence in seen or edge_id in row.get("used_relationship_ids", ()):
+                    continue
+                seen.add(occurrence)
                 target_node = context.get_node(adjacency["neighbor_id"])
                 if target_node is None:
                     continue
@@ -500,6 +837,7 @@ def expand_typed(context: QueryContext, rows, hop):
                 yield {
                     "current_node_id": adjacency["neighbor_id"],
                     "bindings": bindings,
+                    "used_relationship_ids": row.get("used_relationship_ids", frozenset()).union((edge_id,)),
                 }
 
 
@@ -510,33 +848,75 @@ def limit_rows(rows, limit: int | None):
     return islice(rows, limit)
 
 
-def project_rows(rows, returns: tuple[str, ...], projections: tuple[str, ...] = (), limit: int | None = None):
+def project_rows(rows, returns: tuple[str, ...], projections: tuple[str, ...] = (), projection_expressions=(), limit: int | None = None, context: QueryContext | None = None):
     """Project binding rows into result records."""
     limited_rows = limit_rows(rows, limit)
     projection_items = projections or returns
     for row in limited_rows:
-        yield {column: project_value(row["bindings"], projection) for column, projection in zip(returns, projection_items)}
+        if projection_expressions and context is not None:
+            yield {
+                column: evaluate_expression(expression, row["bindings"], context)
+                for column, expression in zip(returns, projection_expressions)
+            }
+        else:
+            yield {column: project_value(row["bindings"], projection) for column, projection in zip(returns, projection_items)}
 
 
-def materialize_results(rows, parsed) -> list[dict[str, object]]:
+def materialize_results(rows, parsed, context: QueryContext) -> list[dict[str, object]]:
     """Apply result shaping and return projected records."""
-    if not parsed.order_by and not parsed.distinct and parsed.skip is None:
-        return list(project_rows(rows, parsed.returns, projections=parsed.projections, limit=parsed.limit))
+    skip = _resolve_pagination(parsed.skip, context, "SKIP")
+    limit = _resolve_pagination(parsed.limit, context, "LIMIT")
+    projection_expressions = getattr(parsed, "projection_expressions", ())
+    if not parsed.order_by and not parsed.distinct and skip is None:
+        return list(project_rows(rows, parsed.returns, projections=parsed.projections, projection_expressions=projection_expressions, limit=limit, context=context))
     row_list = list(rows)
     if parsed.order_by:
         for order_item in reversed(parsed.order_by):
             row_list.sort(
-                key=lambda row, expression=order_item.expression: _sortable_value(project_value(row["bindings"], expression)),
+                key=lambda row, item=order_item: _sortable_value(_order_value(row["bindings"], item, parsed, context)),
                 reverse=order_item.descending,
             )
-    records = list(project_rows(row_list, parsed.returns, projections=parsed.projections))
+    records = list(project_rows(row_list, parsed.returns, projections=parsed.projections, projection_expressions=projection_expressions, context=context))
     if parsed.distinct:
         records = _distinct_records(records, parsed.returns)
-    if parsed.skip is not None:
-        records = records[parsed.skip:]
-    if parsed.limit is not None:
-        records = records[:parsed.limit]
+    if skip is not None:
+        records = records[skip:]
+    if limit is not None:
+        records = records[:limit]
     return records
+
+
+def _order_value(bindings, order_item, parsed, context):
+    expression = getattr(order_item, "expression_ast", None)
+    alias = None
+    if isinstance(expression, Variable) and expression.name in parsed.returns:
+        alias = expression.name
+    elif isinstance(expression, PropertyRef) and expression.variable in parsed.returns:
+        alias = expression.variable
+    if alias is not None:
+        index = parsed.returns.index(alias)
+        projection_expressions = getattr(parsed, "projection_expressions", ())
+        if projection_expressions:
+            value = evaluate_expression(projection_expressions[index], bindings, context)
+            if isinstance(expression, PropertyRef):
+                return project_value({alias: value}, f"{alias}.{expression.property_name}")
+            return value
+    if expression is not None:
+        return evaluate_expression(expression, bindings, context)
+    return project_value(bindings, order_item.expression)
+
+
+def _resolve_pagination(value, context: QueryContext, clause: str) -> int | None:
+    if value is None:
+        return None
+    resolved = context.resolve(value)
+    if isinstance(resolved, bool) or not isinstance(resolved, int) or resolved < 0:
+        raise ValueError(f"{clause} must be a non-negative integer")
+    return resolved
+
+
+def _is_seek_value(value) -> bool:
+    return value is None or isinstance(value, (Parameter, str, int, float, bool, list, dict))
 
 
 def _sortable_value(value):
@@ -586,5 +966,5 @@ def same_entity(left, right) -> bool:
     left_id = getattr(left, "get_id", None)
     right_id = getattr(right, "get_id", None)
     if left_id is not None and right_id is not None:
-        return left_id == right_id
+        return type(left) is type(right) and left_id == right_id
     return left == right
