@@ -14,10 +14,12 @@ from .cypher_ast import (
     MatchQuery,
     MultiMatchQuery,
     NodeScanQuery,
+    Query,
     RelationshipScanQuery,
     SampleTypedPathsCall,
 )
 from .cypher_parser import parse as _parse_query
+from .cypher_parser import parse_ast as _parse_ast
 from .cypher_parser import split_top_level_args as _split_top_level_args  # noqa: F401
 from .cypher_plan import LogicalPlan, plan_query
 from .cypher_runtime import (
@@ -70,6 +72,11 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
         'Drug'
     """
     return _parse_query(query)
+
+
+def parse_ast(query: str) -> Query | SampleTypedPathsCall:
+    """Parse the supported Cypher subset into its canonical clause AST."""
+    return _parse_ast(query)
 
 
 def plan(query: str) -> LogicalPlan:

@@ -1,15 +1,21 @@
 import pytest
 
+from gestaltdb.cypher import parse_ast
 from gestaltdb.cypher_ast import (
     AndExpression,
     ArithmeticExpression,
     ComparisonExpression,
+    MatchClause,
     NotExpression,
     OrExpression,
     Parameter,
     PropertyRef,
+    Query,
+    ReturnClause,
     StringPredicate,
     Variable,
+    WhereClause,
+    Wildcard,
     XorExpression,
 )
 from gestaltdb.cypher_parser import CypherSemanticError, CypherSyntaxError, parse
@@ -173,3 +179,70 @@ def test_return_star_excludes_anonymous_pattern_elements():
 def test_parser_rejects_variable_reused_for_node_and_relationship():
     with pytest.raises(CypherSemanticError, match="both a node and a relationship"):
         parse("MATCH (x)-[x:T]->() RETURN x")
+
+
+def test_parse_ast_preserves_clause_order_and_textual_match_groups():
+    query = (
+        "MATCH (a), (b)\n"
+        "MATCH (b)-[:T]->(c)\n"
+        "WHERE c.ok = true\n"
+        "RETURN a, c"
+    )
+
+    parsed = parse_ast(query)
+
+    assert isinstance(parsed, Query)
+    assert tuple(type(clause) for clause in parsed.clauses) == (
+        MatchClause,
+        MatchClause,
+        WhereClause,
+        ReturnClause,
+    )
+    assert len(parsed.clauses[0].patterns) == 2
+    assert len(parsed.clauses[1].patterns) == 1
+    assert query[parsed.clauses[0].span.start : parsed.clauses[0].span.end] == "MATCH (a), (b)"
+    assert query[parsed.clauses[1].span.start : parsed.clauses[1].span.end] == "MATCH (b)-[:T]->(c)"
+    assert parsed.clauses[0].span.line == 1
+    assert parsed.clauses[1].span.line == 2
+    assert parsed.clauses[2].span.line == 3
+    assert parsed.clauses[3].span.line == 4
+
+
+def test_parse_ast_return_owns_projection_and_modifiers():
+    query = "MATCH (n) RETURN DISTINCT n.id AS id ORDER BY n.rank DESC SKIP $offset LIMIT 2"
+
+    parsed = parse_ast(query)
+    return_clause = parsed.clauses[-1]
+
+    assert isinstance(return_clause, ReturnClause)
+    assert return_clause.distinct is True
+    assert return_clause.items[0].expression == PropertyRef("n", "id")
+    assert return_clause.items[0].alias == "id"
+    assert return_clause.order_by[0].expression_ast == PropertyRef("n", "rank")
+    assert return_clause.order_by[0].descending is True
+    assert return_clause.skip == Parameter("offset")
+    assert return_clause.limit == 2
+    assert query[return_clause.span.start : return_clause.span.end] == query[query.index("RETURN") :]
+
+
+def test_parse_ast_retains_wildcard_without_legacy_expansion():
+    canonical = parse_ast("MATCH (a)-->(b) RETURN *")
+    legacy = parse("MATCH (a)-->(b) RETURN *")
+
+    assert isinstance(canonical.clauses[-1].items[0].expression, Wildcard)
+    assert legacy.returns == ("a", "b")
+
+
+def test_parse_ast_and_parse_have_identical_legacy_acceptance():
+    query = 'MATCH (n:Person {name: "Ada"}) WHERE n.active RETURN n.name AS name LIMIT 1'
+
+    canonical = parse_ast(query)
+    legacy = parse(query)
+
+    assert canonical.source == query
+    assert canonical.span.start == 0
+    assert canonical.span.end == len(query)
+    assert legacy.variable == "n"
+    assert legacy.label == "Person"
+    assert legacy.returns == ("name",)
+    assert legacy.limit == 1

@@ -2,7 +2,87 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True, slots=True)
+class SourceSpan:
+    """Half-open source range and its one-based line and column positions."""
+
+    start_offset: int
+    end_offset: int
+    line: int
+    column: int
+    end_line: int
+    end_column: int
+
+    @property
+    def start(self) -> int:
+        """Return the inclusive source offset."""
+        return self.start_offset
+
+    @property
+    def end(self) -> int:
+        """Return the exclusive source offset."""
+        return self.end_offset
+
+
+@dataclass(frozen=True)
+class Query:
+    """Canonical Cypher query represented as an ordered clause sequence."""
+
+    clauses: tuple[object, ...]
+    source: str
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
+class MatchClause:
+    """One textual ``MATCH`` containing one or more comma-separated patterns."""
+
+    patterns: tuple[PathPatternClause, ...]
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
+class WhereClause:
+    """A filter in its textual position in the query."""
+
+    expression: object
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
+class Wildcard:
+    """A projection wildcard."""
+
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
+class ProjectionItem:
+    """One projection expression and its optional output alias."""
+
+    expression: object
+    alias: str | None = None
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
+class ReturnClause:
+    """A terminal projection and the result modifiers owned by it."""
+
+    items: tuple[ProjectionItem, ...]
+    distinct: bool = False
+    order_by: tuple[OrderItem, ...] = ()
+    skip: int | Parameter | None = None
+    limit: int | Parameter | None = None
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+    @property
+    def projections(self) -> tuple[ProjectionItem, ...]:
+        """Return projection items using the planner-oriented name."""
+        return self.items
 
 
 @dataclass(frozen=True)

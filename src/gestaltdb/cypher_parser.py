@@ -6,7 +6,7 @@ import ast
 import re
 from dataclasses import dataclass
 
-from lark import Lark, Transformer, UnexpectedInput
+from lark import Lark, Transformer, UnexpectedInput, v_args
 from lark.exceptions import VisitError
 
 from .cypher_ast import (
@@ -17,6 +17,7 @@ from .cypher_ast import (
     InExpression,
     ListExpression,
     MapExpression,
+    MatchClause,
     MatchQuery,
     MultiMatchQuery,
     NodePattern,
@@ -29,14 +30,20 @@ from .cypher_ast import (
     Parameter,
     PathPatternClause,
     PatternHop,
+    ProjectionItem,
     PropertyRef,
+    Query,
     RelationshipPatternClause,
     RelationshipScanQuery,
+    ReturnClause,
     SampleTypedPathsCall,
+    SourceSpan,
     StringPredicate,
     TraversalHop,
     UnaryExpression,
     Variable,
+    WhereClause,
+    Wildcard,
     XorExpression,
 )
 
@@ -187,12 +194,21 @@ class _RelationshipTypes:
 @dataclass(frozen=True)
 class _MatchPatterns:
     values: tuple[_Pattern, ...]
+    span: SourceSpan
 
 
 @dataclass(frozen=True)
 class _Projection:
     expression: object
     alias: str | None = None
+    span: SourceSpan | None = None
+
+
+@dataclass(frozen=True)
+class _ParsedPart:
+    kind: str
+    value: object
+    span: SourceSpan
 
 
 @dataclass(frozen=True)
@@ -204,6 +220,10 @@ class _ParsedMatch:
     order_by: tuple[OrderItem, ...]
     skip: int | Parameter | None
     limit: int | Parameter | None
+    match_groups: tuple[_MatchPatterns, ...]
+    where_part: _ParsedPart | None
+    return_part: _ParsedPart
+    modifier_parts: tuple[_ParsedPart, ...]
 
 
 class _ASTBuilder(Transformer):
@@ -341,53 +361,94 @@ class _ASTBuilder(Transformer):
     def pattern(self, children):
         return _Pattern(children[0], tuple(children[1:]))
 
-    def match_clause(self, children):
-        return _MatchPatterns(tuple(children))
+    @v_args(meta=True)
+    def match_clause(self, meta, children):
+        return _MatchPatterns(tuple(children), _source_span(meta))
 
-    def where_clause(self, children):
-        return ("where", children[0])
+    @v_args(meta=True)
+    def where_clause(self, meta, children):
+        return _ParsedPart("where", children[0], _source_span(meta))
 
     def star_projection(self, _children):
         return "*"
 
-    def return_item(self, children):
-        return _Projection(children[0], children[1] if len(children) > 1 else None)
+    @v_args(meta=True)
+    def return_item(self, meta, children):
+        return _Projection(
+            children[0],
+            children[1] if len(children) > 1 else None,
+            _source_span(meta),
+        )
 
     def return_items(self, children):
         return tuple(children)
 
-    def return_clause(self, children):
+    @v_args(meta=True)
+    def return_clause(self, meta, children):
         distinct = bool(children and str(children[0]).upper() == "DISTINCT")
-        return ("return", children[-1], distinct)
+        return _ParsedPart("return", (children[-1], distinct), _source_span(meta))
 
     def order_item(self, children):
         expression = children[0]
         direction = str(children[1]).upper() if len(children) > 1 else "ASC"
         return OrderItem(_render_projection(expression), direction == "DESC", expression)
 
-    def order_clause(self, children):
-        return ("order", tuple(children))
+    @v_args(meta=True)
+    def order_clause(self, meta, children):
+        return _ParsedPart("order", tuple(children), _source_span(meta))
 
-    def skip_clause(self, children):
-        return ("skip", children[0])
+    @v_args(meta=True)
+    def skip_clause(self, meta, children):
+        return _ParsedPart("skip", children[0], _source_span(meta))
 
-    def limit_clause(self, children):
-        return ("limit", children[0])
+    @v_args(meta=True)
+    def limit_clause(self, meta, children):
+        return _ParsedPart("limit", children[0], _source_span(meta))
 
     def call_arguments(self, children):
         return ("arguments", tuple(item for item in children if item is not None))
 
     def match_query(self, children):
-        pattern_groups = tuple(item.values for item in children if isinstance(item, _MatchPatterns))
-        where = next((item[1] for item in children if isinstance(item, tuple) and item and item[0] == "where"), None)
-        return_data = next(item for item in children if isinstance(item, tuple) and item and item[0] == "return")
-        order_by = next((item[1] for item in children if isinstance(item, tuple) and item and item[0] == "order"), ())
-        skip = next((item[1] for item in children if isinstance(item, tuple) and item and item[0] == "skip"), None)
-        limit = next((item[1] for item in children if isinstance(item, tuple) and item and item[0] == "limit"), None)
-        return _ParsedMatch(pattern_groups, where, return_data[1], return_data[2], order_by, skip, limit)
+        match_groups = tuple(item for item in children if isinstance(item, _MatchPatterns))
+        parts = tuple(item for item in children if isinstance(item, _ParsedPart))
+        where_part = next((item for item in parts if item.kind == "where"), None)
+        return_part = next(item for item in parts if item.kind == "return")
+        return_items, distinct = return_part.value
+        modifier_parts = tuple(
+            item for item in parts if item.kind in {"order", "skip", "limit"}
+        )
+        order_by = next(
+            (item.value for item in modifier_parts if item.kind == "order"), ()
+        )
+        skip = next(
+            (item.value for item in modifier_parts if item.kind == "skip"), None
+        )
+        limit = next(
+            (item.value for item in modifier_parts if item.kind == "limit"), None
+        )
+        return _ParsedMatch(
+            tuple(item.values for item in match_groups),
+            where_part.value if where_part is not None else None,
+            return_items,
+            distinct,
+            order_by,
+            skip,
+            limit,
+            match_groups,
+            where_part,
+            return_part,
+            modifier_parts,
+        )
 
     def sample_call(self, children):
-        limit = next((item[1] for item in children if isinstance(item, tuple) and item and item[0] == "limit"), None)
+        limit = next(
+            (
+                item.value
+                for item in children
+                if isinstance(item, _ParsedPart) and item.kind == "limit"
+            ),
+            None,
+        )
         arguments = next(item[1] for item in children if isinstance(item, tuple) and item and item[0] == "arguments")
         return ("sample", arguments, limit)
 
@@ -397,6 +458,52 @@ _BUILDER = _ASTBuilder()
 
 def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | RelationshipScanQuery | MultiMatchQuery:
     """Parse the supported Cypher subset into runtime-compatible AST objects."""
+    parsed = _parse_source(query)
+
+    if isinstance(parsed, tuple) and parsed and parsed[0] == "sample":
+        return _build_sample_call(parsed, query)
+    return _build_match_query(parsed, query)
+
+
+def parse_ast(query: str) -> Query | SampleTypedPathsCall:
+    """Parse the supported Cypher subset into the canonical clause AST."""
+    parsed = _parse_source(query)
+    if isinstance(parsed, tuple) and parsed and parsed[0] == "sample":
+        return _build_sample_call(parsed, query)
+
+    # Keep syntax and semantic acceptance identical to the legacy parser.
+    _build_match_query(parsed, query)
+    clauses: list[object] = [
+        MatchClause(group.values, span=group.span) for group in parsed.match_groups
+    ]
+    if parsed.where_part is not None:
+        clauses.append(WhereClause(parsed.where, span=parsed.where_part.span))
+
+    return_span = _merge_spans(
+        parsed.return_part.span,
+        *(part.span for part in parsed.modifier_parts),
+    )
+    clauses.append(
+        ReturnClause(
+            items=tuple(
+                ProjectionItem(
+                    Wildcard(span=item.span) if item.expression == "*" else item.expression,
+                    item.alias,
+                    span=item.span,
+                )
+                for item in parsed.projections
+            ),
+            distinct=parsed.distinct,
+            order_by=parsed.order_by,
+            skip=parsed.skip,
+            limit=parsed.limit,
+            span=return_span,
+        )
+    )
+    return Query(tuple(clauses), query, span=_query_span(query))
+
+
+def _parse_source(query: str):
     try:
         parsed = _BUILDER.transform(_PARSER.parse(query))
     except UnexpectedInput as exc:
@@ -416,9 +523,7 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
             raise
         raise _located_error(CypherSyntaxError, f"Invalid Cypher literal: {exc}", query) from exc
 
-    if isinstance(parsed, tuple) and parsed and parsed[0] == "sample":
-        return _build_sample_call(parsed, query)
-    return _build_match_query(parsed, query)
+    return parsed
 
 
 def _build_sample_call(parsed, query: str) -> SampleTypedPathsCall:
@@ -742,3 +847,40 @@ def _located_error(error_type, message: str, query: str, needle: str | None = No
     line = query.count("\n", 0, offset) + 1
     line_start = query.rfind("\n", 0, offset) + 1
     return error_type(message, line=line, column=offset - line_start + 1, offset=offset, source=query)
+
+
+def _source_span(meta) -> SourceSpan:
+    return SourceSpan(
+        meta.start_pos,
+        meta.end_pos,
+        meta.line,
+        meta.column,
+        meta.end_line,
+        meta.end_column,
+    )
+
+
+def _merge_spans(first: SourceSpan, *rest: SourceSpan) -> SourceSpan:
+    last = rest[-1] if rest else first
+    return SourceSpan(
+        first.start_offset,
+        last.end_offset,
+        first.line,
+        first.column,
+        last.end_line,
+        last.end_column,
+    )
+
+
+def _query_span(query: str) -> SourceSpan:
+    lines = query.splitlines(keepends=True)
+    if not lines:
+        return SourceSpan(0, 0, 1, 1, 1, 1)
+    final_line = lines[-1]
+    if final_line.endswith(("\n", "\r")):
+        end_line = len(lines) + 1
+        end_column = 1
+    else:
+        end_line = len(lines)
+        end_column = len(final_line) + 1
+    return SourceSpan(0, len(query), 1, 1, end_line, end_column)

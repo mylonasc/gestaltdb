@@ -10,7 +10,7 @@ GestaltDB includes an embedded, read-only Cypher query processor:
 - `graph.query(cypher_str, parameters=None)` returns a `QueryResult(columns, records)`.
 - Iterating over `result` yields dictionaries mapping column names to values.
 - Internal pipeline:
-  - `cypher_parser.py`: Uses a Lark grammar and lowers parsed queries into runtime-compatible AST objects.
+  - `cypher_parser.py`: Uses a Lark grammar; `parse_ast()` preserves an ordered canonical clause AST while legacy `parse()` returns runtime-compatible specialized objects.
   - `cypher_plan.py`: Builds an authoritative typed logical plan with a binding source and ordered operators.
   - `cypher_runtime.py`: Executes the plan through typed binding rows and streaming or blocking result operators against `GraphDB`.
 
