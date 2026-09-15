@@ -176,14 +176,59 @@ def expression_variables(expression: object) -> tuple[str, ...]:
 
 
 def render_projection(expression: object) -> str:
-    """Render a currently supported projection expression as a column name."""
+    """Render a projection expression deterministically as a column name."""
     if expression == "*" or isinstance(expression, Wildcard):
         return "*"
     if isinstance(expression, Variable):
         return expression.name
     if isinstance(expression, PropertyRef):
         return f"{expression.variable}.{expression.property_name}"
-    raise ValueError("Only variables and property references can be projected or ordered")
+    if isinstance(expression, Parameter):
+        return f"${expression.name}"
+    if expression is None:
+        return "null"
+    if isinstance(expression, bool):
+        return "true" if expression else "false"
+    if isinstance(expression, (int, float)):
+        return str(expression)
+    if isinstance(expression, str):
+        return _render_string_literal(expression)
+    if isinstance(expression, ArithmeticExpression):
+        return f"({render_projection(expression.left)} {expression.operator} {render_projection(expression.right)})"
+    if isinstance(expression, UnaryExpression):
+        return f"({expression.operator}{render_projection(expression.expression)})"
+    if isinstance(expression, ComparisonExpression):
+        return f"({render_projection(expression.left)} {expression.operator} {render_projection(expression.right)})"
+    if isinstance(expression, InExpression):
+        return f"({render_projection(expression.left)} IN {render_projection(expression.values)})"
+    if isinstance(expression, NullPredicate):
+        rendered = render_projection(expression.expression)
+        return f"({rendered} IS NOT NULL)" if expression.negated else f"({rendered} IS NULL)"
+    if isinstance(expression, StringPredicate):
+        return f"({render_projection(expression.left)} {expression.operator} {render_projection(expression.right)})"
+    if isinstance(expression, NotExpression):
+        return f"(NOT {render_projection(expression.expression)})"
+    if isinstance(expression, AndExpression):
+        return "(" + " AND ".join(render_projection(item) for item in expression.expressions) + ")"
+    if isinstance(expression, OrExpression):
+        return "(" + " OR ".join(render_projection(item) for item in expression.expressions) + ")"
+    if isinstance(expression, XorExpression):
+        return "(" + " XOR ".join(render_projection(item) for item in expression.expressions) + ")"
+    if isinstance(expression, ListExpression):
+        return "[" + ", ".join(render_projection(item) for item in expression.items) + "]"
+    if isinstance(expression, MapExpression):
+        return "{" + ", ".join(f"{key}: {render_projection(value)}" for key, value in expression.items) + "}"
+    if isinstance(expression, list):
+        return "[" + ", ".join(render_projection(item) for item in expression) + "]"
+    if isinstance(expression, dict):
+        return "{" + ", ".join(f"{key}: {render_projection(value)}" for key, value in expression.items()) + "}"
+    raise ValueError(f"Cannot render projection expression: {expression!r}")
+
+
+def _render_string_literal(value: str) -> str:
+    """Render a string literal with double quotes and minimal escaping."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 def _analyze_match(clause: MatchClause, scope: Scope, source: str) -> Scope:

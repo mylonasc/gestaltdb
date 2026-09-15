@@ -56,14 +56,13 @@ _GRAMMAR = r"""
 match_query: match_clause+ where_clause? return_clause order_clause? skip_clause? limit_clause?
 match_clause: "MATCH"i pattern ("," pattern)*
 where_clause: "WHERE"i expression
-return_clause: "RETURN"i DISTINCT? return_items
-return_items: return_item ("," return_item)*
-return_item: projection ("AS"i symbolic_name)?
-?projection: STAR -> star_projection
-           | property_ref
-           | variable
-order_clause: "ORDER"i "BY"i order_item ("," order_item)*
-order_item: projection ORDER_DIRECTION?
+ return_clause: "RETURN"i DISTINCT? return_items
+ return_items: return_item ("," return_item)*
+ return_item: projection_expression ("AS"i symbolic_name)?
+ ?projection_expression: STAR -> star_projection
+                       | expression
+ order_clause: "ORDER"i "BY"i order_item ("," order_item)*
+ order_item: expression ORDER_DIRECTION?
 skip_clause: "SKIP"i pagination_value
 limit_clause: "LIMIT"i pagination_value
 ?pagination_value: INTEGER -> integer
