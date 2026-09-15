@@ -90,7 +90,7 @@ Supported features include:
 - Chained `MATCH` clauses with clause-local `WHERE`.
 - `WITH` with scope replacement and local `WHERE`, `DISTINCT`, `ORDER BY`, `SKIP`, and `LIMIT`.
 - Core aggregates (`count`, `collect`, `sum`, `avg`, `min`, `max`) with implicit grouping, aggregate `DISTINCT`, and documented null/empty-input behavior.
-- Core scalar functions (`coalesce`, `id`/`elementId`, `type`, `labels`, `startNode`/`endNode`, `properties`, `head`/`last`, `size`/`length`, `toBoolean`/`toInteger`/`toFloat`/`toString`, string ops, math ops, `rand`, `range`, `reverse`, `tail`, `keys`), including property access on computed values such as `startNode(r).name`.
+- Core scalar functions (`coalesce`, `id`/`elementId`, `type`, `labels`, `startNode`/`endNode`, `properties`, `head`/`last`, `size`/`length`, `toBoolean`/`toInteger`/`toFloat`/`toString`, string ops, math ops including `sign`/`exp`/`log`/`sin`/`cos`/`tan`/`pi`/`e`, `rand`/`randomUUID`, `range`, `reverse`, `tail`, `keys`), including property access on computed values such as `startNode(r).name`.
 - GestaltDB-specific `CALL pg.sample_typed_paths(...) YIELD path RETURN path`.
 
 Unsupported Cypher currently includes mutating clauses, `OPTIONAL MATCH`, variable-length paths, relationship property maps, and path binding such as `p = (a)-[:T]->(b)`.

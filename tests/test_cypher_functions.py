@@ -83,7 +83,7 @@ def test_list_function_errors():
 
     with pytest.raises(TypeError, match=r"head\(\) expects list"):
         execute(graph, "MATCH (n:Person) RETURN head(n.age) AS v")
-    with pytest.raises(TypeError, match=r"size\(\) expects a list or string"):
+    with pytest.raises(TypeError, match=r"size\(\) expects a list, map, or string"):
         execute(graph, "MATCH (n:Person) RETURN size(n.age) AS v")
     with pytest.raises(ValueError, match=r"range\(\) step cannot be zero"):
         execute(graph, "MATCH (n:Person) RETURN range(1, 3, 0) AS v")
@@ -161,6 +161,34 @@ def test_math_function_errors():
         execute(graph, "MATCH (n:Person) RETURN abs(n.age > 1) AS v")
     with pytest.raises(ValueError, match="math domain|negative"):
         execute(graph, "MATCH (n:Person) RETURN sqrt(-1) AS v")
+
+
+def test_extended_math_functions():
+    graph = _function_graph()
+
+    assert _values("MATCH (n:Person) RETURN sign(n.age - 30) AS v") == [0, 1]
+    assert _values("MATCH (n:Person) RETURN sign(30 - n.age) AS v") == [0, -1]
+    assert _values("MATCH (n:Person) RETURN exp(0) AS v") == [1.0, 1.0]
+    assert _values("MATCH (n:Person) RETURN log10(100) AS v") == [2.0, 2.0]
+    assert _values("MATCH (n:Person) RETURN log(1) AS v") == [0.0, 0.0]
+    assert _values("MATCH (n:Person) RETURN sin(0) AS v") == [0.0, 0.0]
+    assert _values("MATCH (n:Person) RETURN cos(0) AS v") == [1.0, 1.0]
+    assert _values("MATCH (n:Person) RETURN tan(0) AS v") == [0.0, 0.0]
+    assert _values("MATCH (n:Person) RETURN pi() AS v") == [3.141592653589793] * 2
+    assert _values("MATCH (n:Person) RETURN e() AS v") == [2.718281828459045] * 2
+    assert _values("MATCH (n:Person) RETURN sign(n.missing) AS v") == [None, None]
+
+    uuids = _values("MATCH (n:Person) RETURN randomUUID() AS v")
+    assert len(uuids) == 2
+    assert all(isinstance(value, str) and len(value) == 36 for value in uuids)
+
+
+def test_size_accepts_maps():
+    assert _values("MATCH (n:Person) RETURN size(properties(n)) AS v") == [3, 3]
+    assert _values("MATCH (n:Person) RETURN size({a: 1, b: 2}) AS v") == [2, 2]
+
+    with pytest.raises(TypeError, match=r"length\(\) expects a list or string"):
+        execute(_function_graph(), "MATCH (n:Person) RETURN length({a: 1}) AS v")
 
 
 def test_rand_returns_unit_floats():

@@ -154,7 +154,9 @@ The engine provides the core openCypher scalar functions: ``coalesce``,
 ``toInteger``/``toFloat``/``toString`` conversions, ``trim``/``lTrim``/
 ``rTrim``, ``toUpper``/``toLower``, ``replace``, ``split``, ``substring``,
 ``left``/``right``, ``abs``, ``ceil``, ``floor``, ``round``, ``sqrt``,
-``pow``, ``rand``, ``range``, ``reverse``, ``tail``, and ``keys``.
+``pow``, ``sign``, ``exp``, ``log``, ``log10``, ``sin``, ``cos``, ``tan``,
+``pi``, ``e``, ``rand``, ``randomUUID``, ``range``, ``reverse``, ``tail``,
+and ``keys``.
 Conversions return ``None`` for unconvertible inputs, most other functions
 propagate ``None``, and misused functions raise typed errors. Scalar calls
 group like any other non-aggregate projection expression.

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import math
 import random
+import uuid
 from dataclasses import dataclass
 from typing import Callable
 
@@ -139,9 +140,18 @@ def _size(args: list[object], context) -> object:
     (value,) = args
     if value is None:
         return None
+    if isinstance(value, (list, tuple, str, dict)):
+        return len(value)
+    raise TypeError("size() expects a list, map, or string")
+
+
+def _length(args: list[object], context) -> object:
+    (value,) = args
+    if value is None:
+        return None
     if isinstance(value, (list, tuple, str)):
         return len(value)
-    raise TypeError("size() expects a list or string")
+    raise TypeError("length() expects a list or string")
 
 
 def _to_boolean(args: list[object], context) -> object:
@@ -336,6 +346,27 @@ def _rand(args: list[object], context) -> object:
     return random.random()
 
 
+def _sign(args: list[object], context) -> object:
+    (value,) = args
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError("sign() expects numeric operands")
+    return 0 if value == 0 else (1 if value > 0 else -1)
+
+
+def _pi(args: list[object], context) -> object:
+    return math.pi
+
+
+def _euler(args: list[object], context) -> object:
+    return math.e
+
+
+def _random_uuid(args: list[object], context) -> object:
+    return str(uuid.uuid4())
+
+
 def _range(args: list[object], context) -> object:
     start, end = args[0], args[1]
     step = args[2] if len(args) > 2 else 1
@@ -395,7 +426,7 @@ FUNCTIONS: dict[str, FunctionDef] = {
     "head": _scalar("head", (1, 1), _head),
     "last": _scalar("last", (1, 1), _last),
     "size": _scalar("size", (1, 1), _size),
-    "length": _scalar("length", (1, 1), _size),
+    "length": _scalar("length", (1, 1), _length),
     "toboolean": _scalar("toboolean", (1, 1), _to_boolean),
     "tointeger": _scalar("tointeger", (1, 1), _to_integer),
     "tofloat": _scalar("tofloat", (1, 1), _to_float),
@@ -416,7 +447,17 @@ FUNCTIONS: dict[str, FunctionDef] = {
     "round": _scalar("round", (1, 2), _round),
     "sqrt": _scalar("sqrt", (1, 1), _numeric_unary("sqrt", math.sqrt)),
     "pow": _scalar("pow", (2, 2), _pow),
+    "sign": _scalar("sign", (1, 1), _sign),
+    "exp": _scalar("exp", (1, 1), _numeric_unary("exp", math.exp)),
+    "log": _scalar("log", (1, 1), _numeric_unary("log", math.log)),
+    "log10": _scalar("log10", (1, 1), _numeric_unary("log10", math.log10)),
+    "sin": _scalar("sin", (1, 1), _numeric_unary("sin", math.sin)),
+    "cos": _scalar("cos", (1, 1), _numeric_unary("cos", math.cos)),
+    "tan": _scalar("tan", (1, 1), _numeric_unary("tan", math.tan)),
+    "pi": _scalar("pi", (0, 0), _pi),
+    "e": _scalar("e", (0, 0), _euler),
     "rand": _scalar("rand", (0, 0), _rand),
+    "randomuuid": _scalar("randomuuid", (0, 0), _random_uuid),
     "range": _scalar("range", (2, 3), _range),
     "reverse": _scalar("reverse", (1, 1), _reverse),
     "tail": _scalar("tail", (1, 1), _tail),
