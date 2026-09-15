@@ -46,31 +46,8 @@ from .cypher_ast import (
     Wildcard,
     XorExpression,
 )
-
-
-class CypherSyntaxError(ValueError):
-    """A Cypher syntax error with a source position."""
-
-    def __init__(self, message: str, *, line: int, column: int, offset: int, source: str):
-        super().__init__(f"{message} (line {line}, column {column})")
-        self.message = message
-        self.line = line
-        self.column = column
-        self.offset = offset
-        self.source = source
-
-
-class CypherSemanticError(ValueError):
-    """A semantically invalid Cypher query with a source position."""
-
-    def __init__(self, message: str, *, line: int, column: int, offset: int, source: str):
-        super().__init__(f"{message} (line {line}, column {column})")
-        self.message = message
-        self.line = line
-        self.column = column
-        self.offset = offset
-        self.source = source
-
+from .cypher_errors import CypherSemanticError, CypherSyntaxError
+from .cypher_semantics import QueryAnalysis, analyze_query, render_projection
 
 _GRAMMAR = r"""
 ?start: query ";"?
@@ -391,7 +368,7 @@ class _ASTBuilder(Transformer):
     def order_item(self, children):
         expression = children[0]
         direction = str(children[1]).upper() if len(children) > 1 else "ASC"
-        return OrderItem(_render_projection(expression), direction == "DESC", expression)
+        return OrderItem(render_projection(expression), direction == "DESC", expression)
 
     @v_args(meta=True)
     def order_clause(self, meta, children):
@@ -462,7 +439,9 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
 
     if isinstance(parsed, tuple) and parsed and parsed[0] == "sample":
         return _build_sample_call(parsed, query)
-    return _build_match_query(parsed, query)
+    canonical = _build_canonical_query(parsed, query)
+    analysis = analyze_query(canonical)
+    return _build_match_query(parsed, query, analysis)
 
 
 def parse_ast(query: str) -> Query | SampleTypedPathsCall:
@@ -471,8 +450,15 @@ def parse_ast(query: str) -> Query | SampleTypedPathsCall:
     if isinstance(parsed, tuple) and parsed and parsed[0] == "sample":
         return _build_sample_call(parsed, query)
 
-    # Keep syntax and semantic acceptance identical to the legacy parser.
-    _build_match_query(parsed, query)
+    canonical = _build_canonical_query(parsed, query)
+    analyze_query(canonical)
+    return canonical
+
+
+def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
+    for patterns in parsed.pattern_groups:
+        for pattern in patterns:
+            _validate_pattern_literals(pattern, query)
     clauses: list[object] = [
         MatchClause(group.values, span=group.span) for group in parsed.match_groups
     ]
@@ -538,7 +524,7 @@ def _build_sample_call(parsed, query: str) -> SampleTypedPathsCall:
     return SampleTypedPathsCall(seed_ids=seed_ids, pattern=pattern, limit=limit)
 
 
-def _build_match_query(parsed: _ParsedMatch, query: str):
+def _build_match_query(parsed: _ParsedMatch, query: str, analysis: QueryAnalysis):
     clauses = []
     group_ids = []
     for group_id, patterns in enumerate(parsed.pattern_groups):
@@ -547,16 +533,10 @@ def _build_match_query(parsed: _ParsedMatch, query: str):
             clauses.append(_build_clause(pattern, query, force_generalized=force_generalized))
             group_ids.append(group_id)
     clauses = tuple(clauses)
-    _validate_variable_kinds(clauses, query)
-    ordered_variables = _bound_variables_ordered(clauses)
-    bound_variables = set(ordered_variables)
-    _validate_expression_variables(parsed.where, bound_variables, query, "WHERE")
-    returns, projections, projection_expressions = _build_projections(parsed.projections, ordered_variables, bound_variables, query)
-    if len(set(returns)) != len(returns):
-        raise _located_error(CypherSemanticError, "RETURN contains duplicate column names", query)
-    order_variables = bound_variables.union(returns)
-    for item in parsed.order_by:
-        _validate_expression_variables(item.expression_ast, order_variables, query, "ORDER BY")
+    resolved = analysis.clauses[-1].projections
+    returns = tuple(item.output.name for item in resolved)
+    projections = tuple(item.rendered_expression for item in resolved)
+    projection_expressions = tuple(item.expression for item in resolved)
 
     common = {
         "returns": returns,
@@ -601,10 +581,6 @@ def _build_match_query(parsed: _ParsedMatch, query: str):
 
 def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = False):
     node = pattern.source
-    for pattern_node in (node, *(hop.target for hop in pattern.hops)):
-        for _, value in pattern_node.properties:
-            if not _is_plain_value(value):
-                raise _located_error(CypherSemanticError, "Invalid Cypher literal", query)
     if not pattern.hops and node.variable is not None and not force_generalized:
         first_name, first_value = node.properties[0] if node.properties else (None, None)
         return NodePatternClause(node.variable, node.labels[0] if node.labels else None, first_name, first_value, node.labels, node.properties)
@@ -641,131 +617,11 @@ def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = Fa
     return PathPatternClause(node, pattern.hops)
 
 
-def _build_projections(items, ordered_variables, bound_variables, query):
-    if len(items) == 1 and items[0].expression == "*":
-        if not ordered_variables:
-            raise _located_error(CypherSemanticError, "RETURN * requires bound variables", query)
-        expressions = tuple(Variable(name) for name in ordered_variables)
-        return ordered_variables, ordered_variables, expressions
-    returns = []
-    projections = []
-    expressions = []
-    for item in items:
-        expression = item.expression
-        _validate_expression_variables(expression, bound_variables, query, "RETURN")
-        rendered = _render_projection(expression)
-        projections.append(rendered)
-        returns.append(item.alias or rendered)
-        expressions.append(expression)
-    return tuple(returns), tuple(projections), tuple(expressions)
-
-
-def _validate_expression_variables(expression, bound_variables: set[str], query: str, clause: str) -> None:
-    for variable in _expression_variables(expression):
-        if variable not in bound_variables:
-            message = f"{clause} references unbound variable: {variable}"
-            raise _located_error(CypherSemanticError, message, query, variable)
-
-
-def _expression_variables(expression):
-    if expression is None or isinstance(expression, (str, int, float, bool, Parameter)):
-        return ()
-    if isinstance(expression, Variable):
-        return (expression.name,)
-    if isinstance(expression, PropertyRef):
-        return (expression.variable,)
-    if isinstance(expression, (ComparisonExpression, ArithmeticExpression, StringPredicate)):
-        return _expression_variables(expression.left) + _expression_variables(expression.right)
-    if isinstance(expression, InExpression):
-        return _expression_variables(expression.left) + _expression_variables(expression.values)
-    if isinstance(expression, NullPredicate):
-        return _expression_variables(expression.expression)
-    if isinstance(expression, (NotExpression, UnaryExpression)):
-        return _expression_variables(expression.expression)
-    if isinstance(expression, (AndExpression, OrExpression, XorExpression)):
-        return tuple(variable for item in expression.expressions for variable in _expression_variables(item))
-    if isinstance(expression, ListExpression):
-        return tuple(variable for item in expression.items for variable in _expression_variables(item))
-    if isinstance(expression, MapExpression):
-        return tuple(variable for _, item in expression.items for variable in _expression_variables(item))
-    if isinstance(expression, list):
-        return tuple(variable for item in expression for variable in _expression_variables(item))
-    if isinstance(expression, dict):
-        return tuple(variable for item in expression.values() for variable in _expression_variables(item))
-    return ()
-
-
-def _bound_variables_ordered(clauses) -> tuple[str, ...]:
-    variables = []
-
-    def add(name):
-        if name is not None and name not in variables:
-            variables.append(name)
-
-    for clause in clauses:
-        if isinstance(clause, NodePatternClause):
-            add(clause.variable)
-        elif isinstance(clause, RelationshipPatternClause):
-            first_var = clause.target_var if clause.direction == "in" else clause.source_var
-            second_var = clause.source_var if clause.direction == "in" else clause.target_var
-            add(first_var)
-            add(clause.rel_var)
-            add(second_var)
-        elif isinstance(clause, AnchoredPatternClause):
-            add(clause.source_var)
-            for hop in clause.hops:
-                add(hop.rel_var)
-                add(hop.target_var)
-        elif isinstance(clause, PathPatternClause):
-            add(clause.source.variable)
-            for hop in clause.hops:
-                add(hop.rel_var)
-                add(hop.target.variable)
-    return tuple(variables)
-
-
-def _validate_variable_kinds(clauses, query: str) -> None:
-    kinds: dict[str, str] = {}
-
-    def add(name, kind):
-        if name is None:
-            return
-        previous = kinds.setdefault(name, kind)
-        if previous != kind:
-            raise _located_error(
-                CypherSemanticError,
-                f"Variable {name} cannot be used as both a node and a relationship",
-                query,
-                name,
-            )
-
-    for clause in clauses:
-        if isinstance(clause, NodePatternClause):
-            add(clause.variable, "node")
-        elif isinstance(clause, RelationshipPatternClause):
-            add(clause.source_var, "node")
-            add(clause.rel_var, "relationship")
-            add(clause.target_var, "node")
-        elif isinstance(clause, AnchoredPatternClause):
-            add(clause.source_var, "node")
-            for hop in clause.hops:
-                add(hop.rel_var, "relationship")
-                add(hop.target_var, "node")
-        elif isinstance(clause, PathPatternClause):
-            add(clause.source.variable, "node")
-            for hop in clause.hops:
-                add(hop.rel_var, "relationship")
-                add(hop.target.variable, "node")
-
-
-def _render_projection(expression) -> str:
-    if expression == "*":
-        return "*"
-    if isinstance(expression, Variable):
-        return expression.name
-    if isinstance(expression, PropertyRef):
-        return f"{expression.variable}.{expression.property_name}"
-    raise ValueError("Only variables and property references can be projected or ordered")
+def _validate_pattern_literals(pattern: _Pattern, query: str) -> None:
+    for pattern_node in (pattern.source, *(hop.target for hop in pattern.hops)):
+        for _, value in pattern_node.properties:
+            if not _is_plain_value(value):
+                raise _located_error(CypherSemanticError, "Invalid Cypher literal", query)
 
 
 def _is_plain_value(value) -> bool:
