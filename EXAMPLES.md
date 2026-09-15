@@ -149,6 +149,15 @@ totals = graph.query(
 )
 ```
 
+```python
+bands = graph.query(
+    'MATCH (p:Person) '
+    'RETURN p.name AS name, '
+    'CASE WHEN p.age >= 35 THEN "senior" ELSE "junior" END AS band, '
+    '[t IN p.tags WHERE t STARTS WITH "a" | t] AS tags'
+)
+```
+
 It does not support mutating queries, `OPTIONAL MATCH`, or variable-length paths.
 
 ## Traverse and Sample Typed Relationships
