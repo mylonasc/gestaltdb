@@ -34,6 +34,31 @@ from .cypher_ast import (
     Variable,
     XorExpression,
 )
+from .cypher_plan import (
+    AnchoredMatchSource,
+    Expand,
+    FilterNodeLabels,
+    FilterNodeProperty,
+    LogicalPlan,
+    MultiMatchSource,
+    NodeAllScan,
+    NodeByIdSeek,
+    NodeLabelScan,
+    NodePropertySeek,
+    NodeScanSource,
+    ProcedureCall,
+    ProcedureSource,
+    RelationshipPropertyRangeSeek,
+    RelationshipPropertySeek,
+    RelationshipScanSource,
+    RelationshipTypeScan,
+)
+from .cypher_plan import Distinct as LogicalDistinct
+from .cypher_plan import FilterExpression as LogicalFilterExpression
+from .cypher_plan import Limit as LogicalLimit
+from .cypher_plan import Project as LogicalProject
+from .cypher_plan import Skip as LogicalSkip
+from .cypher_plan import Sort as LogicalSort
 
 
 @dataclass
@@ -266,37 +291,68 @@ class LimitOperator:
 
 def execute_match(parsed: MatchQuery, context: QueryContext) -> list[dict[str, object]]:
     """Execute an anchored typed traversal plan and return projected records."""
-    rows = anchored_node_seek(context, parsed.source_id, parsed.source_var)
-    for hop in parsed.hops:
-        rows = expand_typed(context, rows, hop)
+    rows = _match_rows(parsed, context)
     if parsed.where is not None:
         rows = filter_expression(rows, parsed.where, context)
     return materialize_results(rows, parsed, context)
 
 
+def _match_rows(parsed: MatchQuery, context: QueryContext) -> Iterable[BindingRow]:
+    """Produce unprojected rows for an anchored typed traversal."""
+    rows = anchored_node_seek(context, parsed.source_id, parsed.source_var)
+    for hop in parsed.hops:
+        rows = expand_typed(context, rows, hop)
+    return rows
+
+
 def execute_node_scan(parsed: NodeScanQuery, context: QueryContext) -> list[dict[str, object]]:
     """Execute a label scan plan and return projected records."""
+    rows = _node_scan_rows(parsed, context)
+    if parsed.where is not None:
+        rows = filter_expression(rows, parsed.where, context)
+    return materialize_results(rows, parsed, context)
+
+
+def _node_scan_rows(
+    parsed: NodeScanQuery, context: QueryContext
+) -> Iterable[BindingRow]:
+    """Produce unprojected rows for a node scan and inline properties."""
     node_ids = node_scan_ids(parsed, context)
     rows = hydrate_node_ids(context, node_ids, parsed.variable)
     for property_name, property_value in parsed.properties or (
         ((parsed.property_name, parsed.property_value),) if parsed.property_name is not None else ()
     ):
         rows = filter_node_property(rows, parsed.variable, property_name, context.resolve(property_value))
-    if parsed.where is not None:
-        rows = filter_expression(rows, parsed.where, context)
-    return materialize_results(rows, parsed, context)
+    return rows
 
 
 def execute_relationship_scan(parsed: RelationshipScanQuery, context: QueryContext) -> list[dict[str, object]]:
     """Execute an unanchored typed relationship scan."""
-    rows = relationship_scan_rows(parsed, context)
+    rows = _relationship_rows(parsed, context)
     if parsed.where is not None:
         rows = filter_expression(rows, parsed.where, context)
     return materialize_results(rows, parsed, context)
 
 
+def _relationship_rows(
+    parsed: RelationshipScanQuery, context: QueryContext
+) -> Iterable[BindingRow]:
+    """Produce unprojected rows for a relationship scan."""
+    return relationship_scan_rows(parsed, context)
+
+
 def execute_multi_match(parsed: MultiMatchQuery, context: QueryContext) -> list[dict[str, object]]:
     """Execute multiple MATCH clauses as a streaming row pipeline."""
+    rows = _multi_match_rows(parsed, context)
+    if parsed.where is not None:
+        rows = filter_expression(rows, parsed.where, context)
+    return materialize_results(rows, parsed, context)
+
+
+def _multi_match_rows(
+    parsed: MultiMatchQuery, context: QueryContext
+) -> Iterable[BindingRow]:
+    """Produce unprojected rows for generalized and chained MATCH clauses."""
     rows = iter([BindingRow(bindings={})])
     group_ids = parsed.match_group_ids or tuple(range(len(parsed.clauses)))
     previous_group = None
@@ -315,9 +371,97 @@ def execute_multi_match(parsed: MultiMatchQuery, context: QueryContext) -> list[
             raise TypeError(f"Unsupported MATCH clause type: {type(clause).__name__}")
         previous_group = group_id
     rows = _reset_used_relationships(rows)
-    if parsed.where is not None:
-        rows = filter_expression(rows, parsed.where, context)
-    return materialize_results(rows, parsed, context)
+    return rows
+
+
+def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, object]]:
+    """Execute an authoritative logical plan against one query context."""
+    parsed, rows = _plan_source_rows(plan, context)
+    stream: Iterable[BindingRow] | Iterable[ProjectedRow] = rows
+    projected = False
+    for operator in plan.operators:
+        if isinstance(operator, LogicalFilterExpression):
+            if projected:
+                raise TypeError("FilterExpression cannot execute after projection")
+            stream = filter_expression(stream, operator.expression, context)
+        elif isinstance(operator, LogicalProject):
+            if projected:
+                raise TypeError("Logical plan contains multiple projections")
+            stream = ProjectOperator(
+                returns=operator.returns,
+                projections=getattr(parsed, "projections", ()),
+                projection_expressions=getattr(
+                    parsed, "projection_expressions", ()
+                ),
+            ).execute(stream, context)
+            projected = True
+        elif isinstance(operator, LogicalSort):
+            _require_projected(projected, operator)
+            stream = SortOperator(operator.items, parsed).execute(stream, context)
+        elif isinstance(operator, LogicalDistinct):
+            _require_projected(projected, operator)
+            stream = DistinctOperator(plan.columns).execute(stream, context)
+        elif isinstance(operator, LogicalSkip):
+            _require_projected(projected, operator)
+            count = _resolve_pagination(operator.count, context, "SKIP")
+            stream = SkipOperator(count or 0).execute(stream, context)
+        elif isinstance(operator, LogicalLimit):
+            _require_projected(projected, operator)
+            count = _resolve_pagination(operator.limit, context, "LIMIT")
+            stream = LimitOperator(count or 0).execute(stream, context)
+        elif isinstance(
+            operator,
+            (
+                NodeByIdSeek,
+                NodeLabelScan,
+                NodeAllScan,
+                NodePropertySeek,
+                RelationshipTypeScan,
+                RelationshipPropertySeek,
+                RelationshipPropertyRangeSeek,
+                FilterNodeProperty,
+                FilterNodeLabels,
+                Expand,
+                ProcedureCall,
+            ),
+        ):
+            continue
+        else:
+            raise TypeError(
+                f"Unsupported logical operator: {type(operator).__name__}"
+            )
+    if not projected:
+        raise TypeError("Logical plan does not contain a projection")
+    return [dict(row.values) for row in stream]
+
+
+def _plan_source_rows(
+    plan: LogicalPlan, context: QueryContext
+) -> tuple[object, Iterable[BindingRow]]:
+    source = plan.source
+    if isinstance(source, NodeScanSource):
+        return source.query, _node_scan_rows(source.query, context)
+    if isinstance(source, AnchoredMatchSource):
+        return source.query, _match_rows(source.query, context)
+    if isinstance(source, RelationshipScanSource):
+        return source.query, _relationship_rows(source.query, context)
+    if isinstance(source, MultiMatchSource):
+        return source.query, _multi_match_rows(source.query, context)
+    if isinstance(source, ProcedureSource):
+        paths = context.graph.sample_typed_paths(
+            source.query.seed_ids, source.query.pattern
+        )
+        return source.query, (
+            BindingRow(bindings={"path": path}) for path in paths
+        )
+    raise TypeError("Logical plan does not define a supported binding source")
+
+
+def _require_projected(projected: bool, operator: object) -> None:
+    if not projected:
+        raise TypeError(
+            f"{type(operator).__name__} cannot execute before projection"
+        )
 
 
 def _reset_used_relationships(rows):

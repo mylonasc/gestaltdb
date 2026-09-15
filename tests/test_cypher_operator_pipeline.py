@@ -1,10 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
-from gestaltdb.cypher import parse
+from gestaltdb.cypher import execute, parse, plan
+from gestaltdb.cypher_plan import (
+    AnchoredMatchSource,
+    Distinct,
+    FilterExpression,
+    MultiMatchSource,
+    NodeScanSource,
+    ProcedureSource,
+    RelationshipScanSource,
+    Sort,
+)
 from gestaltdb.cypher_runtime import (
     BindingRow,
     DistinctOperator,
@@ -14,6 +24,7 @@ from gestaltdb.cypher_runtime import (
     QueryContext,
     SkipOperator,
     SortOperator,
+    execute_plan,
     expand_typed,
 )
 from gestaltdb.graphdb import Edge, Node
@@ -166,3 +177,70 @@ def test_sort_operator_uses_hidden_source_expression_and_is_stable():
     )
 
     assert [row.values["name"] for row in result] == ["Second", "First", "Third"]
+
+
+@pytest.mark.parametrize(
+    ("query", "source_type"),
+    [
+        ("MATCH (n:Person) RETURN n", NodeScanSource),
+        (
+            'MATCH (n {id: "n"})-[:T]->(m) RETURN m',
+            AnchoredMatchSource,
+        ),
+        ("MATCH (n)-[:T]->(m) RETURN m", RelationshipScanSource),
+        (
+            "MATCH (n:Person), (m:Person) RETURN n, m",
+            MultiMatchSource,
+        ),
+        (
+            'CALL pg.sample_typed_paths(["n"], []) YIELD path RETURN path',
+            ProcedureSource,
+        ),
+    ],
+)
+def test_plans_define_typed_binding_sources(query, source_type):
+    assert isinstance(plan(query).source, source_type)
+
+
+def test_execute_obeys_the_generated_logical_plan(monkeypatch):
+    graph = FakeCypherGraph()
+    graph.put_node(Node(node_id="alice", properties={"active": True}))
+    graph.put_node(Node(node_id="bob", properties={"active": False}))
+    query = "MATCH (n) WHERE n.active = true RETURN n.id ORDER BY n.id"
+    logical_plan = plan(query)
+    plan_without_filter = replace(
+        logical_plan,
+        operators=tuple(
+            operator
+            for operator in logical_plan.operators
+            if not isinstance(operator, FilterExpression)
+        ),
+    )
+    monkeypatch.setattr(
+        "gestaltdb.cypher.plan_query", lambda parsed: plan_without_filter
+    )
+
+    result = execute(graph, query)
+
+    assert result.records == [{"n.id": "alice"}, {"n.id": "bob"}]
+
+
+def test_logical_result_operator_order_matches_compatible_execution_order():
+    logical_plan = plan("MATCH (n) RETURN DISTINCT n.kind ORDER BY n.kind")
+    result_operators = [
+        operator
+        for operator in logical_plan.operators
+        if isinstance(operator, (Sort, Distinct))
+    ]
+
+    assert [type(operator) for operator in result_operators] == [Sort, Distinct]
+
+
+def test_execute_plan_rejects_unknown_logical_operator():
+    logical_plan = plan("MATCH (n) RETURN n")
+    invalid_plan = replace(
+        logical_plan, operators=(object(), *logical_plan.operators)
+    )
+
+    with pytest.raises(TypeError, match="Unsupported logical operator: object"):
+        execute_plan(invalid_plan, QueryContext(FakeCypherGraph()))

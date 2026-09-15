@@ -6,6 +6,7 @@
 - Added arithmetic, expression comparisons, boolean and string predicates, regex matching, alias-aware ordering, Cypher three-valued null logic, and relationship-isomorphism enforcement for fixed paths.
 - Corrected logical plans for `DISTINCT`, `ORDER BY`, `SKIP`, and `LIMIT`, and removed unsafe intermediate `LIMIT` pushdown during multi-hop traversal.
 - Added generalized fixed-length patterns with anonymous elements, optional relationship types, bracketless relationships, endpoint labels/properties, unanchored multi-hop traversal, comma-separated pattern parts, and canonical all-edge iteration for untyped matches.
+- Added typed Cypher binding/result rows and executable projection, sorting, distinct, skip, and limit operators, then made the planner-derived logical plan authoritative for query execution.
 
 ## 0.6.2
 

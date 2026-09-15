@@ -22,10 +22,7 @@ from .cypher_parser import split_top_level_args as _split_top_level_args  # noqa
 from .cypher_plan import LogicalPlan, plan_query
 from .cypher_runtime import (
     QueryContext,
-    execute_match,
-    execute_multi_match,
-    execute_node_scan,
-    execute_relationship_scan,
+    execute_plan,
 )
 
 
@@ -93,28 +90,9 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
     Examples:
         >>> execute(graph_db, 'MATCH (n:Drug) RETURN n')  # doctest: +SKIP
     """
-    parsed = parse(query)
-    plan_query(parsed)
-    parameters = parameters or {}
-    if isinstance(parsed, SampleTypedPathsCall):
-        paths = graph.sample_typed_paths(parsed.seed_ids, parsed.pattern)
-        if parsed.limit is not None:
-            limit = QueryContext(graph=graph, parameters=parameters).resolve(parsed.limit)
-            if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
-                raise ValueError("LIMIT must be a non-negative integer")
-            paths = paths[:limit]
-        return QueryResult(
-            columns=parsed.returns,
-            records=[{"path": path} for path in paths],
-        )
-    if isinstance(parsed, NodeScanQuery):
-        records = execute_node_scan(parsed, QueryContext(graph=graph, parameters=parameters))
-        return QueryResult(columns=parsed.returns, records=records)
-    if isinstance(parsed, RelationshipScanQuery):
-        records = execute_relationship_scan(parsed, QueryContext(graph=graph, parameters=parameters))
-        return QueryResult(columns=parsed.returns, records=records)
-    if isinstance(parsed, MultiMatchQuery):
-        records = execute_multi_match(parsed, QueryContext(graph=graph, parameters=parameters))
-        return QueryResult(columns=parsed.returns, records=records)
-    records = execute_match(parsed, QueryContext(graph=graph, parameters=parameters))
-    return QueryResult(columns=parsed.returns, records=records)
+    logical_plan = plan_query(parse(query))
+    records = execute_plan(
+        logical_plan,
+        QueryContext(graph=graph, parameters=parameters or {}),
+    )
+    return QueryResult(columns=logical_plan.columns, records=records)

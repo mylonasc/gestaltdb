@@ -27,6 +27,43 @@ class LogicalPlan:
     """Ordered logical operators for a parsed query."""
 
     operators: tuple[object, ...]
+    source: object | None = None
+    columns: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class NodeScanSource:
+    """Produce binding rows for one parsed node scan."""
+
+    query: NodeScanQuery
+
+
+@dataclass(frozen=True)
+class AnchoredMatchSource:
+    """Produce binding rows for one anchored typed traversal."""
+
+    query: MatchQuery
+
+
+@dataclass(frozen=True)
+class RelationshipScanSource:
+    """Produce binding rows for one relationship scan."""
+
+    query: RelationshipScanQuery
+
+
+@dataclass(frozen=True)
+class MultiMatchSource:
+    """Produce binding rows for generalized and chained patterns."""
+
+    query: MultiMatchQuery
+
+
+@dataclass(frozen=True)
+class ProcedureSource:
+    """Produce binding rows from a supported procedure call."""
+
+    query: SampleTypedPathsCall
 
 
 @dataclass(frozen=True)
@@ -172,7 +209,9 @@ def plan_query(parsed) -> LogicalPlan:
     if isinstance(parsed, SampleTypedPathsCall):
         operators = [ProcedureCall("pg.sample_typed_paths"), Project(parsed.returns)]
         _append_result_operators(operators, parsed)
-        return LogicalPlan(tuple(operators))
+        return LogicalPlan(
+            tuple(operators), ProcedureSource(parsed), parsed.returns
+        )
     raise TypeError(f"unsupported parsed query type: {type(parsed).__name__}")
 
 
@@ -188,7 +227,7 @@ def _plan_node_scan(parsed: NodeScanQuery) -> LogicalPlan:
         operators.append(FilterExpression(parsed.where))
     operators.append(Project(parsed.returns))
     _append_result_operators(operators, parsed)
-    return LogicalPlan(tuple(operators))
+    return LogicalPlan(tuple(operators), NodeScanSource(parsed), parsed.returns)
 
 
 def _plan_match(parsed: MatchQuery) -> LogicalPlan:
@@ -198,7 +237,7 @@ def _plan_match(parsed: MatchQuery) -> LogicalPlan:
         operators.append(FilterExpression(parsed.where))
     operators.append(Project(parsed.returns))
     _append_result_operators(operators, parsed)
-    return LogicalPlan(tuple(operators))
+    return LogicalPlan(tuple(operators), AnchoredMatchSource(parsed), parsed.returns)
 
 
 def _plan_relationship_scan(parsed: RelationshipScanQuery) -> LogicalPlan:
@@ -208,7 +247,9 @@ def _plan_relationship_scan(parsed: RelationshipScanQuery) -> LogicalPlan:
         operators.append(FilterExpression(parsed.where))
     operators.append(Project(parsed.returns))
     _append_result_operators(operators, parsed)
-    return LogicalPlan(tuple(operators))
+    return LogicalPlan(
+        tuple(operators), RelationshipScanSource(parsed), parsed.returns
+    )
 
 
 def _plan_multi_match(parsed: MultiMatchQuery) -> LogicalPlan:
@@ -254,7 +295,7 @@ def _plan_multi_match(parsed: MultiMatchQuery) -> LogicalPlan:
         operators.append(FilterExpression(parsed.where))
     operators.append(Project(parsed.returns))
     _append_result_operators(operators, parsed)
-    return LogicalPlan(tuple(operators))
+    return LogicalPlan(tuple(operators), MultiMatchSource(parsed), parsed.returns)
 
 
 def _relationship_property_seek_operators(parsed: RelationshipScanQuery) -> list[object]:
@@ -279,10 +320,10 @@ def _relationship_property_seek_operators(parsed: RelationshipScanQuery) -> list
 
 
 def _append_result_operators(operators: list[object], parsed) -> None:
-    if getattr(parsed, "distinct", False):
-        operators.append(Distinct())
     if getattr(parsed, "order_by", ()):
         operators.append(Sort(parsed.order_by))
+    if getattr(parsed, "distinct", False):
+        operators.append(Distinct())
     if getattr(parsed, "skip", None) is not None:
         operators.append(Skip(parsed.skip))
     if parsed.limit is not None:
