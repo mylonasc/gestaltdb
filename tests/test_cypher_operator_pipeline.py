@@ -24,6 +24,7 @@ from gestaltdb.cypher_runtime import (
     QueryContext,
     SkipOperator,
     SortOperator,
+    cypher_value_key,
     execute_plan,
     expand_typed,
 )
@@ -244,3 +245,31 @@ def test_execute_plan_rejects_unknown_logical_operator():
 
     with pytest.raises(TypeError, match="Unsupported logical operator: object"):
         execute_plan(invalid_plan, QueryContext(FakeCypherGraph()))
+
+
+def test_cypher_value_key_separates_booleans_from_numbers():
+    assert cypher_value_key(True) != cypher_value_key(1)
+    assert cypher_value_key(False) != cypher_value_key(0)
+    assert cypher_value_key(1) == cypher_value_key(1.0)
+
+
+def test_cypher_value_key_identifies_entities_by_kind_and_stable_id():
+    first = Node(node_id="n", labels=["Person"])
+    second = Node(node_id="n", labels=["Person"])
+    edge = Edge(edge_id="n", source="a", target="b", properties={"type": "T"})
+
+    assert cypher_value_key(first) == cypher_value_key(second)
+    assert cypher_value_key(first) != cypher_value_key(edge)
+
+
+def test_cypher_value_key_canonicalizes_nested_values():
+    assert cypher_value_key([1, {"b": 2, "a": 1}]) == cypher_value_key([1, {"a": 1, "b": 2}])
+    assert cypher_value_key(None) != cypher_value_key(False)
+
+
+def test_distinct_operator_keeps_true_and_one_as_separate_rows():
+    rows = [ProjectedRow({"value": True}), ProjectedRow({"value": 1})]
+
+    result = list(DistinctOperator(("value",)).execute(rows, QueryContext(object())))
+
+    assert result == rows

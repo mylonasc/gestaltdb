@@ -11,6 +11,7 @@
 - Added ordered Cypher semantic scope analysis (`cypher_semantics.analyze_query`) for `MATCH`/`WHERE`/`RETURN`, with shared source-located errors in `cypher_errors`.
 - Added general projection expressions (arithmetic, literals, parameters, lists, maps) in `RETURN` and `ORDER BY`, with deterministic unaliased column names.
 - Added `WITH` with scope replacement, clause-local `WHERE`, and local `DISTINCT`/`ORDER BY`/`SKIP`/`LIMIT`, executed through staged `MatchStep`/`ProjectItems` plans.
+- Added a shared Cypher value identity (`cypher_value_key`) for result `DISTINCT`, separating booleans from numbers and keying entities by kind plus stable ID.
 
 ## 0.6.2
 

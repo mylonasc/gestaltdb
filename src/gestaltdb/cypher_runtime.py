@@ -269,7 +269,7 @@ class DistinctOperator:
         del context
         seen = set()
         for row in rows:
-            key = tuple(_hashable_value(row.values.get(column)) for column in self.columns)
+            key = tuple(cypher_value_key(row.values.get(column)) for column in self.columns)
             if key in seen:
                 continue
             seen.add(key)
@@ -1369,24 +1369,50 @@ def _sortable_value(value):
     return (value is None, value)
 
 
+def cypher_value_key(value):
+    """Return a hashable identity key for grouping and deduplication.
+
+    Booleans are tagged separately from numbers so ``True`` and ``1`` stay
+    distinct, and graph entities key by kind plus stable ID instead of object
+    identity.
+    """
+    if value is None:
+        return ("null",)
+    if isinstance(value, bool):
+        return ("boolean", value)
+    if isinstance(value, (int, float)):
+        return ("number", value)
+    if isinstance(value, str):
+        return ("string", value)
+    if isinstance(value, (list, tuple)):
+        return ("list", tuple(cypher_value_key(item) for item in value))
+    if isinstance(value, dict):
+        return (
+            "map",
+            tuple(sorted((key, cypher_value_key(item)) for key, item in value.items())),
+        )
+    if hasattr(value, "get_id") and hasattr(value, "properties"):
+        entity_id = value.get_id() if callable(value.get_id) else value.get_id
+        if hasattr(value, "labels"):
+            return ("node", entity_id)
+        return ("edge", entity_id)
+    try:
+        hash(value)
+    except TypeError:
+        return ("repr", repr(value))
+    return ("value", value)
+
+
 def _distinct_records(records: list[dict[str, object]], columns: tuple[str, ...]) -> list[dict[str, object]]:
     seen = set()
     distinct = []
     for record in records:
-        key = tuple(_hashable_value(record.get(column)) for column in columns)
+        key = tuple(cypher_value_key(record.get(column)) for column in columns)
         if key in seen:
             continue
         seen.add(key)
         distinct.append(record)
     return distinct
-
-
-def _hashable_value(value):
-    if isinstance(value, list):
-        return tuple(_hashable_value(item) for item in value)
-    if isinstance(value, dict):
-        return tuple(sorted((key, _hashable_value(item)) for key, item in value.items()))
-    return value
 
 
 def project_value(bindings: dict[str, object], return_item: str):
