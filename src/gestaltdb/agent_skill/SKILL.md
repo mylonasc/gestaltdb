@@ -56,9 +56,9 @@ The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storag
 
 ## Cypher Boundaries
 
-`GraphDB.query(cypher, parameters=None)` is read-only. It supports label scans, inline properties, parameters, typed relationship traversal, `WHERE`, `RETURN`, `DISTINCT`, `ORDER BY`, `SKIP`, `LIMIT`, and chained `MATCH` clauses.
+`GraphDB.query(cypher, parameters=None)` is read-only. It supports label scans, inline properties, parameters, typed relationship traversal, `WHERE`, `RETURN`, general projection expressions, `DISTINCT`, `ORDER BY`, `SKIP`, `LIMIT`, chained `MATCH` clauses, and `WITH` with scope replacement and local result modifiers.
 
-Do not use mutating clauses, aggregation, `WITH`, `OPTIONAL MATCH`, variable-length paths, multiple pattern parts in one `MATCH`, or path binding like `p = (a)-[:T]->(b)`.
+Do not use mutating clauses, aggregation, `OPTIONAL MATCH`, variable-length paths, or path binding like `p = (a)-[:T]->(b)`.
 
 ## Minimal Runnable Pattern
 

@@ -69,6 +69,23 @@ class ProjectionItem:
 
 
 @dataclass(frozen=True)
+class WithClause:
+    """An intermediate projection, scope boundary, and local modifiers."""
+
+    items: tuple[ProjectionItem, ...]
+    distinct: bool = False
+    order_by: tuple[OrderItem, ...] = ()
+    skip: int | Parameter | None = None
+    limit: int | Parameter | None = None
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+    @property
+    def projections(self) -> tuple[ProjectionItem, ...]:
+        """Return projection items using the planner-oriented name."""
+        return self.items
+
+
+@dataclass(frozen=True)
 class ReturnClause:
     """A terminal projection and the result modifiers owned by it."""
 

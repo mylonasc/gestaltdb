@@ -44,6 +44,7 @@ from .cypher_ast import (
     Variable,
     WhereClause,
     Wildcard,
+    WithClause,
     XorExpression,
 )
 from .cypher_errors import CypherSemanticError, CypherSyntaxError
@@ -53,9 +54,12 @@ _GRAMMAR = r"""
 ?start: query ";"?
 ?query: match_query | sample_call
 
-match_query: match_clause+ where_clause? return_clause order_clause? skip_clause? limit_clause?
-match_clause: "MATCH"i pattern ("," pattern)*
-where_clause: "WHERE"i expression
+ match_query: match_clause (match_clause | where_clause | with_section)* return_full
+ match_clause: "MATCH"i pattern ("," pattern)*
+ where_clause: "WHERE"i expression
+ with_section: with_clause where_clause? order_clause? skip_clause? limit_clause?
+ with_clause: "WITH"i DISTINCT? return_items
+ return_full: return_clause order_clause? skip_clause? limit_clause?
  return_clause: "RETURN"i DISTINCT? return_items
  return_items: return_item ("," return_item)*
  return_item: projection_expression ("AS"i symbolic_name)?
@@ -200,6 +204,7 @@ class _ParsedMatch:
     where_part: _ParsedPart | None
     return_part: _ParsedPart
     modifier_parts: tuple[_ParsedPart, ...]
+    sequence: tuple[object, ...] = ()
 
 
 class _ASTBuilder(Transformer):
@@ -384,9 +389,26 @@ class _ASTBuilder(Transformer):
     def call_arguments(self, children):
         return ("arguments", tuple(item for item in children if item is not None))
 
+    @v_args(meta=True)
+    def with_clause(self, meta, children):
+        distinct = bool(children and str(children[0]).upper() == "DISTINCT")
+        return _ParsedPart("with", (children[-1], distinct), _source_span(meta))
+
+    def with_section(self, children):
+        return tuple(children)
+
+    def return_full(self, children):
+        return tuple(children)
+
     def match_query(self, children):
-        match_groups = tuple(item for item in children if isinstance(item, _MatchPatterns))
-        parts = tuple(item for item in children if isinstance(item, _ParsedPart))
+        sequence: list[object] = []
+        for item in children:
+            if isinstance(item, tuple) and item and all(isinstance(part, _ParsedPart) for part in item):
+                sequence.extend(item)
+            else:
+                sequence.append(item)
+        match_groups = tuple(item for item in sequence if isinstance(item, _MatchPatterns))
+        parts = tuple(item for item in sequence if isinstance(item, _ParsedPart))
         where_part = next((item for item in parts if item.kind == "where"), None)
         return_part = next(item for item in parts if item.kind == "return")
         return_items, distinct = return_part.value
@@ -414,6 +436,7 @@ class _ASTBuilder(Transformer):
             where_part,
             return_part,
             modifier_parts,
+            tuple(sequence),
         )
 
     def sample_call(self, children):
@@ -439,6 +462,12 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
     if isinstance(parsed, tuple) and parsed and parsed[0] == "sample":
         return _build_sample_call(parsed, query)
     canonical = _build_canonical_query(parsed, query)
+    if any(isinstance(clause, WithClause) for clause in canonical.clauses):
+        raise _located_error(
+            CypherSemanticError,
+            "Query cannot be represented by legacy parse(); use parse_ast()",
+            query,
+        )
     analysis = analyze_query(canonical)
     return _build_match_query(parsed, query, analysis)
 
@@ -458,33 +487,90 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
     for patterns in parsed.pattern_groups:
         for pattern in patterns:
             _validate_pattern_literals(pattern, query)
-    clauses: list[object] = [
-        MatchClause(group.values, span=group.span) for group in parsed.match_groups
-    ]
-    if parsed.where_part is not None:
-        clauses.append(WhereClause(parsed.where, span=parsed.where_part.span))
+    clauses: list[object] = []
+    pending: dict[str, object] = {}
+    pending_span: SourceSpan | None = None
+    pending_kind: str | None = None
+    pending_value: object | None = None
 
-    return_span = _merge_spans(
-        parsed.return_part.span,
-        *(part.span for part in parsed.modifier_parts),
-    )
-    clauses.append(
-        ReturnClause(
-            items=tuple(
-                ProjectionItem(
-                    Wildcard(span=item.span) if item.expression == "*" else item.expression,
-                    item.alias,
-                    span=item.span,
-                )
-                for item in parsed.projections
-            ),
-            distinct=parsed.distinct,
-            order_by=parsed.order_by,
-            skip=parsed.skip,
-            limit=parsed.limit,
-            span=return_span,
+    def projection_items(items: tuple[_Projection, ...]) -> tuple[ProjectionItem, ...]:
+        return tuple(
+            ProjectionItem(
+                Wildcard(span=item.span) if item.expression == "*" else item.expression,
+                item.alias,
+                span=item.span,
+            )
+            for item in items
         )
-    )
+
+    def close_projection() -> None:
+        nonlocal pending, pending_span, pending_kind, pending_value
+        if pending_kind is None:
+            return
+        items, distinct = pending_value
+        span = _merge_spans(
+            pending_span,
+            *(part.span for part in pending["modifiers"]),
+        )
+        if pending_kind == "with":
+            clauses.append(
+                WithClause(
+                    items=projection_items(items),
+                    distinct=distinct,
+                    order_by=pending["order"],
+                    skip=pending["skip"],
+                    limit=pending["limit"],
+                    span=span,
+                )
+            )
+        else:
+            clauses.append(
+                ReturnClause(
+                    items=projection_items(items),
+                    distinct=distinct,
+                    order_by=pending["order"],
+                    skip=pending["skip"],
+                    limit=pending["limit"],
+                    span=span,
+                )
+            )
+        pending = {}
+        pending_span = None
+        pending_kind = None
+        pending_value = None
+
+    for item in parsed.sequence:
+        if isinstance(item, _MatchPatterns):
+            if pending_kind == "return":
+                raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
+            close_projection()
+            clauses.append(MatchClause(item.values, span=item.span))
+        elif isinstance(item, _ParsedPart) and item.kind == "where":
+            # A WHERE following WITH belongs to that WITH stage, so the open
+            # projection must be closed first to preserve textual order.
+            close_projection()
+            clauses.append(WhereClause(item.value, span=item.span))
+        elif isinstance(item, _ParsedPart) and item.kind in ("with", "return"):
+            close_projection()
+            pending_kind = item.kind
+            pending_value = item.value
+            pending_span = item.span
+            pending = {"order": (), "skip": None, "limit": None, "modifiers": []}
+        elif isinstance(item, _ParsedPart) and item.kind in ("order", "skip", "limit"):
+            if pending_kind is None:
+                raise _located_error(CypherSemanticError, "ORDER BY, SKIP, and LIMIT must follow WITH or RETURN", query)
+            if item.kind == "order" and pending["order"] != ():
+                raise _located_error(CypherSemanticError, "Duplicate ORDER BY clause", query)
+            if item.kind in ("skip", "limit") and pending[item.kind] is not None:
+                raise _located_error(CypherSemanticError, f"Duplicate {item.kind.upper()} clause", query)
+            pending["modifiers"].append(item)
+            if item.kind == "order":
+                pending["order"] = item.value
+            else:
+                pending[item.kind] = item.value
+        else:  # pragma: no cover - grammar builder invariant
+            raise _located_error(CypherSemanticError, "Unsupported Cypher query", query)
+    close_projection()
     return Query(tuple(clauses), query, span=_query_span(query))
 
 

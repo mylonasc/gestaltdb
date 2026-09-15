@@ -8,6 +8,7 @@ from .cypher_ast import (
     AnchoredPatternClause,
     AndExpression,
     ComparisonExpression,
+    MatchClause,
     MatchQuery,
     MultiMatchQuery,
     NodePatternClause,
@@ -15,10 +16,14 @@ from .cypher_ast import (
     PathPatternClause,
     PatternHop,
     PropertyRef,
+    Query,
     RelationshipPatternClause,
     RelationshipScanQuery,
+    ReturnClause,
     SampleTypedPathsCall,
     TraversalHop,
+    WhereClause,
+    WithClause,
 )
 
 
@@ -29,6 +34,23 @@ class LogicalPlan:
     operators: tuple[object, ...]
     source: object | None = None
     columns: tuple[str, ...] = ()
+    staged: bool = False
+
+
+@dataclass(frozen=True)
+class MatchStep:
+    """Match the patterns of one textual ``MATCH`` with a fresh scope."""
+
+    patterns: tuple[PathPatternClause, ...]
+    group_id: int
+
+
+@dataclass(frozen=True)
+class ProjectItems:
+    """Project one ``WITH`` or ``RETURN`` clause from resolved expressions."""
+
+    returns: tuple[str, ...]
+    expressions: tuple[object, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -213,6 +235,53 @@ def plan_query(parsed) -> LogicalPlan:
             tuple(operators), ProcedureSource(parsed), parsed.returns
         )
     raise TypeError(f"unsupported parsed query type: {type(parsed).__name__}")
+
+
+def plan_staged_query(query: Query) -> LogicalPlan:
+    """Plan a canonical query with ``WITH`` stages as executable operators.
+
+    Operator order within each projection clause follows Cypher semantics:
+    project, then ``DISTINCT``, then the ``WHERE`` filter owned by that
+    stage, then ``ORDER BY``, ``SKIP``, and ``LIMIT``.
+    """
+    from .cypher_semantics import analyze_query
+
+    analysis = analyze_query(query)
+    by_clause = {id(entry.clause): entry for entry in analysis.clauses}
+    operators: list[object] = []
+    group_id = 0
+    index = 0
+    clauses = query.clauses
+    while index < len(clauses):
+        clause = clauses[index]
+        if isinstance(clause, MatchClause):
+            operators.append(MatchStep(clause.patterns, group_id))
+            group_id += 1
+        elif isinstance(clause, WhereClause):
+            operators.append(FilterExpression(clause.expression))
+        elif isinstance(clause, (WithClause, ReturnClause)):
+            entry = by_clause[id(clause)]
+            operators.append(
+                ProjectItems(
+                    returns=tuple(item.output.name for item in entry.projections),
+                    expressions=tuple(item.expression for item in entry.projections),
+                )
+            )
+            if clause.distinct:
+                operators.append(Distinct())
+            if index + 1 < len(clauses) and isinstance(clauses[index + 1], WhereClause):
+                operators.append(FilterExpression(clauses[index + 1].expression))
+                index += 1
+            if clause.order_by:
+                operators.append(Sort(clause.order_by))
+            if clause.skip is not None:
+                operators.append(Skip(clause.skip))
+            if clause.limit is not None:
+                operators.append(Limit(clause.limit))
+        else:
+            raise TypeError(f"unsupported canonical clause type: {type(clause).__name__}")
+        index += 1
+    return LogicalPlan(tuple(operators), None, analysis.output_names, True)
 
 
 def _plan_node_scan(parsed: NodeScanQuery) -> LogicalPlan:

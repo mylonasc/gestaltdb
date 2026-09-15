@@ -126,6 +126,9 @@ Projection and Result Shaping
 -----------------------------
 
 Use aliases, ``RETURN *``, ``DISTINCT``, ``ORDER BY``, ``SKIP``, and ``LIMIT``.
+``RETURN`` and ``ORDER BY`` accept general expressions, including arithmetic,
+literals, parameters, lists, and maps. Unaliased expressions use a
+deterministic rendered column name, so prefer ``AS`` aliases for readability.
 ``ORDER BY`` accepts a projected alias. ``SKIP`` and ``LIMIT`` accept either a
 non-negative integer literal or a parameter containing one.
 
@@ -146,9 +149,8 @@ Chained MATCH Clauses
 ---------------------
 
 Multiple ``MATCH`` clauses execute as a row pipeline. Reusing a variable enforces
-that it refers to the same entity.
-All ``MATCH`` clauses currently precede one shared ``WHERE`` clause; clause-local
-``WHERE`` followed by another ``MATCH`` is not yet supported.
+that it refers to the same entity. ``WHERE`` may follow any ``MATCH`` clause
+and filters that stage before later clauses run.
 
 .. code-block:: python
 
@@ -156,6 +158,24 @@ All ``MATCH`` clauses currently precede one shared ``WHERE`` clause; clause-loca
        'MATCH (d:Drug {name: "Aspirin"}) '
        'MATCH (d)-[r:binds]->(p) '
        'RETURN d.id, r.score, p.id'
+   )
+
+WITH and Variable Scope
+-----------------------
+
+``WITH`` projects intermediate values, replaces the variable scope with its
+outputs, and may carry its own ``WHERE``, ``DISTINCT``, ``ORDER BY``,
+``SKIP``, and ``LIMIT``. Only projected variables and aliases survive; later
+``MATCH`` clauses may traverse from retained entity variables. Each ``MATCH``
+starts a new relationship uniqueness scope.
+
+.. code-block:: python
+
+   graph_db.query(
+       'MATCH (p:Person) '
+       'WITH p ORDER BY p.age DESC LIMIT 10 '
+       'MATCH (p)-[:member_of]->(t:Team) '
+       'RETURN p.name AS name, t.name AS team'
    )
 
 Sampling Procedure
@@ -182,7 +202,6 @@ locations. The current Cypher API does not yet support:
 
 - mutating queries such as ``CREATE``, ``SET``, ``DELETE``, or ``MERGE``
 - aggregation such as ``count`` or ``collect``
-- ``WITH``
 - ``OPTIONAL MATCH``
 - variable-length paths
 - path values such as ``p = (a)-[:T]->(b)``

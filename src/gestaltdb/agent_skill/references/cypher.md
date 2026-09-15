@@ -9,14 +9,14 @@ Use `graph.query(cypher, parameters=None)` for read-only Cypher. It returns `Que
 - Anonymous pattern elements, endpoint labels/properties, unanchored multi-hop paths, and comma-separated pattern parts.
 - `WHERE` arithmetic and comparisons, `NOT`/`AND`/`XOR`/`OR`, `IN`, null predicates, string predicates, and `=~`.
 - Cypher three-valued null logic; use `IS NULL` rather than `= null`.
-- `RETURN`, aliases, `RETURN *`, `DISTINCT`, alias-aware `ORDER BY`, and literal or parameterized `SKIP`/`LIMIT`.
-- Chained `MATCH` clauses.
-- In chained queries, place all `MATCH` clauses before the shared `WHERE` clause.
+- `RETURN`, aliases, `RETURN *`, general projection expressions, `DISTINCT`, alias-aware `ORDER BY`, and literal or parameterized `SKIP`/`LIMIT`.
+- Chained `MATCH` clauses with clause-local `WHERE`.
+- `WITH` with scope replacement: only projected variables and aliases survive, and `WITH` may carry its own `WHERE`, `DISTINCT`, `ORDER BY`, `SKIP`, and `LIMIT`.
 - `{id: $id}` on the first node of a relationship path addresses the stable entity ID as a GestaltDB extension; elsewhere `id` is an ordinary property filter.
 
 ## Unsupported
 
-Do not use `CREATE`, `MERGE`, `SET`, `DELETE`, aggregation such as `COUNT`, `WITH`, `OPTIONAL MATCH`, variable-length paths, relationship property maps, or path binding.
+Do not use `CREATE`, `MERGE`, `SET`, `DELETE`, aggregation such as `COUNT`, `OPTIONAL MATCH`, variable-length paths, relationship property maps, or path binding.
 
 ## Example
 

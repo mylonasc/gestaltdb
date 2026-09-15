@@ -17,11 +17,12 @@ from .cypher_ast import (
     Query,
     RelationshipScanQuery,
     SampleTypedPathsCall,
+    WithClause,
 )
 from .cypher_parser import parse as _parse_query
 from .cypher_parser import parse_ast as _parse_ast
 from .cypher_parser import split_top_level_args as _split_top_level_args  # noqa: F401
-from .cypher_plan import LogicalPlan, plan_query
+from .cypher_plan import LogicalPlan, plan_query, plan_staged_query
 from .cypher_runtime import (
     QueryContext,
     execute_plan,
@@ -79,8 +80,18 @@ def parse_ast(query: str) -> Query | SampleTypedPathsCall:
     return _parse_ast(query)
 
 
+def _is_staged_query(canonical: Query | SampleTypedPathsCall) -> bool:
+    """Return whether a canonical query requires staged ``WITH`` execution."""
+    return isinstance(canonical, Query) and any(
+        isinstance(clause, WithClause) for clause in canonical.clauses
+    )
+
+
 def plan(query: str) -> LogicalPlan:
     """Return the logical plan for a supported Cypher query."""
+    canonical = _parse_ast(query)
+    if _is_staged_query(canonical):
+        return plan_staged_query(canonical)
     return plan_query(parse(query))
 
 
@@ -97,7 +108,11 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
     Examples:
         >>> execute(graph_db, 'MATCH (n:Drug) RETURN n')  # doctest: +SKIP
     """
-    logical_plan = plan_query(parse(query))
+    canonical = _parse_ast(query)
+    if _is_staged_query(canonical):
+        logical_plan = plan_staged_query(canonical)
+    else:
+        logical_plan = plan_query(parse(query))
     records = execute_plan(
         logical_plan,
         QueryContext(graph=graph, parameters=parameters or {}),

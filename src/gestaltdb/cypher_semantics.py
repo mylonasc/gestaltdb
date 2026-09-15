@@ -27,6 +27,7 @@ from .cypher_ast import (
     Variable,
     WhereClause,
     Wildcard,
+    WithClause,
     XorExpression,
 )
 from .cypher_errors import CypherSemanticError
@@ -125,11 +126,12 @@ def analyze_query(query: Query) -> QueryAnalysis:
         if isinstance(clause, MatchClause):
             scope = _analyze_match(clause, scope, query.source)
         elif isinstance(clause, WhereClause):
-            if not isinstance(previous, MatchClause):
+            if not isinstance(previous, (MatchClause, WithClause)):
                 _raise_semantic("WHERE must immediately follow MATCH or WITH", query.source, clause.span)
             _validate_expression(clause.expression, scope, query.source, "WHERE", clause.span)
-        elif isinstance(clause, ReturnClause):
-            projections = _resolve_projections(clause, scope, query.source)
+        elif isinstance(clause, (WithClause, ReturnClause)):
+            label = "WITH" if isinstance(clause, WithClause) else "RETURN"
+            projections = _resolve_projections(clause, scope, query.source, label)
             scope = Scope(tuple(projection.output for projection in projections))
             order_scope = _merge_scopes(incoming, scope)
             for item in clause.order_by:
@@ -260,12 +262,14 @@ def _analyze_match(clause: MatchClause, scope: Scope, source: str) -> Scope:
     return Scope(tuple(symbols))
 
 
-def _resolve_projections(clause: ReturnClause, scope: Scope, source: str) -> tuple[ResolvedProjection, ...]:
+def _resolve_projections(
+    clause: ReturnClause | WithClause, scope: Scope, source: str, label: str = "RETURN"
+) -> tuple[ResolvedProjection, ...]:
     if any(isinstance(item.expression, Wildcard) for item in clause.items):
         if len(clause.items) != 1 or not isinstance(clause.items[0].expression, Wildcard):
-            _raise_semantic("RETURN * must be the only projection item", source, clause.span)
+            _raise_semantic(f"{label} * must be the only projection item", source, clause.span)
         if not scope.symbols:
-            _raise_semantic("RETURN * requires bound variables", source, clause.span)
+            _raise_semantic(f"{label} * requires bound variables", source, clause.span)
         wildcard = clause.items[0]
         return tuple(
             ResolvedProjection(
@@ -280,11 +284,11 @@ def _resolve_projections(clause: ReturnClause, scope: Scope, source: str) -> tup
     resolved: list[ResolvedProjection] = []
     names: set[str] = set()
     for item in clause.items:
-        _validate_expression(item.expression, scope, source, "RETURN", item.span or clause.span)
+        _validate_expression(item.expression, scope, source, label, item.span or clause.span)
         rendered = render_projection(item.expression)
         output_name = item.alias or rendered
         if output_name in names:
-            _raise_semantic("RETURN contains duplicate column names", source, item.span or clause.span)
+            _raise_semantic(f"{label} contains duplicate column names", source, item.span or clause.span)
         names.add(output_name)
         kind = _projection_kind(item.expression, scope)
         resolved.append(

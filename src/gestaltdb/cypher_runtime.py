@@ -40,6 +40,7 @@ from .cypher_plan import (
     FilterNodeLabels,
     FilterNodeProperty,
     LogicalPlan,
+    MatchStep,
     MultiMatchSource,
     NodeAllScan,
     NodeByIdSeek,
@@ -48,6 +49,7 @@ from .cypher_plan import (
     NodeScanSource,
     ProcedureCall,
     ProcedureSource,
+    ProjectItems,
     RelationshipPropertyRangeSeek,
     RelationshipPropertySeek,
     RelationshipScanSource,
@@ -205,20 +207,31 @@ class ProjectOperator:
     ) -> Iterator[ProjectedRow]:
         projection_items = self.projections or self.returns
         for source_row in rows:
-            row = BindingRow.from_row(source_row)
+            if isinstance(source_row, ProjectedRow):
+                bindings = source_row.values
+            else:
+                bindings = BindingRow.from_row(source_row).bindings
             if self.projection_expressions:
                 values = {
-                    column: evaluate_expression(expression, row.bindings, context)
+                    column: evaluate_expression(expression, bindings, context)
                     for column, expression in zip(
                         self.returns, self.projection_expressions
                     )
                 }
             else:
                 values = {
-                    column: project_value(row.bindings, projection)
+                    column: project_value(bindings, projection)
                     for column, projection in zip(self.returns, projection_items)
                 }
-            yield ProjectedRow(values=values, source_bindings=row.bindings)
+            yield ProjectedRow(values=values, source_bindings=bindings)
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectionView:
+    """Minimal projection metadata for alias-aware ordering in staged plans."""
+
+    returns: tuple[str, ...]
+    projection_expressions: tuple[object, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -376,6 +389,8 @@ def _multi_match_rows(
 
 def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, object]]:
     """Execute an authoritative logical plan against one query context."""
+    if plan.staged or any(isinstance(operator, (MatchStep, ProjectItems)) for operator in plan.operators):
+        return _execute_staged(plan, context)
     parsed, rows = _plan_source_rows(plan, context)
     stream: Iterable[BindingRow] | Iterable[ProjectedRow] = rows
     projected = False
@@ -433,6 +448,82 @@ def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, obj
     if not projected:
         raise TypeError("Logical plan does not contain a projection")
     return [dict(row.values) for row in stream]
+
+
+def apply_match_step(
+    rows: Iterable[BindingRow], step: MatchStep, context: QueryContext
+) -> Iterable[BindingRow]:
+    """Match one textual ``MATCH`` clause with a fresh isomorphism scope."""
+    staged: Iterable[BindingRow] = _reset_used_relationships(rows)
+    for pattern in step.patterns:
+        staged = apply_path_pattern_clause(staged, pattern, context)
+    return staged
+
+
+def filter_projected(
+    rows: Iterable[ProjectedRow], expression: object, context: QueryContext
+) -> Iterator[ProjectedRow]:
+    """Yield projected rows whose output values satisfy a ``WHERE`` filter."""
+    for row in rows:
+        values = row.values if isinstance(row, ProjectedRow) else BindingRow.from_row(row).bindings
+        if evaluate_expression(expression, values, context) is True:
+            yield row
+
+
+def _execute_staged(plan: LogicalPlan, context: QueryContext) -> list[dict[str, object]]:
+    """Execute a multi-stage ``WITH`` plan, threading scopes between stages."""
+    bindings: Iterable[BindingRow] | None = iter([BindingRow(bindings={})])
+    projected: Iterable[ProjectedRow] | None = None
+    view = ProjectionView(())
+    for operator in plan.operators:
+        if isinstance(operator, MatchStep):
+            if projected is not None:
+                bindings = (
+                    BindingRow(bindings=dict(row.values), current_node_id=None)
+                    for row in projected
+                )
+                projected = None
+            bindings = apply_match_step(bindings if bindings is not None else iter(()), operator, context)
+        elif isinstance(operator, LogicalFilterExpression):
+            if projected is not None:
+                projected = filter_projected(projected, operator.expression, context)
+            else:
+                bindings = filter_expression(bindings if bindings is not None else iter(()), operator.expression, context)
+        elif isinstance(operator, ProjectItems):
+            source: Iterable[BindingRow] | Iterable[ProjectedRow] = (
+                projected if projected is not None else (bindings if bindings is not None else iter(()))
+            )
+            view = ProjectionView(operator.returns, operator.expressions)
+            projected = ProjectOperator(
+                returns=operator.returns,
+                projection_expressions=operator.expressions,
+            ).execute(source, context)
+            bindings = None
+        elif isinstance(operator, LogicalSort):
+            if projected is None:
+                raise TypeError("Sort cannot execute before projection")
+            projected = SortOperator(operator.items, view).execute(projected, context)
+        elif isinstance(operator, LogicalDistinct):
+            if projected is None:
+                raise TypeError("Distinct cannot execute before projection")
+            projected = DistinctOperator(view.returns).execute(projected, context)
+        elif isinstance(operator, LogicalSkip):
+            if projected is None:
+                raise TypeError("Skip cannot execute before projection")
+            count = _resolve_pagination(operator.count, context, "SKIP")
+            projected = SkipOperator(count or 0).execute(projected, context)
+        elif isinstance(operator, LogicalLimit):
+            if projected is None:
+                raise TypeError("Limit cannot execute before projection")
+            count = _resolve_pagination(operator.limit, context, "LIMIT")
+            projected = LimitOperator(count or 0).execute(projected, context)
+        else:
+            raise TypeError(
+                f"Unsupported staged operator: {type(operator).__name__}"
+            )
+    if projected is None:
+        raise TypeError("Staged plan does not contain a projection")
+    return [dict(row.values) for row in projected]
 
 
 def _plan_source_rows(
