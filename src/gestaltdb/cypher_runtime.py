@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from itertools import islice
+from typing import Protocol
 
 from .cypher_ast import (
     AnchoredPatternClause,
@@ -70,6 +72,198 @@ class QueryContext:
         return value
 
 
+@dataclass(frozen=True, slots=True)
+class BindingRow(Mapping[str, object]):
+    """Typed variable bindings and traversal state for one runtime row.
+
+    The mapping interface keeps direct runtime-helper callers compatible while
+    the execution pipeline migrates away from implicit dictionary row shapes.
+    """
+
+    bindings: dict[str, object]
+    current_node_id: bytes | None = None
+    used_relationship_ids: frozenset[bytes] = frozenset()
+
+    def __getitem__(self, key: str) -> object:
+        if key == "bindings":
+            return self.bindings
+        if key == "current_node_id":
+            return self.current_node_id
+        if key == "used_relationship_ids":
+            return self.used_relationship_ids
+        raise KeyError(key)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(("bindings", "current_node_id", "used_relationship_ids"))
+
+    def __len__(self) -> int:
+        return 3
+
+    @classmethod
+    def from_row(cls, row: BindingRow | Mapping[str, object]) -> BindingRow:
+        """Return ``row`` as a typed binding row."""
+        if isinstance(row, cls):
+            return row
+        return cls(
+            bindings=dict(row["bindings"]),  # type: ignore[arg-type]
+            current_node_id=row.get("current_node_id"),  # type: ignore[arg-type]
+            used_relationship_ids=frozenset(row.get("used_relationship_ids", ())),  # type: ignore[arg-type]
+        )
+
+    def with_bindings(
+        self,
+        bindings: dict[str, object],
+        *,
+        current_node_id: bytes | None = None,
+        preserve_current_node: bool = True,
+        used_relationship_ids: frozenset[bytes] | None = None,
+    ) -> BindingRow:
+        """Return a row with updated bindings and traversal state."""
+        return BindingRow(
+            bindings=bindings,
+            current_node_id=(
+                self.current_node_id if preserve_current_node else current_node_id
+            ),
+            used_relationship_ids=(
+                self.used_relationship_ids
+                if used_relationship_ids is None
+                else used_relationship_ids
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectedRow(Mapping[str, object]):
+    """Typed projected values with optional source bindings for ordering."""
+
+    values: dict[str, object]
+    source_bindings: dict[str, object] | None = None
+
+    def __getitem__(self, key: str) -> object:
+        return self.values[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.values)
+
+    def __len__(self) -> int:
+        return len(self.values)
+
+
+class BindingOperator(Protocol):
+    """Contract for an operator that transforms binding rows."""
+
+    def execute(self, rows: Iterable[BindingRow], context: QueryContext) -> Iterator[BindingRow]: ...
+
+
+class ProjectionOperator(Protocol):
+    """Contract for an operator that projects binding rows."""
+
+    def execute(self, rows: Iterable[BindingRow], context: QueryContext) -> Iterator[ProjectedRow]: ...
+
+
+class ResultOperator(Protocol):
+    """Contract for an operator that transforms projected rows."""
+
+    def execute(self, rows: Iterable[ProjectedRow], context: QueryContext) -> Iterable[ProjectedRow]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectOperator:
+    """Evaluate result projections while retaining source bindings for sorting."""
+
+    returns: tuple[str, ...]
+    projections: tuple[str, ...] = ()
+    projection_expressions: tuple[object, ...] = ()
+
+    def execute(
+        self, rows: Iterable[BindingRow], context: QueryContext
+    ) -> Iterator[ProjectedRow]:
+        projection_items = self.projections or self.returns
+        for source_row in rows:
+            row = BindingRow.from_row(source_row)
+            if self.projection_expressions:
+                values = {
+                    column: evaluate_expression(expression, row.bindings, context)
+                    for column, expression in zip(
+                        self.returns, self.projection_expressions
+                    )
+                }
+            else:
+                values = {
+                    column: project_value(row.bindings, projection)
+                    for column, projection in zip(self.returns, projection_items)
+                }
+            yield ProjectedRow(values=values, source_bindings=row.bindings)
+
+
+@dataclass(frozen=True, slots=True)
+class SortOperator:
+    """Materialize and stably sort projected rows by Cypher order items."""
+
+    items: tuple[object, ...]
+    parsed: object
+
+    def execute(
+        self, rows: Iterable[ProjectedRow], context: QueryContext
+    ) -> Iterator[ProjectedRow]:
+        sorted_rows = list(rows)
+        for item in reversed(self.items):
+            sorted_rows.sort(
+                key=lambda row, order_item=item: _sortable_value(
+                    _order_value(
+                        row.source_bindings or {}, order_item, self.parsed, context
+                    )
+                ),
+                reverse=item.descending,
+            )
+        yield from sorted_rows
+
+
+@dataclass(frozen=True, slots=True)
+class DistinctOperator:
+    """Stream the first projected row for each distinct result value."""
+
+    columns: tuple[str, ...]
+
+    def execute(
+        self, rows: Iterable[ProjectedRow], context: QueryContext
+    ) -> Iterator[ProjectedRow]:
+        del context
+        seen = set()
+        for row in rows:
+            key = tuple(_hashable_value(row.values.get(column)) for column in self.columns)
+            if key in seen:
+                continue
+            seen.add(key)
+            yield row
+
+
+@dataclass(frozen=True, slots=True)
+class SkipOperator:
+    """Skip a fixed number of projected rows without materializing them."""
+
+    count: int
+
+    def execute(
+        self, rows: Iterable[ProjectedRow], context: QueryContext
+    ) -> Iterable[ProjectedRow]:
+        del context
+        return islice(rows, self.count, None)
+
+
+@dataclass(frozen=True, slots=True)
+class LimitOperator:
+    """Stop a projected row stream after a fixed number of rows."""
+
+    count: int
+
+    def execute(
+        self, rows: Iterable[ProjectedRow], context: QueryContext
+    ) -> Iterable[ProjectedRow]:
+        del context
+        return islice(rows, self.count)
+
+
 def execute_match(parsed: MatchQuery, context: QueryContext) -> list[dict[str, object]]:
     """Execute an anchored typed traversal plan and return projected records."""
     rows = anchored_node_seek(context, parsed.source_id, parsed.source_var)
@@ -103,7 +297,7 @@ def execute_relationship_scan(parsed: RelationshipScanQuery, context: QueryConte
 
 def execute_multi_match(parsed: MultiMatchQuery, context: QueryContext) -> list[dict[str, object]]:
     """Execute multiple MATCH clauses as a streaming row pipeline."""
-    rows = iter([{"current_node_id": None, "bindings": {}}])
+    rows = iter([BindingRow(bindings={})])
     group_ids = parsed.match_group_ids or tuple(range(len(parsed.clauses)))
     previous_group = None
     for clause, group_id in zip(parsed.clauses, group_ids):
@@ -128,9 +322,8 @@ def execute_multi_match(parsed: MultiMatchQuery, context: QueryContext) -> list[
 
 def _reset_used_relationships(rows):
     for row in rows:
-        reset = dict(row)
-        reset["used_relationship_ids"] = frozenset()
-        yield reset
+        typed_row = BindingRow.from_row(row)
+        yield typed_row.with_bindings(dict(typed_row.bindings), used_relationship_ids=frozenset())
 
 
 def anchored_node_seek(context: QueryContext, source_id: str, source_var: str):
@@ -139,10 +332,7 @@ def anchored_node_seek(context: QueryContext, source_id: str, source_var: str):
     source_node = context.get_node(source_id_bytes)
     if source_node is None:
         return
-    yield {
-        "current_node_id": source_id_bytes,
-        "bindings": {source_var: source_node},
-    }
+    yield BindingRow(current_node_id=source_id_bytes, bindings={source_var: source_node})
 
 
 def node_scan_ids(parsed: NodeScanQuery, context: QueryContext):
@@ -243,10 +433,7 @@ def hydrate_node_ids(context: QueryContext, node_ids, variable: str):
         node = context.get_node(node_id)
         if node is None:
             continue
-        yield {
-            "current_node_id": node_id,
-            "bindings": {variable: node},
-        }
+        yield BindingRow(current_node_id=node_id, bindings={variable: node})
 
 
 def apply_node_pattern_clause(rows, clause: NodePatternClause, context: QueryContext):
@@ -261,7 +448,8 @@ def apply_node_pattern_clause(rows, clause: NodePatternClause, context: QueryCon
         properties=clause.properties,
     )
     for row in rows:
-        bound_node = row["bindings"].get(clause.variable)
+        row = BindingRow.from_row(row)
+        bound_node = row.bindings.get(clause.variable)
         if bound_node is not None:
             if _node_matches_clause(bound_node, clause, context):
                 yield row
@@ -272,9 +460,9 @@ def apply_node_pattern_clause(rows, clause: NodePatternClause, context: QueryCon
                 continue
             if not _node_matches_clause(node, clause, context):
                 continue
-            bindings = dict(row["bindings"])
+            bindings = dict(row.bindings)
             bindings[clause.variable] = node
-            yield {"current_node_id": node_id, "bindings": bindings}
+            yield row.with_bindings(bindings, current_node_id=node_id, preserve_current_node=False)
 
 
 def _node_matches_clause(node, clause: NodePatternClause, context: QueryContext) -> bool:
@@ -293,8 +481,9 @@ def _node_matches_clause(node, clause: NodePatternClause, context: QueryContext)
 def apply_relationship_pattern_clause(rows, clause: RelationshipPatternClause, context: QueryContext):
     """Apply a relationship pattern to incoming rows."""
     for row in rows:
-        source_node = row["bindings"].get(clause.source_var)
-        target_node = row["bindings"].get(clause.target_var)
+        row = BindingRow.from_row(row)
+        source_node = row.bindings.get(clause.source_var)
+        target_node = row.bindings.get(clause.target_var)
         if source_node is not None:
             yield from _expand_relationship_from_source(row, source_node, clause, context)
             continue
@@ -311,9 +500,13 @@ def apply_relationship_pattern_clause(rows, clause: RelationshipPatternClause, c
             edge_types=clause.edge_types,
         )
         for scanned_row in relationship_scan_rows(scan, context):
-            bindings = dict(row["bindings"])
-            if _merge_bindings(bindings, scanned_row["bindings"]):
-                yield {"current_node_id": scanned_row["current_node_id"], "bindings": bindings}
+            bindings = dict(row.bindings)
+            if _merge_bindings(bindings, scanned_row.bindings):
+                yield row.with_bindings(
+                    bindings,
+                    current_node_id=scanned_row.current_node_id,
+                    preserve_current_node=False,
+                )
 
 
 def _expand_relationship_from_source(row, source_node, clause: RelationshipPatternClause, context: QueryContext):
@@ -344,7 +537,7 @@ def _merge_relationship_adjacency(row, clause: RelationshipPatternClause, contex
         return
     if clause.direction == "any":
         bound_variable = clause.source_var if bound_endpoint == "source" else clause.target_var
-        bound_node = row["bindings"][bound_variable]
+        bound_node = row.bindings[bound_variable]
         neighbor_node = context.get_node(adjacency["neighbor_id"])
         if neighbor_node is None:
             return
@@ -356,11 +549,12 @@ def _merge_relationship_adjacency(row, clause: RelationshipPatternClause, contex
         new_bindings = {clause.source_var: source_node, clause.target_var: target_node}
     if clause.rel_var is not None:
         new_bindings[clause.rel_var] = edge
-    bindings = dict(row["bindings"])
+    bindings = dict(row.bindings)
     if not _merge_bindings(bindings, new_bindings):
         return
     current_node_id = target_id if clause.direction == "out" else source_id
-    yield {"current_node_id": current_node_id, "bindings": bindings}
+    typed_row = BindingRow.from_row(row)
+    yield typed_row.with_bindings(bindings, current_node_id=current_node_id, preserve_current_node=False)
 
 
 def apply_anchored_pattern_clause(rows, clause: AnchoredPatternClause, context: QueryContext):
@@ -370,21 +564,33 @@ def apply_anchored_pattern_clause(rows, clause: AnchoredPatternClause, context: 
     if source_node is None:
         return
     for row in rows:
-        bindings = dict(row["bindings"])
+        row = BindingRow.from_row(row)
+        bindings = dict(row.bindings)
         if clause.source_var in bindings and not same_entity(bindings[clause.source_var], source_node):
             continue
         bindings[clause.source_var] = source_node
-        expanded = iter([{"current_node_id": source_id_bytes, "bindings": bindings, "used_relationship_ids": frozenset()}])
+        expanded = iter(
+            [
+                row.with_bindings(
+                    bindings,
+                    current_node_id=source_id_bytes,
+                    preserve_current_node=False,
+                    used_relationship_ids=frozenset(),
+                )
+            ]
+        )
         for hop in clause.hops:
             expanded = expand_typed(context, expanded, hop)
         for expanded_row in expanded:
-            expanded_row.pop("used_relationship_ids", None)
-            yield expanded_row
+            yield BindingRow.from_row(expanded_row).with_bindings(
+                dict(expanded_row.bindings), used_relationship_ids=frozenset()
+            )
 
 
 def apply_path_pattern_clause(rows, clause: PathPatternClause, context: QueryContext):
     """Apply a generalized fixed-length path pattern to incoming rows."""
     for row in rows:
+        row = BindingRow.from_row(row)
         starts = _path_start_rows(row, clause, context)
         expanded = starts
         for hop in clause.hops:
@@ -396,27 +602,25 @@ def _path_start_rows(row, clause: PathPatternClause, context: QueryContext):
     source = clause.source
     identity = next((value for name, value in source.properties if name == "id"), None)
     properties = tuple(item for item in source.properties if item[0] != "id") if identity is not None else source.properties
-    bound_node = row["bindings"].get(source.variable) if source.variable is not None else None
+    bound_node = row.bindings.get(source.variable) if source.variable is not None else None
     if bound_node is not None:
         identity_matches = identity is None or _cypher_equals(bound_node.get_id, context.resolve(identity)) is True
         if _is_node(bound_node) and identity_matches and _node_matches_pattern(bound_node, source.labels, properties, context):
-            started = dict(row)
-            started["current_node_id"] = context.node_key_to_bytes(bound_node.get_id)
-            yield started
+            yield row.with_bindings(
+                dict(row.bindings),
+                current_node_id=context.node_key_to_bytes(bound_node.get_id),
+                preserve_current_node=False,
+            )
         return
 
     if identity is not None:
         node_id = context.node_key_to_bytes(context.resolve(identity))
         node = context.get_node(node_id)
         if node is not None and _node_matches_pattern(node, source.labels, properties, context):
-            bindings = dict(row["bindings"])
+            bindings = dict(row.bindings)
             if source.variable is not None:
                 bindings[source.variable] = node
-            yield {
-                "current_node_id": node_id,
-                "bindings": bindings,
-                "used_relationship_ids": row.get("used_relationship_ids", frozenset()),
-            }
+            yield row.with_bindings(bindings, current_node_id=node_id, preserve_current_node=False)
         return
 
     first_name, first_value = properties[0] if properties else (None, None)
@@ -433,23 +637,20 @@ def _path_start_rows(row, clause: PathPatternClause, context: QueryContext):
         node = context.get_node(node_id)
         if node is None or not _node_matches_pattern(node, source.labels, properties, context):
             continue
-        bindings = dict(row["bindings"])
+        bindings = dict(row.bindings)
         if source.variable is not None:
             bindings[source.variable] = node
-        yield {
-            "current_node_id": node_id,
-            "bindings": bindings,
-            "used_relationship_ids": row.get("used_relationship_ids", frozenset()),
-        }
+        yield row.with_bindings(bindings, current_node_id=node_id, preserve_current_node=False)
 
 
 def _expand_pattern_hop(context: QueryContext, rows, hop: PatternHop):
     for row in rows:
+        row = BindingRow.from_row(row)
         seen = set()
-        for adjacency in _iter_pattern_adjacency(context, row["current_node_id"], hop):
+        for adjacency in _iter_pattern_adjacency(context, row.current_node_id, hop):
             edge_id = adjacency["edge_id"]
             occurrence = (edge_id, adjacency["neighbor_id"])
-            if occurrence in seen or edge_id in row.get("used_relationship_ids", ()):
+            if occurrence in seen or edge_id in row.used_relationship_ids:
                 continue
             seen.add(occurrence)
             target_node = context.get_node(adjacency["neighbor_id"])
@@ -457,7 +658,7 @@ def _expand_pattern_hop(context: QueryContext, rows, hop: PatternHop):
                 target_node, hop.target.labels, hop.target.properties, context
             ):
                 continue
-            bindings = dict(row["bindings"])
+            bindings = dict(row.bindings)
             if hop.target.variable is not None:
                 bound_target = bindings.get(hop.target.variable)
                 if bound_target is not None and not same_entity(bound_target, target_node):
@@ -471,11 +672,12 @@ def _expand_pattern_hop(context: QueryContext, rows, hop: PatternHop):
                 if bound_edge is not None and not same_entity(bound_edge, edge):
                     continue
                 bindings[hop.rel_var] = edge
-            yield {
-                "current_node_id": adjacency["neighbor_id"],
-                "bindings": bindings,
-                "used_relationship_ids": row.get("used_relationship_ids", frozenset()).union((edge_id,)),
-            }
+            yield row.with_bindings(
+                bindings,
+                current_node_id=adjacency["neighbor_id"],
+                preserve_current_node=False,
+                used_relationship_ids=row.used_relationship_ids.union((edge_id,)),
+            )
 
 
 def _iter_pattern_adjacency(context: QueryContext, node_id: bytes, hop: PatternHop):
@@ -631,13 +833,14 @@ def _hydrate_relationship_scan_edge(context: QueryContext, parsed: RelationshipS
             continue
         if parsed.rel_var is not None and not _merge_bindings(bindings, {parsed.rel_var: edge}):
             continue
-        yield {"current_node_id": current_node_id, "bindings": bindings}
+        yield BindingRow(current_node_id=current_node_id, bindings=bindings)
 
 
 def filter_node_property(rows, variable: str, property_name: str, property_value):
     """Yield rows whose bound node has an exact property value."""
     for row in rows:
-        node = row["bindings"][variable]
+        row = BindingRow.from_row(row)
+        node = row.bindings[variable]
         if _cypher_equals(node.properties.get(property_name), property_value) is True:
             yield row
 
@@ -645,7 +848,8 @@ def filter_node_property(rows, variable: str, property_name: str, property_value
 def filter_expression(rows, expression, context: QueryContext):
     """Yield rows that satisfy a supported boolean expression."""
     for row in rows:
-        if evaluate_expression(expression, row["bindings"], context) is True:
+        row = BindingRow.from_row(row)
+        if evaluate_expression(expression, row.bindings, context) is True:
             yield row
 
 
@@ -808,22 +1012,23 @@ def _require_number(value, operator: str) -> None:
 def expand_typed(context: QueryContext, rows, hop):
     """Expand rows through one typed relationship hop."""
     for row in rows:
+        row = BindingRow.from_row(row)
         seen = set()
         for edge_type in hop.edge_types or (hop.edge_type,):
             for adjacency in context.graph.iter_typed_adjacency(
-                row["current_node_id"],
+                row.current_node_id,
                 edge_type,
                 direction=hop.direction,
             ):
                 edge_id = adjacency["edge_id"]
                 occurrence = (edge_id, adjacency["neighbor_id"])
-                if occurrence in seen or edge_id in row.get("used_relationship_ids", ()):
+                if occurrence in seen or edge_id in row.used_relationship_ids:
                     continue
                 seen.add(occurrence)
                 target_node = context.get_node(adjacency["neighbor_id"])
                 if target_node is None:
                     continue
-                bindings = dict(row["bindings"])
+                bindings = dict(row.bindings)
                 if hop.target_var in bindings and not same_entity(bindings[hop.target_var], target_node):
                     continue
                 bindings[hop.target_var] = target_node
@@ -834,11 +1039,12 @@ def expand_typed(context: QueryContext, rows, hop):
                     if hop.rel_var in bindings and not same_entity(bindings[hop.rel_var], edge):
                         continue
                     bindings[hop.rel_var] = edge
-                yield {
-                    "current_node_id": adjacency["neighbor_id"],
-                    "bindings": bindings,
-                    "used_relationship_ids": row.get("used_relationship_ids", frozenset()).union((edge_id,)),
-                }
+                yield row.with_bindings(
+                    bindings,
+                    current_node_id=adjacency["neighbor_id"],
+                    preserve_current_node=False,
+                    used_relationship_ids=row.used_relationship_ids.union((edge_id,)),
+                )
 
 
 def limit_rows(rows, limit: int | None):
@@ -853,13 +1059,17 @@ def project_rows(rows, returns: tuple[str, ...], projections: tuple[str, ...] = 
     limited_rows = limit_rows(rows, limit)
     projection_items = projections or returns
     for row in limited_rows:
+        row = BindingRow.from_row(row)
         if projection_expressions and context is not None:
             yield {
-                column: evaluate_expression(expression, row["bindings"], context)
+                column: evaluate_expression(expression, row.bindings, context)
                 for column, expression in zip(returns, projection_expressions)
             }
         else:
-            yield {column: project_value(row["bindings"], projection) for column, projection in zip(returns, projection_items)}
+            yield {
+                column: project_value(row.bindings, projection)
+                for column, projection in zip(returns, projection_items)
+            }
 
 
 def materialize_results(rows, parsed, context: QueryContext) -> list[dict[str, object]]:
@@ -867,23 +1077,24 @@ def materialize_results(rows, parsed, context: QueryContext) -> list[dict[str, o
     skip = _resolve_pagination(parsed.skip, context, "SKIP")
     limit = _resolve_pagination(parsed.limit, context, "LIMIT")
     projection_expressions = getattr(parsed, "projection_expressions", ())
-    if not parsed.order_by and not parsed.distinct and skip is None:
-        return list(project_rows(rows, parsed.returns, projections=parsed.projections, projection_expressions=projection_expressions, limit=limit, context=context))
-    row_list = list(rows)
+    projected_rows: Iterable[ProjectedRow] = ProjectOperator(
+        returns=parsed.returns,
+        projections=parsed.projections,
+        projection_expressions=projection_expressions,
+    ).execute(rows, context)
     if parsed.order_by:
-        for order_item in reversed(parsed.order_by):
-            row_list.sort(
-                key=lambda row, item=order_item: _sortable_value(_order_value(row["bindings"], item, parsed, context)),
-                reverse=order_item.descending,
-            )
-    records = list(project_rows(row_list, parsed.returns, projections=parsed.projections, projection_expressions=projection_expressions, context=context))
+        projected_rows = SortOperator(parsed.order_by, parsed).execute(
+            projected_rows, context
+        )
     if parsed.distinct:
-        records = _distinct_records(records, parsed.returns)
+        projected_rows = DistinctOperator(parsed.returns).execute(
+            projected_rows, context
+        )
     if skip is not None:
-        records = records[skip:]
+        projected_rows = SkipOperator(skip).execute(projected_rows, context)
     if limit is not None:
-        records = records[:limit]
-    return records
+        projected_rows = LimitOperator(limit).execute(projected_rows, context)
+    return [dict(row.values) for row in projected_rows]
 
 
 def _order_value(bindings, order_item, parsed, context):
