@@ -1,10 +1,12 @@
 Cypher Queries
 ==============
 
-GestaltDB exposes a read-only Cypher subset through
-``GraphDB.query(cypher, parameters=None)``. It is designed around the features
-GestaltDB can execute efficiently today: indexed node scans, typed relationship
-expansion, filtering, ordering, and chained ``MATCH`` clauses.
+GestaltDB exposes an expanding, read-only openCypher subset through
+``GraphDB.query(cypher, parameters=None)``. The grammar-based frontend supports
+comments, Unicode and backtick-escaped names, source-located syntax errors, and
+standard expression precedence. Execution remains focused on indexed node
+scans, typed relationship expansion, filtering, ordering, and chained ``MATCH``
+clauses.
 
 Relationship types come from ``edge.properties["type"]``. Node labels are stored
 on ``Node(labels=[...])``.
@@ -26,8 +28,9 @@ result yields record dictionaries.
 Node Scans
 ----------
 
-Label scans use the label index. Inline properties are filtered and can use a
-registered property index.
+Label scans use the label index. Inline property maps may contain multiple
+entries. The first indexed property can select an index-backed candidate set;
+all entries are then checked.
 
 .. code-block:: python
 
@@ -35,6 +38,7 @@ registered property index.
 
    graph_db.query('MATCH (n:Drug) RETURN n')
    graph_db.query('MATCH (n:Drug {name: "Aspirin"}) RETURN n.id')
+   graph_db.query('MATCH (n:Drug {name: "Aspirin", approved: true}) RETURN n.id')
    graph_db.query('MATCH (n:Drug:Approved) RETURN n.id')
    graph_db.query('MATCH (n) RETURN n.id LIMIT 5')
 
@@ -42,6 +46,11 @@ Typed Relationship Traversal
 ----------------------------
 
 Use an anchored pattern when you know the start node ID.
+
+``{id: ...}`` on the first node of a relationship path is a GestaltDB extension
+that addresses the stable entity ID; it accepts a string literal or parameter.
+In standalone node patterns and on later path nodes, ``id`` is an ordinary
+stored property name.
 
 .. code-block:: python
 
@@ -56,11 +65,44 @@ Unanchored typed relationship scans are also supported.
    graph_db.query('MATCH (a)-[r:binds]->(b) RETURN a.id, r.id, b.id')
    graph_db.query('MATCH (a)-[r:binds|inhibits]->(b) RETURN r.id ORDER BY r.id')
 
+General fixed-length patterns may be unanchored and may filter every node in the
+path. Anonymous nodes and relationships, omitted relationship types, and
+bracketless relationships are supported. Untyped expansion scans canonical edge
+records and is therefore less efficient than typed adjacency expansion.
+
+.. code-block:: python
+
+   graph_db.query(
+       'MATCH (a:Drug {approved: true})-[:binds]->()-[:affects]->(d:Disease {active: true}) '
+       'RETURN a.id, d.id'
+   )
+   graph_db.query('MATCH (a)-->(b) RETURN a.id, b.id')
+   graph_db.query('MATCH ()-[r]-(b) RETURN r.id, b.id')
+
+Multiple comma-separated pattern parts share one ``MATCH`` scope. Shared
+variables join the parts; disconnected parts form a Cartesian product.
+
+.. code-block:: python
+
+   graph_db.query(
+       'MATCH (a:Drug)-[:binds]->(p), (p)-[:associated_with]->(d:Disease) '
+       'RETURN a.id, d.id'
+   )
+
+Within one path or comma-separated ``MATCH``, one stored relationship cannot be
+used twice. A subsequent ``MATCH`` clause starts a new relationship uniqueness
+scope.
+
 Filtering
 ---------
 
-``WHERE`` supports equality, inequality, ordered comparisons, ``AND``, ``IN``,
-``IS NULL``, and ``IS NOT NULL`` for property references.
+``WHERE`` supports property-to-property and property-to-value comparisons,
+arithmetic, parentheses, ``NOT``, ``AND``, ``XOR``, ``OR``, ``IN``, ``IS
+NULL``, ``IS NOT NULL``, ``STARTS WITH``, ``ENDS WITH``, ``CONTAINS``, and
+regular-expression matching with ``=~``.
+
+Predicates use Cypher three-valued logic. In particular, ``n.value = null`` and
+``n.value <> null`` do not pass ``WHERE``; use ``IS NULL`` or ``IS NOT NULL``.
 
 .. code-block:: python
 
@@ -68,6 +110,7 @@ Filtering
    graph_db.query('MATCH (n:Person) WHERE n.age >= $age RETURN n.id', parameters={"age": 35})
    graph_db.query('MATCH (n) WHERE n.kind IN ["drug", "protein"] RETURN n.id')
    graph_db.query('MATCH (n) WHERE n.name IS NOT NULL RETURN n.id')
+   graph_db.query('MATCH (n) WHERE n.name STARTS WITH "A" OR n.score * 2 >= n.minimum RETURN n.id')
 
 Relationship predicates work in anchored traversals and unanchored relationship
 scans. When an edge property index exists, exact and range predicates on typed
@@ -83,14 +126,19 @@ Projection and Result Shaping
 -----------------------------
 
 Use aliases, ``RETURN *``, ``DISTINCT``, ``ORDER BY``, ``SKIP``, and ``LIMIT``.
+``RETURN`` and ``ORDER BY`` accept general expressions, including arithmetic,
+literals, parameters, lists, and maps. Unaliased expressions use a
+deterministic rendered column name, so prefer ``AS`` aliases for readability.
+``ORDER BY`` accepts a projected alias. ``SKIP`` and ``LIMIT`` accept either a
+non-negative integer literal or a parameter containing one.
 
 .. code-block:: python
 
-   graph_db.query('MATCH (n:Drug) RETURN n.id AS id, n.name AS name ORDER BY name')
+   graph_db.query('MATCH (n:Drug) RETURN n.id AS id, n.name AS name ORDER BY name LIMIT $count', parameters={"count": 10})
    graph_db.query('MATCH (n) RETURN DISTINCT n.kind ORDER BY n.kind')
    graph_db.query('MATCH (a)-[r:binds]->(b) RETURN * LIMIT 10')
 
-Special projections prefer entity identity over user properties:
+GestaltDB retains these extension projections for entity metadata:
 
 - ``n.id`` and ``r.id`` return entity IDs.
 - ``n.labels`` returns node labels.
@@ -101,7 +149,8 @@ Chained MATCH Clauses
 ---------------------
 
 Multiple ``MATCH`` clauses execute as a row pipeline. Reusing a variable enforces
-that it refers to the same entity.
+that it refers to the same entity. ``WHERE`` may follow any ``MATCH`` clause
+and filters that stage before later clauses run.
 
 .. code-block:: python
 
@@ -111,11 +160,31 @@ that it refers to the same entity.
        'RETURN d.id, r.score, p.id'
    )
 
+WITH and Variable Scope
+-----------------------
+
+``WITH`` projects intermediate values, replaces the variable scope with its
+outputs, and may carry its own ``WHERE``, ``DISTINCT``, ``ORDER BY``,
+``SKIP``, and ``LIMIT``. Only projected variables and aliases survive; later
+``MATCH`` clauses may traverse from retained entity variables. Each ``MATCH``
+starts a new relationship uniqueness scope.
+
+.. code-block:: python
+
+   graph_db.query(
+       'MATCH (p:Person) '
+       'WITH p ORDER BY p.age DESC LIMIT 10 '
+       'MATCH (p)-[:member_of]->(t:Team) '
+       'RETURN p.name AS name, t.name AS team'
+   )
+
 Sampling Procedure
 ------------------
 
 GestaltDB also exposes typed path sampling through a project-specific procedure.
-This is not standard openCypher syntax.
+The procedure name and arguments are GestaltDB-specific; the ``CALL``/``YIELD``
+clause family is part of Cypher. Procedure arguments are currently literal
+lists and maps.
 
 .. code-block:: python
 
@@ -125,16 +194,36 @@ This is not standard openCypher syntax.
        'YIELD path RETURN path LIMIT 1'
    )
 
+Aggregation and Implicit Grouping
+---------------------------------
+
+``count``, ``collect``, ``sum``, ``avg``, ``min``, and ``max`` work in
+``WITH`` and ``RETURN``, including ``count(*)`` and argument-level
+``DISTINCT`` such as ``count(DISTINCT n.age)``. Non-aggregate projection
+expressions become implicit grouping keys; an all-aggregate projection has
+one global group. Null inputs are ignored except by ``count(*)``, and empty
+global inputs return ``0`` for ``count``, ``[]`` for ``collect``, ``0`` for
+``sum``, and ``None`` for ``avg``, ``min``, and ``max``.
+
+.. code-block:: python
+
+   graph_db.query('MATCH (p:Person) RETURN count(*)')
+   graph_db.query('MATCH (p:Person) RETURN p.department AS department, count(*) AS total ORDER BY total DESC')
+
+``ORDER BY`` in an aggregate query must reference projected outputs.
+Aggregates cannot appear in ``WHERE`` (filter an aggregating ``WITH`` instead),
+cannot nest, and cannot mix with scalar arithmetic yet.
+
 Current Limitations
 -------------------
 
-Unsupported syntax raises ``ValueError``. The current Cypher API does not yet
-support:
+Syntax and semantic failures are ``ValueError`` subclasses with source
+locations. The current Cypher API does not yet support:
 
 - mutating queries such as ``CREATE``, ``SET``, ``DELETE``, or ``MERGE``
-- aggregation such as ``count`` or ``collect``
-- ``WITH``
 - ``OPTIONAL MATCH``
 - variable-length paths
-- multiple pattern parts inside one ``MATCH`` clause
 - path values such as ``p = (a)-[:T]->(b)``
+- general function calls, list comprehensions, map projections, or ``CASE``
+- ``UNWIND``, ``UNION``, subqueries, or generic procedures
+- relationship property maps and quantified path patterns

@@ -81,15 +81,18 @@ Use `GraphDB.query(cypher, parameters=None)` for read-only Cypher. It returns `Q
 
 Supported features include:
 
-- Node scans by label, multiple labels, inline properties, and parameters.
-- Typed relationship traversal using `edge.properties["type"]`.
-- Anchored and unanchored typed relationship patterns.
-- `WHERE` with equality, inequality, ordered comparisons, `AND`, `IN`, `IS NULL`, and `IS NOT NULL`.
-- `RETURN`, aliases, `RETURN *`, `DISTINCT`, `ORDER BY`, `SKIP`, and `LIMIT`.
-- Chained `MATCH` clauses.
+- Node scans by label, multiple labels, multi-entry inline property maps, and parameters.
+- Typed relationship traversal using `edge.properties["type"]`, plus canonical all-edge scans for untyped patterns.
+- Anchored and unanchored fixed-length paths, anonymous pattern elements, endpoint filters, and comma-separated pattern parts.
+- `WHERE` with arithmetic, expression comparisons, `NOT`/`AND`/`XOR`/`OR`, `IN`, null predicates, string predicates, and regex matching.
+- Cypher three-valued null logic for predicates.
+- `RETURN`, aliases, `RETURN *`, general projection expressions, `DISTINCT`, alias-aware `ORDER BY`, and literal or parameterized `SKIP`/`LIMIT`.
+- Chained `MATCH` clauses with clause-local `WHERE`.
+- `WITH` with scope replacement and local `WHERE`, `DISTINCT`, `ORDER BY`, `SKIP`, and `LIMIT`.
+- Core aggregates (`count`, `collect`, `sum`, `avg`, `min`, `max`) with implicit grouping, aggregate `DISTINCT`, and documented null/empty-input behavior.
 - GestaltDB-specific `CALL pg.sample_typed_paths(...) YIELD path RETURN path`.
 
-Unsupported Cypher currently includes mutating clauses, aggregation, `WITH`, `OPTIONAL MATCH`, variable-length paths, multiple pattern parts inside one `MATCH`, and path binding such as `p = (a)-[:T]->(b)`.
+Unsupported Cypher currently includes mutating clauses, `OPTIONAL MATCH`, variable-length paths, relationship property maps, and path binding such as `p = (a)-[:T]->(b)`.
 
 ## Sampling APIs
 

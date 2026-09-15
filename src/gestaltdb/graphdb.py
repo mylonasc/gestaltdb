@@ -1490,6 +1490,24 @@ class GraphDB:
         self._ensure_indexes_current("edge_type")
         yield from self.store.iter_index_prefix("edge_type", [str(edge_type).encode("utf-8")])
 
+    def iter_edge_ids(self, num_edges=None, key_offset=None):
+        """Yield all canonical edge IDs from the backing store.
+
+        Args:
+            num_edges: Optional maximum number of edge IDs to yield.
+            key_offset: Optional starting key.
+
+        Yields:
+            Edge ID bytes in backend key order.
+
+        Examples:
+            >>> list(graph_db.iter_edge_ids())  # doctest: +SKIP
+            [b'd1-p1']
+        """
+        if num_edges == 0:
+            return
+        yield from self.store.get_edge_keys_generator(num_edges, key_offset)
+
     def edges_by_type(self, edge_type: str):
         """Return edges using the relationship type catalog.
 

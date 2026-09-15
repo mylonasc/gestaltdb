@@ -10,9 +10,11 @@ GestaltDB includes an embedded, read-only Cypher query processor:
 - `graph.query(cypher_str, parameters=None)` returns a `QueryResult(columns, records)`.
 - Iterating over `result` yields dictionaries mapping column names to values.
 - Internal pipeline:
-  - `cypher_parser.py`: Generates an abstract syntax tree (`CypherQuery`, `MatchClause`, `WhereClause`, `ReturnClause`).
-  - `cypher_plan.py`: Builds a cost-aware physical execution plan utilizing label and property indexes.
-  - `cypher_runtime.py`: Executes plan steps against the underlying `GraphDB` store.
+  - `cypher_parser.py`: Uses a Lark grammar; `parse_ast()` preserves an ordered canonical clause AST while legacy `parse()` returns runtime-compatible specialized objects. Shared errors live in `cypher_errors.py`.
+  - `cypher_semantics.py`: Walks canonical clauses left-to-right with ordered scopes (`analyze_query`) for `MATCH`/`WHERE`/`WITH`/`RETURN` validation.
+  - `cypher_plan.py`: Builds staged plans (`MatchStep`, `ProjectItems`) for `WITH` queries; `cypher_runtime.py` executes them via `_execute_staged`.
+  - `cypher_plan.py`: Builds an authoritative typed logical plan with a binding source and ordered operators.
+  - `cypher_runtime.py`: Executes the plan through typed binding rows and streaming or blocking result operators against `GraphDB`.
 
 ---
 
@@ -20,11 +22,14 @@ GestaltDB includes an embedded, read-only Cypher query processor:
 
 ### Node Matching
 - Labels: `MATCH (a:Person)` or multiple labels `MATCH (a:Person:Employee)`
-- Inline property filters: `MATCH (a:Person {status: "active"})`
+- Multi-entry inline property filters: `MATCH (a:Person {status: "active", level: 2})`
 - Parameterized inline filters: `MATCH (a:Person {country: $country})`
 
 ### Relationship Patterns
-- Directed traversal: `MATCH (a:Person)-[:works_at]->(b:Company)` (scans all matching relationships)
+- Directed typed or untyped traversal: `MATCH (a)-[:works_at]->(b)` or `MATCH (a)-->(b)`.
+- Anonymous elements: `MATCH ()-[r:works_at]->() RETURN r`.
+- Labels and properties may appear on every node in a fixed path.
+- Unanchored multi-hop paths and comma-separated pattern parts are supported.
 - Chained traversal (endpoints bound by variable):
   ```cypher
   MATCH (a:Person {name: "Alice"})
@@ -32,42 +37,59 @@ GestaltDB includes an embedded, read-only Cypher query processor:
   MATCH (a)-[:works_at]->(b)
   RETURN a.name, b.name
   ```
-- Undirected traversal: `MATCH (a:Person)-[:knows]-(b:Person)`
+- Undirected traversal: `MATCH (a)-[:knows]-(b)`.
 - Anchored pattern: `MATCH (a {id: "drug-1"})-[:targets]->(b) RETURN b.id`
-- **Important syntax rule:** In chained traversal matches, write `MATCH (a)-[:TYPE]->(b)` with bare variable identifiers. Do not put inline labels on the target inside the traversal step (e.g. avoid `(a)-[:T]->(b:Label)`; use `MATCH (b:Label) MATCH (a)-[:T]->(b)` instead).
-- **Important WHERE placement:** In multi-match queries, all `MATCH` clauses must precede the `WHERE` clause: `MATCH (...) MATCH (...) WHERE ... RETURN ...`.
+- `WHERE` may follow any `MATCH` clause; each `WHERE` filters its own stage.
+- Untyped relationship patterns scan canonical edge records and are slower than typed adjacency expansion.
+
+### WITH and Variable Scope
+- `WITH` projects intermediate values and replaces the variable scope: `MATCH (p:Person) WITH p AS person RETURN person.name`.
+- Only projected variables and aliases survive; referencing a dropped variable downstream is a semantic error.
+- `WITH` may carry its own `WHERE` (which runs after projection and `DISTINCT`), `DISTINCT`, `ORDER BY`, `SKIP`, and `LIMIT`.
+- Later `MATCH` clauses may correlate on retained entity variables, and each `MATCH` starts a new relationship uniqueness scope.
+- `WITH *` carries all currently bound named variables; queries must still start with `MATCH`.
 
 ### WHERE Clauses
-- Comparisons: `=`, `<>`, `<`, `<=`, `>`, `>=`
-- Logical `AND`
+- Comparisons: `=`, `<>`, `!=`, `<`, `<=`, `>`, `>=`, and `=~`
+- Arithmetic and property-to-property comparisons
+- Logical `NOT`, `AND`, `XOR`, and `OR`, with parentheses and standard precedence
+- String predicates: `STARTS WITH`, `ENDS WITH`, and `CONTAINS`
 - Membership: `WHERE a.department IN ["Engineering", "Product"]`
 - Nullity: `WHERE a.manager IS NOT NULL` and `WHERE b.closed_at IS NULL`
 - Query parameters: `$param_name`
 
 ### RETURN and Modifiers
 - Property projection: `RETURN a.name AS full_name, b.id AS target_id`
-- Star projection: `RETURN *`
-- Modifiers: `DISTINCT`, `ORDER BY <variable>.<prop> [ASC|DESC]`, `SKIP <n>`, `LIMIT <n>`
-- Note on `ORDER BY`: Cypher expressions sort on binding variables (e.g. `ORDER BY a.name ASC`), not output projection aliases.
+- General expressions: `RETURN n.age + 1 AS next`, literals, parameters, lists, and maps (unaliased expressions use deterministic rendered names)
+- Star projection: `RETURN *` (must be the only projection item)
+- Modifiers: `DISTINCT`, `ORDER BY <expression-or-alias> [ASC|DESC]`, `SKIP <n-or-parameter>`, `LIMIT <n-or-parameter>`
+- Predicates use Cypher three-valued null logic. Use `IS NULL`, not `= null`.
 
 ### Custom GestaltDB Procedures
 - Path sampling procedure:
   ```cypher
-  CALL pg.sample_typed_paths($seeds, $pattern) YIELD path RETURN path
+  CALL pg.sample_typed_paths(["p1"], [{"edge_type": "knows", "sample_size": 2}]) YIELD path RETURN path
   ```
 
 ---
 
 ## 3. Explicit Unsupported Cypher Features
 
+### Aggregation and Implicit Grouping
+- Core six: `count(*)`, `count(expr)`, `collect`, `sum`, `avg`, `min`, `max`, plus aggregate `DISTINCT`.
+- Non-aggregate projection expressions are implicit grouping keys; all-aggregate projections have one global group (even for empty input).
+- Null inputs are ignored except by `count(*)`; empty global input yields `0`/`[]`/`0`/`None`/`None`/`None` across the six.
+- `ORDER BY` in aggregate queries must reference projected outputs (planner normalizes to output `Variable` refs).
+- Aggregates are rejected in `WHERE`, pattern property maps, nested positions, and scalar arithmetic; unknown functions are rejected.
+- Execution: staged `Aggregate` operator with first-seen group order and `cypher_value_key` grouping/distinct identity.
+
 Do **not** document or expect the following syntax to work:
 - ❌ Mutating queries (`CREATE`, `MERGE`, `SET`, `DELETE`, `REMOVE`)
-- ❌ Aggregation functions (`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `COLLECT`)
-- ❌ Grouping or pipelining (`WITH`, `GROUP BY`)
+- ❌ Explicit grouping (`GROUP BY`; Cypher grouping is implicit)
 - ❌ Optional matches (`OPTIONAL MATCH`)
 - ❌ Variable-length path expansion (`[:KNOWS*1..3]`)
-- ❌ Multiple pattern parts inside a single `MATCH` (e.g. `MATCH (a)-[:T1]->(b), (c)-[:T2]->(d)`)
 - ❌ Path binding variables (e.g. `p = (a)-[:T]->(b)`)
+- ❌ Relationship property maps
 
 ---
 
@@ -91,7 +113,7 @@ with TemporaryDirectory() as tmpdir:
         graph.put_edge(Edge(edge_id="e1", source="p1", target="d1", properties={"type": "diagnosed_with"}))
         graph.put_edge(Edge(edge_id="e2", source="p2", target="d1", properties={"type": "diagnosed_with"}))
 
-        # Query (Note: in chained MATCH queries, place all MATCH clauses before WHERE;
+        # Query (Note: WHERE may follow any MATCH or WITH clause;
         # traversal relationship patterns use bare variables like (p)-[:rel]->(d))
         query = (
             'MATCH (p:Patient) '

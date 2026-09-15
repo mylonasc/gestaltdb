@@ -1,11 +1,28 @@
 import pytest
 
-from gestaltdb.graphdb import Edge, Node
 from gestaltdb.cypher import QueryResult, _split_top_level_args, execute, parse, plan
 from gestaltdb.cypher_ast import MultiMatchQuery, Parameter
-from gestaltdb.cypher_plan import Expand, Limit, NodeAllScan, NodeByIdSeek, NodeLabelScan, NodePropertySeek, ProcedureCall, Project, RelationshipPropertyRangeSeek, RelationshipPropertySeek, RelationshipTypeScan
 from gestaltdb.cypher_parser import parse_literal
-from gestaltdb.cypher_runtime import QueryContext, execute_match, execute_node_scan, expand_typed
+from gestaltdb.cypher_plan import (
+    Expand,
+    Limit,
+    NodeAllScan,
+    NodeByIdSeek,
+    NodeLabelScan,
+    NodePropertySeek,
+    ProcedureCall,
+    Project,
+    RelationshipPropertyRangeSeek,
+    RelationshipPropertySeek,
+    RelationshipTypeScan,
+)
+from gestaltdb.cypher_runtime import (
+    QueryContext,
+    execute_match,
+    execute_node_scan,
+    expand_typed,
+)
+from gestaltdb.graphdb import Edge, Node
 
 from .conftest import populate_typed_graph
 
@@ -58,6 +75,12 @@ class FakeCypherGraph:
         for edge_id, edge in self.edges.items():
             if edge.get_type == edge_type:
                 yield edge_id
+
+    def iter_edge_ids(self, num_edges=None, key_offset=None):
+        edge_ids = list(self.edges)
+        if key_offset is not None:
+            edge_ids = [edge_id for edge_id in edge_ids if edge_id >= key_offset]
+        yield from edge_ids[:num_edges]
 
     def get_node_keys_generator(self):
         for node_id in self.nodes:
@@ -188,7 +211,7 @@ def test_cypher_parser_supports_cypher_literals_without_backend():
 
     assert execute(graph, "MATCH (n:Flag {active: true}) RETURN n.id").records == [{"n.id": "n1"}]
     assert execute(graph, "MATCH (n:Flag {active: false}) RETURN n.id").records == [{"n.id": "n2"}]
-    assert execute(graph, "MATCH (n:Flag {missing: null}) RETURN n.id").records == [{"n.id": "n1"}]
+    assert execute(graph, "MATCH (n:Flag {missing: null}) RETURN n.id").records == []
 
 
 def test_cypher_node_scan_where_equality_without_backend():
@@ -525,9 +548,14 @@ def test_cypher_node_scan_where_rejects_unbound_variable_without_backend():
         parse('MATCH (n:Drug) WHERE m.name = "Aspirin" RETURN n')
 
 
-def test_cypher_node_scan_where_rejects_unsupported_expression_without_backend():
-    with pytest.raises(ValueError, match="Unsupported WHERE expression"):
-        parse('MATCH (n:Drug) WHERE n.name STARTS WITH "A" RETURN n')
+def test_cypher_node_scan_where_supports_string_predicate_without_backend():
+    graph = FakeCypherGraph()
+    graph.put_node(Node(node_id="n1", labels=["Drug"], properties={"name": "Aspirin"}))
+    graph.put_node(Node(node_id="n2", labels=["Drug"], properties={"name": "Ibuprofen"}))
+
+    result = execute(graph, 'MATCH (n:Drug) WHERE n.name STARTS WITH "A" RETURN n.id')
+
+    assert result.records == [{"n.id": "n1"}]
 
 
 def test_cypher_label_scan_rejects_unbound_return_variable(graph_db):
@@ -998,7 +1026,7 @@ def test_cypher_sample_typed_paths_validates_arguments(graph_db):
 def test_cypher_parser_rejects_malformed_match_queries(graph_db):
     with pytest.raises(ValueError, match="Unsupported Cypher query"):
         graph_db.query("RETURN n")
-    with pytest.raises(ValueError, match="Unsupported Cypher query"):
+    with pytest.raises(ValueError, match="unbound variable"):
         graph_db.query("MATCH () RETURN n")
     with pytest.raises(ValueError, match="Unsupported Cypher query"):
         graph_db.query('MATCH (d {id: "drug-1"})-[:rel]->(p)')
@@ -1190,6 +1218,10 @@ def test_runtime_match_operator_respects_limit_without_backend():
     assert records == [{"b.id": "n2"}]
 
 
-def test_cypher_unsupported_query_raises_clear_error(graph_db):
-    with pytest.raises(ValueError, match="Unsupported Cypher query"):
-        graph_db.query("MATCH (n)-->(m) RETURN n")
+def test_cypher_untyped_relationship_query(graph_db):
+    graph_db.put_nodes([Node(node_id="n"), Node(node_id="m")])
+    graph_db.put_edge(Edge(edge_id="e", source="n", target="m", properties={"type": "T"}))
+
+    result = graph_db.query("MATCH (n)-->(m) RETURN n.id, m.id")
+
+    assert result.records == [{"n.id": "n", "m.id": "m"}]

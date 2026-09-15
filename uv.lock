@@ -1265,6 +1265,7 @@ version = "0.6.2"
 source = { editable = "." }
 dependencies = [
     { name = "google" },
+    { name = "lark" },
     { name = "msgpack", version = "1.1.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "msgpack", version = "1.2.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "numpy", version = "2.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
@@ -1423,6 +1424,7 @@ requires-dist = [
     { name = "ladybug", marker = "extra == 'all'" },
     { name = "ladybug", marker = "extra == 'dev'" },
     { name = "ladybug", marker = "extra == 'external-bench'" },
+    { name = "lark", specifier = ">=1.2" },
     { name = "latticedb", marker = "extra == 'all'" },
     { name = "latticedb", marker = "extra == 'dev'" },
     { name = "latticedb", marker = "extra == 'external-bench'" },
@@ -1773,6 +1775,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/82/92/c81edba3abc2d7045088f43d75c34597e97043e21ee33e4483a8835d6d11/ladybug-0.20.4-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:c510eeb630e700d86dfb7c8e73059420dfee6645cba2b7ac1ae12084de248ea1", size = 9290030, upload-time = "2026-09-10T20:27:21.909Z" },
     { url = "https://files.pythonhosted.org/packages/9f/4c/d2eb57a2dfde1f5d2708bb2b92770324321e1e7957ce9db4840a1eb0c67f/ladybug-0.20.4-cp313-cp313-win_amd64.whl", hash = "sha256:3cdbda40c0144117853b6e8d36177bcb868140bf57d98aa4aae5625ee245357c", size = 5871028, upload-time = "2026-09-10T20:27:24.352Z" },
     { url = "https://files.pythonhosted.org/packages/da/cd/12d98ed874ba203e7e386fdc8068870434f9946d003777030293be36a8e8/ladybug-0.20.4-cp313-cp313-win_arm64.whl", hash = "sha256:cce7e686680ced5df1114145640f5847f8f646752f1f8606ef1c46168916892d", size = 8363062, upload-time = "2026-09-10T20:27:26.704Z" },
+]
+
+[[package]]
+name = "lark"
+version = "1.3.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/da/34/28fff3ab31ccff1fd4f6c7c7b0ceb2b6968d8ea4950663eadcb5720591a0/lark-1.3.1.tar.gz", hash = "sha256:b426a7a6d6d53189d318f2b6236ab5d6429eaf09259f1ca33eb716eed10d2905", size = 382732, upload-time = "2025-10-27T18:25:56.653Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/82/3d/14ce75ef66813643812f3093ab17e46d3a206942ce7376d31ec2d36229e7/lark-1.3.1-py3-none-any.whl", hash = "sha256:c629b661023a014c37da873b4ff58a817398d12635d3bbb2c5a03be7fe5d1e12", size = 113151, upload-time = "2025-10-27T18:25:54.882Z" },
 ]
 
 [[package]]

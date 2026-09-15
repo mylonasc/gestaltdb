@@ -1,335 +1,775 @@
-"""Parser for the current GestaltDB Cypher subset.
-
-This module intentionally keeps the accepted language small while separating
-query syntax from execution. It is the migration point for a fuller Cypher
-frontend in later phases.
-"""
+"""Grammar-based parser for the GestaltDB read-only Cypher subset."""
 
 from __future__ import annotations
 
 import ast
 import re
+from dataclasses import dataclass
 
-from .cypher_ast import AndExpression, AnchoredPatternClause, ComparisonExpression, InExpression, MatchQuery, MultiMatchQuery, NodePatternClause, NodeScanQuery, NullPredicate, OrderItem, Parameter, PropertyRef, RelationshipPatternClause, RelationshipScanQuery, SampleTypedPathsCall, TraversalHop
+from lark import Lark, Token, Transformer, UnexpectedInput, v_args
+from lark.exceptions import VisitError
+
+from .cypher_ast import (
+    AnchoredPatternClause,
+    AndExpression,
+    ArithmeticExpression,
+    ComparisonExpression,
+    FunctionCall,
+    InExpression,
+    ListExpression,
+    MapExpression,
+    MatchClause,
+    MatchQuery,
+    MultiMatchQuery,
+    NodePattern,
+    NodePatternClause,
+    NodeScanQuery,
+    NotExpression,
+    NullPredicate,
+    OrderItem,
+    OrExpression,
+    Parameter,
+    PathPatternClause,
+    PatternHop,
+    ProjectionItem,
+    PropertyRef,
+    Query,
+    RelationshipPatternClause,
+    RelationshipScanQuery,
+    ReturnClause,
+    SampleTypedPathsCall,
+    SourceSpan,
+    StringPredicate,
+    TraversalHop,
+    UnaryExpression,
+    Variable,
+    WhereClause,
+    Wildcard,
+    WithClause,
+    XorExpression,
+)
+from .cypher_errors import CypherSemanticError, CypherSyntaxError
+from .cypher_semantics import QueryAnalysis, analyze_query, render_projection
+
+_GRAMMAR = r"""
+?start: query ";"?
+?query: match_query | sample_call
+
+ match_query: match_clause (match_clause | where_clause | with_section)* return_full
+ match_clause: "MATCH"i pattern ("," pattern)*
+ where_clause: "WHERE"i expression
+ with_section: with_clause where_clause? order_clause? skip_clause? limit_clause?
+ with_clause: "WITH"i DISTINCT? return_items
+ return_full: return_clause order_clause? skip_clause? limit_clause?
+ return_clause: "RETURN"i DISTINCT? return_items
+ return_items: return_item ("," return_item)*
+ return_item: projection_expression ("AS"i symbolic_name)?
+ ?projection_expression: STAR -> star_projection
+                       | expression
+ order_clause: "ORDER"i "BY"i order_item ("," order_item)*
+ order_item: expression ORDER_DIRECTION?
+skip_clause: "SKIP"i pagination_value
+limit_clause: "LIMIT"i pagination_value
+?pagination_value: INTEGER -> integer
+                 | parameter
+
+sample_call: "CALL"i "pg"i "." "sample_typed_paths"i "(" call_arguments ")" "YIELD"i "path"i "RETURN"i "path"i limit_clause?
+call_arguments: [expression ("," expression)*]
+
+pattern: node_pattern traversal_hop*
+node_pattern: "(" symbolic_name? labels? properties? ")"
+labels: (":" symbolic_name)+
+properties: "{" [property_pair ("," property_pair)*] "}"
+property_pair: symbolic_name ":" expression
+?traversal_hop: "-" relationship? "->" node_pattern -> out_hop
+              | "<-" relationship? "-" node_pattern -> in_hop
+              | "-" relationship? "-" node_pattern -> any_hop
+relationship: "[" symbolic_name? rel_type_spec? "]"
+rel_type_spec: ":" rel_types
+rel_types: rel_name ("|" rel_name)*
+rel_name: REL_NAME | BACKTICK_NAME
+
+?expression: or_expr
+?or_expr: xor_expr ("OR"i xor_expr)* -> or_expression
+?xor_expr: and_expr ("XOR"i and_expr)* -> xor_expression
+?and_expr: not_expr ("AND"i not_expr)* -> and_expression
+?not_expr: "NOT"i not_expr -> not_expression
+         | comparison
+?comparison: additive
+           | additive COMP_OP additive -> comparison_expression
+           | additive "IN"i additive -> in_expression
+           | additive "IS"i "NULL"i -> is_null
+           | additive "IS"i "NOT"i "NULL"i -> is_not_null
+           | additive "STARTS"i "WITH"i additive -> starts_with
+           | additive "ENDS"i "WITH"i additive -> ends_with
+           | additive "CONTAINS"i additive -> contains
+?additive: multiplicative (ADD_OP multiplicative)* -> arithmetic_expression
+?multiplicative: unary (MUL_OP unary)* -> arithmetic_expression
+?unary: ADD_OP unary -> unary_expression
+      | atom
+ ?atom: property_ref
+      | parameter
+      | literal
+      | variable
+      | count_star
+      | function_call
+      | list_literal
+      | map_literal
+      | "(" expression ")" -> parenthesized
+ count_star: symbolic_name "(" STAR ")"
+ function_call: symbolic_name "(" DISTINCT? expression ("," expression)* ")"
+property_ref: symbolic_name "." symbolic_name
+variable: symbolic_name
+parameter: "$" symbolic_name
+list_literal: "[" [expression ("," expression)*] "]"
+map_literal: "{" [map_pair ("," map_pair)*] "}"
+map_pair: map_key ":" expression
+?map_key: symbolic_name | STRING -> string
+?literal: STRING -> string
+        | NUMBER -> number
+        | "true"i -> true
+        | "false"i -> false
+        | "null"i -> null
+
+symbolic_name: NAME | BACKTICK_NAME
+DISTINCT.2: /DISTINCT/i
+ORDER_DIRECTION.2: /ASC|DESC/i
+COMP_OP: "=~" | "<>" | "!=" | "<=" | ">=" | "=" | "<" | ">"
+ADD_OP: "+" | "-"
+MUL_OP: "*" | "/" | "%"
+STAR: "*"
+INTEGER: /[0-9]+/
+NUMBER: /(?:[0-9]+\.[0-9]*|\.[0-9]+|[0-9]+)(?:[eE][+-]?[0-9]+)?/
+STRING: /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/s
+BACKTICK_NAME: /`(?:``|[^`])*`/
+NAME: /[^\W\d]\w*/u
+REL_NAME: /[^\W\d][\w-]*/u
+
+%import common.WS
+%ignore WS
+%ignore /\/\/[^\n\r]*/
+%ignore /\/\*(?s:.*?)\*\//
+"""
 
 
-_IDENTIFIER = r"[A-Za-z_][A-Za-z0-9_]*"
-_PARAMETER_RE = re.compile(rf"^\$(?P<name>{_IDENTIFIER})$")
-_RETURN_ITEM = rf"(?:\*|{_IDENTIFIER}(?:\.{_IDENTIFIER})?)"
-_RETURN_ALIAS_ITEM = rf"{_RETURN_ITEM}(?:\s+AS\s+{_IDENTIFIER})?"
-_RETURN_ITEMS = rf"{_RETURN_ALIAS_ITEM}(?:\s*,\s*{_RETURN_ALIAS_ITEM})*"
-_ORDER_ITEM = rf"{_IDENTIFIER}(?:\.{_IDENTIFIER})?(?:\s+(?:ASC|DESC))?"
-_ORDER_ITEMS = rf"{_ORDER_ITEM}(?:\s*,\s*{_ORDER_ITEM})*"
-_ANCHOR_RE = re.compile(
-    rf"^\s*\((?P<source_var>{_IDENTIFIER})\s*"
-    rf"\{{\s*id\s*:\s*(?P<quote>['\"])(?P<source_id>.*?)(?P=quote)\s*\}}\)"
-)
-_OUT_HOP_RE = re.compile(
-    rf"^\s*-\s*\[(?:(?P<rel_var>{_IDENTIFIER})\s*)?:(?P<edge_type>[^\]\s]+)\]\s*->\s*"
-    rf"\((?P<target_var>{_IDENTIFIER})\)"
-)
-_IN_HOP_RE = re.compile(
-    rf"^\s*<-\s*\[(?:(?P<rel_var>{_IDENTIFIER})\s*)?:(?P<edge_type>[^\]\s]+)\]\s*-\s*"
-    rf"\((?P<target_var>{_IDENTIFIER})\)"
-)
-_ANY_HOP_RE = re.compile(
-    rf"^\s*-\s*\[(?:(?P<rel_var>{_IDENTIFIER})\s*)?:(?P<edge_type>[^\]\s]+)\]\s*-\s*"
-    rf"\((?P<target_var>{_IDENTIFIER})\)"
-)
-_RETURN_RE = re.compile(
-    rf"^\s*(?:WHERE\s+(?P<where>.*?)\s+)?RETURN\s+(?:(?P<distinct>DISTINCT)\s+)?(?P<returns>{_RETURN_ITEMS})"
-    rf"(?:\s+ORDER\s+BY\s+(?P<order_by>{_ORDER_ITEMS}))?(?:\s+SKIP\s+(?P<skip>\d+))?(?:\s+LIMIT\s+(?P<limit>\d+))?\s*;?\s*$",
-    re.IGNORECASE | re.DOTALL,
-)
-_NODE_SCAN_RE = re.compile(
-    rf"^\s*MATCH\s+\((?P<var>{_IDENTIFIER})(?P<labels>(?::{_IDENTIFIER})*)(?:\s*\{{\s*(?P<property>{_IDENTIFIER})\s*:\s*(?P<value>.*?)\s*\}})?\)\s+"
-    rf"(?:WHERE\s+(?P<where>.*?)\s+)?"
-    rf"RETURN\s+(?:(?P<distinct>DISTINCT)\s+)?(?P<returns>{_RETURN_ITEMS})"
-    rf"(?:\s+ORDER\s+BY\s+(?P<order_by>{_ORDER_ITEMS}))?(?:\s+SKIP\s+(?P<skip>\d+))?(?:\s+LIMIT\s+(?P<limit>\d+))?\s*;?\s*$",
-    re.IGNORECASE | re.DOTALL,
-)
-_NODE_PATTERN_RE = re.compile(
-    rf"^\s*\((?P<var>{_IDENTIFIER})(?P<labels>(?::{_IDENTIFIER})*)(?:\s*\{{\s*(?P<property>{_IDENTIFIER})\s*:\s*(?P<value>.*?)\s*\}})?\)\s*$",
-    re.IGNORECASE | re.DOTALL,
-)
-_REL_PATTERN_OUT_RE = re.compile(
-    rf"^\s*\((?P<source_var>{_IDENTIFIER})\)\s*-\s*\[(?:(?P<rel_var>{_IDENTIFIER})\s*)?:(?P<edge_type>[^\]\s]+)\]\s*->\s*\((?P<target_var>{_IDENTIFIER})\)\s*$",
-    re.IGNORECASE | re.DOTALL,
-)
-_REL_PATTERN_IN_RE = re.compile(
-    rf"^\s*\((?P<target_var>{_IDENTIFIER})\)\s*<-\s*\[(?:(?P<rel_var>{_IDENTIFIER})\s*)?:(?P<edge_type>[^\]\s]+)\]\s*-\s*\((?P<source_var>{_IDENTIFIER})\)\s*$",
-    re.IGNORECASE | re.DOTALL,
-)
-_REL_SCAN_OUT_RE = re.compile(
-    rf"^\s*MATCH\s+\((?P<source_var>{_IDENTIFIER})\)\s*-\s*\[(?:(?P<rel_var>{_IDENTIFIER})\s*)?:(?P<edge_type>[^\]\s]+)\]\s*->\s*\((?P<target_var>{_IDENTIFIER})\)\s+"
-    rf"(?:WHERE\s+(?P<where>.*?)\s+)?RETURN\s+(?:(?P<distinct>DISTINCT)\s+)?(?P<returns>{_RETURN_ITEMS})"
-    rf"(?:\s+ORDER\s+BY\s+(?P<order_by>{_ORDER_ITEMS}))?(?:\s+SKIP\s+(?P<skip>\d+))?(?:\s+LIMIT\s+(?P<limit>\d+))?\s*;?\s*$",
-    re.IGNORECASE | re.DOTALL,
-)
-_REL_SCAN_IN_RE = re.compile(
-    rf"^\s*MATCH\s+\((?P<target_var>{_IDENTIFIER})\)\s*<-\s*\[(?:(?P<rel_var>{_IDENTIFIER})\s*)?:(?P<edge_type>[^\]\s]+)\]\s*-\s*\((?P<source_var>{_IDENTIFIER})\)\s+"
-    rf"(?:WHERE\s+(?P<where>.*?)\s+)?RETURN\s+(?:(?P<distinct>DISTINCT)\s+)?(?P<returns>{_RETURN_ITEMS})"
-    rf"(?:\s+ORDER\s+BY\s+(?P<order_by>{_ORDER_ITEMS}))?(?:\s+SKIP\s+(?P<skip>\d+))?(?:\s+LIMIT\s+(?P<limit>\d+))?\s*;?\s*$",
-    re.IGNORECASE | re.DOTALL,
-)
-_COMPARISON_RE = re.compile(
-    rf"^\s*(?P<variable>{_IDENTIFIER})\.(?P<property>{_IDENTIFIER})\s*"
-    rf"(?P<operator>=|<>|!=|<=|>=|<|>)\s*(?P<value>.*?)\s*$",
-    re.IGNORECASE | re.DOTALL,
-)
-_IN_RE = re.compile(
-    rf"^\s*(?P<variable>{_IDENTIFIER})\.(?P<property>{_IDENTIFIER})\s+IN\s+(?P<value>.*?)\s*$",
-    re.IGNORECASE | re.DOTALL,
-)
-_NULL_RE = re.compile(
-    rf"^\s*(?P<variable>{_IDENTIFIER})\.(?P<property>{_IDENTIFIER})\s+IS\s+(?P<negated>NOT\s+)?NULL\s*$",
-    re.IGNORECASE | re.DOTALL,
-)
-_CALL_SAMPLE_RE = re.compile(
-    r"^\s*CALL\s+pg\.sample_typed_paths\s*\((?P<args>.*)\)\s+"
-    r"YIELD\s+path\s+RETURN\s+path(?:\s+LIMIT\s+(?P<limit>\d+))?\s*;?\s*$",
-    re.IGNORECASE | re.DOTALL,
-)
+_PARSER = Lark(_GRAMMAR, parser="lalr", lexer="contextual", propagate_positions=True, maybe_placeholders=False)
+_PARAMETER_RE = re.compile(r"^\$(?P<name>[^\W\d]\w*)$", re.UNICODE)
+
+
+_NodePattern = NodePattern
+_Hop = PatternHop
+_Pattern = PathPatternClause
+
+
+@dataclass(frozen=True)
+class _Labels:
+    values: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _Properties:
+    values: tuple[tuple[str, object], ...]
+
+
+@dataclass(frozen=True)
+class _RelationshipTypes:
+    values: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _MatchPatterns:
+    values: tuple[_Pattern, ...]
+    span: SourceSpan
+
+
+@dataclass(frozen=True)
+class _Projection:
+    expression: object
+    alias: str | None = None
+    span: SourceSpan | None = None
+
+
+@dataclass(frozen=True)
+class _ParsedPart:
+    kind: str
+    value: object
+    span: SourceSpan
+
+
+@dataclass(frozen=True)
+class _ParsedMatch:
+    pattern_groups: tuple[tuple[_Pattern, ...], ...]
+    where: object | None
+    projections: tuple[_Projection, ...]
+    distinct: bool
+    order_by: tuple[OrderItem, ...]
+    skip: int | Parameter | None
+    limit: int | Parameter | None
+    match_groups: tuple[_MatchPatterns, ...]
+    where_part: _ParsedPart | None
+    return_part: _ParsedPart
+    modifier_parts: tuple[_ParsedPart, ...]
+    sequence: tuple[object, ...] = ()
+
+
+class _ASTBuilder(Transformer):
+    def symbolic_name(self, children):
+        text = str(children[0])
+        return text[1:-1].replace("``", "`") if text.startswith("`") else text
+
+    def rel_name(self, children):
+        return self.symbolic_name(children)
+
+    def string(self, children):
+        return _decode_string(str(children[0]))
+
+    def number(self, children):
+        text = str(children[0])
+        return float(text) if any(char in text for char in ".eE") else int(text)
+
+    def integer(self, children):
+        return int(children[0])
+
+    def true(self, _children):
+        return True
+
+    def false(self, _children):
+        return False
+
+    def null(self, _children):
+        return None
+
+    def variable(self, children):
+        return Variable(children[0])
+
+    def property_ref(self, children):
+        return PropertyRef(children[0], children[1])
+
+    def parameter(self, children):
+        return Parameter(children[0])
+
+    def list_literal(self, children):
+        values = list(children)
+        return values if all(_is_plain_value(value) for value in values) else ListExpression(tuple(values))
+
+    def property_pair(self, children):
+        return children[0], children[1]
+
+    def map_literal(self, children):
+        items = tuple(item for item in children if item is not None)
+        return dict(items) if all(_is_plain_value(value) for _, value in items) else MapExpression(items)
+
+    def map_pair(self, children):
+        return children[0], children[1]
+
+    def parenthesized(self, children):
+        return children[0]
+
+    @v_args(meta=True)
+    def count_star(self, meta, children):
+        span = _source_span(meta)
+        return FunctionCall(str(children[0]).lower(), (Wildcard(span=span),), False, span=span)
+
+    @v_args(meta=True)
+    def function_call(self, meta, children):
+        name = str(children[0]).lower()
+        distinct = False
+        arguments: list[object] = []
+        for child in children[1:]:
+            if isinstance(child, Token):
+                distinct = True
+            else:
+                arguments.append(child)
+        return FunctionCall(name, tuple(arguments), distinct, span=_source_span(meta))
+
+    def arithmetic_expression(self, children):
+        if len(children) == 1:
+            return children[0]
+        expression = children[0]
+        for index in range(1, len(children), 2):
+            expression = ArithmeticExpression(expression, str(children[index]), children[index + 1])
+        return expression
+
+    def unary_expression(self, children):
+        return UnaryExpression(str(children[0]), children[1])
+
+    def comparison_expression(self, children):
+        return ComparisonExpression(children[0], str(children[1]), children[2])
+
+    def in_expression(self, children):
+        return InExpression(children[0], children[1])
+
+    def is_null(self, children):
+        return NullPredicate(children[0])
+
+    def is_not_null(self, children):
+        return NullPredicate(children[0], negated=True)
+
+    def starts_with(self, children):
+        return StringPredicate(children[0], "STARTS WITH", children[1])
+
+    def ends_with(self, children):
+        return StringPredicate(children[0], "ENDS WITH", children[1])
+
+    def contains(self, children):
+        return StringPredicate(children[0], "CONTAINS", children[1])
+
+    def not_expression(self, children):
+        return NotExpression(children[0])
+
+    def and_expression(self, children):
+        return children[0] if len(children) == 1 else AndExpression(tuple(children))
+
+    def xor_expression(self, children):
+        return children[0] if len(children) == 1 else XorExpression(tuple(children))
+
+    def or_expression(self, children):
+        return children[0] if len(children) == 1 else OrExpression(tuple(children))
+
+    def labels(self, children):
+        return _Labels(tuple(children))
+
+    def properties(self, children):
+        return _Properties(tuple(children))
+
+    def node_pattern(self, children):
+        variable = next((item for item in children if isinstance(item, str)), None)
+        labels = next((item.values for item in children if isinstance(item, _Labels)), ())
+        properties = next((item.values for item in children if isinstance(item, _Properties)), ())
+        return _NodePattern(variable, labels, properties)
+
+    def rel_types(self, children):
+        return _RelationshipTypes(tuple(children))
+
+    def rel_type_spec(self, children):
+        return children[0]
+
+    def relationship(self, children):
+        rel_var = next((item for item in children if isinstance(item, str)), None)
+        edge_types = next((item.values for item in children if isinstance(item, _RelationshipTypes)), ())
+        return rel_var, edge_types
+
+    def out_hop(self, children):
+        relationship, node = (children if len(children) == 2 else ((None, ()), children[0]))
+        return _Hop(relationship[0], relationship[1], node, "out")
+
+    def in_hop(self, children):
+        relationship, node = (children if len(children) == 2 else ((None, ()), children[0]))
+        return _Hop(relationship[0], relationship[1], node, "in")
+
+    def any_hop(self, children):
+        relationship, node = (children if len(children) == 2 else ((None, ()), children[0]))
+        return _Hop(relationship[0], relationship[1], node, "any")
+
+    def pattern(self, children):
+        return _Pattern(children[0], tuple(children[1:]))
+
+    @v_args(meta=True)
+    def match_clause(self, meta, children):
+        return _MatchPatterns(tuple(children), _source_span(meta))
+
+    @v_args(meta=True)
+    def where_clause(self, meta, children):
+        return _ParsedPart("where", children[0], _source_span(meta))
+
+    def star_projection(self, _children):
+        return "*"
+
+    @v_args(meta=True)
+    def return_item(self, meta, children):
+        return _Projection(
+            children[0],
+            children[1] if len(children) > 1 else None,
+            _source_span(meta),
+        )
+
+    def return_items(self, children):
+        return tuple(children)
+
+    @v_args(meta=True)
+    def return_clause(self, meta, children):
+        distinct = bool(children and str(children[0]).upper() == "DISTINCT")
+        return _ParsedPart("return", (children[-1], distinct), _source_span(meta))
+
+    def order_item(self, children):
+        expression = children[0]
+        direction = str(children[1]).upper() if len(children) > 1 else "ASC"
+        return OrderItem(render_projection(expression), direction == "DESC", expression)
+
+    @v_args(meta=True)
+    def order_clause(self, meta, children):
+        return _ParsedPart("order", tuple(children), _source_span(meta))
+
+    @v_args(meta=True)
+    def skip_clause(self, meta, children):
+        return _ParsedPart("skip", children[0], _source_span(meta))
+
+    @v_args(meta=True)
+    def limit_clause(self, meta, children):
+        return _ParsedPart("limit", children[0], _source_span(meta))
+
+    def call_arguments(self, children):
+        return ("arguments", tuple(item for item in children if item is not None))
+
+    @v_args(meta=True)
+    def with_clause(self, meta, children):
+        distinct = bool(children and str(children[0]).upper() == "DISTINCT")
+        return _ParsedPart("with", (children[-1], distinct), _source_span(meta))
+
+    def with_section(self, children):
+        return tuple(children)
+
+    def return_full(self, children):
+        return tuple(children)
+
+    def match_query(self, children):
+        sequence: list[object] = []
+        for item in children:
+            if isinstance(item, tuple) and item and all(isinstance(part, _ParsedPart) for part in item):
+                sequence.extend(item)
+            else:
+                sequence.append(item)
+        match_groups = tuple(item for item in sequence if isinstance(item, _MatchPatterns))
+        parts = tuple(item for item in sequence if isinstance(item, _ParsedPart))
+        where_part = next((item for item in parts if item.kind == "where"), None)
+        return_part = next(item for item in parts if item.kind == "return")
+        return_items, distinct = return_part.value
+        modifier_parts = tuple(
+            item for item in parts if item.kind in {"order", "skip", "limit"}
+        )
+        order_by = next(
+            (item.value for item in modifier_parts if item.kind == "order"), ()
+        )
+        skip = next(
+            (item.value for item in modifier_parts if item.kind == "skip"), None
+        )
+        limit = next(
+            (item.value for item in modifier_parts if item.kind == "limit"), None
+        )
+        return _ParsedMatch(
+            tuple(item.values for item in match_groups),
+            where_part.value if where_part is not None else None,
+            return_items,
+            distinct,
+            order_by,
+            skip,
+            limit,
+            match_groups,
+            where_part,
+            return_part,
+            modifier_parts,
+            tuple(sequence),
+        )
+
+    def sample_call(self, children):
+        limit = next(
+            (
+                item.value
+                for item in children
+                if isinstance(item, _ParsedPart) and item.kind == "limit"
+            ),
+            None,
+        )
+        arguments = next(item[1] for item in children if isinstance(item, tuple) and item and item[0] == "arguments")
+        return ("sample", arguments, limit)
+
+
+_BUILDER = _ASTBuilder()
 
 
 def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | RelationshipScanQuery | MultiMatchQuery:
-    """Parse the supported Cypher subset into AST objects."""
-    stripped = query.strip()
-    if re.match(r"^CALL\s+pg\.sample_typed_paths\b", stripped, re.IGNORECASE):
-        return _parse_sample_typed_paths(stripped)
-    multi_match = _parse_multi_match(stripped)
-    if multi_match is not None:
-        return multi_match
-    node_scan = _parse_node_scan(stripped)
-    if node_scan is not None:
-        return node_scan
-    rel_scan = _parse_relationship_scan(stripped)
-    if rel_scan is not None:
-        return rel_scan
-    return _parse_match(stripped)
+    """Parse the supported Cypher subset into runtime-compatible AST objects."""
+    parsed = _parse_source(query)
 
-
-def _parse_multi_match(query: str) -> MultiMatchQuery | None:
-    if len(re.findall(r"\bMATCH\b", query, re.IGNORECASE)) < 2:
-        return None
-    split_at = _find_return_suffix_start(query)
-    if split_at is None:
-        raise unsupported_query_error()
-    match_text = query[:split_at]
-    return_match = _RETURN_RE.match(query[split_at:])
-    if return_match is None:
-        raise unsupported_query_error()
-    pattern_texts = [part.strip() for part in re.split(r"\bMATCH\b", match_text, flags=re.IGNORECASE) if part.strip()]
-    clauses = tuple(_parse_match_clause_pattern(pattern_text) for pattern_text in pattern_texts)
-    ordered_variables = _multi_match_bound_variables_ordered(clauses)
-    bound_variables = set(ordered_variables)
-    where = None
-    if return_match.group("where") is not None:
-        where = _parse_where_expression(return_match.group("where"), bound_variables)
-    returns, projections = _parse_returns(return_match.group("returns"), ordered_variables)
-    unknown = [name for name in _return_variables(projections) if name not in bound_variables]
-    if unknown:
-        raise ValueError(f"RETURN references unbound variable(s): {', '.join(unknown)}")
-    return MultiMatchQuery(
-        clauses=clauses,
-        returns=returns,
-        where=where,
-        projections=projections,
-        order_by=_parse_order_by(return_match.group("order_by")),
-        skip=_parse_limit(return_match.group("skip")),
-        limit=_parse_limit(return_match.group("limit")),
-        distinct=return_match.group("distinct") is not None,
-    )
-
-
-def _find_return_suffix_start(query: str) -> int | None:
-    for match in re.finditer(r"\b(?:WHERE|RETURN)\b", query, re.IGNORECASE):
-        if _RETURN_RE.match(query[match.start():]) is not None:
-            return match.start()
-    return None
-
-
-def _parse_match_clause_pattern(pattern_text: str):
-    node_match = _NODE_PATTERN_RE.match(pattern_text)
-    if node_match is not None:
-        labels = tuple(part for part in node_match.group("labels").split(":") if part)
-        property_value = None
-        if node_match.group("property") is not None:
-            property_value = parse_literal(node_match.group("value"))
-        return NodePatternClause(
-            variable=node_match.group("var"),
-            label=labels[0] if labels else None,
-            property_name=node_match.group("property"),
-            property_value=property_value,
-            labels=labels,
+    if isinstance(parsed, tuple) and parsed and parsed[0] == "sample":
+        return _build_sample_call(parsed, query)
+    canonical = _build_canonical_query(parsed, query)
+    if any(isinstance(clause, WithClause) for clause in canonical.clauses):
+        raise _located_error(
+            CypherSemanticError,
+            "Query cannot be represented by legacy parse(); use parse_ast()",
+            query,
         )
-    relationship_match = _REL_PATTERN_OUT_RE.match(pattern_text)
-    direction = "out"
-    if relationship_match is None:
-        relationship_match = _REL_PATTERN_IN_RE.match(pattern_text)
-        direction = "in"
-    if relationship_match is not None:
-        edge_types = tuple(edge_type for edge_type in relationship_match.group("edge_type").split("|") if edge_type)
-        return RelationshipPatternClause(
-            source_var=relationship_match.group("source_var"),
-            rel_var=relationship_match.group("rel_var"),
-            edge_type=edge_types[0],
-            target_var=relationship_match.group("target_var"),
-            direction=direction,
-            edge_types=edge_types,
+    if _canonical_uses_functions(canonical):
+        raise _located_error(
+            CypherSemanticError,
+            "Query cannot be represented by legacy parse(); use parse_ast()",
+            query,
         )
-    anchor_match = _ANCHOR_RE.match(pattern_text)
-    if anchor_match is not None:
-        remainder = pattern_text[anchor_match.end():]
-        hops = []
-        while True:
-            hop_match, direction = _match_hop(remainder)
-            if hop_match is None or direction is None:
-                break
-            edge_types = tuple(edge_type for edge_type in hop_match.group("edge_type").split("|") if edge_type)
-            hops.append(TraversalHop(hop_match.group("rel_var"), edge_types[0], hop_match.group("target_var"), direction, edge_types))
-            remainder = remainder[hop_match.end():]
-        if hops and not remainder.strip():
-            return AnchoredPatternClause(anchor_match.group("source_var"), anchor_match.group("source_id"), tuple(hops))
-    raise unsupported_query_error()
+    analysis = analyze_query(canonical)
+    return _build_match_query(parsed, query, analysis)
 
 
-def _parse_node_scan(query: str) -> NodeScanQuery | None:
-    match = _NODE_SCAN_RE.match(query)
-    if match is None:
-        return None
-    variable = match.group("var")
-    returns, projections = _parse_returns(match.group("returns"), (variable,))
-    unknown = [name for name in _return_variables(projections) if name != variable]
-    if unknown:
-        raise ValueError(f"RETURN references unbound variable(s): {', '.join(unknown)}")
-    labels = tuple(part for part in match.group("labels").split(":") if part)
-    property_value = None
-    if match.group("property") is not None:
-        property_value = parse_literal(match.group("value"))
-    where = None
-    if match.group("where") is not None:
-        where = _parse_where_expression(match.group("where"), {variable})
-    return NodeScanQuery(
-        variable=variable,
-        label=labels[0] if labels else None,
-        property_name=match.group("property"),
-        property_value=property_value,
-        returns=returns,
-        limit=_parse_limit(match.group("limit")),
-        where=where,
-        labels=labels,
-        projections=projections,
-        order_by=_parse_order_by(match.group("order_by")),
-        skip=_parse_limit(match.group("skip")),
-        distinct=match.group("distinct") is not None,
-    )
+def parse_ast(query: str) -> Query | SampleTypedPathsCall:
+    """Parse the supported Cypher subset into the canonical clause AST."""
+    parsed = _parse_source(query)
+    if isinstance(parsed, tuple) and parsed and parsed[0] == "sample":
+        return _build_sample_call(parsed, query)
+
+    canonical = _build_canonical_query(parsed, query)
+    analyze_query(canonical)
+    return canonical
 
 
-def _parse_match(query: str) -> MatchQuery:
-    if not query.upper().startswith("MATCH "):
-        raise unsupported_query_error()
+def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
+    for patterns in parsed.pattern_groups:
+        for pattern in patterns:
+            _validate_pattern_literals(pattern, query)
+    clauses: list[object] = []
+    pending: dict[str, object] = {}
+    pending_span: SourceSpan | None = None
+    pending_kind: str | None = None
+    pending_value: object | None = None
 
-    remainder = query[5:]
-    anchor_match = _ANCHOR_RE.match(remainder)
-    if anchor_match is None:
-        raise unsupported_query_error()
-
-    source_var = anchor_match.group("source_var")
-    source_id = anchor_match.group("source_id")
-    remainder = remainder[anchor_match.end():]
-    hops = []
-    while True:
-        hop_match, direction = _match_hop(remainder)
-        if hop_match is None or direction is None:
-            break
-        edge_types = tuple(edge_type for edge_type in hop_match.group("edge_type").split("|") if edge_type)
-        hops.append(
-            TraversalHop(
-                rel_var=hop_match.group("rel_var"),
-                edge_type=edge_types[0],
-                target_var=hop_match.group("target_var"),
-                direction=direction,
-                edge_types=edge_types,
+    def projection_items(items: tuple[_Projection, ...]) -> tuple[ProjectionItem, ...]:
+        return tuple(
+            ProjectionItem(
+                Wildcard(span=item.span) if item.expression == "*" else item.expression,
+                item.alias,
+                span=item.span,
             )
+            for item in items
         )
-        remainder = remainder[hop_match.end():]
 
-    if not hops:
-        raise unsupported_query_error()
-    return_match = _RETURN_RE.match(remainder)
-    if return_match is None:
-        raise unsupported_query_error()
+    def close_projection() -> None:
+        nonlocal pending, pending_span, pending_kind, pending_value
+        if pending_kind is None:
+            return
+        items, distinct = pending_value
+        span = _merge_spans(
+            pending_span,
+            *(part.span for part in pending["modifiers"]),
+        )
+        if pending_kind == "with":
+            clauses.append(
+                WithClause(
+                    items=projection_items(items),
+                    distinct=distinct,
+                    order_by=pending["order"],
+                    skip=pending["skip"],
+                    limit=pending["limit"],
+                    span=span,
+                )
+            )
+        else:
+            clauses.append(
+                ReturnClause(
+                    items=projection_items(items),
+                    distinct=distinct,
+                    order_by=pending["order"],
+                    skip=pending["skip"],
+                    limit=pending["limit"],
+                    span=span,
+                )
+            )
+        pending = {}
+        pending_span = None
+        pending_kind = None
+        pending_value = None
 
-    bound_variables = _match_bound_variables(source_var, hops)
-    where = None
-    if return_match.group("where") is not None:
-        where = _parse_where_expression(return_match.group("where"), bound_variables)
+    for item in parsed.sequence:
+        if isinstance(item, _MatchPatterns):
+            if pending_kind == "return":
+                raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
+            close_projection()
+            clauses.append(MatchClause(item.values, span=item.span))
+        elif isinstance(item, _ParsedPart) and item.kind == "where":
+            # A WHERE following WITH belongs to that WITH stage, so the open
+            # projection must be closed first to preserve textual order.
+            close_projection()
+            clauses.append(WhereClause(item.value, span=item.span))
+        elif isinstance(item, _ParsedPart) and item.kind in ("with", "return"):
+            close_projection()
+            pending_kind = item.kind
+            pending_value = item.value
+            pending_span = item.span
+            pending = {"order": (), "skip": None, "limit": None, "modifiers": []}
+        elif isinstance(item, _ParsedPart) and item.kind in ("order", "skip", "limit"):
+            if pending_kind is None:
+                raise _located_error(CypherSemanticError, "ORDER BY, SKIP, and LIMIT must follow WITH or RETURN", query)
+            if item.kind == "order" and pending["order"] != ():
+                raise _located_error(CypherSemanticError, "Duplicate ORDER BY clause", query)
+            if item.kind in ("skip", "limit") and pending[item.kind] is not None:
+                raise _located_error(CypherSemanticError, f"Duplicate {item.kind.upper()} clause", query)
+            pending["modifiers"].append(item)
+            if item.kind == "order":
+                pending["order"] = item.value
+            else:
+                pending[item.kind] = item.value
+        else:  # pragma: no cover - grammar builder invariant
+            raise _located_error(CypherSemanticError, "Unsupported Cypher query", query)
+    close_projection()
+    return Query(tuple(clauses), query, span=_query_span(query))
 
-    returns, projections = _parse_returns(return_match.group("returns"), _match_bound_variables_ordered(source_var, hops))
-    parsed = MatchQuery(
-        source_var=source_var,
-        source_id=source_id,
-        hops=tuple(hops),
-        returns=returns,
-        limit=_parse_limit(return_match.group("limit")),
-        where=where,
-        projections=projections,
-        order_by=_parse_order_by(return_match.group("order_by")),
-        skip=_parse_limit(return_match.group("skip")),
-        distinct=return_match.group("distinct") is not None,
-    )
-    _validate_match_returns(parsed)
+
+def _parse_source(query: str):
+    try:
+        parsed = _BUILDER.transform(_PARSER.parse(query))
+    except UnexpectedInput as exc:
+        raise CypherSyntaxError(
+            "Unsupported Cypher query",
+            line=exc.line,
+            column=exc.column,
+            offset=exc.pos_in_stream,
+            source=query,
+        ) from exc
+    except VisitError as exc:
+        if isinstance(exc.orig_exc, (CypherSyntaxError, CypherSemanticError)):
+            raise exc.orig_exc from exc
+        raise _located_error(CypherSyntaxError, f"Invalid Cypher literal: {exc.orig_exc}", query) from exc
+    except (SyntaxError, ValueError) as exc:
+        if isinstance(exc, (CypherSyntaxError, CypherSemanticError)):
+            raise
+        raise _located_error(CypherSyntaxError, f"Invalid Cypher literal: {exc}", query) from exc
+
     return parsed
 
 
-def _parse_relationship_scan(query: str) -> RelationshipScanQuery | None:
-    match = _REL_SCAN_OUT_RE.match(query)
-    direction = "out"
-    if match is None:
-        match = _REL_SCAN_IN_RE.match(query)
-        direction = "in"
-    if match is None:
-        return None
-    edge_types = tuple(edge_type for edge_type in match.group("edge_type").split("|") if edge_type)
-    bound_variables = {match.group("source_var"), match.group("target_var")}
-    if match.group("rel_var") is not None:
-        bound_variables.add(match.group("rel_var"))
-    where = None
-    if match.group("where") is not None:
-        where = _parse_where_expression(match.group("where"), bound_variables)
-    ordered_variables = _relationship_bound_variables_ordered(match)
-    returns, projections = _parse_returns(match.group("returns"), ordered_variables)
-    unknown = [name for name in _return_variables(projections) if name not in set(ordered_variables)]
-    if unknown:
-        raise ValueError(f"RETURN references unbound variable(s): {', '.join(unknown)}")
-    return RelationshipScanQuery(
-        source_var=match.group("source_var"),
-        rel_var=match.group("rel_var"),
-        edge_type=edge_types[0],
-        target_var=match.group("target_var"),
-        returns=returns,
-        direction=direction,
-        edge_types=edge_types,
-        where=where,
-        projections=projections,
-        order_by=_parse_order_by(match.group("order_by")),
-        skip=_parse_limit(match.group("skip")),
-        limit=_parse_limit(match.group("limit")),
-        distinct=match.group("distinct") is not None,
-    )
-
-
-def _parse_sample_typed_paths(query: str) -> SampleTypedPathsCall:
-    match = _CALL_SAMPLE_RE.match(query)
-    if match is None:
-        raise unsupported_query_error()
-    seed_ids, pattern = _parse_call_arguments(match.group("args"))
+def _build_sample_call(parsed, query: str) -> SampleTypedPathsCall:
+    _, arguments, limit = parsed
+    if len(arguments) != 2:
+        raise _located_error(CypherSemanticError, "pg.sample_typed_paths expects seed IDs and a sampling pattern", query)
+    seed_ids, pattern = arguments
     if not isinstance(seed_ids, list) or not all(isinstance(seed_id, str) for seed_id in seed_ids):
-        raise ValueError("pg.sample_typed_paths seed IDs must be a list of strings")
+        raise _located_error(CypherSemanticError, "pg.sample_typed_paths seed IDs must be a list of strings", query)
     if not isinstance(pattern, list) or not all(isinstance(hop, dict) for hop in pattern):
-        raise ValueError("pg.sample_typed_paths pattern must be a list of dictionaries")
-    return SampleTypedPathsCall(seed_ids=seed_ids, pattern=pattern, limit=_parse_limit(match.groupdict().get("limit")))
+        raise _located_error(CypherSemanticError, "pg.sample_typed_paths pattern must be a list of dictionaries", query)
+    return SampleTypedPathsCall(seed_ids=seed_ids, pattern=pattern, limit=limit)
+
+
+def _build_match_query(parsed: _ParsedMatch, query: str, analysis: QueryAnalysis):
+    clauses = []
+    group_ids = []
+    for group_id, patterns in enumerate(parsed.pattern_groups):
+        force_generalized = len(patterns) > 1
+        for pattern in patterns:
+            clauses.append(_build_clause(pattern, query, force_generalized=force_generalized))
+            group_ids.append(group_id)
+    clauses = tuple(clauses)
+    resolved = analysis.clauses[-1].projections
+    returns = tuple(item.output.name for item in resolved)
+    projections = tuple(item.rendered_expression for item in resolved)
+    projection_expressions = tuple(item.expression for item in resolved)
+
+    common = {
+        "returns": returns,
+        "where": parsed.where,
+        "projections": projections,
+        "projection_expressions": projection_expressions,
+        "order_by": parsed.order_by,
+        "skip": parsed.skip,
+        "limit": parsed.limit,
+        "distinct": parsed.distinct,
+    }
+    if len(clauses) > 1:
+        return MultiMatchQuery(clauses=clauses, match_group_ids=tuple(group_ids), **common)
+
+    clause = clauses[0]
+    if isinstance(clause, NodePatternClause):
+        return NodeScanQuery(
+            variable=clause.variable,
+            label=clause.label,
+            property_name=clause.property_name,
+            property_value=clause.property_value,
+            labels=clause.labels,
+            properties=clause.properties,
+            **common,
+        )
+    if isinstance(clause, RelationshipPatternClause):
+        return RelationshipScanQuery(
+            source_var=clause.source_var,
+            rel_var=clause.rel_var,
+            edge_type=clause.edge_type,
+            target_var=clause.target_var,
+            direction=clause.direction,
+            edge_types=clause.edge_types,
+            **common,
+        )
+    if isinstance(clause, AnchoredPatternClause):
+        return MatchQuery(source_var=clause.source_var, source_id=clause.source_id, hops=clause.hops, **common)
+    if isinstance(clause, PathPatternClause):
+        return MultiMatchQuery(clauses=clauses, match_group_ids=(0,), **common)
+    raise _located_error(CypherSemanticError, "Unsupported Cypher query", query)
+
+
+def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = False):
+    node = pattern.source
+    if not pattern.hops and node.variable is not None and not force_generalized:
+        first_name, first_value = node.properties[0] if node.properties else (None, None)
+        return NodePatternClause(node.variable, node.labels[0] if node.labels else None, first_name, first_value, node.labels, node.properties)
+
+    if (
+        not force_generalized
+        and len(pattern.hops) == 1
+        and node.variable is not None
+        and pattern.hops[0].target.variable is not None
+        and pattern.hops[0].edge_types
+        and not node.labels
+        and not node.properties
+        and not pattern.hops[0].target.labels
+        and not pattern.hops[0].target.properties
+    ):
+        hop = pattern.hops[0]
+        if hop.direction == "in":
+            source_var, target_var, direction = hop.target.variable, node.variable, "in"
+        else:
+            source_var, target_var, direction = node.variable, hop.target.variable, hop.direction
+        return RelationshipPatternClause(source_var, hop.rel_var, hop.edge_types[0], target_var, direction, hop.edge_types)
+
+    properties = dict(node.properties)
+    if (
+        not force_generalized
+        and node.variable is not None
+        and not node.labels
+        and set(properties) == {"id"}
+        and isinstance(properties.get("id"), str)
+        and all(hop.edge_types and hop.target.variable is not None and not hop.target.labels and not hop.target.properties for hop in pattern.hops)
+    ):
+        hops = tuple(TraversalHop(hop.rel_var, hop.edge_types[0], hop.target.variable, hop.direction, hop.edge_types) for hop in pattern.hops)
+        return AnchoredPatternClause(node.variable, properties["id"], hops)
+    return PathPatternClause(node, pattern.hops)
+
+
+def _canonical_uses_functions(canonical: Query) -> bool:
+    """Return whether any canonical clause projects or filters on a function call."""
+    from .cypher_semantics import contains_function_call
+
+    for clause in canonical.clauses:
+        if isinstance(clause, WhereClause) and contains_function_call(clause.expression):
+            return True
+        if isinstance(clause, (WithClause, ReturnClause)):
+            if any(contains_function_call(item.expression) for item in clause.items):
+                return True
+            if any(contains_function_call(item.expression_ast) for item in clause.order_by if item.expression_ast is not None):
+                return True
+    return False
+
+
+def _validate_pattern_literals(pattern: _Pattern, query: str) -> None:
+    for pattern_node in (pattern.source, *(hop.target for hop in pattern.hops)):
+        for _, value in pattern_node.properties:
+            if not _is_plain_value(value):
+                raise _located_error(CypherSemanticError, "Invalid Cypher literal", query)
+
+
+def _is_plain_value(value) -> bool:
+    if isinstance(value, Parameter):
+        return True
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return True
+    if isinstance(value, list):
+        return all(_is_plain_value(item) for item in value)
+    if isinstance(value, dict):
+        return all(_is_plain_value(item) for item in value.values())
+    return False
+
+
+def _decode_string(text: str) -> str:
+    try:
+        value = ast.literal_eval(text)
+    except (SyntaxError, ValueError) as exc:
+        raise ValueError(text) from exc
+    return value
 
 
 def parse_literal(literal_text: str):
@@ -351,167 +791,8 @@ def parse_literal(literal_text: str):
         raise ValueError(f"Invalid Cypher literal: {literal_text}") from exc
 
 
-def _parse_where_expression(expression_text: str, bound_variables: set[str]):
-    parts = _split_top_level_keyword(expression_text, "AND")
-    if len(parts) > 1:
-        return AndExpression(tuple(_parse_comparison(part, bound_variables) for part in parts))
-    return _parse_comparison(expression_text, bound_variables)
-
-
-def _parse_comparison(expression_text: str, bound_variables: set[str]) -> ComparisonExpression:
-    null_match = _NULL_RE.match(expression_text)
-    if null_match is not None:
-        variable = null_match.group("variable")
-        if variable not in bound_variables:
-            raise ValueError(f"WHERE references unbound variable: {variable}")
-        return NullPredicate(
-            expression=PropertyRef(variable=variable, property_name=null_match.group("property")),
-            negated=null_match.group("negated") is not None,
-        )
-    in_match = _IN_RE.match(expression_text)
-    if in_match is not None:
-        variable = in_match.group("variable")
-        if variable not in bound_variables:
-            raise ValueError(f"WHERE references unbound variable: {variable}")
-        return InExpression(
-            left=PropertyRef(variable=variable, property_name=in_match.group("property")),
-            values=parse_literal(in_match.group("value")),
-        )
-    match = _COMPARISON_RE.match(expression_text)
-    if match is None:
-        raise ValueError(f"Unsupported WHERE expression: {expression_text}")
-    variable = match.group("variable")
-    if variable not in bound_variables:
-        raise ValueError(f"WHERE references unbound variable: {variable}")
-    return ComparisonExpression(
-        left=PropertyRef(variable=variable, property_name=match.group("property")),
-        operator=match.group("operator"),
-        right=parse_literal(match.group("value")),
-    )
-
-
-def _parse_returns(return_text: str, bound_variables: tuple[str, ...] = ()) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    if return_text.strip() == "*":
-        if not bound_variables:
-            raise ValueError("RETURN * requires bound variables")
-        return bound_variables, bound_variables
-    columns = []
-    projections = []
-    for part in return_text.split(","):
-        projection, column = _parse_return_item(part.strip())
-        projections.append(projection)
-        columns.append(column)
-    return tuple(columns), tuple(projections)
-
-
-def _parse_return_item(return_item: str) -> tuple[str, str]:
-    alias_match = re.match(rf"^(?P<projection>{_RETURN_ITEM})\s+AS\s+(?P<alias>{_IDENTIFIER})$", return_item, re.IGNORECASE)
-    if alias_match is not None:
-        return alias_match.group("projection"), alias_match.group("alias")
-    return return_item, return_item
-
-
-def _parse_order_by(order_by_text: str | None) -> tuple[OrderItem, ...]:
-    if order_by_text is None:
-        return ()
-    items = []
-    for part in order_by_text.split(","):
-        pieces = part.strip().split()
-        expression = pieces[0]
-        descending = len(pieces) > 1 and pieces[1].upper() == "DESC"
-        items.append(OrderItem(expression=expression, descending=descending))
-    return tuple(items)
-
-
-def _parse_limit(limit_text: str | None) -> int | None:
-    if limit_text is None:
-        return None
-    limit = int(limit_text)
-    if limit < 0:
-        raise ValueError("LIMIT must be non-negative")
-    return limit
-
-
-def _match_hop(remainder: str):
-    for pattern, direction in (
-        (_IN_HOP_RE, "in"),
-        (_OUT_HOP_RE, "out"),
-        (_ANY_HOP_RE, "any"),
-    ):
-        match = pattern.match(remainder)
-        if match is not None:
-            return match, direction
-    return None, None
-
-
-def _validate_match_returns(parsed: MatchQuery) -> None:
-    bound_variables = _match_bound_variables(parsed.source_var, parsed.hops)
-    unknown = [name for name in _return_variables(parsed.projections or parsed.returns) if name not in bound_variables]
-    if unknown:
-        raise ValueError(f"RETURN references unbound variable(s): {', '.join(unknown)}")
-
-
-def _match_bound_variables(source_var: str, hops: list[TraversalHop] | tuple[TraversalHop, ...]) -> set[str]:
-    bound_variables = {source_var}
-    for hop in hops:
-        bound_variables.add(hop.target_var)
-        if hop.rel_var is not None:
-            bound_variables.add(hop.rel_var)
-    return bound_variables
-
-
-def _match_bound_variables_ordered(source_var: str, hops: list[TraversalHop] | tuple[TraversalHop, ...]) -> tuple[str, ...]:
-    variables = [source_var]
-    for hop in hops:
-        if hop.rel_var is not None and hop.rel_var not in variables:
-            variables.append(hop.rel_var)
-        if hop.target_var not in variables:
-            variables.append(hop.target_var)
-    return tuple(variables)
-
-
-def _relationship_bound_variables_ordered(match) -> tuple[str, ...]:
-    variables = [match.group("source_var")]
-    if match.group("rel_var") is not None:
-        variables.append(match.group("rel_var"))
-    variables.append(match.group("target_var"))
-    return tuple(variables)
-
-
-def _multi_match_bound_variables_ordered(clauses: tuple[object, ...]) -> tuple[str, ...]:
-    variables = []
-
-    def add(variable):
-        if variable is not None and variable not in variables:
-            variables.append(variable)
-
-    for clause in clauses:
-        if isinstance(clause, NodePatternClause):
-            add(clause.variable)
-        elif isinstance(clause, RelationshipPatternClause):
-            add(clause.source_var)
-            add(clause.rel_var)
-            add(clause.target_var)
-        elif isinstance(clause, AnchoredPatternClause):
-            add(clause.source_var)
-            for hop in clause.hops:
-                add(hop.rel_var)
-                add(hop.target_var)
-    return tuple(variables)
-
-
-def _return_variables(returns: tuple[str, ...]) -> tuple[str, ...]:
-    return tuple(item.split(".", 1)[0] for item in returns)
-
-
-def _parse_call_arguments(args_text: str):
-    parts = split_top_level_args(args_text)
-    if len(parts) != 2:
-        raise ValueError("pg.sample_typed_paths expects seed IDs and a sampling pattern")
-    return ast.literal_eval(parts[0]), ast.literal_eval(parts[1])
-
-
 def split_top_level_args(args_text: str) -> list[str]:
+    """Split comma-separated procedure arguments without splitting nested values."""
     parts = []
     start = 0
     depth = 0
@@ -528,57 +809,62 @@ def split_top_level_args(args_text: str) -> list[str]:
             continue
         if char in {'"', "'"}:
             quote = char
-            continue
-        if char in "[({":
+        elif char in "[({":
             depth += 1
-            continue
-        if char in "])}":
+        elif char in "])}":
             depth -= 1
-            continue
-        if char == "," and depth == 0:
+        elif char == "," and depth == 0:
             parts.append(args_text[start:index].strip())
             start = index + 1
     parts.append(args_text[start:].strip())
     return parts
 
 
-def _split_top_level_keyword(text: str, keyword: str) -> list[str]:
-    parts = []
-    start = 0
-    quote = None
-    escape = False
-    pattern = re.compile(rf"\b{re.escape(keyword)}\b", re.IGNORECASE)
-    index = 0
-    while index < len(text):
-        char = text[index]
-        if quote is not None:
-            if escape:
-                escape = False
-            elif char == "\\":
-                escape = True
-            elif char == quote:
-                quote = None
-            index += 1
-            continue
-        if char in {'"', "'"}:
-            quote = char
-            index += 1
-            continue
-        match = pattern.match(text, index)
-        if match is not None:
-            parts.append(text[start:index].strip())
-            start = match.end()
-            index = match.end()
-            continue
-        index += 1
-    parts.append(text[start:].strip())
-    return parts
+def unsupported_query_error(query: str = "") -> CypherSyntaxError:
+    """Return the legacy unsupported-query error with source metadata."""
+    return _located_error(CypherSyntaxError, "Unsupported Cypher query", query)
 
 
-def unsupported_query_error() -> ValueError:
-    return ValueError(
-        "Unsupported Cypher query. Supported subset: "
-        'MATCH (a {id: "node-id"})-[:TYPE1]->(b)<-[:TYPE2]-(c) RETURN a, b, c; '
-        'MATCH (n:Label) RETURN n; '
-        'CALL pg.sample_typed_paths(["node-id"], [{"edge_type": "TYPE", "sample_size": 2}]) YIELD path RETURN path'
+def _located_error(error_type, message: str, query: str, needle: str | None = None):
+    offset = query.find(needle) if needle else 0
+    offset = max(offset, 0)
+    line = query.count("\n", 0, offset) + 1
+    line_start = query.rfind("\n", 0, offset) + 1
+    return error_type(message, line=line, column=offset - line_start + 1, offset=offset, source=query)
+
+
+def _source_span(meta) -> SourceSpan:
+    return SourceSpan(
+        meta.start_pos,
+        meta.end_pos,
+        meta.line,
+        meta.column,
+        meta.end_line,
+        meta.end_column,
     )
+
+
+def _merge_spans(first: SourceSpan, *rest: SourceSpan) -> SourceSpan:
+    last = rest[-1] if rest else first
+    return SourceSpan(
+        first.start_offset,
+        last.end_offset,
+        first.line,
+        first.column,
+        last.end_line,
+        last.end_column,
+    )
+
+
+def _query_span(query: str) -> SourceSpan:
+    lines = query.splitlines(keepends=True)
+    if not lines:
+        return SourceSpan(0, 0, 1, 1, 1, 1)
+    final_line = lines[-1]
+    if final_line.endswith(("\n", "\r")):
+        end_line = len(lines) + 1
+        end_column = 1
+    else:
+        end_line = len(lines)
+        end_column = len(final_line) + 1
+    return SourceSpan(0, len(query), 1, 1, end_line, end_column)

@@ -130,7 +130,26 @@ for record in result:
     print(record["id"], record["name"])
 ```
 
-Supported Cypher is read-only. It covers indexed node scans, typed relationship traversal, filters, projection, ordering, limits, and chained `MATCH` clauses. It does not support mutating queries, aggregation, `WITH`, `OPTIONAL MATCH`, or variable-length paths.
+Supported Cypher is read-only. It covers indexed node scans, typed relationship traversal, filters, projection, ordering, limits, chained `MATCH` clauses, and `WITH` stages with scope replacement:
+
+```python
+result = graph.query(
+    'MATCH (p:Person) '
+    'WITH p ORDER BY p.age DESC LIMIT 10 '
+    'MATCH (p)-[:member_of]->(t:Team) '
+    'RETURN p.name AS name, t.name AS team'
+)
+```
+
+```python
+totals = graph.query(
+    'MATCH (p:Person) '
+    'RETURN p.department AS department, count(*) AS total '
+    'ORDER BY total DESC'
+)
+```
+
+It does not support mutating queries, `OPTIONAL MATCH`, or variable-length paths.
 
 ## Traverse and Sample Typed Relationships
 

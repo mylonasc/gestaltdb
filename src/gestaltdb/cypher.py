@@ -1,4 +1,4 @@
-"""Minimal read-only Cypher support for GestaltDB.
+"""Read-only openCypher-oriented query support for GestaltDB.
 
 The supported subset maps directly to existing typed adjacency and sampling APIs:
 
@@ -10,10 +10,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .cypher_ast import MatchQuery, MultiMatchQuery, NodeScanQuery, RelationshipScanQuery, SampleTypedPathsCall
-from .cypher_plan import LogicalPlan, plan_query
-from .cypher_parser import parse as _parse_query, split_top_level_args as _split_top_level_args
-from .cypher_runtime import QueryContext, execute_match, execute_multi_match, execute_node_scan, execute_relationship_scan
+from .cypher_ast import (
+    MatchQuery,
+    MultiMatchQuery,
+    NodeScanQuery,
+    Query,
+    RelationshipScanQuery,
+    ReturnClause,
+    SampleTypedPathsCall,
+    WithClause,
+)
+from .cypher_parser import parse as _parse_query
+from .cypher_parser import parse_ast as _parse_ast
+from .cypher_parser import split_top_level_args as _split_top_level_args  # noqa: F401
+from .cypher_plan import LogicalPlan, plan_query, plan_staged_query
+from .cypher_runtime import (
+    QueryContext,
+    execute_plan,
+)
+from .cypher_semantics import contains_function_call
 
 
 @dataclass(frozen=True)
@@ -62,8 +77,30 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
     return _parse_query(query)
 
 
+def parse_ast(query: str) -> Query | SampleTypedPathsCall:
+    """Parse the supported Cypher subset into its canonical clause AST."""
+    return _parse_ast(query)
+
+
+def _is_staged_query(canonical: Query | SampleTypedPathsCall) -> bool:
+    """Return whether a canonical query requires staged execution."""
+    if not isinstance(canonical, Query):
+        return False
+    for clause in canonical.clauses:
+        if isinstance(clause, WithClause):
+            return True
+        if isinstance(clause, (WithClause, ReturnClause)) and any(
+            contains_function_call(item.expression) for item in clause.items
+        ):
+            return True
+    return False
+
+
 def plan(query: str) -> LogicalPlan:
     """Return the logical plan for a supported Cypher query."""
+    canonical = _parse_ast(query)
+    if _is_staged_query(canonical):
+        return plan_staged_query(canonical)
     return plan_query(parse(query))
 
 
@@ -80,25 +117,13 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
     Examples:
         >>> execute(graph_db, 'MATCH (n:Drug) RETURN n')  # doctest: +SKIP
     """
-    parsed = parse(query)
-    plan_query(parsed)
-    parameters = parameters or {}
-    if isinstance(parsed, SampleTypedPathsCall):
-        paths = graph.sample_typed_paths(parsed.seed_ids, parsed.pattern)
-        if parsed.limit is not None:
-            paths = paths[:parsed.limit]
-        return QueryResult(
-            columns=parsed.returns,
-            records=[{"path": path} for path in paths],
-        )
-    if isinstance(parsed, NodeScanQuery):
-        records = execute_node_scan(parsed, QueryContext(graph=graph, parameters=parameters))
-        return QueryResult(columns=parsed.returns, records=records)
-    if isinstance(parsed, RelationshipScanQuery):
-        records = execute_relationship_scan(parsed, QueryContext(graph=graph, parameters=parameters))
-        return QueryResult(columns=parsed.returns, records=records)
-    if isinstance(parsed, MultiMatchQuery):
-        records = execute_multi_match(parsed, QueryContext(graph=graph, parameters=parameters))
-        return QueryResult(columns=parsed.returns, records=records)
-    records = execute_match(parsed, QueryContext(graph=graph, parameters=parameters))
-    return QueryResult(columns=parsed.returns, records=records)
+    canonical = _parse_ast(query)
+    if _is_staged_query(canonical):
+        logical_plan = plan_staged_query(canonical)
+    else:
+        logical_plan = plan_query(parse(query))
+    records = execute_plan(
+        logical_plan,
+        QueryContext(graph=graph, parameters=parameters or {}),
+    )
+    return QueryResult(columns=logical_plan.columns, records=records)
