@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
 
 - Replaced regex-based Cypher parsing with a Lark grammar supporting comments, Unicode and escaped names, source-located errors, expression precedence, multiple inline properties, and parameterized pagination.
 - Added arithmetic, expression comparisons, boolean and string predicates, regex matching, alias-aware ordering, Cypher three-valued null logic, and relationship-isomorphism enforcement for fixed paths.
