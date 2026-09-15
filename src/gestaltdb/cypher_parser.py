@@ -13,11 +13,15 @@ from .cypher_ast import (
     AnchoredPatternClause,
     AndExpression,
     ArithmeticExpression,
+    CaseExpression,
     ComparisonExpression,
+    ExistsExpression,
     FunctionCall,
     InExpression,
+    ListComprehension,
     ListExpression,
     MapExpression,
+    MapProjectionExpression,
     MatchClause,
     MatchQuery,
     MultiMatchQuery,
@@ -32,14 +36,19 @@ from .cypher_ast import (
     PathPatternClause,
     PatternHop,
     ProjectionItem,
+    PropertyAccessExpression,
     PropertyRef,
+    QuantifiedPredicate,
     Query,
+    ReduceExpression,
     RelationshipPatternClause,
     RelationshipScanQuery,
     ReturnClause,
     SampleTypedPathsCall,
+    SliceExpression,
     SourceSpan,
     StringPredicate,
+    SubscriptExpression,
     TraversalHop,
     UnaryExpression,
     Variable,
@@ -105,19 +114,47 @@ rel_name: REL_NAME | BACKTICK_NAME
            | additive "CONTAINS"i additive -> contains
 ?additive: multiplicative (ADD_OP multiplicative)* -> arithmetic_expression
 ?multiplicative: unary (MUL_OP unary)* -> arithmetic_expression
-?unary: ADD_OP unary -> unary_expression
-      | atom
- ?atom: property_ref
-      | parameter
-      | literal
-      | variable
-      | count_star
-      | function_call
-      | list_literal
-      | map_literal
-      | "(" expression ")" -> parenthesized
- count_star: symbolic_name "(" STAR ")"
- function_call: symbolic_name "(" DISTINCT? expression ("," expression)* ")"
+ ?unary: ADD_OP unary -> unary_expression
+       | postfix
+  ?postfix: atom (subscript_suffix)*
+  subscript_suffix: "[" expression "]" -> index_suffix
+                  | "[" expression ".." expression "]" -> slice_both
+                  | "[" expression ".." "]" -> slice_from
+                  | "[" ".." expression "]" -> slice_to
+  ?atom: property_ref
+       | parameter
+       | literal
+       | variable
+       | count_star
+       | function_call
+       | property_access
+       | case_expression
+       | list_comprehension
+       | quantified_predicate
+       | exists_expression
+       | map_projection
+       | reduce_call
+       | list_literal
+       | map_literal
+       | "(" expression ")" -> parenthesized
+  ?case_expression: case_simple | case_generic
+  case_simple: "CASE"i expression when_clause+ else_clause? "END"i
+  case_generic: "CASE"i when_clause+ else_clause? "END"i
+  when_clause: "WHEN"i expression "THEN"i expression
+  else_clause: "ELSE"i expression
+  list_comprehension: "[" symbolic_name "IN"i expression comp_where? comp_yield? "]"
+  comp_where: "WHERE"i expression
+  comp_yield: "|" expression
+  quantified_predicate: QUANTIFIER "(" symbolic_name "IN"i expression "WHERE"i expression ")"
+  exists_expression: "EXISTS"i "(" expression ")"
+  map_projection: symbolic_name "{" map_projection_item ("," map_projection_item)* "}"
+  map_projection_item: "." STAR -> proj_all
+                     | "." symbolic_name -> proj_property
+                     | symbolic_name ":" expression -> proj_alias
+  reduce_call: "REDUCE"i "(" symbolic_name COMP_OP expression "," symbolic_name "IN"i expression "|" expression ")"
+  count_star: symbolic_name "(" STAR ")"
+  function_call: symbolic_name "(" DISTINCT? [expression ("," expression)*] ")"
+  property_access: (function_call | map_projection | reduce_call) "." symbolic_name
 property_ref: symbolic_name "." symbolic_name
 variable: symbolic_name
 parameter: "$" symbolic_name
@@ -131,15 +168,16 @@ map_pair: map_key ":" expression
         | "false"i -> false
         | "null"i -> null
 
-symbolic_name: NAME | BACKTICK_NAME
-DISTINCT.2: /DISTINCT/i
+ symbolic_name: NAME | BACKTICK_NAME
+ DISTINCT.2: /DISTINCT/i
+ QUANTIFIER.2: /(ALL|ANY|NONE|SINGLE)/i
 ORDER_DIRECTION.2: /ASC|DESC/i
 COMP_OP: "=~" | "<>" | "!=" | "<=" | ">=" | "=" | "<" | ">"
 ADD_OP: "+" | "-"
 MUL_OP: "*" | "/" | "%"
 STAR: "*"
 INTEGER: /[0-9]+/
-NUMBER: /(?:[0-9]+\.[0-9]*|\.[0-9]+|[0-9]+)(?:[eE][+-]?[0-9]+)?/
+ NUMBER: /(?:[0-9]+\.[0-9]+|\.[0-9]+|[0-9]+)(?:[eE][+-]?[0-9]+)?/
 STRING: /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/s
 BACKTICK_NAME: /`(?:``|[^`])*`/
 NAME: /[^\W\d]\w*/u
@@ -187,6 +225,27 @@ class _Projection:
     expression: object
     alias: str | None = None
     span: SourceSpan | None = None
+
+
+@dataclass(frozen=True)
+class _CaseWhen:
+    condition: object
+    value: object
+
+
+@dataclass(frozen=True)
+class _CaseElse:
+    value: object
+
+
+@dataclass(frozen=True)
+class _CompWhere:
+    value: object
+
+
+@dataclass(frozen=True)
+class _CompYield:
+    value: object
 
 
 @dataclass(frozen=True)
@@ -245,6 +304,9 @@ class _ASTBuilder(Transformer):
     def property_ref(self, children):
         return PropertyRef(children[0], children[1])
 
+    def property_access(self, children):
+        return PropertyAccessExpression(children[0], children[1])
+
     def parameter(self, children):
         return Parameter(children[0])
 
@@ -264,6 +326,94 @@ class _ASTBuilder(Transformer):
 
     def parenthesized(self, children):
         return children[0]
+
+    def when_clause(self, children):
+        return _CaseWhen(children[0], children[1])
+
+    def else_clause(self, children):
+        return _CaseElse(children[0])
+
+    def case_simple(self, children):
+        operand = children[0]
+        rest = children[1:]
+        return CaseExpression(
+            tuple((item.condition, item.value) for item in rest if isinstance(item, _CaseWhen)),
+            next((item.value for item in rest if isinstance(item, _CaseElse)), None),
+            operand,
+        )
+
+    def case_generic(self, children):
+        return CaseExpression(
+            tuple((item.condition, item.value) for item in children if isinstance(item, _CaseWhen)),
+            next((item.value for item in children if isinstance(item, _CaseElse)), None),
+        )
+
+    def comp_where(self, children):
+        return _CompWhere(children[0])
+
+    def comp_yield(self, children):
+        return _CompYield(children[0])
+
+    def list_comprehension(self, children):
+        return ListComprehension(
+            children[0],
+            children[1],
+            next((item.value for item in children[2:] if isinstance(item, _CompWhere)), None),
+            next((item.value for item in children[2:] if isinstance(item, _CompYield)), None),
+        )
+
+    def quantified_predicate(self, children):
+        return QuantifiedPredicate(str(children[0]).lower(), children[1], children[2], children[3])
+
+    def exists_expression(self, children):
+        return ExistsExpression(children[0])
+
+    def proj_all(self, _children):
+        return ("all",)
+
+    def proj_property(self, children):
+        return ("property", children[0])
+
+    def proj_alias(self, children):
+        return ("alias", children[0], children[1])
+
+    def map_projection(self, children):
+        return MapProjectionExpression(children[0], tuple(children[1:]))
+
+    @v_args(meta=True)
+    def reduce_call(self, meta, children):
+        parts = [child for child in children if not isinstance(child, Token)]
+        operator = next(child for child in children if isinstance(child, Token))
+        if str(operator) != "=":
+            raise CypherSyntaxError(
+                "REDUCE accumulator must use =",
+                line=meta.line,
+                column=meta.column,
+                offset=meta.start_pos,
+                source="",
+            )
+        return ReduceExpression(parts[0], parts[1], parts[2], parts[3], parts[4])
+
+    def index_suffix(self, children):
+        return ("index", children[0])
+
+    def slice_both(self, children):
+        return ("slice", children[0], children[1])
+
+    def slice_from(self, children):
+        return ("slice", children[0], None)
+
+    def slice_to(self, children):
+        return ("slice", None, children[0])
+
+    def postfix(self, children):
+        node = children[0]
+        for suffix in children[1:]:
+            if suffix[0] == "index":
+                node = SubscriptExpression(node, suffix[1])
+            else:
+                node = SliceExpression(node, suffix[1], suffix[2])
+        return node
 
     @v_args(meta=True)
     def count_star(self, meta, children):
@@ -490,7 +640,7 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
             "Query cannot be represented by legacy parse(); use parse_ast()",
             query,
         )
-    if _canonical_uses_functions(canonical):
+    if _canonical_uses_functions(canonical) or _canonical_uses_extended_expressions(canonical):
         raise _located_error(
             CypherSemanticError,
             "Query cannot be represented by legacy parse(); use parse_ast()",
@@ -741,6 +891,21 @@ def _canonical_uses_functions(canonical: Query) -> bool:
             if any(contains_function_call(item.expression) for item in clause.items):
                 return True
             if any(contains_function_call(item.expression_ast) for item in clause.order_by if item.expression_ast is not None):
+                return True
+    return False
+
+
+def _canonical_uses_extended_expressions(canonical: Query) -> bool:
+    """Return whether any canonical clause uses extended expression forms."""
+    from .cypher_semantics import contains_extended_expression
+
+    for clause in canonical.clauses:
+        if isinstance(clause, WhereClause) and contains_extended_expression(clause.expression):
+            return True
+        if isinstance(clause, (WithClause, ReturnClause)):
+            if any(contains_extended_expression(item.expression) for item in clause.items):
+                return True
+            if any(contains_extended_expression(item.expression_ast) for item in clause.order_by if item.expression_ast is not None):
                 return True
     return False
 

@@ -19,6 +19,7 @@ from .cypher_ast import (
     WithClause,
 )
 from .cypher_errors import CypherSemanticError
+from .cypher_functions import is_aggregate_function
 
 
 @dataclass(frozen=True)
@@ -164,7 +165,7 @@ def plan_staged_query(query: Query) -> LogicalPlan:
             entry = by_clause[id(clause)]
             outputs = tuple(item.output.name for item in entry.projections)
             expressions = tuple(item.expression for item in entry.projections)
-            if any(isinstance(expression, FunctionCall) for expression in expressions):
+            if _has_aggregate_call(expressions):
                 operators.append(_plan_aggregate(query.source, clause, outputs, expressions))
             else:
                 operators.append(ProjectItems(returns=outputs, expressions=expressions))
@@ -174,7 +175,7 @@ def plan_staged_query(query: Query) -> LogicalPlan:
                 operators.append(FilterExpression(clauses[index + 1].expression))
                 index += 1
             if clause.order_by:
-                if any(isinstance(expression, FunctionCall) for expression in expressions):
+                if _has_aggregate_call(expressions):
                     operators.append(
                         Sort(_normalize_aggregate_order(query.source, clause, outputs, expressions))
                     )
@@ -190,6 +191,14 @@ def plan_staged_query(query: Query) -> LogicalPlan:
     return LogicalPlan(tuple(operators), None, analysis.output_names, True)
 
 
+def _has_aggregate_call(expressions: tuple[object, ...]) -> bool:
+    """Return whether any top-level projection expression is an aggregate call."""
+    return any(
+        isinstance(expression, FunctionCall) and is_aggregate_function(expression.name)
+        for expression in expressions
+    )
+
+
 def _plan_aggregate(
     source: str,
     clause: WithClause | ReturnClause,
@@ -200,7 +209,7 @@ def _plan_aggregate(
     keys: list[tuple[str, object]] = []
     calls: list[tuple[str, AggregateCall]] = []
     for output, expression in zip(outputs, expressions):
-        if isinstance(expression, FunctionCall):
+        if isinstance(expression, FunctionCall) and is_aggregate_function(expression.name):
             argument = expression.arguments[0]
             calls.append(
                 (

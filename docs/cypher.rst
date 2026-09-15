@@ -122,6 +122,48 @@ relationship scans can use the composite type/property index.
 
    graph_db.query('MATCH (a)-[r:binds]->(b) WHERE r.score >= 0.8 RETURN r.id, b.id')
 
+Extended Expressions
+--------------------
+
+``RETURN``, ``WITH``, ``ORDER BY``, and ``WHERE`` accept ``CASE``,
+subscripts, slices, list comprehensions, ``reduce``, map projections,
+quantified predicates, and ``exists`` over properties. Comprehension
+variables are local to their expression and shadow outer variables of the
+same name. Missing values propagate as ``None``.
+
+.. code-block:: python
+
+   graph_db.query('MATCH (n:Drug) RETURN CASE WHEN n.score >= 0.8 THEN "hit" ELSE "miss" END AS call')
+   graph_db.query('MATCH (n:Drug) RETURN n.synonyms[0] AS first, n.synonyms[1..3] AS rest')
+   graph_db.query('MATCH (n:Drug) RETURN [s IN n.synonyms WHERE s STARTS WITH "A" | s] AS matches')
+   graph_db.query('MATCH (n:Drug) RETURN reduce(total = 0, s IN n.scores | total + s) AS total')
+   graph_db.query('MATCH (n:Drug) RETURN n{.*, name: n.name} AS drug')
+   graph_db.query('MATCH (n:Drug) WHERE all(s IN n.scores WHERE s > 0) RETURN n.id')
+   graph_db.query('MATCH (n:Drug) WHERE exists(n.score) RETURN n.id')
+
+Aggregates must still be top-level projection expressions; they cannot hide
+inside ``CASE`` or comprehensions. Pattern comprehensions and
+``exists()`` with a pattern argument are not yet supported.
+
+Scalar Functions
+----------------
+
+The engine provides the core openCypher scalar functions: ``coalesce``,
+``id``/``elementId``, ``type``, ``labels``, ``startNode``/``endNode``,
+``properties``, ``head``/``last``, ``size``/``length``, the ``toBoolean``/
+``toInteger``/``toFloat``/``toString`` conversions, ``trim``/``lTrim``/
+``rTrim``, ``toUpper``/``toLower``, ``replace``, ``split``, ``substring``,
+``left``/``right``, ``abs``, ``ceil``, ``floor``, ``round``, ``sqrt``,
+``pow``, ``rand``, ``range``, ``reverse``, ``tail``, and ``keys``.
+Conversions return ``None`` for unconvertible inputs, most other functions
+propagate ``None``, and misused functions raise typed errors. Scalar calls
+group like any other non-aggregate projection expression.
+
+.. code-block:: python
+
+   graph_db.query('MATCH (n:Drug) RETURN toUpper(n.name) AS name, size(n.synonyms) AS total')
+   graph_db.query('MATCH (a)-[r:binds]->(b) RETURN type(r) AS rel, startNode(r).name AS source')
+
 Projection and Result Shaping
 -----------------------------
 
@@ -223,7 +265,7 @@ locations. The current Cypher API does not yet support:
 - mutating queries such as ``CREATE``, ``SET``, ``DELETE``, or ``MERGE``
 - ``OPTIONAL MATCH``
 - variable-length paths
-- path values such as ``p = (a)-[:T]->(b)``
-- general function calls, list comprehensions, map projections, or ``CASE``
+- path values such as ``p = (a)-[:T]->(b)``, pattern comprehensions, and ``exists()`` with a pattern argument
+- scalar functions beyond the documented core set
 - ``UNWIND``, ``UNION``, subqueries, or generic procedures
 - relationship property maps and quantified path patterns

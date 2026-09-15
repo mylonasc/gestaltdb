@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from itertools import islice
@@ -10,24 +9,15 @@ from typing import Protocol
 
 from .cypher_ast import (
     AndExpression,
-    ArithmeticExpression,
     ComparisonExpression,
-    InExpression,
-    ListExpression,
-    MapExpression,
     NodeScanQuery,
-    NotExpression,
-    NullPredicate,
-    OrExpression,
     Parameter,
     PathPatternClause,
     PatternHop,
     PropertyRef,
-    StringPredicate,
-    UnaryExpression,
     Variable,
-    XorExpression,
 )
+from .cypher_expr import _cypher_equals, evaluate_expression, project_value
 from .cypher_plan import Aggregate as LogicalAggregate
 from .cypher_plan import (
     LogicalPlan,
@@ -919,162 +909,6 @@ def filter_expression(rows, expression, context: QueryContext):
             yield row
 
 
-def evaluate_expression(expression, bindings: dict[str, object], context: QueryContext):
-    """Evaluate an expression using Cypher null propagation and boolean logic."""
-    if isinstance(expression, Parameter):
-        return context.resolve(expression)
-    if isinstance(expression, Variable):
-        return bindings[expression.name]
-    if isinstance(expression, PropertyRef):
-        return project_value(bindings, f"{expression.variable}.{expression.property_name}")
-    if isinstance(expression, ListExpression):
-        return [evaluate_expression(item, bindings, context) for item in expression.items]
-    if isinstance(expression, MapExpression):
-        return {key: evaluate_expression(value, bindings, context) for key, value in expression.items}
-    if isinstance(expression, list):
-        return [evaluate_expression(item, bindings, context) for item in expression]
-    if isinstance(expression, dict):
-        return {key: evaluate_expression(value, bindings, context) for key, value in expression.items()}
-    if isinstance(expression, NotExpression):
-        value = _boolean_value(evaluate_expression(expression.expression, bindings, context))
-        return None if value is None else not value
-    if isinstance(expression, AndExpression):
-        result = True
-        for part in expression.expressions:
-            value = _boolean_value(evaluate_expression(part, bindings, context))
-            if value is False:
-                return False
-            if value is None:
-                result = None
-        return result
-    if isinstance(expression, OrExpression):
-        result = False
-        for part in expression.expressions:
-            value = _boolean_value(evaluate_expression(part, bindings, context))
-            if value is True:
-                return True
-            if value is None:
-                result = None
-        return result
-    if isinstance(expression, XorExpression):
-        values = [_boolean_value(evaluate_expression(part, bindings, context)) for part in expression.expressions]
-        if any(value is None for value in values):
-            return None
-        return sum(value is True for value in values) % 2 == 1
-    if isinstance(expression, InExpression):
-        left_value = evaluate_expression(expression.left, bindings, context)
-        values = evaluate_expression(expression.values, bindings, context)
-        if values is None:
-            return None
-        if not isinstance(values, (list, tuple)):
-            raise TypeError("IN expects a list value")
-        saw_null = left_value is None
-        for value in values:
-            equal = _cypher_equals(left_value, value)
-            if equal is True:
-                return True
-            saw_null = saw_null or equal is None
-        return None if saw_null else False
-    if isinstance(expression, NullPredicate):
-        value = evaluate_expression(expression.expression, bindings, context)
-        return value is not None if expression.negated else value is None
-    if isinstance(expression, StringPredicate):
-        left_value = evaluate_expression(expression.left, bindings, context)
-        right_value = evaluate_expression(expression.right, bindings, context)
-        if left_value is None or right_value is None:
-            return None
-        if not isinstance(left_value, str) or not isinstance(right_value, str):
-            raise TypeError(f"{expression.operator} expects string operands")
-        if expression.operator == "STARTS WITH":
-            return left_value.startswith(right_value)
-        if expression.operator == "ENDS WITH":
-            return left_value.endswith(right_value)
-        return right_value in left_value
-    if isinstance(expression, UnaryExpression):
-        value = evaluate_expression(expression.expression, bindings, context)
-        if value is None:
-            return None
-        _require_number(value, expression.operator)
-        return value if expression.operator == "+" else -value
-    if isinstance(expression, ArithmeticExpression):
-        left_value = evaluate_expression(expression.left, bindings, context)
-        right_value = evaluate_expression(expression.right, bindings, context)
-        if left_value is None or right_value is None:
-            return None
-        if expression.operator == "+" and (isinstance(left_value, str) or isinstance(right_value, str)):
-            if not isinstance(left_value, str) or not isinstance(right_value, str):
-                raise TypeError("+ expects two strings or two numbers")
-            return left_value + right_value
-        _require_number(left_value, expression.operator)
-        _require_number(right_value, expression.operator)
-        operations = {
-            "+": lambda: left_value + right_value,
-            "-": lambda: left_value - right_value,
-            "*": lambda: left_value * right_value,
-            "/": lambda: left_value / right_value,
-            "%": lambda: left_value % right_value,
-        }
-        return operations[expression.operator]()
-    if isinstance(expression, ComparisonExpression):
-        left_value = evaluate_expression(expression.left, bindings, context)
-        right_value = evaluate_expression(expression.right, bindings, context)
-        operator = expression.operator
-        if operator == "=":
-            return _cypher_equals(left_value, right_value)
-        if operator in {"!=", "<>"}:
-            equal = _cypher_equals(left_value, right_value)
-            return None if equal is None else not equal
-        if left_value is None or right_value is None:
-            return None
-        if operator == "=~":
-            if not isinstance(left_value, str) or not isinstance(right_value, str):
-                raise TypeError("=~ expects string operands")
-            return re.fullmatch(right_value, left_value) is not None
-        try:
-            return {
-                "<": lambda: left_value < right_value,
-                "<=": lambda: left_value <= right_value,
-                ">": lambda: left_value > right_value,
-                ">=": lambda: left_value >= right_value,
-            }[operator]()
-        except TypeError as exc:
-            raise TypeError(f"Cannot compare {type(left_value).__name__} and {type(right_value).__name__}") from exc
-    return expression
-
-
-def _cypher_equals(left, right):
-    if left is None or right is None:
-        return None
-    if isinstance(left, bool) != isinstance(right, bool):
-        return False
-    if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
-        if len(left) != len(right):
-            return False
-        comparisons = [_cypher_equals(left_item, right_item) for left_item, right_item in zip(left, right)]
-        if False in comparisons:
-            return False
-        return None if None in comparisons else True
-    if isinstance(left, dict) and isinstance(right, dict):
-        if left.keys() != right.keys():
-            return False
-        comparisons = [_cypher_equals(left[key], right[key]) for key in left]
-        if False in comparisons:
-            return False
-        return None if None in comparisons else True
-    return left == right
-
-
-def _boolean_value(value):
-    if value is None or isinstance(value, bool):
-        return value
-    raise TypeError(f"Expected boolean expression, got {type(value).__name__}")
-
-
-def _require_number(value, operator: str) -> None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError(f"{operator} expects numeric operands")
-
-
 def _order_value(bindings, order_item, parsed, context):
     expression = getattr(order_item, "expression_ast", None)
     alias = None
@@ -1152,24 +986,6 @@ def _distinct_records(records: list[dict[str, object]], columns: tuple[str, ...]
         seen.add(key)
         distinct.append(record)
     return distinct
-
-
-def project_value(bindings: dict[str, object], return_item: str):
-    """Project one return item from variable bindings."""
-    variable, _, property_name = return_item.partition(".")
-    value = bindings[variable]
-    if not property_name:
-        return value
-    if property_name == "id" and hasattr(value, "get_id"):
-        return value.get_id
-    if property_name == "labels" and hasattr(value, "labels"):
-        return value.labels
-    if property_name in {"source", "target"} and hasattr(value, property_name):
-        return getattr(value, property_name)
-    properties = getattr(value, "properties", {})
-    if property_name in properties:
-        return properties[property_name]
-    return None
 
 
 def same_entity(left, right) -> bool:

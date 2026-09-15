@@ -228,6 +228,96 @@ class MapExpression:
 
 
 @dataclass(frozen=True)
+class CaseExpression:
+    """A ``CASE`` conditional expression.
+
+    ``operand`` is ``None`` for generic ``CASE WHEN`` and the compared value
+    for simple ``CASE <operand> WHEN``. ``whens`` holds ``(condition, value)``
+    pairs where the condition is a boolean expression (generic) or a compared
+    value (simple). ``else_value`` is ``None`` when no ``ELSE`` is present.
+    """
+
+    whens: tuple[tuple[object, object], ...]
+    else_value: object = None
+    operand: object | None = None
+
+
+@dataclass(frozen=True)
+class SubscriptExpression:
+    """Dynamic element access such as ``xs[0]``, ``m[key]`` or ``n[$prop]``."""
+
+    target: object
+    index: object
+
+
+@dataclass(frozen=True)
+class SliceExpression:
+    """List slicing such as ``xs[1..3]``; ``start``/``end`` may be ``None``."""
+
+    target: object
+    start: object | None = None
+    end: object | None = None
+
+
+@dataclass(frozen=True)
+class ListComprehension:
+    """A list comprehension such as ``[x IN xs WHERE p | f(x)]``."""
+
+    variable: str
+    iterable: object
+    where: object | None = None
+    projection: object | None = None
+
+
+@dataclass(frozen=True)
+class ReduceExpression:
+    """A reduction such as ``reduce(acc = 0, x IN xs | acc + x)``."""
+
+    accumulator: str
+    initial: object
+    variable: str
+    iterable: object
+    expression: object
+
+
+@dataclass(frozen=True)
+class MapProjectionExpression:
+    """A map projection such as ``n{.*, .age, name: n.name}``.
+
+    Items are ``("all",)`` for ``.*``, ``("property", name)`` for ``.name``,
+    and ``("alias", key, expression)`` for ``key: expression``.
+    """
+
+    variable: str
+    items: tuple[tuple, ...]
+
+
+@dataclass(frozen=True)
+class QuantifiedPredicate:
+    """A quantified predicate such as ``all(x IN xs WHERE p)``."""
+
+    function: str
+    variable: str
+    iterable: object
+    where: object
+
+
+@dataclass(frozen=True)
+class ExistsExpression:
+    """An ``exists(n.property)`` existence check."""
+
+    expression: object
+
+
+@dataclass(frozen=True)
+class PropertyAccessExpression:
+    """Property access on a computed value, such as ``startNode(r).name``."""
+
+    expression: object
+    property_name: str
+
+
+@dataclass(frozen=True)
 class OrderItem:
     """One ORDER BY item."""
 
