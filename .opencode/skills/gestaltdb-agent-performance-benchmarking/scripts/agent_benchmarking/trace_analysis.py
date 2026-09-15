@@ -35,7 +35,7 @@ SIGNAL_RULES = [
     ),
     (
         "unsupported Cypher syntax likely used",
-        r"\b(OPTIONAL\s+MATCH|CREATE\b|MERGE\b|DELETE\b|SET\b|COUNT\s*\(|MATCH\s+\w+\s*=|\*\d*)",
+        r"\b(OPTIONAL\s+MATCH|CREATE\b|MERGE\b|DELETE\b|SET\b|MATCH\s+\w+\s*=|\*\d*)",
         "Cypher docs and AGENTS.md should make unsupported syntax more discoverable for application authors.",
     ),
     (

@@ -194,6 +194,26 @@ lists and maps.
        'YIELD path RETURN path LIMIT 1'
    )
 
+Aggregation and Implicit Grouping
+---------------------------------
+
+``count``, ``collect``, ``sum``, ``avg``, ``min``, and ``max`` work in
+``WITH`` and ``RETURN``, including ``count(*)`` and argument-level
+``DISTINCT`` such as ``count(DISTINCT n.age)``. Non-aggregate projection
+expressions become implicit grouping keys; an all-aggregate projection has
+one global group. Null inputs are ignored except by ``count(*)``, and empty
+global inputs return ``0`` for ``count``, ``[]`` for ``collect``, ``0`` for
+``sum``, and ``None`` for ``avg``, ``min``, and ``max``.
+
+.. code-block:: python
+
+   graph_db.query('MATCH (p:Person) RETURN count(*)')
+   graph_db.query('MATCH (p:Person) RETURN p.department AS department, count(*) AS total ORDER BY total DESC')
+
+``ORDER BY`` in an aggregate query must reference projected outputs.
+Aggregates cannot appear in ``WHERE`` (filter an aggregating ``WITH`` instead),
+cannot nest, and cannot mix with scalar arithmetic yet.
+
 Current Limitations
 -------------------
 
@@ -201,7 +221,6 @@ Syntax and semantic failures are ``ValueError`` subclasses with source
 locations. The current Cypher API does not yet support:
 
 - mutating queries such as ``CREATE``, ``SET``, ``DELETE``, or ``MERGE``
-- aggregation such as ``count`` or ``collect``
 - ``OPTIONAL MATCH``
 - variable-length paths
 - path values such as ``p = (a)-[:T]->(b)``

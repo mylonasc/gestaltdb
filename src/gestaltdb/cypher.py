@@ -16,6 +16,7 @@ from .cypher_ast import (
     NodeScanQuery,
     Query,
     RelationshipScanQuery,
+    ReturnClause,
     SampleTypedPathsCall,
     WithClause,
 )
@@ -27,6 +28,7 @@ from .cypher_runtime import (
     QueryContext,
     execute_plan,
 )
+from .cypher_semantics import contains_function_call
 
 
 @dataclass(frozen=True)
@@ -81,10 +83,17 @@ def parse_ast(query: str) -> Query | SampleTypedPathsCall:
 
 
 def _is_staged_query(canonical: Query | SampleTypedPathsCall) -> bool:
-    """Return whether a canonical query requires staged ``WITH`` execution."""
-    return isinstance(canonical, Query) and any(
-        isinstance(clause, WithClause) for clause in canonical.clauses
-    )
+    """Return whether a canonical query requires staged execution."""
+    if not isinstance(canonical, Query):
+        return False
+    for clause in canonical.clauses:
+        if isinstance(clause, WithClause):
+            return True
+        if isinstance(clause, (WithClause, ReturnClause)) and any(
+            contains_function_call(item.expression) for item in clause.items
+        ):
+            return True
+    return False
 
 
 def plan(query: str) -> LogicalPlan:

@@ -75,10 +75,17 @@ GestaltDB includes an embedded, read-only Cypher query processor:
 
 ## 3. Explicit Unsupported Cypher Features
 
+### Aggregation and Implicit Grouping
+- Core six: `count(*)`, `count(expr)`, `collect`, `sum`, `avg`, `min`, `max`, plus aggregate `DISTINCT`.
+- Non-aggregate projection expressions are implicit grouping keys; all-aggregate projections have one global group (even for empty input).
+- Null inputs are ignored except by `count(*)`; empty global input yields `0`/`[]`/`0`/`None`/`None`/`None` across the six.
+- `ORDER BY` in aggregate queries must reference projected outputs (planner normalizes to output `Variable` refs).
+- Aggregates are rejected in `WHERE`, pattern property maps, nested positions, and scalar arithmetic; unknown functions are rejected.
+- Execution: staged `Aggregate` operator with first-seen group order and `cypher_value_key` grouping/distinct identity.
+
 Do **not** document or expect the following syntax to work:
 - ❌ Mutating queries (`CREATE`, `MERGE`, `SET`, `DELETE`, `REMOVE`)
-- ❌ Aggregation functions (`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `COLLECT`)
-- ❌ Explicit grouping (`GROUP BY`; Cypher grouping stays implicit once aggregates land)
+- ❌ Explicit grouping (`GROUP BY`; Cypher grouping is implicit)
 - ❌ Optional matches (`OPTIONAL MATCH`)
 - ❌ Variable-length path expansion (`[:KNOWS*1..3]`)
 - ❌ Path binding variables (e.g. `p = (a)-[:T]->(b)`)

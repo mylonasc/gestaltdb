@@ -60,6 +60,16 @@ class Wildcard:
 
 
 @dataclass(frozen=True)
+class FunctionCall:
+    """A function call such as ``count(*)`` or ``collect(n.value)``."""
+
+    name: str
+    arguments: tuple[object, ...] = ()
+    distinct: bool = False
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
 class ProjectionItem:
     """One projection expression and its optional output alias."""
 

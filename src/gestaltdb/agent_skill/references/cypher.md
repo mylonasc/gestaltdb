@@ -12,11 +12,12 @@ Use `graph.query(cypher, parameters=None)` for read-only Cypher. It returns `Que
 - `RETURN`, aliases, `RETURN *`, general projection expressions, `DISTINCT`, alias-aware `ORDER BY`, and literal or parameterized `SKIP`/`LIMIT`.
 - Chained `MATCH` clauses with clause-local `WHERE`.
 - `WITH` with scope replacement: only projected variables and aliases survive, and `WITH` may carry its own `WHERE`, `DISTINCT`, `ORDER BY`, `SKIP`, and `LIMIT`.
+- Core aggregates `count`, `collect`, `sum`, `avg`, `min`, and `max` in `WITH` and `RETURN`, including `count(*)` and aggregate `DISTINCT`. Non-aggregate projections are implicit grouping keys; `ORDER BY` in aggregate queries must reference projected outputs.
 - `{id: $id}` on the first node of a relationship path addresses the stable entity ID as a GestaltDB extension; elsewhere `id` is an ordinary property filter.
 
 ## Unsupported
 
-Do not use `CREATE`, `MERGE`, `SET`, `DELETE`, aggregation such as `COUNT`, `OPTIONAL MATCH`, variable-length paths, relationship property maps, or path binding.
+Do not use `CREATE`, `MERGE`, `SET`, `DELETE`, `OPTIONAL MATCH`, variable-length paths, relationship property maps, or path binding.
 
 ## Example
 

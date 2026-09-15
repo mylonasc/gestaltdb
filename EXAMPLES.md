@@ -141,7 +141,15 @@ result = graph.query(
 )
 ```
 
-It does not support mutating queries, aggregation, `OPTIONAL MATCH`, or variable-length paths.
+```python
+totals = graph.query(
+    'MATCH (p:Person) '
+    'RETURN p.department AS department, count(*) AS total '
+    'ORDER BY total DESC'
+)
+```
+
+It does not support mutating queries, `OPTIONAL MATCH`, or variable-length paths.
 
 ## Traverse and Sample Typed Relationships
 

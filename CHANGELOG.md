@@ -12,6 +12,7 @@
 - Added general projection expressions (arithmetic, literals, parameters, lists, maps) in `RETURN` and `ORDER BY`, with deterministic unaliased column names.
 - Added `WITH` with scope replacement, clause-local `WHERE`, and local `DISTINCT`/`ORDER BY`/`SKIP`/`LIMIT`, executed through staged `MatchStep`/`ProjectItems` plans.
 - Added a shared Cypher value identity (`cypher_value_key`) for result `DISTINCT`, separating booleans from numbers and keying entities by kind plus stable ID.
+- Added core Cypher aggregates (`count`, `collect`, `sum`, `avg`, `min`, `max`) with `count(*)`, aggregate `DISTINCT`, implicit grouping, and documented null/empty-input behavior in `WITH` and `RETURN`.
 
 ## 0.6.2
 

@@ -34,6 +34,7 @@ from .cypher_ast import (
     Variable,
     XorExpression,
 )
+from .cypher_plan import Aggregate as LogicalAggregate
 from .cypher_plan import (
     AnchoredMatchSource,
     Expand,
@@ -389,7 +390,9 @@ def _multi_match_rows(
 
 def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, object]]:
     """Execute an authoritative logical plan against one query context."""
-    if plan.staged or any(isinstance(operator, (MatchStep, ProjectItems)) for operator in plan.operators):
+    if plan.staged or any(
+        isinstance(operator, (MatchStep, ProjectItems, LogicalAggregate)) for operator in plan.operators
+    ):
         return _execute_staged(plan, context)
     parsed, rows = _plan_source_rows(plan, context)
     stream: Iterable[BindingRow] | Iterable[ProjectedRow] = rows
@@ -460,6 +463,94 @@ def apply_match_step(
     return staged
 
 
+@dataclass(frozen=True, slots=True)
+class AggregateOperator:
+    """Group rows by key expressions and apply the core six aggregates."""
+
+    aggregate: LogicalAggregate
+
+    def execute(
+        self, rows: Iterable[BindingRow], context: QueryContext
+    ) -> Iterator[ProjectedRow]:
+        groups: dict[tuple[object, ...], dict[str, object]] = {}
+        order: list[tuple[object, ...]] = []
+        for source_row in rows:
+            if isinstance(source_row, ProjectedRow):
+                bindings = source_row.values
+            else:
+                bindings = BindingRow.from_row(source_row).bindings
+            key_values = [
+                evaluate_expression(expression, bindings, context)
+                for _, expression in self.aggregate.keys
+            ]
+            key = tuple(cypher_value_key(value) for value in key_values)
+            group = groups.get(key)
+            if group is None:
+                group = {"key_values": key_values, "row_count": 0, "arguments": []}
+                groups[key] = group
+                order.append(key)
+            group["row_count"] += 1
+            group["arguments"].append(
+                [
+                    evaluate_expression(call.argument, bindings, context)
+                    if call.argument is not None
+                    else None
+                    for _, call in self.aggregate.calls
+                ]
+            )
+        if not order and not self.aggregate.keys:
+            empty = {"key_values": [], "row_count": 0, "arguments": []}
+            groups[()] = empty
+            order.append(())
+        for key in order:
+            group = groups[key]
+            record: dict[str, object] = {
+                output: value
+                for (output, _), value in zip(self.aggregate.keys, group["key_values"])
+            }
+            columns = list(zip(*group["arguments"])) if group["arguments"] else [() for _ in self.aggregate.calls]
+            for (output, call), values in zip(self.aggregate.calls, columns):
+                record[output] = _apply_aggregate(call, list(values), group["row_count"])
+            yield ProjectedRow(values=record, source_bindings=dict(record))
+
+
+def _apply_aggregate(call, values: list[object], row_count: int) -> object:
+    """Apply one aggregate call to its collected per-row argument values."""
+    if call.function == "count" and call.argument is None:
+        return row_count
+    non_null = [value for value in values if value is not None]
+    if call.distinct:
+        seen: set[object] = set()
+        deduplicated: list[object] = []
+        for value in non_null:
+            key = cypher_value_key(value)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduplicated.append(value)
+        non_null = deduplicated
+    if call.function == "count":
+        return len(non_null)
+    if call.function == "collect":
+        return non_null
+    if call.function in ("sum", "avg"):
+        for value in non_null:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise TypeError(f"{call.function} expects numeric operands")
+        if not non_null:
+            return 0 if call.function == "sum" else None
+        total = sum(non_null)
+        return total if call.function == "sum" else total / len(non_null)
+    if call.function in ("min", "max"):
+        if not non_null:
+            return None
+        try:
+            return min(non_null) if call.function == "min" else max(non_null)
+        except TypeError as exc:
+            raise TypeError(f"{call.function} expects comparable values") from exc
+    raise TypeError(f"Unsupported aggregate function: {call.function}")
+
+
 def filter_projected(
     rows: Iterable[ProjectedRow], expression: object, context: QueryContext
 ) -> Iterator[ProjectedRow]:
@@ -498,6 +589,15 @@ def _execute_staged(plan: LogicalPlan, context: QueryContext) -> list[dict[str, 
                 returns=operator.returns,
                 projection_expressions=operator.expressions,
             ).execute(source, context)
+            bindings = None
+        elif isinstance(operator, LogicalAggregate):
+            aggregate_source: Iterable[BindingRow] | Iterable[ProjectedRow] = (
+                projected if projected is not None else (bindings if bindings is not None else iter(()))
+            )
+            view = ProjectionView(
+                operator.returns, tuple(Variable(name) for name in operator.returns)
+            )
+            projected = AggregateOperator(operator).execute(aggregate_source, context)
             bindings = None
         elif isinstance(operator, LogicalSort):
             if projected is None:

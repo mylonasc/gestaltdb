@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
 
@@ -9,6 +10,7 @@ from .cypher_ast import (
     AndExpression,
     ArithmeticExpression,
     ComparisonExpression,
+    FunctionCall,
     InExpression,
     ListExpression,
     MapExpression,
@@ -129,6 +131,7 @@ def analyze_query(query: Query) -> QueryAnalysis:
             if not isinstance(previous, (MatchClause, WithClause)):
                 _raise_semantic("WHERE must immediately follow MATCH or WITH", query.source, clause.span)
             _validate_expression(clause.expression, scope, query.source, "WHERE", clause.span)
+            validate_function_calls(clause.expression, query.source, clause.span, allow_aggregate=False)
         elif isinstance(clause, (WithClause, ReturnClause)):
             label = "WITH" if isinstance(clause, WithClause) else "RETURN"
             projections = _resolve_projections(clause, scope, query.source, label)
@@ -136,6 +139,15 @@ def analyze_query(query: Query) -> QueryAnalysis:
             order_scope = _merge_scopes(incoming, scope)
             for item in clause.order_by:
                 _validate_expression(item.expression_ast, order_scope, query.source, "ORDER BY", clause.span)
+                validate_function_calls(item.expression_ast, query.source, clause.span, allow_aggregate=True)
+            if not any(isinstance(projection.expression, FunctionCall) for projection in projections):
+                for item in clause.order_by:
+                    if contains_function_call(item.expression_ast):
+                        _raise_semantic(
+                            "ORDER BY aggregates require an aggregate projection",
+                            query.source,
+                            clause.span,
+                        )
         else:
             _raise_semantic("Unsupported Cypher clause", query.source, getattr(clause, "span", None))
 
@@ -148,6 +160,9 @@ def analyze_query(query: Query) -> QueryAnalysis:
     return QueryAnalysis(query, tuple(snapshots))
 
 
+AGGREGATE_FUNCTIONS = ("count", "collect", "sum", "avg", "min", "max")
+
+
 def expression_variables(expression: object) -> tuple[str, ...]:
     """Return variable references in expression traversal order."""
     if expression is None or isinstance(expression, (str, int, float, bool, Parameter, Wildcard)):
@@ -156,6 +171,8 @@ def expression_variables(expression: object) -> tuple[str, ...]:
         return (expression.name,)
     if isinstance(expression, PropertyRef):
         return (expression.variable,)
+    if isinstance(expression, FunctionCall):
+        return tuple(variable for item in expression.arguments for variable in expression_variables(item))
     if isinstance(expression, (ComparisonExpression, ArithmeticExpression, StringPredicate)):
         return expression_variables(expression.left) + expression_variables(expression.right)
     if isinstance(expression, InExpression):
@@ -224,7 +241,83 @@ def render_projection(expression: object) -> str:
         return "[" + ", ".join(render_projection(item) for item in expression) + "]"
     if isinstance(expression, dict):
         return "{" + ", ".join(f"{key}: {render_projection(value)}" for key, value in expression.items()) + "}"
+    if isinstance(expression, FunctionCall):
+        rendered = ", ".join(render_projection(item) for item in expression.arguments)
+        distinct = "DISTINCT " if expression.distinct else ""
+        return f"{expression.name}({distinct}{rendered})"
     raise ValueError(f"Cannot render projection expression: {expression!r}")
+
+
+def contains_function_call(expression: object) -> bool:
+    """Return whether an expression contains any function call."""
+    if isinstance(expression, FunctionCall):
+        return True
+    if isinstance(expression, (ComparisonExpression, ArithmeticExpression, StringPredicate)):
+        return contains_function_call(expression.left) or contains_function_call(expression.right)
+    if isinstance(expression, InExpression):
+        return contains_function_call(expression.left) or contains_function_call(expression.values)
+    if isinstance(expression, NullPredicate):
+        return contains_function_call(expression.expression)
+    if isinstance(expression, (NotExpression, UnaryExpression)):
+        return contains_function_call(expression.expression)
+    if isinstance(expression, (AndExpression, OrExpression, XorExpression)):
+        return any(contains_function_call(item) for item in expression.expressions)
+    if isinstance(expression, ListExpression):
+        return any(contains_function_call(item) for item in expression.items)
+    if isinstance(expression, MapExpression):
+        return any(contains_function_call(item) for _, item in expression.items)
+    if isinstance(expression, list):
+        return any(contains_function_call(item) for item in expression)
+    if isinstance(expression, dict):
+        return any(contains_function_call(item) for item in expression.values())
+    return False
+
+
+def validate_function_calls(expression: object, source: str, span: SourceSpan | None, *, allow_aggregate: bool) -> None:
+    """Validate aggregate placement, nesting, and known function names."""
+    calls = _iter_function_calls(expression)
+    for call in calls:
+        if call.name not in AGGREGATE_FUNCTIONS:
+            _raise_semantic(f"Unsupported function: {call.name}", source, call.span or span)
+        if any(contains_function_call(argument) for argument in call.arguments):
+            _raise_semantic("Nested aggregate calls are not supported", source, call.span or span)
+        if len(call.arguments) != 1:
+            _raise_semantic(f"{call.name} expects exactly one argument", source, call.span or span)
+        argument = call.arguments[0]
+        if isinstance(argument, Wildcard) and (call.name != "count" or call.distinct):
+            _raise_semantic(f"{call.name}(*) is not supported", source, call.span or span)
+        if not allow_aggregate:
+            _raise_semantic("Aggregates cannot be used in WHERE", source, call.span or span)
+
+
+def _iter_function_calls(expression: object) -> Iterator[FunctionCall]:
+    """Yield function calls in an expression tree, outermost first."""
+    if isinstance(expression, FunctionCall):
+        yield expression
+        return
+    if isinstance(expression, (ComparisonExpression, ArithmeticExpression, StringPredicate)):
+        yield from _iter_function_calls(expression.left)
+        yield from _iter_function_calls(expression.right)
+    elif isinstance(expression, InExpression):
+        yield from _iter_function_calls(expression.left)
+        yield from _iter_function_calls(expression.values)
+    elif isinstance(expression, (NullPredicate, NotExpression, UnaryExpression)):
+        yield from _iter_function_calls(expression.expression)
+    elif isinstance(expression, (AndExpression, OrExpression, XorExpression)):
+        for item in expression.expressions:
+            yield from _iter_function_calls(item)
+    elif isinstance(expression, ListExpression):
+        for item in expression.items:
+            yield from _iter_function_calls(item)
+    elif isinstance(expression, MapExpression):
+        for _, item in expression.items:
+            yield from _iter_function_calls(item)
+    elif isinstance(expression, list):
+        for item in expression:
+            yield from _iter_function_calls(item)
+    elif isinstance(expression, dict):
+        for item in expression.values():
+            yield from _iter_function_calls(item)
 
 
 def _render_string_literal(value: str) -> str:
@@ -285,6 +378,13 @@ def _resolve_projections(
     names: set[str] = set()
     for item in clause.items:
         _validate_expression(item.expression, scope, source, label, item.span or clause.span)
+        validate_function_calls(item.expression, source, item.span or clause.span, allow_aggregate=True)
+        if contains_function_call(item.expression) and not isinstance(item.expression, FunctionCall):
+            _raise_semantic(
+                "Aggregate calls must be top-level projection expressions",
+                source,
+                item.span or clause.span,
+            )
         rendered = render_projection(item.expression)
         output_name = item.alias or rendered
         if output_name in names:

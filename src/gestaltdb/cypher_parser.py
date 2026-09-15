@@ -6,7 +6,7 @@ import ast
 import re
 from dataclasses import dataclass
 
-from lark import Lark, Transformer, UnexpectedInput, v_args
+from lark import Lark, Token, Transformer, UnexpectedInput, v_args
 from lark.exceptions import VisitError
 
 from .cypher_ast import (
@@ -14,6 +14,7 @@ from .cypher_ast import (
     AndExpression,
     ArithmeticExpression,
     ComparisonExpression,
+    FunctionCall,
     InExpression,
     ListExpression,
     MapExpression,
@@ -106,13 +107,17 @@ rel_name: REL_NAME | BACKTICK_NAME
 ?multiplicative: unary (MUL_OP unary)* -> arithmetic_expression
 ?unary: ADD_OP unary -> unary_expression
       | atom
-?atom: property_ref
-     | parameter
-     | literal
-     | variable
-     | list_literal
-     | map_literal
-     | "(" expression ")" -> parenthesized
+ ?atom: property_ref
+      | parameter
+      | literal
+      | variable
+      | count_star
+      | function_call
+      | list_literal
+      | map_literal
+      | "(" expression ")" -> parenthesized
+ count_star: symbolic_name "(" STAR ")"
+ function_call: symbolic_name "(" DISTINCT? expression ("," expression)* ")"
 property_ref: symbolic_name "." symbolic_name
 variable: symbolic_name
 parameter: "$" symbolic_name
@@ -259,6 +264,23 @@ class _ASTBuilder(Transformer):
 
     def parenthesized(self, children):
         return children[0]
+
+    @v_args(meta=True)
+    def count_star(self, meta, children):
+        span = _source_span(meta)
+        return FunctionCall(str(children[0]).lower(), (Wildcard(span=span),), False, span=span)
+
+    @v_args(meta=True)
+    def function_call(self, meta, children):
+        name = str(children[0]).lower()
+        distinct = False
+        arguments: list[object] = []
+        for child in children[1:]:
+            if isinstance(child, Token):
+                distinct = True
+            else:
+                arguments.append(child)
+        return FunctionCall(name, tuple(arguments), distinct, span=_source_span(meta))
 
     def arithmetic_expression(self, children):
         if len(children) == 1:
@@ -463,6 +485,12 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
         return _build_sample_call(parsed, query)
     canonical = _build_canonical_query(parsed, query)
     if any(isinstance(clause, WithClause) for clause in canonical.clauses):
+        raise _located_error(
+            CypherSemanticError,
+            "Query cannot be represented by legacy parse(); use parse_ast()",
+            query,
+        )
+    if _canonical_uses_functions(canonical):
         raise _located_error(
             CypherSemanticError,
             "Query cannot be represented by legacy parse(); use parse_ast()",
@@ -700,6 +728,21 @@ def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = Fa
         hops = tuple(TraversalHop(hop.rel_var, hop.edge_types[0], hop.target.variable, hop.direction, hop.edge_types) for hop in pattern.hops)
         return AnchoredPatternClause(node.variable, properties["id"], hops)
     return PathPatternClause(node, pattern.hops)
+
+
+def _canonical_uses_functions(canonical: Query) -> bool:
+    """Return whether any canonical clause projects or filters on a function call."""
+    from .cypher_semantics import contains_function_call
+
+    for clause in canonical.clauses:
+        if isinstance(clause, WhereClause) and contains_function_call(clause.expression):
+            return True
+        if isinstance(clause, (WithClause, ReturnClause)):
+            if any(contains_function_call(item.expression) for item in clause.items):
+                return True
+            if any(contains_function_call(item.expression_ast) for item in clause.order_by if item.expression_ast is not None):
+                return True
+    return False
 
 
 def _validate_pattern_literals(pattern: _Pattern, query: str) -> None:
