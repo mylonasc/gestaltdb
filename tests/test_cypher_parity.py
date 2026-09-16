@@ -3,8 +3,8 @@
 import pytest
 
 from gestaltdb.cypher import execute, parse, parse_ast, plan
-from gestaltdb.cypher_ast import ShowIndexes
-from gestaltdb.cypher_errors import CypherSemanticError, CypherSyntaxError
+from gestaltdb.query_engine.cypher.ast import ShowIndexes
+from gestaltdb.query_engine.cypher.errors import CypherSemanticError, CypherSyntaxError
 
 from tests.conftest import populate_typed_graph
 from tests.test_cypher import FakeCypherGraph

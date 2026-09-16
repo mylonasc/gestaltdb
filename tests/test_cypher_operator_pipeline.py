@@ -5,14 +5,14 @@ from dataclasses import FrozenInstanceError, replace
 import pytest
 
 from gestaltdb.cypher import execute, parse, plan
-from gestaltdb.cypher_plan import (
+from gestaltdb.query_engine.cypher.plan import (
     Distinct,
     FilterExpression,
     MatchStep,
     ProcedureSource,
     Sort,
 )
-from gestaltdb.cypher_runtime import (
+from gestaltdb.query_engine.cypher.runtime import (
     BindingRow,
     DistinctOperator,
     LimitOperator,
@@ -203,7 +203,7 @@ def test_execute_obeys_the_generated_logical_plan(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "gestaltdb.cypher.plan_staged_query", lambda canonical: plan_without_filter
+        "gestaltdb.query_engine.cypher.api.plan_staged_query", lambda canonical: plan_without_filter
     )
 
     result = execute(graph, query)

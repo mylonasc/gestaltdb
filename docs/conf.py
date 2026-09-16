@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from importlib.metadata import version as package_version
 from pathlib import Path
 import sys
 
@@ -12,7 +13,8 @@ sys.path.insert(0, str(ROOT / "src"))
 project = "GestaltDB"
 author = "Mylonas Charilaos"
 copyright = "2026, Mylonas Charilaos"
-release = "0.5.0"
+release = package_version("gestaltdb")
+version = release
 
 extensions = [
     "sphinx.ext.autodoc",

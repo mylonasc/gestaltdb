@@ -11,8 +11,8 @@ Use this file when you are an agent trying to understand or modify the library w
 - Storage backends: `src/gestaltdb/kvstores.py`
 - Serializers: `src/gestaltdb/serializers.py`
 - Columnar ingestion containers and enums: `src/gestaltdb/ingestion.py`
-- Cypher facade: `src/gestaltdb/cypher.py`
-- Cypher parser/planner/runtime internals: `src/gestaltdb/cypher_*.py`
+- Cypher engine: `src/gestaltdb/query_engine/cypher/`
+- Legacy Cypher import shims: `src/gestaltdb/cypher.py` and `src/gestaltdb/cypher_*.py`
 - Sampling API: `src/gestaltdb/sampling/`
 - Sphinx docs: `docs/`
 - Tests: `tests/`

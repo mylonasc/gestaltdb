@@ -1,6 +1,6 @@
 # Cypher Query Language Support & Limitations
 
-**When to read:** Read this file when writing Cypher queries, modifying the Cypher parser/planner/runtime (`cypher_parser.py`, `cypher_plan.py`, `cypher_runtime.py`), or debugging `GraphDB.query`.
+**When to read:** Read this file when writing Cypher queries, modifying the parser/planner/runtime under `src/gestaltdb/query_engine/cypher/`, or debugging `GraphDB.query`.
 
 ---
 
@@ -10,11 +10,11 @@ GestaltDB includes an embedded Cypher query processor:
 - `graph.query(cypher_str, parameters=None)` returns a `QueryResult(columns, records)`.
 - Iterating over `result` yields dictionaries mapping column names to values.
 - Internal pipeline:
-  - `cypher_parser.py`: Uses a Lark grammar; `parse_ast()` preserves an ordered canonical clause AST while legacy `parse()` returns runtime-compatible specialized objects. Shared errors live in `cypher_errors.py`.
-  - `cypher_semantics.py`: Walks canonical clauses left-to-right with ordered scopes (`analyze_query`) for `MATCH`/`WHERE`/`WITH`/`RETURN` validation.
-  - `cypher_plan.py`: Builds staged plans (`MatchStep`, `ProjectItems`) for `WITH` queries; `cypher_runtime.py` executes them via `_execute_staged`.
-  - `cypher_plan.py`: Builds an authoritative typed logical plan with a binding source and ordered operators.
-  - `cypher_runtime.py`: Executes the plan through typed binding rows and streaming or blocking result operators against `GraphDB`.
+  - `parser.py`: Uses a Lark grammar; `parse_ast()` preserves an ordered canonical clause AST while legacy `parse()` returns runtime-compatible specialized objects. Shared errors live in `errors.py`.
+  - `semantics.py`: Walks canonical clauses left-to-right with ordered scopes (`analyze_query`) for `MATCH`/`WHERE`/`WITH`/`RETURN` validation.
+  - `plan.py`: Builds staged plans (`MatchStep`, `ProjectItems`) for `WITH` queries and an authoritative typed logical plan with a binding source and ordered operators.
+  - `runtime.py`: Executes plans through typed binding rows and streaming or blocking result operators against `GraphDB`.
+  - Modules under `src/gestaltdb/cypher*.py` are compatibility shims for existing import paths.
 
 ---
 

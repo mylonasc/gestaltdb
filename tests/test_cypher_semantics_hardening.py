@@ -3,8 +3,8 @@
 import pytest
 
 from gestaltdb.cypher import execute
-from gestaltdb.cypher_errors import CypherSemanticError
-from gestaltdb.cypher_expr import _cypher_equals
+from gestaltdb.query_engine.cypher.errors import CypherSemanticError
+from gestaltdb.query_engine.cypher.expr import _cypher_equals
 from gestaltdb.graphdb import Node
 
 from tests.test_cypher import FakeCypherGraph

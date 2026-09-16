@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 
 from gestaltdb.cypher import execute, parse_ast, plan
-from gestaltdb.cypher_ast import WithClause
-from gestaltdb.cypher_parser import CypherSemanticError, parse
-from gestaltdb.cypher_plan import MatchStep, ProjectItems
+from gestaltdb.query_engine.cypher.ast import WithClause
+from gestaltdb.query_engine.cypher.parser import CypherSemanticError, parse
+from gestaltdb.query_engine.cypher.plan import MatchStep, ProjectItems
 from gestaltdb.graphdb import Edge, Node
 from tests.test_cypher import FakeCypherGraph
 

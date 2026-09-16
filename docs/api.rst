@@ -62,7 +62,7 @@ Columnar Ingestion
 Cypher Queries
 --------------
 
-.. automodule:: gestaltdb.cypher
+.. automodule:: gestaltdb.query_engine.cypher
    :members:
    :undoc-members:
    :show-inheritance:

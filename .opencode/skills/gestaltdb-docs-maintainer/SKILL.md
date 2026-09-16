@@ -70,7 +70,7 @@ Follow this lazy-loading workflow:
     - `src/gestaltdb/agent_skill/references/*.md`: Short shipped, user-focused retrieval docs for installed-library coding agents.
 3. Inspect relevant source files only when deep implementation details or test cases are needed:
    - Backends: `src/gestaltdb/kvstores.py`
-   - Cypher: `src/gestaltdb/cypher.py` and `src/gestaltdb/cypher_*.py`
+   - Cypher: `src/gestaltdb/query_engine/cypher/` (legacy import shims remain in `src/gestaltdb/cypher*.py`)
    - Ingestion: `src/gestaltdb/ingestion.py`
    - Sampling: `src/gestaltdb/sampling/`
    - Core API: `src/gestaltdb/graphdb.py`

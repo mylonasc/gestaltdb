@@ -12,7 +12,7 @@ import re
 import pytest
 
 from gestaltdb.cypher import execute
-from gestaltdb.cypher_errors import CypherSemanticError, CypherSyntaxError
+from gestaltdb.query_engine.cypher.errors import CypherSemanticError, CypherSyntaxError
 from gestaltdb.graphdb import Node
 from tests.test_cypher import FakeCypherGraph
 

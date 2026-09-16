@@ -1,8 +1,8 @@
 import pytest
 
 from gestaltdb.cypher import execute, parse, plan
-from gestaltdb.cypher_ast import Parameter
-from gestaltdb.cypher_plan import (
+from gestaltdb.query_engine.cypher.ast import Parameter
+from gestaltdb.query_engine.cypher.plan import (
     Distinct,
     Limit,
     MatchStep,

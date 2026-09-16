@@ -5,7 +5,7 @@ import importlib.util
 import pytest
 
 from gestaltdb.cypher import execute, parse_ast
-from gestaltdb.cypher_ast import CreateConstraint, DropConstraint, ShowConstraints
+from gestaltdb.query_engine.cypher.ast import CreateConstraint, DropConstraint, ShowConstraints
 from gestaltdb.graphdb import GraphDB, Node
 from gestaltdb.kvstores import LMDBStore
 from gestaltdb.serializers import PickleSerializer

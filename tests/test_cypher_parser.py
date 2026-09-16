@@ -1,7 +1,7 @@
 import pytest
 
 from gestaltdb.cypher import parse_ast
-from gestaltdb.cypher_ast import (
+from gestaltdb.query_engine.cypher.ast import (
     AndExpression,
     ArithmeticExpression,
     ComparisonExpression,
@@ -18,7 +18,7 @@ from gestaltdb.cypher_ast import (
     Wildcard,
     XorExpression,
 )
-from gestaltdb.cypher_parser import CypherSemanticError, CypherSyntaxError, parse
+from gestaltdb.query_engine.cypher.parser import CypherSemanticError, CypherSyntaxError, parse
 
 
 def test_parser_ignores_comments_and_keywords_inside_strings():

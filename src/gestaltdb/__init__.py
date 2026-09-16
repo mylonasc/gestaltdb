@@ -55,7 +55,7 @@ runnable usage patterns, and ``docs/`` for the Sphinx user guide.
 
 from .sampling import AsyncBatchFeeder, HardNegativeConfig, SampledSubgraphBatch, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
-from .cypher import QueryResult
+from .query_engine.cypher import QueryResult
 
 __all__ = [
     "ColumnarIngestionMode",

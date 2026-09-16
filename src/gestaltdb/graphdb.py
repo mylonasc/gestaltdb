@@ -3218,13 +3218,13 @@ class GraphDB:
                 leading ``$``.
 
         Returns:
-            ``gestaltdb.cypher.QueryResult`` containing projected records.
+            ``gestaltdb.QueryResult`` containing projected records.
 
         Examples:
             >>> graph_db.query('MATCH (n:Drug) RETURN n')  # doctest: +SKIP
             >>> graph_db.query('MATCH (a {id: "drug-1"})-[:drug-to-protein]->(b) RETURN a, b')  # doctest: +SKIP
         """
-        from .cypher import execute
+        from .query_engine.cypher import execute
 
         return execute(self, cypher, parameters=parameters)
 

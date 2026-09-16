@@ -17,7 +17,7 @@ import re
 import pytest
 
 from gestaltdb.cypher import execute
-from gestaltdb.cypher_ast import PathValue
+from gestaltdb.query_engine.cypher.ast import PathValue
 from gestaltdb.graphdb import Edge, Node
 from tests.test_cypher import FakeCypherGraph
 

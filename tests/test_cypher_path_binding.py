@@ -8,7 +8,7 @@ reuse downstream, fixed/variable/zero-length shapes, ``OPTIONAL MATCH``,
 import pytest
 
 from gestaltdb.cypher import execute, parse
-from gestaltdb.cypher_ast import PathValue
+from gestaltdb.query_engine.cypher.ast import PathValue
 from gestaltdb.graphdb import Edge, Node
 from tests.test_cypher import FakeCypherGraph
 

@@ -64,7 +64,7 @@ TOPIC_REGISTRY: dict[str, TopicMetadata] = {
         topic_id="cypher",
         title="Cypher Query Language Support & Limitations",
         when_to_read="Writing or modifying Cypher queries, graph.query(), cypher parser/plan/runtime, supported and unsupported syntax.",
-        related_sources=["src/gestaltdb/cypher.py", "src/gestaltdb/cypher_*.py"],
+        related_sources=["src/gestaltdb/query_engine/cypher/", "src/gestaltdb/cypher*.py"],
         file_path=REFERENCES_DIR / "cypher.md",
     ),
     "sampling": TopicMetadata(

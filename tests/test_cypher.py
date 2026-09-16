@@ -1,16 +1,16 @@
 import pytest
 
 from gestaltdb.cypher import QueryResult, _split_top_level_args, execute, parse, plan
-from gestaltdb.cypher_ast import MultiMatchQuery, Parameter
-from gestaltdb.cypher_parser import parse_literal
-from gestaltdb.cypher_plan import (
+from gestaltdb.query_engine.cypher.ast import MultiMatchQuery, Parameter
+from gestaltdb.query_engine.cypher.parser import parse_literal
+from gestaltdb.query_engine.cypher.plan import (
     FilterExpression,
     Limit,
     MatchStep,
     ProcedureCall,
     ProjectItems,
 )
-from gestaltdb.cypher_runtime import QueryContext
+from gestaltdb.query_engine.cypher.runtime import QueryContext
 from gestaltdb.graphdb import Edge, Node
 
 from .conftest import populate_typed_graph
