@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0
 
 - Added extended Cypher expressions, strict three-valued semantics, stable cross-type ordering, and scalar expressions containing aggregates.
 - Added `OPTIONAL MATCH`, `UNWIND`, `UNION [ALL]`, correlated `CALL { ... }`, relationship property maps, variable-length and shortest paths, named paths, and label expressions.
