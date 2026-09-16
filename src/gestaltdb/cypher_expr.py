@@ -27,6 +27,7 @@ from .cypher_ast import (
     NullPredicate,
     OrExpression,
     Parameter,
+    PathValue,
     PropertyAccessExpression,
     PropertyRef,
     QuantifiedPredicate,

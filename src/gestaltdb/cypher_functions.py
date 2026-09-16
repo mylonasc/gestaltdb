@@ -13,7 +13,10 @@ import math
 import random
 import uuid
 from dataclasses import dataclass
+from functools import partial
 from typing import Callable
+
+from .cypher_ast import PathValue
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,9 +152,20 @@ def _length(args: list[object], context) -> object:
     (value,) = args
     if value is None:
         return None
+    if isinstance(value, PathValue):
+        return len(value.edges)
     if isinstance(value, (list, tuple, str)):
         return len(value)
-    raise TypeError("length() expects a list or string")
+    raise TypeError("length() expects a list, string, or path")
+
+
+def _path_elements(args: list[object], context, *, name: str) -> object:
+    (value,) = args
+    if value is None:
+        return None
+    if not isinstance(value, PathValue):
+        raise TypeError(f"{name}() expects a path")
+    return list(value.nodes if name == "nodes" else value.edges)
 
 
 def _to_boolean(args: list[object], context) -> object:
@@ -462,6 +476,8 @@ FUNCTIONS: dict[str, FunctionDef] = {
     "reverse": _scalar("reverse", (1, 1), _reverse),
     "tail": _scalar("tail", (1, 1), _tail),
     "keys": _scalar("keys", (1, 1), _keys),
+    "nodes": _scalar("nodes", (1, 1), partial(_path_elements, name="nodes")),
+    "relationships": _scalar("relationships", (1, 1), partial(_path_elements, name="relationships")),
 }
 
 

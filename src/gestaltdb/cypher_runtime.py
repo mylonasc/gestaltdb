@@ -10,9 +10,11 @@ from typing import Protocol
 from .cypher_ast import (
     AndExpression,
     ComparisonExpression,
+    NodePattern,
     NodeScanQuery,
     Parameter,
     PathPatternClause,
+    PathValue,
     PatternHop,
     PropertyRef,
     Variable,
@@ -451,6 +453,8 @@ def apply_call_subquery(
 def _pattern_variables(pattern: PathPatternClause) -> tuple[str, ...]:
     """Return variable names introduced by one path pattern."""
     variables = []
+    if pattern.name is not None:
+        variables.append(pattern.name)
     if pattern.source.variable is not None:
         variables.append(pattern.source.variable)
     for hop in pattern.hops:
@@ -754,9 +758,15 @@ def apply_path_pattern_clause(rows, clause: PathPatternClause, context: QueryCon
     type/property edge index instead of scanning node adjacency. The trailing
     ``FilterExpression`` operator always re-applies the full predicate, so
     index selection never changes results.
+
+    Named patterns (``p = (a)-->(b)``) bind ``p`` to a path value holding
+    endpoint-to-endpoint nodes and edges.
     """
     for row in rows:
         row = BindingRow.from_row(row)
+        if clause.name is not None:
+            yield from _match_named_pattern(row, clause, context, where, selector)
+            continue
         indexed = _indexed_first_hop_rows(row, clause, context, where)
         if indexed is None:
             expanded = _path_start_rows(row, clause, context, where)
@@ -767,6 +777,145 @@ def apply_path_pattern_clause(rows, clause: PathPatternClause, context: QueryCon
         for hop in remaining:
             expanded = _expand_pattern_hop(context, expanded, hop, selector)
         yield from expanded
+
+
+def _match_named_pattern(row: BindingRow, pattern: PathPatternClause, context: QueryContext, where, selector):
+    """Match one named pattern, binding its name to a path value per match."""
+    trails = []
+    for start in _path_start_rows(row, pattern, context, where):
+        if pattern.source.variable is not None:
+            start_node = start.bindings.get(pattern.source.variable)
+            if start_node is None:
+                continue
+        else:
+            start_node = context.get_node(start.current_node_id)
+            if start_node is None:
+                continue
+        trails.append((start, [start_node], []))
+    if not pattern.hops:
+        for start, nodes, edges in trails:
+            bindings = dict(start.bindings)
+            bindings[pattern.name] = PathValue(tuple(nodes), tuple(edges))
+            yield start.with_bindings(bindings)
+        return
+    for hop in pattern.hops:
+        trails = _extend_named_trails(context, trails, hop, selector)
+        if not trails:
+            return
+    for final, nodes, edges in trails:
+        bindings = dict(final.bindings)
+        bindings[pattern.name] = PathValue(tuple(nodes), tuple(edges))
+        yield final.with_bindings(bindings)
+
+
+def _extend_named_trails(context: QueryContext, trails, hop: PatternHop, selector):
+    """Extend named-pattern trails across one hop, fixed or variable-length."""
+    extended = []
+    for start, nodes, edges in trails:
+        if (hop.min_length, hop.max_length) == (1, 1):
+            for bindings, neighbor_id, edge_id, edge in _expand_fixed_step(context, start, hop, set()):
+                trail_row = start.with_bindings(
+                    bindings,
+                    current_node_id=neighbor_id,
+                    preserve_current_node=False,
+                    used_relationship_ids=start.used_relationship_ids.union((edge_id,)),
+                )
+                neighbor = context.get_node(neighbor_id)
+                extended.append((trail_row, nodes + [neighbor], edges + [edge]))
+        elif selector is None:
+            extended.extend(_extend_named_variable(context, start, nodes, edges, hop))
+        else:
+            extended.extend(_extend_named_shortest(context, start, nodes, edges, hop, selector))
+    return extended
+
+
+def _bind_trail_row(start: BindingRow, bindings, neighbor_id, used_ids):
+    """Build the next trail row with bindings, cursor, and isomorphism state."""
+    return start.with_bindings(
+        bindings,
+        current_node_id=neighbor_id,
+        preserve_current_node=False,
+        used_relationship_ids=used_ids,
+    )
+
+
+def _extend_named_variable(context: QueryContext, start: BindingRow, nodes, edges, hop: PatternHop):
+    """Extend named trails across a variable-length hop, binding rel lists."""
+    if hop.min_length == 0:
+        bindings = dict(start.bindings)
+        if _bind_variable(bindings, hop.target.variable, nodes[-1]) and _bind_variable(
+            bindings, hop.rel_var, []
+        ):
+            yield start, nodes, edges
+    if hop.max_length == 0:
+        return
+    for neighbor_id, target_node, path_edges, path_used, path_nodes in _bfs_trails(
+        context, start.current_node_id, hop, start.used_relationship_ids
+    ):
+        if hop.max_length is not None and len(path_edges) > hop.max_length:
+            break
+        if len(path_edges) < hop.min_length:
+            continue
+        if not _node_pattern_matches(target_node, hop.target, hop.target.properties, context):
+            continue
+        bindings = dict(start.bindings)
+        if not (
+            _bind_variable(bindings, hop.target.variable, target_node)
+            and _bind_variable(bindings, hop.rel_var, path_edges)
+        ):
+            continue
+        trail_row = _bind_trail_row(start, bindings, neighbor_id, path_used)
+        trail_nodes = nodes + [context.get_node(node_id) for node_id in path_nodes[1:]]
+        if any(node is None for node in trail_nodes):
+            continue
+        yield trail_row, trail_nodes, edges + path_edges
+
+
+def _extend_named_shortest(context: QueryContext, start: BindingRow, nodes, edges, hop, selector):
+    """Extend named trails across a ``SHORTEST`` variable-length hop."""
+    mode, limit = selector.mode, selector.limit
+    emitted = 0
+    first_length: int | None = None
+    if hop.min_length == 0:
+        bindings = dict(start.bindings)
+        if _bind_variable(bindings, hop.target.variable, nodes[-1]) and _bind_variable(
+            bindings, hop.rel_var, []
+        ):
+            yield start, nodes, edges
+            emitted += 1
+            first_length = 0
+            if mode == "any" and emitted >= (limit or 1):
+                return
+    if hop.max_length == 0:
+        return
+    for neighbor_id, target_node, path_edges, path_used, path_nodes in _bfs_trails(
+        context, start.current_node_id, hop, start.used_relationship_ids
+    ):
+        length = len(path_edges)
+        if hop.max_length is not None and length > hop.max_length:
+            break
+        if length < hop.min_length:
+            continue
+        if not _node_pattern_matches(target_node, hop.target, hop.target.properties, context):
+            continue
+        if first_length is None:
+            first_length = length
+        if mode == "all" and length != first_length:
+            break
+        bindings = dict(start.bindings)
+        if not (
+            _bind_variable(bindings, hop.target.variable, target_node)
+            and _bind_variable(bindings, hop.rel_var, path_edges)
+        ):
+            continue
+        trail_row = _bind_trail_row(start, bindings, neighbor_id, path_used)
+        trail_nodes = nodes + [context.get_node(node_id) for node_id in path_nodes[1:]]
+        if any(node is None for node in trail_nodes):
+            continue
+        yield trail_row, trail_nodes, edges + path_edges
+        emitted += 1
+        if mode == "any" and emitted >= (limit or 1):
+            return
 
 
 def _indexed_first_hop_rows(row, clause: PathPatternClause, context: QueryContext, where):
@@ -836,9 +985,9 @@ def _hydrate_indexed_edge(row, clause: PathPatternClause, hop: PatternHop, conte
     for start_node, neighbor_node, _, neighbor_id in orientations:
         if _is_null_bound(row, hop.target.variable) or _is_null_bound(row, hop.rel_var):
             continue
-        if not _node_matches_pattern(start_node, clause.source.labels, clause.source.properties, context):
+        if not _node_pattern_matches(start_node, clause.source, clause.source.properties, context):
             continue
-        if not _node_matches_pattern(neighbor_node, hop.target.labels, hop.target.properties, context):
+        if not _node_pattern_matches(neighbor_node, hop.target, hop.target.properties, context):
             continue
         bindings = dict(row.bindings)
         if clause.source.variable is not None:
@@ -936,7 +1085,7 @@ def _path_start_rows(row, clause: PathPatternClause, context: QueryContext, wher
         return
     if bound_node is not None:
         identity_matches = identity is None or _cypher_equals(bound_node.get_id, context.resolve(identity)) is True
-        if _is_node(bound_node) and identity_matches and _node_matches_pattern(bound_node, source.labels, properties, context):
+        if _is_node(bound_node) and identity_matches and _node_pattern_matches(bound_node, source, properties, context):
             yield row.with_bindings(
                 dict(row.bindings),
                 current_node_id=context.node_key_to_bytes(bound_node.get_id),
@@ -947,7 +1096,7 @@ def _path_start_rows(row, clause: PathPatternClause, context: QueryContext, wher
     if identity is not None:
         node_id = context.node_key_to_bytes(context.resolve(identity))
         node = context.get_node(node_id)
-        if node is not None and _node_matches_pattern(node, source.labels, properties, context):
+        if node is not None and _node_pattern_matches(node, source, properties, context):
             bindings = dict(row.bindings)
             if source.variable is not None:
                 bindings[source.variable] = node
@@ -955,19 +1104,23 @@ def _path_start_rows(row, clause: PathPatternClause, context: QueryContext, wher
         return
 
     first_name, first_value = properties[0] if properties else (None, None)
-    scan = NodeScanQuery(
-        variable=source.variable or "",
-        label=source.labels[0] if source.labels else None,
-        property_name=first_name,
-        property_value=first_value,
-        returns=(),
-        labels=source.labels,
-        properties=properties,
-        where=where,
-    )
-    for node_id in node_scan_ids(scan, context):
+    if source.label_expression is not None:
+        candidate_ids: Iterable[bytes] = _node_ids_for_label_expression(source, context)
+    else:
+        scan = NodeScanQuery(
+            variable=source.variable or "",
+            label=source.labels[0] if source.labels else None,
+            property_name=first_name,
+            property_value=first_value,
+            returns=(),
+            labels=source.labels,
+            properties=properties,
+            where=where,
+        )
+        candidate_ids = node_scan_ids(scan, context)
+    for node_id in candidate_ids:
         node = context.get_node(node_id)
-        if node is None or not _node_matches_pattern(node, source.labels, properties, context):
+        if node is None or not _node_pattern_matches(node, source, properties, context):
             continue
         bindings = dict(row.bindings)
         if source.variable is not None:
@@ -984,40 +1137,46 @@ def _expand_pattern_hop(context: QueryContext, rows, hop: PatternHop, selector=N
         if _is_null_bound(row, hop.target.variable) or _is_null_bound(row, hop.rel_var):
             continue
         seen = set()
-        for adjacency in _iter_pattern_adjacency(context, row.current_node_id, hop):
-            edge_id = adjacency["edge_id"]
-            occurrence = (edge_id, adjacency["neighbor_id"])
-            if occurrence in seen or edge_id in row.used_relationship_ids:
-                continue
-            seen.add(occurrence)
-            target_node = context.get_node(adjacency["neighbor_id"])
-            if target_node is None or not _node_matches_pattern(
-                target_node, hop.target.labels, hop.target.properties, context
-            ):
-                continue
-            bindings = dict(row.bindings)
-            if hop.target.variable is not None:
-                bound_target = bindings.get(hop.target.variable)
-                if bound_target is not None and not same_entity(bound_target, target_node):
-                    continue
-                bindings[hop.target.variable] = target_node
-            if hop.rel_var is not None or hop.properties:
-                edge = context.get_edge(edge_id)
-                if edge is None:
-                    continue
-                if hop.properties and not _edge_matches_properties(edge, hop.properties, context):
-                    continue
-            if hop.rel_var is not None:
-                bound_edge = bindings.get(hop.rel_var)
-                if bound_edge is not None and not same_entity(bound_edge, edge):
-                    continue
-                bindings[hop.rel_var] = edge
+        for bindings, neighbor_id, edge_id, _edge in _expand_fixed_step(context, row, hop, seen):
             yield row.with_bindings(
                 bindings,
-                current_node_id=adjacency["neighbor_id"],
+                current_node_id=neighbor_id,
                 preserve_current_node=False,
                 used_relationship_ids=row.used_relationship_ids.union((edge_id,)),
             )
+
+
+def _expand_fixed_step(context: QueryContext, row: BindingRow, hop: PatternHop, seen: set):
+    """Yield ``(bindings, neighbor_id, edge_id, edge)`` for one fixed hop."""
+    for adjacency in _iter_pattern_adjacency(context, row.current_node_id, hop):
+        edge_id = adjacency["edge_id"]
+        neighbor_id = adjacency["neighbor_id"]
+        occurrence = (edge_id, neighbor_id)
+        if occurrence in seen or edge_id in row.used_relationship_ids:
+            continue
+        seen.add(occurrence)
+        target_node = context.get_node(neighbor_id)
+        if target_node is None or not _node_pattern_matches(
+            target_node, hop.target, hop.target.properties, context
+        ):
+            continue
+        bindings = dict(row.bindings)
+        if hop.target.variable is not None:
+            bound_target = bindings.get(hop.target.variable)
+            if bound_target is not None and not same_entity(bound_target, target_node):
+                continue
+            bindings[hop.target.variable] = target_node
+        edge = context.get_edge(edge_id)
+        if edge is None:
+            continue
+        if hop.properties and not _edge_matches_properties(edge, hop.properties, context):
+            continue
+        if hop.rel_var is not None:
+            bound_edge = bindings.get(hop.rel_var)
+            if bound_edge is not None and not same_entity(bound_edge, edge):
+                continue
+            bindings[hop.rel_var] = edge
+        yield bindings, neighbor_id, edge_id, edge
 
 
 def _edge_matches_properties(edge, properties, context: QueryContext) -> bool:
@@ -1048,8 +1207,8 @@ def _variable_paths(context: QueryContext, row: BindingRow, hop: PatternHop):
         return
     if hop.min_length == 0:
         start_node = context.get_node(start_id)
-        if start_node is not None and _node_matches_pattern(
-            start_node, hop.target.labels, hop.target.properties, context
+        if start_node is not None and _node_pattern_matches(
+            start_node, hop.target, hop.target.properties, context
         ):
             bindings = dict(row.bindings)
             if _bind_variable(bindings, hop.target.variable, start_node) and _bind_variable(
@@ -1070,7 +1229,7 @@ def _variable_paths(context: QueryContext, row: BindingRow, hop: PatternHop):
             break
         if len(path_edges) < hop.min_length:
             continue
-        if not _node_matches_pattern(target_node, hop.target.labels, hop.target.properties, context):
+        if not _node_pattern_matches(target_node, hop.target, hop.target.properties, context):
             continue
         bindings = dict(row.bindings)
         if _bind_variable(bindings, hop.target.variable, target_node) and _bind_variable(
@@ -1130,8 +1289,8 @@ def _shortest_paths(context: QueryContext, row: BindingRow, hop: PatternHop, sel
     first_length: int | None = None
     if hop.min_length == 0:
         start_node = context.get_node(start_id)
-        if start_node is not None and _node_matches_pattern(
-            start_node, hop.target.labels, hop.target.properties, context
+        if start_node is not None and _node_pattern_matches(
+            start_node, hop.target, hop.target.properties, context
         ):
             bindings = dict(row.bindings)
             if _bind_variable(bindings, hop.target.variable, start_node) and _bind_variable(
@@ -1157,7 +1316,7 @@ def _shortest_paths(context: QueryContext, row: BindingRow, hop: PatternHop, sel
             break
         if length < hop.min_length:
             continue
-        if not _node_matches_pattern(target_node, hop.target.labels, hop.target.properties, context):
+        if not _node_pattern_matches(target_node, hop.target, hop.target.properties, context):
             continue
         if first_length is None:
             first_length = length
@@ -1191,12 +1350,19 @@ def _shortest_between(context: QueryContext, source_pattern, start, hop: Pattern
         return None if not all_paths else []
     start_id = context.node_key_to_bytes(start.get_id)
     target_id = context.node_key_to_bytes(target.get_id)
-    matches: list[list] = []
+    if (
+        hop.min_length == 0
+        and start_id == target_id
+        and _node_pattern_matches(start, hop.target, hop.target.properties, context)
+    ):
+        zero = PathValue((start,), ())
+        return [zero] if all_paths else zero
+    matches: list[PathValue] = []
     first_length: int | None = None
-    for neighbor_id, _target_node, _edges, _used, node_ids in _bfs_trails(
+    for neighbor_id, _target_node, path_edges, _used, node_ids in _bfs_trails(
         context, start_id, hop, frozenset()
     ):
-        length = len(node_ids) - 1
+        length = len(path_edges)
         if hop.max_length is not None and length > hop.max_length:
             break
         if length < hop.min_length or neighbor_id != target_id:
@@ -1204,15 +1370,16 @@ def _shortest_between(context: QueryContext, source_pattern, start, hop: Pattern
         nodes = [context.get_node(node_id) for node_id in node_ids]
         if any(node is None for node in nodes):
             continue
-        if not _node_matches_pattern(nodes[-1], hop.target.labels, hop.target.properties, context):
+        if not _node_pattern_matches(nodes[-1], hop.target, hop.target.properties, context):
             continue
+        path = PathValue(tuple(nodes), tuple(path_edges))
         if not all_paths:
-            return nodes
+            return path
         if first_length is None:
             first_length = length
         if length != first_length:
             break
-        matches.append(nodes)
+        matches.append(path)
     return matches if all_paths else None
 
 
@@ -1223,7 +1390,7 @@ def _endpoint_matches_pattern(context: QueryContext, pattern, node) -> bool:
     if identity is not None:
         if _cypher_equals(node.get_id, context.resolve(identity)) is not True:
             return False
-    return _node_matches_pattern(node, pattern.labels, properties, context)
+    return _node_pattern_matches(node, pattern, properties, context)
 
 
 def _bind_variable(bindings: dict[str, object], variable: str | None, value: object) -> bool:
@@ -1266,13 +1433,36 @@ def _iter_pattern_adjacency(context: QueryContext, node_id: bytes, hop: PatternH
             yield {"edge_id": edge_id, "neighbor_id": source_id}
 
 
-def _node_matches_pattern(node, labels, properties, context: QueryContext) -> bool:
-    if labels and not set(labels).issubset(set(getattr(node, "labels", ()))):
+def _node_pattern_matches(node, pattern: NodePattern, properties, context: QueryContext) -> bool:
+    """Return whether a node satisfies labels, label expressions, and properties."""
+    if pattern.label_expression is not None:
+        node_labels = set(getattr(node, "labels", ()))
+        if not any(
+            required.issubset(node_labels) and not (excluded & node_labels)
+            for required, excluded in pattern.label_expression
+        ):
+            return False
+    elif pattern.labels and not set(pattern.labels).issubset(set(getattr(node, "labels", ()))):
         return False
     for property_name, property_value in properties:
         if _cypher_equals(node.properties.get(property_name), context.resolve(property_value)) is not True:
             return False
     return True
+
+
+def _node_ids_for_label_expression(source: NodePattern, context: QueryContext):
+    """Seed candidate IDs for a label-expression scan."""
+    required: set = set()
+    for alternative_required, _ in source.label_expression or ():
+        if not alternative_required:
+            return context.graph.get_node_keys_generator()
+        required.update(alternative_required)
+    if not required:
+        return context.graph.get_node_keys_generator()
+    matching: set = set()
+    for label in required:
+        matching.update(context.graph.iter_node_ids_by_label(label))
+    return iter(sorted(matching))
 
 
 def _is_node(value) -> bool:
@@ -1329,6 +1519,12 @@ def cypher_value_key(value):
     """
     if value is None:
         return ("null",)
+    if isinstance(value, PathValue):
+        return (
+            "path",
+            tuple(cypher_value_key(node) for node in value.nodes),
+            tuple(cypher_value_key(edge) for edge in value.edges),
+        )
     if isinstance(value, bool):
         return ("boolean", value)
     if isinstance(value, (int, float)):

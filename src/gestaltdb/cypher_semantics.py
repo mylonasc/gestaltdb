@@ -759,6 +759,8 @@ def _analyze_match(clause: MatchClause, scope: Scope, source: str) -> Scope:
                 )
             introduce(hop.rel_var, SymbolKind.RELATIONSHIP)
             introduce(hop.target.variable, SymbolKind.NODE)
+        if pattern.name is not None:
+            introduce(pattern.name, SymbolKind.VALUE)
     selector = getattr(clause, "selector", None)
     if selector is not None:
         if selector.mode not in ("any", "all"):

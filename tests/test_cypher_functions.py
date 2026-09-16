@@ -187,7 +187,7 @@ def test_size_accepts_maps():
     assert _values("MATCH (n:Person) RETURN size(properties(n)) AS v") == [3, 3]
     assert _values("MATCH (n:Person) RETURN size({a: 1, b: 2}) AS v") == [2, 2]
 
-    with pytest.raises(TypeError, match=r"length\(\) expects a list or string"):
+    with pytest.raises(TypeError, match=r"length\(\) expects a list, string, or path"):
         execute(_function_graph(), "MATCH (n:Person) RETURN length({a: 1}) AS v")
 
 

@@ -17,6 +17,7 @@ import re
 import pytest
 
 from gestaltdb.cypher import execute
+from gestaltdb.cypher_ast import PathValue
 from gestaltdb.graphdb import Edge, Node
 from tests.test_cypher import FakeCypherGraph
 
@@ -36,6 +37,11 @@ def _conformance_graph() -> FakeCypherGraph:
 
 def _canon(value: object) -> object:
     """Normalize entities to stable IDs so records compare deterministically."""
+    if isinstance(value, PathValue):
+        return {
+            "nodes": [_canon(node) for node in value.nodes],
+            "edges": [_canon(edge) for edge in value.edges],
+        }
     if isinstance(value, Node):
         return f"node:{value.get_id}"
     if isinstance(value, Edge):
@@ -172,13 +178,14 @@ SUPPORTED: list[tuple[str, str, str, tuple[str, ...], list[dict[str, object]]]] 
      ("y.id",), [{"y.id": "b"}]),
     ("shortest-path-function", "[cypher-13]",
      'MATCH (x {id: "a"}), (y {id: "b"}) RETURN shortestPath((x)-[*]->(y)) AS path',
-     ("path",), [{"path": ["node:a", "node:b"]}]),
+     ("path",), [{"path": {"nodes": ["node:a", "node:b"], "edges": ["edge:e1"]}}]),
+    ("path-binding", "[cypher-14]",
+     "MATCH p = (a)-[r:KNOWS]->(b) RETURN length(p) AS len",
+     ("len",), [{"len": 1}]),
 ]
 
 # (feature, implementing stage issue, query, expected error substring).
 UNSUPPORTED: list[tuple[str, str, str, str]] = [
-    ("path-binding", "[cypher-14]", "MATCH p = (a)-->(b) RETURN p",
-     "Unsupported Cypher query"),
     ("create", "[cypher-15]", "CREATE (n:Person) RETURN n",
      "Unsupported Cypher query"),
     ("set", "[cypher-15]", "MATCH (n) SET n.age = 1 RETURN n",

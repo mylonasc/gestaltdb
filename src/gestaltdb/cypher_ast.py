@@ -100,6 +100,23 @@ class UnionQuery:
 
 
 @dataclass(frozen=True)
+class PathValue:
+    """An immutable matched path: endpoint-to-endpoint nodes and edges.
+
+    Housed with the AST because every layer (parser, planner, runtime,
+    functions) needs it without import cycles.
+    """
+
+    nodes: tuple
+    edges: tuple
+
+    @property
+    def length(self) -> int:
+        """Return the number of relationships in the path."""
+        return len(self.edges)
+
+
+@dataclass(frozen=True)
 class WhereClause:
     """A filter in its textual position in the query."""
 
@@ -412,6 +429,7 @@ class NodePattern:
     variable: str | None
     labels: tuple[str, ...] = ()
     properties: tuple[tuple[str, object], ...] = ()
+    label_expression: tuple[tuple[frozenset[str], frozenset[str]], ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -436,10 +454,15 @@ class PatternHop:
 
 @dataclass(frozen=True)
 class PathPatternClause:
-    """A generalized fixed-length path pattern."""
+    """A generalized fixed-length path pattern.
+
+    ``name`` binds the whole matched path (``p = (a)-->(b)``) to a path
+    value holding endpoint-to-endpoint nodes and edges.
+    """
 
     source: NodePattern
     hops: tuple[PatternHop, ...]
+    name: str | None = None
 
 
 @dataclass(frozen=True)

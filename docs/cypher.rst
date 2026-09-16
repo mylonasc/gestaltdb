@@ -85,12 +85,20 @@ Shortest paths select minimal-length trails. ``MATCH SHORTEST [k]`` emits
 up to ``k`` shortest matches (one by default), ``MATCH ANY SHORTEST``
 behaves the same, and ``MATCH ALL SHORTEST`` emits every match at the
 minimal length. ``shortestPath`` and ``allShortestPaths`` evaluate a
-single-hop pattern between bound endpoints to node lists (``None`` or
+single-hop pattern between bound endpoints to path values (``None`` or
 ``[]`` when unreachable).
 
 .. code-block:: python
 
    graph_db.query('MATCH SHORTEST (d {id: "drug-1"})-[*]->(p) RETURN p.id')
+
+Named paths bind a whole match to a path value holding endpoint-to-endpoint
+nodes and edges. Use ``nodes()``, ``relationships()``, and ``length()`` to
+inspect path values; bound paths remain usable downstream like any variable.
+
+.. code-block:: python
+
+   graph_db.query('MATCH p = (d:Drug)-[:binds]->(t:Target) RETURN length(p) AS hops')
 
 General fixed-length patterns may be unanchored and may filter every node in the
 path. Anonymous nodes and relationships, omitted relationship types, and
@@ -358,7 +366,6 @@ Syntax and semantic failures are ``ValueError`` subclasses with source
 locations. The current Cypher API does not yet support:
 
 - mutating queries such as ``CREATE``, ``SET``, ``DELETE``, or ``MERGE``
-- path values such as ``p = (a)-[:T]->(b)``, pattern comprehensions, and ``exists()`` with a pattern argument
+- pattern comprehensions, ``exists()`` with a pattern argument, and quantified path patterns
 - scalar functions beyond the documented core set
 - generic procedures
-- quantified path patterns

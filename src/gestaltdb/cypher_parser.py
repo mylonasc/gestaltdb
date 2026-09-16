@@ -99,9 +99,14 @@ limit_clause: "LIMIT"i pagination_value
 sample_call: "CALL"i "pg"i "." "sample_typed_paths"i "(" call_arguments ")" "YIELD"i "path"i "RETURN"i "path"i limit_clause?
 call_arguments: [expression ("," expression)*]
 
-pattern: node_pattern traversal_hop*
-node_pattern: "(" symbolic_name? labels? properties? ")"
-labels: (":" symbolic_name)+
+  pattern: node_pattern traversal_hop*
+         | named_pattern
+  named_pattern: symbolic_name COMP_OP pattern
+  node_pattern: "(" symbolic_name? labels? properties? ")"
+  labels: ":" label_conjunction ("|" ":"? label_conjunction)*
+  label_conjunction: label_item (":" label_item)*
+  label_item: "!" symbolic_name -> neg_label
+            | symbolic_name -> pos_label
 properties: "{" [property_pair ("," property_pair)*] "}"
 property_pair: symbolic_name ":" expression
 ?traversal_hop: "-" relationship? "->" node_pattern -> out_hop
@@ -227,6 +232,7 @@ _Pattern = PathPatternClause
 @dataclass(frozen=True)
 class _Labels:
     values: tuple[str, ...]
+    expression: tuple[tuple[frozenset[str], frozenset[str]], ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -510,16 +516,60 @@ class _ASTBuilder(Transformer):
         return children[0] if len(children) == 1 else OrExpression(tuple(children))
 
     def labels(self, children):
-        return _Labels(tuple(children))
+        conjunctions = [tuple(child) for child in children]
+        if len(conjunctions) == 1 and all(not negated for negated, _ in conjunctions[0]):
+            return _Labels(tuple(name for _, name in conjunctions[0]), None)
+        return _Labels(
+            (),
+            tuple(
+                (
+                    frozenset(name for negated, name in conjunction if not negated),
+                    frozenset(name for negated, name in conjunction if negated),
+                )
+                for conjunction in conjunctions
+            ),
+        )
+
+    def label_conjunction(self, children):
+        return tuple(children)
+
+    def neg_label(self, children):
+        return (True, children[0])
+
+    def pos_label(self, children):
+        return (False, children[0])
 
     def properties(self, children):
         return _Properties(tuple(children))
 
     def node_pattern(self, children):
         variable = next((item for item in children if isinstance(item, str)), None)
-        labels = next((item.values for item in children if isinstance(item, _Labels)), ())
+        labels = next((item for item in children if isinstance(item, _Labels)), _Labels((), None))
         properties = next((item.values for item in children if isinstance(item, _Properties)), ())
-        return _NodePattern(variable, labels, properties)
+        return _NodePattern(variable, labels.values, properties, labels.expression)
+
+    @v_args(meta=True)
+    def named_pattern(self, meta, children):
+        operator = next(child for child in children if isinstance(child, Token))
+        if str(operator) != "=":
+            raise CypherSyntaxError(
+                "Path binding must use =",
+                line=meta.line,
+                column=meta.column,
+                offset=meta.start_pos,
+                source="",
+            )
+        variable = next(item for item in children if isinstance(item, str))
+        pattern = next(item for item in children if isinstance(item, _Pattern))
+        if pattern.name is not None:
+            raise CypherSyntaxError(
+                "Path patterns cannot be nested",
+                line=meta.line,
+                column=meta.column,
+                offset=meta.start_pos,
+                source="",
+            )
+        return _Pattern(pattern.source, pattern.hops, variable)
 
     def rel_types(self, children):
         return _RelationshipTypes(tuple(children))
@@ -572,6 +622,8 @@ class _ASTBuilder(Transformer):
         return _Hop(relationship[0], relationship[1], node, "any", relationship[2], relationship[3][0], relationship[3][1])
 
     def pattern(self, children):
+        if len(children) == 1 and isinstance(children[0], _Pattern):
+            return children[0]
         return _Pattern(children[0], tuple(children[1:]))
 
     @v_args(meta=True)
@@ -994,12 +1046,13 @@ def _build_match_query(parsed: _ParsedMatch, query: str, analysis: QueryAnalysis
 
 def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = False):
     node = pattern.source
-    if not pattern.hops and node.variable is not None and not force_generalized:
+    if not pattern.hops and node.variable is not None and not force_generalized and pattern.name is None:
         first_name, first_value = node.properties[0] if node.properties else (None, None)
         return NodePatternClause(node.variable, node.labels[0] if node.labels else None, first_name, first_value, node.labels, node.properties)
 
     if (
         not force_generalized
+        and pattern.name is None
         and len(pattern.hops) == 1
         and node.variable is not None
         and pattern.hops[0].target.variable is not None
@@ -1021,6 +1074,7 @@ def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = Fa
     properties = dict(node.properties)
     if (
         not force_generalized
+        and pattern.name is None
         and node.variable is not None
         and not node.labels
         and set(properties) == {"id"}
@@ -1029,7 +1083,7 @@ def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = Fa
     ):
         hops = tuple(TraversalHop(hop.rel_var, hop.edge_types[0], hop.target.variable, hop.direction, hop.edge_types) for hop in pattern.hops)
         return AnchoredPatternClause(node.variable, properties["id"], hops)
-    return PathPatternClause(node, pattern.hops)
+    return PathPatternClause(node, pattern.hops, pattern.name)
 
 
 def _canonical_uses_functions(canonical: Query) -> bool:

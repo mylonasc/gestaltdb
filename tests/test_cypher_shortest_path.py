@@ -78,14 +78,17 @@ def test_match_shortest_rejects_bad_selectors():
         execute(graph, 'MATCH SINGLE SHORTEST (x {id: "a"})-[*]->(y) RETURN y.id')
 
 
-def test_shortest_path_function_returns_node_list():
+def test_shortest_path_function_returns_path_value():
     records = execute(
         _shortest_graph(),
         'MATCH (x {id: "a"}), (y {id: "c"}) RETURN shortestPath((x)-[*]->(y)) AS path',
     ).records
 
     assert len(records) == 1
-    assert [node.get_id for node in records[0]["path"]] == ["a", "c"]
+    path = records[0]["path"]
+    assert [node.get_id for node in path.nodes] == ["a", "c"]
+    assert [edge.get_id for edge in path.edges] == ["e3"]
+    assert path.length == 1
 
 
 def test_shortest_path_function_no_match_returns_null():
@@ -110,7 +113,7 @@ def test_all_shortest_paths_function_returns_path_lists():
     ).records
 
     assert len(records) == 1
-    assert [[node.get_id for node in path] for path in records[0]["paths"]] == [["a", "c"]]
+    assert [[node.get_id for node in path.nodes] for path in records[0]["paths"]] == [["a", "c"]]
 
 
 def test_shortest_path_function_validates_shape():
