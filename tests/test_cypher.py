@@ -39,6 +39,27 @@ class FakeCypherGraph:
         self.adjacency.setdefault((edge.source.encode("utf-8"), edge_type, "out"), []).append((edge_id, edge.target.encode("utf-8")))
         self.adjacency.setdefault((edge.target.encode("utf-8"), edge_type, "in"), []).append((edge_id, edge.source.encode("utf-8")))
 
+    def delete_edge(self, edge_id):
+        edge_id = self.node_key_to_bytes(edge_id)
+        edge = self.edges.pop(edge_id, None)
+        if edge is None:
+            return
+        for key, entries in self.adjacency.items():
+            self.adjacency[key] = [entry for entry in entries if entry[0] != edge_id]
+
+    def delete_node(self, node_id):
+        node_id = self.node_key_to_bytes(node_id)
+        node = self.nodes.pop(node_id, None)
+        if node is None:
+            return
+        for label in node.labels:
+            ids = self.labels.get(label, [])
+            while node_id in ids:
+                ids.remove(node_id)
+        for edge_id, edge in list(self.edges.items()):
+            if edge.source.encode("utf-8") == node_id or edge.target.encode("utf-8") == node_id:
+                self.delete_edge(edge_id)
+
     def node_key_to_bytes(self, node_key):
         if isinstance(node_key, bytes):
             return node_key
@@ -70,6 +91,9 @@ class FakeCypherGraph:
         if key_offset is not None:
             edge_ids = [edge_id for edge_id in edge_ids if edge_id >= key_offset]
         yield from edge_ids[:num_edges]
+
+    def get_edge_keys_generator(self):
+        yield from self.edges
 
     def get_node_keys_generator(self):
         for node_id in self.nodes:

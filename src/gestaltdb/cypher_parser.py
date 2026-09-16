@@ -16,6 +16,7 @@ from .cypher_ast import (
     CaseExpression,
     ComparisonExpression,
     CreateClause,
+    DeleteClause,
     ExistsExpression,
     FunctionCall,
     InExpression,
@@ -82,7 +83,7 @@ _GRAMMAR = r"""
  union_operator: "UNION"i "ALL"i -> union_all
                | "UNION"i -> union_distinct
 
-  match_query: (match_clause | optional_match_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause) (match_clause | optional_match_clause | where_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | with_section)* return_full
+  match_query: (match_clause | optional_match_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause) (match_clause | optional_match_clause | where_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | with_section)* return_full
   match_clause: "MATCH"i shortest_selector? pattern ("," pattern)*
   optional_match_clause: "OPTIONAL"i "MATCH"i shortest_selector? pattern ("," pattern)*
   shortest_selector: QUANTIFIER "SHORTEST"i -> shortest_quantified
@@ -96,6 +97,8 @@ _GRAMMAR = r"""
   remove_clause: "REMOVE"i remove_item ("," remove_item)*
   remove_item: symbolic_name "." symbolic_name -> remove_property
              | symbolic_name (":" symbolic_name)+ -> remove_labels
+  delete_clause: "DETACH"i "DELETE"i expression ("," expression)* -> detach_delete
+               | "DELETE"i expression ("," expression)* -> plain_delete
   unwind_clause: "UNWIND"i expression "AS"i symbolic_name
   call_subquery: "CALL"i "{" match_query "}"
  where_clause: "WHERE"i expression
@@ -746,6 +749,14 @@ class _ASTBuilder(Transformer):
     def remove_clause(self, meta, children):
         return _ParsedPart("remove", tuple(children), _source_span(meta))
 
+    @v_args(meta=True)
+    def detach_delete(self, meta, children):
+        return _ParsedPart("delete", (True, tuple(children)), _source_span(meta))
+
+    @v_args(meta=True)
+    def plain_delete(self, meta, children):
+        return _ParsedPart("delete", (False, tuple(children)), _source_span(meta))
+
     def union_all(self, _children):
         return True
 
@@ -877,7 +888,7 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
             query,
         )
     canonical = _build_canonical_query(parsed, query)
-    if any(isinstance(clause, (WithClause, OptionalMatchClause, UnwindClause, SubqueryClause, CreateClause, SetClause, RemoveClause)) for clause in canonical.clauses):
+    if any(isinstance(clause, (WithClause, OptionalMatchClause, UnwindClause, SubqueryClause, CreateClause, SetClause, RemoveClause, DeleteClause)) for clause in canonical.clauses):
         raise _located_error(
             CypherSemanticError,
             "Query cannot be represented by legacy parse(); use parse_ast()",
@@ -923,7 +934,7 @@ def _build_union_query(parsed, query: str) -> UnionQuery:
             branches_raw.append(item)
     branches = tuple(_build_canonical_query(branch, query) for branch in branches_raw)
     for branch in branches:
-        if any(isinstance(clause, (CreateClause, SetClause, RemoveClause)) for clause in branch.clauses):
+        if any(isinstance(clause, (CreateClause, SetClause, RemoveClause, DeleteClause)) for clause in branch.clauses):
             raise _located_error(
                 CypherSemanticError, "UNION branches must be read-only", query
             )
@@ -1023,6 +1034,12 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
                 clauses.append(SetClause(item.value, span=item.span))
             else:
                 clauses.append(RemoveClause(item.value, span=item.span))
+        elif isinstance(item, _ParsedPart) and item.kind == "delete":
+            if pending_kind == "return":
+                raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
+            close_projection()
+            detach, expressions = item.value
+            clauses.append(DeleteClause(expressions, detach, span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind in ("with", "return"):
             close_projection()
             pending_kind = item.kind

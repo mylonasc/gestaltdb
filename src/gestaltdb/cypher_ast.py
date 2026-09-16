@@ -149,6 +149,15 @@ class RemoveClause:
 
 
 @dataclass(frozen=True)
+class DeleteClause:
+    """One ``DELETE`` or ``DETACH DELETE`` over entity expressions."""
+
+    expressions: tuple[object, ...]
+    detach: bool = False
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
 class SubqueryClause:
     """One ``CALL { ... }`` correlated subquery over an inner clause query."""
 

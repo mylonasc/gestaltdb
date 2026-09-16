@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from .cypher_ast import (
     CreateClause,
+    DeleteClause,
     FunctionCall,
     MatchClause,
     OrderItem,
@@ -106,6 +107,14 @@ class RemoveStep:
     """Apply one textual ``REMOVE`` per input row with copy-on-write."""
 
     items: tuple[object, ...]
+
+
+@dataclass(frozen=True)
+class DeleteStep:
+    """Delete the entities of one textual ``DELETE`` per input row."""
+
+    expressions: tuple[object, ...]
+    detach: bool = False
 
 
 @dataclass(frozen=True)
@@ -271,6 +280,8 @@ def plan_staged_query(query: Query, scope=None) -> LogicalPlan:
             operators.append(SetStep(clause.items))
         elif isinstance(clause, RemoveClause):
             operators.append(RemoveStep(clause.items))
+        elif isinstance(clause, DeleteClause):
+            operators.append(DeleteStep(clause.expressions, clause.detach))
         elif isinstance(clause, WhereClause):
             operators.append(FilterExpression(clause.expression))
         elif isinstance(clause, (WithClause, ReturnClause)):

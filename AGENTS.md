@@ -89,7 +89,7 @@ Supported features include:
 - Variable-length paths (`*`, `*m..n`) with trail semantics and relationship-list bindings.
 - Shortest-path matching (`SHORTEST [k]`, `ANY SHORTEST`, `ALL SHORTEST`, `shortestPath`, `allShortestPaths`).
 - Path binding (`p = (a)-[:T]->(b)`) with path values plus `nodes()`/`relationships()`/`length(p)` accessors.
-- `CREATE` (fresh UUIDs unless properties supply `id`, bound-node reuse), `SET` (`prop=`/`+=`/`=`/labels), and `REMOVE`, executed per row inside a backend transaction when supported.
+- `CREATE` (fresh UUIDs unless properties supply `id`, bound-node reuse), `SET` (`prop=`/`+=`/`=`/labels), `REMOVE`, and `DELETE`/`DETACH DELETE` (relationship-existence check vs cascade), executed per row inside a backend transaction when supported.
 - `WHERE` with arithmetic, expression comparisons, `NOT`/`AND`/`XOR`/`OR`, `IN`, null predicates, string predicates, regex matching, quantified predicates (`all`/`any`/`none`/`single`), and `exists(property)`.
 - Cypher three-valued null logic for predicates.
 - `RETURN`, aliases, `RETURN *`, general projection expressions (including `CASE`, subscripts/slices, list comprehensions, `reduce`, map projections), `DISTINCT`, alias-aware `ORDER BY`, and literal or parameterized `SKIP`/`LIMIT`.

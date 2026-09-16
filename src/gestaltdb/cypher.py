@@ -19,7 +19,7 @@ from .cypher_ast import (
 from .cypher_parser import parse as _parse_query
 from .cypher_parser import parse_ast as _parse_ast
 from .cypher_parser import split_top_level_args as _split_top_level_args  # noqa: F401
-from .cypher_plan import CreateStep, LogicalPlan, RemoveStep, SetStep, plan_query, plan_staged_query, plan_union_query
+from .cypher_plan import CreateStep, DeleteStep, LogicalPlan, RemoveStep, SetStep, plan_query, plan_staged_query, plan_union_query
 from .cypher_runtime import (
     QueryContext,
     execute_plan,
@@ -138,4 +138,4 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
 
 def _plan_has_writes(plan: LogicalPlan) -> bool:
     """Return whether a plan contains mutating operators."""
-    return any(isinstance(operator, (CreateStep, SetStep, RemoveStep)) for operator in plan.operators)
+    return any(isinstance(operator, (CreateStep, SetStep, RemoveStep, DeleteStep)) for operator in plan.operators)

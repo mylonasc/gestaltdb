@@ -27,10 +27,12 @@ from .graphdb import Edge, Node
 
 @dataclass
 class WriteBatch:
-    """One clause worth of node and edge puts, applied atomically per query."""
+    """Node/edge puts and deletes for one clause, applied atomically per query."""
 
     nodes: list[Node] = field(default_factory=list)
     edges: list[Edge] = field(default_factory=list)
+    deleted_nodes: list[bytes] = field(default_factory=list)
+    deleted_edges: list[bytes] = field(default_factory=list)
 
     def add_node(self, node: Node) -> None:
         """Stage a node put."""
@@ -68,6 +70,12 @@ class WriteBatch:
                     graph.put_edge(edge)
             for edge in self.edges:
                 context.edge_cache[graph.node_key_to_bytes(edge.get_id)] = edge
+        for edge_id in self.deleted_edges:
+            graph.delete_edge(edge_id)
+            context.edge_cache.pop(graph.node_key_to_bytes(edge_id), None)
+        for node_id in self.deleted_nodes:
+            graph.delete_node(node_id)
+            context.node_cache.pop(graph.node_key_to_bytes(node_id), None)
 
 
 def transaction_supported(graph) -> bool:
@@ -226,6 +234,73 @@ def apply_remove(rows, step, context):
             _apply_remove_item(bindings, batch, item, context)
         batch.apply(context)
         yield row.with_bindings(bindings)
+
+
+def apply_delete(rows, step, context):
+    """Execute one ``DELETE`` clause, checking relationships unless detaching."""
+    for row in _snapshot(rows):
+        row = BindingRow.from_row(row)
+        bindings = dict(row.bindings)
+        batch = WriteBatch()
+        entities = []
+        for expression in step.expressions:
+            value = evaluate_expression(expression, bindings, context)
+            if value is None:
+                continue
+            if not _is_node(value) and not hasattr(value, "properties"):
+                raise TypeError(
+                    f"DELETE expects a node or relationship, got {type(value).__name__}"
+                )
+            entities.append(value)
+        deleted_edge_ids: set[bytes] = set()
+        for entity in entities:
+            if _is_node(entity):
+                continue
+            if not hasattr(entity, "source") or not hasattr(entity, "get_id"):
+                raise TypeError(
+                    f"DELETE expects a node or relationship, got {type(entity).__name__}"
+                )
+            edge_id = context.graph.node_key_to_bytes(entity.get_id)
+            deleted_edge_ids.add(edge_id)
+            batch.deleted_edges.append(edge_id)
+        for entity in entities:
+            if not _is_node(entity):
+                continue
+            node_id = context.graph.node_key_to_bytes(entity.get_id)
+            if not step.detach and _has_live_incident_edges(context, node_id, deleted_edge_ids):
+                raise ValueError(
+                    f"Cannot delete node {entity.get_id!r} with relationships; use DETACH DELETE"
+                )
+            batch.deleted_nodes.append(node_id)
+        batch.apply(context)
+        yield row.with_bindings(bindings)
+
+
+def _has_live_incident_edges(context, node_id: bytes, deleted_edge_ids: set[bytes]) -> bool:
+    """Return whether stored edges beyond deleted ones touch a node."""
+    for edge_key in _iter_edge_keys(context.graph):
+        if edge_key in deleted_edge_ids:
+            continue
+        edge = context.get_edge(edge_key)
+        if edge is None:
+            continue
+        if (
+            context.graph.node_key_to_bytes(edge.source) == node_id
+            or context.graph.node_key_to_bytes(edge.target) == node_id
+        ):
+            return True
+    return False
+
+
+def _iter_edge_keys(graph):
+    """Yield stored edge keys across graph handle shapes."""
+    generator = getattr(graph, "get_edge_keys_generator", None)
+    if generator is not None:
+        yield from generator()
+        return
+    store = getattr(graph, "store", None)
+    if store is not None:
+        yield from store.get_edge_keys_generator()
 
 
 def _apply_remove_item(bindings: dict, batch: WriteBatch, item, context) -> None:

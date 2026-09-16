@@ -12,6 +12,7 @@ from .cypher_ast import (
     CaseExpression,
     ComparisonExpression,
     CreateClause,
+    DeleteClause,
     ExistsExpression,
     FunctionCall,
     InExpression,
@@ -181,6 +182,12 @@ def _analyze_query_with_scope(query: Query, initial: Scope) -> QueryAnalysis:
         elif isinstance(clause, (SetClause, RemoveClause)):
             label = "SET" if isinstance(clause, SetClause) else "REMOVE"
             _validate_write_items(clause, scope, query.source, label)
+        elif isinstance(clause, DeleteClause):
+            for expression in clause.expressions:
+                _validate_expression(expression, scope, query.source, "DELETE", clause.span)
+                validate_function_calls(
+                    expression, query.source, clause.span, allow_aggregate=False, clause="DELETE"
+                )
         elif isinstance(clause, (WithClause, ReturnClause)):
             label = "WITH" if isinstance(clause, WithClause) else "RETURN"
             projections = _resolve_projections(clause, scope, query.source, label)

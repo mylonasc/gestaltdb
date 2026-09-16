@@ -24,6 +24,7 @@ from .cypher_plan import Aggregate as LogicalAggregate
 from .cypher_plan import (
     CallSubquery,
     CreateStep,
+    DeleteStep,
     LogicalPlan,
     MatchStep,
     OptionalMatchStep,
@@ -302,7 +303,7 @@ def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, obj
     if len(plan.operators) == 1 and isinstance(plan.operators[0], Union):
         return _execute_union(plan.operators[0], context)
     if plan.staged or any(
-        isinstance(operator, (MatchStep, OptionalMatchStep, Unwind, CallSubquery, CreateStep, SetStep, RemoveStep, ProjectItems, LogicalAggregate)) for operator in plan.operators
+        isinstance(operator, (MatchStep, OptionalMatchStep, Unwind, CallSubquery, CreateStep, SetStep, RemoveStep, DeleteStep, ProjectItems, LogicalAggregate)) for operator in plan.operators
     ):
         return _execute_staged(plan, context)
     if not isinstance(plan.source, ProcedureSource):
@@ -586,7 +587,7 @@ def _execute_staged(
                 bindings = apply_optional_match_step(bindings if bindings is not None else iter(()), operator, context)
             else:
                 bindings = apply_match_step(bindings if bindings is not None else iter(()), operator, context)
-        elif isinstance(operator, (Unwind, CallSubquery, CreateStep, SetStep, RemoveStep)):
+        elif isinstance(operator, (Unwind, CallSubquery, CreateStep, SetStep, RemoveStep, DeleteStep)):
             if projected is not None:
                 bindings = (
                     BindingRow(bindings=dict(row.values), current_node_id=None)
@@ -599,14 +600,16 @@ def _execute_staged(
             elif isinstance(operator, Unwind):
                 bindings = apply_unwind(stream, operator, context)
             else:
-                from .cypher_write import apply_create, apply_remove, apply_set
+                from .cypher_write import apply_create, apply_delete, apply_remove, apply_set
 
                 if isinstance(operator, CreateStep):
                     bindings = apply_create(stream, operator, context)
                 elif isinstance(operator, SetStep):
                     bindings = apply_set(stream, operator, context)
-                else:
+                elif isinstance(operator, RemoveStep):
                     bindings = apply_remove(stream, operator, context)
+                else:
+                    bindings = apply_delete(stream, operator, context)
         elif isinstance(operator, LogicalFilterExpression):
             if projected is not None:
                 projected = filter_projected(projected, operator.expression, context)

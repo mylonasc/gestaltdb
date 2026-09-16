@@ -121,6 +121,13 @@ Write queries run inside a backend transaction when one is supported
 best-effort direct writes. Later clauses in the same query always observe
 earlier writes.
 
+``DELETE`` removes nodes and relationships. Deleting a node with remaining
+relationships fails unless ``DETACH DELETE`` cascades to incident edges.
+
+.. code-block:: python
+
+   graph_db.query('MATCH (d {id: "drug-9"}) DETACH DELETE d')
+
 General fixed-length patterns may be unanchored and may filter every node in the
 path. Anonymous nodes and relationships, omitted relationship types, and
 bracketless relationships are supported. Untyped expansion scans canonical edge
@@ -386,7 +393,7 @@ Current Limitations
 Syntax and semantic failures are ``ValueError`` subclasses with source
 locations. The current Cypher API does not yet support:
 
-- mutating queries beyond ``CREATE``, ``SET``, and ``REMOVE`` (such as ``DELETE`` or ``MERGE``)
+- mutating queries beyond ``CREATE``, ``SET``, ``REMOVE``, and ``DELETE`` (such as ``MERGE``)
 - pattern comprehensions, ``exists()`` with a pattern argument, and quantified path patterns
 - scalar functions beyond the documented core set
 - generic procedures
