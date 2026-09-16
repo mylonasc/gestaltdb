@@ -199,11 +199,13 @@ SUPPORTED: list[tuple[str, str, str, tuple[str, ...], list[dict[str, object]]]] 
      ("n.id",), [{"n.id": "a"}]),
     ("show-constraints", "[cypher-19]", "SHOW CONSTRAINTS",
      ("name", "type", "label", "property"), []),
+    ("three-valued-empty-membership", "[cypher-20]",
+     "UNWIND [0] AS x RETURN null IN [] AS value", ("value",), [{"value": False}]),
 ]
 
 # (feature, implementing stage issue, query, expected error substring).
 UNSUPPORTED: list[tuple[str, str, str, str]] = [
-    ("aggregate-mixed-with-scalar", "[cypher-20]", "MATCH (n) RETURN n.age + count(*)",
+    ("aggregate-mixed-with-scalar", "[cypher-21]", "MATCH (n) RETURN n.age + count(*)",
      "must be top-level"),
 ]
 

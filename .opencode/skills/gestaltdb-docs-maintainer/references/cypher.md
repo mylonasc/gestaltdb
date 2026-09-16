@@ -64,6 +64,9 @@ GestaltDB includes an embedded Cypher query processor:
 - Star projection: `RETURN *` (must be the only projection item)
 - Modifiers: `DISTINCT`, `ORDER BY <expression-or-alias> [ASC|DESC]`, `SKIP <n-or-parameter>`, `LIMIT <n-or-parameter>`
 - Predicates use Cypher three-valued null logic. Use `IS NULL`, not `= null`.
+- Predicate contexts require Boolean/null values; `null IN []` is false.
+- `ORDER BY` is stable, uses Cypher's supported value hierarchy, and places null last ascending/first descending.
+- Regular conversion functions reject unsupported value categories while malformed supported strings convert to null.
 
 ### Writes and Constraints
 - `CREATE`, `SET`, `REMOVE`, `DELETE`/`DETACH DELETE`, `MERGE` with `ON CREATE`/`ON MATCH`, and write-only `FOREACH` loops.

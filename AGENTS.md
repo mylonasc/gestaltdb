@@ -95,6 +95,7 @@ Supported features include:
 - Persisted single-property node `UNIQUE` and `IS NOT NULL` constraints through `CREATE CONSTRAINT`, `DROP CONSTRAINT`, and `SHOW CONSTRAINTS`, enforced on Cypher writes.
 - `WHERE` with arithmetic, expression comparisons, `NOT`/`AND`/`XOR`/`OR`, `IN`, null predicates, string predicates, regex matching, quantified predicates (`all`/`any`/`none`/`single`), and `exists(property)`.
 - Cypher three-valued null logic for predicates.
+- Stable `ORDER BY` with Cypher value ordering, nulls last ascending/first descending, and strict Boolean predicate/coercion rules.
 - `RETURN`, aliases, `RETURN *`, general projection expressions (including `CASE`, subscripts/slices, list comprehensions, `reduce`, map projections), `DISTINCT`, alias-aware `ORDER BY`, and literal or parameterized `SKIP`/`LIMIT`.
 - Chained `MATCH` clauses with clause-local `WHERE`.
 - `OPTIONAL MATCH` as a left-outer join with `None`-filled rows, post-optional `WHERE` filtering, and null-safe downstream matching.

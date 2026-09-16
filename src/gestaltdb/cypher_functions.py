@@ -35,6 +35,15 @@ class FunctionDef:
 
 
 AGGREGATE_FUNCTIONS = ("count", "collect", "sum", "avg", "min", "max")
+UNSUPPORTED_FUNCTION_KINDS = {
+    "date": "temporal",
+    "time": "temporal",
+    "localtime": "temporal",
+    "datetime": "temporal",
+    "localdatetime": "temporal",
+    "duration": "temporal",
+    "point": "spatial",
+}
 
 
 def _scalar(name: str, arity: tuple[int, int | None], execute: Callable[[list[object], object], object]) -> FunctionDef:
@@ -183,7 +192,7 @@ def _to_boolean(args: list[object], context) -> object:
         if lowered == "false":
             return False
         return None
-    return None
+    raise TypeError("toBoolean() expects a boolean, integer, or string")
 
 
 def _to_integer(args: list[object], context) -> object:
@@ -201,7 +210,7 @@ def _to_integer(args: list[object], context) -> object:
             return int(value.strip())
         except ValueError:
             return None
-    return None
+    raise TypeError("toInteger() expects a boolean, number, or string")
 
 
 def _to_float(args: list[object], context) -> object:
@@ -209,7 +218,7 @@ def _to_float(args: list[object], context) -> object:
     if value is None:
         return None
     if isinstance(value, bool):
-        return float(value)
+        raise TypeError("toFloat() expects a number or string")
     if isinstance(value, (int, float)):
         return float(value)
     if isinstance(value, str):
@@ -217,7 +226,7 @@ def _to_float(args: list[object], context) -> object:
             return float(value.strip())
         except ValueError:
             return None
-    return None
+    raise TypeError("toFloat() expects a number or string")
 
 
 def _to_string(args: list[object], context) -> object:

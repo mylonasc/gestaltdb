@@ -211,6 +211,9 @@ regular-expression matching with ``=~``.
 
 Predicates use Cypher three-valued logic. In particular, ``n.value = null`` and
 ``n.value <> null`` do not pass ``WHERE``; use ``IS NULL`` or ``IS NOT NULL``.
+Predicate contexts require Boolean or ``None`` values rather than coercing
+numbers or strings. Membership in an empty list is always false, including
+``null IN []``.
 
 .. code-block:: python
 
@@ -431,6 +434,13 @@ global inputs return ``0`` for ``count``, ``[]`` for ``collect``, ``0`` for
 ``ORDER BY`` in an aggregate query must reference projected outputs.
 Aggregates cannot appear in ``WHERE`` (filter an aggregating ``WITH`` instead),
 cannot nest, and cannot mix with scalar arithmetic yet.
+
+``ORDER BY`` is stable and applies Cypher's value hierarchy across supported
+maps, entities, lists, paths, strings, Booleans, numbers, and nulls. Nulls sort
+last ascending and first descending. Conversion functions reject unsupported
+input types; malformed strings passed to numeric/Boolean conversions return
+``None``. Temporal constructors (such as ``date`` and ``duration``) and the
+spatial ``point`` constructor produce explicit unsupported-function errors.
 
 Current Limitations
 -------------------

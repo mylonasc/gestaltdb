@@ -9,6 +9,7 @@ Use `graph.query(cypher, parameters=None)` for Cypher reads and writes. It retur
 - Anonymous pattern elements, endpoint labels/properties, unanchored multi-hop paths, and comma-separated pattern parts.
 - `WHERE` arithmetic and comparisons, `NOT`/`AND`/`XOR`/`OR`, `IN`, null predicates, string predicates, and `=~`.
 - Cypher three-valued null logic; use `IS NULL` rather than `= null`.
+- Predicate contexts are strictly Boolean/null. `ORDER BY` is stable, with null last ascending and first descending.
 - `RETURN`, aliases, `RETURN *`, general projection expressions, `DISTINCT`, alias-aware `ORDER BY`, and literal or parameterized `SKIP`/`LIMIT`.
 - Chained `MATCH` clauses with clause-local `WHERE`.
 - `WITH` with scope replacement: only projected variables and aliases survive, and `WITH` may carry its own `WHERE`, `DISTINCT`, `ORDER BY`, `SKIP`, and `LIMIT`.

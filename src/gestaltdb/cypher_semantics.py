@@ -55,6 +55,7 @@ from .cypher_ast import (
 )
 from .cypher_errors import CypherSemanticError
 from .cypher_functions import (
+    UNSUPPORTED_FUNCTION_KINDS,
     check_scalar_arity,
     get_function_def,
     is_aggregate_function,
@@ -660,6 +661,11 @@ def validate_function_calls(
     for call in calls:
         definition = get_function_def(call.name)
         if definition is None:
+            kind = UNSUPPORTED_FUNCTION_KINDS.get(call.name)
+            if kind is not None:
+                _raise_semantic(
+                    f"Unsupported {kind} function: {call.name}", source, call.span or span
+                )
             _raise_semantic(f"Unsupported function: {call.name}", source, call.span or span)
         if definition.is_aggregate:
             if any(contains_function_call(argument) for argument in call.arguments):

@@ -121,7 +121,8 @@ def test_invalid_regex_raises_re_error():
 def test_boolean_context_strictness_boundary():
     graph = _graph()
 
-    assert execute(graph, "MATCH (n:Person) WHERE 1 RETURN n.id").records == []
+    with pytest.raises(TypeError, match="Expected boolean expression"):
+        execute(graph, "MATCH (n:Person) WHERE 1 RETURN n.id")
     with pytest.raises(TypeError, match="Expected boolean expression"):
         execute(graph, "MATCH (n:Person) WHERE 1 AND true RETURN n.id")
 

@@ -19,7 +19,7 @@ from .cypher_ast import (
     PropertyRef,
     Variable,
 )
-from .cypher_expr import _cypher_equals, evaluate_expression, project_value
+from .cypher_expr import _boolean_value, _cypher_equals, evaluate_expression, project_value
 from .cypher_plan import Aggregate as LogicalAggregate
 from .cypher_plan import (
     CallSubquery,
@@ -240,9 +240,7 @@ class SortOperator:
         for item in reversed(self.items):
             sorted_rows.sort(
                 key=lambda row, order_item=item: _sortable_value(
-                    _order_value(
-                        row.source_bindings or {}, order_item, self.parsed, context
-                    )
+                    _order_value(row, order_item, self.parsed, context)
                 ),
                 reverse=item.descending,
             )
@@ -563,7 +561,7 @@ def filter_projected(
     """Yield projected rows whose output values satisfy a ``WHERE`` filter."""
     for row in rows:
         values = bindings_of(row)
-        if evaluate_expression(expression, values, context) is True:
+        if _boolean_value(evaluate_expression(expression, values, context)) is True:
             yield row
 
 
@@ -1612,11 +1610,12 @@ def filter_expression(rows, expression, context: QueryContext):
     """Yield rows that satisfy a supported boolean expression."""
     for row in rows:
         row = BindingRow.from_row(row)
-        if evaluate_expression(expression, row.bindings, context) is True:
+        if _boolean_value(evaluate_expression(expression, row.bindings, context)) is True:
             yield row
 
 
-def _order_value(bindings, order_item, parsed, context):
+def _order_value(row: ProjectedRow, order_item, parsed, context):
+    bindings = row.source_bindings or {}
     expression = getattr(order_item, "expression_ast", None)
     alias = None
     if isinstance(expression, Variable) and expression.name in parsed.returns:
@@ -1624,13 +1623,10 @@ def _order_value(bindings, order_item, parsed, context):
     elif isinstance(expression, PropertyRef) and expression.variable in parsed.returns:
         alias = expression.variable
     if alias is not None:
-        index = parsed.returns.index(alias)
-        projection_expressions = getattr(parsed, "projection_expressions", ())
-        if projection_expressions:
-            value = evaluate_expression(projection_expressions[index], bindings, context)
-            if isinstance(expression, PropertyRef):
-                return project_value({alias: value}, f"{alias}.{expression.property_name}")
-            return value
+        value = row.values[alias]
+        if isinstance(expression, PropertyRef):
+            return project_value({alias: value}, f"{alias}.{expression.property_name}")
+        return value
     if expression is not None:
         return evaluate_expression(expression, bindings, context)
     return project_value(bindings, order_item.expression)
@@ -1646,7 +1642,26 @@ def _resolve_pagination(value, context: QueryContext, clause: str) -> int | None
 
 
 def _sortable_value(value):
-    return (value is None, value)
+    """Return a recursively comparable key using Cypher's value hierarchy."""
+    if isinstance(value, dict):
+        return (0, len(value), tuple((key, _sortable_value(item)) for key, item in sorted(value.items())))
+    if _is_node(value):
+        return (1, str(value.get_id))
+    if hasattr(value, "get_id") and hasattr(value, "properties"):
+        return (2, str(value.get_id))
+    if isinstance(value, (list, tuple)):
+        return (3, tuple(_sortable_value(item) for item in value))
+    if isinstance(value, PathValue):
+        return (4, cypher_value_key(value))
+    if isinstance(value, str):
+        return (5, value)
+    if isinstance(value, bool):
+        return (6, value)
+    if isinstance(value, (int, float)):
+        return (7, value)
+    if value is None:
+        return (9,)
+    raise TypeError(f"Cannot order value of type {type(value).__name__}")
 
 
 def cypher_value_key(value):

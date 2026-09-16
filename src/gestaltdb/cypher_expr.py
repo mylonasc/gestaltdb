@@ -116,7 +116,7 @@ def evaluate_expression(expression, bindings: dict[str, object], context) -> obj
             return None
         if not isinstance(values, (list, tuple)):
             raise TypeError("IN expects a list value")
-        saw_null = left_value is None
+        saw_null = False
         for value in values:
             equal = _cypher_equals(left_value, value)
             if equal is True:
@@ -178,6 +178,7 @@ def evaluate_expression(expression, bindings: dict[str, object], context) -> obj
             if not isinstance(left_value, str) or not isinstance(right_value, str):
                 raise TypeError("=~ expects string operands")
             return re.fullmatch(right_value, left_value) is not None
+        _require_comparable(left_value, right_value)
         try:
             return {
                 "<": lambda: left_value < right_value,
@@ -207,7 +208,7 @@ def _evaluate_case(expression: CaseExpression, bindings: dict[str, object], cont
     """Evaluate a ``CASE`` expression lazily, first match wins."""
     if expression.operand is None:
         for condition, value in expression.whens:
-            if evaluate_expression(condition, bindings, context) is True:
+            if _boolean_value(evaluate_expression(condition, bindings, context)) is True:
                 return evaluate_expression(value, bindings, context)
     else:
         operand = evaluate_expression(expression.operand, bindings, context)
@@ -274,7 +275,7 @@ def _evaluate_comprehension(expression: ListComprehension, bindings: dict[str, o
         scoped = dict(bindings)
         scoped[expression.variable] = item
         if expression.where is not None:
-            if evaluate_expression(expression.where, scoped, context) is not True:
+            if _boolean_value(evaluate_expression(expression.where, scoped, context)) is not True:
                 continue
         if expression.projection is None:
             result.append(item)
@@ -375,10 +376,7 @@ def _quantified_match(expression: QuantifiedPredicate, item: object, bindings: d
     """Evaluate one quantified-predicate element against its ``WHERE``."""
     scoped = dict(bindings)
     scoped[expression.variable] = item
-    value = evaluate_expression(expression.where, scoped, context)
-    if value is None:
-        return None
-    return value is True
+    return _boolean_value(evaluate_expression(expression.where, scoped, context))
 
 
 def _evaluate_shortest_path(expression: ShortestPathExpression, bindings: dict[str, object], context) -> object:
@@ -421,6 +419,8 @@ def _cypher_equals(left, right):
         return None
     if isinstance(left, bool) != isinstance(right, bool):
         return False
+    if isinstance(left, PathValue) and isinstance(right, PathValue):
+        return _cypher_equals(_path_sequence(left), _path_sequence(right))
     if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
         if len(left) != len(right):
             return False
@@ -435,7 +435,42 @@ def _cypher_equals(left, right):
         if False in comparisons:
             return False
         return None if None in comparisons else True
+    if _is_entity(left) and _is_entity(right):
+        if hasattr(left, "labels") != hasattr(right, "labels"):
+            return False
+        left_id = left.get_id() if callable(left.get_id) else left.get_id
+        right_id = right.get_id() if callable(right.get_id) else right.get_id
+        return left_id == right_id
     return left == right
+
+
+def _path_sequence(path: PathValue) -> list[object]:
+    values: list[object] = []
+    for index, node in enumerate(path.nodes):
+        values.append(node)
+        if index < len(path.edges):
+            values.append(path.edges[index])
+    return values
+
+
+def _is_entity(value) -> bool:
+    return hasattr(value, "get_id") and hasattr(value, "properties")
+
+
+def _require_comparable(left, right) -> None:
+    """Require operands from the same Cypher-comparable scalar category."""
+    if isinstance(left, bool) and isinstance(right, bool):
+        return
+    if (
+        not isinstance(left, bool)
+        and not isinstance(right, bool)
+        and isinstance(left, (int, float))
+        and isinstance(right, (int, float))
+    ):
+        return
+    if isinstance(left, str) and isinstance(right, str):
+        return
+    raise TypeError(f"Cannot compare {type(left).__name__} and {type(right).__name__}")
 
 
 def _boolean_value(value):
