@@ -36,6 +36,7 @@ from .cypher_ast import (
     StringPredicate,
     SubscriptExpression,
     UnaryExpression,
+    UnwindClause,
     Variable,
     WhereClause,
     Wildcard,
@@ -147,6 +148,12 @@ def analyze_query(query: Query) -> QueryAnalysis:
                 _raise_semantic("WHERE must immediately follow MATCH or WITH", query.source, clause.span)
             _validate_expression(clause.expression, scope, query.source, "WHERE", clause.span)
             validate_function_calls(clause.expression, query.source, clause.span, allow_aggregate=False)
+        elif isinstance(clause, UnwindClause):
+            _validate_expression(clause.expression, scope, query.source, "UNWIND", clause.span)
+            validate_function_calls(
+                clause.expression, query.source, clause.span, allow_aggregate=False, clause="UNWIND"
+            )
+            scope = Scope((*scope.symbols, Symbol(clause.variable, SymbolKind.VALUE, clause.span)))
         elif isinstance(clause, (WithClause, ReturnClause)):
             label = "WITH" if isinstance(clause, WithClause) else "RETURN"
             projections = _resolve_projections(clause, scope, query.source, label)
@@ -520,7 +527,14 @@ def _child_expressions(expression: object) -> tuple[object, ...]:
     return ()
 
 
-def validate_function_calls(expression: object, source: str, span: SourceSpan | None, *, allow_aggregate: bool) -> None:
+def validate_function_calls(
+    expression: object,
+    source: str,
+    span: SourceSpan | None,
+    *,
+    allow_aggregate: bool,
+    clause: str = "WHERE",
+) -> None:
     """Validate function names, arities, nesting, and aggregate placement."""
     calls = _iter_function_calls(expression)
     for call in calls:
@@ -546,7 +560,7 @@ def validate_function_calls(expression: object, source: str, span: SourceSpan | 
             if problem is not None:
                 _raise_semantic(problem, source, call.span or span)
     if not allow_aggregate and contains_aggregate_call(expression):
-        _raise_semantic("Aggregates cannot be used in WHERE", source, span)
+        _raise_semantic(f"Aggregates cannot be used in {clause}", source, span)
 
 
 def _iter_function_calls(expression: object) -> Iterator[FunctionCall]:

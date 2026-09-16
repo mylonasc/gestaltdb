@@ -242,6 +242,18 @@ for ``count(*)``.
        'RETURN d.id, p.id'
    )
 
+UNWIND
+------
+
+``UNWIND`` expands each input row into one row per element of a list
+expression, which may come from a literal, a parameter, or a bound variable.
+``None`` and empty lists produce no rows. ``UNWIND`` may open a query or
+appear after ``MATCH``, ``OPTIONAL MATCH``, or ``WITH`` stages.
+
+.. code-block:: python
+
+   graph_db.query('UNWIND ["Aspirin", "Ibuprofen"] AS name RETURN name')
+
 Sampling Procedure
 ------------------
 
@@ -288,5 +300,5 @@ locations. The current Cypher API does not yet support:
 - variable-length paths
 - path values such as ``p = (a)-[:T]->(b)``, pattern comprehensions, and ``exists()`` with a pattern argument
 - scalar functions beyond the documented core set
-- ``UNWIND``, ``UNION``, subqueries, or generic procedures
+- ``UNION``, subqueries, or generic procedures
 - relationship property maps and quantified path patterns

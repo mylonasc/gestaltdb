@@ -53,6 +53,15 @@ class OptionalMatchClause:
 
 
 @dataclass(frozen=True)
+class UnwindClause:
+    """One ``UNWIND <expression> AS <variable>`` list-to-rows expansion."""
+
+    expression: object
+    variable: str
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
 class WhereClause:
     """A filter in its textual position in the query."""
 

@@ -14,6 +14,7 @@ from .cypher_ast import (
     Query,
     ReturnClause,
     SampleTypedPathsCall,
+    UnwindClause,
     Variable,
     WhereClause,
     Wildcard,
@@ -53,13 +54,21 @@ class OptionalMatchStep:
     """Match one textual ``OPTIONAL MATCH`` with left-outer-join semantics.
 
     ``where`` carries the immediately following ``WHERE`` expression, if any,
-    for index-eligible seeks. Unmatched input rows are preserved with newly
+    for index-eligible seeks.     Unmatched input rows are preserved with newly
     introduced variables bound to ``None``.
     """
 
     patterns: tuple[PathPatternClause, ...]
     group_id: int
     where: object = None
+
+
+@dataclass(frozen=True)
+class Unwind:
+    """Expand each input row into one row per element of a list expression."""
+
+    expression: object
+    variable: str
 
 
 @dataclass(frozen=True)
@@ -177,6 +186,8 @@ def plan_staged_query(query: Query) -> LogicalPlan:
             else:
                 operators.append(MatchStep(clause.patterns, group_id, attached_where))
             group_id += 1
+        elif isinstance(clause, UnwindClause):
+            operators.append(Unwind(clause.expression, clause.variable))
         elif isinstance(clause, WhereClause):
             operators.append(FilterExpression(clause.expression))
         elif isinstance(clause, (WithClause, ReturnClause)):

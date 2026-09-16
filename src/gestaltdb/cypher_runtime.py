@@ -26,6 +26,7 @@ from .cypher_plan import (
     ProcedureCall,
     ProcedureSource,
     ProjectItems,
+    Unwind,
 )
 from .cypher_plan import Distinct as LogicalDistinct
 from .cypher_plan import FilterExpression as LogicalFilterExpression
@@ -292,7 +293,7 @@ def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, obj
     ``TypeError`` instead of being silently skipped.
     """
     if plan.staged or any(
-        isinstance(operator, (MatchStep, OptionalMatchStep, ProjectItems, LogicalAggregate)) for operator in plan.operators
+        isinstance(operator, (MatchStep, OptionalMatchStep, Unwind, ProjectItems, LogicalAggregate)) for operator in plan.operators
     ):
         return _execute_staged(plan, context)
     if not isinstance(plan.source, ProcedureSource):
@@ -379,6 +380,25 @@ def _null_fill_row(row: BindingRow, patterns) -> BindingRow:
             if variable not in bindings:
                 bindings[variable] = None
     return row.with_bindings(bindings)
+
+
+def apply_unwind(rows: Iterable[BindingRow], unwind: Unwind, context: QueryContext) -> Iterable[BindingRow]:
+    """Expand each row into one row per element of the ``UNWIND`` list.
+
+    ``None`` and empty lists produce no rows; non-list values raise
+    ``TypeError``.
+    """
+    for row in rows:
+        row = BindingRow.from_row(row)
+        items = evaluate_expression(unwind.expression, row.bindings, context)
+        if items is None:
+            continue
+        if not isinstance(items, (list, tuple)):
+            raise TypeError("UNWIND expects a list value")
+        for item in items:
+            bindings = dict(row.bindings)
+            bindings[unwind.variable] = item
+            yield row.with_bindings(bindings)
 
 
 def _pattern_variables(pattern: PathPatternClause) -> tuple[str, ...]:
@@ -506,6 +526,14 @@ def _execute_staged(plan: LogicalPlan, context: QueryContext) -> list[dict[str, 
                 bindings = apply_optional_match_step(bindings if bindings is not None else iter(()), operator, context)
             else:
                 bindings = apply_match_step(bindings if bindings is not None else iter(()), operator, context)
+        elif isinstance(operator, Unwind):
+            if projected is not None:
+                bindings = (
+                    BindingRow(bindings=dict(row.values), current_node_id=None)
+                    for row in projected
+                )
+                projected = None
+            bindings = apply_unwind(bindings if bindings is not None else iter(()), operator, context)
         elif isinstance(operator, LogicalFilterExpression):
             if projected is not None:
                 projected = filter_projected(projected, operator.expression, context)

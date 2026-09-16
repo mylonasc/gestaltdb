@@ -89,6 +89,7 @@ Supported features include:
 - `RETURN`, aliases, `RETURN *`, general projection expressions (including `CASE`, subscripts/slices, list comprehensions, `reduce`, map projections), `DISTINCT`, alias-aware `ORDER BY`, and literal or parameterized `SKIP`/`LIMIT`.
 - Chained `MATCH` clauses with clause-local `WHERE`.
 - `OPTIONAL MATCH` as a left-outer join with `None`-filled rows, post-optional `WHERE` filtering, and null-safe downstream matching.
+- `UNWIND list AS x` expanding rows per element, usable mid-pipeline or as the opening clause.
 - `WITH` with scope replacement and local `WHERE`, `DISTINCT`, `ORDER BY`, `SKIP`, and `LIMIT`.
 - Core aggregates (`count`, `collect`, `sum`, `avg`, `min`, `max`) with implicit grouping, aggregate `DISTINCT`, and documented null/empty-input behavior.
 - Core scalar functions (`coalesce`, `id`/`elementId`, `type`, `labels`, `startNode`/`endNode`, `properties`, `head`/`last`, `size`/`length`, `toBoolean`/`toInteger`/`toFloat`/`toString`, string ops, math ops including `sign`/`exp`/`log`/`sin`/`cos`/`tan`/`pi`/`e`, `rand`/`randomUUID`, `range`, `reverse`, `tail`, `keys`), including property access on computed values such as `startNode(r).name`.

@@ -52,6 +52,7 @@ from .cypher_ast import (
     SubscriptExpression,
     TraversalHop,
     UnaryExpression,
+    UnwindClause,
     Variable,
     WhereClause,
     Wildcard,
@@ -65,9 +66,10 @@ _GRAMMAR = r"""
 ?start: query ";"?
 ?query: match_query | sample_call
 
-  match_query: (match_clause | optional_match_clause) (match_clause | optional_match_clause | where_clause | with_section)* return_full
+  match_query: (match_clause | optional_match_clause | unwind_clause) (match_clause | optional_match_clause | where_clause | unwind_clause | with_section)* return_full
   match_clause: "MATCH"i pattern ("," pattern)*
   optional_match_clause: "OPTIONAL"i "MATCH"i pattern ("," pattern)*
+  unwind_clause: "UNWIND"i expression "AS"i symbolic_name
  where_clause: "WHERE"i expression
  with_section: with_clause where_clause? order_clause? skip_clause? limit_clause?
  with_clause: "WITH"i DISTINCT? return_items
@@ -526,6 +528,10 @@ class _ASTBuilder(Transformer):
         return _MatchPatterns(tuple(children), _source_span(meta), True)
 
     @v_args(meta=True)
+    def unwind_clause(self, meta, children):
+        return _ParsedPart("unwind", (children[0], children[1]), _source_span(meta))
+
+    @v_args(meta=True)
     def where_clause(self, meta, children):
         return _ParsedPart("where", children[0], _source_span(meta))
 
@@ -641,7 +647,7 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
     if isinstance(parsed, tuple) and parsed and parsed[0] == "sample":
         return _build_sample_call(parsed, query)
     canonical = _build_canonical_query(parsed, query)
-    if any(isinstance(clause, (WithClause, OptionalMatchClause)) for clause in canonical.clauses):
+    if any(isinstance(clause, (WithClause, OptionalMatchClause, UnwindClause)) for clause in canonical.clauses):
         raise _located_error(
             CypherSemanticError,
             "Query cannot be represented by legacy parse(); use parse_ast()",
@@ -738,6 +744,10 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
             # projection must be closed first to preserve textual order.
             close_projection()
             clauses.append(WhereClause(item.value, span=item.span))
+        elif isinstance(item, _ParsedPart) and item.kind == "unwind":
+            close_projection()
+            expression, variable = item.value
+            clauses.append(UnwindClause(expression, variable, span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind in ("with", "return"):
             close_projection()
             pending_kind = item.kind

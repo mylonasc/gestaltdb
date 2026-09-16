@@ -146,12 +146,16 @@ SUPPORTED: list[tuple[str, str, str, tuple[str, ...], list[dict[str, object]]]] 
      ("exists(n.age)",), [{"exists(n.age)": True}, {"exists(n.age)": True}]),
     ("scalar-function", "[cypher-05]", "MATCH (n:Person) RETURN toString(n.age)",
      ("tostring(n.age)",), [{"tostring(n.age)": "30"}, {"tostring(n.age)": "40"}]),
+    ("optional-match", "[cypher-07]",
+     "MATCH (n:Person) OPTIONAL MATCH (n)-[:KNOWS]->(m) RETURN n.id, m.id",
+     ("n.id", "m.id"),
+     [{"n.id": "a", "m.id": "b"}, {"n.id": "b", "m.id": None}]),
+    ("unwind", "[cypher-08]", "UNWIND [1, 2] AS x RETURN x",
+     ("x",), [{"x": 1}, {"x": 2}]),
 ]
 
 # (feature, implementing stage issue, query, expected error substring).
 UNSUPPORTED: list[tuple[str, str, str, str]] = [
-    ("unwind", "[cypher-08]", "UNWIND [1, 2] AS x RETURN x",
-     "Unsupported Cypher query"),
     ("union", "[cypher-09]", "MATCH (n) RETURN n UNION MATCH (m) RETURN m",
      "Unsupported Cypher query"),
     ("union-all", "[cypher-09]", "MATCH (n) RETURN n UNION ALL MATCH (m) RETURN m",
