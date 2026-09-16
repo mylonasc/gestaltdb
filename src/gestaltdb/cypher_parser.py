@@ -18,6 +18,7 @@ from .cypher_ast import (
     CreateClause,
     DeleteClause,
     ExistsExpression,
+    ForeachClause,
     FunctionCall,
     InExpression,
     ListComprehension,
@@ -84,7 +85,7 @@ _GRAMMAR = r"""
  union_operator: "UNION"i "ALL"i -> union_all
                | "UNION"i -> union_distinct
 
-  match_query: (match_clause | optional_match_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | merge_clause) (match_clause | optional_match_clause | where_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | merge_clause | with_section)* return_full
+  match_query: (match_clause | optional_match_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | merge_clause | foreach_clause) (match_clause | optional_match_clause | where_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | merge_clause | foreach_clause | with_section)* return_full
   match_clause: "MATCH"i shortest_selector? pattern ("," pattern)*
   optional_match_clause: "OPTIONAL"i "MATCH"i shortest_selector? pattern ("," pattern)*
   shortest_selector: QUANTIFIER "SHORTEST"i -> shortest_quantified
@@ -103,6 +104,8 @@ _GRAMMAR = r"""
   merge_clause: "MERGE"i pattern ("," pattern)* merge_action*
   merge_action: "ON"i "CREATE"i "SET"i set_item ("," set_item)* -> on_create_action
               | "ON"i "MATCH"i "SET"i set_item ("," set_item)* -> on_match_action
+  foreach_clause: "FOREACH"i "(" symbolic_name "IN"i expression "|" foreach_body ")"
+  foreach_body: (match_clause | optional_match_clause | where_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | merge_clause | foreach_clause)+
   unwind_clause: "UNWIND"i expression "AS"i symbolic_name
   call_subquery: "CALL"i "{" match_query "}"
  where_clause: "WHERE"i expression
@@ -783,6 +786,13 @@ class _ASTBuilder(Transformer):
             _source_span(meta),
         )
 
+    @v_args(meta=True)
+    def foreach_clause(self, meta, children):
+        return _ParsedPart("foreach", (children[0], children[1], children[-1]), _source_span(meta))
+
+    def foreach_body(self, children):
+        return tuple(children)
+
     def union_all(self, _children):
         return True
 
@@ -914,7 +924,7 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
             query,
         )
     canonical = _build_canonical_query(parsed, query)
-    if any(isinstance(clause, (WithClause, OptionalMatchClause, UnwindClause, SubqueryClause, CreateClause, SetClause, RemoveClause, DeleteClause, MergeClause)) for clause in canonical.clauses):
+    if any(isinstance(clause, (WithClause, OptionalMatchClause, UnwindClause, SubqueryClause, CreateClause, SetClause, RemoveClause, DeleteClause, MergeClause, ForeachClause)) for clause in canonical.clauses):
         raise _located_error(
             CypherSemanticError,
             "Query cannot be represented by legacy parse(); use parse_ast()",
@@ -960,7 +970,7 @@ def _build_union_query(parsed, query: str) -> UnionQuery:
             branches_raw.append(item)
     branches = tuple(_build_canonical_query(branch, query) for branch in branches_raw)
     for branch in branches:
-        if any(isinstance(clause, (CreateClause, SetClause, RemoveClause, DeleteClause, MergeClause)) for clause in branch.clauses):
+        if any(isinstance(clause, (CreateClause, SetClause, RemoveClause, DeleteClause, MergeClause, ForeachClause)) for clause in branch.clauses):
             raise _located_error(
                 CypherSemanticError, "UNION branches must be read-only", query
             )
@@ -1049,8 +1059,6 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
             if pending_kind == "return":
                 raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
             close_projection()
-            for pattern in item.value:
-                _validate_pattern_literals(pattern, query)
             clauses.append(CreateClause(item.value, span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind in ("set", "remove"):
             if pending_kind == "return":
@@ -1071,8 +1079,6 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
                 raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
             close_projection()
             patterns, actions = item.value
-            for pattern in patterns:
-                _validate_pattern_literals(pattern, query)
             on_create = tuple(
                 set_item for action in actions if action.kind == "create" for set_item in action.items
             )
@@ -1080,6 +1086,23 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
                 set_item for action in actions if action.kind == "match" for set_item in action.items
             )
             clauses.append(MergeClause(patterns, on_create, on_match, span=item.span))
+        elif isinstance(item, _ParsedPart) and item.kind == "foreach":
+            if pending_kind == "return":
+                raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
+            close_projection()
+            variable, iterable, body = item.value
+            for sub in body:
+                if isinstance(sub, _MatchPatterns):
+                    for pattern in sub.values:
+                        _validate_pattern_literals(pattern, query)
+            inner = _build_canonical_query(
+                _ParsedMatch(
+                    (), None, (), False, (), None, None, (), None,
+                    _ParsedPart("return", ((), False), item.span), (), tuple(body),
+                ),
+                query,
+            )
+            clauses.append(ForeachClause(variable, iterable, inner.clauses, span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind in ("with", "return"):
             close_projection()
             pending_kind = item.kind

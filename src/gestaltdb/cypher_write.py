@@ -13,6 +13,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .cypher_ast import (
+    NodePattern,
+    PathPatternClause,
+    PatternHop,
     RemoveLabels,
     RemoveProperty,
     SetLabels,
@@ -21,7 +24,13 @@ from .cypher_ast import (
     SetReplace,
 )
 from .cypher_expr import PathValue, evaluate_expression
-from .cypher_runtime import BindingRow, _is_node, _reset_used_relationships, apply_path_pattern_clause
+from .cypher_runtime import (
+    BindingRow,
+    _execute_staged,
+    _is_node,
+    _reset_used_relationships,
+    apply_path_pattern_clause,
+)
 from .graphdb import Edge, Node
 
 
@@ -96,6 +105,41 @@ def _snapshot(rows):
     return list(rows)
 
 
+def _resolve_pattern(pattern: PathPatternClause, bindings: dict, context) -> PathPatternClause:
+    """Evaluate computed property values against row bindings.
+
+    ``CREATE``/``MERGE`` maps accept general expressions (variables,
+    parameters, function calls); matching and creation both run on the
+    resolved plain values.
+    """
+
+    def resolved(properties):
+        return tuple((name, evaluate_expression(value, bindings, context)) for name, value in properties)
+
+    source = pattern.source
+    resolved_source = NodePattern(
+        source.variable, source.labels, resolved(source.properties), source.label_expression
+    )
+    hops = tuple(
+        PatternHop(
+            hop.rel_var,
+            hop.edge_types,
+            NodePattern(
+                hop.target.variable,
+                hop.target.labels,
+                resolved(hop.target.properties),
+                hop.target.label_expression,
+            ),
+            hop.direction,
+            resolved(hop.properties),
+            hop.min_length,
+            hop.max_length,
+        )
+        for hop in pattern.hops
+    )
+    return PathPatternClause(resolved_source, hops, pattern.name)
+
+
 def apply_create(rows, step, context):
     """Execute one ``CREATE`` clause, binding created entities per row."""
     for row in _snapshot(rows):
@@ -103,7 +147,7 @@ def apply_create(rows, step, context):
         bindings = dict(row.bindings)
         batch = WriteBatch()
         for pattern in step.patterns:
-            _create_pattern(bindings, batch, pattern, context)
+            _create_pattern(bindings, batch, _resolve_pattern(pattern, bindings, context), context)
         batch.apply(context)
         yield row.with_bindings(bindings)
 
@@ -118,7 +162,10 @@ def apply_merge(rows, step, context):
     for row in _snapshot(rows):
         row = BindingRow.from_row(row)
         staged = _reset_used_relationships(iter([row]))
-        for pattern in step.patterns:
+        resolved_patterns = tuple(
+            _resolve_pattern(pattern, row.bindings, context) for pattern in step.patterns
+        )
+        for pattern in resolved_patterns:
             staged = apply_path_pattern_clause(staged, pattern, context, None, None)
         matched = list(staged)
         batch = WriteBatch()
@@ -131,12 +178,49 @@ def apply_merge(rows, step, context):
                 yield match.with_bindings(bindings)
         else:
             bindings = dict(row.bindings)
-            for pattern in step.patterns:
+            for pattern in resolved_patterns:
                 _create_pattern(bindings, batch, pattern, context)
             for item in step.on_create:
                 _apply_set_item(bindings, batch, item, context)
             batch.apply(context)
             yield row.with_bindings(bindings)
+
+
+def apply_foreach(rows, step, context):
+    """Execute one ``FOREACH`` loop, passing input rows through unchanged.
+
+    The body plan runs per row and list element for side effects only; the
+    loop variable never escapes. Entity bindings refresh afterwards so later
+    clauses observe body writes.
+    """
+    for row in _snapshot(rows):
+        row = BindingRow.from_row(row)
+        items = evaluate_expression(step.iterable, row.bindings, context)
+        if items is None:
+            yield row
+            continue
+        if not isinstance(items, (list, tuple)):
+            raise TypeError("FOREACH expects a list value")
+        for item in items:
+            seed = row.with_bindings(
+                {**row.bindings, step.variable: item},
+                preserve_current_node=False,
+                current_node_id=None,
+                used_relationship_ids=frozenset(),
+            )
+            _execute_staged(step.plan, context, initial=[seed], require_projection=False)
+        yield _refresh_entities(row, context)
+
+
+def _refresh_entities(row: BindingRow, context) -> BindingRow:
+    """Re-read entity bindings so later clauses observe loop writes."""
+    bindings = dict(row.bindings)
+    for variable, value in bindings.items():
+        if _is_node(value) or hasattr(value, "properties"):
+            key = context.graph.node_key_to_bytes(value.get_id)
+            refreshed = context.get_node(key) if _is_node(value) else context.get_edge(key)
+            bindings[variable] = refreshed
+    return row.with_bindings(bindings)
 
 
 def _create_pattern(bindings: dict, batch: WriteBatch, pattern, context) -> None:

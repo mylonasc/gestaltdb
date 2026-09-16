@@ -168,6 +168,16 @@ class MergeClause:
 
 
 @dataclass(frozen=True)
+class ForeachClause:
+    """One ``FOREACH (x IN list | ...)`` write-only loop over body clauses."""
+
+    variable: str
+    iterable: object
+    body: tuple[object, ...]
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
 class SubqueryClause:
     """One ``CALL { ... }`` correlated subquery over an inner clause query."""
 

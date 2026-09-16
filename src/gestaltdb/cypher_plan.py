@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from .cypher_ast import (
     CreateClause,
     DeleteClause,
+    ForeachClause,
     FunctionCall,
     MatchClause,
     MergeClause,
@@ -125,6 +126,15 @@ class MergeStep:
     patterns: tuple[PathPatternClause, ...]
     on_create: tuple[object, ...] = ()
     on_match: tuple[object, ...] = ()
+
+
+@dataclass(frozen=True)
+class ForeachStep:
+    """Run a write-only inner plan per input row and list element."""
+
+    variable: str
+    iterable: object
+    plan: LogicalPlan
 
 
 @dataclass(frozen=True)
@@ -249,7 +259,7 @@ def plan_union_query(query: UnionQuery) -> LogicalPlan:
     )
 
 
-def plan_staged_query(query: Query, scope=None) -> LogicalPlan:
+def plan_staged_query(query: Query, scope=None, require_return: bool = True) -> LogicalPlan:
     """Plan a canonical query with ``WITH`` stages as executable operators.
 
     Operator order within each projection clause follows Cypher semantics:
@@ -257,11 +267,12 @@ def plan_staged_query(query: Query, scope=None) -> LogicalPlan:
     stage, then ``ORDER BY``, ``SKIP``, and ``LIMIT``.
 
     ``scope`` seeds the initial scope so correlated subqueries resolve outer
-    variables; top-level queries start empty.
+    variables; top-level queries start empty. ``require_return`` is disabled
+    for ``FOREACH`` bodies, which are write-only.
     """
-    from .cypher_semantics import analyze_query
+    from .cypher_semantics import Scope, Symbol, SymbolKind, analyze_query
 
-    analysis = analyze_query(query, scope) if scope is not None else analyze_query(query)
+    analysis = analyze_query(query, scope, require_return) if scope is not None else analyze_query(query, require_return=require_return)
     by_clause = {id(entry.clause): entry for entry in analysis.clauses}
     operators: list[object] = []
     group_id = 0
@@ -288,6 +299,13 @@ def plan_staged_query(query: Query, scope=None) -> LogicalPlan:
             operators.append(CreateStep(clause.patterns))
         elif isinstance(clause, MergeClause):
             operators.append(MergeStep(clause.patterns, clause.on_create, clause.on_match))
+        elif isinstance(clause, ForeachClause):
+            entry = by_clause[id(clause)]
+            inner_scope = Scope(
+                (*entry.scope_before.symbols, Symbol(clause.variable, SymbolKind.VALUE, clause.span))
+            )
+            inner_plan = plan_staged_query(Query(clause.body, query.source), inner_scope, False)
+            operators.append(ForeachStep(clause.variable, clause.iterable, inner_plan))
         elif isinstance(clause, SetClause):
             operators.append(SetStep(clause.items))
         elif isinstance(clause, RemoveClause):

@@ -137,6 +137,14 @@ execution.
 
    graph_db.query('MERGE (d:Drug {id: "drug-9"}) ON CREATE SET d.score = 0 RETURN d.id')
 
+``FOREACH`` runs write clauses per element of a list without changing the
+row stream. Loop variables never escape, and entity bindings refresh
+afterwards so later clauses observe loop writes.
+
+.. code-block:: python
+
+   graph_db.query('MATCH (d:Drug) FOREACH (tag IN ["a", "b"] | SET d.tag = tag) RETURN d.id')
+
 General fixed-length patterns may be unanchored and may filter every node in the
 path. Anonymous nodes and relationships, omitted relationship types, and
 bracketless relationships are supported. Untyped expansion scans canonical edge

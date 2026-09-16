@@ -44,6 +44,7 @@ from .cypher_ast import (
     StringPredicate,
     SubqueryClause,
     SubscriptExpression,
+    ForeachClause,
     UnaryExpression,
     UnwindClause,
     Variable,
@@ -141,16 +142,17 @@ class QueryAnalysis:
         return self.clauses[-1].output_names if self.clauses else ()
 
 
-def analyze_query(query: Query, scope: Scope | None = None) -> QueryAnalysis:
+def analyze_query(query: Query, scope: Scope | None = None, require_return: bool = True) -> QueryAnalysis:
     """Analyze a canonical query left-to-right and resolve its scopes.
 
     ``scope`` seeds the initial scope so correlated subqueries resolve outer
-    variables; top-level queries start empty.
+    variables; top-level queries start empty. ``require_return`` is disabled
+    for ``FOREACH`` bodies, which are write-only.
     """
-    return _analyze_query_with_scope(query, scope or Scope())
+    return _analyze_query_with_scope(query, scope or Scope(), require_return)
 
 
-def _analyze_query_with_scope(query: Query, initial: Scope) -> QueryAnalysis:
+def _analyze_query_with_scope(query: Query, initial: Scope, require_return: bool = True) -> QueryAnalysis:
     """Analyze a canonical query from a given incoming scope."""
     scope = Scope(initial.symbols)
     snapshots: list[ClauseAnalysis] = []
@@ -162,11 +164,21 @@ def _analyze_query_with_scope(query: Query, initial: Scope) -> QueryAnalysis:
         if isinstance(clause, (MatchClause, OptionalMatchClause)):
             scope = _analyze_match(clause, scope, query.source)
         elif isinstance(clause, SubqueryClause):
-            inner = _analyze_query_with_scope(clause.query, scope)
+            inner = _analyze_query_with_scope(clause.query, scope, True)
             exported = inner.final_scope.symbols
             shadowed = {symbol.name for symbol in exported}
             kept = tuple(symbol for symbol in scope.symbols if symbol.name not in shadowed)
             scope = Scope(kept + exported)
+        elif isinstance(clause, ForeachClause):
+            _validate_expression(clause.iterable, scope, query.source, "FOREACH", clause.span)
+            validate_function_calls(
+                clause.iterable, query.source, clause.span, allow_aggregate=False, clause="FOREACH"
+            )
+            _analyze_query_with_scope(
+                Query(clause.body, query.source),
+                Scope((*scope.symbols, Symbol(clause.variable, SymbolKind.VALUE, clause.span))),
+                False,
+            )
         elif isinstance(clause, WhereClause):
             if not isinstance(previous, (MatchClause, OptionalMatchClause, WithClause, SubqueryClause)):
                 _raise_semantic("WHERE must immediately follow MATCH or WITH", query.source, clause.span)
@@ -217,7 +229,7 @@ def _analyze_query_with_scope(query: Query, initial: Scope) -> QueryAnalysis:
         snapshots.append(ClauseAnalysis(clause, incoming, scope, projections))
         previous = clause
 
-    if not query.clauses or not isinstance(query.clauses[-1], ReturnClause):
+    if require_return and (not query.clauses or not isinstance(query.clauses[-1], ReturnClause)):
         span = query.clauses[-1].span if query.clauses else query.span
         _raise_semantic("Cypher query must terminate with RETURN", query.source, span)
     return QueryAnalysis(query, tuple(snapshots))
@@ -749,6 +761,7 @@ def _render_string_literal(value: str) -> str:
 
 def _analyze_create(clause: CreateClause | MergeClause, scope: Scope, source: str) -> Scope:
     """Introduce created variables; bound nodes are reused, rels must be fresh."""
+    label = "MERGE" if isinstance(clause, MergeClause) else "CREATE"
     symbols = list(scope.symbols)
     by_name = {symbol.name: symbol for symbol in symbols}
 
@@ -815,7 +828,19 @@ def _analyze_create(clause: CreateClause | MergeClause, scope: Scope, source: st
             introduce_node(hop.target.variable)
         if pattern.name is not None:
             introduce_fresh(pattern.name, SymbolKind.VALUE, "a path")
+        _validate_pattern_expressions(pattern, scope, source, label, clause.span)
     return Scope(tuple(symbols))
+
+
+def _validate_pattern_expressions(pattern, scope: Scope, source: str, label: str, span) -> None:
+    """Validate computed ``CREATE``/``MERGE`` property values against scope."""
+    values = [value for _, value in pattern.source.properties]
+    for hop in pattern.hops:
+        values += [value for _, value in hop.target.properties]
+        values += [value for _, value in hop.properties]
+    for value in values:
+        _validate_expression(value, scope, source, label, span)
+        validate_function_calls(value, source, span, allow_aggregate=False, clause=label)
 
 
 def _validate_write_items(items, span, scope: Scope, source: str, label: str) -> None:
