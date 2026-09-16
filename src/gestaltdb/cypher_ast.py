@@ -42,6 +42,19 @@ class MatchClause:
 
     patterns: tuple[PathPatternClause, ...]
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
+    selector: PathSelector | None = None
+
+
+@dataclass(frozen=True)
+class PathSelector:
+    """A shortest-path selector for a ``MATCH`` clause.
+
+    ``mode`` is ``"any"`` (up to ``limit`` shortest paths, ``limit`` always
+    set) or ``"all"`` (every path at the minimal matching length).
+    """
+
+    mode: str
+    limit: int | None = None
 
 
 @dataclass(frozen=True)
@@ -50,6 +63,7 @@ class OptionalMatchClause:
 
     patterns: tuple[PathPatternClause, ...]
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
+    selector: PathSelector | None = None
 
 
 @dataclass(frozen=True)
@@ -356,6 +370,19 @@ class PropertyAccessExpression:
 
     expression: object
     property_name: str
+
+
+@dataclass(frozen=True)
+class ShortestPathExpression:
+    """A ``shortestPath``/``allShortestPaths`` call over a single-hop pattern.
+
+    Evaluates to a node list (single shortest path) or a list of node lists,
+    or ``None``/``[]`` when nothing matches. Both pattern endpoints must be
+    bound variables; binding new variables requires ``MATCH SHORTEST``.
+    """
+
+    pattern: PathPatternClause
+    all_paths: bool = False
 
 
 @dataclass(frozen=True)

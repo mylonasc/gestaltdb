@@ -31,6 +31,7 @@ from .cypher_ast import (
     PropertyRef,
     QuantifiedPredicate,
     ReduceExpression,
+    ShortestPathExpression,
     SliceExpression,
     StringPredicate,
     SubscriptExpression,
@@ -79,6 +80,8 @@ def evaluate_expression(expression, bindings: dict[str, object], context) -> obj
         return _evaluate_quantified(expression, bindings, context)
     if isinstance(expression, ExistsExpression):
         return evaluate_expression(expression.expression, bindings, context) is not None
+    if isinstance(expression, ShortestPathExpression):
+        return _evaluate_shortest_path(expression, bindings, context)
     if isinstance(expression, NotExpression):
         value = _boolean_value(evaluate_expression(expression.expression, bindings, context))
         return None if value is None else not value
@@ -375,6 +378,21 @@ def _quantified_match(expression: QuantifiedPredicate, item: object, bindings: d
     if value is None:
         return None
     return value is True
+
+
+def _evaluate_shortest_path(expression: ShortestPathExpression, bindings: dict[str, object], context) -> object:
+    """Evaluate ``shortestPath``/``allShortestPaths`` between bound endpoints."""
+    from .cypher_runtime import _is_node, _shortest_between
+
+    pattern = expression.pattern
+    hop = pattern.hops[0]
+    start = bindings[pattern.source.variable]
+    end = bindings[hop.target.variable]
+    if start is None or end is None:
+        return None if not expression.all_paths else []
+    if not _is_node(start) or not _is_node(end):
+        raise TypeError("shortestPath() endpoints must be nodes")
+    return _shortest_between(context, pattern.source, start, hop, end, expression.all_paths)
 
 
 def project_value(bindings: dict[str, object], return_item: str):

@@ -10,6 +10,7 @@ from .cypher_ast import (
     OrderItem,
     OptionalMatchClause,
     PathPatternClause,
+    PathSelector,
     PropertyRef,
     Query,
     ReturnClause,
@@ -49,6 +50,7 @@ class MatchStep:
     patterns: tuple[PathPatternClause, ...]
     group_id: int
     where: object = None
+    selector: PathSelector | None = None
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,7 @@ class OptionalMatchStep:
     patterns: tuple[PathPatternClause, ...]
     group_id: int
     where: object = None
+    selector: PathSelector | None = None
 
 
 @dataclass(frozen=True)
@@ -228,9 +231,9 @@ def plan_staged_query(query: Query, scope=None) -> LogicalPlan:
             if index + 1 < len(clauses) and isinstance(clauses[index + 1], WhereClause):
                 attached_where = clauses[index + 1].expression
             if isinstance(clause, OptionalMatchClause):
-                operators.append(OptionalMatchStep(clause.patterns, group_id, attached_where))
+                operators.append(OptionalMatchStep(clause.patterns, group_id, attached_where, clause.selector))
             else:
-                operators.append(MatchStep(clause.patterns, group_id, attached_where))
+                operators.append(MatchStep(clause.patterns, group_id, attached_where, clause.selector))
             group_id += 1
         elif isinstance(clause, UnwindClause):
             operators.append(Unwind(clause.expression, clause.variable))

@@ -167,12 +167,16 @@ SUPPORTED: list[tuple[str, str, str, tuple[str, ...], list[dict[str, object]]]] 
     ("variable-length-path", "[cypher-12]",
      "MATCH (a)-[*1..3]->(b) RETURN a.id, b.id",
      ("a.id", "b.id"), [{"a.id": "a", "b.id": "b"}]),
+    ("shortest-path", "[cypher-13]",
+     'MATCH SHORTEST (x {id: "a"})-[*]->(y) RETURN y.id',
+     ("y.id",), [{"y.id": "b"}]),
+    ("shortest-path-function", "[cypher-13]",
+     'MATCH (x {id: "a"}), (y {id: "b"}) RETURN shortestPath((x)-[*]->(y)) AS path',
+     ("path",), [{"path": ["node:a", "node:b"]}]),
 ]
 
 # (feature, implementing stage issue, query, expected error substring).
 UNSUPPORTED: list[tuple[str, str, str, str]] = [
-    ("shortest-path-function", "[cypher-13]", "MATCH (a) RETURN shortestPath((a)-->(b))",
-     "Unsupported Cypher query"),
     ("path-binding", "[cypher-14]", "MATCH p = (a)-->(b) RETURN p",
      "Unsupported Cypher query"),
     ("create", "[cypher-15]", "CREATE (n:Person) RETURN n",

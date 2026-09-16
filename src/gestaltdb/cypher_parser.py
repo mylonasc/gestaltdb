@@ -35,6 +35,7 @@ from .cypher_ast import (
     OrExpression,
     Parameter,
     PathPatternClause,
+    PathSelector,
     PatternHop,
     ProjectionItem,
     PropertyAccessExpression,
@@ -46,6 +47,7 @@ from .cypher_ast import (
     RelationshipScanQuery,
     ReturnClause,
     SampleTypedPathsCall,
+    ShortestPathExpression,
     SliceExpression,
     SourceSpan,
     StringPredicate,
@@ -72,8 +74,10 @@ _GRAMMAR = r"""
                | "UNION"i -> union_distinct
 
   match_query: (match_clause | optional_match_clause | unwind_clause | call_subquery) (match_clause | optional_match_clause | where_clause | unwind_clause | call_subquery | with_section)* return_full
-  match_clause: "MATCH"i pattern ("," pattern)*
-  optional_match_clause: "OPTIONAL"i "MATCH"i pattern ("," pattern)*
+  match_clause: "MATCH"i shortest_selector? pattern ("," pattern)*
+  optional_match_clause: "OPTIONAL"i "MATCH"i shortest_selector? pattern ("," pattern)*
+  shortest_selector: QUANTIFIER "SHORTEST"i -> shortest_quantified
+                   | "SHORTEST"i INTEGER? -> shortest_k
   unwind_clause: "UNWIND"i expression "AS"i symbolic_name
   call_subquery: "CALL"i "{" match_query "}"
  where_clause: "WHERE"i expression
@@ -143,6 +147,8 @@ property_pair: symbolic_name ":" expression
        | count_star
        | function_call
        | property_access
+       | shortest_single
+       | shortest_all
        | case_expression
        | list_comprehension
        | quantified_predicate
@@ -170,6 +176,8 @@ property_pair: symbolic_name ":" expression
   count_star: symbolic_name "(" STAR ")"
   function_call: symbolic_name "(" DISTINCT? [expression ("," expression)*] ")"
   property_access: (function_call | map_projection | reduce_call) "." symbolic_name
+  shortest_single: SHORTEST_PATH "(" pattern ")"
+  shortest_all: ALL_SHORTEST_PATHS "(" pattern ")"
 property_ref: symbolic_name "." symbolic_name
 variable: symbolic_name
 parameter: "$" symbolic_name
@@ -185,6 +193,8 @@ map_pair: map_key ":" expression
 
  symbolic_name: NAME | BACKTICK_NAME
  DISTINCT.2: /DISTINCT/i
+ SHORTEST_PATH.3: /SHORTESTPATH/i
+ ALL_SHORTEST_PATHS.3: /ALLSHORTESTPATHS/i
  QUANTIFIER.2: /(ALL|ANY|NONE|SINGLE)/i
 ORDER_DIRECTION.2: /ASC|DESC/i
 COMP_OP: "=~" | "<>" | "!=" | "<=" | ">=" | "=" | "<" | ">"
@@ -240,6 +250,7 @@ class _MatchPatterns:
     values: tuple[_Pattern, ...]
     span: SourceSpan
     optional: bool = False
+    selector: PathSelector | None = None
 
 
 @dataclass(frozen=True)
@@ -565,11 +576,41 @@ class _ASTBuilder(Transformer):
 
     @v_args(meta=True)
     def match_clause(self, meta, children):
-        return _MatchPatterns(tuple(children), _source_span(meta))
+        selector = next((item for item in children if isinstance(item, PathSelector)), None)
+        return _MatchPatterns(
+            tuple(item for item in children if isinstance(item, _Pattern)),
+            _source_span(meta),
+            False,
+            selector,
+        )
 
     @v_args(meta=True)
     def optional_match_clause(self, meta, children):
-        return _MatchPatterns(tuple(children), _source_span(meta), True)
+        selector = next((item for item in children if isinstance(item, PathSelector)), None)
+        return _MatchPatterns(
+            tuple(item for item in children if isinstance(item, _Pattern)),
+            _source_span(meta),
+            True,
+            selector,
+        )
+
+    def shortest_quantified(self, children):
+        return PathSelector(str(children[0]).lower(), None)
+
+    def shortest_k(self, children):
+        limit = next(
+            (child for child in children if isinstance(child, Token) and child.type == "INTEGER"),
+            None,
+        )
+        return PathSelector("any", int(limit) if limit is not None else 1)
+
+    def shortest_single(self, children):
+        pattern = next(child for child in children if isinstance(child, _Pattern))
+        return ShortestPathExpression(pattern, False)
+
+    def shortest_all(self, children):
+        pattern = next(child for child in children if isinstance(child, _Pattern))
+        return ShortestPathExpression(pattern, True)
 
     @v_args(meta=True)
     def unwind_clause(self, meta, children):
@@ -716,6 +757,12 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
             "Query cannot be represented by legacy parse(); use parse_ast()",
             query,
         )
+    if any(getattr(clause, "selector", None) is not None for clause in canonical.clauses):
+        raise _located_error(
+            CypherSemanticError,
+            "Query cannot be represented by legacy parse(); use parse_ast()",
+            query,
+        )
     if _canonical_uses_functions(canonical) or _canonical_uses_extended_expressions(canonical):
         raise _located_error(
             CypherSemanticError,
@@ -816,9 +863,9 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
                 raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
             close_projection()
             if item.optional:
-                clauses.append(OptionalMatchClause(item.values, span=item.span))
+                clauses.append(OptionalMatchClause(item.values, span=item.span, selector=item.selector))
             else:
-                clauses.append(MatchClause(item.values, span=item.span))
+                clauses.append(MatchClause(item.values, span=item.span, selector=item.selector))
         elif isinstance(item, _ParsedPart) and item.kind == "where":
             # A WHERE following WITH belongs to that WITH stage, so the open
             # projection must be closed first to preserve textual order.

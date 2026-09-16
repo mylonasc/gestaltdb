@@ -81,6 +81,17 @@ to a list of edges (``[]`` for zero-length matches such as ``*0..1``).
 
    graph_db.query('MATCH (d {id: "drug-1"})-[:binds*1..3]->(p) RETURN p.id')
 
+Shortest paths select minimal-length trails. ``MATCH SHORTEST [k]`` emits
+up to ``k`` shortest matches (one by default), ``MATCH ANY SHORTEST``
+behaves the same, and ``MATCH ALL SHORTEST`` emits every match at the
+minimal length. ``shortestPath`` and ``allShortestPaths`` evaluate a
+single-hop pattern between bound endpoints to node lists (``None`` or
+``[]`` when unreachable).
+
+.. code-block:: python
+
+   graph_db.query('MATCH SHORTEST (d {id: "drug-1"})-[*]->(p) RETURN p.id')
+
 General fixed-length patterns may be unanchored and may filter every node in the
 path. Anonymous nodes and relationships, omitted relationship types, and
 bracketless relationships are supported. Untyped expansion scans canonical edge

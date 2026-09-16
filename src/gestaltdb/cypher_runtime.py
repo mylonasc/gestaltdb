@@ -367,7 +367,7 @@ def apply_match_step(
     """Match one textual ``MATCH`` clause with a fresh isomorphism scope."""
     staged: Iterable[BindingRow] = _reset_used_relationships(rows)
     for pattern in step.patterns:
-        staged = apply_path_pattern_clause(staged, pattern, context, step.where)
+        staged = apply_path_pattern_clause(staged, pattern, context, step.where, step.selector)
     return staged
 
 
@@ -383,7 +383,7 @@ def apply_optional_match_step(
         row = BindingRow.from_row(row)
         staged: Iterable[BindingRow] = iter([row])
         for pattern in step.patterns:
-            staged = apply_path_pattern_clause(staged, pattern, context, step.where)
+            staged = apply_path_pattern_clause(staged, pattern, context, step.where, step.selector)
         matched = False
         for extended in staged:
             matched = True
@@ -746,7 +746,7 @@ def _node_ids_for_labels(parsed: NodeScanQuery, context: QueryContext):
     return iter(sorted(matching_ids or set()))
 
 
-def apply_path_pattern_clause(rows, clause: PathPatternClause, context: QueryContext, where=None):
+def apply_path_pattern_clause(rows, clause: PathPatternClause, context: QueryContext, where=None, selector=None):
     """Apply a generalized fixed-length path pattern to incoming rows.
 
     When the clause-local ``WHERE`` holds an index-eligible predicate on the
@@ -765,7 +765,7 @@ def apply_path_pattern_clause(rows, clause: PathPatternClause, context: QueryCon
             expanded = indexed
             remaining = clause.hops[1:]
         for hop in remaining:
-            expanded = _expand_pattern_hop(context, expanded, hop)
+            expanded = _expand_pattern_hop(context, expanded, hop, selector)
         yield from expanded
 
 
@@ -975,9 +975,9 @@ def _path_start_rows(row, clause: PathPatternClause, context: QueryContext, wher
         yield row.with_bindings(bindings, current_node_id=node_id, preserve_current_node=False)
 
 
-def _expand_pattern_hop(context: QueryContext, rows, hop: PatternHop):
+def _expand_pattern_hop(context: QueryContext, rows, hop: PatternHop, selector=None):
     if (hop.min_length, hop.max_length) != (1, 1):
-        yield from _expand_variable_hop(context, rows, hop)
+        yield from _expand_variable_hop(context, rows, hop, selector)
         return
     for row in rows:
         row = BindingRow.from_row(row)
@@ -1029,13 +1029,16 @@ def _edge_matches_properties(edge, properties, context: QueryContext) -> bool:
     return True
 
 
-def _expand_variable_hop(context: QueryContext, rows, hop: PatternHop):
+def _expand_variable_hop(context: QueryContext, rows, hop: PatternHop, selector=None):
     """Expand variable-length hops with trail semantics (no repeated edges)."""
     for row in rows:
         row = BindingRow.from_row(row)
         if _is_null_bound(row, hop.target.variable) or _is_null_bound(row, hop.rel_var):
             continue
-        yield from _variable_paths(context, row, hop)
+        if selector is None:
+            yield from _variable_paths(context, row, hop)
+        else:
+            yield from _shortest_paths(context, row, hop, selector)
 
 
 def _variable_paths(context: QueryContext, row: BindingRow, hop: PatternHop):
@@ -1060,14 +1063,38 @@ def _variable_paths(context: QueryContext, row: BindingRow, hop: PatternHop):
                 )
     if hop.max_length == 0:
         return
-    frontier = [(start_id, [], row.used_relationship_ids)]
-    depth = 0
-    while frontier:
-        depth += 1
-        if hop.max_length is not None and depth > hop.max_length:
+    for neighbor_id, target_node, path_edges, path_used, _node_ids in _bfs_trails(
+        context, start_id, hop, row.used_relationship_ids
+    ):
+        if hop.max_length is not None and len(path_edges) > hop.max_length:
             break
+        if len(path_edges) < hop.min_length:
+            continue
+        if not _node_matches_pattern(target_node, hop.target.labels, hop.target.properties, context):
+            continue
+        bindings = dict(row.bindings)
+        if _bind_variable(bindings, hop.target.variable, target_node) and _bind_variable(
+            bindings, hop.rel_var, path_edges
+        ):
+            yield row.with_bindings(
+                bindings,
+                current_node_id=neighbor_id,
+                preserve_current_node=False,
+                used_relationship_ids=path_used,
+            )
+
+
+def _bfs_trails(context: QueryContext, start_id: bytes, hop: PatternHop, used_ids):
+    """Breadth-first yield ``(neighbor_id, target, edges, used, node_ids)`` trails.
+
+    Trails never repeat a relationship; frontier order guarantees
+    non-decreasing length. Node labels and target properties are left to
+    callers so intermediate nodes stay unconstrained.
+    """
+    frontier = [(start_id, [], used_ids, [start_id])]
+    while frontier:
         next_frontier = []
-        for node_id, edges, used in frontier:
+        for node_id, edges, used, node_ids in frontier:
             for adjacency in _iter_pattern_adjacency(context, node_id, hop):
                 edge_id = adjacency["edge_id"]
                 neighbor_id = adjacency["neighbor_id"]
@@ -1083,21 +1110,120 @@ def _variable_paths(context: QueryContext, row: BindingRow, hop: PatternHop):
                     continue
                 path_edges = edges + [edge]
                 path_used = used.union((edge_id,))
-                if depth >= hop.min_length and _node_matches_pattern(
-                    target_node, hop.target.labels, hop.target.properties, context
-                ):
-                    bindings = dict(row.bindings)
-                    if _bind_variable(bindings, hop.target.variable, target_node) and _bind_variable(
-                        bindings, hop.rel_var, path_edges
-                    ):
-                        yield row.with_bindings(
-                            bindings,
-                            current_node_id=neighbor_id,
-                            preserve_current_node=False,
-                            used_relationship_ids=path_used,
-                        )
-                next_frontier.append((neighbor_id, path_edges, path_used))
+                path_nodes = node_ids + [neighbor_id]
+                yield neighbor_id, target_node, path_edges, path_used, path_nodes
+                next_frontier.append((neighbor_id, path_edges, path_used, path_nodes))
         frontier = next_frontier
+
+
+def _shortest_paths(context: QueryContext, row: BindingRow, hop: PatternHop, selector):
+    """Enumerate shortest trails for a ``SHORTEST`` selector.
+
+    ``mode "any"`` emits up to ``limit`` shortest matches; ``mode "all"``
+    emits every match at the minimal matching length.
+    """
+    start_id = row.current_node_id
+    if start_id is None:
+        return
+    mode, limit = selector.mode, selector.limit
+    emitted = 0
+    first_length: int | None = None
+    if hop.min_length == 0:
+        start_node = context.get_node(start_id)
+        if start_node is not None and _node_matches_pattern(
+            start_node, hop.target.labels, hop.target.properties, context
+        ):
+            bindings = dict(row.bindings)
+            if _bind_variable(bindings, hop.target.variable, start_node) and _bind_variable(
+                bindings, hop.rel_var, []
+            ):
+                yield row.with_bindings(
+                    bindings,
+                    current_node_id=start_id,
+                    preserve_current_node=False,
+                    used_relationship_ids=row.used_relationship_ids,
+                )
+                emitted += 1
+                first_length = 0
+                if mode == "any" and emitted >= (limit or 1):
+                    return
+    if hop.max_length == 0:
+        return
+    for neighbor_id, target_node, path_edges, path_used, _node_ids in _bfs_trails(
+        context, start_id, hop, row.used_relationship_ids
+    ):
+        length = len(path_edges)
+        if hop.max_length is not None and length > hop.max_length:
+            break
+        if length < hop.min_length:
+            continue
+        if not _node_matches_pattern(target_node, hop.target.labels, hop.target.properties, context):
+            continue
+        if first_length is None:
+            first_length = length
+        if mode == "all" and length != first_length:
+            break
+        bindings = dict(row.bindings)
+        if not (
+            _bind_variable(bindings, hop.target.variable, target_node)
+            and _bind_variable(bindings, hop.rel_var, path_edges)
+        ):
+            continue
+        yield row.with_bindings(
+            bindings,
+            current_node_id=neighbor_id,
+            preserve_current_node=False,
+            used_relationship_ids=path_used,
+        )
+        emitted += 1
+        if mode == "any" and emitted >= (limit or 1):
+            return
+
+
+def _shortest_between(context: QueryContext, source_pattern, start, hop: PatternHop, target, all_paths: bool):
+    """Evaluate ``shortestPath`` between two bound nodes.
+
+    Returns a node list (single shortest trail) or a list of node lists, or
+    ``None``/``[]`` when nothing matches. Only single-hop patterns qualify;
+    longer patterns belong to ``MATCH SHORTEST``.
+    """
+    if not _endpoint_matches_pattern(context, source_pattern, start):
+        return None if not all_paths else []
+    start_id = context.node_key_to_bytes(start.get_id)
+    target_id = context.node_key_to_bytes(target.get_id)
+    matches: list[list] = []
+    first_length: int | None = None
+    for neighbor_id, _target_node, _edges, _used, node_ids in _bfs_trails(
+        context, start_id, hop, frozenset()
+    ):
+        length = len(node_ids) - 1
+        if hop.max_length is not None and length > hop.max_length:
+            break
+        if length < hop.min_length or neighbor_id != target_id:
+            continue
+        nodes = [context.get_node(node_id) for node_id in node_ids]
+        if any(node is None for node in nodes):
+            continue
+        if not _node_matches_pattern(nodes[-1], hop.target.labels, hop.target.properties, context):
+            continue
+        if not all_paths:
+            return nodes
+        if first_length is None:
+            first_length = length
+        if length != first_length:
+            break
+        matches.append(nodes)
+    return matches if all_paths else None
+
+
+def _endpoint_matches_pattern(context: QueryContext, pattern, node) -> bool:
+    """Return whether a bound endpoint satisfies inline labels and properties."""
+    properties = tuple(item for item in pattern.properties if item[0] != "id")
+    identity = next((value for name, value in pattern.properties if name == "id"), None)
+    if identity is not None:
+        if _cypher_equals(node.get_id, context.resolve(identity)) is not True:
+            return False
+    return _node_matches_pattern(node, pattern.labels, properties, context)
 
 
 def _bind_variable(bindings: dict[str, object], variable: str | None, value: object) -> bool:

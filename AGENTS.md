@@ -86,6 +86,7 @@ Supported features include:
 - Relationship property maps (`-[r:T {score: 1}]->`) with literal or parameter values.
 - Anchored and unanchored fixed-length paths, anonymous pattern elements, endpoint filters, and comma-separated pattern parts.
 - Variable-length paths (`*`, `*m..n`) with trail semantics and relationship-list bindings.
+- Shortest-path matching (`SHORTEST [k]`, `ANY SHORTEST`, `ALL SHORTEST`, `shortestPath`, `allShortestPaths`).
 - `WHERE` with arithmetic, expression comparisons, `NOT`/`AND`/`XOR`/`OR`, `IN`, null predicates, string predicates, regex matching, quantified predicates (`all`/`any`/`none`/`single`), and `exists(property)`.
 - Cypher three-valued null logic for predicates.
 - `RETURN`, aliases, `RETURN *`, general projection expressions (including `CASE`, subscripts/slices, list comprehensions, `reduce`, map projections), `DISTINCT`, alias-aware `ORDER BY`, and literal or parameterized `SKIP`/`LIMIT`.

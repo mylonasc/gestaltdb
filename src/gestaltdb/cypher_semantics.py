@@ -31,6 +31,7 @@ from .cypher_ast import (
     Query,
     ReduceExpression,
     ReturnClause,
+    ShortestPathExpression,
     SliceExpression,
     SourceSpan,
     StringPredicate,
@@ -264,6 +265,8 @@ def expression_variables(expression: object) -> tuple[str, ...]:
         return expression_variables(expression.expression)
     if isinstance(expression, PropertyAccessExpression):
         return expression_variables(expression.expression)
+    if isinstance(expression, ShortestPathExpression):
+        return _shortest_path_variables(expression)
     if isinstance(expression, list):
         return tuple(variable for item in expression for variable in expression_variables(item))
     if isinstance(expression, dict):
@@ -280,6 +283,18 @@ def _free_variables(parts: tuple[object | None, ...], bound: set[str]) -> tuple[
         for variable in expression_variables(item)
         if variable not in bound
     )
+
+
+def _shortest_path_variables(expression: ShortestPathExpression) -> tuple[str, ...]:
+    """Return endpoint variables correlated by a shortest-path call."""
+    pattern = expression.pattern
+    variables = []
+    if pattern.source.variable is not None:
+        variables.append(pattern.source.variable)
+    for hop in pattern.hops:
+        if hop.target.variable is not None:
+            variables.append(hop.target.variable)
+    return tuple(variables)
 
 
 def render_projection(expression: object) -> str:
@@ -361,6 +376,9 @@ def render_projection(expression: object) -> str:
         return f"exists({render_projection(expression.expression)})"
     if isinstance(expression, PropertyAccessExpression):
         return f"{render_projection(expression.expression)}.{expression.property_name}"
+    if isinstance(expression, ShortestPathExpression):
+        name = "allShortestPaths" if expression.all_paths else "shortestPath"
+        return f"{name}({_render_pattern(expression.pattern)})"
     if isinstance(expression, list):
         return "[" + ", ".join(render_projection(item) for item in expression) + "]"
     if isinstance(expression, dict):
@@ -370,6 +388,55 @@ def render_projection(expression: object) -> str:
         distinct = "DISTINCT " if expression.distinct else ""
         return f"{expression.name}({distinct}{rendered})"
     raise ValueError(f"Cannot render projection expression: {expression!r}")
+
+
+def _render_pattern(pattern) -> str:
+    """Render a path pattern deterministically for column names."""
+    rendered = _render_node_pattern(pattern.source)
+    for hop in pattern.hops:
+        rendered += _render_hop(hop)
+    return rendered
+
+
+def _render_node_pattern(node) -> str:
+    rendered = f"({node.variable or ''}"
+    for label in node.labels:
+        rendered += f":{label}"
+    if node.properties:
+        rendered += " {" + ", ".join(
+            f"{name}: {render_projection(value)}" for name, value in node.properties
+        ) + "}"
+    return rendered + ")"
+
+
+def _render_hop(hop) -> str:
+    text = "["
+    if hop.rel_var is not None:
+        text += hop.rel_var
+    if hop.edge_types:
+        text += ":" + "|".join(hop.edge_types)
+    if (hop.min_length, hop.max_length) == (1, 1):
+        suffix = ""
+    elif hop.max_length is None:
+        suffix = "*" if hop.min_length == 1 else f"*{hop.min_length}.."
+    elif hop.min_length == hop.max_length:
+        suffix = f"*{hop.min_length}"
+    elif hop.min_length == 1:
+        suffix = f"*..{hop.max_length}"
+    else:
+        suffix = f"*{hop.min_length}..{hop.max_length}"
+    text += suffix
+    if hop.properties:
+        text += " {" + ", ".join(
+            f"{name}: {render_projection(value)}" for name, value in hop.properties
+        ) + "}"
+    text += "]"
+    target = _render_node_pattern(hop.target)
+    if hop.direction == "in":
+        return f"<-{text}-{target}"
+    if hop.direction == "any":
+        return f"-{text}-{target}"
+    return f"-{text}->{target}"
 
 
 def _render_map_projection_item(item: tuple) -> str:
@@ -426,6 +493,8 @@ def contains_function_call(expression: object) -> bool:
         return contains_function_call(expression.expression)
     if isinstance(expression, PropertyAccessExpression):
         return contains_function_call(expression.expression)
+    if isinstance(expression, ShortestPathExpression):
+        return False
     if isinstance(expression, list):
         return any(contains_function_call(item) for item in expression)
     if isinstance(expression, dict):
@@ -452,6 +521,7 @@ def contains_extended_expression(expression: object) -> bool:
             QuantifiedPredicate,
             ExistsExpression,
             PropertyAccessExpression,
+            ShortestPathExpression,
         ),
     ):
         return True
@@ -540,6 +610,8 @@ def _child_expressions(expression: object) -> tuple[object, ...]:
         return (expression.expression,)
     if isinstance(expression, PropertyAccessExpression):
         return (expression.expression,)
+    if isinstance(expression, ShortestPathExpression):
+        return ()
     return ()
 
 
@@ -639,6 +711,8 @@ def _iter_function_calls(expression: object) -> Iterator[FunctionCall]:
         yield from _iter_function_calls(expression.expression)
     elif isinstance(expression, PropertyAccessExpression):
         yield from _iter_function_calls(expression.expression)
+    elif isinstance(expression, ShortestPathExpression):
+        return
     elif isinstance(expression, list):
         for item in expression:
             yield from _iter_function_calls(item)
@@ -685,6 +759,16 @@ def _analyze_match(clause: MatchClause, scope: Scope, source: str) -> Scope:
                 )
             introduce(hop.rel_var, SymbolKind.RELATIONSHIP)
             introduce(hop.target.variable, SymbolKind.NODE)
+    selector = getattr(clause, "selector", None)
+    if selector is not None:
+        if selector.mode not in ("any", "all"):
+            _raise_semantic(
+                "SHORTEST selector must be SHORTEST, ANY SHORTEST, or ALL SHORTEST",
+                source,
+                clause.span,
+            )
+        if selector.limit is not None and selector.limit < 1:
+            _raise_semantic("SHORTEST limit must be a positive integer", source, clause.span)
     return Scope(tuple(symbols))
 
 
@@ -744,6 +828,60 @@ def _validate_expression(expression: object, scope: Scope, source: str, clause: 
     for variable in expression_variables(expression):
         if scope.resolve(variable) is None:
             _raise_semantic(f"{clause} references unbound variable: {variable}", source, span, variable)
+    for path_expression in _iter_shortest_path_calls(expression):
+        _validate_shortest_path_call(path_expression, source, span)
+
+
+def _iter_shortest_path_calls(expression: object) -> Iterator[ShortestPathExpression]:
+    """Yield shortest-path calls anywhere in an expression tree."""
+    if isinstance(expression, ShortestPathExpression):
+        yield expression
+        return
+    for child in _child_expressions(expression):
+        yield from _iter_shortest_path_calls(child)
+    if isinstance(expression, FunctionCall):
+        for argument in expression.arguments:
+            yield from _iter_shortest_path_calls(argument)
+    elif isinstance(expression, (ComparisonExpression, ArithmeticExpression, StringPredicate)):
+        yield from _iter_shortest_path_calls(expression.left)
+        yield from _iter_shortest_path_calls(expression.right)
+    elif isinstance(expression, InExpression):
+        yield from _iter_shortest_path_calls(expression.left)
+        yield from _iter_shortest_path_calls(expression.values)
+    elif isinstance(expression, (NullPredicate, NotExpression, UnaryExpression)):
+        yield from _iter_shortest_path_calls(expression.expression)
+    elif isinstance(expression, (AndExpression, OrExpression, XorExpression)):
+        for item in expression.expressions:
+            yield from _iter_shortest_path_calls(item)
+    elif isinstance(expression, (ListExpression, list)):
+        for item in expression.items if isinstance(expression, ListExpression) else expression:
+            yield from _iter_shortest_path_calls(item)
+    elif isinstance(expression, MapExpression):
+        for _, item in expression.items:
+            yield from _iter_shortest_path_calls(item)
+    elif isinstance(expression, dict):
+        for item in expression.values():
+            yield from _iter_shortest_path_calls(item)
+
+
+def _validate_shortest_path_call(
+    expression: ShortestPathExpression, source: str, span: SourceSpan | None
+) -> None:
+    """Validate the shape of a shortest-path call pattern."""
+    pattern = expression.pattern
+    if len(pattern.hops) != 1:
+        _raise_semantic(
+            "shortestPath() requires a single-hop pattern; match variable-length paths with MATCH SHORTEST",
+            source,
+            span,
+        )
+    hop = pattern.hops[0]
+    if pattern.source.variable is None or hop.target.variable is None:
+        _raise_semantic(
+            "shortestPath() pattern endpoints must be bound variables",
+            source,
+            span,
+        )
 
 
 def _merge_scopes(first: Scope, second: Scope) -> Scope:
