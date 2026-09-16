@@ -19,7 +19,7 @@ from .cypher_ast import (
 from .cypher_parser import parse as _parse_query
 from .cypher_parser import parse_ast as _parse_ast
 from .cypher_parser import split_top_level_args as _split_top_level_args  # noqa: F401
-from .cypher_plan import LogicalPlan, plan_query, plan_staged_query, plan_union_query
+from .cypher_plan import CreateStep, LogicalPlan, RemoveStep, SetStep, plan_query, plan_staged_query, plan_union_query
 from .cypher_runtime import (
     QueryContext,
     execute_plan,
@@ -113,6 +113,8 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
     Examples:
         >>> execute(graph_db, 'MATCH (n:Drug) RETURN n')  # doctest: +SKIP
     """
+    from .cypher_write import transaction_supported
+
     canonical = _parse_ast(query)
     if isinstance(canonical, SampleTypedPathsCall):
         logical_plan = plan_query(canonical)
@@ -120,8 +122,20 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
         logical_plan = plan_union_query(canonical)
     else:
         logical_plan = plan_staged_query(canonical)
-    records = execute_plan(
-        logical_plan,
-        QueryContext(graph=graph, parameters=parameters or {}),
-    )
+    if _plan_has_writes(logical_plan) and transaction_supported(graph):
+        with graph.transaction() as tx_graph:
+            records = execute_plan(
+                logical_plan,
+                QueryContext(graph=tx_graph, parameters=parameters or {}),
+            )
+    else:
+        records = execute_plan(
+            logical_plan,
+            QueryContext(graph=graph, parameters=parameters or {}),
+        )
     return QueryResult(columns=logical_plan.columns, records=records)
+
+
+def _plan_has_writes(plan: LogicalPlan) -> bool:
+    """Return whether a plan contains mutating operators."""
+    return any(isinstance(operator, (CreateStep, SetStep, RemoveStep)) for operator in plan.operators)

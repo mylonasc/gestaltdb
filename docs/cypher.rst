@@ -1,12 +1,12 @@
 Cypher Queries
 ==============
 
-GestaltDB exposes an expanding, read-only openCypher subset through
+GestaltDB exposes an expanding openCypher subset through
 ``GraphDB.query(cypher, parameters=None)``. The grammar-based frontend supports
 comments, Unicode and backtick-escaped names, source-located syntax errors, and
-standard expression precedence. Execution remains focused on indexed node
-scans, typed relationship expansion, filtering, ordering, and chained ``MATCH``
-clauses.
+standard expression precedence. Execution covers indexed node
+scans, typed relationship expansion, filtering, ordering, chained ``MATCH``
+clauses, and ``CREATE``/``SET``/``REMOVE`` writes.
 
 Relationship types come from ``edge.properties["type"]``. Node labels are stored
 on ``Node(labels=[...])``.
@@ -99,6 +99,27 @@ inspect path values; bound paths remain usable downstream like any variable.
 .. code-block:: python
 
    graph_db.query('MATCH p = (d:Drug)-[:binds]->(t:Target) RETURN length(p) AS hops')
+
+Writes
+------
+
+``CREATE`` builds nodes and relationships. Bound variables are reused while
+fresh ones are created (nodes get a UUID unless the properties supply
+``id``); created relationships need exactly one type. ``SET`` updates
+properties (``n.prop = expr``), adds labels (``n:Label``), merges maps
+(``n += map``), or replaces all properties (``n = map``). ``REMOVE`` drops
+properties or labels. All updates copy on write, apply per input row with
+snapshot input semantics, and treat ``None`` targets as a null-safe no-op.
+
+.. code-block:: python
+
+   graph_db.query('CREATE (d:Drug {id: "drug-9", name: "New"}) RETURN d.id')
+   graph_db.query('MATCH (d {id: "drug-9"}) SET d.score = 0.9 RETURN d.score')
+
+Write queries run inside a backend transaction when one is supported
+(LMDB, transactional PyRex) and roll back on failure; other backends apply
+best-effort direct writes. Later clauses in the same query always observe
+earlier writes.
 
 General fixed-length patterns may be unanchored and may filter every node in the
 path. Anonymous nodes and relationships, omitted relationship types, and
@@ -365,7 +386,7 @@ Current Limitations
 Syntax and semantic failures are ``ValueError`` subclasses with source
 locations. The current Cypher API does not yet support:
 
-- mutating queries such as ``CREATE``, ``SET``, ``DELETE``, or ``MERGE``
+- mutating queries beyond ``CREATE``, ``SET``, and ``REMOVE`` (such as ``DELETE`` or ``MERGE``)
 - pattern comprehensions, ``exists()`` with a pattern argument, and quantified path patterns
 - scalar functions beyond the documented core set
 - generic procedures

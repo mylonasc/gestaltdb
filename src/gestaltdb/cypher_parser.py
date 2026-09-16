@@ -15,6 +15,7 @@ from .cypher_ast import (
     ArithmeticExpression,
     CaseExpression,
     ComparisonExpression,
+    CreateClause,
     ExistsExpression,
     FunctionCall,
     InExpression,
@@ -45,8 +46,16 @@ from .cypher_ast import (
     ReduceExpression,
     RelationshipPatternClause,
     RelationshipScanQuery,
+    RemoveClause,
+    RemoveLabels,
+    RemoveProperty,
     ReturnClause,
     SampleTypedPathsCall,
+    SetClause,
+    SetLabels,
+    SetMerge,
+    SetProperty,
+    SetReplace,
     ShortestPathExpression,
     SliceExpression,
     SourceSpan,
@@ -73,11 +82,20 @@ _GRAMMAR = r"""
  union_operator: "UNION"i "ALL"i -> union_all
                | "UNION"i -> union_distinct
 
-  match_query: (match_clause | optional_match_clause | unwind_clause | call_subquery) (match_clause | optional_match_clause | where_clause | unwind_clause | call_subquery | with_section)* return_full
+  match_query: (match_clause | optional_match_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause) (match_clause | optional_match_clause | where_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | with_section)* return_full
   match_clause: "MATCH"i shortest_selector? pattern ("," pattern)*
   optional_match_clause: "OPTIONAL"i "MATCH"i shortest_selector? pattern ("," pattern)*
   shortest_selector: QUANTIFIER "SHORTEST"i -> shortest_quantified
                    | "SHORTEST"i INTEGER? -> shortest_k
+  create_clause: "CREATE"i pattern ("," pattern)*
+  set_clause: "SET"i set_item ("," set_item)*
+  set_item: symbolic_name "." symbolic_name COMP_OP expression -> set_property
+          | symbolic_name PLUS_EQ expression -> set_merge
+          | symbolic_name COMP_OP expression -> set_replace
+          | symbolic_name (":" symbolic_name)+ -> set_labels
+  remove_clause: "REMOVE"i remove_item ("," remove_item)*
+  remove_item: symbolic_name "." symbolic_name -> remove_property
+             | symbolic_name (":" symbolic_name)+ -> remove_labels
   unwind_clause: "UNWIND"i expression "AS"i symbolic_name
   call_subquery: "CALL"i "{" match_query "}"
  where_clause: "WHERE"i expression
@@ -202,8 +220,9 @@ map_pair: map_key ":" expression
  ALL_SHORTEST_PATHS.3: /ALLSHORTESTPATHS/i
  QUANTIFIER.2: /(ALL|ANY|NONE|SINGLE)/i
 ORDER_DIRECTION.2: /ASC|DESC/i
-COMP_OP: "=~" | "<>" | "!=" | "<=" | ">=" | "=" | "<" | ">"
-ADD_OP: "+" | "-"
+ COMP_OP: "=~" | "<>" | "!=" | "<=" | ">=" | "=" | "<" | ">"
+ PLUS_EQ: "+="
+ ADD_OP: "+" | "-"
  MUL_OP: "/" | "%"
 STAR: "*"
 INTEGER: /[0-9]+/
@@ -672,6 +691,61 @@ class _ASTBuilder(Transformer):
     def call_subquery(self, meta, children):
         return _ParsedPart("subquery", children[0], _source_span(meta))
 
+    @v_args(meta=True)
+    def create_clause(self, meta, children):
+        return _ParsedPart("create", tuple(children), _source_span(meta))
+
+    @v_args(meta=True)
+    def set_property(self, meta, children):
+        operator = next(child for child in children if isinstance(child, Token))
+        if str(operator) != "=":
+            raise CypherSyntaxError(
+                "SET property assignment must use =",
+                line=meta.line,
+                column=meta.column,
+                offset=meta.start_pos,
+                source="",
+            )
+        parts = [child for child in children if not isinstance(child, Token)]
+        return SetProperty(parts[0], parts[1], parts[2])
+
+    def set_merge(self, children):
+        parts = [child for child in children if not isinstance(child, Token)]
+        return SetMerge(parts[0], parts[1])
+
+    @v_args(meta=True)
+    def set_replace(self, meta, children):
+        operator = next(child for child in children if isinstance(child, Token))
+        if str(operator) != "=":
+            raise CypherSyntaxError(
+                "SET map assignment must use =",
+                line=meta.line,
+                column=meta.column,
+                offset=meta.start_pos,
+                source="",
+            )
+        parts = [child for child in children if not isinstance(child, Token)]
+        return SetReplace(parts[0], parts[1])
+
+    def set_labels(self, children):
+        names = [child for child in children if isinstance(child, str)]
+        return SetLabels(names[0], tuple(names[1:]))
+
+    @v_args(meta=True)
+    def set_clause(self, meta, children):
+        return _ParsedPart("set", tuple(children), _source_span(meta))
+
+    def remove_property(self, children):
+        return RemoveProperty(children[0], children[1])
+
+    def remove_labels(self, children):
+        names = [child for child in children if isinstance(child, str)]
+        return RemoveLabels(names[0], tuple(names[1:]))
+
+    @v_args(meta=True)
+    def remove_clause(self, meta, children):
+        return _ParsedPart("remove", tuple(children), _source_span(meta))
+
     def union_all(self, _children):
         return True
 
@@ -803,7 +877,7 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
             query,
         )
     canonical = _build_canonical_query(parsed, query)
-    if any(isinstance(clause, (WithClause, OptionalMatchClause, UnwindClause, SubqueryClause)) for clause in canonical.clauses):
+    if any(isinstance(clause, (WithClause, OptionalMatchClause, UnwindClause, SubqueryClause, CreateClause, SetClause, RemoveClause)) for clause in canonical.clauses):
         raise _located_error(
             CypherSemanticError,
             "Query cannot be represented by legacy parse(); use parse_ast()",
@@ -849,6 +923,10 @@ def _build_union_query(parsed, query: str) -> UnionQuery:
             branches_raw.append(item)
     branches = tuple(_build_canonical_query(branch, query) for branch in branches_raw)
     for branch in branches:
+        if any(isinstance(clause, (CreateClause, SetClause, RemoveClause)) for clause in branch.clauses):
+            raise _located_error(
+                CypherSemanticError, "UNION branches must be read-only", query
+            )
         analyze_query(branch)
     return UnionQuery(branches, tuple(flags), query, span=_query_span(query))
 
@@ -930,6 +1008,21 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
         elif isinstance(item, _ParsedPart) and item.kind == "subquery":
             close_projection()
             clauses.append(SubqueryClause(_build_canonical_query(item.value, query), span=item.span))
+        elif isinstance(item, _ParsedPart) and item.kind == "create":
+            if pending_kind == "return":
+                raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
+            close_projection()
+            for pattern in item.value:
+                _validate_pattern_literals(pattern, query)
+            clauses.append(CreateClause(item.value, span=item.span))
+        elif isinstance(item, _ParsedPart) and item.kind in ("set", "remove"):
+            if pending_kind == "return":
+                raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
+            close_projection()
+            if item.kind == "set":
+                clauses.append(SetClause(item.value, span=item.span))
+            else:
+                clauses.append(RemoveClause(item.value, span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind in ("with", "return"):
             close_projection()
             pending_kind = item.kind

@@ -23,12 +23,15 @@ from .cypher_expr import _cypher_equals, evaluate_expression, project_value
 from .cypher_plan import Aggregate as LogicalAggregate
 from .cypher_plan import (
     CallSubquery,
+    CreateStep,
     LogicalPlan,
     MatchStep,
     OptionalMatchStep,
     ProcedureCall,
     ProcedureSource,
     ProjectItems,
+    RemoveStep,
+    SetStep,
     Union,
     Unwind,
 )
@@ -299,7 +302,7 @@ def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, obj
     if len(plan.operators) == 1 and isinstance(plan.operators[0], Union):
         return _execute_union(plan.operators[0], context)
     if plan.staged or any(
-        isinstance(operator, (MatchStep, OptionalMatchStep, Unwind, CallSubquery, ProjectItems, LogicalAggregate)) for operator in plan.operators
+        isinstance(operator, (MatchStep, OptionalMatchStep, Unwind, CallSubquery, CreateStep, SetStep, RemoveStep, ProjectItems, LogicalAggregate)) for operator in plan.operators
     ):
         return _execute_staged(plan, context)
     if not isinstance(plan.source, ProcedureSource):
@@ -583,17 +586,27 @@ def _execute_staged(
                 bindings = apply_optional_match_step(bindings if bindings is not None else iter(()), operator, context)
             else:
                 bindings = apply_match_step(bindings if bindings is not None else iter(()), operator, context)
-        elif isinstance(operator, (Unwind, CallSubquery)):
+        elif isinstance(operator, (Unwind, CallSubquery, CreateStep, SetStep, RemoveStep)):
             if projected is not None:
                 bindings = (
                     BindingRow(bindings=dict(row.values), current_node_id=None)
                     for row in projected
                 )
                 projected = None
+            stream = bindings if bindings is not None else iter(())
             if isinstance(operator, CallSubquery):
-                bindings = apply_call_subquery(bindings if bindings is not None else iter(()), operator, context)
+                bindings = apply_call_subquery(stream, operator, context)
+            elif isinstance(operator, Unwind):
+                bindings = apply_unwind(stream, operator, context)
             else:
-                bindings = apply_unwind(bindings if bindings is not None else iter(()), operator, context)
+                from .cypher_write import apply_create, apply_remove, apply_set
+
+                if isinstance(operator, CreateStep):
+                    bindings = apply_create(stream, operator, context)
+                elif isinstance(operator, SetStep):
+                    bindings = apply_set(stream, operator, context)
+                else:
+                    bindings = apply_remove(stream, operator, context)
         elif isinstance(operator, LogicalFilterExpression):
             if projected is not None:
                 projected = filter_projected(projected, operator.expression, context)

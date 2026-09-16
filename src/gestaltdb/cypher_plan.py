@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .cypher_ast import (
+    CreateClause,
     FunctionCall,
     MatchClause,
     OrderItem,
@@ -13,8 +14,10 @@ from .cypher_ast import (
     PathSelector,
     PropertyRef,
     Query,
+    RemoveClause,
     ReturnClause,
     SampleTypedPathsCall,
+    SetClause,
     SubqueryClause,
     UnionQuery,
     UnwindClause,
@@ -82,6 +85,27 @@ class CallSubquery:
 
     plan: LogicalPlan
     returns: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class CreateStep:
+    """Create the nodes and edges of one textual ``CREATE`` per input row."""
+
+    patterns: tuple[PathPatternClause, ...]
+
+
+@dataclass(frozen=True)
+class SetStep:
+    """Apply one textual ``SET`` per input row with copy-on-write."""
+
+    items: tuple[object, ...]
+
+
+@dataclass(frozen=True)
+class RemoveStep:
+    """Apply one textual ``REMOVE`` per input row with copy-on-write."""
+
+    items: tuple[object, ...]
 
 
 @dataclass(frozen=True)
@@ -241,6 +265,12 @@ def plan_staged_query(query: Query, scope=None) -> LogicalPlan:
             entry = by_clause[id(clause)]
             subquery_plan = plan_staged_query(clause.query, entry.scope_before)
             operators.append(CallSubquery(subquery_plan, subquery_plan.columns))
+        elif isinstance(clause, CreateClause):
+            operators.append(CreateStep(clause.patterns))
+        elif isinstance(clause, SetClause):
+            operators.append(SetStep(clause.items))
+        elif isinstance(clause, RemoveClause):
+            operators.append(RemoveStep(clause.items))
         elif isinstance(clause, WhereClause):
             operators.append(FilterExpression(clause.expression))
         elif isinstance(clause, (WithClause, ReturnClause)):

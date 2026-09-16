@@ -182,14 +182,16 @@ SUPPORTED: list[tuple[str, str, str, tuple[str, ...], list[dict[str, object]]]] 
     ("path-binding", "[cypher-14]",
      "MATCH p = (a)-[r:KNOWS]->(b) RETURN length(p) AS len",
      ("len",), [{"len": 1}]),
+    ("create", "[cypher-15]",
+     'CREATE (n:Person {id: "c", age: 50}) RETURN n.id',
+     ("n.id",), [{"n.id": "c"}]),
+    ("set", "[cypher-15]",
+     'MATCH (n {id: "a"}) SET n.age = 31 RETURN n.age',
+     ("n.age",), [{"n.age": 31}]),
 ]
 
 # (feature, implementing stage issue, query, expected error substring).
 UNSUPPORTED: list[tuple[str, str, str, str]] = [
-    ("create", "[cypher-15]", "CREATE (n:Person) RETURN n",
-     "Unsupported Cypher query"),
-    ("set", "[cypher-15]", "MATCH (n) SET n.age = 1 RETURN n",
-     "Unsupported Cypher query"),
     ("delete", "[cypher-16]", "MATCH (n) DELETE n",
      "Unsupported Cypher query"),
     ("merge", "[cypher-17]", "MERGE (n:Person) RETURN n",

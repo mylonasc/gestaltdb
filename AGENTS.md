@@ -77,7 +77,7 @@ Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes 
 
 ## Cypher Support
 
-Use `GraphDB.query(cypher, parameters=None)` for read-only Cypher. It returns `QueryResult(columns, records)`, and iterating over the result yields record dictionaries.
+Use `GraphDB.query(cypher, parameters=None)` for Cypher reads and writes. It returns `QueryResult(columns, records)`, and iterating over the result yields record dictionaries.
 
 Supported features include:
 
@@ -89,6 +89,7 @@ Supported features include:
 - Variable-length paths (`*`, `*m..n`) with trail semantics and relationship-list bindings.
 - Shortest-path matching (`SHORTEST [k]`, `ANY SHORTEST`, `ALL SHORTEST`, `shortestPath`, `allShortestPaths`).
 - Path binding (`p = (a)-[:T]->(b)`) with path values plus `nodes()`/`relationships()`/`length(p)` accessors.
+- `CREATE` (fresh UUIDs unless properties supply `id`, bound-node reuse), `SET` (`prop=`/`+=`/`=`/labels), and `REMOVE`, executed per row inside a backend transaction when supported.
 - `WHERE` with arithmetic, expression comparisons, `NOT`/`AND`/`XOR`/`OR`, `IN`, null predicates, string predicates, regex matching, quantified predicates (`all`/`any`/`none`/`single`), and `exists(property)`.
 - Cypher three-valued null logic for predicates.
 - `RETURN`, aliases, `RETURN *`, general projection expressions (including `CASE`, subscripts/slices, list comprehensions, `reduce`, map projections), `DISTINCT`, alias-aware `ORDER BY`, and literal or parameterized `SKIP`/`LIMIT`.
@@ -102,7 +103,7 @@ Supported features include:
 - Core scalar functions (`coalesce`, `id`/`elementId`, `type`, `labels`, `startNode`/`endNode`, `properties`, `head`/`last`, `size`/`length`, `toBoolean`/`toInteger`/`toFloat`/`toString`, string ops, math ops including `sign`/`exp`/`log`/`sin`/`cos`/`tan`/`pi`/`e`, `rand`/`randomUUID`, `range`, `reverse`, `tail`, `keys`), including property access on computed values such as `startNode(r).name`.
 - GestaltDB-specific `CALL pg.sample_typed_paths(...) YIELD path RETURN path`.
 
-Unsupported Cypher currently includes mutating clauses, pattern comprehensions, `exists()` with patterns, and quantified path patterns.
+Unsupported Cypher currently includes mutating clauses beyond `CREATE`/`SET`/`REMOVE` (such as `DELETE`, `MERGE`), pattern comprehensions, `exists()` with patterns, and quantified path patterns.
 
 ## Sampling APIs
 

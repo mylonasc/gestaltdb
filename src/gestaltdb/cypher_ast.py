@@ -76,6 +76,79 @@ class UnwindClause:
 
 
 @dataclass(frozen=True)
+class SetProperty:
+    """A ``SET n.prop = <expression>`` item."""
+
+    variable: str
+    property_name: str
+    expression: object
+
+
+@dataclass(frozen=True)
+class SetLabels:
+    """A ``SET n:Label`` item."""
+
+    variable: str
+    labels: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SetMerge:
+    """A ``SET n += <map>`` item merging properties."""
+
+    variable: str
+    expression: object
+
+
+@dataclass(frozen=True)
+class SetReplace:
+    """A ``SET n = <map>`` item replacing all properties."""
+
+    variable: str
+    expression: object
+
+
+@dataclass(frozen=True)
+class RemoveProperty:
+    """A ``REMOVE n.prop`` item."""
+
+    variable: str
+    property_name: str
+
+
+@dataclass(frozen=True)
+class RemoveLabels:
+    """A ``REMOVE n:Label`` item."""
+
+    variable: str
+    labels: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CreateClause:
+    """One ``CREATE`` with comma-separated patterns creating nodes and edges."""
+
+    patterns: tuple[PathPatternClause, ...]
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
+class SetClause:
+    """One ``SET`` with comma-separated mutation items."""
+
+    items: tuple[object, ...]
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
+class RemoveClause:
+    """One ``REMOVE`` with comma-separated removal items."""
+
+    items: tuple[object, ...]
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
 class SubqueryClause:
     """One ``CALL { ... }`` correlated subquery over an inner clause query."""
 

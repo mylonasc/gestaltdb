@@ -3142,7 +3142,11 @@ class GraphDB:
             self.store.put_range_index_entries_bulk(range_entries)
 
     def query(self, cypher: str, parameters: Optional[dict[str, object]] = None):
-        """Execute a supported read-only Cypher query.
+        """Execute a supported Cypher query.
+
+        Read queries run directly; queries with ``CREATE``/``SET``/``REMOVE``
+        run inside :meth:`transaction` when the backend supports it and fall
+        back to best-effort direct writes otherwise.
 
         Args:
             cypher: Query text in the supported GestaltDB Cypher subset.

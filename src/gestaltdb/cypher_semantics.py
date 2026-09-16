@@ -11,6 +11,7 @@ from .cypher_ast import (
     ArithmeticExpression,
     CaseExpression,
     ComparisonExpression,
+    CreateClause,
     ExistsExpression,
     FunctionCall,
     InExpression,
@@ -30,7 +31,11 @@ from .cypher_ast import (
     QuantifiedPredicate,
     Query,
     ReduceExpression,
+    RemoveClause,
+    RemoveLabels,
     ReturnClause,
+    SetClause,
+    SetLabels,
     ShortestPathExpression,
     SliceExpression,
     SourceSpan,
@@ -171,6 +176,11 @@ def _analyze_query_with_scope(query: Query, initial: Scope) -> QueryAnalysis:
                 clause.expression, query.source, clause.span, allow_aggregate=False, clause="UNWIND"
             )
             scope = Scope((*scope.symbols, Symbol(clause.variable, SymbolKind.VALUE, clause.span)))
+        elif isinstance(clause, CreateClause):
+            scope = _analyze_create(clause, scope, query.source)
+        elif isinstance(clause, (SetClause, RemoveClause)):
+            label = "SET" if isinstance(clause, SetClause) else "REMOVE"
+            _validate_write_items(clause, scope, query.source, label)
         elif isinstance(clause, (WithClause, ReturnClause)):
             label = "WITH" if isinstance(clause, WithClause) else "RETURN"
             projections = _resolve_projections(clause, scope, query.source, label)
@@ -725,6 +735,102 @@ def _render_string_literal(value: str) -> str:
     """Render a string literal with double quotes and minimal escaping."""
     escaped = value.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
+
+
+def _analyze_create(clause: CreateClause, scope: Scope, source: str) -> Scope:
+    """Introduce created variables; bound nodes are reused, rels must be fresh."""
+    symbols = list(scope.symbols)
+    by_name = {symbol.name: symbol for symbol in symbols}
+
+    def introduce_fresh(name: str | None, kind: SymbolKind, what: str) -> None:
+        if name is None:
+            return
+        if name in by_name:
+            _raise_semantic(
+                f"Variable {name} is already defined and cannot be created as {what}",
+                source,
+                clause.span,
+                name,
+            )
+        symbol = Symbol(name, kind, clause.span)
+        symbols.append(symbol)
+        by_name[name] = symbol
+
+    def introduce_node(name: str | None) -> None:
+        if name is None:
+            return
+        previous = by_name.get(name)
+        if previous is not None:
+            if previous.kind != SymbolKind.NODE:
+                _raise_semantic(
+                    f"Variable {name} cannot be used as both a node and a relationship",
+                    source,
+                    clause.span,
+                    name,
+                )
+            return
+        symbol = Symbol(name, SymbolKind.NODE, clause.span)
+        symbols.append(symbol)
+        by_name[name] = symbol
+
+    for pattern in clause.patterns:
+        if pattern.source.label_expression is not None:
+            _raise_semantic(
+                "CREATE requires concrete labels, not label expressions",
+                source,
+                clause.span,
+            )
+        for hop in pattern.hops:
+            if (hop.min_length, hop.max_length) != (1, 1):
+                _raise_semantic(
+                    "CREATE does not support variable-length relationships",
+                    source,
+                    clause.span,
+                )
+            if len(hop.edge_types) != 1:
+                _raise_semantic(
+                    "CREATE relationships must specify exactly one type",
+                    source,
+                    clause.span,
+                )
+            if hop.target.label_expression is not None:
+                _raise_semantic(
+                    "CREATE requires concrete labels, not label expressions",
+                    source,
+                    clause.span,
+                )
+        introduce_node(pattern.source.variable)
+        for hop in pattern.hops:
+            introduce_fresh(hop.rel_var, SymbolKind.RELATIONSHIP, "a relationship")
+            introduce_node(hop.target.variable)
+        if pattern.name is not None:
+            introduce_fresh(pattern.name, SymbolKind.VALUE, "a path")
+    return Scope(tuple(symbols))
+
+
+def _validate_write_items(clause, scope: Scope, source: str, label: str) -> None:
+    """Validate ``SET``/``REMOVE`` targets and right-hand expressions."""
+    for item in clause.items:
+        symbol = scope.resolve(item.variable)
+        if symbol is None:
+            _raise_semantic(
+                f"{label} references unbound variable: {item.variable}",
+                source,
+                clause.span,
+                item.variable,
+            )
+        needs_node = isinstance(item, (SetLabels, RemoveLabels))
+        if needs_node and symbol.kind != SymbolKind.NODE:
+            _raise_semantic(
+                f"{label} labels requires a node variable: {item.variable}",
+                source,
+                clause.span,
+                item.variable,
+            )
+        expression = getattr(item, "expression", None)
+        if expression is not None:
+            _validate_expression(expression, scope, source, label, clause.span)
+            validate_function_calls(expression, source, clause.span, allow_aggregate=False, clause=label)
 
 
 def _analyze_match(clause: MatchClause, scope: Scope, source: str) -> Scope:
