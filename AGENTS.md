@@ -83,6 +83,7 @@ Supported features include:
 
 - Node scans by label, multiple labels, multi-entry inline property maps, and parameters.
 - Typed relationship traversal using `edge.properties["type"]`, plus canonical all-edge scans for untyped patterns.
+- Relationship property maps (`-[r:T {score: 1}]->`) with literal or parameter values.
 - Anchored and unanchored fixed-length paths, anonymous pattern elements, endpoint filters, and comma-separated pattern parts.
 - `WHERE` with arithmetic, expression comparisons, `NOT`/`AND`/`XOR`/`OR`, `IN`, null predicates, string predicates, regex matching, quantified predicates (`all`/`any`/`none`/`single`), and `exists(property)`.
 - Cypher three-valued null logic for predicates.
@@ -97,7 +98,7 @@ Supported features include:
 - Core scalar functions (`coalesce`, `id`/`elementId`, `type`, `labels`, `startNode`/`endNode`, `properties`, `head`/`last`, `size`/`length`, `toBoolean`/`toInteger`/`toFloat`/`toString`, string ops, math ops including `sign`/`exp`/`log`/`sin`/`cos`/`tan`/`pi`/`e`, `rand`/`randomUUID`, `range`, `reverse`, `tail`, `keys`), including property access on computed values such as `startNode(r).name`.
 - GestaltDB-specific `CALL pg.sample_typed_paths(...) YIELD path RETURN path`.
 
-Unsupported Cypher currently includes mutating clauses, variable-length paths, relationship property maps, and path binding such as `p = (a)-[:T]->(b)`.
+Unsupported Cypher currently includes mutating clauses, variable-length paths, and path binding such as `p = (a)-[:T]->(b)`.
 
 ## Sampling APIs
 

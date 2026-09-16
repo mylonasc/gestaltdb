@@ -817,6 +817,8 @@ def _hydrate_indexed_edge(row, clause: PathPatternClause, hop: PatternHop, conte
     edge = context.get_edge(edge_id)
     if edge is None:
         return
+    if hop.properties and not _edge_matches_properties(edge, hop.properties, context):
+        return
     source_id = context.node_key_to_bytes(edge.source)
     target_id = context.node_key_to_bytes(edge.target)
     source_node = context.get_node(source_id)
@@ -994,10 +996,13 @@ def _expand_pattern_hop(context: QueryContext, rows, hop: PatternHop):
                 if bound_target is not None and not same_entity(bound_target, target_node):
                     continue
                 bindings[hop.target.variable] = target_node
-            if hop.rel_var is not None:
+            if hop.rel_var is not None or hop.properties:
                 edge = context.get_edge(edge_id)
                 if edge is None:
                     continue
+                if hop.properties and not _edge_matches_properties(edge, hop.properties, context):
+                    continue
+            if hop.rel_var is not None:
                 bound_edge = bindings.get(hop.rel_var)
                 if bound_edge is not None and not same_entity(bound_edge, edge):
                     continue
@@ -1008,6 +1013,15 @@ def _expand_pattern_hop(context: QueryContext, rows, hop: PatternHop):
                 preserve_current_node=False,
                 used_relationship_ids=row.used_relationship_ids.union((edge_id,)),
             )
+
+
+def _edge_matches_properties(edge, properties, context: QueryContext) -> bool:
+    """Return whether an edge satisfies inline relationship properties."""
+    edge_properties = getattr(edge, "properties", {}) or {}
+    for name, expected in properties:
+        if _cypher_equals(edge_properties.get(name), context.resolve(expected)) is not True:
+            return False
+    return True
 
 
 def _is_null_bound(row: BindingRow, variable: str | None) -> bool:

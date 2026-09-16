@@ -65,6 +65,13 @@ Unanchored typed relationship scans are also supported.
    graph_db.query('MATCH (a)-[r:binds]->(b) RETURN a.id, r.id, b.id')
    graph_db.query('MATCH (a)-[r:binds|inhibits]->(b) RETURN r.id ORDER BY r.id')
 
+Relationship patterns accept inline property maps with literal or parameter
+values, which filter matched edges in both typed and untyped expansions.
+
+.. code-block:: python
+
+   graph_db.query('MATCH (a)-[r:binds {score: 0.9}]->(b) RETURN r.id, b.id')
+
 General fixed-length patterns may be unanchored and may filter every node in the
 path. Anonymous nodes and relationships, omitted relationship types, and
 bracketless relationships are supported. Untyped expansion scans canonical edge
@@ -335,4 +342,4 @@ locations. The current Cypher API does not yet support:
 - path values such as ``p = (a)-[:T]->(b)``, pattern comprehensions, and ``exists()`` with a pattern argument
 - scalar functions beyond the documented core set
 - generic procedures
-- relationship property maps and quantified path patterns
+- quantified path patterns

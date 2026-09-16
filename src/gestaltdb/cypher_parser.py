@@ -103,7 +103,7 @@ property_pair: symbolic_name ":" expression
 ?traversal_hop: "-" relationship? "->" node_pattern -> out_hop
               | "<-" relationship? "-" node_pattern -> in_hop
               | "-" relationship? "-" node_pattern -> any_hop
-relationship: "[" symbolic_name? rel_type_spec? "]"
+ relationship: "[" symbolic_name? rel_type_spec? properties? "]"
 rel_type_spec: ":" rel_types
 rel_types: rel_name ("|" rel_name)*
 rel_name: REL_NAME | BACKTICK_NAME
@@ -508,19 +508,20 @@ class _ASTBuilder(Transformer):
     def relationship(self, children):
         rel_var = next((item for item in children if isinstance(item, str)), None)
         edge_types = next((item.values for item in children if isinstance(item, _RelationshipTypes)), ())
-        return rel_var, edge_types
+        properties = next((item.values for item in children if isinstance(item, _Properties)), ())
+        return rel_var, edge_types, properties
 
     def out_hop(self, children):
-        relationship, node = (children if len(children) == 2 else ((None, ()), children[0]))
-        return _Hop(relationship[0], relationship[1], node, "out")
+        relationship, node = (children if len(children) == 2 else ((None, (), ()), children[0]))
+        return _Hop(relationship[0], relationship[1], node, "out", relationship[2])
 
     def in_hop(self, children):
-        relationship, node = (children if len(children) == 2 else ((None, ()), children[0]))
-        return _Hop(relationship[0], relationship[1], node, "in")
+        relationship, node = (children if len(children) == 2 else ((None, (), ()), children[0]))
+        return _Hop(relationship[0], relationship[1], node, "in", relationship[2])
 
     def any_hop(self, children):
-        relationship, node = (children if len(children) == 2 else ((None, ()), children[0]))
-        return _Hop(relationship[0], relationship[1], node, "any")
+        relationship, node = (children if len(children) == 2 else ((None, (), ()), children[0]))
+        return _Hop(relationship[0], relationship[1], node, "any", relationship[2])
 
     def pattern(self, children):
         return _Pattern(children[0], tuple(children[1:]))
@@ -923,6 +924,7 @@ def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = Fa
         and not node.properties
         and not pattern.hops[0].target.labels
         and not pattern.hops[0].target.properties
+        and not pattern.hops[0].properties
     ):
         hop = pattern.hops[0]
         if hop.direction == "in":
@@ -938,7 +940,7 @@ def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = Fa
         and not node.labels
         and set(properties) == {"id"}
         and isinstance(properties.get("id"), str)
-        and all(hop.edge_types and hop.target.variable is not None and not hop.target.labels and not hop.target.properties for hop in pattern.hops)
+        and all(hop.edge_types and hop.target.variable is not None and not hop.target.labels and not hop.target.properties and not hop.properties for hop in pattern.hops)
     ):
         hops = tuple(TraversalHop(hop.rel_var, hop.edge_types[0], hop.target.variable, hop.direction, hop.edge_types) for hop in pattern.hops)
         return AnchoredPatternClause(node.variable, properties["id"], hops)
@@ -978,6 +980,10 @@ def _canonical_uses_extended_expressions(canonical: Query) -> bool:
 def _validate_pattern_literals(pattern: _Pattern, query: str) -> None:
     for pattern_node in (pattern.source, *(hop.target for hop in pattern.hops)):
         for _, value in pattern_node.properties:
+            if not _is_plain_value(value):
+                raise _located_error(CypherSemanticError, "Invalid Cypher literal", query)
+    for hop in pattern.hops:
+        for _, value in hop.properties:
             if not _is_plain_value(value):
                 raise _located_error(CypherSemanticError, "Invalid Cypher literal", query)
 

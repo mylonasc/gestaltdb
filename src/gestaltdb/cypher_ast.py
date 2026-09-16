@@ -395,6 +395,7 @@ class PatternHop:
     edge_types: tuple[str, ...]
     target: NodePattern
     direction: str = "out"
+    properties: tuple[tuple[str, object], ...] = ()
 
 
 @dataclass(frozen=True)

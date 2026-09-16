@@ -29,7 +29,7 @@ def _conformance_graph() -> FakeCypherGraph:
     graph.put_node(Node(node_id="a", labels=["Person"], properties={"age": 30}))
     graph.put_node(Node(node_id="b", labels=["Person"], properties={"age": 40}))
     graph.put_edge(
-        Edge(edge_id="e1", source="a", target="b", properties={"type": "KNOWS"})
+        Edge(edge_id="e1", source="a", target="b", properties={"type": "KNOWS", "score": 0.9})
     )
     return graph
 
@@ -161,12 +161,13 @@ SUPPORTED: list[tuple[str, str, str, tuple[str, ...], list[dict[str, object]]]] 
     ("call-subquery", "[cypher-10]",
      "MATCH (n:Person) WHERE n.age = 30 CALL { MATCH (m:Person) WHERE m.age = 40 RETURN m AS o } RETURN n.id, o.id",
      ("n.id", "o.id"), [{"n.id": "a", "o.id": "b"}]),
+    ("relationship-property-map", "[cypher-11]",
+     "MATCH (a)-[r:KNOWS {score: 0.9}]->(b) RETURN r.id",
+     ("r.id",), [{"r.id": "e1"}]),
 ]
 
 # (feature, implementing stage issue, query, expected error substring).
 UNSUPPORTED: list[tuple[str, str, str, str]] = [
-    ("relationship-property-map", "[cypher-11]", "MATCH (a)-[r:T {score: 1}]->(b) RETURN r",
-     "Unsupported Cypher query"),
     ("variable-length-path", "[cypher-12]", "MATCH (a)-[*1..3]->(b) RETURN a",
      "Unsupported Cypher query"),
     ("shortest-path-function", "[cypher-13]", "MATCH (a) RETURN shortestPath((a)-->(b))",
