@@ -49,6 +49,7 @@ from .cypher_ast import (
     SliceExpression,
     SourceSpan,
     StringPredicate,
+    SubqueryClause,
     SubscriptExpression,
     TraversalHop,
     UnaryExpression,
@@ -70,10 +71,11 @@ _GRAMMAR = r"""
  union_operator: "UNION"i "ALL"i -> union_all
                | "UNION"i -> union_distinct
 
-  match_query: (match_clause | optional_match_clause | unwind_clause) (match_clause | optional_match_clause | where_clause | unwind_clause | with_section)* return_full
+  match_query: (match_clause | optional_match_clause | unwind_clause | call_subquery) (match_clause | optional_match_clause | where_clause | unwind_clause | call_subquery | with_section)* return_full
   match_clause: "MATCH"i pattern ("," pattern)*
   optional_match_clause: "OPTIONAL"i "MATCH"i pattern ("," pattern)*
   unwind_clause: "UNWIND"i expression "AS"i symbolic_name
+  call_subquery: "CALL"i "{" match_query "}"
  where_clause: "WHERE"i expression
  with_section: with_clause where_clause? order_clause? skip_clause? limit_clause?
  with_clause: "WITH"i DISTINCT? return_items
@@ -535,6 +537,10 @@ class _ASTBuilder(Transformer):
     def unwind_clause(self, meta, children):
         return _ParsedPart("unwind", (children[0], children[1]), _source_span(meta))
 
+    @v_args(meta=True)
+    def call_subquery(self, meta, children):
+        return _ParsedPart("subquery", children[0], _source_span(meta))
+
     def union_all(self, _children):
         return True
 
@@ -666,7 +672,7 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
             query,
         )
     canonical = _build_canonical_query(parsed, query)
-    if any(isinstance(clause, (WithClause, OptionalMatchClause, UnwindClause)) for clause in canonical.clauses):
+    if any(isinstance(clause, (WithClause, OptionalMatchClause, UnwindClause, SubqueryClause)) for clause in canonical.clauses):
         raise _located_error(
             CypherSemanticError,
             "Query cannot be represented by legacy parse(); use parse_ast()",
@@ -784,6 +790,9 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
             close_projection()
             expression, variable = item.value
             clauses.append(UnwindClause(expression, variable, span=item.span))
+        elif isinstance(item, _ParsedPart) and item.kind == "subquery":
+            close_projection()
+            clauses.append(SubqueryClause(_build_canonical_query(item.value, query), span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind in ("with", "return"):
             close_projection()
             pending_kind = item.kind

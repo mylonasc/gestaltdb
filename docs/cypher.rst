@@ -271,6 +271,23 @@ first-seen order. Mixed operators fold left.
        'UNION MATCH (p:Protein) RETURN p.id AS id'
    )
 
+CALL Subqueries
+---------------
+
+``CALL { ... }`` runs a correlated subquery once per input row. The inner
+query sees outer bindings, and its ``RETURN`` outputs merge into the outer
+row (shadowing same-named variables); outer rows with an empty subquery
+result are dropped. Parameters work everywhere, including ``SKIP``/``LIMIT``,
+regular expressions, ``IN`` lists, and inside subqueries.
+
+.. code-block:: python
+
+   graph_db.query(
+       'MATCH (d:Drug) '
+       'CALL { MATCH (d)-[:binds]->(p:Protein) RETURN p } '
+       'RETURN d.id, p.id'
+   )
+
 Sampling Procedure
 ------------------
 
@@ -317,5 +334,5 @@ locations. The current Cypher API does not yet support:
 - variable-length paths
 - path values such as ``p = (a)-[:T]->(b)``, pattern comprehensions, and ``exists()`` with a pattern argument
 - scalar functions beyond the documented core set
-- subqueries or generic procedures
+- generic procedures
 - relationship property maps and quantified path patterns

@@ -14,6 +14,7 @@ from .cypher_ast import (
     Query,
     ReturnClause,
     SampleTypedPathsCall,
+    SubqueryClause,
     UnionQuery,
     UnwindClause,
     Variable,
@@ -70,6 +71,14 @@ class Unwind:
 
     expression: object
     variable: str
+
+
+@dataclass(frozen=True)
+class CallSubquery:
+    """Execute an inner plan per input row and merge its records into bindings."""
+
+    plan: LogicalPlan
+    returns: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -194,16 +203,19 @@ def plan_union_query(query: UnionQuery) -> LogicalPlan:
     )
 
 
-def plan_staged_query(query: Query) -> LogicalPlan:
+def plan_staged_query(query: Query, scope=None) -> LogicalPlan:
     """Plan a canonical query with ``WITH`` stages as executable operators.
 
     Operator order within each projection clause follows Cypher semantics:
     project, then ``DISTINCT``, then the ``WHERE`` filter owned by that
     stage, then ``ORDER BY``, ``SKIP``, and ``LIMIT``.
+
+    ``scope`` seeds the initial scope so correlated subqueries resolve outer
+    variables; top-level queries start empty.
     """
     from .cypher_semantics import analyze_query
 
-    analysis = analyze_query(query)
+    analysis = analyze_query(query, scope) if scope is not None else analyze_query(query)
     by_clause = {id(entry.clause): entry for entry in analysis.clauses}
     operators: list[object] = []
     group_id = 0
@@ -222,6 +234,10 @@ def plan_staged_query(query: Query) -> LogicalPlan:
             group_id += 1
         elif isinstance(clause, UnwindClause):
             operators.append(Unwind(clause.expression, clause.variable))
+        elif isinstance(clause, SubqueryClause):
+            entry = by_clause[id(clause)]
+            subquery_plan = plan_staged_query(clause.query, entry.scope_before)
+            operators.append(CallSubquery(subquery_plan, subquery_plan.columns))
         elif isinstance(clause, WhereClause):
             operators.append(FilterExpression(clause.expression))
         elif isinstance(clause, (WithClause, ReturnClause)):

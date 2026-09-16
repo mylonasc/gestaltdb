@@ -158,12 +158,13 @@ SUPPORTED: list[tuple[str, str, str, tuple[str, ...], list[dict[str, object]]]] 
     ("union-all", "[cypher-09]",
      "MATCH (n:Person) WHERE n.age = 30 RETURN n.id AS id UNION ALL MATCH (n:Person) WHERE n.age = 30 RETURN n.id AS id",
      ("id",), [{"id": "a"}, {"id": "a"}]),
+    ("call-subquery", "[cypher-10]",
+     "MATCH (n:Person) WHERE n.age = 30 CALL { MATCH (m:Person) WHERE m.age = 40 RETURN m AS o } RETURN n.id, o.id",
+     ("n.id", "o.id"), [{"n.id": "a", "o.id": "b"}]),
 ]
 
 # (feature, implementing stage issue, query, expected error substring).
 UNSUPPORTED: list[tuple[str, str, str, str]] = [
-    ("call-subquery", "[cypher-10]", "CALL { MATCH (n) RETURN n } RETURN n",
-     "Unsupported Cypher query"),
     ("relationship-property-map", "[cypher-11]", "MATCH (a)-[r:T {score: 1}]->(b) RETURN r",
      "Unsupported Cypher query"),
     ("variable-length-path", "[cypher-12]", "MATCH (a)-[*1..3]->(b) RETURN a",

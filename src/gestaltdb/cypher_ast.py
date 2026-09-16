@@ -62,6 +62,14 @@ class UnwindClause:
 
 
 @dataclass(frozen=True)
+class SubqueryClause:
+    """One ``CALL { ... }`` correlated subquery over an inner clause query."""
+
+    query: Query
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
 class UnionQuery:
     """Two or more branch queries combined with ``UNION [ALL]``.
 

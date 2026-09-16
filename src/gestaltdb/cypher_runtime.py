@@ -20,6 +20,7 @@ from .cypher_ast import (
 from .cypher_expr import _cypher_equals, evaluate_expression, project_value
 from .cypher_plan import Aggregate as LogicalAggregate
 from .cypher_plan import (
+    CallSubquery,
     LogicalPlan,
     MatchStep,
     OptionalMatchStep,
@@ -296,7 +297,7 @@ def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, obj
     if len(plan.operators) == 1 and isinstance(plan.operators[0], Union):
         return _execute_union(plan.operators[0], context)
     if plan.staged or any(
-        isinstance(operator, (MatchStep, OptionalMatchStep, Unwind, ProjectItems, LogicalAggregate)) for operator in plan.operators
+        isinstance(operator, (MatchStep, OptionalMatchStep, Unwind, CallSubquery, ProjectItems, LogicalAggregate)) for operator in plan.operators
     ):
         return _execute_staged(plan, context)
     if not isinstance(plan.source, ProcedureSource):
@@ -420,6 +421,33 @@ def apply_unwind(rows: Iterable[BindingRow], unwind: Unwind, context: QueryConte
             yield row.with_bindings(bindings)
 
 
+def apply_call_subquery(
+    rows: Iterable[BindingRow], call: CallSubquery, context: QueryContext
+) -> Iterable[BindingRow]:
+    """Execute an inner plan per input row and merge its records into bindings.
+
+    Outer rows with an empty subquery result are dropped (correlated join).
+    Returned values overwrite same-named outer bindings.
+    """
+    for row in rows:
+        row = BindingRow.from_row(row)
+        seed = row.with_bindings(
+            dict(row.bindings),
+            preserve_current_node=False,
+            current_node_id=None,
+            used_relationship_ids=frozenset(),
+        )
+        for record in _execute_staged(call.plan, context, initial=[seed]):
+            merged = dict(seed.bindings)
+            merged.update(record)
+            yield seed.with_bindings(
+                merged,
+                preserve_current_node=False,
+                current_node_id=None,
+                used_relationship_ids=frozenset(),
+            )
+
+
 def _pattern_variables(pattern: PathPatternClause) -> tuple[str, ...]:
     """Return variable names introduced by one path pattern."""
     variables = []
@@ -528,9 +556,15 @@ def filter_projected(
             yield row
 
 
-def _execute_staged(plan: LogicalPlan, context: QueryContext) -> list[dict[str, object]]:
-    """Execute a multi-stage ``WITH`` plan, threading scopes between stages."""
-    bindings: Iterable[BindingRow] | None = iter([BindingRow(bindings={})])
+def _execute_staged(
+    plan: LogicalPlan, context: QueryContext, initial: Iterable[BindingRow] | None = None
+) -> list[dict[str, object]]:
+    """Execute a multi-stage ``WITH`` plan, threading scopes between stages.
+
+    ``initial`` seeds the binding stream for correlated execution (such as
+    ``CALL`` subqueries); top-level queries start from one empty row.
+    """
+    bindings: Iterable[BindingRow] | None = iter(initial) if initial is not None else iter([BindingRow(bindings={})])
     projected: Iterable[ProjectedRow] | None = None
     view = ProjectionView(())
     for operator in plan.operators:
@@ -545,14 +579,17 @@ def _execute_staged(plan: LogicalPlan, context: QueryContext) -> list[dict[str, 
                 bindings = apply_optional_match_step(bindings if bindings is not None else iter(()), operator, context)
             else:
                 bindings = apply_match_step(bindings if bindings is not None else iter(()), operator, context)
-        elif isinstance(operator, Unwind):
+        elif isinstance(operator, (Unwind, CallSubquery)):
             if projected is not None:
                 bindings = (
                     BindingRow(bindings=dict(row.values), current_node_id=None)
                     for row in projected
                 )
                 projected = None
-            bindings = apply_unwind(bindings if bindings is not None else iter(()), operator, context)
+            if isinstance(operator, CallSubquery):
+                bindings = apply_call_subquery(bindings if bindings is not None else iter(()), operator, context)
+            else:
+                bindings = apply_unwind(bindings if bindings is not None else iter(()), operator, context)
         elif isinstance(operator, LogicalFilterExpression):
             if projected is not None:
                 projected = filter_projected(projected, operator.expression, context)

@@ -34,6 +34,7 @@ from .cypher_ast import (
     SliceExpression,
     SourceSpan,
     StringPredicate,
+    SubqueryClause,
     SubscriptExpression,
     UnaryExpression,
     UnwindClause,
@@ -132,9 +133,18 @@ class QueryAnalysis:
         return self.clauses[-1].output_names if self.clauses else ()
 
 
-def analyze_query(query: Query) -> QueryAnalysis:
-    """Analyze a canonical query left-to-right and resolve its scopes."""
-    scope = Scope()
+def analyze_query(query: Query, scope: Scope | None = None) -> QueryAnalysis:
+    """Analyze a canonical query left-to-right and resolve its scopes.
+
+    ``scope`` seeds the initial scope so correlated subqueries resolve outer
+    variables; top-level queries start empty.
+    """
+    return _analyze_query_with_scope(query, scope or Scope())
+
+
+def _analyze_query_with_scope(query: Query, initial: Scope) -> QueryAnalysis:
+    """Analyze a canonical query from a given incoming scope."""
+    scope = Scope(initial.symbols)
     snapshots: list[ClauseAnalysis] = []
     previous: object | None = None
 
@@ -143,8 +153,14 @@ def analyze_query(query: Query) -> QueryAnalysis:
         projections: tuple[ResolvedProjection, ...] = ()
         if isinstance(clause, (MatchClause, OptionalMatchClause)):
             scope = _analyze_match(clause, scope, query.source)
+        elif isinstance(clause, SubqueryClause):
+            inner = _analyze_query_with_scope(clause.query, scope)
+            exported = inner.final_scope.symbols
+            shadowed = {symbol.name for symbol in exported}
+            kept = tuple(symbol for symbol in scope.symbols if symbol.name not in shadowed)
+            scope = Scope(kept + exported)
         elif isinstance(clause, WhereClause):
-            if not isinstance(previous, (MatchClause, OptionalMatchClause, WithClause)):
+            if not isinstance(previous, (MatchClause, OptionalMatchClause, WithClause, SubqueryClause)):
                 _raise_semantic("WHERE must immediately follow MATCH or WITH", query.source, clause.span)
             _validate_expression(clause.expression, scope, query.source, "WHERE", clause.span)
             validate_function_calls(clause.expression, query.source, clause.span, allow_aggregate=False)
