@@ -92,6 +92,7 @@ Supported features include:
 - `CREATE` (fresh UUIDs unless properties supply `id`, bound-node reuse), `SET` (`prop=`/`+=`/`=`/labels), `REMOVE`, and `DELETE`/`DETACH DELETE` (relationship-existence check vs cascade), executed per row inside a backend transaction when supported.
 - `MERGE pattern [ON CREATE SET ...][ON MATCH SET ...]` matching or creating idempotently within the per-query atomicity boundary.
 - `FOREACH (x IN list | ...)` write-only loop with scoped loop variables and post-loop entity refresh.
+- Persisted single-property node `UNIQUE` and `IS NOT NULL` constraints through `CREATE CONSTRAINT`, `DROP CONSTRAINT`, and `SHOW CONSTRAINTS`, enforced on Cypher writes.
 - `WHERE` with arithmetic, expression comparisons, `NOT`/`AND`/`XOR`/`OR`, `IN`, null predicates, string predicates, regex matching, quantified predicates (`all`/`any`/`none`/`single`), and `exists(property)`.
 - Cypher three-valued null logic for predicates.
 - `RETURN`, aliases, `RETURN *`, general projection expressions (including `CASE`, subscripts/slices, list comprehensions, `reduce`, map projections), `DISTINCT`, alias-aware `ORDER BY`, and literal or parameterized `SKIP`/`LIMIT`.
@@ -105,7 +106,7 @@ Supported features include:
 - Core scalar functions (`coalesce`, `id`/`elementId`, `type`, `labels`, `startNode`/`endNode`, `properties`, `head`/`last`, `size`/`length`, `toBoolean`/`toInteger`/`toFloat`/`toString`, string ops, math ops including `sign`/`exp`/`log`/`sin`/`cos`/`tan`/`pi`/`e`, `rand`/`randomUUID`, `range`, `reverse`, `tail`, `keys`), including property access on computed values such as `startNode(r).name`.
 - GestaltDB-specific `CALL pg.sample_typed_paths(...) YIELD path RETURN path`.
 
-Unsupported Cypher currently includes mutating clauses beyond `CREATE`/`SET`/`REMOVE` (such as `DELETE`, `MERGE`), pattern comprehensions, `exists()` with patterns, and quantified path patterns.
+Unsupported Cypher currently includes mutating clauses beyond `CREATE`/`SET`/`REMOVE`/`DELETE`/`MERGE`/`FOREACH`, pattern comprehensions, `exists()` with patterns, quantified path patterns, and relationship or multi-property constraints.
 
 ## Sampling APIs
 

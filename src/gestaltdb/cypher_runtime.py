@@ -54,6 +54,7 @@ class QueryContext:
     parameters: dict[str, object] = field(default_factory=dict)
     node_cache: dict[bytes, object] = field(default_factory=dict)
     edge_cache: dict[bytes, object] = field(default_factory=dict)
+    label_cardinalities: dict[str, int] = field(default_factory=dict)
 
     def node_key_to_bytes(self, node_key):
         return self.graph.node_key_to_bytes(node_key)
@@ -374,7 +375,7 @@ def apply_match_step(
 ) -> Iterable[BindingRow]:
     """Match one textual ``MATCH`` clause with a fresh isomorphism scope."""
     staged: Iterable[BindingRow] = _reset_used_relationships(rows)
-    for pattern in step.patterns:
+    for pattern in _order_match_patterns(step.patterns, context):
         staged = apply_path_pattern_clause(staged, pattern, context, step.where, step.selector)
     return staged
 
@@ -390,7 +391,7 @@ def apply_optional_match_step(
     for row in _reset_used_relationships(rows):
         row = BindingRow.from_row(row)
         staged: Iterable[BindingRow] = iter([row])
-        for pattern in step.patterns:
+        for pattern in _order_match_patterns(step.patterns, context):
             staged = apply_path_pattern_clause(staged, pattern, context, step.where, step.selector)
         matched = False
         for extended in staged:
@@ -625,6 +626,9 @@ def _execute_staged(
                     bindings = apply_remove(stream, operator, context)
                 else:
                     bindings = apply_delete(stream, operator, context)
+                # A downstream LIMIT shapes returned rows; it must not truncate
+                # the side effects of an earlier mutating clause.
+                bindings = iter(list(bindings))
         elif isinstance(operator, LogicalFilterExpression):
             if projected is not None:
                 projected = filter_projected(projected, operator.expression, context)
@@ -962,11 +966,11 @@ def _indexed_first_hop_rows(row, clause: PathPatternClause, context: QueryContex
     eligible predicate), in which case the caller falls back to adjacency
     expansion.
     """
-    if where is None or not clause.hops:
+    if not clause.hops:
         return None
     hop = clause.hops[0]
     source = clause.source
-    if hop.rel_var is None or not hop.edge_types:
+    if not hop.edge_types:
         return None
     if (hop.min_length, hop.max_length) != (1, 1):
         return None
@@ -974,7 +978,7 @@ def _indexed_first_hop_rows(row, clause: PathPatternClause, context: QueryContex
         return None
     if any(name == "id" for name, _ in source.properties):
         return None
-    spec = _edge_seek_spec(hop.rel_var, where, context)
+    spec = _edge_seek_spec(hop.rel_var, hop.properties, where, context)
     if spec is None:
         return None
     return _iter_indexed_first_hop(row, clause, hop, context, spec)
@@ -1036,10 +1040,11 @@ def _hydrate_indexed_edge(row, clause: PathPatternClause, hop: PatternHop, conte
             if bound_target is not None and not same_entity(bound_target, neighbor_node):
                 continue
             bindings[hop.target.variable] = neighbor_node
-        bound_edge = bindings.get(hop.rel_var)
-        if bound_edge is not None and not same_entity(bound_edge, edge):
-            continue
-        bindings[hop.rel_var] = edge
+        if hop.rel_var is not None:
+            bound_edge = bindings.get(hop.rel_var)
+            if bound_edge is not None and not same_entity(bound_edge, edge):
+                continue
+            bindings[hop.rel_var] = edge
         yield row.with_bindings(
             bindings,
             current_node_id=neighbor_id,
@@ -1048,7 +1053,7 @@ def _hydrate_indexed_edge(row, clause: PathPatternClause, hop: PatternHop, conte
         )
 
 
-def _edge_seek_spec(rel_var: str, where, context: QueryContext):
+def _edge_seek_spec(rel_var: str | None, properties, where, context: QueryContext):
     """Return an edge property index scan spec for one relationship variable.
 
     Only ``AND``-ed exact (``=``) or single-property range predicates against
@@ -1056,6 +1061,15 @@ def _edge_seek_spec(rel_var: str, where, context: QueryContext):
     use the composite type/property index.
     """
     indexed = getattr(context.graph, "indexed_edge_properties", set())
+    for property_name, value in properties:
+        if (
+            property_name in indexed
+            and _is_seek_value(value)
+            and hasattr(context.graph, "iter_edge_ids_by_type_property")
+        ):
+            return ("exact", property_name, context.resolve(value))
+    if where is None or rel_var is None:
+        return None
     expressions = where.expressions if isinstance(where, AndExpression) else (where,)
     for expression in expressions:
         if (
@@ -1139,20 +1153,35 @@ def _path_start_rows(row, clause: PathPatternClause, context: QueryContext, wher
             yield row.with_bindings(bindings, current_node_id=node_id, preserve_current_node=False)
         return
 
-    first_name, first_value = properties[0] if properties else (None, None)
-    if source.label_expression is not None:
+    first_name, first_value = _inline_exact_seek(properties, context)
+    if first_name is None and where is not None:
+        first_name, first_value = _where_exact_seek(source.variable or "", where, context)
+    scan = NodeScanQuery(
+        variable=source.variable or "",
+        label=source.labels[0] if source.labels else None,
+        property_name=first_name,
+        property_value=first_value,
+        returns=(),
+        labels=source.labels,
+        properties=properties,
+        where=where,
+    )
+    if (
+        source.label_expression is not None
+        and first_name is None
+        and _range_bounds_for_node_scan(scan, context) is None
+    ):
         candidate_ids: Iterable[bytes] = _node_ids_for_label_expression(source, context)
     else:
-        scan = NodeScanQuery(
-            variable=source.variable or "",
-            label=source.labels[0] if source.labels else None,
-            property_name=first_name,
-            property_value=first_value,
-            returns=(),
-            labels=source.labels,
-            properties=properties,
-            where=where,
-        )
+        if source.label_expression is not None:
+            scan = NodeScanQuery(
+                variable=scan.variable,
+                property_name=scan.property_name,
+                property_value=scan.property_value,
+                returns=(),
+                properties=properties,
+                where=where,
+            )
         candidate_ids = node_scan_ids(scan, context)
     for node_id in candidate_ids:
         node = context.get_node(node_id)
@@ -1491,6 +1520,73 @@ def _node_pattern_matches(node, pattern: NodePattern, properties, context: Query
         elif _cypher_equals(node.properties.get(property_name), context.resolve(property_value)) is not True:
             return False
     return True
+
+
+def _where_exact_seek(variable: str, where, context: QueryContext):
+    """Extract an indexed exact-equality predicate for one variable from ``WHERE``.
+
+    Returns ``(property_name, value)`` for the first eligible ``=`` predicate,
+    else ``(None, None)``. Only ``AND``-ed comparisons against indexed node
+    properties qualify; the trailing filter operator re-checks everything.
+    """
+    expressions = where.expressions if isinstance(where, AndExpression) else (where,)
+    for expression in expressions:
+        if not isinstance(expression, ComparisonExpression):
+            continue
+        if not isinstance(expression.left, PropertyRef):
+            continue
+        if expression.operator != "=" or not _is_seek_value(expression.right):
+            continue
+        if expression.left.variable != variable:
+            continue
+        if expression.left.property_name not in context.graph.indexed_node_properties:
+            continue
+        return expression.left.property_name, context.resolve(expression.right)
+    return None, None
+
+
+def _inline_exact_seek(properties, context: QueryContext):
+    """Return the first index-eligible exact predicate from an inline map."""
+    indexed = getattr(context.graph, "indexed_node_properties", set())
+    for property_name, value in properties:
+        if property_name in indexed and _is_seek_value(value):
+            return property_name, value
+    return None, None
+
+
+def _order_match_patterns(patterns, context: QueryContext):
+    """Put the smallest independent labeled node scan first.
+
+    Path components retain textual order because reversing or moving them can
+    alter traversal cost and relationship-isomorphism state. Standalone node
+    components with distinct variables are commutative Cartesian inputs.
+    """
+    if len(patterns) < 2 or any(pattern.hops for pattern in patterns):
+        return patterns
+    variables = [pattern.source.variable for pattern in patterns]
+    if any(variable is None for variable in variables) or len(set(variables)) != len(variables):
+        return patterns
+
+    def estimate(item):
+        position, pattern = item
+        if any(name == "id" for name, _ in pattern.source.properties):
+            return (0, 1, position)
+        labels = pattern.source.labels
+        if not labels or pattern.source.label_expression is not None:
+            return (2, float("inf"), position)
+        counts = []
+        for label in labels:
+            if label not in context.label_cardinalities:
+                counter = getattr(context.graph, "count_nodes_by_label", None)
+                context.label_cardinalities[label] = (
+                    counter(label)
+                    if counter is not None
+                    else sum(1 for _ in context.graph.iter_node_ids_by_label(label))
+                )
+            counts.append(context.label_cardinalities[label])
+        return (1, min(counts), position)
+
+    return tuple(pattern for _, pattern in sorted(enumerate(patterns), key=estimate))
 
 
 def _node_ids_for_label_expression(source: NodePattern, context: QueryContext):

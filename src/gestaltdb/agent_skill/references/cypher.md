@@ -1,6 +1,6 @@
 # Cypher For Library Users
 
-Use `graph.query(cypher, parameters=None)` for read-only Cypher. It returns `QueryResult(columns, records)` and iteration yields record dictionaries.
+Use `graph.query(cypher, parameters=None)` for Cypher reads and writes. It returns `QueryResult(columns, records)` and iteration yields record dictionaries.
 
 ## Supported
 
@@ -13,11 +13,15 @@ Use `graph.query(cypher, parameters=None)` for read-only Cypher. It returns `Que
 - Chained `MATCH` clauses with clause-local `WHERE`.
 - `WITH` with scope replacement: only projected variables and aliases survive, and `WITH` may carry its own `WHERE`, `DISTINCT`, `ORDER BY`, `SKIP`, and `LIMIT`.
 - Core aggregates `count`, `collect`, `sum`, `avg`, `min`, and `max` in `WITH` and `RETURN`, including `count(*)` and aggregate `DISTINCT`. Non-aggregate projections are implicit grouping keys; `ORDER BY` in aggregate queries must reference projected outputs.
-- `{id: $id}` on the first node of a relationship path addresses the stable entity ID as a GestaltDB extension; elsewhere `id` is an ordinary property filter.
+- `{id: $id}` on node patterns addresses the stable entity ID as a GestaltDB extension.
+- `OPTIONAL MATCH`, `UNWIND`, `UNION [ALL]`, correlated `CALL { ... }`, relationship property maps, variable-length and shortest paths, path bindings, and label expressions.
+- `CREATE`, `SET`, `REMOVE`, `DELETE`/`DETACH DELETE`, `MERGE`, and write-only `FOREACH` loops.
+- Persisted single-property node `UNIQUE` and `IS NOT NULL` constraints through `CREATE CONSTRAINT`, `DROP CONSTRAINT`, and `SHOW CONSTRAINTS`; enforcement applies to Cypher writes.
+- Configured exact/range node and typed relationship indexes are reused where predicates permit.
 
 ## Unsupported
 
-Do not use `CREATE`, `MERGE`, `SET`, `DELETE`, `OPTIONAL MATCH`, variable-length paths, relationship property maps, or path binding.
+Do not use pattern comprehensions, pattern arguments to `exists()`, quantified path patterns, relationship or multi-property constraints, or generic procedures beyond the documented sampling call.
 
 ## Example
 

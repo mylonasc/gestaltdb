@@ -4,9 +4,9 @@ Cypher Queries
 GestaltDB exposes an expanding openCypher subset through
 ``GraphDB.query(cypher, parameters=None)``. The grammar-based frontend supports
 comments, Unicode and backtick-escaped names, source-located syntax errors, and
-standard expression precedence. Execution covers indexed node
+standard expression precedence. Execution covers indexed node and relationship
 scans, typed relationship expansion, filtering, ordering, chained ``MATCH``
-clauses, and ``CREATE``/``SET``/``REMOVE`` writes.
+clauses, writes, and a persisted node-constraint catalog.
 
 Relationship types come from ``edge.properties["type"]``. Node labels are stored
 on ``Node(labels=[...])``.
@@ -29,8 +29,10 @@ Node Scans
 ----------
 
 Label scans use the label index. Inline property maps may contain multiple
-entries. The first indexed property can select an index-backed candidate set;
-all entries are then checked.
+entries. The first eligible indexed property selects an index-backed candidate
+set; exact and range predicates in ``WHERE`` reuse the same indexes, and all
+predicates are then checked. Independent comma-separated node patterns start
+with the smallest labeled scan.
 
 .. code-block:: python
 
@@ -66,7 +68,9 @@ Unanchored typed relationship scans are also supported.
    graph_db.query('MATCH (a)-[r:binds|inhibits]->(b) RETURN r.id ORDER BY r.id')
 
 Relationship patterns accept inline property maps with literal or parameter
-values, which filter matched edges in both typed and untyped expansions.
+values, which filter matched edges in both typed and untyped expansions. A
+typed pattern can use a configured composite type/property index for an inline
+property or eligible ``WHERE`` predicate.
 
 .. code-block:: python
 
@@ -144,6 +148,30 @@ afterwards so later clauses observe loop writes.
 .. code-block:: python
 
    graph_db.query('MATCH (d:Drug) FOREACH (tag IN ["a", "b"] | SET d.tag = tag) RETURN d.id')
+
+Node Constraints
+----------------
+
+``CREATE CONSTRAINT`` registers a persisted single-label, single-property
+``UNIQUE`` or ``IS NOT NULL`` constraint. Existing data is validated before the
+catalog changes. Cypher ``CREATE``, ``MERGE``, ``SET``, and ``REMOVE`` validate
+the final node state, including ``ON CREATE SET`` actions. ``SHOW CONSTRAINTS``
+returns ``name``, ``type``, ``label``, and ``property`` columns, and
+``DROP CONSTRAINT`` removes a definition by name.
+
+.. code-block:: python
+
+   graph_db.query(
+       'CREATE CONSTRAINT drug_name FOR (d:Drug) REQUIRE d.name IS UNIQUE'
+   )
+   graph_db.query(
+       'CREATE CONSTRAINT drug_source FOR (d:Drug) REQUIRE d.source IS NOT NULL'
+   )
+   constraints = graph_db.query('SHOW CONSTRAINTS')
+   graph_db.query('DROP CONSTRAINT drug_source')
+
+Constraints currently cover node label/property values written through Cypher;
+direct object and columnar writes do not enforce the catalog.
 
 General fixed-length patterns may be unanchored and may filter every node in the
 path. Anonymous nodes and relationships, omitted relationship types, and
@@ -410,7 +438,8 @@ Current Limitations
 Syntax and semantic failures are ``ValueError`` subclasses with source
 locations. The current Cypher API does not yet support:
 
-- mutating queries beyond ``CREATE``, ``SET``, ``REMOVE``, ``DELETE``, and ``MERGE``
+- mutating clauses beyond ``CREATE``, ``SET``, ``REMOVE``, ``DELETE``, ``MERGE``, and ``FOREACH``
+- relationship, multi-property, and direct-object-write constraint enforcement
 - pattern comprehensions, ``exists()`` with a pattern argument, and quantified path patterns
 - scalar functions beyond the documented core set
 - generic procedures

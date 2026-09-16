@@ -6,7 +6,7 @@
 
 ## 1. Cypher Architecture
 
-GestaltDB includes an embedded, read-only Cypher query processor:
+GestaltDB includes an embedded Cypher query processor:
 - `graph.query(cypher_str, parameters=None)` returns a `QueryResult(columns, records)`.
 - Iterating over `result` yields dictionaries mapping column names to values.
 - Internal pipeline:
@@ -65,6 +65,13 @@ GestaltDB includes an embedded, read-only Cypher query processor:
 - Modifiers: `DISTINCT`, `ORDER BY <expression-or-alias> [ASC|DESC]`, `SKIP <n-or-parameter>`, `LIMIT <n-or-parameter>`
 - Predicates use Cypher three-valued null logic. Use `IS NULL`, not `= null`.
 
+### Writes and Constraints
+- `CREATE`, `SET`, `REMOVE`, `DELETE`/`DETACH DELETE`, `MERGE` with `ON CREATE`/`ON MATCH`, and write-only `FOREACH` loops.
+- Writes run in a backend transaction when supported; terminal `RETURN ... LIMIT` does not truncate earlier side effects.
+- Persisted, single-property node `UNIQUE` and `IS NOT NULL` constraints through `CREATE CONSTRAINT`, `DROP CONSTRAINT`, and `SHOW CONSTRAINTS`.
+- Constraints validate existing data on creation and final node states for Cypher writes. Direct object and columnar writes do not enforce them.
+- Exact/range node and typed relationship predicates reuse configured property indexes. Independent comma-separated node scans start with the smallest label population.
+
 ### Custom GestaltDB Procedures
 - Path sampling procedure:
   ```cypher
@@ -84,12 +91,10 @@ GestaltDB includes an embedded, read-only Cypher query processor:
 - Execution: staged `Aggregate` operator with first-seen group order and `cypher_value_key` grouping/distinct identity.
 
 Do **not** document or expect the following syntax to work:
-- ❌ Mutating queries (`CREATE`, `MERGE`, `SET`, `DELETE`, `REMOVE`)
-- ❌ Explicit grouping (`GROUP BY`; Cypher grouping is implicit)
-- ❌ Optional matches (`OPTIONAL MATCH`)
-- ❌ Variable-length path expansion (`[:KNOWS*1..3]`)
-- ❌ Path binding variables (e.g. `p = (a)-[:T]->(b)`)
-- ❌ Relationship property maps
+- Explicit grouping (`GROUP BY`; Cypher grouping is implicit)
+- Pattern comprehensions, `exists()` with a pattern, and quantified path patterns
+- Relationship or multi-property constraints
+- Generic procedure calls beyond the documented sampling procedure and correlated `CALL { ... }`
 
 ---
 

@@ -197,6 +197,8 @@ SUPPORTED: list[tuple[str, str, str, tuple[str, ...], list[dict[str, object]]]] 
     ("foreach", "[cypher-18]",
      "MATCH (n:Person) WHERE n.age = 30 FOREACH (x IN [1] | SET n.tagged = true) RETURN n.id",
      ("n.id",), [{"n.id": "a"}]),
+    ("show-constraints", "[cypher-19]", "SHOW CONSTRAINTS",
+     ("name", "type", "label", "property"), []),
 ]
 
 # (feature, implementing stage issue, query, expected error substring).

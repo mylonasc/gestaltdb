@@ -29,6 +29,7 @@ from .serializers import JSONSerializer
 
 _NODE_PROPERTY_INDEXES_METADATA_KEY = b"schema:indexes:node_properties"
 _EDGE_PROPERTY_INDEXES_METADATA_KEY = b"schema:indexes:edge_properties"
+_NODE_CONSTRAINTS_METADATA_KEY = b"schema:constraints:nodes"
 _STALE_INDEXES_METADATA_KEY = b"schema:indexes:stale"
 _MANIFEST_METADATA_KEY = b"schema:manifest"
 MANIFEST_FILENAME = "gestaltdb_manifest.json"
@@ -496,6 +497,7 @@ class GraphDB:
         persisted_edge_indexes = self._load_property_index_metadata(_EDGE_PROPERTY_INDEXES_METADATA_KEY)
         self.indexed_node_properties = set(persisted_node_indexes).union(indexed_node_properties or [])
         self.indexed_edge_properties = set(persisted_edge_indexes).union(indexed_edge_properties or [])
+        self.node_constraints = self._load_node_constraint_metadata()
         if indexed_node_properties is not None:
             self._persist_property_index_metadata(_NODE_PROPERTY_INDEXES_METADATA_KEY, self.indexed_node_properties)
         if indexed_edge_properties is not None:
@@ -783,6 +785,32 @@ class GraphDB:
         """Persist property index definitions to backend metadata."""
         payload = json.dumps(sorted(property_names), separators=(",", ":")).encode("utf-8")
         self.store.put_metadata(key, payload)
+
+    def _load_node_constraint_metadata(self) -> list[dict[str, str]]:
+        """Load persisted node constraint definitions from backend metadata."""
+        try:
+            payload = self.store.get_metadata(_NODE_CONSTRAINTS_METADATA_KEY)
+        except NotImplementedError:
+            return []
+        if not payload:
+            return []
+        decoded = json.loads(payload.decode("utf-8"))
+        if not isinstance(decoded, dict) or decoded.get("version") != 1:
+            raise ValueError("Unsupported node constraint catalog format")
+        constraints = decoded.get("constraints", [])
+        if not isinstance(constraints, list):
+            raise ValueError("Invalid node constraint catalog")
+        return [dict(constraint) for constraint in constraints]
+
+    def set_node_constraints(self, constraints: list[dict[str, str]]) -> None:
+        """Replace and persist the node constraint catalog."""
+        payload = json.dumps(
+            {"version": 1, "constraints": constraints},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        self.store.put_metadata(_NODE_CONSTRAINTS_METADATA_KEY, payload)
+        self.node_constraints = [dict(constraint) for constraint in constraints]
 
     # -----------
     # Node Methods
@@ -2010,6 +2038,7 @@ class GraphDB:
         """
         to_store = {}
         index_entries = []
+        range_entries = []
         for n in nodes:
             old_node = self.get_node(n.get_id_bytes)
             if old_node is not None:
@@ -2031,9 +2060,26 @@ class GraphDB:
                             [label.encode("utf-8"), property_name.encode("utf-8"), property_value],
                             n.get_id_bytes,
                         ))
+                    range_value = _property_value_to_range_index_bytes(n.properties[property_name])
+                    if range_value is not None:
+                        range_entries.append((
+                            "node_property",
+                            [property_name.encode("utf-8")],
+                            range_value,
+                            n.get_id_bytes,
+                        ))
+                        for label in n.labels:
+                            range_entries.append((
+                                "node_label_property",
+                                [label.encode("utf-8"), property_name.encode("utf-8")],
+                                range_value,
+                                n.get_id_bytes,
+                            ))
         self.store.put_nodes_bulk(to_store)
         if index_entries:
             self.store.put_index_entries_bulk(index_entries)
+        if range_entries:
+            self.store.put_range_index_entries_bulk(range_entries)
 
     def ingest_polars(
         self,
@@ -2745,6 +2791,7 @@ class GraphDB:
         edge_dict = {}
         typed_adjacency_records = []
         index_entries = []
+        range_entries = []
         # 2) Accumulate adjacency changes in memory: node_id -> set(edge_ids)
         adjacency_accumulator = {} # the keys are "nodes" and the values are sets of edges for where the nodes appear as source or destinations (separately). 
         # adjacency_accumulator_target = {}
@@ -2778,6 +2825,21 @@ class GraphDB:
                             [str(edge_type).encode("utf-8"), property_name.encode("utf-8"), property_value],
                             e.get_id_bytes,
                         ))
+                    range_value = _property_value_to_range_index_bytes(e.properties[property_name])
+                    if range_value is not None:
+                        range_entries.append((
+                            "edge_property",
+                            [property_name.encode("utf-8")],
+                            range_value,
+                            e.get_id_bytes,
+                        ))
+                        if edge_type is not None:
+                            range_entries.append((
+                                "edge_type_property",
+                                [str(edge_type).encode("utf-8"), property_name.encode("utf-8")],
+                                range_value,
+                                e.get_id_bytes,
+                            ))
             # adjacency accum update
             adjacency_accumulator.setdefault(_source, {'target' : [], 'source' : []})
             adjacency_accumulator[_source]['source'].append(e.get_id_bytes)
@@ -2790,6 +2852,8 @@ class GraphDB:
         self._update_typed_adjacency_count_cache(typed_adjacency_records, 1)
         if index_entries:
             self.store.put_index_entries_bulk(index_entries)
+        if range_entries:
+            self.store.put_range_index_entries_bulk(range_entries)
 
 
         # 4) Build adjacency dict so we do one read+write per node

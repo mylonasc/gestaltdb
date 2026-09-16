@@ -12,8 +12,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .cypher_ast import (
+    CreateConstraint,
+    DropConstraint,
     Query,
     SampleTypedPathsCall,
+    ShowConstraints,
     UnionQuery,
 )
 from .cypher_parser import parse as _parse_query
@@ -80,7 +83,9 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
     return _parse_query(query)
 
 
-def parse_ast(query: str) -> Query | SampleTypedPathsCall:
+def parse_ast(
+    query: str,
+) -> Query | SampleTypedPathsCall | UnionQuery | CreateConstraint | DropConstraint | ShowConstraints:
     """Parse the supported Cypher subset into its canonical clause AST."""
     return _parse_ast(query)
 
@@ -90,13 +95,16 @@ def plan(query: str) -> LogicalPlan:
 
     Clause queries plan to the staged operator pipeline, ``UNION`` queries
     plan each branch independently, and only the sampling procedure call
-    keeps its dedicated source-backed plan.
+    keeps its dedicated source-backed plan. Constraint commands are executed
+    directly and cannot be planned.
     """
     canonical = _parse_ast(query)
     if isinstance(canonical, SampleTypedPathsCall):
         return plan_query(canonical)
     if isinstance(canonical, UnionQuery):
         return plan_union_query(canonical)
+    if isinstance(canonical, (CreateConstraint, DropConstraint, ShowConstraints)):
+        raise TypeError(f"Cannot plan constraint command: {type(canonical).__name__}")
     return plan_staged_query(canonical)
 
 
@@ -113,9 +121,12 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
     Examples:
         >>> execute(graph_db, 'MATCH (n:Drug) RETURN n')  # doctest: +SKIP
     """
-    from .cypher_write import transaction_supported
+    from .cypher_write import execute_ddl, transaction_supported
 
     canonical = _parse_ast(query)
+    if isinstance(canonical, (CreateConstraint, DropConstraint, ShowConstraints)):
+        columns, records = execute_ddl(graph, canonical)
+        return QueryResult(columns=columns, records=records)
     if isinstance(canonical, SampleTypedPathsCall):
         logical_plan = plan_query(canonical)
     elif isinstance(canonical, UnionQuery):

@@ -13,6 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .cypher_ast import (
+    CreateConstraint,
+    DropConstraint,
     NodePattern,
     PathPatternClause,
     PatternHop,
@@ -22,8 +24,9 @@ from .cypher_ast import (
     SetMerge,
     SetProperty,
     SetReplace,
+    ShowConstraints,
 )
-from .cypher_expr import PathValue, evaluate_expression
+from .cypher_expr import PathValue, _cypher_equals, evaluate_expression
 from .cypher_runtime import (
     BindingRow,
     _execute_staged,
@@ -61,23 +64,35 @@ class WriteBatch:
         the same query read the new versions.
         """
         graph = context.graph
-        if self.nodes:
+        nodes = list({graph.node_key_to_bytes(node.get_id): node for node in self.nodes}.values())
+        edges = list({graph.node_key_to_bytes(edge.get_id): edge for edge in self.edges}.values())
+        checked: list[Node] = []
+        for node in nodes:
+            check_node_constraints(
+                graph,
+                node.labels,
+                node.properties,
+                exclude_id=node.get_id,
+                against=checked,
+            )
+            checked.append(node)
+        if nodes:
             put_nodes = getattr(graph, "put_nodes", None)
             if put_nodes is not None:
-                put_nodes(self.nodes)
+                put_nodes(nodes)
             else:
-                for node in self.nodes:
+                for node in nodes:
                     graph.put_node(node)
-            for node in self.nodes:
+            for node in nodes:
                 context.node_cache[graph.node_key_to_bytes(node.get_id)] = node
-        if self.edges:
+        if edges:
             put_edges_bulk = getattr(graph, "put_edges_bulk", None)
             if put_edges_bulk is not None:
-                put_edges_bulk(self.edges)
+                put_edges_bulk(edges)
             else:
-                for edge in self.edges:
+                for edge in edges:
                     graph.put_edge(edge)
-            for edge in self.edges:
+            for edge in edges:
                 context.edge_cache[graph.node_key_to_bytes(edge.get_id)] = edge
         for edge_id in self.deleted_edges:
             graph.delete_edge(edge_id)
@@ -103,6 +118,144 @@ def transaction_supported(graph) -> bool:
 def _snapshot(rows):
     """Materialize upstream rows before writing (snapshot semantics)."""
     return list(rows)
+
+
+def get_constraints(graph) -> list[dict[str, str]]:
+    """Return the node constraint catalog, including test-double fallback."""
+    if not hasattr(graph, "node_constraints"):
+        graph.node_constraints = []
+    return graph.node_constraints
+
+
+def _constraint_value(constraint, name: str):
+    return constraint[name] if isinstance(constraint, dict) else getattr(constraint, name)
+
+
+def check_node_constraints(graph, labels, properties: dict, exclude_id=None, against=()) -> None:
+    """Enforce uniqueness and existence constraints for a staged node put."""
+    constraints = get_constraints(graph)
+    if not constraints:
+        return
+    key = graph.node_key_to_bytes
+    for constraint in constraints:
+        label = _constraint_value(constraint, "label")
+        property_name = _constraint_value(constraint, "property")
+        kind = _constraint_value(constraint, "kind")
+        if label not in labels:
+            continue
+        if kind == "exists":
+            if properties.get(property_name) is None:
+                raise ValueError(
+                    f"Existence constraint violated: {label} requires non-null property "
+                    f"{property_name!r}"
+                )
+        else:
+            if properties.get(property_name) is None:
+                continue
+            value = properties[property_name]
+            for other in against:
+                if label in other.labels and _cypher_equals(
+                    other.properties.get(property_name), value
+                ) is True:
+                    raise ValueError(
+                        f"Uniqueness constraint violated: {label}.{property_name} must be unique"
+                    )
+            for node_id in graph.iter_node_ids_by_label(label):
+                if exclude_id is not None and key(exclude_id) == node_id:
+                    continue
+                node = graph.get_node(node_id)
+                if node is None:
+                    continue
+                if property_name in node.properties and _cypher_equals(
+                    node.properties[property_name], value
+                ) is True:
+                    raise ValueError(
+                        f"Uniqueness constraint violated: {label}.{property_name} must be unique"
+                    )
+
+
+def execute_ddl(graph, command) -> tuple[tuple[str, ...], list[dict]]:
+    """Execute a constraint command, returning ``(columns, records)``."""
+    if isinstance(command, ShowConstraints):
+        return (
+            ("name", "type", "label", "property"),
+            [
+                {
+                    "name": constraint["name"],
+                    "type": constraint["kind"].upper(),
+                    "label": constraint["label"],
+                    "property": constraint["property"],
+                }
+                for constraint in get_constraints(graph)
+            ],
+        )
+    if isinstance(command, DropConstraint):
+        constraints = get_constraints(graph)
+        remaining = [item for item in constraints if item["name"] != command.name]
+        if len(remaining) == len(constraints):
+            raise ValueError(f"No such constraint: {command.name}")
+        _store_constraints(graph, remaining)
+        return (), []
+    name = command.name or f"{command.label}_{command.property_name}_{command.kind}"
+    catalog = get_constraints(graph)
+    if any(item["name"] == name for item in catalog):
+        raise ValueError(f"Constraint already exists: {name}")
+    if any(
+        item["label"] == command.label
+        and item["property"] == command.property_name
+        and item["kind"] == command.kind
+        for item in catalog
+    ):
+        raise ValueError(
+            f"Constraint already exists for {command.label}.{command.property_name}"
+        )
+    _validate_existing_nodes(graph, command)
+    _store_constraints(
+        graph,
+        [
+            *catalog,
+            {
+                "name": name,
+                "label": command.label,
+                "property": command.property_name,
+                "kind": command.kind,
+            },
+        ],
+    )
+    return (), []
+
+
+def _store_constraints(graph, constraints: list[dict[str, str]]) -> None:
+    setter = getattr(graph, "set_node_constraints", None)
+    if setter is not None:
+        setter(constraints)
+    else:
+        graph.node_constraints = [dict(constraint) for constraint in constraints]
+
+
+def _validate_existing_nodes(graph, command: CreateConstraint) -> None:
+    """Reject a new constraint when existing labeled nodes violate it."""
+    seen: list[object] = []
+    for node_id in graph.iter_node_ids_by_label(command.label):
+        node = graph.get_node(node_id)
+        if node is None:
+            continue
+        value = node.properties.get(command.property_name)
+        if command.kind == "exists":
+            if value is None:
+                raise ValueError(
+                    f"Existence constraint violated: {command.label} requires non-null "
+                    f"property {command.property_name!r}"
+                )
+            continue
+        if value is None:
+            continue
+        if any(_cypher_equals(value, previous) is True for previous in seen):
+            raise ValueError(
+                f"Uniqueness constraint violated: {command.label}."
+                f"{command.property_name} must be unique"
+            )
+        seen.append(value)
 
 
 def _resolve_pattern(pattern: PathPatternClause, bindings: dict, context) -> PathPatternClause:

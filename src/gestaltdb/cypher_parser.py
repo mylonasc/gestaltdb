@@ -16,7 +16,9 @@ from .cypher_ast import (
     CaseExpression,
     ComparisonExpression,
     CreateClause,
+    CreateConstraint,
     DeleteClause,
+    DropConstraint,
     ExistsExpression,
     ForeachClause,
     FunctionCall,
@@ -60,6 +62,7 @@ from .cypher_ast import (
     SetProperty,
     SetReplace,
     ShortestPathExpression,
+    ShowConstraints,
     SliceExpression,
     SourceSpan,
     StringPredicate,
@@ -80,10 +83,16 @@ from .cypher_semantics import QueryAnalysis, analyze_query, render_projection
 
 _GRAMMAR = r"""
  ?start: query ";"?
- ?query: match_query | sample_call | union_query
+ ?query: match_query | sample_call | union_query | constraint_command
  union_query: match_query (union_operator match_query)+
  union_operator: "UNION"i "ALL"i -> union_all
                | "UNION"i -> union_distinct
+ ?constraint_command: create_constraint | drop_constraint | show_constraints
+ create_constraint: "CREATE"i "CONSTRAINT"i symbolic_name? "FOR"i "(" symbolic_name ":" symbolic_name ")" "REQUIRE"i symbolic_name "." symbolic_name "IS"i constraint_kind
+ constraint_kind: "UNIQUE"i -> unique_kind
+                | "NOT"i "NULL"i -> exists_kind
+ drop_constraint: "DROP"i "CONSTRAINT"i symbolic_name
+ show_constraints: "SHOW"i "CONSTRAINTS"i
 
   match_query: (match_clause | optional_match_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | merge_clause | foreach_clause) (match_clause | optional_match_clause | where_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | merge_clause | foreach_clause | with_section)* return_full
   match_clause: "MATCH"i shortest_selector? pattern ("," pattern)*
@@ -793,6 +802,37 @@ class _ASTBuilder(Transformer):
     def foreach_body(self, children):
         return tuple(children)
 
+    def unique_kind(self, _children):
+        return "unique"
+
+    def exists_kind(self, _children):
+        return "exists"
+
+    def create_constraint(self, children):
+        parts = [child for child in children if isinstance(child, str)]
+        kind = parts[-1]
+        names = parts[:-1]
+        if len(names) == 5:
+            name, variable, label, require_variable, prop = names
+        else:
+            name = None
+            variable, label, require_variable, prop = names
+        if require_variable != variable:
+            raise CypherSyntaxError(
+                "Constraint variable must match the pattern variable",
+                line=1,
+                column=1,
+                offset=0,
+                source="",
+            )
+        return CreateConstraint(label, prop, kind, name)
+
+    def drop_constraint(self, children):
+        return DropConstraint(children[0])
+
+    def show_constraints(self, _children):
+        return ShowConstraints()
+
     def union_all(self, _children):
         return True
 
@@ -917,6 +957,12 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
 
     if isinstance(parsed, tuple) and parsed and parsed[0] == "sample":
         return _build_sample_call(parsed, query)
+    if isinstance(parsed, (CreateConstraint, DropConstraint, ShowConstraints)):
+        raise _located_error(
+            CypherSemanticError,
+            "Query cannot be represented by legacy parse(); use parse_ast()",
+            query,
+        )
     if isinstance(parsed, tuple) and parsed and parsed[0] == "union":
         raise _located_error(
             CypherSemanticError,
@@ -946,11 +992,13 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
     return _build_match_query(parsed, query, analysis)
 
 
-def parse_ast(query: str) -> Query | SampleTypedPathsCall | UnionQuery:
+def parse_ast(query: str) -> Query | SampleTypedPathsCall | UnionQuery | CreateConstraint | DropConstraint | ShowConstraints:
     """Parse the supported Cypher subset into the canonical clause AST."""
     parsed = _parse_source(query)
     if isinstance(parsed, tuple) and parsed and parsed[0] == "sample":
         return _build_sample_call(parsed, query)
+    if isinstance(parsed, (CreateConstraint, DropConstraint, ShowConstraints)):
+        return parsed
     if isinstance(parsed, tuple) and parsed and parsed[0] == "union":
         return _build_union_query(parsed, query)
 

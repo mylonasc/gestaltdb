@@ -178,6 +178,28 @@ class ForeachClause:
 
 
 @dataclass(frozen=True)
+class CreateConstraint:
+    """A uniqueness or existence constraint over one node label property."""
+
+    label: str
+    property_name: str
+    kind: str
+    name: str | None = None
+
+
+@dataclass(frozen=True)
+class DropConstraint:
+    """Drop a constraint by name."""
+
+    name: str
+
+
+@dataclass(frozen=True)
+class ShowConstraints:
+    """List the constraint catalog."""
+
+
+@dataclass(frozen=True)
 class SubqueryClause:
     """One ``CALL { ... }`` correlated subquery over an inner clause query."""
 
