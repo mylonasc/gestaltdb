@@ -173,6 +173,15 @@ returns ``name``, ``type``, ``label``, and ``property`` columns, and
 Constraints currently cover node label/property values written through Cypher;
 direct object and columnar writes do not enforce the catalog.
 
+``SHOW INDEX`` and ``SHOW INDEXES`` list configured property indexes in
+deterministic node-then-relationship order. The result columns are
+``entityType`` and ``properties``; automatic label, relationship-type,
+composite, and range representations are not separate catalog entries.
+
+.. code-block:: python
+
+   indexes = graph_db.query('SHOW INDEXES')
+
 General fixed-length patterns may be unanchored and may filter every node in the
 path. Anonymous nodes and relationships, omitted relationship types, and
 bracketless relationships are supported. Untyped expansion scans canonical edge
@@ -399,20 +408,24 @@ regular expressions, ``IN`` lists, and inside subqueries.
        'RETURN d.id, p.id'
    )
 
-Sampling Procedure
-------------------
+Registered Procedures
+---------------------
 
-GestaltDB also exposes typed path sampling through a project-specific procedure.
-The procedure name and arguments are GestaltDB-specific; the ``CALL``/``YIELD``
-clause family is part of Cypher. Procedure arguments are currently literal
-lists and maps.
+Top-level registered procedure calls use ``CALL qualified.name(...) YIELD``.
+Yielded fields may be aliased, arguments may use parameters, and unknown
+procedure names or fields produce source-located semantic errors. Generalized
+syntax does not enable arbitrary dispatch: ``pg.sample_typed_paths`` is the
+currently registered procedure.
 
 .. code-block:: python
 
    result = graph_db.query(
-       'CALL pg.sample_typed_paths(["drug-1"], '
-       '[{"edge_type": "binds", "direction": "out", "sample_size": 2}]) '
-       'YIELD path RETURN path LIMIT 1'
+       'CALL pg.sample_typed_paths($seeds, $pattern) '
+       'YIELD path AS sampled RETURN sampled LIMIT 1',
+       parameters={
+           "seeds": ["drug-1"],
+           "pattern": [{"edge_type": "binds", "direction": "out", "sample_size": 2}],
+       },
    )
 
 Aggregation and Implicit Grouping
@@ -433,7 +446,8 @@ global inputs return ``0`` for ``count``, ``[]`` for ``collect``, ``0`` for
 
 ``ORDER BY`` in an aggregate query must reference projected outputs.
 Aggregates cannot appear in ``WHERE`` (filter an aggregating ``WITH`` instead),
-cannot nest, and cannot mix with scalar arithmetic yet.
+and cannot nest. Aggregate results may be composed with scalar expressions and
+functions, such as ``count(*) + 1`` or ``toString(count(*))``.
 
 ``ORDER BY`` is stable and applies Cypher's value hierarchy across supported
 maps, entities, lists, paths, strings, Booleans, numbers, and nulls. Nulls sort
@@ -450,6 +464,7 @@ locations. The current Cypher API does not yet support:
 
 - mutating clauses beyond ``CREATE``, ``SET``, ``REMOVE``, ``DELETE``, ``MERGE``, and ``FOREACH``
 - relationship, multi-property, and direct-object-write constraint enforcement
-- pattern comprehensions, ``exists()`` with a pattern argument, and quantified path patterns
+- pattern comprehensions and ``exists()`` with a pattern argument
+- GQL quantified relationships/path patterns; errors suggest legacy ``*min..max`` syntax
 - scalar functions beyond the documented core set
-- generic procedures
+- procedures other than the registered ``pg.sample_typed_paths`` call

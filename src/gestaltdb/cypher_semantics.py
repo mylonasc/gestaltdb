@@ -668,7 +668,7 @@ def validate_function_calls(
                 )
             _raise_semantic(f"Unsupported function: {call.name}", source, call.span or span)
         if definition.is_aggregate:
-            if any(contains_function_call(argument) for argument in call.arguments):
+            if any(contains_aggregate_call(argument) for argument in call.arguments):
                 _raise_semantic("Nested aggregate calls are not supported", source, call.span or span)
             if len(call.arguments) != 1:
                 _raise_semantic(f"{call.name} expects exactly one argument", source, call.span or span)
@@ -693,7 +693,8 @@ def _iter_function_calls(expression: object) -> Iterator[FunctionCall]:
     """Yield function calls in an expression tree, outermost first."""
     if isinstance(expression, FunctionCall):
         yield expression
-        return
+        for argument in expression.arguments:
+            yield from _iter_function_calls(argument)
     if isinstance(expression, (ComparisonExpression, ArithmeticExpression, StringPredicate)):
         yield from _iter_function_calls(expression.left)
         yield from _iter_function_calls(expression.right)
@@ -953,14 +954,6 @@ def _resolve_projections(
     for item in clause.items:
         _validate_expression(item.expression, scope, source, label, item.span or clause.span)
         validate_function_calls(item.expression, source, item.span or clause.span, allow_aggregate=True)
-        if contains_aggregate_call(item.expression) and not (
-            isinstance(item.expression, FunctionCall) and is_aggregate_function(item.expression.name)
-        ):
-            _raise_semantic(
-                "Aggregate calls must be top-level projection expressions",
-                source,
-                item.span or clause.span,
-            )
         rendered = render_projection(item.expression)
         output_name = item.alias or rendered
         if output_name in names:

@@ -93,6 +93,7 @@ Supported features include:
 - `MERGE pattern [ON CREATE SET ...][ON MATCH SET ...]` matching or creating idempotently within the per-query atomicity boundary.
 - `FOREACH (x IN list | ...)` write-only loop with scoped loop variables and post-loop entity refresh.
 - Persisted single-property node `UNIQUE` and `IS NOT NULL` constraints through `CREATE CONSTRAINT`, `DROP CONSTRAINT`, and `SHOW CONSTRAINTS`, enforced on Cypher writes.
+- `SHOW INDEX[ES]` for deterministic configured property-index introspection.
 - `WHERE` with arithmetic, expression comparisons, `NOT`/`AND`/`XOR`/`OR`, `IN`, null predicates, string predicates, regex matching, quantified predicates (`all`/`any`/`none`/`single`), and `exists(property)`.
 - Cypher three-valued null logic for predicates.
 - Stable `ORDER BY` with Cypher value ordering, nulls last ascending/first descending, and strict Boolean predicate/coercion rules.
@@ -104,10 +105,11 @@ Supported features include:
 - `CALL { ... }` correlated subqueries with `RETURN` exports and per-row execution.
 - `WITH` with scope replacement and local `WHERE`, `DISTINCT`, `ORDER BY`, `SKIP`, and `LIMIT`.
 - Core aggregates (`count`, `collect`, `sum`, `avg`, `min`, `max`) with implicit grouping, aggregate `DISTINCT`, and documented null/empty-input behavior.
+- Scalar expressions containing aggregate results, such as `count(*) + 1`.
 - Core scalar functions (`coalesce`, `id`/`elementId`, `type`, `labels`, `startNode`/`endNode`, `properties`, `head`/`last`, `size`/`length`, `toBoolean`/`toInteger`/`toFloat`/`toString`, string ops, math ops including `sign`/`exp`/`log`/`sin`/`cos`/`tan`/`pi`/`e`, `rand`/`randomUUID`, `range`, `reverse`, `tail`, `keys`), including property access on computed values such as `startNode(r).name`.
-- GestaltDB-specific `CALL pg.sample_typed_paths(...) YIELD path RETURN path`.
+- Generalized top-level `CALL name(...) YIELD field [AS alias] RETURN alias` parsing with allowlisted execution; `pg.sample_typed_paths` is registered and accepts parameters.
 
-Unsupported Cypher currently includes mutating clauses beyond `CREATE`/`SET`/`REMOVE`/`DELETE`/`MERGE`/`FOREACH`, pattern comprehensions, `exists()` with patterns, quantified path patterns, and relationship or multi-property constraints.
+Unsupported Cypher currently includes mutating clauses beyond `CREATE`/`SET`/`REMOVE`/`DELETE`/`MERGE`/`FOREACH`, pattern comprehensions, `exists()` with patterns, GQL quantified paths (with migration hints), unregistered procedures, and relationship or multi-property constraints.
 
 ## Sampling APIs
 

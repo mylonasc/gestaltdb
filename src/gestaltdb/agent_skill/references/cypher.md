@@ -18,11 +18,13 @@ Use `graph.query(cypher, parameters=None)` for Cypher reads and writes. It retur
 - `OPTIONAL MATCH`, `UNWIND`, `UNION [ALL]`, correlated `CALL { ... }`, relationship property maps, variable-length and shortest paths, path bindings, and label expressions.
 - `CREATE`, `SET`, `REMOVE`, `DELETE`/`DETACH DELETE`, `MERGE`, and write-only `FOREACH` loops.
 - Persisted single-property node `UNIQUE` and `IS NOT NULL` constraints through `CREATE CONSTRAINT`, `DROP CONSTRAINT`, and `SHOW CONSTRAINTS`; enforcement applies to Cypher writes.
+- `SHOW INDEX`/`SHOW INDEXES` returns configured node and relationship property indexes as `entityType`/`properties` records.
+- Registered procedures use generalized `CALL name(...) YIELD field [AS alias] RETURN alias`; only `pg.sample_typed_paths` currently executes and it accepts parameters.
 - Configured exact/range node and typed relationship indexes are reused where predicates permit.
 
 ## Unsupported
 
-Do not use pattern comprehensions, pattern arguments to `exists()`, quantified path patterns, relationship or multi-property constraints, or generic procedures beyond the documented sampling call.
+Do not use pattern comprehensions, pattern arguments to `exists()`, GQL quantified path patterns, relationship or multi-property constraints, or procedures beyond the documented sampling call. GQL quantifier errors suggest the supported legacy `*min..max` form.
 
 ## Example
 

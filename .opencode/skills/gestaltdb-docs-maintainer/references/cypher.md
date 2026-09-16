@@ -72,6 +72,8 @@ GestaltDB includes an embedded Cypher query processor:
 - `CREATE`, `SET`, `REMOVE`, `DELETE`/`DETACH DELETE`, `MERGE` with `ON CREATE`/`ON MATCH`, and write-only `FOREACH` loops.
 - Writes run in a backend transaction when supported; terminal `RETURN ... LIMIT` does not truncate earlier side effects.
 - Persisted, single-property node `UNIQUE` and `IS NOT NULL` constraints through `CREATE CONSTRAINT`, `DROP CONSTRAINT`, and `SHOW CONSTRAINTS`.
+- `SHOW INDEX`/`SHOW INDEXES` lists configured property indexes with `entityType` and `properties` columns.
+- Top-level procedure syntax is generalized and allowlisted: `pg.sample_typed_paths` supports parameters and `YIELD path AS alias`; unknown procedures/fields are semantic errors.
 - Constraints validate existing data on creation and final node states for Cypher writes. Direct object and columnar writes do not enforce them.
 - Exact/range node and typed relationship predicates reuse configured property indexes. Independent comma-separated node scans start with the smallest label population.
 
@@ -95,7 +97,8 @@ GestaltDB includes an embedded Cypher query processor:
 
 Do **not** document or expect the following syntax to work:
 - Explicit grouping (`GROUP BY`; Cypher grouping is implicit)
-- Pattern comprehensions, `exists()` with a pattern, and quantified path patterns
+- Pattern comprehensions and `exists()` with a pattern
+- GQL quantified path patterns (diagnostics suggest legacy `*min..max` syntax)
 - Relationship or multi-property constraints
 - Generic procedure calls beyond the documented sampling procedure and correlated `CALL { ... }`
 

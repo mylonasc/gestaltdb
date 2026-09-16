@@ -25,7 +25,7 @@ Available topics:
 
 - `quickstart`: imports, graph lifecycle, node/edge creation, close discipline.
 - `backends`: `GraphDB.create/open`, manifests, LevelDB/PyRex/RocksDB, and inspection.
-- `cypher`: supported read-only Cypher syntax and common unsupported forms.
+- `cypher`: supported Cypher reads, writes, schema commands, procedures, and limitations.
 - `indexing`: explicit property indexes, range lookups, deferred rebuilds.
 - `sampling`: typed traversal sampling vs snapshot/engine sampling.
 - `ingestion`: Arrow/Polars ingestion and index maintenance modes.
@@ -56,9 +56,14 @@ The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storag
 
 ## Cypher Boundaries
 
-`GraphDB.query(cypher, parameters=None)` is read-only. It supports label scans, inline properties, parameters, typed relationship traversal, `WHERE`, `RETURN`, general projection expressions, `DISTINCT`, `ORDER BY`, `SKIP`, `LIMIT`, chained `MATCH` clauses, `WITH` with scope replacement and local result modifiers, and core aggregates (`count`, `collect`, `sum`, `avg`, `min`, `max`) with implicit grouping.
+`GraphDB.query(cypher, parameters=None)` supports reads and writes, including
+read composition, paths, core expressions and aggregates, mutations, persisted
+node constraints, and `SHOW CONSTRAINTS`/`SHOW INDEXES`. Registered procedures
+use `CALL name(...) YIELD ...`; currently only `pg.sample_typed_paths` executes.
 
-Do not use mutating clauses, `OPTIONAL MATCH`, variable-length paths, or path binding like `p = (a)-[:T]->(b)`.
+Do not use pattern comprehensions, pattern arguments to `exists()`, GQL
+quantified paths, relationship/multi-property constraints, or unregistered
+procedures.
 
 ## Minimal Runnable Pattern
 

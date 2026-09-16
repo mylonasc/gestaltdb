@@ -272,11 +272,12 @@ def test_scalar_functions_in_where_and_order_by():
     ]
 
 
-def test_aggregates_nested_in_scalars_stay_rejected():
+def test_aggregates_in_scalar_functions_and_where_placement():
     graph = _function_graph()
 
-    with pytest.raises(ValueError, match="top-level"):
-        execute(graph, "MATCH (n:Person) RETURN toString(count(*)) AS v")
+    assert execute(graph, "MATCH (n:Person) RETURN toString(count(*)) AS v").records == [
+        {"v": "2"}
+    ]
     with pytest.raises(ValueError, match="Aggregates cannot be used in WHERE"):
         execute(graph, "MATCH (n:Person) WHERE toString(count(*)) = 'x' RETURN n.id")
 

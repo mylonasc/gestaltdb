@@ -38,7 +38,7 @@ TOPICS: dict[str, Topic] = {
     "cypher": Topic(
         "cypher",
         "Cypher For Library Users",
-        "Writing read-only GraphDB.query calls and avoiding unsupported Cypher syntax.",
+        "Writing GraphDB.query reads and writes, schema commands, registered procedures, and explicit limitations.",
         "references/cypher.md",
     ),
     "indexing": Topic(

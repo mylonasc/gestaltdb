@@ -37,7 +37,7 @@ convenience.
 Important usage notes for agents and developers:
 
 * Relationship traversal types come from ``Edge.properties["type"]``.
-* ``GraphDB.query`` implements a partial, read-only Cypher subset.
+* ``GraphDB.query`` implements a broad Cypher read/write subset.
 * Property indexes are explicit; create them before relying on property lookups.
 * Use ``GraphDB.ingest_arrow`` and ``GraphDB.ingest_polars`` for tabular bulk
   ingestion, and use ``SamplerSnapshot``/``SamplerEngine`` for ML-oriented

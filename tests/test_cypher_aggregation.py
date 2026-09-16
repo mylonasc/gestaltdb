@@ -67,6 +67,27 @@ def test_grouped_aggregation_with_first_seen_order():
     assert result.records == [{"dept": "eng", "total": 2}, {"dept": "ops", "total": 2}]
 
 
+def test_scalar_projection_with_aggregate_uses_implicit_grouping():
+    result = execute(
+        _scores_graph(),
+        "MATCH (n:Person) RETURN n.age + count(*) AS total ORDER BY total",
+    )
+
+    assert result.records == [{"total": 31}, {"total": 42}, {"total": None}]
+
+
+def test_global_aggregate_can_be_used_in_scalar_projection():
+    result = execute(_scores_graph(), "MATCH (n:Person) RETURN count(*) + 1 AS total")
+
+    assert result.records == [{"total": 5}]
+
+
+def test_scalar_aggregate_projection_preserves_empty_input_row():
+    result = execute(_scores_graph(), "MATCH (n:Missing) RETURN count(*) + 1 AS total")
+
+    assert result.records == [{"total": 1}]
+
+
 def test_grouped_empty_input_returns_no_rows():
     assert execute(_scores_graph(), "MATCH (n:Missing) RETURN n.dept, count(*)").records == []
 
@@ -203,8 +224,8 @@ def test_collect_order_follows_first_seen_input_order():
         ("MATCH (n) RETURN count(sum(n.id))", "Nested aggregate"),
         ("MATCH (n) WHERE count(n.id) > 1 RETURN n", "Aggregates cannot be used in WHERE"),
         ("MATCH (n) RETURN count(DISTINCT *)", "Unsupported Cypher query"),
-        ("MATCH (n) RETURN count(*) + 1", "top-level projection"),
         ("MATCH (n) RETURN sum(*)", "not supported"),
+        ("MATCH (n) RETURN toString(sum(*))", "not supported"),
         ("MATCH (n) RETURN n.id ORDER BY count(n.id)", "aggregate projection"),
         ("MATCH (n) RETURN count(n.id) AS total, n.id AS total", "duplicate column names"),
     ],

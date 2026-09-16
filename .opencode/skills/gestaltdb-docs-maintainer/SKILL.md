@@ -65,7 +65,7 @@ Follow this lazy-loading workflow:
    - `references/backends.md`: `LevelDBStore`, `LMDBStore`, `PyRexStore`, transactional vs non-transactional mode, manifests (`create`/`open`).
    - `references/indexing.md`: Native labels, relationship types, property indexes, exact/range lookups, index maintenance.
    - `references/ingestion.md`: Arrow & Polars columnar ingest, `ColumnarIngestionMode`, `IndexMaintenanceMode`.
-   - `references/cypher.md`: Supported read-only Cypher subset, syntax rules, limitations, and `QueryResult`.
+   - `references/cypher.md`: Supported Cypher read/write subset, syntax rules, limitations, and `QueryResult`.
     - `references/sampling.md`: Graph traversal sampling vs array-native `SamplerSnapshot`/`SamplerEngine` for GNNs.
     - `src/gestaltdb/agent_skill/references/*.md`: Short shipped, user-focused retrieval docs for installed-library coding agents.
 3. Inspect relevant source files only when deep implementation details or test cases are needed:

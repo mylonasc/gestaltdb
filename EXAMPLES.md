@@ -115,7 +115,7 @@ with TemporaryDirectory() as tmpdir:
         graph.close()
 ```
 
-## Run Read-Only Cypher
+## Read and Write with Cypher
 
 ```python
 result = graph.query(
@@ -130,7 +130,8 @@ for record in result:
     print(record["id"], record["name"])
 ```
 
-Supported Cypher is read-only. It covers indexed node scans, typed relationship traversal, filters, projection, ordering, limits, chained `MATCH` clauses, and `WITH` stages with scope replacement:
+Cypher covers indexed scans, typed traversal, read composition, paths,
+aggregation, and writes. Writes use backend transactions when available:
 
 ```python
 result = graph.query(
@@ -158,7 +159,40 @@ bands = graph.query(
 )
 ```
 
-It does not support mutating queries, `OPTIONAL MATCH`, or variable-length paths.
+```python
+created = graph.query(
+    'MERGE (a:Person {id: "alice"}) ON CREATE SET a.name = "Alice" '
+    'MERGE (b:Person {id: "bob"}) ON CREATE SET b.name = "Bob" '
+    'MERGE (a)-[r:KNOWS {id: "alice-knows-bob"}]->(b) '
+    'ON CREATE SET r.since = 2024 '
+    'RETURN a.name AS source, b.name AS target, r.since AS since'
+)
+assert created.records == [{"source": "Alice", "target": "Bob", "since": 2024}]
+
+paths = graph.query(
+    'MATCH p = (a:Person {id: "alice"})-[:KNOWS*1..2]->(friend) '
+    'OPTIONAL MATCH (friend)-[:KNOWS]->(other) '
+    'RETURN friend.name AS friend, length(p) AS hops, other.name AS other '
+    'ORDER BY friend'
+)
+```
+
+Inspect schema metadata and call the registered sampling procedure:
+
+```python
+graph.create_node_property_index("name")
+graph.create_edge_property_index("since")
+assert graph.query("SHOW INDEXES").columns == ("entityType", "properties")
+
+sampled = graph.query(
+    'CALL pg.sample_typed_paths($seeds, $pattern) '
+    'YIELD path AS sampled RETURN sampled LIMIT 1',
+    parameters={
+        "seeds": ["alice"],
+        "pattern": [{"edge_type": "KNOWS", "direction": "out", "sample_size": 2}],
+    },
+)
+```
 
 ## Traverse and Sample Typed Relationships
 

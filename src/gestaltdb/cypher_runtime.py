@@ -346,10 +346,17 @@ def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, obj
 
 def _procedure_rows(source: ProcedureSource, context: QueryContext) -> Iterator[BindingRow]:
     """Seed binding rows from a sampling procedure call."""
-    paths = context.graph.sample_typed_paths(
-        source.query.seed_ids, source.query.pattern
+    seed_ids = context.resolve(source.query.seed_ids)
+    pattern = context.resolve(source.query.pattern)
+    if not isinstance(seed_ids, list) or not all(isinstance(seed_id, str) for seed_id in seed_ids):
+        raise ValueError("pg.sample_typed_paths seed IDs must be a list of strings")
+    if not isinstance(pattern, list) or not all(isinstance(hop, dict) for hop in pattern):
+        raise ValueError("pg.sample_typed_paths pattern must be a list of dictionaries")
+    paths = context.graph.sample_typed_paths(seed_ids, pattern)
+    return (
+        BindingRow(bindings={source.query.output_name: path})
+        for path in paths
     )
-    return (BindingRow(bindings={"path": path}) for path in paths)
 
 
 def _execute_union(union: Union, context: QueryContext) -> list[dict[str, object]]:
@@ -508,13 +515,20 @@ class AggregateOperator:
             order.append(())
         for key in order:
             group = groups[key]
-            record: dict[str, object] = {
+            aggregate_values: dict[str, object] = {
                 output: value
                 for (output, _), value in zip(self.aggregate.keys, group["key_values"])
             }
             columns = list(zip(*group["arguments"])) if group["arguments"] else [() for _ in self.aggregate.calls]
             for (output, call), values in zip(self.aggregate.calls, columns):
-                record[output] = _apply_aggregate(call, list(values), group["row_count"])
+                aggregate_values[output] = _apply_aggregate(call, list(values), group["row_count"])
+            expressions = self.aggregate.expressions or tuple(
+                Variable(output) for output in self.aggregate.returns
+            )
+            record = {
+                output: evaluate_expression(expression, aggregate_values, context)
+                for output, expression in zip(self.aggregate.returns, expressions)
+            }
             yield ProjectedRow(values=record, source_bindings=dict(record))
 
 

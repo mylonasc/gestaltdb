@@ -200,6 +200,11 @@ class ShowConstraints:
 
 
 @dataclass(frozen=True)
+class ShowIndexes:
+    """List configured node and relationship property indexes."""
+
+
+@dataclass(frozen=True)
 class SubqueryClause:
     """One ``CALL { ... }`` correlated subquery over an inner clause query."""
 
@@ -659,10 +664,11 @@ class MultiMatchQuery:
 class SampleTypedPathsCall:
     """Parsed ``pg.sample_typed_paths`` procedure call."""
 
-    seed_ids: list[str]
-    pattern: list[dict[str, object]]
+    seed_ids: object
+    pattern: object
     returns: tuple[str, ...] = ("path",)
     limit: int | Parameter | None = None
+    output_name: str = "path"
 
 
 @dataclass(frozen=True)

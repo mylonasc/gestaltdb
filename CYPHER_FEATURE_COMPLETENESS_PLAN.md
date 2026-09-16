@@ -1,5 +1,8 @@
 # Cypher Feature-Completeness Plan
 
+> Status: stages 0-6 (`[cypher-01]` through `[cypher-21]`) are complete. The
+> baseline below is retained as historical context rather than current support.
+
 Target: **openCypher read + write**, **compatible + extensions** (retain
 `n.id` / `r.id` / `n.labels` / `r.source` / `r.target` / anchored `{id:}`),
 **backend-aware simple atomicity** (no new session/Tx API this iteration).

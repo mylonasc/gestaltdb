@@ -1,5 +1,9 @@
 # Cypher Clause Pipeline and Aggregation Features
 
+> Historical design document. The pipeline migration is complete and current
+> capabilities are tracked in `CYPHER_FEATURE_COMPLETENESS_PLAN.md`, `AGENTS.md`,
+> and `docs/cypher.rst`.
+
 ## 1. Purpose
 
 This document defines the next GestaltDB read-only Cypher features as independently trackable work items. It covers the migration from AST-specific execution to an authoritative typed operator pipeline, followed by clause-oriented parsing, `WITH`, clause-local `WHERE`, general projections, and aggregation.

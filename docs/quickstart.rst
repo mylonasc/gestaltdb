@@ -62,8 +62,8 @@ properties you query frequently.
 Cypher Query
 ------------
 
-Use ``GraphDB.query`` for read-only Cypher queries over labels, typed
-relationships, filters, ordering, and chained ``MATCH`` clauses.
+Use ``GraphDB.query`` for Cypher reads and writes over labels, typed
+relationships, paths, read-composition clauses, aggregation, and mutations.
 
 .. code-block:: python
 

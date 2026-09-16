@@ -24,6 +24,7 @@ from .cypher_ast import (
     SetMerge,
     SetProperty,
     SetReplace,
+    ShowIndexes,
     ShowConstraints,
 )
 from .cypher_expr import PathValue, _cypher_equals, evaluate_expression
@@ -176,6 +177,16 @@ def check_node_constraints(graph, labels, properties: dict, exclude_id=None, aga
 
 def execute_ddl(graph, command) -> tuple[tuple[str, ...], list[dict]]:
     """Execute a constraint command, returning ``(columns, records)``."""
+    if isinstance(command, ShowIndexes):
+        records = [
+            {"entityType": entity_type, "properties": [property_name]}
+            for entity_type, property_names in (
+                ("NODE", getattr(graph, "indexed_node_properties", set())),
+                ("RELATIONSHIP", getattr(graph, "indexed_edge_properties", set())),
+            )
+            for property_name in sorted(property_names)
+        ]
+        return ("entityType", "properties"), records
     if isinstance(command, ShowConstraints):
         return (
             ("name", "type", "label", "property"),

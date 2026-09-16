@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Added extended Cypher expressions, strict three-valued semantics, stable cross-type ordering, and scalar expressions containing aggregates.
+- Added `OPTIONAL MATCH`, `UNWIND`, `UNION [ALL]`, correlated `CALL { ... }`, relationship property maps, variable-length and shortest paths, named paths, and label expressions.
+- Added Cypher writes through `CREATE`, `SET`, `REMOVE`, `DELETE`, `MERGE`, and `FOREACH`, with backend-aware transaction handling.
+- Added persisted node uniqueness/not-null constraints plus `SHOW CONSTRAINTS` and `SHOW INDEXES` schema introspection.
+- Hardened planner join ordering, exact/range index reuse, bulk range-index maintenance, and write behavior around terminal `LIMIT`.
+- Generalized registered procedure calls with `YIELD` aliases and parameters, while preserving an allowlisted execution boundary.
+- Added actionable migration errors for deferred GQL quantified relationships and path patterns.
+- Rewrote Cypher user and packaged agent documentation with current read/write examples and limitations.
+
 ## 0.7.0
 
 - Replaced regex-based Cypher parsing with a Lark grammar supporting comments, Unicode and escaped names, source-located errors, expression precedence, multiple inline properties, and parameterized pagination.

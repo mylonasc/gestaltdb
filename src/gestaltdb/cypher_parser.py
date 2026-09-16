@@ -1,4 +1,4 @@
-"""Grammar-based parser for the GestaltDB read-only Cypher subset."""
+"""Grammar-based parser for the supported GestaltDB Cypher subset."""
 
 from __future__ import annotations
 
@@ -62,6 +62,7 @@ from .cypher_ast import (
     SetProperty,
     SetReplace,
     ShortestPathExpression,
+    ShowIndexes,
     ShowConstraints,
     SliceExpression,
     SourceSpan,
@@ -83,16 +84,17 @@ from .cypher_semantics import QueryAnalysis, analyze_query, render_projection
 
 _GRAMMAR = r"""
  ?start: query ";"?
- ?query: match_query | sample_call | union_query | constraint_command
+ ?query: match_query | procedure_call | union_query | constraint_command
  union_query: match_query (union_operator match_query)+
  union_operator: "UNION"i "ALL"i -> union_all
                | "UNION"i -> union_distinct
- ?constraint_command: create_constraint | drop_constraint | show_constraints
+ ?constraint_command: create_constraint | drop_constraint | show_constraints | show_indexes
  create_constraint: "CREATE"i "CONSTRAINT"i symbolic_name? "FOR"i "(" symbolic_name ":" symbolic_name ")" "REQUIRE"i symbolic_name "." symbolic_name "IS"i constraint_kind
  constraint_kind: "UNIQUE"i -> unique_kind
                 | "NOT"i "NULL"i -> exists_kind
  drop_constraint: "DROP"i "CONSTRAINT"i symbolic_name
  show_constraints: "SHOW"i "CONSTRAINTS"i
+ show_indexes: "SHOW"i ("INDEX"i | "INDEXES"i)
 
   match_query: (match_clause | optional_match_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | merge_clause | foreach_clause) (match_clause | optional_match_clause | where_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | merge_clause | foreach_clause | with_section)* return_full
   match_clause: "MATCH"i shortest_selector? pattern ("," pattern)*
@@ -133,7 +135,9 @@ limit_clause: "LIMIT"i pagination_value
 ?pagination_value: INTEGER -> integer
                  | parameter
 
-sample_call: "CALL"i "pg"i "." "sample_typed_paths"i "(" call_arguments ")" "YIELD"i "path"i "RETURN"i "path"i limit_clause?
+procedure_call: "CALL"i qualified_name "(" call_arguments ")" "YIELD"i yield_item "RETURN"i symbolic_name limit_clause?
+qualified_name: symbolic_name ("." symbolic_name)*
+yield_item: symbolic_name ("AS"i symbolic_name)?
 call_arguments: [expression ("," expression)*]
 
   pattern: node_pattern traversal_hop*
@@ -833,6 +837,9 @@ class _ASTBuilder(Transformer):
     def show_constraints(self, _children):
         return ShowConstraints()
 
+    def show_indexes(self, _children):
+        return ShowIndexes()
+
     def union_all(self, _children):
         return True
 
@@ -935,7 +942,13 @@ class _ASTBuilder(Transformer):
             tuple(sequence),
         )
 
-    def sample_call(self, children):
+    def qualified_name(self, children):
+        return ".".join(children)
+
+    def yield_item(self, children):
+        return ("yield", children[0], children[-1])
+
+    def procedure_call(self, children):
         limit = next(
             (
                 item.value
@@ -944,8 +957,11 @@ class _ASTBuilder(Transformer):
             ),
             None,
         )
+        name = next(item for item in children if isinstance(item, str))
         arguments = next(item[1] for item in children if isinstance(item, tuple) and item and item[0] == "arguments")
-        return ("sample", arguments, limit)
+        yielded = next(item for item in children if isinstance(item, tuple) and item and item[0] == "yield")
+        return_name = next(item for item in reversed(children) if isinstance(item, str))
+        return ("procedure", name, arguments, yielded[1], yielded[2], return_name, limit)
 
 
 _BUILDER = _ASTBuilder()
@@ -955,9 +971,9 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
     """Parse the supported Cypher subset into runtime-compatible AST objects."""
     parsed = _parse_source(query)
 
-    if isinstance(parsed, tuple) and parsed and parsed[0] == "sample":
+    if isinstance(parsed, tuple) and parsed and parsed[0] == "procedure":
         return _build_sample_call(parsed, query)
-    if isinstance(parsed, (CreateConstraint, DropConstraint, ShowConstraints)):
+    if isinstance(parsed, (CreateConstraint, DropConstraint, ShowConstraints, ShowIndexes)):
         raise _located_error(
             CypherSemanticError,
             "Query cannot be represented by legacy parse(); use parse_ast()",
@@ -992,12 +1008,12 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
     return _build_match_query(parsed, query, analysis)
 
 
-def parse_ast(query: str) -> Query | SampleTypedPathsCall | UnionQuery | CreateConstraint | DropConstraint | ShowConstraints:
+def parse_ast(query: str) -> Query | SampleTypedPathsCall | UnionQuery | CreateConstraint | DropConstraint | ShowConstraints | ShowIndexes:
     """Parse the supported Cypher subset into the canonical clause AST."""
     parsed = _parse_source(query)
-    if isinstance(parsed, tuple) and parsed and parsed[0] == "sample":
+    if isinstance(parsed, tuple) and parsed and parsed[0] == "procedure":
         return _build_sample_call(parsed, query)
-    if isinstance(parsed, (CreateConstraint, DropConstraint, ShowConstraints)):
+    if isinstance(parsed, (CreateConstraint, DropConstraint, ShowConstraints, ShowIndexes)):
         return parsed
     if isinstance(parsed, tuple) and parsed and parsed[0] == "union":
         return _build_union_query(parsed, query)
@@ -1179,6 +1195,18 @@ def _parse_source(query: str):
     try:
         parsed = _BUILDER.transform(_PARSER.parse(query))
     except UnexpectedInput as exc:
+        hint = _gql_quantifier_hint(query)
+        if hint is not None:
+            message, offset = hint
+            line = query.count("\n", 0, offset) + 1
+            line_start = query.rfind("\n", 0, offset) + 1
+            raise CypherSyntaxError(
+                message,
+                line=line,
+                column=offset - line_start + 1,
+                offset=offset,
+                source=query,
+            ) from exc
         raise CypherSyntaxError(
             "Unsupported Cypher query",
             line=exc.line,
@@ -1199,15 +1227,56 @@ def _parse_source(query: str):
 
 
 def _build_sample_call(parsed, query: str) -> SampleTypedPathsCall:
-    _, arguments, limit = parsed
+    _, name, arguments, yielded, output_name, return_name, limit = parsed
+    if name.lower() != "pg.sample_typed_paths":
+        raise _located_error(CypherSemanticError, f"Unsupported procedure: {name}", query, name)
+    if yielded.lower() != "path":
+        raise _located_error(
+            CypherSemanticError,
+            f"Procedure pg.sample_typed_paths does not yield field: {yielded}",
+            query,
+            yielded,
+        )
+    if return_name != output_name:
+        raise _located_error(
+            CypherSemanticError,
+            f"RETURN must reference yielded variable: {output_name}",
+            query,
+            return_name,
+        )
     if len(arguments) != 2:
         raise _located_error(CypherSemanticError, "pg.sample_typed_paths expects seed IDs and a sampling pattern", query)
     seed_ids, pattern = arguments
-    if not isinstance(seed_ids, list) or not all(isinstance(seed_id, str) for seed_id in seed_ids):
+    if not isinstance(seed_ids, (list, Parameter)) or isinstance(seed_ids, list) and not all(isinstance(seed_id, str) for seed_id in seed_ids):
         raise _located_error(CypherSemanticError, "pg.sample_typed_paths seed IDs must be a list of strings", query)
-    if not isinstance(pattern, list) or not all(isinstance(hop, dict) for hop in pattern):
+    if not isinstance(pattern, (list, Parameter)) or isinstance(pattern, list) and not all(isinstance(hop, dict) for hop in pattern):
         raise _located_error(CypherSemanticError, "pg.sample_typed_paths pattern must be a list of dictionaries", query)
-    return SampleTypedPathsCall(seed_ids=seed_ids, pattern=pattern, limit=limit)
+    return SampleTypedPathsCall(
+        seed_ids=seed_ids,
+        pattern=pattern,
+        returns=(output_name,),
+        limit=limit,
+        output_name=output_name,
+    )
+
+
+def _gql_quantifier_hint(query: str) -> tuple[str, int] | None:
+    """Recognize unsupported postfix GQL path quantifiers after parse failure."""
+    relationship = re.search(r"(?:->|<-|-)\s*(\{\s*\d*\s*(?:,\s*\d*)?\s*\}|[+*?])\s*\(", query)
+    if relationship is not None:
+        return (
+            "GQL quantified relationships are not supported; use legacy variable-length "
+            "syntax such as -[:TYPE*1..3]->",
+            relationship.start(1),
+        )
+    path = re.search(r"\)\s*(\{\s*\d*\s*(?:,\s*\d*)?\s*\}|[+*?])\s*(?:RETURN|,|\))", query, re.IGNORECASE)
+    if path is not None and query.lstrip().upper().startswith("MATCH (("):
+        return (
+            "GQL quantified path patterns are not supported; use legacy *min..max syntax "
+            "for one repeated relationship or expand the pattern explicitly",
+            path.start(1),
+        )
+    return None
 
 
 def _build_match_query(parsed: _ParsedMatch, query: str, analysis: QueryAnalysis):

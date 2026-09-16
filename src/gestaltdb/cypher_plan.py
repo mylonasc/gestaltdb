@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass, replace
 
 from .cypher_ast import (
     CreateClause,
@@ -170,6 +170,7 @@ class Aggregate:
     returns: tuple[str, ...]
     keys: tuple[tuple[str, object], ...] = ()
     calls: tuple[tuple[str, AggregateCall], ...] = ()
+    expressions: tuple[object, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -345,11 +346,10 @@ def plan_staged_query(query: Query, scope=None, require_return: bool = True) -> 
 
 
 def _has_aggregate_call(expressions: tuple[object, ...]) -> bool:
-    """Return whether any top-level projection expression is an aggregate call."""
-    return any(
-        isinstance(expression, FunctionCall) and is_aggregate_function(expression.name)
-        for expression in expressions
-    )
+    """Return whether any projection expression contains an aggregate call."""
+    from .cypher_semantics import contains_aggregate_call
+
+    return any(contains_aggregate_call(expression) for expression in expressions)
 
 
 def _plan_aggregate(
@@ -358,15 +358,32 @@ def _plan_aggregate(
     outputs: tuple[str, ...],
     expressions: tuple[object, ...],
 ) -> Aggregate:
-    """Build an ``Aggregate`` operator with implicit grouping keys."""
+    """Build an ``Aggregate`` operator with implicit grouping keys.
+
+    Mixed expressions are split into aggregate-free grouping slots and
+    aggregate-call slots. The runtime evaluates the rewritten scalar
+    expression once those slots have values for each group.
+    """
+    from .cypher_semantics import contains_aggregate_call, expression_variables
+
     keys: list[tuple[str, object]] = []
     calls: list[tuple[str, AggregateCall]] = []
-    for output, expression in zip(outputs, expressions):
+    projected: list[object] = []
+    slot_number = 0
+
+    def slot_name(kind: str) -> str:
+        nonlocal slot_number
+        name = f"__gestaltdb_{kind}_{slot_number}"
+        slot_number += 1
+        return name
+
+    def rewrite_expression(expression: object, output: str | None = None) -> object:
         if isinstance(expression, FunctionCall) and is_aggregate_function(expression.name):
             argument = expression.arguments[0]
+            name = output or slot_name("aggregate")
             calls.append(
                 (
-                    output,
+                    name,
                     AggregateCall(
                         function=expression.name,
                         argument=None if isinstance(argument, Wildcard) else argument,
@@ -374,9 +391,42 @@ def _plan_aggregate(
                     ),
                 )
             )
-        else:
+            return Variable(name)
+        if isinstance(expression, tuple):
+            return tuple(rewrite_expression(item) for item in expression)
+        if not contains_aggregate_call(expression):
+            if expression_variables(expression):
+                name = output or slot_name("group")
+                keys.append((name, expression))
+                return Variable(name)
+            return expression
+        if isinstance(expression, list):
+            return [rewrite_expression(item) for item in expression]
+        if isinstance(expression, dict):
+            return {name: rewrite_expression(value) for name, value in expression.items()}
+        if is_dataclass(expression):
+            return replace(
+                expression,
+                **{
+                    item.name: rewrite_expression(getattr(expression, item.name))
+                    for item in fields(expression)
+                    if item.name != "span"
+                },
+            )
+        return expression
+
+    for output, expression in zip(outputs, expressions):
+        if not contains_aggregate_call(expression):
             keys.append((output, expression))
-    return Aggregate(returns=outputs, keys=tuple(keys), calls=tuple(calls))
+            projected.append(Variable(output))
+        else:
+            projected.append(rewrite_expression(expression, output))
+    return Aggregate(
+        returns=outputs,
+        keys=tuple(keys),
+        calls=tuple(calls),
+        expressions=tuple(projected),
+    )
 
 
 def _normalize_aggregate_order(

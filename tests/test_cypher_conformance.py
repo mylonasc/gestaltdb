@@ -201,12 +201,19 @@ SUPPORTED: list[tuple[str, str, str, tuple[str, ...], list[dict[str, object]]]] 
      ("name", "type", "label", "property"), []),
     ("three-valued-empty-membership", "[cypher-20]",
      "UNWIND [0] AS x RETURN null IN [] AS value", ("value",), [{"value": False}]),
+    ("show-indexes", "[cypher-21]", "SHOW INDEXES",
+     ("entityType", "properties"), []),
+    ("aggregate-mixed-with-scalar", "[cypher-21]", "MATCH (n) RETURN n.age + count(*)",
+     ("(n.age + count(*))",),
+     [{"(n.age + count(*))": 31}, {"(n.age + count(*))": 41}]),
 ]
 
-# (feature, implementing stage issue, query, expected error substring).
-UNSUPPORTED: list[tuple[str, str, str, str]] = [
-    ("aggregate-mixed-with-scalar", "[cypher-21]", "MATCH (n) RETURN n.age + count(*)",
-     "must be top-level"),
+# Explicitly deferred GQL syntax remains pinned to actionable migration errors.
+DEFERRED_GQL: list[tuple[str, str, str, str]] = [
+    ("gql-relationship-quantifier", "[cypher-21]",
+     "MATCH (a)-[:T]->{1,3}(b) RETURN b", "GQL quantified relationships"),
+    ("gql-path-quantifier", "[cypher-21]",
+     "MATCH ((a)-[:T]->(b)){1,3} RETURN b", "GQL quantified path patterns"),
 ]
 
 
@@ -226,11 +233,11 @@ def test_supported_clause_executes(feature, issue, query, columns, records):
 
 @pytest.mark.parametrize(
     ("feature", "issue", "query", "message"),
-    UNSUPPORTED,
-    ids=[entry[0] for entry in UNSUPPORTED],
+    DEFERRED_GQL,
+    ids=[entry[0] for entry in DEFERRED_GQL],
 )
-def test_unsupported_clause_rejected_with_location(feature, issue, query, message):
-    """Unsupported clauses fail with a located error, never silently."""
+def test_deferred_gql_clause_has_migration_error(feature, issue, query, message):
+    """Deferred GQL syntax fails with a located migration diagnostic."""
     del feature, issue
     with pytest.raises(ValueError, match=re.escape(message)) as excinfo:
         execute(_conformance_graph(), query)
@@ -245,7 +252,7 @@ def test_unsupported_clause_rejected_with_location(feature, issue, query, messag
 def test_conformance_entries_reference_known_stage_issues():
     """Every entry traces to a stage issue from the completeness plan."""
     tagged = [(entry[0], entry[1]) for entry in SUPPORTED]
-    tagged += [(entry[0], entry[1]) for entry in UNSUPPORTED]
+    tagged += [(entry[0], entry[1]) for entry in DEFERRED_GQL]
 
     assert tagged
     for feature, issue in tagged:

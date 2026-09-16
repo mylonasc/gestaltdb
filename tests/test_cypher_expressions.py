@@ -296,13 +296,15 @@ def test_comprehension_variable_is_local_to_scope():
         execute(graph, "MATCH (n:Person) RETURN [x IN [1] | y] AS v")
 
 
-def test_aggregates_cannot_hide_inside_extended_expressions():
+def test_aggregates_in_extended_projection_expressions():
     graph = _expr_graph()
 
-    with pytest.raises(ValueError, match="top-level"):
-        execute(graph, "MATCH (n:Person) RETURN [x IN [1] | count(*)] AS v")
-    with pytest.raises(ValueError, match="top-level"):
-        execute(graph, "MATCH (n:Person) RETURN CASE WHEN count(*) > 0 THEN 1 ELSE 0 END AS v")
+    assert execute(graph, "MATCH (n:Person) RETURN [x IN [1] | count(*)] AS v").records == [
+        {"v": [3]}
+    ]
+    assert execute(
+        graph, "MATCH (n:Person) RETURN CASE WHEN count(*) > 0 THEN 1 ELSE 0 END AS v"
+    ).records == [{"v": 1}]
 
 
 def test_legacy_parse_rejects_extended_expressions():

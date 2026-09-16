@@ -188,7 +188,7 @@ Measured locally on 100k nodes and 500k edges, RocksDB native columnar ingestion
 - LMDB, LevelDB, and RocksDB/PyRex storage backends.
 - Pickle, JSON, MessagePack, and Protobuf serializers.
 - Label, relationship type, property, composite, and range indexes.
-- Grammar-based, read-only Cypher subset for indexed scans, typed traversal, three-valued expressions, ordering, pagination, and chained `MATCH` clauses.
+- Grammar-based Cypher read/write subset with indexed scans, paths, read composition, aggregation, constraints, schema introspection, and registered procedures.
 - Bulk and columnar ingestion helpers for Arrow and Polars.
 - Typed path and subgraph sampling.
 
