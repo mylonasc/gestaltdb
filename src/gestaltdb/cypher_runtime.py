@@ -783,6 +783,8 @@ def _indexed_first_hop_rows(row, clause: PathPatternClause, context: QueryContex
     source = clause.source
     if hop.rel_var is None or not hop.edge_types:
         return None
+    if (hop.min_length, hop.max_length) != (1, 1):
+        return None
     if source.variable is not None and source.variable in row.bindings:
         return None
     if any(name == "id" for name, _ in source.properties):
@@ -974,6 +976,9 @@ def _path_start_rows(row, clause: PathPatternClause, context: QueryContext, wher
 
 
 def _expand_pattern_hop(context: QueryContext, rows, hop: PatternHop):
+    if (hop.min_length, hop.max_length) != (1, 1):
+        yield from _expand_variable_hop(context, rows, hop)
+        return
     for row in rows:
         row = BindingRow.from_row(row)
         if _is_null_bound(row, hop.target.variable) or _is_null_bound(row, hop.rel_var):
@@ -1021,6 +1026,88 @@ def _edge_matches_properties(edge, properties, context: QueryContext) -> bool:
     for name, expected in properties:
         if _cypher_equals(edge_properties.get(name), context.resolve(expected)) is not True:
             return False
+    return True
+
+
+def _expand_variable_hop(context: QueryContext, rows, hop: PatternHop):
+    """Expand variable-length hops with trail semantics (no repeated edges)."""
+    for row in rows:
+        row = BindingRow.from_row(row)
+        if _is_null_bound(row, hop.target.variable) or _is_null_bound(row, hop.rel_var):
+            continue
+        yield from _variable_paths(context, row, hop)
+
+
+def _variable_paths(context: QueryContext, row: BindingRow, hop: PatternHop):
+    """Breadth-first enumerate ``min_length..max_length`` trails from a row."""
+    start_id = row.current_node_id
+    if start_id is None:
+        return
+    if hop.min_length == 0:
+        start_node = context.get_node(start_id)
+        if start_node is not None and _node_matches_pattern(
+            start_node, hop.target.labels, hop.target.properties, context
+        ):
+            bindings = dict(row.bindings)
+            if _bind_variable(bindings, hop.target.variable, start_node) and _bind_variable(
+                bindings, hop.rel_var, []
+            ):
+                yield row.with_bindings(
+                    bindings,
+                    current_node_id=start_id,
+                    preserve_current_node=False,
+                    used_relationship_ids=row.used_relationship_ids,
+                )
+    if hop.max_length == 0:
+        return
+    frontier = [(start_id, [], row.used_relationship_ids)]
+    depth = 0
+    while frontier:
+        depth += 1
+        if hop.max_length is not None and depth > hop.max_length:
+            break
+        next_frontier = []
+        for node_id, edges, used in frontier:
+            for adjacency in _iter_pattern_adjacency(context, node_id, hop):
+                edge_id = adjacency["edge_id"]
+                neighbor_id = adjacency["neighbor_id"]
+                if edge_id in used:
+                    continue
+                edge = context.get_edge(edge_id)
+                if edge is None:
+                    continue
+                if hop.properties and not _edge_matches_properties(edge, hop.properties, context):
+                    continue
+                target_node = context.get_node(neighbor_id)
+                if target_node is None:
+                    continue
+                path_edges = edges + [edge]
+                path_used = used.union((edge_id,))
+                if depth >= hop.min_length and _node_matches_pattern(
+                    target_node, hop.target.labels, hop.target.properties, context
+                ):
+                    bindings = dict(row.bindings)
+                    if _bind_variable(bindings, hop.target.variable, target_node) and _bind_variable(
+                        bindings, hop.rel_var, path_edges
+                    ):
+                        yield row.with_bindings(
+                            bindings,
+                            current_node_id=neighbor_id,
+                            preserve_current_node=False,
+                            used_relationship_ids=path_used,
+                        )
+                next_frontier.append((neighbor_id, path_edges, path_used))
+        frontier = next_frontier
+
+
+def _bind_variable(bindings: dict[str, object], variable: str | None, value: object) -> bool:
+    """Bind a variable unless already bound to a different entity."""
+    if variable is None:
+        return True
+    bound = bindings.get(variable)
+    if bound is not None and not same_entity(bound, value):
+        return False
+    bindings[variable] = value
     return True
 
 

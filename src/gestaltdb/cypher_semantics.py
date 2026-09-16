@@ -677,6 +677,12 @@ def _analyze_match(clause: MatchClause, scope: Scope, source: str) -> Scope:
     for pattern in clause.patterns:
         introduce(pattern.source.variable, SymbolKind.NODE)
         for hop in pattern.hops:
+            if hop.min_length < 0 or (hop.max_length is not None and hop.max_length < hop.min_length):
+                _raise_semantic(
+                    f"Invalid variable-length bounds *{hop.min_length}..{hop.max_length if hop.max_length is not None else ''}",
+                    source,
+                    clause.span,
+                )
             introduce(hop.rel_var, SymbolKind.RELATIONSHIP)
             introduce(hop.target.variable, SymbolKind.NODE)
     return Scope(tuple(symbols))

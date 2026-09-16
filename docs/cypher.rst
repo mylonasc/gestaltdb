@@ -72,6 +72,15 @@ values, which filter matched edges in both typed and untyped expansions.
 
    graph_db.query('MATCH (a)-[r:binds {score: 0.9}]->(b) RETURN r.id, b.id')
 
+Variable-length patterns (``-[*]->``, ``-[*1..3]->``, ``-[*..2]->``,
+``-[*2..]->``, ``-[*2]->``) match trails of the given length range without
+repeating relationships. Multi-edge matches bind the relationship variable
+to a list of edges (``[]`` for zero-length matches such as ``*0..1``).
+
+.. code-block:: python
+
+   graph_db.query('MATCH (d {id: "drug-1"})-[:binds*1..3]->(p) RETURN p.id')
+
 General fixed-length patterns may be unanchored and may filter every node in the
 path. Anonymous nodes and relationships, omitted relationship types, and
 bracketless relationships are supported. Untyped expansion scans canonical edge
@@ -338,7 +347,6 @@ Syntax and semantic failures are ``ValueError`` subclasses with source
 locations. The current Cypher API does not yet support:
 
 - mutating queries such as ``CREATE``, ``SET``, ``DELETE``, or ``MERGE``
-- variable-length paths
 - path values such as ``p = (a)-[:T]->(b)``, pattern comprehensions, and ``exists()`` with a pattern argument
 - scalar functions beyond the documented core set
 - generic procedures

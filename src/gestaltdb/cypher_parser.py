@@ -103,10 +103,15 @@ property_pair: symbolic_name ":" expression
 ?traversal_hop: "-" relationship? "->" node_pattern -> out_hop
               | "<-" relationship? "-" node_pattern -> in_hop
               | "-" relationship? "-" node_pattern -> any_hop
- relationship: "[" symbolic_name? rel_type_spec? properties? "]"
-rel_type_spec: ":" rel_types
-rel_types: rel_name ("|" rel_name)*
-rel_name: REL_NAME | BACKTICK_NAME
+  relationship: "[" symbolic_name? rel_type_spec? var_length? properties? "]"
+  rel_type_spec: ":" rel_types
+  rel_types: rel_name ("|" rel_name)*
+  rel_name: REL_NAME | BACKTICK_NAME
+  var_length: STAR INTEGER ".." INTEGER -> var_bounded
+            | STAR INTEGER ".." -> var_lower
+            | STAR ".." INTEGER -> var_upper
+            | STAR INTEGER -> var_exact
+            | STAR -> var_unbounded
 
 ?expression: or_expr
 ?or_expr: xor_expr ("OR"i xor_expr)* -> or_expression
@@ -122,8 +127,8 @@ rel_name: REL_NAME | BACKTICK_NAME
            | additive "STARTS"i "WITH"i additive -> starts_with
            | additive "ENDS"i "WITH"i additive -> ends_with
            | additive "CONTAINS"i additive -> contains
-?additive: multiplicative (ADD_OP multiplicative)* -> arithmetic_expression
-?multiplicative: unary (MUL_OP unary)* -> arithmetic_expression
+ ?additive: multiplicative (ADD_OP multiplicative)* -> arithmetic_expression
+ ?multiplicative: unary ((STAR | MUL_OP) unary)* -> arithmetic_expression
  ?unary: ADD_OP unary -> unary_expression
        | postfix
   ?postfix: atom (subscript_suffix)*
@@ -184,7 +189,7 @@ map_pair: map_key ":" expression
 ORDER_DIRECTION.2: /ASC|DESC/i
 COMP_OP: "=~" | "<>" | "!=" | "<=" | ">=" | "=" | "<" | ">"
 ADD_OP: "+" | "-"
-MUL_OP: "*" | "/" | "%"
+ MUL_OP: "/" | "%"
 STAR: "*"
 INTEGER: /[0-9]+/
  NUMBER: /(?:[0-9]+\.[0-9]+|\.[0-9]+|[0-9]+)(?:[eE][+-]?[0-9]+)?/
@@ -222,6 +227,12 @@ class _Properties:
 @dataclass(frozen=True)
 class _RelationshipTypes:
     values: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _VarLength:
+    min_length: int
+    max_length: int | None
 
 
 @dataclass(frozen=True)
@@ -509,19 +520,45 @@ class _ASTBuilder(Transformer):
         rel_var = next((item for item in children if isinstance(item, str)), None)
         edge_types = next((item.values for item in children if isinstance(item, _RelationshipTypes)), ())
         properties = next((item.values for item in children if isinstance(item, _Properties)), ())
-        return rel_var, edge_types, properties
+        bounds = next(
+            ((item.min_length, item.max_length) for item in children if isinstance(item, _VarLength)),
+            (1, 1),
+        )
+        return rel_var, edge_types, properties, bounds
+
+    def _var_bounds(self, children):
+        return [int(child) for child in children if isinstance(child, Token) and child.type == "INTEGER"]
+
+    def var_bounded(self, children):
+        bounds = self._var_bounds(children)
+        return _VarLength(bounds[0], bounds[1])
+
+    def var_lower(self, children):
+        bounds = self._var_bounds(children)
+        return _VarLength(bounds[0], None)
+
+    def var_upper(self, children):
+        bounds = self._var_bounds(children)
+        return _VarLength(1, bounds[0])
+
+    def var_exact(self, children):
+        bounds = self._var_bounds(children)
+        return _VarLength(bounds[0], bounds[0])
+
+    def var_unbounded(self, _children):
+        return _VarLength(1, None)
 
     def out_hop(self, children):
-        relationship, node = (children if len(children) == 2 else ((None, (), ()), children[0]))
-        return _Hop(relationship[0], relationship[1], node, "out", relationship[2])
+        relationship, node = (children if len(children) == 2 else ((None, (), (), (1, 1)), children[0]))
+        return _Hop(relationship[0], relationship[1], node, "out", relationship[2], relationship[3][0], relationship[3][1])
 
     def in_hop(self, children):
-        relationship, node = (children if len(children) == 2 else ((None, (), ()), children[0]))
-        return _Hop(relationship[0], relationship[1], node, "in", relationship[2])
+        relationship, node = (children if len(children) == 2 else ((None, (), (), (1, 1)), children[0]))
+        return _Hop(relationship[0], relationship[1], node, "in", relationship[2], relationship[3][0], relationship[3][1])
 
     def any_hop(self, children):
-        relationship, node = (children if len(children) == 2 else ((None, (), ()), children[0]))
-        return _Hop(relationship[0], relationship[1], node, "any", relationship[2])
+        relationship, node = (children if len(children) == 2 else ((None, (), (), (1, 1)), children[0]))
+        return _Hop(relationship[0], relationship[1], node, "any", relationship[2], relationship[3][0], relationship[3][1])
 
     def pattern(self, children):
         return _Pattern(children[0], tuple(children[1:]))
@@ -925,6 +962,7 @@ def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = Fa
         and not pattern.hops[0].target.labels
         and not pattern.hops[0].target.properties
         and not pattern.hops[0].properties
+        and (pattern.hops[0].min_length, pattern.hops[0].max_length) == (1, 1)
     ):
         hop = pattern.hops[0]
         if hop.direction == "in":
@@ -940,7 +978,7 @@ def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = Fa
         and not node.labels
         and set(properties) == {"id"}
         and isinstance(properties.get("id"), str)
-        and all(hop.edge_types and hop.target.variable is not None and not hop.target.labels and not hop.target.properties and not hop.properties for hop in pattern.hops)
+        and all(hop.edge_types and hop.target.variable is not None and not hop.target.labels and not hop.target.properties and not hop.properties and (hop.min_length, hop.max_length) == (1, 1) for hop in pattern.hops)
     ):
         hops = tuple(TraversalHop(hop.rel_var, hop.edge_types[0], hop.target.variable, hop.direction, hop.edge_types) for hop in pattern.hops)
         return AnchoredPatternClause(node.variable, properties["id"], hops)

@@ -101,16 +101,33 @@ def test_parser_supports_parameter_pagination_without_changing_integer_values():
     assert literal.limit == 5
 
 
-def test_parser_rejects_variable_length_relationship_with_location():
-    query = "MATCH (a)-[:T*1..3]->(b) RETURN b"
+def test_parser_accepts_variable_length_relationship_with_bounds():
+    canonical = parse_ast("MATCH (a)-[:T*1..3]->(b) RETURN b")
 
-    with pytest.raises(CypherSyntaxError) as caught:
-        parse(query)
+    assert isinstance(canonical, Query)
+    hop = canonical.clauses[0].patterns[0].hops[0]
+    assert (hop.min_length, hop.max_length) == (1, 3)
 
-    assert "Unsupported Cypher query" in str(caught.value)
-    assert caught.value.line == 1
-    assert caught.value.column > 1
-    assert caught.value.source == query
+
+@pytest.mark.parametrize(
+    ("pattern", "bounds"),
+    [
+        ("MATCH (a)-[*]->(b) RETURN b", (1, None)),
+        ("MATCH (a)-[*2]->(b) RETURN b", (2, 2)),
+        ("MATCH (a)-[*..2]->(b) RETURN b", (1, 2)),
+        ("MATCH (a)-[*2..]->(b) RETURN b", (2, None)),
+        ("MATCH (a)-[*0..1]->(b) RETURN b", (0, 1)),
+    ],
+)
+def test_parser_accepts_variable_length_bound_shapes(pattern, bounds):
+    hop = parse_ast(pattern).clauses[0].patterns[0].hops[0]
+
+    assert (hop.min_length, hop.max_length) == bounds
+
+
+def test_parser_rejects_invalid_variable_length_bounds():
+    with pytest.raises(CypherSemanticError, match="Invalid variable-length bounds"):
+        parse_ast("MATCH (a)-[:T*3..1]->(b) RETURN b")
 
 
 def test_semantic_errors_include_unbound_variable_and_location():

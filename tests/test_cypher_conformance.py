@@ -164,12 +164,13 @@ SUPPORTED: list[tuple[str, str, str, tuple[str, ...], list[dict[str, object]]]] 
     ("relationship-property-map", "[cypher-11]",
      "MATCH (a)-[r:KNOWS {score: 0.9}]->(b) RETURN r.id",
      ("r.id",), [{"r.id": "e1"}]),
+    ("variable-length-path", "[cypher-12]",
+     "MATCH (a)-[*1..3]->(b) RETURN a.id, b.id",
+     ("a.id", "b.id"), [{"a.id": "a", "b.id": "b"}]),
 ]
 
 # (feature, implementing stage issue, query, expected error substring).
 UNSUPPORTED: list[tuple[str, str, str, str]] = [
-    ("variable-length-path", "[cypher-12]", "MATCH (a)-[*1..3]->(b) RETURN a",
-     "Unsupported Cypher query"),
     ("shortest-path-function", "[cypher-13]", "MATCH (a) RETURN shortestPath((a)-->(b))",
      "Unsupported Cypher query"),
     ("path-binding", "[cypher-14]", "MATCH p = (a)-->(b) RETURN p",

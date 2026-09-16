@@ -389,13 +389,22 @@ class NodePattern:
 
 @dataclass(frozen=True)
 class PatternHop:
-    """One relationship and target node in a generalized path pattern."""
+    """One relationship and target node in a generalized path pattern.
+
+    Fixed hops use ``(min_length, max_length) == (1, 1)``. Variable-length
+    hops match ``min_length..max_length`` traversals (``max_length`` of
+    ``None`` is unbounded) with trail semantics: no relationship repeats
+    within one expansion. Multi-edge matches bind ``rel_var`` to a list of
+    edges, or ``[]`` for zero-length matches.
+    """
 
     rel_var: str | None
     edge_types: tuple[str, ...]
     target: NodePattern
     direction: str = "out"
     properties: tuple[tuple[str, object], ...] = ()
+    min_length: int = 1
+    max_length: int | None = 1
 
 
 @dataclass(frozen=True)
