@@ -8,6 +8,7 @@ from .cypher_ast import (
     FunctionCall,
     MatchClause,
     OrderItem,
+    OptionalMatchClause,
     PathPatternClause,
     PropertyRef,
     Query,
@@ -40,6 +41,20 @@ class MatchStep:
     follows the ``MATCH`` clause. The staged executor still applies it as a
     regular ``FilterExpression``; scan helpers may additionally use it to
     select index-backed candidate sets without changing results.
+    """
+
+    patterns: tuple[PathPatternClause, ...]
+    group_id: int
+    where: object = None
+
+
+@dataclass(frozen=True)
+class OptionalMatchStep:
+    """Match one textual ``OPTIONAL MATCH`` with left-outer-join semantics.
+
+    ``where`` carries the immediately following ``WHERE`` expression, if any,
+    for index-eligible seeks. Unmatched input rows are preserved with newly
+    introduced variables bound to ``None``.
     """
 
     patterns: tuple[PathPatternClause, ...]
@@ -153,11 +168,14 @@ def plan_staged_query(query: Query) -> LogicalPlan:
     clauses = query.clauses
     while index < len(clauses):
         clause = clauses[index]
-        if isinstance(clause, MatchClause):
+        if isinstance(clause, (MatchClause, OptionalMatchClause)):
             attached_where = None
             if index + 1 < len(clauses) and isinstance(clauses[index + 1], WhereClause):
                 attached_where = clauses[index + 1].expression
-            operators.append(MatchStep(clause.patterns, group_id, attached_where))
+            if isinstance(clause, OptionalMatchClause):
+                operators.append(OptionalMatchStep(clause.patterns, group_id, attached_where))
+            else:
+                operators.append(MatchStep(clause.patterns, group_id, attached_where))
             group_id += 1
         elif isinstance(clause, WhereClause):
             operators.append(FilterExpression(clause.expression))

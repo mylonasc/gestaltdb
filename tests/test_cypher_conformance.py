@@ -150,8 +150,6 @@ SUPPORTED: list[tuple[str, str, str, tuple[str, ...], list[dict[str, object]]]] 
 
 # (feature, implementing stage issue, query, expected error substring).
 UNSUPPORTED: list[tuple[str, str, str, str]] = [
-    ("optional-match", "[cypher-07]", "MATCH (n) OPTIONAL MATCH (n)-->(m) RETURN n",
-     "Unsupported Cypher query"),
     ("unwind", "[cypher-08]", "UNWIND [1, 2] AS x RETURN x",
      "Unsupported Cypher query"),
     ("union", "[cypher-09]", "MATCH (n) RETURN n UNION MATCH (m) RETURN m",

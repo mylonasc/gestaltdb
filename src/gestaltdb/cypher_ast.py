@@ -45,6 +45,14 @@ class MatchClause:
 
 
 @dataclass(frozen=True)
+class OptionalMatchClause:
+    """One textual ``OPTIONAL MATCH`` with left-outer-join semantics."""
+
+    patterns: tuple[PathPatternClause, ...]
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
 class WhereClause:
     """A filter in its textual position in the query."""
 

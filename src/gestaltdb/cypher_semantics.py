@@ -21,6 +21,7 @@ from .cypher_ast import (
     MatchClause,
     NotExpression,
     NullPredicate,
+    OptionalMatchClause,
     OrExpression,
     Parameter,
     ProjectionItem,
@@ -139,10 +140,10 @@ def analyze_query(query: Query) -> QueryAnalysis:
     for clause in query.clauses:
         incoming = scope
         projections: tuple[ResolvedProjection, ...] = ()
-        if isinstance(clause, MatchClause):
+        if isinstance(clause, (MatchClause, OptionalMatchClause)):
             scope = _analyze_match(clause, scope, query.source)
         elif isinstance(clause, WhereClause):
-            if not isinstance(previous, (MatchClause, WithClause)):
+            if not isinstance(previous, (MatchClause, OptionalMatchClause, WithClause)):
                 _raise_semantic("WHERE must immediately follow MATCH or WITH", query.source, clause.span)
             _validate_expression(clause.expression, scope, query.source, "WHERE", clause.span)
             validate_function_calls(clause.expression, query.source, clause.span, allow_aggregate=False)

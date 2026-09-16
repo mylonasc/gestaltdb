@@ -222,6 +222,26 @@ starts a new relationship uniqueness scope.
        'RETURN p.name AS name, t.name AS team'
    )
 
+OPTIONAL MATCH
+--------------
+
+``OPTIONAL MATCH`` works as a left-outer join: input rows without a match
+survive with newly introduced variables bound to ``None``. A ``WHERE`` clause
+after ``OPTIONAL MATCH`` filters the joined rows, so null-extended rows are
+removed unless the predicate keeps them (for example with ``OR m IS NULL``).
+Later ``MATCH`` clauses can still traverse from bound variables, while
+patterns referencing null-bound variables match nothing; unrelated patterns
+form Cartesian products as usual. Aggregates ignore ``None`` inputs except
+for ``count(*)``.
+
+.. code-block:: python
+
+   graph_db.query(
+       'MATCH (d:Drug) '
+       'OPTIONAL MATCH (d)-[:binds]->(p:Protein) '
+       'RETURN d.id, p.id'
+   )
+
 Sampling Procedure
 ------------------
 
@@ -265,7 +285,6 @@ Syntax and semantic failures are ``ValueError`` subclasses with source
 locations. The current Cypher API does not yet support:
 
 - mutating queries such as ``CREATE``, ``SET``, ``DELETE``, or ``MERGE``
-- ``OPTIONAL MATCH``
 - variable-length paths
 - path values such as ``p = (a)-[:T]->(b)``, pattern comprehensions, and ``exists()`` with a pattern argument
 - scalar functions beyond the documented core set

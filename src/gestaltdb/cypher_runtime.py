@@ -22,6 +22,7 @@ from .cypher_plan import Aggregate as LogicalAggregate
 from .cypher_plan import (
     LogicalPlan,
     MatchStep,
+    OptionalMatchStep,
     ProcedureCall,
     ProcedureSource,
     ProjectItems,
@@ -291,7 +292,7 @@ def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, obj
     ``TypeError`` instead of being silently skipped.
     """
     if plan.staged or any(
-        isinstance(operator, (MatchStep, ProjectItems, LogicalAggregate)) for operator in plan.operators
+        isinstance(operator, (MatchStep, OptionalMatchStep, ProjectItems, LogicalAggregate)) for operator in plan.operators
     ):
         return _execute_staged(plan, context)
     if not isinstance(plan.source, ProcedureSource):
@@ -347,6 +348,50 @@ def apply_match_step(
     for pattern in step.patterns:
         staged = apply_path_pattern_clause(staged, pattern, context, step.where)
     return staged
+
+
+def apply_optional_match_step(
+    rows: Iterable[BindingRow], step: OptionalMatchStep, context: QueryContext
+) -> Iterable[BindingRow]:
+    """Match one textual ``OPTIONAL MATCH`` clause as a left-outer join.
+
+    Input rows with at least one match expand normally; input rows with no
+    match survive with newly introduced variables bound to ``None``.
+    """
+    for row in _reset_used_relationships(rows):
+        row = BindingRow.from_row(row)
+        staged: Iterable[BindingRow] = iter([row])
+        for pattern in step.patterns:
+            staged = apply_path_pattern_clause(staged, pattern, context, step.where)
+        matched = False
+        for extended in staged:
+            matched = True
+            yield extended
+        if not matched:
+            yield _null_fill_row(row, step.patterns)
+
+
+def _null_fill_row(row: BindingRow, patterns) -> BindingRow:
+    """Return ``row`` with pattern-introduced variables bound to ``None``."""
+    bindings = dict(row.bindings)
+    for pattern in patterns:
+        for variable in _pattern_variables(pattern):
+            if variable not in bindings:
+                bindings[variable] = None
+    return row.with_bindings(bindings)
+
+
+def _pattern_variables(pattern: PathPatternClause) -> tuple[str, ...]:
+    """Return variable names introduced by one path pattern."""
+    variables = []
+    if pattern.source.variable is not None:
+        variables.append(pattern.source.variable)
+    for hop in pattern.hops:
+        if hop.rel_var is not None:
+            variables.append(hop.rel_var)
+        if hop.target.variable is not None:
+            variables.append(hop.target.variable)
+    return tuple(variables)
 
 
 @dataclass(frozen=True, slots=True)
@@ -450,14 +495,17 @@ def _execute_staged(plan: LogicalPlan, context: QueryContext) -> list[dict[str, 
     projected: Iterable[ProjectedRow] | None = None
     view = ProjectionView(())
     for operator in plan.operators:
-        if isinstance(operator, MatchStep):
+        if isinstance(operator, (MatchStep, OptionalMatchStep)):
             if projected is not None:
                 bindings = (
                     BindingRow(bindings=dict(row.values), current_node_id=None)
                     for row in projected
                 )
                 projected = None
-            bindings = apply_match_step(bindings if bindings is not None else iter(()), operator, context)
+            if isinstance(operator, OptionalMatchStep):
+                bindings = apply_optional_match_step(bindings if bindings is not None else iter(()), operator, context)
+            else:
+                bindings = apply_match_step(bindings if bindings is not None else iter(()), operator, context)
         elif isinstance(operator, LogicalFilterExpression):
             if projected is not None:
                 projected = filter_projected(projected, operator.expression, context)
@@ -698,6 +746,8 @@ def _hydrate_indexed_edge(row, clause: PathPatternClause, hop: PatternHop, conte
         if hop.direction == "any" and source_id != target_id:
             orientations.append((target_node, source_node, target_id, source_id))
     for start_node, neighbor_node, _, neighbor_id in orientations:
+        if _is_null_bound(row, hop.target.variable) or _is_null_bound(row, hop.rel_var):
+            continue
         if not _node_matches_pattern(start_node, clause.source.labels, clause.source.properties, context):
             continue
         if not _node_matches_pattern(neighbor_node, hop.target.labels, hop.target.properties, context):
@@ -790,6 +840,12 @@ def _path_start_rows(row, clause: PathPatternClause, context: QueryContext, wher
     identity = next((value for name, value in source.properties if name == "id"), None)
     properties = tuple(item for item in source.properties if item[0] != "id") if identity is not None else source.properties
     bound_node = row.bindings.get(source.variable) if source.variable is not None else None
+    if (
+        source.variable is not None
+        and source.variable in row.bindings
+        and row.bindings[source.variable] is None
+    ):
+        return
     if bound_node is not None:
         identity_matches = identity is None or _cypher_equals(bound_node.get_id, context.resolve(identity)) is True
         if _is_node(bound_node) and identity_matches and _node_matches_pattern(bound_node, source.labels, properties, context):
@@ -834,6 +890,8 @@ def _path_start_rows(row, clause: PathPatternClause, context: QueryContext, wher
 def _expand_pattern_hop(context: QueryContext, rows, hop: PatternHop):
     for row in rows:
         row = BindingRow.from_row(row)
+        if _is_null_bound(row, hop.target.variable) or _is_null_bound(row, hop.rel_var):
+            continue
         seen = set()
         for adjacency in _iter_pattern_adjacency(context, row.current_node_id, hop):
             edge_id = adjacency["edge_id"]
@@ -866,6 +924,15 @@ def _expand_pattern_hop(context: QueryContext, rows, hop: PatternHop):
                 preserve_current_node=False,
                 used_relationship_ids=row.used_relationship_ids.union((edge_id,)),
             )
+
+
+def _is_null_bound(row: BindingRow, variable: str | None) -> bool:
+    """Return whether a variable is bound to ``None`` (e.g. by ``OPTIONAL MATCH``).
+
+    ``None``-bound variables never match further patterns, but rows carrying
+    them survive cartesian products and projections.
+    """
+    return variable is not None and variable in row.bindings and row.bindings[variable] is None
 
 
 def _iter_pattern_adjacency(context: QueryContext, node_id: bytes, hop: PatternHop):
