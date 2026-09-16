@@ -254,6 +254,23 @@ appear after ``MATCH``, ``OPTIONAL MATCH``, or ``WITH`` stages.
 
    graph_db.query('UNWIND ["Aspirin", "Ibuprofen"] AS name RETURN name')
 
+UNION
+-----
+
+``UNION`` and ``UNION ALL`` combine the results of two or more independent
+read queries. Every branch must return exactly the same columns in the same
+order; branch ``ORDER BY``/``SKIP``/``LIMIT`` apply within their branch.
+``UNION ALL`` concatenates branch results in branch order, while each
+``UNION`` step deduplicates everything accumulated so far, preserving
+first-seen order. Mixed operators fold left.
+
+.. code-block:: python
+
+   graph_db.query(
+       'MATCH (d:Drug) RETURN d.id AS id '
+       'UNION MATCH (p:Protein) RETURN p.id AS id'
+   )
+
 Sampling Procedure
 ------------------
 
@@ -300,5 +317,5 @@ locations. The current Cypher API does not yet support:
 - variable-length paths
 - path values such as ``p = (a)-[:T]->(b)``, pattern comprehensions, and ``exists()`` with a pattern argument
 - scalar functions beyond the documented core set
-- ``UNION``, subqueries, or generic procedures
+- subqueries or generic procedures
 - relationship property maps and quantified path patterns

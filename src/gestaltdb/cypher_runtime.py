@@ -26,6 +26,7 @@ from .cypher_plan import (
     ProcedureCall,
     ProcedureSource,
     ProjectItems,
+    Union,
     Unwind,
 )
 from .cypher_plan import Distinct as LogicalDistinct
@@ -292,6 +293,8 @@ def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, obj
     Every other operator executes directly: unknown operators raise
     ``TypeError`` instead of being silently skipped.
     """
+    if len(plan.operators) == 1 and isinstance(plan.operators[0], Union):
+        return _execute_union(plan.operators[0], context)
     if plan.staged or any(
         isinstance(operator, (MatchStep, OptionalMatchStep, Unwind, ProjectItems, LogicalAggregate)) for operator in plan.operators
     ):
@@ -339,6 +342,22 @@ def _procedure_rows(source: ProcedureSource, context: QueryContext) -> Iterator[
         source.query.seed_ids, source.query.pattern
     )
     return (BindingRow(bindings={"path": path}) for path in paths)
+
+
+def _execute_union(union: Union, context: QueryContext) -> list[dict[str, object]]:
+    """Execute ``UNION`` branches left to right with set semantics.
+
+    ``UNION ALL`` steps concatenate; each ``UNION`` step deduplicates
+    everything accumulated so far, preserving first-seen order.
+    """
+    accumulated = _execute_staged(union.branches[0], context)
+    for position, branch in enumerate(union.branches[1:]):
+        rows = _execute_staged(branch, context)
+        if union.union_all[position]:
+            accumulated.extend(rows)
+        else:
+            accumulated = _distinct_records(accumulated + rows, union.columns)
+    return accumulated
 
 
 def apply_match_step(

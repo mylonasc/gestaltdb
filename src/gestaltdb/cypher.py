@@ -14,11 +14,12 @@ from typing import TYPE_CHECKING
 from .cypher_ast import (
     Query,
     SampleTypedPathsCall,
+    UnionQuery,
 )
 from .cypher_parser import parse as _parse_query
 from .cypher_parser import parse_ast as _parse_ast
 from .cypher_parser import split_top_level_args as _split_top_level_args  # noqa: F401
-from .cypher_plan import LogicalPlan, plan_query, plan_staged_query
+from .cypher_plan import LogicalPlan, plan_query, plan_staged_query, plan_union_query
 from .cypher_runtime import (
     QueryContext,
     execute_plan,
@@ -87,12 +88,15 @@ def parse_ast(query: str) -> Query | SampleTypedPathsCall:
 def plan(query: str) -> LogicalPlan:
     """Return the logical plan for a supported Cypher query.
 
-    Every canonical clause query plans to the staged operator pipeline; only
-    the sampling procedure call keeps its dedicated source-backed plan.
+    Clause queries plan to the staged operator pipeline, ``UNION`` queries
+    plan each branch independently, and only the sampling procedure call
+    keeps its dedicated source-backed plan.
     """
     canonical = _parse_ast(query)
     if isinstance(canonical, SampleTypedPathsCall):
         return plan_query(canonical)
+    if isinstance(canonical, UnionQuery):
+        return plan_union_query(canonical)
     return plan_staged_query(canonical)
 
 
@@ -112,6 +116,8 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
     canonical = _parse_ast(query)
     if isinstance(canonical, SampleTypedPathsCall):
         logical_plan = plan_query(canonical)
+    elif isinstance(canonical, UnionQuery):
+        logical_plan = plan_union_query(canonical)
     else:
         logical_plan = plan_staged_query(canonical)
     records = execute_plan(

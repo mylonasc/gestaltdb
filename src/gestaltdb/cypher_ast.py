@@ -62,6 +62,22 @@ class UnwindClause:
 
 
 @dataclass(frozen=True)
+class UnionQuery:
+    """Two or more branch queries combined with ``UNION [ALL]``.
+
+    ``union_all[i]`` selects the operator between ``branches[i]`` and
+    ``branches[i + 1]``: ``True`` for ``UNION ALL`` (concatenate),
+    ``False`` for ``UNION`` (deduplicate). Evaluation folds left, so each
+    ``UNION`` step deduplicates everything accumulated so far.
+    """
+
+    branches: tuple[Query, ...]
+    union_all: tuple[bool, ...]
+    source: str
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
 class WhereClause:
     """A filter in its textual position in the query."""
 

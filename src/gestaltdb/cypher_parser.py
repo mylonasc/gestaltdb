@@ -52,6 +52,7 @@ from .cypher_ast import (
     SubscriptExpression,
     TraversalHop,
     UnaryExpression,
+    UnionQuery,
     UnwindClause,
     Variable,
     WhereClause,
@@ -63,8 +64,11 @@ from .cypher_errors import CypherSemanticError, CypherSyntaxError
 from .cypher_semantics import QueryAnalysis, analyze_query, render_projection
 
 _GRAMMAR = r"""
-?start: query ";"?
-?query: match_query | sample_call
+ ?start: query ";"?
+ ?query: match_query | sample_call | union_query
+ union_query: match_query (union_operator match_query)+
+ union_operator: "UNION"i "ALL"i -> union_all
+               | "UNION"i -> union_distinct
 
   match_query: (match_clause | optional_match_clause | unwind_clause) (match_clause | optional_match_clause | where_clause | unwind_clause | with_section)* return_full
   match_clause: "MATCH"i pattern ("," pattern)*
@@ -531,6 +535,15 @@ class _ASTBuilder(Transformer):
     def unwind_clause(self, meta, children):
         return _ParsedPart("unwind", (children[0], children[1]), _source_span(meta))
 
+    def union_all(self, _children):
+        return True
+
+    def union_distinct(self, _children):
+        return False
+
+    def union_query(self, children):
+        return ("union", tuple(children))
+
     @v_args(meta=True)
     def where_clause(self, meta, children):
         return _ParsedPart("where", children[0], _source_span(meta))
@@ -646,6 +659,12 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
 
     if isinstance(parsed, tuple) and parsed and parsed[0] == "sample":
         return _build_sample_call(parsed, query)
+    if isinstance(parsed, tuple) and parsed and parsed[0] == "union":
+        raise _located_error(
+            CypherSemanticError,
+            "Query cannot be represented by legacy parse(); use parse_ast()",
+            query,
+        )
     canonical = _build_canonical_query(parsed, query)
     if any(isinstance(clause, (WithClause, OptionalMatchClause, UnwindClause)) for clause in canonical.clauses):
         raise _located_error(
@@ -663,15 +682,32 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
     return _build_match_query(parsed, query, analysis)
 
 
-def parse_ast(query: str) -> Query | SampleTypedPathsCall:
+def parse_ast(query: str) -> Query | SampleTypedPathsCall | UnionQuery:
     """Parse the supported Cypher subset into the canonical clause AST."""
     parsed = _parse_source(query)
     if isinstance(parsed, tuple) and parsed and parsed[0] == "sample":
         return _build_sample_call(parsed, query)
+    if isinstance(parsed, tuple) and parsed and parsed[0] == "union":
+        return _build_union_query(parsed, query)
 
     canonical = _build_canonical_query(parsed, query)
     analyze_query(canonical)
     return canonical
+
+
+def _build_union_query(parsed, query: str) -> UnionQuery:
+    """Build independently analyzed branch queries for a ``UNION``."""
+    branches_raw: list[_ParsedMatch] = []
+    flags: list[bool] = []
+    for item in parsed[1]:
+        if isinstance(item, bool):
+            flags.append(item)
+        else:
+            branches_raw.append(item)
+    branches = tuple(_build_canonical_query(branch, query) for branch in branches_raw)
+    for branch in branches:
+        analyze_query(branch)
+    return UnionQuery(branches, tuple(flags), query, span=_query_span(query))
 
 
 def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:

@@ -152,14 +152,16 @@ SUPPORTED: list[tuple[str, str, str, tuple[str, ...], list[dict[str, object]]]] 
      [{"n.id": "a", "m.id": "b"}, {"n.id": "b", "m.id": None}]),
     ("unwind", "[cypher-08]", "UNWIND [1, 2] AS x RETURN x",
      ("x",), [{"x": 1}, {"x": 2}]),
+    ("union", "[cypher-09]",
+     "MATCH (n:Person) WHERE n.age = 30 RETURN n.id AS id UNION MATCH (n:Person) RETURN n.id AS id",
+     ("id",), [{"id": "a"}, {"id": "b"}]),
+    ("union-all", "[cypher-09]",
+     "MATCH (n:Person) WHERE n.age = 30 RETURN n.id AS id UNION ALL MATCH (n:Person) WHERE n.age = 30 RETURN n.id AS id",
+     ("id",), [{"id": "a"}, {"id": "a"}]),
 ]
 
 # (feature, implementing stage issue, query, expected error substring).
 UNSUPPORTED: list[tuple[str, str, str, str]] = [
-    ("union", "[cypher-09]", "MATCH (n) RETURN n UNION MATCH (m) RETURN m",
-     "Unsupported Cypher query"),
-    ("union-all", "[cypher-09]", "MATCH (n) RETURN n UNION ALL MATCH (m) RETURN m",
-     "Unsupported Cypher query"),
     ("call-subquery", "[cypher-10]", "CALL { MATCH (n) RETURN n } RETURN n",
      "Unsupported Cypher query"),
     ("relationship-property-map", "[cypher-11]", "MATCH (a)-[r:T {score: 1}]->(b) RETURN r",

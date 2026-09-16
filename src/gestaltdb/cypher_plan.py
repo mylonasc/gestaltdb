@@ -14,6 +14,7 @@ from .cypher_ast import (
     Query,
     ReturnClause,
     SampleTypedPathsCall,
+    UnionQuery,
     UnwindClause,
     Variable,
     WhereClause,
@@ -69,6 +70,15 @@ class Unwind:
 
     expression: object
     variable: str
+
+
+@dataclass(frozen=True)
+class Union:
+    """Combine independently planned branch queries with set semantics."""
+
+    branches: tuple[LogicalPlan, ...]
+    union_all: tuple[bool, ...]
+    columns: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -157,6 +167,30 @@ def plan_query(parsed: SampleTypedPathsCall) -> LogicalPlan:
     _append_result_operators(operators, parsed)
     return LogicalPlan(
         tuple(operators), ProcedureSource(parsed), parsed.returns
+    )
+
+
+def plan_union_query(query: UnionQuery) -> LogicalPlan:
+    """Plan each ``UNION`` branch independently and check column compatibility.
+
+    Every branch must return exactly the same columns in the same order;
+    branch ``ORDER BY``/``SKIP``/``LIMIT`` apply within their branch.
+    """
+    from .cypher_semantics import analyze_query
+
+    branch_plans = tuple(plan_staged_query(branch) for branch in query.branches)
+    columns = branch_plans[0].columns
+    for branch_plan in branch_plans[1:]:
+        if branch_plan.columns != columns:
+            raise CypherSemanticError(
+                f"UNION branches must return the same columns, got {columns} and {branch_plan.columns}",
+                line=1,
+                column=1,
+                offset=0,
+                source=query.source,
+            )
+    return LogicalPlan(
+        (Union(branch_plans, query.union_all, columns),), None, columns, True
     )
 
 
