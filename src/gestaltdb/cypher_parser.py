@@ -26,6 +26,7 @@ from .cypher_ast import (
     MapProjectionExpression,
     MatchClause,
     MatchQuery,
+    MergeClause,
     MultiMatchQuery,
     NodePattern,
     NodePatternClause,
@@ -83,7 +84,7 @@ _GRAMMAR = r"""
  union_operator: "UNION"i "ALL"i -> union_all
                | "UNION"i -> union_distinct
 
-  match_query: (match_clause | optional_match_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause) (match_clause | optional_match_clause | where_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | with_section)* return_full
+  match_query: (match_clause | optional_match_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | merge_clause) (match_clause | optional_match_clause | where_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | merge_clause | with_section)* return_full
   match_clause: "MATCH"i shortest_selector? pattern ("," pattern)*
   optional_match_clause: "OPTIONAL"i "MATCH"i shortest_selector? pattern ("," pattern)*
   shortest_selector: QUANTIFIER "SHORTEST"i -> shortest_quantified
@@ -99,6 +100,9 @@ _GRAMMAR = r"""
              | symbolic_name (":" symbolic_name)+ -> remove_labels
   delete_clause: "DETACH"i "DELETE"i expression ("," expression)* -> detach_delete
                | "DELETE"i expression ("," expression)* -> plain_delete
+  merge_clause: "MERGE"i pattern ("," pattern)* merge_action*
+  merge_action: "ON"i "CREATE"i "SET"i set_item ("," set_item)* -> on_create_action
+              | "ON"i "MATCH"i "SET"i set_item ("," set_item)* -> on_match_action
   unwind_clause: "UNWIND"i expression "AS"i symbolic_name
   call_subquery: "CALL"i "{" match_query "}"
  where_clause: "WHERE"i expression
@@ -279,6 +283,12 @@ class _MatchPatterns:
     span: SourceSpan
     optional: bool = False
     selector: PathSelector | None = None
+
+
+@dataclass(frozen=True)
+class _MergeAction:
+    kind: str
+    items: tuple[object, ...]
 
 
 @dataclass(frozen=True)
@@ -757,6 +767,22 @@ class _ASTBuilder(Transformer):
     def plain_delete(self, meta, children):
         return _ParsedPart("delete", (False, tuple(children)), _source_span(meta))
 
+    def on_create_action(self, children):
+        return _MergeAction("create", tuple(children))
+
+    def on_match_action(self, children):
+        return _MergeAction("match", tuple(children))
+
+    @v_args(meta=True)
+    def merge_clause(self, meta, children):
+        patterns = tuple(item for item in children if isinstance(item, _Pattern))
+        actions = [item for item in children if isinstance(item, _MergeAction)]
+        return _ParsedPart(
+            "merge",
+            (patterns, actions),
+            _source_span(meta),
+        )
+
     def union_all(self, _children):
         return True
 
@@ -888,7 +914,7 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
             query,
         )
     canonical = _build_canonical_query(parsed, query)
-    if any(isinstance(clause, (WithClause, OptionalMatchClause, UnwindClause, SubqueryClause, CreateClause, SetClause, RemoveClause, DeleteClause)) for clause in canonical.clauses):
+    if any(isinstance(clause, (WithClause, OptionalMatchClause, UnwindClause, SubqueryClause, CreateClause, SetClause, RemoveClause, DeleteClause, MergeClause)) for clause in canonical.clauses):
         raise _located_error(
             CypherSemanticError,
             "Query cannot be represented by legacy parse(); use parse_ast()",
@@ -934,7 +960,7 @@ def _build_union_query(parsed, query: str) -> UnionQuery:
             branches_raw.append(item)
     branches = tuple(_build_canonical_query(branch, query) for branch in branches_raw)
     for branch in branches:
-        if any(isinstance(clause, (CreateClause, SetClause, RemoveClause, DeleteClause)) for clause in branch.clauses):
+        if any(isinstance(clause, (CreateClause, SetClause, RemoveClause, DeleteClause, MergeClause)) for clause in branch.clauses):
             raise _located_error(
                 CypherSemanticError, "UNION branches must be read-only", query
             )
@@ -1040,6 +1066,20 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
             close_projection()
             detach, expressions = item.value
             clauses.append(DeleteClause(expressions, detach, span=item.span))
+        elif isinstance(item, _ParsedPart) and item.kind == "merge":
+            if pending_kind == "return":
+                raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
+            close_projection()
+            patterns, actions = item.value
+            for pattern in patterns:
+                _validate_pattern_literals(pattern, query)
+            on_create = tuple(
+                set_item for action in actions if action.kind == "create" for set_item in action.items
+            )
+            on_match = tuple(
+                set_item for action in actions if action.kind == "match" for set_item in action.items
+            )
+            clauses.append(MergeClause(patterns, on_create, on_match, span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind in ("with", "return"):
             close_projection()
             pending_kind = item.kind

@@ -158,6 +158,16 @@ class DeleteClause:
 
 
 @dataclass(frozen=True)
+class MergeClause:
+    """One ``MERGE`` matching a pattern or creating it, with ``ON`` actions."""
+
+    patterns: tuple[PathPatternClause, ...]
+    on_create: tuple[object, ...] = ()
+    on_match: tuple[object, ...] = ()
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
 class SubqueryClause:
     """One ``CALL { ... }`` correlated subquery over an inner clause query."""
 

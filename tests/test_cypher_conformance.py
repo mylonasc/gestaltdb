@@ -191,12 +191,13 @@ SUPPORTED: list[tuple[str, str, str, tuple[str, ...], list[dict[str, object]]]] 
     ("delete", "[cypher-16]",
      'MATCH (n {id: "b"}) DETACH DELETE n RETURN n.id',
      ("n.id",), [{"n.id": "b"}]),
+    ("merge", "[cypher-17]",
+     'MERGE (n:Person {id: "c"}) RETURN n.id',
+     ("n.id",), [{"n.id": "c"}]),
 ]
 
 # (feature, implementing stage issue, query, expected error substring).
 UNSUPPORTED: list[tuple[str, str, str, str]] = [
-    ("merge", "[cypher-17]", "MERGE (n:Person) RETURN n",
-     "Unsupported Cypher query"),
     ("foreach", "[cypher-18]", "FOREACH (x IN [1] | CREATE (n))",
      "Unsupported Cypher query"),
     ("aggregate-mixed-with-scalar", "[cypher-20]", "MATCH (n) RETURN n.age + count(*)",

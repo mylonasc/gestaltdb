@@ -9,6 +9,7 @@ from .cypher_ast import (
     DeleteClause,
     FunctionCall,
     MatchClause,
+    MergeClause,
     OrderItem,
     OptionalMatchClause,
     PathPatternClause,
@@ -115,6 +116,15 @@ class DeleteStep:
 
     expressions: tuple[object, ...]
     detach: bool = False
+
+
+@dataclass(frozen=True)
+class MergeStep:
+    """Match a pattern per input row or create it, running ``ON`` actions."""
+
+    patterns: tuple[PathPatternClause, ...]
+    on_create: tuple[object, ...] = ()
+    on_match: tuple[object, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -276,6 +286,8 @@ def plan_staged_query(query: Query, scope=None) -> LogicalPlan:
             operators.append(CallSubquery(subquery_plan, subquery_plan.columns))
         elif isinstance(clause, CreateClause):
             operators.append(CreateStep(clause.patterns))
+        elif isinstance(clause, MergeClause):
+            operators.append(MergeStep(clause.patterns, clause.on_create, clause.on_match))
         elif isinstance(clause, SetClause):
             operators.append(SetStep(clause.items))
         elif isinstance(clause, RemoveClause):

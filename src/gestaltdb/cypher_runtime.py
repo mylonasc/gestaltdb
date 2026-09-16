@@ -27,6 +27,7 @@ from .cypher_plan import (
     DeleteStep,
     LogicalPlan,
     MatchStep,
+    MergeStep,
     OptionalMatchStep,
     ProcedureCall,
     ProcedureSource,
@@ -303,7 +304,7 @@ def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, obj
     if len(plan.operators) == 1 and isinstance(plan.operators[0], Union):
         return _execute_union(plan.operators[0], context)
     if plan.staged or any(
-        isinstance(operator, (MatchStep, OptionalMatchStep, Unwind, CallSubquery, CreateStep, SetStep, RemoveStep, DeleteStep, ProjectItems, LogicalAggregate)) for operator in plan.operators
+        isinstance(operator, (MatchStep, OptionalMatchStep, Unwind, CallSubquery, CreateStep, MergeStep, SetStep, RemoveStep, DeleteStep, ProjectItems, LogicalAggregate)) for operator in plan.operators
     ):
         return _execute_staged(plan, context)
     if not isinstance(plan.source, ProcedureSource):
@@ -587,7 +588,7 @@ def _execute_staged(
                 bindings = apply_optional_match_step(bindings if bindings is not None else iter(()), operator, context)
             else:
                 bindings = apply_match_step(bindings if bindings is not None else iter(()), operator, context)
-        elif isinstance(operator, (Unwind, CallSubquery, CreateStep, SetStep, RemoveStep, DeleteStep)):
+        elif isinstance(operator, (Unwind, CallSubquery, CreateStep, MergeStep, SetStep, RemoveStep, DeleteStep)):
             if projected is not None:
                 bindings = (
                     BindingRow(bindings=dict(row.values), current_node_id=None)
@@ -600,10 +601,12 @@ def _execute_staged(
             elif isinstance(operator, Unwind):
                 bindings = apply_unwind(stream, operator, context)
             else:
-                from .cypher_write import apply_create, apply_delete, apply_remove, apply_set
+                from .cypher_write import apply_create, apply_delete, apply_merge, apply_remove, apply_set
 
                 if isinstance(operator, CreateStep):
                     bindings = apply_create(stream, operator, context)
+                elif isinstance(operator, MergeStep):
+                    bindings = apply_merge(stream, operator, context)
                 elif isinstance(operator, SetStep):
                     bindings = apply_set(stream, operator, context)
                 elif isinstance(operator, RemoveStep):
@@ -1450,7 +1453,11 @@ def _iter_pattern_adjacency(context: QueryContext, node_id: bytes, hop: PatternH
 
 
 def _node_pattern_matches(node, pattern: NodePattern, properties, context: QueryContext) -> bool:
-    """Return whether a node satisfies labels, label expressions, and properties."""
+    """Return whether a node satisfies labels, label expressions, and properties.
+
+    An ``id`` entry always addresses the stable entity ID, in every pattern
+    position; all other entries match stored properties.
+    """
     if pattern.label_expression is not None:
         node_labels = set(getattr(node, "labels", ()))
         if not any(
@@ -1461,7 +1468,10 @@ def _node_pattern_matches(node, pattern: NodePattern, properties, context: Query
     elif pattern.labels and not set(pattern.labels).issubset(set(getattr(node, "labels", ()))):
         return False
     for property_name, property_value in properties:
-        if _cypher_equals(node.properties.get(property_name), context.resolve(property_value)) is not True:
+        if property_name == "id":
+            if _cypher_equals(node.get_id, context.resolve(property_value)) is not True:
+                return False
+        elif _cypher_equals(node.properties.get(property_name), context.resolve(property_value)) is not True:
             return False
     return True
 

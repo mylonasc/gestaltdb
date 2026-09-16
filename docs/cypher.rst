@@ -47,10 +47,10 @@ Typed Relationship Traversal
 
 Use an anchored pattern when you know the start node ID.
 
-``{id: ...}`` on the first node of a relationship path is a GestaltDB extension
-that addresses the stable entity ID; it accepts a string literal or parameter.
-In standalone node patterns and on later path nodes, ``id`` is an ordinary
-stored property name.
+``{id: ...}`` in any node pattern is a GestaltDB extension that addresses
+the stable entity ID; it accepts a string literal or parameter. It composes
+with labels, other properties, and relationship patterns, and keeps
+``MERGE`` idempotent on every endpoint.
 
 .. code-block:: python
 
@@ -127,6 +127,15 @@ relationships fails unless ``DETACH DELETE`` cascades to incident edges.
 .. code-block:: python
 
    graph_db.query('MATCH (d {id: "drug-9"}) DETACH DELETE d')
+
+``MERGE`` matches a pattern or creates it when absent, running ``ON MATCH``
+actions in the first case and ``ON CREATE`` actions in the second. It is
+idempotent: repeating the same ``MERGE`` changes nothing after the first
+execution.
+
+.. code-block:: python
+
+   graph_db.query('MERGE (d:Drug {id: "drug-9"}) ON CREATE SET d.score = 0 RETURN d.id')
 
 General fixed-length patterns may be unanchored and may filter every node in the
 path. Anonymous nodes and relationships, omitted relationship types, and
@@ -393,7 +402,7 @@ Current Limitations
 Syntax and semantic failures are ``ValueError`` subclasses with source
 locations. The current Cypher API does not yet support:
 
-- mutating queries beyond ``CREATE``, ``SET``, ``REMOVE``, and ``DELETE`` (such as ``MERGE``)
+- mutating queries beyond ``CREATE``, ``SET``, ``REMOVE``, ``DELETE``, and ``MERGE``
 - pattern comprehensions, ``exists()`` with a pattern argument, and quantified path patterns
 - scalar functions beyond the documented core set
 - generic procedures

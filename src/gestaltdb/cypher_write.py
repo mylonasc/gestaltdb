@@ -21,7 +21,7 @@ from .cypher_ast import (
     SetReplace,
 )
 from .cypher_expr import PathValue, evaluate_expression
-from .cypher_runtime import BindingRow, _is_node
+from .cypher_runtime import BindingRow, _is_node, _reset_used_relationships, apply_path_pattern_clause
 from .graphdb import Edge, Node
 
 
@@ -106,6 +106,37 @@ def apply_create(rows, step, context):
             _create_pattern(bindings, batch, pattern, context)
         batch.apply(context)
         yield row.with_bindings(bindings)
+
+
+def apply_merge(rows, step, context):
+    """Execute one ``MERGE`` clause: match the patterns or create them.
+
+    Each input row matches independently with a fresh isomorphism scope.
+    Fully matched rows run ``ON MATCH`` actions; otherwise the whole
+    pattern is created (reusing bound variables) and ``ON CREATE`` runs.
+    """
+    for row in _snapshot(rows):
+        row = BindingRow.from_row(row)
+        staged = _reset_used_relationships(iter([row]))
+        for pattern in step.patterns:
+            staged = apply_path_pattern_clause(staged, pattern, context, None, None)
+        matched = list(staged)
+        batch = WriteBatch()
+        if matched:
+            for match in matched:
+                bindings = dict(match.bindings)
+                for item in step.on_match:
+                    _apply_set_item(bindings, batch, item, context)
+                batch.apply(context)
+                yield match.with_bindings(bindings)
+        else:
+            bindings = dict(row.bindings)
+            for pattern in step.patterns:
+                _create_pattern(bindings, batch, pattern, context)
+            for item in step.on_create:
+                _apply_set_item(bindings, batch, item, context)
+            batch.apply(context)
+            yield row.with_bindings(bindings)
 
 
 def _create_pattern(bindings: dict, batch: WriteBatch, pattern, context) -> None:

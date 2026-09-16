@@ -21,6 +21,7 @@ from .cypher_ast import (
     MapExpression,
     MapProjectionExpression,
     MatchClause,
+    MergeClause,
     NotExpression,
     NullPredicate,
     OptionalMatchClause,
@@ -179,9 +180,11 @@ def _analyze_query_with_scope(query: Query, initial: Scope) -> QueryAnalysis:
             scope = Scope((*scope.symbols, Symbol(clause.variable, SymbolKind.VALUE, clause.span)))
         elif isinstance(clause, CreateClause):
             scope = _analyze_create(clause, scope, query.source)
+        elif isinstance(clause, MergeClause):
+            scope = _analyze_merge(clause, scope, query.source)
         elif isinstance(clause, (SetClause, RemoveClause)):
             label = "SET" if isinstance(clause, SetClause) else "REMOVE"
-            _validate_write_items(clause, scope, query.source, label)
+            _validate_write_items(clause.items, clause.span, scope, query.source, label)
         elif isinstance(clause, DeleteClause):
             for expression in clause.expressions:
                 _validate_expression(expression, scope, query.source, "DELETE", clause.span)
@@ -744,7 +747,7 @@ def _render_string_literal(value: str) -> str:
     return f'"{escaped}"'
 
 
-def _analyze_create(clause: CreateClause, scope: Scope, source: str) -> Scope:
+def _analyze_create(clause: CreateClause | MergeClause, scope: Scope, source: str) -> Scope:
     """Introduce created variables; bound nodes are reused, rels must be fresh."""
     symbols = list(scope.symbols)
     by_name = {symbol.name: symbol for symbol in symbols}
@@ -815,15 +818,15 @@ def _analyze_create(clause: CreateClause, scope: Scope, source: str) -> Scope:
     return Scope(tuple(symbols))
 
 
-def _validate_write_items(clause, scope: Scope, source: str, label: str) -> None:
+def _validate_write_items(items, span, scope: Scope, source: str, label: str) -> None:
     """Validate ``SET``/``REMOVE`` targets and right-hand expressions."""
-    for item in clause.items:
+    for item in items:
         symbol = scope.resolve(item.variable)
         if symbol is None:
             _raise_semantic(
                 f"{label} references unbound variable: {item.variable}",
                 source,
-                clause.span,
+                span,
                 item.variable,
             )
         needs_node = isinstance(item, (SetLabels, RemoveLabels))
@@ -831,13 +834,21 @@ def _validate_write_items(clause, scope: Scope, source: str, label: str) -> None
             _raise_semantic(
                 f"{label} labels requires a node variable: {item.variable}",
                 source,
-                clause.span,
+                span,
                 item.variable,
             )
         expression = getattr(item, "expression", None)
         if expression is not None:
-            _validate_expression(expression, scope, source, label, clause.span)
-            validate_function_calls(expression, source, clause.span, allow_aggregate=False, clause=label)
+            _validate_expression(expression, scope, source, label, span)
+            validate_function_calls(expression, source, span, allow_aggregate=False, clause=label)
+
+
+def _analyze_merge(clause: MergeClause, scope: Scope, source: str) -> Scope:
+    """Introduce merge variables, then validate ``ON CREATE``/``ON MATCH`` items."""
+    scope = _analyze_create(clause, scope, source)
+    _validate_write_items(clause.on_create, clause.span, scope, source, "SET")
+    _validate_write_items(clause.on_match, clause.span, scope, source, "SET")
+    return scope
 
 
 def _analyze_match(clause: MatchClause, scope: Scope, source: str) -> Scope:
