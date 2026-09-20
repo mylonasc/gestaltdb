@@ -19,6 +19,8 @@ class VizOptions:
 
     max_nodes: int = 2000
     max_edges: int = 5000
+    absolute_max_nodes: int | None = None
+    absolute_max_edges: int | None = None
     height: int = 600
     theme: str = "light"
     charge: float = -300.0
@@ -31,6 +33,10 @@ class VizOptions:
         """Validate option ranges eagerly with actionable messages."""
         if self.max_nodes <= 0 or self.max_edges <= 0:
             raise ValueError("max_nodes and max_edges must be positive")
+        if self.absolute_max_nodes is not None and self.absolute_max_nodes <= 0:
+            raise ValueError("absolute_max_nodes must be positive")
+        if self.absolute_max_edges is not None and self.absolute_max_edges <= 0:
+            raise ValueError("absolute_max_edges must be positive")
         if self.height <= 0:
             raise ValueError("height must be positive")
         if self.theme not in ("light", "dark"):
@@ -104,6 +110,22 @@ def _coerce_options(options: VizOptions | Mapping[str, Any] | None) -> VizOption
     raise TypeError(f"options must be VizOptions or a mapping, got {type(options).__name__}")
 
 
+def _caps_kwargs(resolved: VizOptions) -> dict[str, Any]:
+    return {
+        "max_nodes": resolved.max_nodes,
+        "max_edges": resolved.max_edges,
+        "absolute_max_nodes": resolved.absolute_max_nodes,
+        "absolute_max_edges": resolved.absolute_max_edges,
+    }
+
+
+def _finish(viz: Any, resolved: VizOptions, *, source: str) -> VizFigure:
+    from .ir import warn_if_truncated
+
+    warn_if_truncated(viz, source=source)
+    return VizFigure(viz=viz, options=resolved)
+
+
 def visualize_nodes_edges(
     nodes: Any,
     edges: Any,
@@ -121,10 +143,16 @@ def visualize_nodes_edges(
     """
     from .ir import VizGraph
 
-    resolved = _coerce_options(options)
-    return VizFigure(
-        viz=VizGraph.from_nodes_edges(nodes, edges, max_nodes=resolved.max_nodes, max_edges=resolved.max_edges),
-        options=resolved,
+    if caps:
+        merged = dict(_coerce_options(options).__dict__)
+        merged.update(caps)
+        resolved = VizOptions(**merged)
+    else:
+        resolved = _coerce_options(options)
+    return _finish(
+        VizGraph.from_nodes_edges(nodes, edges, **_caps_kwargs(resolved)),
+        resolved,
+        source="visualize_nodes_edges",
     )
 
 
@@ -140,9 +168,10 @@ def visualize_query(
 
     resolved = _coerce_options(options)
     result = graph.query(cypher, parameters=dict(parameters) if parameters else None)
-    return VizFigure(
-        viz=VizGraph.from_cypher_result(result, max_nodes=resolved.max_nodes, max_edges=resolved.max_edges),
-        options=resolved,
+    return _finish(
+        VizGraph.from_cypher_result(result, **_caps_kwargs(resolved)),
+        resolved,
+        source="visualize_query",
     )
 
 
@@ -159,7 +188,31 @@ def visualize_sample(
 
     resolved = _coerce_options(options)
     subgraph = graph.sample_typed_subgraph(seeds, pattern, rng=rng)
-    return VizFigure(
-        viz=VizGraph.from_sampled_subgraph(subgraph, max_nodes=resolved.max_nodes, max_edges=resolved.max_edges),
-        options=resolved,
+    return _finish(
+        VizGraph.from_sampled_subgraph(subgraph, **_caps_kwargs(resolved)),
+        resolved,
+        source="visualize_sample",
+    )
+
+
+def visualize_sampler_batch(
+    batch: Any,
+    snapshot: Any,
+    *,
+    options: VizOptions | Mapping[str, Any] | None = None,
+) -> VizFigure:
+    """Visualize an ML training batch mapped back to external IDs.
+
+    Local batch rows resolve through ``batch.node_ids_global`` to compact
+    global IDs and then via ``snapshot.external_node_id(...)`` /
+    ``snapshot.external_relation_id(...)``. The sampling-first path for
+    inspecting ``SamplerEngine`` output without dumping whole snapshots.
+    """
+    from .ir import VizGraph
+
+    resolved = _coerce_options(options)
+    return _finish(
+        VizGraph.from_sampler_batch(batch, snapshot, **_caps_kwargs(resolved)),
+        resolved,
+        source="visualize_sampler_batch",
     )

@@ -9,23 +9,37 @@ The Python side uses only the standard library so library users never need
 a JavaScript toolchain at runtime.
 """
 
-from .api import VizFigure, VizOptions, visualize_nodes_edges, visualize_query, visualize_sample
+from .api import (
+    VizFigure,
+    VizOptions,
+    visualize_nodes_edges,
+    visualize_query,
+    visualize_sample,
+    visualize_sampler_batch,
+)
 from .html import build_html, ensure_bundle_fresh, is_bundle_fresh, read_manifest, save_html
 from .ir import (
+    DEFAULT_ABSOLUTE_CEILING_MULTIPLIER,
     DEFAULT_MAX_EDGES,
     DEFAULT_MAX_NODES,
     VIZ_IR_VERSION,
     TruncationInfo,
+    TruncationWarning,
+    VizCapExceededError,
     VizEdge,
     VizGraph,
     VizNode,
+    warn_if_truncated,
 )
 
 __all__ = [
+    "DEFAULT_ABSOLUTE_CEILING_MULTIPLIER",
     "DEFAULT_MAX_EDGES",
     "DEFAULT_MAX_NODES",
     "VIZ_IR_VERSION",
     "TruncationInfo",
+    "TruncationWarning",
+    "VizCapExceededError",
     "VizEdge",
     "VizGraph",
     "VizNode",
@@ -39,4 +53,6 @@ __all__ = [
     "visualize_nodes_edges",
     "visualize_query",
     "visualize_sample",
+    "visualize_sampler_batch",
+    "warn_if_truncated",
 ]

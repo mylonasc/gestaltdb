@@ -42,7 +42,7 @@ def test_from_nodes_edges_deterministic_ordering():
 def test_from_nodes_edges_caps_are_deterministic():
     nodes = [Node(node_id=f"n{i:03d}") for i in range(10)]
     edges = [Edge(edge_id=f"e{i:03d}", source=f"n{i:03d}", target=f"n{(i + 1) % 10:03d}") for i in range(10)]
-    viz = VizGraph.from_nodes_edges(nodes, edges, max_nodes=4, max_edges=2)
+    viz = VizGraph.from_nodes_edges(nodes, edges, max_nodes=4, max_edges=2, absolute_max_nodes=20, absolute_max_edges=20)
     assert viz.node_ids == ("n000", "n001", "n002", "n003")
     assert viz.truncation.nodes_dropped == 6
     # Only edges fully inside the kept node set survive, then the edge cap.
@@ -181,7 +181,7 @@ def test_ir_module_has_no_third_party_runtime_dependency():
             imported.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module.split(".")[0])
-    assert imported <= {"__future__", "json", "math", "dataclasses", "typing"}
+    assert imported <= {"__future__", "json", "math", "dataclasses", "typing", "warnings"}
 
 
 def test_default_caps_match_epic():

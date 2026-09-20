@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import math
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
@@ -194,6 +195,19 @@ def _is_path_like(value: Any) -> bool:
     return hasattr(value, "nodes") and hasattr(value, "edges") and not isinstance(value, Mapping)
 
 
+#: Multiplier applied to ``max_nodes``/``max_edges`` to derive the default
+#: absolute ceiling. Payloads beyond the ceiling raise instead of rendering.
+DEFAULT_ABSOLUTE_CEILING_MULTIPLIER = 2
+
+
+class VizCapExceededError(ValueError):
+    """Raised when a payload exceeds its absolute ceiling (VIZ-07)."""
+
+
+class TruncationWarning(UserWarning):
+    """Emitted when caps deterministically drop nodes or edges (VIZ-07)."""
+
+
 @dataclass(frozen=True)
 class VizNode:
     """A single node in the visualization IR."""
@@ -263,6 +277,24 @@ class TruncationInfo:
         }
 
 
+def warn_if_truncated(viz_graph: "VizGraph", *, source: str) -> None:
+    """Emit a :class:`TruncationWarning` when caps dropped anything.
+
+    Args:
+        viz_graph: Built payload to inspect.
+        source: Human context (e.g. builder name) included in the message.
+    """
+    truncation = getattr(viz_graph, "truncation", None)
+    if truncation is not None and truncation.truncated:
+        warnings.warn(
+            f"Visualization truncated {truncation.nodes_dropped} nodes and "
+            f"{truncation.edges_dropped} edges by caps ({source}); "
+            "sample a subgraph with visualize_sample() or narrow the query with LIMIT instead.",
+            TruncationWarning,
+            stacklevel=3,
+        )
+
+
 @dataclass(frozen=True)
 class VizGraph:
     """Deterministic, JSON-serializable graph payload for the front end."""
@@ -312,6 +344,8 @@ class VizGraph:
         *,
         max_nodes: int = DEFAULT_MAX_NODES,
         max_edges: int = DEFAULT_MAX_EDGES,
+        absolute_max_nodes: int | None = None,
+        absolute_max_edges: int | None = None,
         highlight_nodes: Any = (),
         highlight_edges: Any = (),
         meta: Mapping[str, Any] | None = None,
@@ -322,6 +356,11 @@ class VizGraph:
         by ``(source, target, id)`` and keep the first ``max_edges``. Edges
         touching a dropped node are dropped as well and counted in
         ``edges_dropped``. Duplicate IDs keep their first occurrence.
+
+        Payloads with more distinct nodes than ``absolute_max_nodes`` (or
+        edges than ``absolute_max_edges``) raise :class:`VizCapExceededError`
+        instead of freezing the browser; both default to twice their
+        respective cap. Sample a subgraph or narrow the query instead.
         """
         node_map: dict[str, VizNode] = {}
         for raw in nodes or ():
@@ -333,6 +372,12 @@ class VizGraph:
                 node_map[node_id] = VizNode(id=node_id, labels=labels, properties=properties, extra=extra)
 
         ordered_node_ids = sorted(node_map)
+        ceiling_nodes = absolute_max_nodes if absolute_max_nodes is not None else max_nodes * DEFAULT_ABSOLUTE_CEILING_MULTIPLIER
+        if len(ordered_node_ids) > ceiling_nodes:
+            raise VizCapExceededError(
+                f"Cannot visualize {len(ordered_node_ids)} nodes (absolute ceiling {ceiling_nodes}); "
+                "sample a subgraph with visualize_sample() or narrow the query with LIMIT instead."
+            )
         kept_node_ids = set(ordered_node_ids[:max_nodes])
         nodes_dropped = len(ordered_node_ids) - len(kept_node_ids)
 
@@ -355,6 +400,12 @@ class VizGraph:
             )
 
         ordered_edges = sorted(edge_map.values(), key=lambda edge: (edge.source, edge.target, edge.id))
+        ceiling_edges = absolute_max_edges if absolute_max_edges is not None else max_edges * DEFAULT_ABSOLUTE_CEILING_MULTIPLIER
+        if len(ordered_edges) > ceiling_edges:
+            raise VizCapExceededError(
+                f"Cannot visualize {len(ordered_edges)} edges (absolute ceiling {ceiling_edges}); "
+                "sample a subgraph with visualize_sample() or narrow the query with LIMIT instead."
+            )
         kept_edges: list[VizEdge] = []
         edges_dropped = 0
         for edge in ordered_edges:
@@ -393,6 +444,8 @@ class VizGraph:
         *,
         max_nodes: int = DEFAULT_MAX_NODES,
         max_edges: int = DEFAULT_MAX_EDGES,
+        absolute_max_nodes: int | None = None,
+        absolute_max_edges: int | None = None,
         meta: Mapping[str, Any] | None = None,
     ) -> "VizGraph":
         """Build a payload from a Cypher ``QueryResult``.
@@ -456,6 +509,8 @@ class VizGraph:
             list(edge_raws.values()),
             max_nodes=max_nodes,
             max_edges=max_edges,
+            absolute_max_nodes=absolute_max_nodes,
+            absolute_max_edges=absolute_max_edges,
             highlight_nodes=sorted(highlight_nodes),
             highlight_edges=sorted(highlight_edges),
             meta=payload_meta,
@@ -468,6 +523,8 @@ class VizGraph:
         *,
         max_nodes: int = DEFAULT_MAX_NODES,
         max_edges: int = DEFAULT_MAX_EDGES,
+        absolute_max_nodes: int | None = None,
+        absolute_max_edges: int | None = None,
         meta: Mapping[str, Any] | None = None,
     ) -> "VizGraph":
         """Build a payload from a ``sample_typed_subgraph`` mapping.
@@ -524,6 +581,8 @@ class VizGraph:
             edge_values,
             max_nodes=max_nodes,
             max_edges=max_edges,
+            absolute_max_nodes=absolute_max_nodes,
+            absolute_max_edges=absolute_max_edges,
             highlight_nodes=sorted(highlight_nodes),
             highlight_edges=sorted(highlight_edges),
             meta=payload_meta,
@@ -537,6 +596,8 @@ class VizGraph:
         *,
         max_nodes: int = DEFAULT_MAX_NODES,
         max_edges: int = DEFAULT_MAX_EDGES,
+        absolute_max_nodes: int | None = None,
+        absolute_max_edges: int | None = None,
         meta: Mapping[str, Any] | None = None,
     ) -> "VizGraph":
         """Build a payload from a ``SampledSubgraphBatch`` and snapshot.
@@ -592,5 +653,7 @@ class VizGraph:
             edge_values,
             max_nodes=max_nodes,
             max_edges=max_edges,
+            absolute_max_nodes=absolute_max_nodes,
+            absolute_max_edges=absolute_max_edges,
             meta=payload_meta,
         )
