@@ -3779,6 +3779,43 @@ class GraphDB:
 
         return execute(self, cypher, parameters=parameters)
 
+    def visualize(self, cypher=None, *, seeds=None, pattern=None, parameters=None, options=None, rng=None):
+        """Build an offline interactive visualization of this graph.
+
+        The front-end bundle is prebuilt and packaged with the library, so
+        this works with no JavaScript toolchain and no network access. The
+        returned figure saves self-contained ``.html`` artifacts and renders
+        inline in Jupyter.
+
+        Args:
+            cypher: Optional Cypher query whose matched entities are
+                visualized (with query matches highlighted).
+            seeds: Optional seed node IDs for typed-subgraph sampling; requires
+                ``pattern``.
+            pattern: ``SamplingPattern`` or hop dicts used with ``seeds``.
+            parameters: Optional Cypher parameters for ``cypher``.
+            options: Optional ``gestaltdb.viz.api.VizOptions`` or mapping.
+            rng: Optional random generator for sampling mode.
+
+        Returns:
+            ``gestaltdb.viz.api.VizFigure``.
+
+        Examples:
+            >>> figure = graph_db.visualize('MATCH (a:Person) RETURN a LIMIT 25')  # doctest: +SKIP
+            >>> figure.save("/tmp/people.html")  # doctest: +SKIP
+        """
+        from .viz.api import visualize_query, visualize_sample
+
+        if cypher is not None:
+            if seeds is not None or pattern is not None:
+                raise ValueError("visualize() accepts either cypher= or seeds=/pattern=, not both")
+            return visualize_query(self, cypher, parameters=parameters, options=options)
+        if seeds is not None or pattern is not None:
+            if pattern is None:
+                raise ValueError("visualize() with seeds= requires pattern=")
+            return visualize_sample(self, seeds, pattern, rng=rng, options=options)
+        raise ValueError("visualize() requires cypher= or seeds=/pattern=")
+
     @contextmanager
     def transaction(self, **options):
         """Run graph operations in a backend transaction when supported.

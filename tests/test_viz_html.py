@@ -44,7 +44,7 @@ def test_xss_probe_is_inert_and_payload_parses():
     )
     document = build_html(viz)
     assert "</script><script>" not in document
-    match = re.search(r"window\.__GESTALTDB_VIZ__ = (\{.*?\});</script>", document, re.DOTALL)
+    match = re.search(r"window\.__GESTALTDB_VIZ__ = (.*?);window\.__GESTALTDB_VIZ_OPTIONS__", document, re.DOTALL)
     assert match is not None
     payload = json.loads(match.group(1))
     assert payload["nodes"][0]["labels"] == [evil]

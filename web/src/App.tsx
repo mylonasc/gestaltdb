@@ -4,16 +4,17 @@ import { Inspector, type Selection } from "./Inspector";
 import { legendGroups, legendTypes } from "./graph";
 import { computeView } from "./view";
 import { colorFor } from "./colors";
-import type { VizPayload } from "./viz-types";
+import type { VizPayload, VizViewOptions } from "./viz-types";
 
 // VIZ-05 shell: search, label/type filters, 1-hop focus, highlight overlay,
 // and the node/edge inspector on top of the VIZ-04 canvas.
-export function App({ payload }: { payload: VizPayload }) {
+export function App({ payload, initial = {} }: { payload: VizPayload; initial?: VizViewOptions }) {
   const [paused, setPaused] = useState(false);
-  const [charge, setCharge] = useState(-300);
-  const [linkDistance, setLinkDistance] = useState(60);
-  const [showLabels, setShowLabels] = useState(true);
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [charge, setCharge] = useState(initial.charge ?? -300);
+  const [linkDistance, setLinkDistance] = useState(initial.linkDistance ?? 60);
+  const [showLabels, setShowLabels] = useState(initial.showLabels ?? true);
+  const [theme, setTheme] = useState<"light" | "dark">(initial.theme ?? "light");
+  const showProperties = initial.showProperties ?? true;
   const [fitSignal, setFitSignal] = useState(0);
   const [unpinSignal, setUnpinSignal] = useState(0);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -157,13 +158,15 @@ export function App({ payload }: { payload: VizPayload }) {
           dimEdges={view.dimEdges}
         />
         <aside className="gdviz-legend" aria-label="Legend and inspector">
-          <Inspector
-            payload={payload}
-            selection={selection}
-            focusNodeId={focusNodeId}
-            onFocus={setFocusNodeId}
-            onClear={() => setSelection(null)}
-          />
+          {showProperties && (
+            <Inspector
+              payload={payload}
+              selection={selection}
+              focusNodeId={focusNodeId}
+              onFocus={setFocusNodeId}
+              onClear={() => setSelection(null)}
+            />
+          )}
           <section>
             <h2>Node groups</h2>
             <ul>

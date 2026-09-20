@@ -1,10 +1,11 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
-import type { VizPayload } from "./viz-types";
+import type { VizPayload, VizViewOptions } from "./viz-types";
 import "./styles.css";
 
 const payload: VizPayload | undefined = window.__GESTALTDB_VIZ__;
+const initialOptions: VizViewOptions = window.__GESTALTDB_VIZ_OPTIONS__ ?? {};
 
 const root = document.getElementById("root");
 if (!root) {
@@ -16,7 +17,7 @@ if (!payload || payload.version !== 1) {
 } else {
   createRoot(root).render(
     <React.StrictMode>
-      <App payload={payload} />
+      <App payload={payload} initial={initialOptions} />
     </React.StrictMode>
   );
 }

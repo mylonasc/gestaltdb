@@ -30,5 +30,14 @@ export interface VizPayload {
 declare global {
   interface Window {
     __GESTALTDB_VIZ__?: VizPayload;
+    __GESTALTDB_VIZ_OPTIONS__?: VizViewOptions;
   }
+}
+
+export interface VizViewOptions {
+  theme?: "light" | "dark";
+  charge?: number;
+  linkDistance?: number;
+  showLabels?: boolean;
+  showProperties?: boolean;
 }

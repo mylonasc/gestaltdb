@@ -79,6 +79,7 @@ def build_html(
     *,
     title: str = "GestaltDB graph",
     warn_on_stale_bundle: bool = True,
+    view_overrides: Mapping[str, Any] | None = None,
 ) -> str:
     """Build a self-contained offline HTML document for a payload.
 
@@ -88,6 +89,9 @@ def build_html(
         title: Document title (HTML-escaped).
         warn_on_stale_bundle: Emit a ``RuntimeWarning`` when the committed
             bundle does not match its manifest.
+        view_overrides: Optional front-end initial-state overrides (theme,
+            charge, link distance, label/property visibility) injected as
+            ``window.__GESTALTDB_VIZ_OPTIONS__``.
 
     Returns:
         Complete HTML document as a string.
@@ -103,6 +107,7 @@ def build_html(
     css = (STATIC_DIR / BUNDLE_CSS_NAME).read_text(encoding="utf-8")
     safe_title = html_module.escape(str(title), quote=True)
     safe_payload = _payload_json(payload)
+    safe_overrides = _payload_json(dict(view_overrides or {}))
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -114,7 +119,7 @@ def build_html(
 </head>
 <body>
 <div id="root"></div>
-<script>window.__GESTALTDB_VIZ__ = {safe_payload};</script>
+<script>window.__GESTALTDB_VIZ__ = {safe_payload};window.__GESTALTDB_VIZ_OPTIONS__ = {safe_overrides};</script>
 <script>{js}</script>
 </body>
 </html>
@@ -127,12 +132,15 @@ def save_html(
     *,
     title: str = "GestaltDB graph",
     warn_on_stale_bundle: bool = True,
+    view_overrides: Mapping[str, Any] | None = None,
 ) -> Path:
     """Write a self-contained HTML artifact to ``path``.
 
     Creates parent directories as needed. Returns the resolved path.
     """
-    document = build_html(viz_graph, title=title, warn_on_stale_bundle=warn_on_stale_bundle)
+    document = build_html(
+        viz_graph, title=title, warn_on_stale_bundle=warn_on_stale_bundle, view_overrides=view_overrides
+    )
     resolved = Path(path).expanduser().resolve()
     resolved.parent.mkdir(parents=True, exist_ok=True)
     resolved.write_text(document, encoding="utf-8")
