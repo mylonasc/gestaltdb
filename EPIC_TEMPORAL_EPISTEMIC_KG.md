@@ -1,6 +1,6 @@
 # Epic: Temporal and Epistemic Knowledge Graphs
 
-Status: **in progress** (`TKG-01` and `TKG-02` implemented on
+Status: **in progress** (`TKG-01` through `TKG-03` implemented on
 `temporal-epistemic-kg`)
 
 GitHub parent: [#63](https://github.com/mylonasc/gestaltdb/issues/63)
@@ -504,4 +504,5 @@ Every TKG feature must:
 - [x] `TKG-01` implemented with canonical temporal primitives.
 - [x] `TKG-01` verification and issue closure.
 - [x] `TKG-02` implemented with immutable bitemporal version history.
-- [ ] `TKG-03` onward.
+- [x] `TKG-03` implemented with indexed as-of resolution and traversal.
+- [ ] `TKG-04` onward.
