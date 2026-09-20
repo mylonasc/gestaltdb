@@ -12,6 +12,9 @@ Available notebooks include:
 - ``04_typed_path_sampling.ipynb`` for typed traversal and sampling.
 - ``05_columnar_ingestion_benchmark.ipynb`` for Arrow/Polars columnar ingestion
   compared with LevelDB object batch ingestion.
+- ``09_graph_visualization.ipynb`` for offline interactive visualization:
+  ``visualize_*`` entrypoints, Cypher highlighting, typed sampling, caps,
+  themes, and sampler-batch inspection.
 
 Choose the Correct Kernel
 -------------------------

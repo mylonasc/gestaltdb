@@ -1,0 +1,199 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.gdviz {
+  --gdviz-bg: #ffffff;
+  --gdviz-fg: #1a1a1a;
+  --gdviz-muted: #5a5a5a;
+  --gdviz-panel: #f4f4f2;
+  --gdviz-border: #d8d8d4;
+  --gdviz-banner-bg: #fff4d6;
+  --gdviz-banner-fg: #5c4500;
+  height: 100vh;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--gdviz-bg);
+  color: var(--gdviz-fg);
+}
+
+.gdviz[data-theme="dark"] {
+  --gdviz-bg: #14161a;
+  --gdviz-fg: #e8e8e6;
+  --gdviz-muted: #a8a8a4;
+  --gdviz-panel: #1e2126;
+  --gdviz-border: #3a3e45;
+  --gdviz-banner-bg: #3a2f00;
+  --gdviz-banner-fg: #ffe08a;
+}
+
+.gdviz-header {
+  padding: 0.75rem 1rem 0.5rem;
+  border-bottom: 1px solid var(--gdviz-border);
+  background: var(--gdviz-panel);
+}
+
+.gdviz-header h1 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.gdviz-counts {
+  margin: 0.15rem 0 0.5rem;
+  color: var(--gdviz-muted);
+  font-size: 0.85rem;
+}
+
+.gdviz-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.gdviz-toolbar button {
+  cursor: pointer;
+}
+
+.gdviz-toolbar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.gdviz-banner {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  background: var(--gdviz-banner-bg);
+  color: var(--gdviz-banner-fg);
+  font-size: 0.85rem;
+}
+
+.gdviz-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.gdviz-canvas {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: block;
+  touch-action: none;
+  color: var(--gdviz-muted);
+}
+
+.gdviz-canvas .node {
+  cursor: grab;
+  outline: none;
+}
+
+.gdviz-canvas .node:focus-visible circle {
+  stroke-width: 3;
+}
+
+.gdviz-canvas .node.selected circle {
+  stroke: #111111;
+  stroke-width: 3;
+}
+
+.gdviz[data-theme="dark"] .gdviz-canvas .node.selected circle {
+  stroke: #ffffff;
+}
+
+.gdviz-canvas .edge-hit {
+  cursor: pointer;
+  outline: none;
+}
+
+.gdviz-canvas .node:active {
+  cursor: grabbing;
+}
+
+.gdviz-canvas .node-label {
+  font-size: 10px;
+  fill: var(--gdviz-fg);
+  paint-order: stroke;
+  stroke: var(--gdviz-bg);
+  stroke-width: 3px;
+  pointer-events: none;
+}
+
+.gdviz-legend {
+  width: 14rem;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 0.75rem 1rem;
+  border-left: 1px solid var(--gdviz-border);
+  background: var(--gdviz-panel);
+  font-size: 0.85rem;
+}
+
+.gdviz-legend h2 {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gdviz-muted);
+}
+
+.gdviz-legend ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.gdviz-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.1rem 0;
+  overflow-wrap: anywhere;
+}
+
+.gdviz-legend li label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.gdviz-props {
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+}
+
+.gdviz-props dt {
+  color: var(--gdviz-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gdviz-props dd {
+  margin: 0 0 0.4rem;
+  overflow-wrap: anywhere;
+}
+
+.gdviz-row {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.gdviz-muted {
+  color: var(--gdviz-muted);
+  font-size: 0.85rem;
+}
+
+.gdviz-swatch {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}

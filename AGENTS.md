@@ -11,6 +11,8 @@ Use this file when you are an agent trying to understand or modify the library w
 - Storage backends: `src/gestaltdb/kvstores.py`
 - Serializers: `src/gestaltdb/serializers.py`
 - Columnar ingestion containers and enums: `src/gestaltdb/ingestion.py`
+- Canonical temporal values and selection semantics: `src/gestaltdb/temporal.py`
+- Immutable temporal version records and write descriptors: `src/gestaltdb/versioning.py`
 - Cypher engine: `src/gestaltdb/query_engine/cypher/`
 - Legacy Cypher import shims: `src/gestaltdb/cypher.py` and `src/gestaltdb/cypher_*.py`
 - Sampling API: `src/gestaltdb/sampling/`
@@ -34,6 +36,7 @@ The package root currently re-exports selected ingestion, Cypher result, and sam
 from gestaltdb import EdgeList, IndexMaintenanceMode, NodeList, QueryResult
 from gestaltdb import HardNegativeConfig, SamplerEngine, SamplerSnapshot
 from gestaltdb import SamplingHop, SamplingPattern
+from gestaltdb import TemporalContext, TemporalInstant, TemporalInterval
 ```
 
 Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes are available from `import gestaltdb`; import them from their modules unless the API is intentionally changed.
@@ -46,6 +49,8 @@ Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes 
 - `GraphDB.create(path, backend="pyrex", serializer="json", ...)` creates a self-describing database directory with `gestaltdb_manifest.json`; `GraphDB.open(path)` reopens it.
 - Backends implement the `KVStore` interface. Current backends are `LMDBStore`, `LevelDBStore`, and `PyRexStore`.
 - Serializers convert graph entities to bytes. Current serializers are `PickleSerializer`, `JSONSerializer`, `MessagePackSerializer`, and `ProtobufSerializer`.
+- `TemporalInstant`, `TemporalInterval`, and `TemporalContext` define timezone-aware UTC-microsecond instants, half-open `[start, end)` intervals, and point/window matching.
+- `put_node_version`, `put_edge_version`, correction/retraction helpers, and `commit_versions` append immutable temporal history. They do not update current graph records, Cypher views, or sampler snapshots; TKG-02 history inspection is scan-based.
 
 ## Backend Guidance
 
@@ -121,6 +126,13 @@ There are two sampling layers:
 `SamplerSnapshot.build(graph, output_path, ...)` and `graph.build_sampler_snapshot(output_path, ...)` persist immutable `.npy` arrays and metadata. `SamplerEngine.load(path, mode="ram"|"memmap", seed=...)` loads the arrays for neighbor, multihop, subgraph, positive-triple, and hard-negative sampling.
 
 `SampledSubgraphBatch` uses local node IDs in `senders`, `receivers`, `positives`, and `negatives`. Use `node_ids_global` to map local batch rows back to compact global snapshot IDs, and use `snapshot.external_node_id(...)` or `snapshot.global_triple_to_external(...)` to recover external IDs.
+
+## Visualization
+
+- Packaged offline viz lives in `src/gestaltdb/viz/` (Python, stdlib only) plus `web/` (React + D3 + Vite source, build-time only). The prebuilt bundle is committed at `src/gestaltdb/viz/static/` and shipped via `package-data`.
+- Import from `gestaltdb.viz.api` (`VizOptions`, `VizFigure`, `visualize_nodes_edges`, `visualize_query`, `visualize_sample`, `visualize_sampler_batch`) or use `graph.visualize(cypher=...)` / `graph.visualize(seeds=..., pattern=...)`.
+- `VizGraph` IR builders (`gestaltdb.viz.ir`) cover nodes/edges, Cypher results, sampled subgraphs, and sampler batches with deterministic caps (2000 nodes / 5000 edges, 2x absolute ceilings).
+- Rebuild the bundle with `npm run build` in `web/` after front-end changes (`npm ci` first; `npm run check:licenses` gates JS licenses). Python tests never need npm.
 
 ## Development Commands
 

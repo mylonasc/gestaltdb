@@ -1,5 +1,7 @@
 /.venv/
 /.venv-*/
+node_modules/
+web/dist/
 /build/
 /dist/
 *.egg-info/

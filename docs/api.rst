@@ -9,6 +9,20 @@ Graph Models and Database
    :undoc-members:
    :show-inheritance:
 
+Temporal Semantics
+------------------
+
+.. automodule:: gestaltdb.temporal
+   :members:
+   :show-inheritance:
+
+Temporal Version History
+------------------------
+
+.. automodule:: gestaltdb.versioning
+   :members:
+   :show-inheritance:
+
 Sampling Configuration
 ----------------------
 
@@ -79,6 +93,27 @@ Serializers
 -----------
 
 .. automodule:: gestaltdb.serializers
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Visualization IR
+----------------
+
+.. automodule:: gestaltdb.viz.ir
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Visualization Artifacts and API
+-------------------------------
+
+.. automodule:: gestaltdb.viz.api
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: gestaltdb.viz.html
    :members:
    :undoc-members:
    :show-inheritance:

@@ -1,0 +1,11 @@
+{
+  "app_version": "0.1.0",
+  "bundle_js": "gestaltdb-viz.js",
+  "bundle_css": "gestaltdb-viz.css",
+  "bundle_js_sha256": "3e1dd8e66c76306c56f233c31fa9cd2e8098df5760c116d88e562afef3658d10",
+  "bundle_css_sha256": "2a9c1e1d876bc00de6af2a952b2d94901d0019da55937cc24a0037a02dda69d3",
+  "d3_version": "^7.9.0",
+  "react_version": "^18.3.1",
+  "react_dom_version": "^18.3.1",
+  "built_at": "2026-09-20T16:21:16.071Z"
+}

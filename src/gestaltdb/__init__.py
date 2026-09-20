@@ -29,9 +29,11 @@ main graph API lives in submodules rather than entirely at the package root:
        graph.close()
 
 Import core graph classes from ``gestaltdb.graphdb``, storage backends from
-``gestaltdb.kvstores``, serializers from ``gestaltdb.serializers``, and advanced
-sampling primitives from ``gestaltdb.sampling``. This package root re-exports
-selected ingestion enums/containers, ``QueryResult``, and sampling helpers for
+``gestaltdb.kvstores``, serializers from ``gestaltdb.serializers``, canonical
+temporal values from ``gestaltdb.temporal``, and advanced sampling primitives
+from ``gestaltdb.sampling``. Immutable temporal version models and write
+descriptors live in ``gestaltdb.versioning``. This package root re-exports selected ingestion
+enums/containers, temporal values, ``QueryResult``, and sampling helpers for
 convenience.
 
 Important usage notes for agents and developers:
@@ -39,9 +41,25 @@ Important usage notes for agents and developers:
 * Relationship traversal types come from ``Edge.properties["type"]``.
 * ``GraphDB.query`` implements a broad Cypher read/write subset.
 * Property indexes are explicit; create them before relying on property lookups.
+* Explicit temporal version writes append history without changing current
+  graph, Cypher, or sampler views.
 * Use ``GraphDB.ingest_arrow`` and ``GraphDB.ingest_polars`` for tabular bulk
   ingestion, and use ``SamplerSnapshot``/``SamplerEngine`` for ML-oriented
   array-native sampling.
+
+GestaltDB also ships offline interactive visualization. The D3.js + React
+front end is prebuilt and packaged, so this needs no JavaScript toolchain:
+
+.. code-block:: python
+
+   from gestaltdb.viz.api import visualize_query
+
+   figure = visualize_query(graph, 'MATCH (a:Person) RETURN a LIMIT 25')
+   figure.save("/tmp/graph.html")  # open offline in any browser
+
+See ``gestaltdb.viz.api`` (``VizOptions``, ``VizFigure``, ``visualize_*``),
+``gestaltdb.viz.ir`` (deterministic payload builders), and
+``GraphDB.visualize``.
 
 GestaltDB also ships a packaged opencode skill and queryable user examples. In
 an application project that uses GestaltDB, run ``python -m gestaltdb.agent_docs
@@ -56,6 +74,7 @@ runnable usage patterns, and ``docs/`` for the Sphinx user guide.
 from .sampling import AsyncBatchFeeder, HardNegativeConfig, SampledSubgraphBatch, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .query_engine.cypher import QueryResult
+from .temporal import TemporalContext, TemporalInstant, TemporalInterval
 
 __all__ = [
     "ColumnarIngestionMode",
@@ -70,4 +89,7 @@ __all__ = [
     "SamplerSnapshot",
     "SamplingHop",
     "SamplingPattern",
+    "TemporalContext",
+    "TemporalInstant",
+    "TemporalInterval",
 ]

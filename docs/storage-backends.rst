@@ -270,6 +270,14 @@ ingestion is the priority.
 The current ``LevelDBStore`` layout uses multiple physical LevelDB databases, so
 graph-level transactions are intentionally unsupported there.
 
+Immutable temporal-version commits use backend metadata rather than current
+node and edge records. LMDB and transaction-capable PyRex publish all records
+and the commit marker in the surrounding backend transaction. LevelDB and
+default PyRex publish a marker last; interrupted, unmarked records remain
+invisible and visible commit IDs remain ordered. Non-transactional temporal
+commits currently require one externally serialized writer handle. See
+:doc:`temporal-versioning`.
+
 Backend Selection Pattern
 -------------------------
 

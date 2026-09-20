@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import pickle
 import json
+import hashlib
 import os
 import random
 import shutil
 import sys
+import threading
 import time
 import uuid
 import base64
@@ -25,6 +27,25 @@ import struct
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .sampling import SamplingPattern, as_sampling_pattern
 from .serializers import JSONSerializer
+from .temporal import TemporalInstant, TemporalInterval
+from .versioning import (
+    EdgeVersion,
+    EdgeVersionWrite,
+    NodeVersion,
+    NodeVersionWrite,
+    TemporalCommit,
+    TemporalCorruptionError,
+    TemporalVersionError,
+    VersionOperation,
+    canonical_json_bytes,
+    commit_descriptor_bytes,
+    decode_version_envelope,
+    encode_version_envelope,
+    immutable_metadata,
+    normalize_logical_id,
+    normalize_temporal_interval,
+    normalize_version_id,
+)
 
 
 _NODE_PROPERTY_INDEXES_METADATA_KEY = b"schema:indexes:node_properties"
@@ -36,6 +57,11 @@ MANIFEST_FILENAME = "gestaltdb_manifest.json"
 MANIFEST_FORMAT_VERSION = 1
 _VALID_INDEX_MODES = {IndexMaintenanceMode.MAINTAIN.value, IndexMaintenanceMode.DEFER.value}
 _INDEX_REBUILD_BATCH_SIZE = 100_000
+_TEMPORAL_PREFIX = b"temporal:v1:"
+_TEMPORAL_SEQUENCE_KEY = _TEMPORAL_PREFIX + b"sequence"
+_TEMPORAL_COMMIT_PREFIX = _TEMPORAL_PREFIX + b"commit:"
+_TEMPORAL_RECORD_PREFIX = _TEMPORAL_PREFIX + b"record:"
+_TEMPORAL_VISIBLE_PREFIX = _TEMPORAL_PREFIX + b"visible:"
 
 
 def _utc_now_iso() -> str:
@@ -489,6 +515,9 @@ class GraphDB:
         self._backend_name: str | None = _registry_name_for_instance(store, _backend_registry())
         self._serializer_name: str | None = _registry_name_for_instance(serializer, _serializer_registry())
         self._manifest: dict | None = None
+        self._temporal_write_lock = threading.RLock()
+        self._temporal_transaction_bound = False
+        self._temporal_clock = lambda: datetime.datetime.now(datetime.timezone.utc)
         self.entity_serializer = GraphEntityDictSerializer(
             self.serializer
         )
@@ -659,6 +688,7 @@ class GraphDB:
                 "edge_count": None,
                 "indexed_node_properties": list(sorted(self.indexed_node_properties)),
                 "indexed_edge_properties": list(sorted(self.indexed_edge_properties)),
+                "temporal_versions_format": 1,
             },
             "created_at": created_at or _utc_now_iso(),
         }
@@ -3205,6 +3235,527 @@ class GraphDB:
         if range_entries:
             self.store.put_range_index_entries_bulk(range_entries)
 
+    # ------------------------
+    # Temporal Version History
+    # ------------------------
+
+    @staticmethod
+    def _temporal_commit_key(commit_id: int) -> bytes:
+        return _TEMPORAL_COMMIT_PREFIX + int(commit_id).to_bytes(8, "big", signed=False)
+
+    @staticmethod
+    def _temporal_visible_key(commit_id: int) -> bytes:
+        return _TEMPORAL_VISIBLE_PREFIX + int(commit_id).to_bytes(8, "big", signed=False)
+
+    @staticmethod
+    def _temporal_record_key(commit_id: int, ordinal: int) -> bytes:
+        return (
+            _TEMPORAL_RECORD_PREFIX
+            + int(commit_id).to_bytes(8, "big", signed=False)
+            + int(ordinal).to_bytes(4, "big", signed=False)
+        )
+
+    def _temporal_sequence(self) -> tuple[int, TemporalInstant | None]:
+        try:
+            payload = self.store.get_metadata(_TEMPORAL_SEQUENCE_KEY)
+        except NotImplementedError as exc:
+            raise TemporalVersionError("the configured store does not support temporal metadata") from exc
+        if payload is None:
+            return 0, None
+        try:
+            decoded = json.loads(payload.decode("utf-8"))
+            if not isinstance(decoded, dict):
+                raise TypeError
+            commit_id = decoded["commit_id"]
+            system_time_us = decoded["system_time_us"]
+            if isinstance(commit_id, bool) or not isinstance(commit_id, int):
+                raise TypeError
+            if isinstance(system_time_us, bool) or not isinstance(system_time_us, int):
+                raise TypeError
+            system_time = TemporalInstant(system_time_us)
+        except (KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise TemporalCorruptionError("invalid temporal commit sequence") from exc
+        if commit_id < 0:
+            raise TemporalCorruptionError("invalid temporal commit sequence")
+        return commit_id, system_time
+
+    def _next_temporal_system_time(self, previous: TemporalInstant | None) -> TemporalInstant:
+        current = self._temporal_clock()
+        if isinstance(current, TemporalInstant):
+            instant = current
+        else:
+            instant = TemporalInstant.from_datetime(current)
+        if previous is not None and instant <= previous:
+            return TemporalInstant(previous.epoch_microseconds + 1)
+        return instant
+
+    def put_node_version(
+        self, node: Node, *, valid, version_id=None, metadata=None
+    ) -> NodeVersion:
+        """Append an immutable node assertion without changing the current graph."""
+        commit = self.commit_versions(
+            [NodeVersionWrite.assertion(node, valid, version_id=version_id)],
+            metadata=metadata,
+        )
+        return commit.versions[0]  # type: ignore[return-value]
+
+    def put_edge_version(
+        self, edge: Edge, *, valid, version_id=None, metadata=None
+    ) -> EdgeVersion:
+        """Append an immutable edge assertion without changing the current graph."""
+        commit = self.commit_versions(
+            [EdgeVersionWrite.assertion(edge, valid, version_id=version_id)],
+            metadata=metadata,
+        )
+        return commit.versions[0]  # type: ignore[return-value]
+
+    def correct_node_version(
+        self,
+        node: Node,
+        *,
+        supersedes_version_id: str,
+        valid=None,
+        version_id=None,
+        metadata=None,
+    ) -> NodeVersion:
+        """Append a corrected node payload while preserving the superseded version."""
+        commit = self.commit_versions([
+            NodeVersionWrite.correction(
+                node,
+                supersedes_version_id=supersedes_version_id,
+                valid=valid,
+                version_id=version_id,
+            )
+        ], metadata=metadata)
+        return commit.versions[0]  # type: ignore[return-value]
+
+    def correct_edge_version(
+        self,
+        edge: Edge,
+        *,
+        supersedes_version_id: str,
+        valid=None,
+        version_id=None,
+        metadata=None,
+    ) -> EdgeVersion:
+        """Append a corrected edge payload while preserving the superseded version."""
+        commit = self.commit_versions([
+            EdgeVersionWrite.correction(
+                edge,
+                supersedes_version_id=supersedes_version_id,
+                valid=valid,
+                version_id=version_id,
+            )
+        ], metadata=metadata)
+        return commit.versions[0]  # type: ignore[return-value]
+
+    def retract_node_version(
+        self,
+        logical_id: str,
+        *,
+        valid=None,
+        valid_from=None,
+        supersedes_version_id=None,
+        reason=None,
+        version_id=None,
+        metadata=None,
+    ) -> NodeVersion:
+        """Append a node retraction over an explicit or inherited interval."""
+        commit = self.commit_versions([
+            NodeVersionWrite.retraction(
+                logical_id,
+                valid=valid,
+                valid_from=valid_from,
+                supersedes_version_id=supersedes_version_id,
+                reason=reason,
+                version_id=version_id,
+            )
+        ], metadata=metadata)
+        return commit.versions[0]  # type: ignore[return-value]
+
+    def retract_edge_version(
+        self,
+        logical_id: str,
+        *,
+        valid=None,
+        valid_from=None,
+        supersedes_version_id=None,
+        reason=None,
+        version_id=None,
+        metadata=None,
+    ) -> EdgeVersion:
+        """Append an edge retraction over an explicit or inherited interval."""
+        commit = self.commit_versions([
+            EdgeVersionWrite.retraction(
+                logical_id,
+                valid=valid,
+                valid_from=valid_from,
+                supersedes_version_id=supersedes_version_id,
+                reason=reason,
+                version_id=version_id,
+            )
+        ], metadata=metadata)
+        return commit.versions[0]  # type: ignore[return-value]
+
+    def commit_versions(self, writes, *, metadata=None) -> TemporalCommit:
+        """Append one logical commit containing immutable node/edge versions."""
+        writes = tuple(writes)
+        if not writes:
+            raise TemporalVersionError("temporal commit must contain at least one version")
+        normalized_metadata = json.loads(canonical_json_bytes(dict(metadata or {})).decode("utf-8"))
+        if getattr(self.store, "supports_transactions", False) and not self._temporal_transaction_bound:
+            with self.transaction() as transaction:
+                return transaction._commit_versions_direct(writes, normalized_metadata)
+        with self._temporal_write_lock:
+            return self._commit_versions_direct(writes, normalized_metadata)
+
+    def _commit_versions_direct(self, writes, metadata) -> TemporalCommit:
+        previous_commit_id, previous_system_time = self._temporal_sequence()
+        commit_id = previous_commit_id + 1
+        if commit_id >= 1 << 64:
+            raise TemporalVersionError("temporal commit ID space is exhausted")
+        system_time = self._next_temporal_system_time(previous_system_time)
+
+        prepared = []
+        batch_version_ids = set()
+        for ordinal, write in enumerate(writes):
+            if ordinal >= 1 << 32:
+                raise TemporalVersionError("temporal commit contains too many versions")
+            if not isinstance(write, (NodeVersionWrite, EdgeVersionWrite)):
+                raise TypeError("writes must contain NodeVersionWrite or EdgeVersionWrite values")
+            if not isinstance(write.operation, VersionOperation):
+                raise TemporalVersionError("temporal version operation is invalid")
+            valid_input = write.valid
+            if valid_input is not None:
+                try:
+                    valid_input = normalize_temporal_interval(valid_input)
+                except (TypeError, ValueError) as exc:
+                    raise TemporalVersionError("temporal version validity interval is invalid") from exc
+            version_id = normalize_version_id(write.version_id)
+            if version_id in batch_version_ids or self._temporal_version_id_exists(version_id):
+                raise TemporalVersionError(f"temporal version ID already exists: {version_id}")
+            batch_version_ids.add(version_id)
+            logical_id = normalize_logical_id(write.logical_id)
+            target = None
+            supersedes_version_id = None
+            if write.supersedes_version_id is not None:
+                supersedes_version_id = normalize_version_id(write.supersedes_version_id)
+                target = self._get_temporal_version(supersedes_version_id)
+                if target is None:
+                    raise TemporalVersionError("superseded temporal version does not exist")
+                expected_node = isinstance(write, NodeVersionWrite)
+                if isinstance(target, NodeVersion) != expected_node or target.logical_id != logical_id:
+                    raise TemporalVersionError("superseded temporal version has a different kind or logical ID")
+            if write.operation is VersionOperation.ASSERT and write.supersedes_version_id is not None:
+                raise TemporalVersionError("assertions cannot supersede another version")
+            if write.operation is not VersionOperation.RETRACT and write.reason is not None:
+                raise TemporalVersionError("only retractions may include a reason")
+            if write.reason is not None and (not isinstance(write.reason, str) or not write.reason):
+                raise TemporalVersionError("retraction reason must be a non-empty string")
+            if write.operation is VersionOperation.CORRECT and target is None:
+                raise TemporalVersionError("corrections require a superseded version")
+            valid = valid_input or (target.valid if target is not None else None)
+            if valid is None:
+                raise TemporalVersionError("a validity interval or superseded version is required")
+
+            if isinstance(write, NodeVersionWrite):
+                entity_kind = "node"
+                entity = write.node
+                if write.operation is not VersionOperation.RETRACT and not isinstance(entity, Node):
+                    raise TemporalVersionError("node assertions and corrections require a Node payload")
+                if entity is not None and entity.get_id != logical_id:
+                    raise TemporalVersionError("node payload ID does not match logical ID")
+                payload = b"" if entity is None else self.entity_serializer.serialize(entity, "Node")
+                entity_type = "Node"
+            else:
+                entity_kind = "edge"
+                entity = write.edge
+                if write.operation is not VersionOperation.RETRACT and not isinstance(entity, Edge):
+                    raise TemporalVersionError("edge assertions and corrections require an Edge payload")
+                if entity is not None and entity.get_id != logical_id:
+                    raise TemporalVersionError("edge payload ID does not match logical ID")
+                payload = b"" if entity is None else self.entity_serializer.serialize(entity, "Edge")
+                entity_type = "Edge"
+            if write.operation is VersionOperation.RETRACT and entity is not None:
+                raise TemporalVersionError("retractions cannot contain entity payloads")
+            if not isinstance(payload, bytes):
+                raise TemporalVersionError("the configured serializer must return bytes")
+            if write.operation is not VersionOperation.RETRACT:
+                if not payload:
+                    raise TemporalVersionError("temporal entity payload cannot be empty")
+                try:
+                    decoded_entity = self.entity_serializer.deserialize(payload, entity_type)
+                except Exception as exc:
+                    raise TemporalVersionError("the configured serializer cannot decode its temporal payload") from exc
+                expected_type = Node if entity_type == "Node" else Edge
+                if not isinstance(decoded_entity, expected_type) or decoded_entity.get_id != logical_id:
+                    raise TemporalVersionError("serialized temporal payload changed its logical ID")
+
+            header = {
+                "entity_kind": entity_kind,
+                "version_id": version_id,
+                "logical_id": logical_id,
+                "valid_from_us": valid.start.epoch_microseconds,
+                "valid_to_us": None if valid.end is None else valid.end.epoch_microseconds,
+                "commit_id": commit_id,
+                "commit_ordinal": ordinal,
+                "system_time_us": system_time.epoch_microseconds,
+                "operation": write.operation.value,
+                "supersedes_version_id": supersedes_version_id,
+                "reason": write.reason,
+            }
+            envelope = encode_version_envelope(header, payload)
+            prepared.append((version_id, envelope))
+
+        sequence = canonical_json_bytes({
+            "commit_id": commit_id,
+            "system_time_us": system_time.epoch_microseconds,
+        })
+        record_digests = [hashlib.sha256(envelope).hexdigest() for _, envelope in prepared]
+        descriptor = commit_descriptor_bytes(
+            commit_id,
+            system_time,
+            metadata,
+            [version_id for version_id, _ in prepared],
+            record_digests,
+        )
+
+        if self.store.get_metadata(self._temporal_commit_key(commit_id)) is not None:
+            raise TemporalCorruptionError("temporal sequence would overwrite an existing commit")
+        if self.store.get_metadata(self._temporal_visible_key(commit_id)) is not None:
+            raise TemporalCorruptionError("temporal sequence would overwrite an existing marker")
+        for ordinal in range(len(prepared)):
+            if self.store.get_metadata(self._temporal_record_key(commit_id, ordinal)) is not None:
+                raise TemporalCorruptionError("temporal sequence would overwrite an existing record")
+
+        # The sequence reserves the ID. The visibility marker is always written last.
+        self.store.put_metadata(_TEMPORAL_SEQUENCE_KEY, sequence)
+        self.store.put_metadata(self._temporal_commit_key(commit_id), descriptor)
+        for ordinal, (_, envelope) in enumerate(prepared):
+            self.store.put_metadata(self._temporal_record_key(commit_id, ordinal), envelope)
+        self.store.put_metadata(
+            self._temporal_visible_key(commit_id), hashlib.sha256(descriptor).digest()
+        )
+        commit = self.get_temporal_commit(commit_id)
+        if commit is None:
+            raise TemporalCorruptionError("new temporal commit was not visible after publication")
+        return commit
+
+    def _temporal_version_id_exists(self, version_id: str) -> bool:
+        last_commit_id, _ = self._temporal_sequence()
+        for commit_id in range(1, last_commit_id + 1):
+            descriptor_payload = self.store.get_metadata(self._temporal_commit_key(commit_id))
+            if descriptor_payload is None:
+                continue
+            try:
+                descriptor = json.loads(descriptor_payload.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            if not isinstance(descriptor, dict):
+                raise TemporalCorruptionError("invalid temporal commit descriptor")
+            if version_id in descriptor.get("version_ids", []):
+                return True
+        return False
+
+    def get_temporal_commit(self, commit_id: int) -> TemporalCommit | None:
+        """Return a fully validated visible temporal commit."""
+        if isinstance(commit_id, bool) or not isinstance(commit_id, int) or commit_id < 1:
+            raise ValueError("commit_id must be a positive integer")
+        descriptor_payload = self.store.get_metadata(self._temporal_commit_key(commit_id))
+        marker = self.store.get_metadata(self._temporal_visible_key(commit_id))
+        if marker is None:
+            return None
+        if descriptor_payload is None or marker != hashlib.sha256(descriptor_payload).digest():
+            raise TemporalCorruptionError("temporal commit marker does not match its descriptor")
+        try:
+            descriptor = json.loads(descriptor_payload.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise TemporalCorruptionError("invalid temporal commit descriptor") from exc
+        if not isinstance(descriptor, dict):
+            raise TemporalCorruptionError("temporal commit descriptor must be an object")
+        if descriptor.get("format_version") != 1 or descriptor.get("commit_id") != commit_id:
+            raise TemporalCorruptionError("invalid temporal commit descriptor")
+        version_ids = descriptor.get("version_ids")
+        record_digests = descriptor.get("record_digests")
+        if not isinstance(version_ids, list) or not isinstance(record_digests, list) or len(version_ids) != len(record_digests):
+            raise TemporalCorruptionError("invalid temporal commit record catalog")
+        if not version_ids:
+            raise TemporalCorruptionError("temporal commit contains no versions")
+        if not all(isinstance(value, str) for value in version_ids):
+            raise TemporalCorruptionError("temporal commit contains an invalid version ID")
+        if len(set(version_ids)) != len(version_ids):
+            raise TemporalCorruptionError("temporal commit contains duplicate version IDs")
+        try:
+            normalized_version_ids = [normalize_version_id(value) for value in version_ids]
+        except (TypeError, ValueError) as exc:
+            raise TemporalCorruptionError("temporal commit contains an invalid version ID") from exc
+        if normalized_version_ids != version_ids:
+            raise TemporalCorruptionError("temporal commit contains a non-canonical version ID")
+        if not all(
+            isinstance(value, str)
+            and len(value) == 64
+            and all(character in "0123456789abcdef" for character in value)
+            for value in record_digests
+        ):
+            raise TemporalCorruptionError("temporal commit contains an invalid record digest")
+        try:
+            system_time_us = descriptor["system_time_us"]
+            descriptor_metadata = descriptor.get("metadata", {})
+            if isinstance(system_time_us, bool) or not isinstance(system_time_us, int):
+                raise TypeError
+            if not isinstance(descriptor_metadata, dict):
+                raise TypeError
+            system_time = TemporalInstant(system_time_us)
+            metadata = immutable_metadata(descriptor_metadata)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise TemporalCorruptionError("invalid temporal commit metadata") from exc
+        versions = []
+        for ordinal, (version_id, expected_digest) in enumerate(zip(version_ids, record_digests)):
+            envelope = self.store.get_metadata(self._temporal_record_key(commit_id, ordinal))
+            if envelope is None or hashlib.sha256(envelope).hexdigest() != expected_digest:
+                raise TemporalCorruptionError("temporal commit record is missing or corrupt")
+            version = self._decode_temporal_version(envelope)
+            if version.version_id != version_id or version.commit_id != commit_id or version.commit_ordinal != ordinal:
+                raise TemporalCorruptionError("temporal commit record does not match its descriptor")
+            if version.system_time != system_time:
+                raise TemporalCorruptionError("temporal version system time does not match its commit")
+            versions.append(version)
+        for version in versions:
+            if version.supersedes_version_id is None:
+                continue
+            target = self._get_temporal_version_through(
+                version.supersedes_version_id, commit_id - 1
+            )
+            if target is None:
+                raise TemporalCorruptionError("temporal version supersedes a missing version")
+            if isinstance(target, NodeVersion) != isinstance(version, NodeVersion) or target.logical_id != version.logical_id:
+                raise TemporalCorruptionError("temporal supersession kind or logical ID mismatch")
+        return TemporalCommit(commit_id, system_time, metadata, tuple(versions))
+
+    def _decode_temporal_version(self, envelope: bytes):
+        header, payload = decode_version_envelope(envelope)
+        required = {
+            "entity_kind", "version_id", "logical_id", "valid_from_us", "valid_to_us",
+            "commit_id", "commit_ordinal", "system_time_us", "operation",
+        }
+        if not required.issubset(header):
+            raise TemporalCorruptionError("temporal version header is incomplete")
+        try:
+            integer_fields = (
+                header["valid_from_us"],
+                header["commit_id"],
+                header["commit_ordinal"],
+                header["system_time_us"],
+            )
+            if any(isinstance(value, bool) or not isinstance(value, int) for value in integer_fields):
+                raise TypeError
+            if header["valid_to_us"] is not None and (
+                isinstance(header["valid_to_us"], bool) or not isinstance(header["valid_to_us"], int)
+            ):
+                raise TypeError
+            valid = TemporalInterval.from_values(header["valid_from_us"], header["valid_to_us"])
+            common = {
+                "version_id": normalize_version_id(header["version_id"]),
+                "logical_id": normalize_logical_id(header["logical_id"]),
+                "valid": valid,
+                "commit_id": header["commit_id"],
+                "commit_ordinal": header["commit_ordinal"],
+                "system_time": TemporalInstant(header["system_time_us"]),
+                "operation": VersionOperation(header["operation"]),
+                "payload_hash": header["payload_hash"],
+                "supersedes_version_id": (
+                    None
+                    if header.get("supersedes_version_id") is None
+                    else normalize_version_id(header["supersedes_version_id"])
+                ),
+                "reason": header.get("reason"),
+            }
+        except (KeyError, TypeError, ValueError) as exc:
+            raise TemporalCorruptionError("invalid temporal version header values") from exc
+        if not isinstance(common["payload_hash"], str):
+            raise TemporalCorruptionError("temporal version payload hash is invalid")
+        operation = common["operation"]
+        if operation is VersionOperation.ASSERT and common["supersedes_version_id"] is not None:
+            raise TemporalCorruptionError("temporal assertion unexpectedly supersedes another version")
+        if operation is VersionOperation.CORRECT and common["supersedes_version_id"] is None:
+            raise TemporalCorruptionError("temporal correction has no superseded version")
+        if operation is not VersionOperation.RETRACT and common["reason"] is not None:
+            raise TemporalCorruptionError("non-retraction temporal version has a reason")
+        if common["reason"] is not None and (
+            not isinstance(common["reason"], str) or not common["reason"]
+        ):
+            raise TemporalCorruptionError("temporal retraction reason is invalid")
+        if operation is VersionOperation.RETRACT:
+            if payload:
+                raise TemporalCorruptionError("temporal retraction unexpectedly contains a payload")
+            entity = None
+        elif not payload:
+            raise TemporalCorruptionError("temporal assertion or correction has no payload")
+        elif header["entity_kind"] == "node":
+            try:
+                entity = self.entity_serializer.deserialize(payload, "Node")
+            except Exception as exc:
+                raise TemporalCorruptionError("cannot decode temporal node payload") from exc
+        elif header["entity_kind"] == "edge":
+            try:
+                entity = self.entity_serializer.deserialize(payload, "Edge")
+            except Exception as exc:
+                raise TemporalCorruptionError("cannot decode temporal edge payload") from exc
+        else:
+            raise TemporalCorruptionError("unknown temporal entity kind")
+        if entity is not None and entity.get_id != common["logical_id"]:
+            raise TemporalCorruptionError("temporal payload ID does not match its logical ID")
+        if header["entity_kind"] == "node":
+            return NodeVersion(**common, node=entity)
+        if header["entity_kind"] == "edge":
+            return EdgeVersion(**common, edge=entity)
+        raise TemporalCorruptionError("unknown temporal entity kind")
+
+    def iter_temporal_commits(self, *, through_commit=None):
+        """Iterate visible commits in commit order, skipping incomplete commits."""
+        last_commit_id, _ = self._temporal_sequence()
+        limit = last_commit_id if through_commit is None else min(last_commit_id, through_commit)
+        for commit_id in range(1, limit + 1):
+            commit = self.get_temporal_commit(commit_id)
+            if commit is not None:
+                yield commit
+
+    def _get_temporal_version(self, version_id: str):
+        last_commit_id, _ = self._temporal_sequence()
+        return self._get_temporal_version_through(version_id, last_commit_id)
+
+    def _get_temporal_version_through(self, version_id: str, through_commit: int):
+        version_id = normalize_version_id(version_id)
+        for commit in self.iter_temporal_commits(through_commit=through_commit):
+            for version in commit.versions:
+                if version.version_id == version_id:
+                    return version
+        return None
+
+    def get_node_version(self, version_id: str) -> NodeVersion | None:
+        """Return a visible node version by UUID, using a history scan in TKG-02."""
+        version = self._get_temporal_version(version_id)
+        return version if isinstance(version, NodeVersion) else None
+
+    def get_edge_version(self, version_id: str) -> EdgeVersion | None:
+        """Return a visible edge version by UUID, using a history scan in TKG-02."""
+        version = self._get_temporal_version(version_id)
+        return version if isinstance(version, EdgeVersion) else None
+
+    def iter_node_versions(self, logical_id=None, *, through_commit=None):
+        """Iterate visible node versions, optionally filtering by logical ID."""
+        for commit in self.iter_temporal_commits(through_commit=through_commit):
+            for version in commit.versions:
+                if isinstance(version, NodeVersion) and (logical_id is None or version.logical_id == logical_id):
+                    yield version
+
+    def iter_edge_versions(self, logical_id=None, *, through_commit=None):
+        """Iterate visible edge versions, optionally filtering by logical ID."""
+        for commit in self.iter_temporal_commits(through_commit=through_commit):
+            for version in commit.versions:
+                if isinstance(version, EdgeVersion) and (logical_id is None or version.logical_id == logical_id):
+                    yield version
+
     def query(self, cypher: str, parameters: Optional[dict[str, object]] = None):
         """Execute a supported Cypher query.
 
@@ -3228,6 +3779,43 @@ class GraphDB:
 
         return execute(self, cypher, parameters=parameters)
 
+    def visualize(self, cypher=None, *, seeds=None, pattern=None, parameters=None, options=None, rng=None):
+        """Build an offline interactive visualization of this graph.
+
+        The front-end bundle is prebuilt and packaged with the library, so
+        this works with no JavaScript toolchain and no network access. The
+        returned figure saves self-contained ``.html`` artifacts and renders
+        inline in Jupyter.
+
+        Args:
+            cypher: Optional Cypher query whose matched entities are
+                visualized (with query matches highlighted).
+            seeds: Optional seed node IDs for typed-subgraph sampling; requires
+                ``pattern``.
+            pattern: ``SamplingPattern`` or hop dicts used with ``seeds``.
+            parameters: Optional Cypher parameters for ``cypher``.
+            options: Optional ``gestaltdb.viz.api.VizOptions`` or mapping.
+            rng: Optional random generator for sampling mode.
+
+        Returns:
+            ``gestaltdb.viz.api.VizFigure``.
+
+        Examples:
+            >>> figure = graph_db.visualize('MATCH (a:Person) RETURN a LIMIT 25')  # doctest: +SKIP
+            >>> figure.save("/tmp/people.html")  # doctest: +SKIP
+        """
+        from .viz.api import visualize_query, visualize_sample
+
+        if cypher is not None:
+            if seeds is not None or pattern is not None:
+                raise ValueError("visualize() accepts either cypher= or seeds=/pattern=, not both")
+            return visualize_query(self, cypher, parameters=parameters, options=options)
+        if seeds is not None or pattern is not None:
+            if pattern is None:
+                raise ValueError("visualize() with seeds= requires pattern=")
+            return visualize_sample(self, seeds, pattern, rng=rng, options=options)
+        raise ValueError("visualize() requires cypher= or seeds=/pattern=")
+
     @contextmanager
     def transaction(self, **options):
         """Run graph operations in a backend transaction when supported.
@@ -3244,6 +3832,9 @@ class GraphDB:
             tx_graph._backend_name = self._backend_name
             tx_graph._serializer_name = self._serializer_name
             tx_graph._manifest = self._manifest
+            tx_graph._temporal_write_lock = self._temporal_write_lock
+            tx_graph._temporal_transaction_bound = True
+            tx_graph._temporal_clock = self._temporal_clock
             yield tx_graph
         except Exception:
             tx_store.rollback()

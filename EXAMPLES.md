@@ -348,3 +348,120 @@ with TemporaryDirectory() as tmpdir:
 ```
 
 Use `SamplerEngine.load(path, mode="memmap")` for large snapshots that should be memory mapped instead of eagerly loaded into RAM.
+
+## Visualize Graphs
+
+GestaltDB ships offline interactive visualization: the D3.js + React front
+end is prebuilt and packaged with the library, so saving `.html` artifacts
+or rendering inline in Jupyter needs no JavaScript toolchain or network.
+
+```python
+from tempfile import TemporaryDirectory
+
+from gestaltdb.graphdb import Edge, GraphDB, Node
+from gestaltdb.kvstores import LevelDBStore
+from gestaltdb.serializers import PickleSerializer
+from gestaltdb.viz.api import VizOptions, visualize_query
+
+with TemporaryDirectory() as tmpdir:
+    graph = GraphDB(LevelDBStore(path=f"{tmpdir}/graph"), PickleSerializer())
+    try:
+        graph.put_node(Node(node_id="alice", labels=["Person"], properties={"name": "Alice"}))
+        graph.put_node(Node(node_id="bob", labels=["Person"], properties={"name": "Bob"}))
+        graph.put_edge(Edge(edge_id="e1", source="alice", target="bob", properties={"type": "knows"}))
+
+        figure = visualize_query(
+            graph,
+            'MATCH (a:Person)-[r:knows]->(b) RETURN a, r, b',
+            options=VizOptions(title="Knows graph", theme="dark"),
+        )
+        figure.save(f"{tmpdir}/knows.html")  # open offline in any browser
+        print(repr(figure))
+    finally:
+        graph.close()
+```
+
+`GraphDB.visualize` is the same path as a method, and `visualize_sample`
+covers large graphs through typed sampling instead of full dumps:
+
+```python
+from gestaltdb.sampling import SamplingHop, SamplingPattern
+from gestaltdb.viz.api import VizOptions
+
+pattern = SamplingPattern([SamplingHop("binds", direction="out", sample_size=5)])
+figure = graph.visualize(seeds=["drug-1"], pattern=pattern)
+figure = graph.visualize(
+    'MATCH (a:Person) RETURN a LIMIT 25',
+    options=VizOptions(max_nodes=500, max_edges=1000),
+)
+```
+
+Caps (defaults 2000 nodes / 5000 edges) truncate deterministically with a
+`TruncationWarning` and an on-canvas banner; payloads beyond twice the caps
+raise `VizCapExceededError` naming the sampling alternative.
+
+## Define Canonical Temporal Values
+
+Temporal values require timezone-aware datetimes, normalize to UTC
+microseconds, and use half-open intervals `[start, end)`. These values establish
+shared semantics; they do not yet filter `GraphDB` records or sampler snapshots.
+
+```python
+from datetime import datetime, timedelta, timezone
+
+from gestaltdb.temporal import TemporalContext, TemporalInstant, TemporalInterval
+
+valid_from = datetime(2026, 1, 1, tzinfo=timezone.utc)
+valid_to = valid_from + timedelta(days=30)
+validity = TemporalInterval.from_values(valid_from, valid_to)
+
+assert TemporalContext.as_of(
+    datetime(2026, 1, 15, tzinfo=timezone.utc)
+).matches(validity)
+assert not TemporalContext.as_of(valid_to).matches(validity)
+
+instant = TemporalInstant.parse("2026-01-15T12:00:00Z")
+assert TemporalInstant.decode_sortable(instant.encode_sortable()) == instant
+```
+
+## Append Immutable Temporal Versions
+
+Temporal version writes preserve assertions, corrections, and retractions
+without changing current-state records returned by `get_node` or `get_edge`.
+History lookup is scan-based until temporal indexes are added.
+
+```python
+from tempfile import TemporaryDirectory
+
+from gestaltdb.graphdb import GraphDB, Node
+from gestaltdb.kvstores import LevelDBStore
+from gestaltdb.serializers import JSONSerializer
+from gestaltdb.temporal import TemporalInterval
+
+with TemporaryDirectory() as tmpdir:
+    graph = GraphDB(LevelDBStore(path=f"{tmpdir}/graph"), JSONSerializer())
+    try:
+        asserted = graph.put_node_version(
+            Node(node_id="alice", labels=["Person"], properties={"name": "Alice"}),
+            valid=TemporalInterval.parse("2020-01-01T00:00:00Z"),
+            metadata={"source": "people-import"},
+        )
+        corrected = graph.correct_node_version(
+            Node(node_id="alice", labels=["Person"], properties={"name": "Alicia"}),
+            supersedes_version_id=asserted.version_id,
+        )
+        graph.retract_node_version(
+            "alice",
+            valid_from="2030-01-01T00:00:00Z",
+            supersedes_version_id=corrected.version_id,
+            reason="source withdrew the assertion",
+        )
+
+        history = list(graph.iter_node_versions("alice"))
+        assert [version.operation.value for version in history] == [
+            "assert", "correct", "retract"
+        ]
+        assert graph.get_node(b"alice") is None
+    finally:
+        graph.close()
+```
