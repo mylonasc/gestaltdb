@@ -41,8 +41,8 @@ Important usage notes for agents and developers:
 * Relationship traversal types come from ``Edge.properties["type"]``.
 * ``GraphDB.query`` implements a broad Cypher read/write subset.
 * Property indexes are explicit; create them before relying on property lookups.
-* Explicit temporal version writes append history without changing current
-  graph, Cypher, or sampler views.
+* Explicit temporal version writes append indexed history without changing
+  current graph, Cypher, or sampler views.
 * Use ``GraphDB.ingest_arrow`` and ``GraphDB.ingest_polars`` for tabular bulk
   ingestion, and use ``SamplerSnapshot``/``SamplerEngine`` for ML-oriented
   array-native sampling.

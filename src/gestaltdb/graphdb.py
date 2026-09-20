@@ -63,6 +63,13 @@ _TEMPORAL_SEQUENCE_KEY = _TEMPORAL_PREFIX + b"sequence"
 _TEMPORAL_COMMIT_PREFIX = _TEMPORAL_PREFIX + b"commit:"
 _TEMPORAL_RECORD_PREFIX = _TEMPORAL_PREFIX + b"record:"
 _TEMPORAL_VISIBLE_PREFIX = _TEMPORAL_PREFIX + b"visible:"
+_TEMPORAL_INDEX_STATE_KEY = b"temporal:indexes:v1:state"
+_TEMPORAL_VERSION_INDEX = "temporal_v1_version"
+_TEMPORAL_LOGICAL_COMMIT_INDEX = "temporal_v1_logical_commit"
+_TEMPORAL_LOGICAL_VALID_INDEX = "temporal_v1_logical_valid"
+_TEMPORAL_SYSTEM_INDEX = "temporal_v1_system_commit"
+_TEMPORAL_EDGE_OUT_INDEX = "temporal_v1_edge_out"
+_TEMPORAL_EDGE_IN_INDEX = "temporal_v1_edge_in"
 
 
 def _utc_now_iso() -> str:
@@ -744,7 +751,10 @@ class GraphDB:
 
     def stale_indexes(self) -> tuple[str, ...]:
         """Return index families requiring rebuild after deferred ingestion."""
-        return tuple(sorted(self._load_stale_indexes()))
+        stale = self._load_stale_indexes()
+        if self._temporal_index_state() is None and self._has_visible_temporal_history():
+            stale.add("temporal")
+        return tuple(sorted(stale))
 
     def _ensure_indexes_current(self, *index_names: str) -> None:
         """Prevent stale secondary indexes from silently returning wrong results."""
@@ -1705,7 +1715,7 @@ class GraphDB:
         Returns:
             Mapping from rebuilt index family/property to entries written.
         """
-        stale = self._load_stale_indexes()
+        stale = set(self.stale_indexes())
         rebuilt: dict[str, int] = {}
         if stale.intersection({"node_label", "node_property"}):
             rebuilt.update(
@@ -1721,6 +1731,8 @@ class GraphDB:
                     properties=self.indexed_edge_properties if "edge_property" in stale else set(),
                 )
             )
+        if "temporal" in stale:
+            rebuilt.update(self.rebuild_temporal_indexes())
         return rebuilt
 
     def build_sampler_snapshot(
@@ -3256,6 +3268,113 @@ class GraphDB:
             + int(ordinal).to_bytes(4, "big", signed=False)
         )
 
+    @staticmethod
+    def _temporal_locator(commit_id: int, ordinal: int) -> bytes:
+        return f"{commit_id:016x}{ordinal:08x}".encode("ascii")
+
+    @staticmethod
+    def _decode_temporal_locator(locator: bytes) -> tuple[int, int]:
+        try:
+            if not isinstance(locator, bytes) or len(locator) != 24:
+                raise ValueError
+            return int(locator[:16], 16), int(locator[16:], 16)
+        except (TypeError, ValueError) as exc:
+            raise TemporalCorruptionError("invalid temporal index locator") from exc
+
+    @staticmethod
+    def _temporal_instant_index_value(instant: TemporalInstant) -> bytes:
+        return instant.encode_sortable().hex().encode("ascii")
+
+    def _temporal_index_state(self) -> int | None:
+        payload = self.store.get_metadata(_TEMPORAL_INDEX_STATE_KEY)
+        if payload is None:
+            return None
+        try:
+            value = json.loads(payload.decode("utf-8"))
+            if not isinstance(value, dict) or value.get("format_version") != 1:
+                raise ValueError
+            indexed = value["indexed_through_commit"]
+            if isinstance(indexed, bool) or not isinstance(indexed, int) or indexed < 0:
+                raise ValueError
+            return indexed
+        except (KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise TemporalCorruptionError("invalid temporal index state") from exc
+
+    def _persist_temporal_index_state(self, commit_id: int) -> None:
+        self.store.put_metadata(
+            _TEMPORAL_INDEX_STATE_KEY,
+            canonical_json_bytes({"format_version": 1, "indexed_through_commit": commit_id}),
+        )
+
+    def _ensure_temporal_indexes(self, horizon: int) -> None:
+        self._ensure_indexes_current("temporal")
+        indexed = self._temporal_index_state()
+        if horizon == 0 and indexed is None:
+            return
+        if indexed is None or indexed < horizon:
+            raise RuntimeError("stale indexes require rebuild before query: temporal")
+
+    def _has_visible_temporal_history(self) -> bool:
+        last_commit_id, _ = self._temporal_sequence()
+        return any(
+            self.store.get_metadata(self._temporal_visible_key(commit_id)) is not None
+            for commit_id in range(1, last_commit_id + 1)
+        )
+
+    def _temporal_index_entries(self, version):
+        kind = b"n" if isinstance(version, NodeVersion) else b"e"
+        locator = self._temporal_locator(version.commit_id, version.commit_ordinal)
+        exact = [(_TEMPORAL_VERSION_INDEX, [version.version_id.encode("ascii")], locator)]
+        ranges = [
+            (_TEMPORAL_LOGICAL_COMMIT_INDEX, [kind, version.logical_id.encode("utf-8")], locator, locator),
+            (
+                _TEMPORAL_LOGICAL_VALID_INDEX,
+                [kind, version.logical_id.encode("utf-8")],
+                self._temporal_instant_index_value(version.valid.start),
+                locator,
+            ),
+        ]
+        if isinstance(version, EdgeVersion) and version.edge is not None:
+            edge_type = version.edge.properties.get("type")
+            if edge_type is not None:
+                ranges.extend([
+                    (
+                        _TEMPORAL_EDGE_OUT_INDEX,
+                        [str(version.edge.source).encode("utf-8"), str(edge_type).encode("utf-8")],
+                        self._temporal_instant_index_value(version.valid.start),
+                        locator,
+                    ),
+                    (
+                        _TEMPORAL_EDGE_IN_INDEX,
+                        [str(version.edge.target).encode("utf-8"), str(edge_type).encode("utf-8")],
+                        self._temporal_instant_index_value(version.valid.start),
+                        locator,
+                    ),
+                ])
+        return exact, ranges
+
+    def _write_temporal_indexes(self, versions, commit_id: int) -> dict[str, int]:
+        exact_entries = []
+        range_entries = []
+        for version in versions:
+            exact, ranges = self._temporal_index_entries(version)
+            exact_entries.extend(exact)
+            range_entries.extend(ranges)
+        if exact_entries:
+            self.store.put_index_entries_bulk(exact_entries)
+        if range_entries:
+            self.store.put_range_index_entries_bulk(range_entries)
+        commit = versions[0] if versions else None
+        if commit is not None:
+            self.store.put_range_index_entry(
+                _TEMPORAL_SYSTEM_INDEX,
+                [b"commit"],
+                self._temporal_instant_index_value(commit.system_time),
+                f"{commit_id:016x}".encode("ascii"),
+            )
+        self._persist_temporal_index_state(commit_id)
+        return {"temporal_exact": len(exact_entries), "temporal_range": len(range_entries) + (1 if commit else 0)}
+
     def _temporal_sequence(self) -> tuple[int, TemporalInstant | None]:
         try:
             payload = self.store.get_metadata(_TEMPORAL_SEQUENCE_KEY)
@@ -3291,22 +3410,24 @@ class GraphDB:
         return instant
 
     def put_node_version(
-        self, node: Node, *, valid, version_id=None, metadata=None
+        self, node: Node, *, valid, version_id=None, metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> NodeVersion:
         """Append an immutable node assertion without changing the current graph."""
         commit = self.commit_versions(
             [NodeVersionWrite.assertion(node, valid, version_id=version_id)],
-            metadata=metadata,
+            metadata=metadata, index_mode=index_mode,
         )
         return commit.versions[0]  # type: ignore[return-value]
 
     def put_edge_version(
-        self, edge: Edge, *, valid, version_id=None, metadata=None
+        self, edge: Edge, *, valid, version_id=None, metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> EdgeVersion:
         """Append an immutable edge assertion without changing the current graph."""
         commit = self.commit_versions(
             [EdgeVersionWrite.assertion(edge, valid, version_id=version_id)],
-            metadata=metadata,
+            metadata=metadata, index_mode=index_mode,
         )
         return commit.versions[0]  # type: ignore[return-value]
 
@@ -3318,6 +3439,7 @@ class GraphDB:
         valid=None,
         version_id=None,
         metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> NodeVersion:
         """Append a corrected node payload while preserving the superseded version."""
         commit = self.commit_versions([
@@ -3327,7 +3449,7 @@ class GraphDB:
                 valid=valid,
                 version_id=version_id,
             )
-        ], metadata=metadata)
+        ], metadata=metadata, index_mode=index_mode)
         return commit.versions[0]  # type: ignore[return-value]
 
     def correct_edge_version(
@@ -3338,6 +3460,7 @@ class GraphDB:
         valid=None,
         version_id=None,
         metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> EdgeVersion:
         """Append a corrected edge payload while preserving the superseded version."""
         commit = self.commit_versions([
@@ -3347,7 +3470,7 @@ class GraphDB:
                 valid=valid,
                 version_id=version_id,
             )
-        ], metadata=metadata)
+        ], metadata=metadata, index_mode=index_mode)
         return commit.versions[0]  # type: ignore[return-value]
 
     def retract_node_version(
@@ -3360,6 +3483,7 @@ class GraphDB:
         reason=None,
         version_id=None,
         metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> NodeVersion:
         """Append a node retraction over an explicit or inherited interval."""
         commit = self.commit_versions([
@@ -3371,7 +3495,7 @@ class GraphDB:
                 reason=reason,
                 version_id=version_id,
             )
-        ], metadata=metadata)
+        ], metadata=metadata, index_mode=index_mode)
         return commit.versions[0]  # type: ignore[return-value]
 
     def retract_edge_version(
@@ -3384,6 +3508,7 @@ class GraphDB:
         reason=None,
         version_id=None,
         metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> EdgeVersion:
         """Append an edge retraction over an explicit or inherited interval."""
         commit = self.commit_versions([
@@ -3395,22 +3520,34 @@ class GraphDB:
                 reason=reason,
                 version_id=version_id,
             )
-        ], metadata=metadata)
+        ], metadata=metadata, index_mode=index_mode)
         return commit.versions[0]  # type: ignore[return-value]
 
-    def commit_versions(self, writes, *, metadata=None) -> TemporalCommit:
+    def commit_versions(
+        self, writes, *, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN
+    ) -> TemporalCommit:
         """Append one logical commit containing immutable node/edge versions."""
         writes = tuple(writes)
         if not writes:
             raise TemporalVersionError("temporal commit must contain at least one version")
+        mode = index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode
+        allowed_modes = {item.value for item in IndexMaintenanceMode}
+        if mode not in allowed_modes:
+            raise ValueError(f"index_mode must be one of: {', '.join(sorted(allowed_modes))}")
+        rebuild_after = mode == IndexMaintenanceMode.DEFER_REBUILD.value
+        write_mode = IndexMaintenanceMode.DEFER.value if rebuild_after else mode
         normalized_metadata = json.loads(canonical_json_bytes(dict(metadata or {})).decode("utf-8"))
         if getattr(self.store, "supports_transactions", False) and not self._temporal_transaction_bound:
             with self.transaction() as transaction:
-                return transaction._commit_versions_direct(writes, normalized_metadata)
-        with self._temporal_write_lock:
-            return self._commit_versions_direct(writes, normalized_metadata)
+                result = transaction._commit_versions_direct(writes, normalized_metadata, write_mode)
+        else:
+            with self._temporal_write_lock:
+                result = self._commit_versions_direct(writes, normalized_metadata, write_mode)
+        if rebuild_after:
+            self.rebuild_temporal_indexes()
+        return result
 
-    def _commit_versions_direct(self, writes, metadata) -> TemporalCommit:
+    def _commit_versions_direct(self, writes, metadata, index_mode) -> TemporalCommit:
         previous_commit_id, previous_system_time = self._temporal_sequence()
         commit_id = previous_commit_id + 1
         if commit_id >= 1 << 64:
@@ -3534,6 +3671,13 @@ class GraphDB:
         self.store.put_metadata(self._temporal_commit_key(commit_id), descriptor)
         for ordinal, (_, envelope) in enumerate(prepared):
             self.store.put_metadata(self._temporal_record_key(commit_id, ordinal), envelope)
+        if index_mode == IndexMaintenanceMode.DEFER.value:
+            self._mark_indexes_stale("temporal")
+        else:
+            if previous_commit_id > 0 and self._temporal_index_state() is None:
+                self._mark_indexes_stale("temporal")
+            indexed_versions = [self._decode_temporal_version(envelope) for _, envelope in prepared]
+            self._write_temporal_indexes(indexed_versions, commit_id)
         self.store.put_metadata(
             self._temporal_visible_key(commit_id), hashlib.sha256(descriptor).digest()
         )
@@ -3558,7 +3702,9 @@ class GraphDB:
                 return True
         return False
 
-    def get_temporal_commit(self, commit_id: int) -> TemporalCommit | None:
+    def get_temporal_commit(
+        self, commit_id: int, *, _validate_supersession: bool = True
+    ) -> TemporalCommit | None:
         """Return a fully validated visible temporal commit."""
         if isinstance(commit_id, bool) or not isinstance(commit_id, int) or commit_id < 1:
             raise ValueError("commit_id must be a positive integer")
@@ -3621,16 +3767,17 @@ class GraphDB:
             if version.system_time != system_time:
                 raise TemporalCorruptionError("temporal version system time does not match its commit")
             versions.append(version)
-        for version in versions:
-            if version.supersedes_version_id is None:
-                continue
-            target = self._get_temporal_version_through(
-                version.supersedes_version_id, commit_id - 1
-            )
-            if target is None:
-                raise TemporalCorruptionError("temporal version supersedes a missing version")
-            if isinstance(target, NodeVersion) != isinstance(version, NodeVersion) or target.logical_id != version.logical_id:
-                raise TemporalCorruptionError("temporal supersession kind or logical ID mismatch")
+        if _validate_supersession:
+            for version in versions:
+                if version.supersedes_version_id is None:
+                    continue
+                target = self._get_temporal_version_through(
+                    version.supersedes_version_id, commit_id - 1
+                )
+                if target is None:
+                    raise TemporalCorruptionError("temporal version supersedes a missing version")
+                if isinstance(target, NodeVersion) != isinstance(version, NodeVersion) or target.logical_id != version.logical_id:
+                    raise TemporalCorruptionError("temporal supersession kind or logical ID mismatch")
         return TemporalCommit(commit_id, system_time, metadata, tuple(versions))
 
     def _decode_temporal_version(self, envelope: bytes):
@@ -3725,55 +3872,142 @@ class GraphDB:
         last_commit_id, _ = self._temporal_sequence()
         return self._get_temporal_version_through(version_id, last_commit_id)
 
+    def _get_temporal_version_at(self, locator: bytes):
+        commit_id, ordinal = self._decode_temporal_locator(locator)
+        commit = self.get_temporal_commit(commit_id, _validate_supersession=False)
+        if commit is None:
+            return None
+        if ordinal >= len(commit.versions):
+            raise TemporalCorruptionError("temporal index locator ordinal is out of range")
+        return commit.versions[ordinal]
+
     def _get_temporal_version_through(self, version_id: str, through_commit: int):
         version_id = normalize_version_id(version_id)
-        for commit in self.iter_temporal_commits(through_commit=through_commit):
+        for commit_id in range(1, through_commit + 1):
+            commit = self.get_temporal_commit(commit_id, _validate_supersession=False)
+            if commit is None:
+                continue
             for version in commit.versions:
                 if version.version_id == version_id:
                     return version
         return None
 
-    def get_node_version(self, version_id: str) -> NodeVersion | None:
-        """Return a visible node version by UUID, using a history scan in TKG-02."""
-        version = self._get_temporal_version(version_id)
+    def get_node_version(
+        self, version_id: str, *, system_time=None, through_commit=None
+    ) -> NodeVersion | None:
+        """Return a visible node version by UUID using the temporal index."""
+        horizon = self._temporal_system_horizon(
+            system_time=system_time, through_commit=through_commit
+        )
+        self._ensure_temporal_indexes(horizon)
+        locators = list(self.store.iter_index_prefix(
+            _TEMPORAL_VERSION_INDEX, [normalize_version_id(version_id).encode("ascii")]
+        ))
+        version = self._get_temporal_version_at(locators[-1]) if locators else None
+        if version is not None and version.commit_id > horizon:
+            return None
         return version if isinstance(version, NodeVersion) else None
 
-    def get_edge_version(self, version_id: str) -> EdgeVersion | None:
-        """Return a visible edge version by UUID, using a history scan in TKG-02."""
-        version = self._get_temporal_version(version_id)
+    def get_edge_version(
+        self, version_id: str, *, system_time=None, through_commit=None
+    ) -> EdgeVersion | None:
+        """Return a visible edge version by UUID using the temporal index."""
+        horizon = self._temporal_system_horizon(
+            system_time=system_time, through_commit=through_commit
+        )
+        self._ensure_temporal_indexes(horizon)
+        locators = list(self.store.iter_index_prefix(
+            _TEMPORAL_VERSION_INDEX, [normalize_version_id(version_id).encode("ascii")]
+        ))
+        version = self._get_temporal_version_at(locators[-1]) if locators else None
+        if version is not None and version.commit_id > horizon:
+            return None
         return version if isinstance(version, EdgeVersion) else None
 
-    def iter_node_versions(self, logical_id=None, *, through_commit=None):
-        """Iterate visible node versions, optionally filtering by logical ID."""
-        for commit in self.iter_temporal_commits(through_commit=through_commit):
+    def iter_node_versions(self, logical_id=None, *, system_time=None, through_commit=None):
+        """Iterate node versions, using the logical-history index when filtered."""
+        if logical_id is not None:
+            logical_id = normalize_logical_id(logical_id)
+            horizon = self._temporal_system_horizon(system_time=system_time, through_commit=through_commit)
+            self._ensure_temporal_indexes(horizon)
+            end = self._temporal_locator(horizon, (1 << 32) - 1)
+            for locator in self.store.iter_range_index(
+                _TEMPORAL_LOGICAL_COMMIT_INDEX,
+                [b"n", logical_id.encode("utf-8")],
+                None,
+                end,
+                True,
+                True,
+            ):
+                version = self._get_temporal_version_at(locator)
+                if isinstance(version, NodeVersion):
+                    yield version
+            return
+        horizon = self._temporal_system_horizon(system_time=system_time, through_commit=through_commit)
+        for commit in self.iter_temporal_commits(through_commit=horizon):
             for version in commit.versions:
-                if isinstance(version, NodeVersion) and (logical_id is None or version.logical_id == logical_id):
+                if isinstance(version, NodeVersion):
                     yield version
 
-    def iter_edge_versions(self, logical_id=None, *, through_commit=None):
-        """Iterate visible edge versions, optionally filtering by logical ID."""
-        for commit in self.iter_temporal_commits(through_commit=through_commit):
+    def iter_edge_versions(self, logical_id=None, *, system_time=None, through_commit=None):
+        """Iterate edge versions, using the logical-history index when filtered."""
+        if logical_id is not None:
+            logical_id = normalize_logical_id(logical_id)
+            horizon = self._temporal_system_horizon(system_time=system_time, through_commit=through_commit)
+            self._ensure_temporal_indexes(horizon)
+            end = self._temporal_locator(horizon, (1 << 32) - 1)
+            for locator in self.store.iter_range_index(
+                _TEMPORAL_LOGICAL_COMMIT_INDEX,
+                [b"e", logical_id.encode("utf-8")],
+                None,
+                end,
+                True,
+                True,
+            ):
+                version = self._get_temporal_version_at(locator)
+                if isinstance(version, EdgeVersion):
+                    yield version
+            return
+        horizon = self._temporal_system_horizon(system_time=system_time, through_commit=through_commit)
+        for commit in self.iter_temporal_commits(through_commit=horizon):
             for version in commit.versions:
-                if isinstance(version, EdgeVersion) and (logical_id is None or version.logical_id == logical_id):
+                if isinstance(version, EdgeVersion):
                     yield version
 
     def _temporal_system_horizon(self, *, system_time=None, through_commit=None) -> int:
         if system_time is not None and through_commit is not None:
             raise ValueError("provide either system_time or through_commit, not both")
         last_commit_id, _ = self._temporal_sequence()
+        latest_visible = last_commit_id
+        while latest_visible > 0 and self.get_temporal_commit(
+            latest_visible, _validate_supersession=False
+        ) is None:
+            latest_visible -= 1
         if through_commit is not None:
             if isinstance(through_commit, bool) or not isinstance(through_commit, int) or through_commit < 0:
                 raise ValueError("through_commit must be a non-negative integer")
-            return min(last_commit_id, through_commit)
+            return min(latest_visible, through_commit)
         if system_time is None:
-            return last_commit_id
+            return latest_visible
         requested = normalize_temporal_instant(system_time)
+        self._ensure_temporal_indexes(latest_visible)
         horizon = 0
-        for commit in self.iter_temporal_commits():
-            if commit.system_time <= requested:
-                horizon = commit.commit_id
-            else:
-                break
+        for encoded_commit_id in self.store.iter_range_index(
+            _TEMPORAL_SYSTEM_INDEX,
+            [b"commit"],
+            None,
+            self._temporal_instant_index_value(requested),
+            True,
+            True,
+        ):
+            try:
+                commit_id = int(encoded_commit_id, 16)
+            except (TypeError, ValueError) as exc:
+                raise TemporalCorruptionError("invalid temporal system index value") from exc
+            if commit_id <= latest_visible and self.get_temporal_commit(
+                commit_id, _validate_supersession=False
+            ) is not None:
+                horizon = max(horizon, commit_id)
         return horizon
 
     def _temporal_entity_as_of(
@@ -3784,15 +4018,23 @@ class GraphDB:
         horizon = self._temporal_system_horizon(
             system_time=system_time, through_commit=through_commit
         )
-        versions = (
-            self.iter_node_versions(logical_id, through_commit=horizon)
-            if kind == "node"
-            else self.iter_edge_versions(logical_id, through_commit=horizon)
+        self._ensure_temporal_indexes(horizon)
+        kind_bytes = b"n" if kind == "node" else b"e"
+        upper = self._temporal_instant_index_value(instant)
+        locators = self.store.iter_range_index(
+            _TEMPORAL_LOGICAL_VALID_INDEX,
+            [kind_bytes, logical_id.encode("utf-8")],
+            None,
+            upper,
+            True,
+            True,
         )
         winner = None
-        for version in versions:
-            if version.valid.contains(instant):
-                winner = version
+        for locator in locators:
+            version = self._get_temporal_version_at(locator)
+            if version is not None and version.commit_id <= horizon and version.valid.contains(instant):
+                if winner is None or (version.commit_id, version.commit_ordinal) > (winner.commit_id, winner.commit_ordinal):
+                    winner = version
         if winner is None or winner.operation is VersionOperation.RETRACT:
             return None
         return winner
@@ -3832,12 +4074,7 @@ class GraphDB:
         system_time=None,
         through_commit=None,
     ):
-        """Iterate typed edges visible at valid time and a system horizon.
-
-        This TKG-03 foundation uses canonical history scans. Persisted temporal
-        adjacency indexes will replace the candidate scan without changing the
-        result semantics.
-        """
+        """Iterate typed edges visible at valid time and a system horizon."""
         if direction not in {"out", "in"}:
             raise ValueError("direction must be 'out' or 'in'")
         if direction == "out" and (source is None or target is not None):
@@ -3849,10 +4086,23 @@ class GraphDB:
         horizon = self._temporal_system_horizon(
             system_time=system_time, through_commit=through_commit
         )
-        logical_ids = {
-            version.logical_id
-            for version in self.iter_edge_versions(through_commit=horizon)
-        }
+        self._ensure_temporal_indexes(horizon)
+        node_id = source if direction == "out" else target
+        index_name = _TEMPORAL_EDGE_OUT_INDEX if direction == "out" else _TEMPORAL_EDGE_IN_INDEX
+        upper = self._temporal_instant_index_value(normalize_temporal_instant(valid_time))
+        locators = self.store.iter_range_index(
+            index_name,
+            [str(node_id).encode("utf-8"), edge_type.encode("utf-8")],
+            None,
+            upper,
+            True,
+            True,
+        )
+        logical_ids = set()
+        for locator in locators:
+            candidate = self._get_temporal_version_at(locator)
+            if candidate is not None and candidate.commit_id <= horizon:
+                logical_ids.add(candidate.logical_id)
         for logical_id in sorted(logical_ids):
             version = self.get_edge_as_of(
                 logical_id, valid_time=valid_time, through_commit=horizon
@@ -3864,6 +4114,25 @@ class GraphDB:
             if direction == "in" and str(version.edge.target) != str(target):
                 continue
             yield version
+
+    def rebuild_temporal_indexes(self, *, through_commit=None) -> dict[str, int]:
+        """Rebuild all derived temporal indexes from visible canonical history."""
+        with self._temporal_write_lock:
+            self._mark_indexes_stale("temporal")
+            latest_horizon = self._temporal_system_horizon()
+            horizon = self._temporal_system_horizon(through_commit=through_commit)
+            counts = {"temporal_exact": 0, "temporal_range": 0}
+            last_visible = 0
+            for commit in self.iter_temporal_commits(through_commit=horizon):
+                written = self._write_temporal_indexes(commit.versions, commit.commit_id)
+                counts["temporal_exact"] += written["temporal_exact"]
+                counts["temporal_range"] += written["temporal_range"]
+                last_visible = commit.commit_id
+            if last_visible == 0:
+                self._persist_temporal_index_state(0)
+            if horizon >= latest_horizon:
+                self._clear_stale_indexes("temporal")
+            return counts
 
     def query(self, cypher: str, parameters: Optional[dict[str, object]] = None):
         """Execute a supported Cypher query.

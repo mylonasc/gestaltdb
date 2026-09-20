@@ -428,7 +428,8 @@ assert TemporalInstant.decode_sortable(instant.encode_sortable()) == instant
 
 Temporal version writes preserve assertions, corrections, and retractions
 without changing current-state records returned by `get_node` or `get_edge`.
-History lookup is scan-based until temporal indexes are added.
+Exact history, as-of resolution, and typed traversal use separate temporal
+indexes.
 
 ```python
 from tempfile import TemporaryDirectory
@@ -462,6 +463,11 @@ with TemporaryDirectory() as tmpdir:
             "assert", "correct", "retract"
         ]
         assert graph.get_node(b"alice") is None
+
+        at_2025 = graph.get_node_as_of(
+            "alice", valid_time="2025-01-01T00:00:00Z"
+        )
+        assert at_2025.node.properties["name"] == "Alicia"
     finally:
         graph.close()
 ```

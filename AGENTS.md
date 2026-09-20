@@ -50,7 +50,7 @@ Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes 
 - Backends implement the `KVStore` interface. Current backends are `LMDBStore`, `LevelDBStore`, and `PyRexStore`.
 - Serializers convert graph entities to bytes. Current serializers are `PickleSerializer`, `JSONSerializer`, `MessagePackSerializer`, and `ProtobufSerializer`.
 - `TemporalInstant`, `TemporalInterval`, and `TemporalContext` define timezone-aware UTC-microsecond instants, half-open `[start, end)` intervals, and point/window matching.
-- `put_node_version`, `put_edge_version`, correction/retraction helpers, and `commit_versions` append immutable temporal history. They do not update current graph records, Cypher views, or sampler snapshots; TKG-02 history inspection is scan-based.
+- `put_node_version`, `put_edge_version`, correction/retraction helpers, and `commit_versions` append immutable temporal history. `get_node_as_of`, `get_edge_as_of`, and `iter_edges_as_of` use derived temporal indexes; deferred temporal writes require `rebuild_temporal_indexes()` or `rebuild_deferred_indexes()`. Current graph records, Cypher views, and sampler snapshots remain separate.
 
 ## Backend Guidance
 

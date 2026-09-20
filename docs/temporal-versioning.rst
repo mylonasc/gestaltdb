@@ -10,8 +10,9 @@ mutable graph. Temporal versions use two distinct time dimensions:
   committed that version.
 
 The explicit version APIs do not update records returned by ``get_node`` or
-``get_edge`` and do not alter Cypher or sampling behavior. Indexed as-of graph
-resolution and traversal are planned separately.
+``get_edge`` and do not alter Cypher or sampling behavior. Temporal history has
+separate indexes for exact versions, logical entities, valid starts, system
+times, and typed outgoing/incoming traversal.
 
 Assertions, Corrections, and Retractions
 ----------------------------------------
@@ -74,17 +75,55 @@ require one externally serialized writer handle. Commit IDs are strictly
 increasing for visible commits; an ID provisionally returned inside a rolled
 back outer transaction is not durable and may be reused.
 
-Inspection and Current Limits
------------------------------
+As-Of Resolution and Traversal
+------------------------------
 
 ``get_node_version`` and ``get_edge_version`` retrieve visible versions by UUID.
-``iter_node_versions``, ``iter_edge_versions``, and ``iter_temporal_commits``
-return append order and accept an optional commit horizon.
+``iter_node_versions`` and ``iter_edge_versions`` return append order and accept
+an optional system-time or commit horizon. ``iter_temporal_commits`` accepts a
+commit horizon.
 
-These TKG-02 operations scan commit history. Logical-ID, version-ID, interval,
-system-time, and temporal adjacency indexes are not implemented yet. Temporal
-versions are also not visible through Cypher or sampler snapshots. Marker-backed
-data that fails hash or envelope validation raises
+``get_node_as_of`` and ``get_edge_as_of`` select a logical entity at one valid
+instant and optional inclusive system horizon. Eligible versions are ordered by
+commit and in-commit ordinal. The newest assertion or correction supplies the
+payload; a newest retraction returns ``None``.
+
+.. code-block:: python
+
+   historical = graph.get_node_as_of(
+       "alice",
+       valid_time="2025-01-01T00:00:00Z",
+       system_time=corrected.system_time,
+   )
+
+   edges = list(graph.iter_edges_as_of(
+       source="alice",
+       edge_type="WORKS_FOR",
+       valid_time="2025-01-01T00:00:00Z",
+   ))
+
+Temporal traversal resolves each logical edge before checking its winning
+source, target, and type, so interval-local topology corrections and retractions
+do not leak historical adjacency.
+
+Index Maintenance
+-----------------
+
+Temporal writes maintain indexes by default. Pass
+``index_mode=IndexMaintenanceMode.DEFER`` for bulk append workflows; indexed
+reads then fail closed until ``rebuild_temporal_indexes`` or
+``rebuild_deferred_indexes`` succeeds. ``DEFER_REBUILD`` rebuilds before the
+write returns. Rebuilds are additive and idempotent because canonical history is
+append-only. A pre-index TKG-02 database is automatically reported with the
+``temporal`` stale family and can be migrated with ``rebuild_deferred_indexes``.
+
+Current Limits
+--------------
+
+Each API call captures its own latest horizon; stable multi-call read views are
+not implemented yet. Valid-time windows, temporal property indexes, Cypher, and
+sampler snapshots are also not temporal yet. Marker-backed data that fails hash
+or envelope validation raises
 ``TemporalCorruptionError`` rather than returning partial history.
 
 Version dataclasses contain immutable metadata and detached entity payloads.

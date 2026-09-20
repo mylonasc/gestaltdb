@@ -25,12 +25,41 @@ class _MetadataStore:
 
     def __init__(self):
         self.metadata = {}
+        self.indexes = {}
+        self.range_indexes = {}
 
     def get_metadata(self, key):
         return self.metadata.get(key)
 
     def put_metadata(self, key, value):
         self.metadata[key] = value
+
+    def put_index_entry(self, name, parts, value):
+        self.indexes.setdefault((name, tuple(parts)), set()).add(value)
+
+    def put_index_entries_bulk(self, entries):
+        for name, parts, value in entries:
+            self.put_index_entry(name, parts, value)
+
+    def iter_index_prefix(self, name, parts):
+        return iter(sorted(self.indexes.get((name, tuple(parts)), set())))
+
+    def put_range_index_entry(self, name, parts, range_value, value):
+        self.range_indexes.setdefault((name, tuple(parts)), set()).add((range_value, value))
+
+    def put_range_index_entries_bulk(self, entries):
+        for name, parts, range_value, value in entries:
+            self.put_range_index_entry(name, parts, range_value, value)
+
+    def iter_range_index(self, name, parts, start=None, end=None, include_start=True, include_end=True):
+        values = []
+        for range_value, value in sorted(self.range_indexes.get((name, tuple(parts)), set())):
+            if start is not None and (range_value < start or (range_value == start and not include_start)):
+                continue
+            if end is not None and (range_value > end or (range_value == end and not include_end)):
+                continue
+            values.append(value)
+        return iter(values)
 
     def close(self):
         pass
@@ -208,7 +237,7 @@ def test_stale_or_missing_sequence_never_overwrites_history(temporal_graph):
     assert temporal_graph.get_node_version(first.version_id).logical_id == "alice"
 
 
-@pytest.mark.parametrize("fail_on_put", [2, 3, 4])
+@pytest.mark.parametrize("fail_on_put", [2, 3, 4, 5])
 def test_marker_last_failures_remain_invisible_and_skip_reserved_commit(fail_on_put):
     store = _FailingMetadataStore(fail_on_put)
     graph = GraphDB(store, JSONSerializer())
