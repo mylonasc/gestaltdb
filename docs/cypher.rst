@@ -286,6 +286,39 @@ group like any other non-aggregate projection expression.
    graph_db.query('MATCH (n:Drug) RETURN toUpper(n.name) AS name, size(n.synonyms) AS total')
    graph_db.query('MATCH (a)-[r:binds]->(b) RETURN type(r) AS rel, startNode(r).name AS source')
 
+Temporal Values
+---------------
+
+Cypher expressions support immutable, microsecond-precision ``date``, ``time``,
+``localtime``, ``datetime``, ``localdatetime``, and exact ``duration`` values.
+Each constructor takes one strict ISO string or component map. Constructors
+propagate ``null``; they deliberately do not provide a no-argument current-clock
+form, so repeated queries remain deterministic. ``datetime`` requires an
+explicit numeric offset and normalizes to UTC. Named timezones and calendar
+month/year durations are not supported.
+
+.. code-block:: python
+
+   result = graph_db.query(
+       "UNWIND [1] AS x "
+       "RETURN date('2025-01-31') + duration('P2D') AS due, "
+       "datetime('2025-01-31T12:30:00+02:00').hour AS utc_hour"
+   )
+
+Temporal values support component access, same-category comparison,
+``DISTINCT``, grouping, ``ORDER BY``, ``CASE``, collections, parameters, and
+canonical ``toString`` conversion. Exact duration arithmetic is supported for
+dates, times, and datetimes; date arithmetic requires whole days. Aware Python
+``datetime``/``time`` parameters become offset temporal values, while naive
+ones become local values; Python ``date`` and ``timedelta`` parameters are also
+normalized.
+
+These values currently exist only in query expressions and results. Cypher
+rejects graph property writes containing temporal values, including nested
+lists and maps, until all serializers and property indexes have a stable tagged
+storage encoding. Temporal graph views and historical ``MATCH`` are separate
+from these scalar values.
+
 Projection and Result Shaping
 -----------------------------
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 
+from ...temporal import TemporalDuration
 from .ast import (
     AndExpression,
     ArithmeticExpression,
@@ -42,6 +43,12 @@ from .ast import (
     XorExpression,
 )
 from .functions import get_function_def
+from .temporal import (
+    TEMPORAL_TYPES,
+    temporal_arithmetic,
+    temporal_compare_key,
+    temporal_property,
+)
 
 
 def evaluate_expression(expression, bindings: dict[str, object], context) -> object:
@@ -142,6 +149,8 @@ def evaluate_expression(expression, bindings: dict[str, object], context) -> obj
         value = evaluate_expression(expression.expression, bindings, context)
         if value is None:
             return None
+        if isinstance(value, TemporalDuration):
+            return value if expression.operator == "+" else TemporalDuration(-value.total_microseconds)
         _require_number(value, expression.operator)
         return value if expression.operator == "+" else -value
     if isinstance(expression, ArithmeticExpression):
@@ -149,6 +158,14 @@ def evaluate_expression(expression, bindings: dict[str, object], context) -> obj
         right_value = evaluate_expression(expression.right, bindings, context)
         if left_value is None or right_value is None:
             return None
+        handled, temporal_result = temporal_arithmetic(expression.operator, left_value, right_value)
+        if handled:
+            if temporal_result is None:
+                raise TypeError(
+                    f"{expression.operator} does not support {type(left_value).__name__} "
+                    f"and {type(right_value).__name__}"
+                )
+            return temporal_result
         if expression.operator == "+" and (isinstance(left_value, str) or isinstance(right_value, str)):
             if not isinstance(left_value, str) or not isinstance(right_value, str):
                 raise TypeError("+ expects two strings or two numbers")
@@ -179,12 +196,16 @@ def evaluate_expression(expression, bindings: dict[str, object], context) -> obj
                 raise TypeError("=~ expects string operands")
             return re.fullmatch(right_value, left_value) is not None
         _require_comparable(left_value, right_value)
+        left_temporal = temporal_compare_key(left_value)
+        right_temporal = temporal_compare_key(right_value)
+        comparison_left = left_temporal[1] if left_temporal is not None else left_value
+        comparison_right = right_temporal[1] if right_temporal is not None else right_value
         try:
             return {
-                "<": lambda: left_value < right_value,
-                "<=": lambda: left_value <= right_value,
-                ">": lambda: left_value > right_value,
-                ">=": lambda: left_value >= right_value,
+                "<": lambda: comparison_left < comparison_right,
+                "<=": lambda: comparison_left <= comparison_right,
+                ">": lambda: comparison_left > comparison_right,
+                ">=": lambda: comparison_left >= comparison_right,
             }[operator]()
         except TypeError as exc:
             raise TypeError(f"Cannot compare {type(left_value).__name__} and {type(right_value).__name__}") from exc
@@ -402,6 +423,9 @@ def project_value(bindings: dict[str, object], return_item: str):
         return value
     if isinstance(value, dict):
         return value.get(property_name)
+    handled, component = temporal_property(value, property_name)
+    if handled:
+        return component
     if property_name == "id" and hasattr(value, "get_id"):
         return value.get_id
     if property_name == "labels" and hasattr(value, "labels"):
@@ -419,6 +443,10 @@ def _cypher_equals(left, right):
         return None
     if isinstance(left, bool) != isinstance(right, bool):
         return False
+    left_temporal = temporal_compare_key(left)
+    right_temporal = temporal_compare_key(right)
+    if left_temporal is not None or right_temporal is not None:
+        return left_temporal == right_temporal
     if isinstance(left, PathValue) and isinstance(right, PathValue):
         return _cypher_equals(_path_sequence(left), _path_sequence(right))
     if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
@@ -469,6 +497,10 @@ def _require_comparable(left, right) -> None:
     ):
         return
     if isinstance(left, str) and isinstance(right, str):
+        return
+    left_key = temporal_compare_key(left)
+    right_key = temporal_compare_key(right)
+    if left_key is not None and right_key is not None and left_key[0] == right_key[0]:
         return
     raise TypeError(f"Cannot compare {type(left).__name__} and {type(right).__name__}")
 

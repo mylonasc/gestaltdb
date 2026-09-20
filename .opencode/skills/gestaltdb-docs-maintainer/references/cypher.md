@@ -67,6 +67,8 @@ GestaltDB includes an embedded Cypher query processor:
 - Predicate contexts require Boolean/null values; `null IN []` is false.
 - `ORDER BY` is stable, uses Cypher's supported value hierarchy, and places null last ascending/first descending.
 - Regular conversion functions reject unsupported value categories while malformed supported strings convert to null.
+- Deterministic temporal constructors `date`, `time`, `localtime`, `datetime`, `localdatetime`, and `duration` accept one strict ISO string or component map. They support components, exact duration arithmetic, comparisons, grouping, and ordering.
+- Temporal values are query-only: Cypher graph property writes reject them recursively until serializers and indexes have a stable encoding. Historical graph views are separate from scalar temporal values.
 
 ### Writes and Constraints
 - `CREATE`, `SET`, `REMOVE`, `DELETE`/`DETACH DELETE`, `MERGE` with `ON CREATE`/`ON MATCH`, and write-only `FOREACH` loops.

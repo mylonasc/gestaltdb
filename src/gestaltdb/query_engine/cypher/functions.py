@@ -17,6 +17,7 @@ from functools import partial
 from typing import Callable
 
 from .ast import PathValue
+from .temporal import construct_temporal, temporal_to_string
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,12 +37,6 @@ class FunctionDef:
 
 AGGREGATE_FUNCTIONS = ("count", "collect", "sum", "avg", "min", "max")
 UNSUPPORTED_FUNCTION_KINDS = {
-    "date": "temporal",
-    "time": "temporal",
-    "localtime": "temporal",
-    "datetime": "temporal",
-    "localdatetime": "temporal",
-    "duration": "temporal",
     "point": "spatial",
 }
 
@@ -235,9 +230,19 @@ def _to_string(args: list[object], context) -> object:
         return None
     if isinstance(value, bool):
         return "true" if value else "false"
+    temporal = temporal_to_string(value)
+    if temporal is not None:
+        return temporal
     if isinstance(value, (int, float, str)):
         return str(value)
-    raise TypeError("toString() expects a boolean, number, or string")
+    raise TypeError("toString() expects a boolean, number, string, or temporal value")
+
+
+def _temporal_constructor(name: str) -> Callable[[list[object], object], object]:
+    def execute(args: list[object], context) -> object:
+        return construct_temporal(name, args[0])
+
+    return execute
 
 
 def _trim(args: list[object], context) -> object:
@@ -485,6 +490,12 @@ FUNCTIONS: dict[str, FunctionDef] = {
     "reverse": _scalar("reverse", (1, 1), _reverse),
     "tail": _scalar("tail", (1, 1), _tail),
     "keys": _scalar("keys", (1, 1), _keys),
+    "date": _scalar("date", (1, 1), _temporal_constructor("date")),
+    "time": _scalar("time", (1, 1), _temporal_constructor("time")),
+    "localtime": _scalar("localtime", (1, 1), _temporal_constructor("localtime")),
+    "datetime": _scalar("datetime", (1, 1), _temporal_constructor("datetime")),
+    "localdatetime": _scalar("localdatetime", (1, 1), _temporal_constructor("localdatetime")),
+    "duration": _scalar("duration", (1, 1), _temporal_constructor("duration")),
     "nodes": _scalar("nodes", (1, 1), partial(_path_elements, name="nodes")),
     "relationships": _scalar("relationships", (1, 1), partial(_path_elements, name="relationships")),
 }

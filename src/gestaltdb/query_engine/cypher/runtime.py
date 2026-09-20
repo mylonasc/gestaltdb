@@ -20,6 +20,7 @@ from .ast import (
     Variable,
 )
 from .expr import _boolean_value, _cypher_equals, evaluate_expression, project_value
+from .temporal import normalize_parameter, temporal_compare_key
 from .plan import Aggregate as LogicalAggregate
 from .plan import (
     CallSubquery,
@@ -73,7 +74,7 @@ class QueryContext:
         if isinstance(value, Parameter):
             if value.name not in self.parameters:
                 raise ValueError(f"Missing Cypher parameter: ${value.name}")
-            return self.parameters[value.name]
+            return normalize_parameter(self.parameters[value.name])
         if isinstance(value, list):
             return [self.resolve(item) for item in value]
         if isinstance(value, tuple):
@@ -1667,12 +1668,16 @@ def _sortable_value(value):
         return (3, tuple(_sortable_value(item) for item in value))
     if isinstance(value, PathValue):
         return (4, cypher_value_key(value))
+    temporal = temporal_compare_key(value)
+    if temporal is not None:
+        order = {"date": 0, "time": 1, "localtime": 2, "datetime": 3, "localdatetime": 4, "duration": 5}
+        return (5, order[temporal[0]], temporal[1])
     if isinstance(value, str):
-        return (5, value)
-    if isinstance(value, bool):
         return (6, value)
-    if isinstance(value, (int, float)):
+    if isinstance(value, bool):
         return (7, value)
+    if isinstance(value, (int, float)):
+        return (8, value)
     if value is None:
         return (9,)
     raise TypeError(f"Cannot order value of type {type(value).__name__}")
@@ -1699,6 +1704,9 @@ def cypher_value_key(value):
         return ("number", value)
     if isinstance(value, str):
         return ("string", value)
+    temporal = temporal_compare_key(value)
+    if temporal is not None:
+        return temporal
     if isinstance(value, (list, tuple)):
         return ("list", tuple(cypher_value_key(item) for item in value))
     if isinstance(value, dict):

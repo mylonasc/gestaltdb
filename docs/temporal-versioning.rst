@@ -121,8 +121,9 @@ Current Limits
 --------------
 
 Each API call captures its own latest horizon; stable multi-call read views are
-not implemented yet. Valid-time windows, temporal property indexes, Cypher, and
-sampler snapshots are also not temporal yet. Marker-backed data that fails hash
+not implemented yet. Cypher scalar temporal values are available, but temporal
+graph views, temporal property indexes, and sampler snapshots are not temporal
+yet. Marker-backed data that fails hash
 or envelope validation raises
 ``TemporalCorruptionError`` rather than returning partial history.
 

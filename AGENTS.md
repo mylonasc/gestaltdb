@@ -37,6 +37,8 @@ from gestaltdb import EdgeList, IndexMaintenanceMode, NodeList, QueryResult
 from gestaltdb import HardNegativeConfig, SamplerEngine, SamplerSnapshot
 from gestaltdb import SamplingHop, SamplingPattern
 from gestaltdb import TemporalContext, TemporalInstant, TemporalInterval
+from gestaltdb import TemporalDate, TemporalDuration, TemporalLocalDateTime
+from gestaltdb import TemporalLocalTime, TemporalTime
 ```
 
 Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes are available from `import gestaltdb`; import them from their modules unless the API is intentionally changed.
@@ -50,6 +52,7 @@ Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes 
 - Backends implement the `KVStore` interface. Current backends are `LMDBStore`, `LevelDBStore`, and `PyRexStore`.
 - Serializers convert graph entities to bytes. Current serializers are `PickleSerializer`, `JSONSerializer`, `MessagePackSerializer`, and `ProtobufSerializer`.
 - `TemporalInstant`, `TemporalInterval`, and `TemporalContext` define timezone-aware UTC-microsecond instants, half-open `[start, end)` intervals, and point/window matching.
+- Cypher temporal expressions return immutable `TemporalDate`, `TemporalTime`, `TemporalLocalTime`, `TemporalLocalDateTime`, `TemporalInstant`, and `TemporalDuration` values. They are query-only and cannot yet be persisted as graph properties.
 - `put_node_version`, `put_edge_version`, correction/retraction helpers, and `commit_versions` append immutable temporal history. `get_node_as_of`, `get_edge_as_of`, and `iter_edges_as_of` use derived temporal indexes; deferred temporal writes require `rebuild_temporal_indexes()` or `rebuild_deferred_indexes()`. Current graph records, Cypher views, and sampler snapshots remain separate.
 
 ## Backend Guidance

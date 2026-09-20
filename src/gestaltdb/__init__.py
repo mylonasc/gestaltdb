@@ -74,7 +74,16 @@ runnable usage patterns, and ``docs/`` for the Sphinx user guide.
 from .sampling import AsyncBatchFeeder, HardNegativeConfig, SampledSubgraphBatch, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .query_engine.cypher import QueryResult
-from .temporal import TemporalContext, TemporalInstant, TemporalInterval
+from .temporal import (
+    TemporalContext,
+    TemporalDate,
+    TemporalDuration,
+    TemporalInstant,
+    TemporalInterval,
+    TemporalLocalDateTime,
+    TemporalLocalTime,
+    TemporalTime,
+)
 
 __all__ = [
     "ColumnarIngestionMode",
@@ -90,6 +99,11 @@ __all__ = [
     "SamplingHop",
     "SamplingPattern",
     "TemporalContext",
+    "TemporalDate",
+    "TemporalDuration",
     "TemporalInstant",
     "TemporalInterval",
+    "TemporalLocalDateTime",
+    "TemporalLocalTime",
+    "TemporalTime",
 ]
