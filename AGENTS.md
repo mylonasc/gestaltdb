@@ -11,6 +11,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Storage backends: `src/gestaltdb/kvstores.py`
 - Serializers: `src/gestaltdb/serializers.py`
 - Columnar ingestion containers and enums: `src/gestaltdb/ingestion.py`
+- Canonical temporal values and selection semantics: `src/gestaltdb/temporal.py`
 - Cypher engine: `src/gestaltdb/query_engine/cypher/`
 - Legacy Cypher import shims: `src/gestaltdb/cypher.py` and `src/gestaltdb/cypher_*.py`
 - Sampling API: `src/gestaltdb/sampling/`
@@ -34,6 +35,7 @@ The package root currently re-exports selected ingestion, Cypher result, and sam
 from gestaltdb import EdgeList, IndexMaintenanceMode, NodeList, QueryResult
 from gestaltdb import HardNegativeConfig, SamplerEngine, SamplerSnapshot
 from gestaltdb import SamplingHop, SamplingPattern
+from gestaltdb import TemporalContext, TemporalInstant, TemporalInterval
 ```
 
 Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes are available from `import gestaltdb`; import them from their modules unless the API is intentionally changed.
@@ -46,6 +48,7 @@ Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes 
 - `GraphDB.create(path, backend="pyrex", serializer="json", ...)` creates a self-describing database directory with `gestaltdb_manifest.json`; `GraphDB.open(path)` reopens it.
 - Backends implement the `KVStore` interface. Current backends are `LMDBStore`, `LevelDBStore`, and `PyRexStore`.
 - Serializers convert graph entities to bytes. Current serializers are `PickleSerializer`, `JSONSerializer`, `MessagePackSerializer`, and `ProtobufSerializer`.
+- `TemporalInstant`, `TemporalInterval`, and `TemporalContext` define timezone-aware UTC-microsecond instants, half-open `[start, end)` intervals, and point/window matching. They are storage-independent foundations and do not yet make GraphDB queries or sampler snapshots temporal.
 
 ## Backend Guidance
 

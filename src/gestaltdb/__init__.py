@@ -29,9 +29,10 @@ main graph API lives in submodules rather than entirely at the package root:
        graph.close()
 
 Import core graph classes from ``gestaltdb.graphdb``, storage backends from
-``gestaltdb.kvstores``, serializers from ``gestaltdb.serializers``, and advanced
-sampling primitives from ``gestaltdb.sampling``. This package root re-exports
-selected ingestion enums/containers, ``QueryResult``, and sampling helpers for
+``gestaltdb.kvstores``, serializers from ``gestaltdb.serializers``, canonical
+temporal values from ``gestaltdb.temporal``, and advanced sampling primitives
+from ``gestaltdb.sampling``. This package root re-exports selected ingestion
+enums/containers, temporal values, ``QueryResult``, and sampling helpers for
 convenience.
 
 Important usage notes for agents and developers:
@@ -56,6 +57,7 @@ runnable usage patterns, and ``docs/`` for the Sphinx user guide.
 from .sampling import AsyncBatchFeeder, HardNegativeConfig, SampledSubgraphBatch, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .query_engine.cypher import QueryResult
+from .temporal import TemporalContext, TemporalInstant, TemporalInterval
 
 __all__ = [
     "ColumnarIngestionMode",
@@ -70,4 +72,7 @@ __all__ = [
     "SamplerSnapshot",
     "SamplingHop",
     "SamplingPattern",
+    "TemporalContext",
+    "TemporalInstant",
+    "TemporalInterval",
 ]

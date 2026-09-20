@@ -348,3 +348,27 @@ with TemporaryDirectory() as tmpdir:
 ```
 
 Use `SamplerEngine.load(path, mode="memmap")` for large snapshots that should be memory mapped instead of eagerly loaded into RAM.
+
+## Define Canonical Temporal Values
+
+Temporal values require timezone-aware datetimes, normalize to UTC
+microseconds, and use half-open intervals `[start, end)`. These values establish
+shared semantics; they do not yet filter `GraphDB` records or sampler snapshots.
+
+```python
+from datetime import datetime, timedelta, timezone
+
+from gestaltdb.temporal import TemporalContext, TemporalInstant, TemporalInterval
+
+valid_from = datetime(2026, 1, 1, tzinfo=timezone.utc)
+valid_to = valid_from + timedelta(days=30)
+validity = TemporalInterval.from_values(valid_from, valid_to)
+
+assert TemporalContext.as_of(
+    datetime(2026, 1, 15, tzinfo=timezone.utc)
+).matches(validity)
+assert not TemporalContext.as_of(valid_to).matches(validity)
+
+instant = TemporalInstant.parse("2026-01-15T12:00:00Z")
+assert TemporalInstant.decode_sortable(instant.encode_sortable()) == instant
+```

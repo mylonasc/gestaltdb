@@ -9,6 +9,13 @@ Graph Models and Database
    :undoc-members:
    :show-inheritance:
 
+Temporal Semantics
+------------------
+
+.. automodule:: gestaltdb.temporal
+   :members:
+   :show-inheritance:
+
 Sampling Configuration
 ----------------------
 
