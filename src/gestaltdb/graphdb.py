@@ -43,6 +43,7 @@ from .versioning import (
     encode_version_envelope,
     immutable_metadata,
     normalize_logical_id,
+    normalize_temporal_instant,
     normalize_temporal_interval,
     normalize_version_id,
 )
@@ -3755,6 +3756,114 @@ class GraphDB:
             for version in commit.versions:
                 if isinstance(version, EdgeVersion) and (logical_id is None or version.logical_id == logical_id):
                     yield version
+
+    def _temporal_system_horizon(self, *, system_time=None, through_commit=None) -> int:
+        if system_time is not None and through_commit is not None:
+            raise ValueError("provide either system_time or through_commit, not both")
+        last_commit_id, _ = self._temporal_sequence()
+        if through_commit is not None:
+            if isinstance(through_commit, bool) or not isinstance(through_commit, int) or through_commit < 0:
+                raise ValueError("through_commit must be a non-negative integer")
+            return min(last_commit_id, through_commit)
+        if system_time is None:
+            return last_commit_id
+        requested = normalize_temporal_instant(system_time)
+        horizon = 0
+        for commit in self.iter_temporal_commits():
+            if commit.system_time <= requested:
+                horizon = commit.commit_id
+            else:
+                break
+        return horizon
+
+    def _temporal_entity_as_of(
+        self, kind, logical_id, *, valid_time, system_time=None, through_commit=None
+    ):
+        logical_id = normalize_logical_id(logical_id)
+        instant = normalize_temporal_instant(valid_time)
+        horizon = self._temporal_system_horizon(
+            system_time=system_time, through_commit=through_commit
+        )
+        versions = (
+            self.iter_node_versions(logical_id, through_commit=horizon)
+            if kind == "node"
+            else self.iter_edge_versions(logical_id, through_commit=horizon)
+        )
+        winner = None
+        for version in versions:
+            if version.valid.contains(instant):
+                winner = version
+        if winner is None or winner.operation is VersionOperation.RETRACT:
+            return None
+        return winner
+
+    def get_node_as_of(
+        self, logical_id, *, valid_time, system_time=None, through_commit=None
+    ) -> NodeVersion | None:
+        """Resolve a logical node at valid time and an optional system horizon."""
+        return self._temporal_entity_as_of(
+            "node",
+            logical_id,
+            valid_time=valid_time,
+            system_time=system_time,
+            through_commit=through_commit,
+        )
+
+    def get_edge_as_of(
+        self, logical_id, *, valid_time, system_time=None, through_commit=None
+    ) -> EdgeVersion | None:
+        """Resolve a logical edge at valid time and an optional system horizon."""
+        return self._temporal_entity_as_of(
+            "edge",
+            logical_id,
+            valid_time=valid_time,
+            system_time=system_time,
+            through_commit=through_commit,
+        )
+
+    def iter_edges_as_of(
+        self,
+        *,
+        edge_type,
+        direction="out",
+        source=None,
+        target=None,
+        valid_time,
+        system_time=None,
+        through_commit=None,
+    ):
+        """Iterate typed edges visible at valid time and a system horizon.
+
+        This TKG-03 foundation uses canonical history scans. Persisted temporal
+        adjacency indexes will replace the candidate scan without changing the
+        result semantics.
+        """
+        if direction not in {"out", "in"}:
+            raise ValueError("direction must be 'out' or 'in'")
+        if direction == "out" and (source is None or target is not None):
+            raise ValueError("outgoing traversal requires source and rejects target")
+        if direction == "in" and (target is None or source is not None):
+            raise ValueError("incoming traversal requires target and rejects source")
+        if not isinstance(edge_type, str) or not edge_type:
+            raise ValueError("edge_type must be a non-empty string")
+        horizon = self._temporal_system_horizon(
+            system_time=system_time, through_commit=through_commit
+        )
+        logical_ids = {
+            version.logical_id
+            for version in self.iter_edge_versions(through_commit=horizon)
+        }
+        for logical_id in sorted(logical_ids):
+            version = self.get_edge_as_of(
+                logical_id, valid_time=valid_time, through_commit=horizon
+            )
+            if version is None or version.edge.properties.get("type") != edge_type:
+                continue
+            if direction == "out" and str(version.edge.source) != str(source):
+                continue
+            if direction == "in" and str(version.edge.target) != str(target):
+                continue
+            yield version
 
     def query(self, cypher: str, parameters: Optional[dict[str, object]] = None):
         """Execute a supported Cypher query.
