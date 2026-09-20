@@ -9,6 +9,7 @@ The Python side uses only the standard library so library users never need
 a JavaScript toolchain at runtime.
 """
 
+from .html import build_html, ensure_bundle_fresh, is_bundle_fresh, read_manifest, save_html
 from .ir import (
     DEFAULT_MAX_EDGES,
     DEFAULT_MAX_NODES,
@@ -27,4 +28,9 @@ __all__ = [
     "VizEdge",
     "VizGraph",
     "VizNode",
+    "build_html",
+    "ensure_bundle_fresh",
+    "is_bundle_fresh",
+    "read_manifest",
+    "save_html",
 ]
