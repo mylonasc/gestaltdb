@@ -372,3 +372,45 @@ assert not TemporalContext.as_of(valid_to).matches(validity)
 instant = TemporalInstant.parse("2026-01-15T12:00:00Z")
 assert TemporalInstant.decode_sortable(instant.encode_sortable()) == instant
 ```
+
+## Append Immutable Temporal Versions
+
+Temporal version writes preserve assertions, corrections, and retractions
+without changing current-state records returned by `get_node` or `get_edge`.
+History lookup is scan-based until temporal indexes are added.
+
+```python
+from tempfile import TemporaryDirectory
+
+from gestaltdb.graphdb import GraphDB, Node
+from gestaltdb.kvstores import LevelDBStore
+from gestaltdb.serializers import JSONSerializer
+from gestaltdb.temporal import TemporalInterval
+
+with TemporaryDirectory() as tmpdir:
+    graph = GraphDB(LevelDBStore(path=f"{tmpdir}/graph"), JSONSerializer())
+    try:
+        asserted = graph.put_node_version(
+            Node(node_id="alice", labels=["Person"], properties={"name": "Alice"}),
+            valid=TemporalInterval.parse("2020-01-01T00:00:00Z"),
+            metadata={"source": "people-import"},
+        )
+        corrected = graph.correct_node_version(
+            Node(node_id="alice", labels=["Person"], properties={"name": "Alicia"}),
+            supersedes_version_id=asserted.version_id,
+        )
+        graph.retract_node_version(
+            "alice",
+            valid_from="2030-01-01T00:00:00Z",
+            supersedes_version_id=corrected.version_id,
+            reason="source withdrew the assertion",
+        )
+
+        history = list(graph.iter_node_versions("alice"))
+        assert [version.operation.value for version in history] == [
+            "assert", "correct", "retract"
+        ]
+        assert graph.get_node(b"alice") is None
+    finally:
+        graph.close()
+```

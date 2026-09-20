@@ -16,6 +16,13 @@ Temporal Semantics
    :members:
    :show-inheritance:
 
+Temporal Version History
+------------------------
+
+.. automodule:: gestaltdb.versioning
+   :members:
+   :show-inheritance:
+
 Sampling Configuration
 ----------------------
 

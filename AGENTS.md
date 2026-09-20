@@ -12,6 +12,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Serializers: `src/gestaltdb/serializers.py`
 - Columnar ingestion containers and enums: `src/gestaltdb/ingestion.py`
 - Canonical temporal values and selection semantics: `src/gestaltdb/temporal.py`
+- Immutable temporal version records and write descriptors: `src/gestaltdb/versioning.py`
 - Cypher engine: `src/gestaltdb/query_engine/cypher/`
 - Legacy Cypher import shims: `src/gestaltdb/cypher.py` and `src/gestaltdb/cypher_*.py`
 - Sampling API: `src/gestaltdb/sampling/`
@@ -48,7 +49,8 @@ Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes 
 - `GraphDB.create(path, backend="pyrex", serializer="json", ...)` creates a self-describing database directory with `gestaltdb_manifest.json`; `GraphDB.open(path)` reopens it.
 - Backends implement the `KVStore` interface. Current backends are `LMDBStore`, `LevelDBStore`, and `PyRexStore`.
 - Serializers convert graph entities to bytes. Current serializers are `PickleSerializer`, `JSONSerializer`, `MessagePackSerializer`, and `ProtobufSerializer`.
-- `TemporalInstant`, `TemporalInterval`, and `TemporalContext` define timezone-aware UTC-microsecond instants, half-open `[start, end)` intervals, and point/window matching. They are storage-independent foundations and do not yet make GraphDB queries or sampler snapshots temporal.
+- `TemporalInstant`, `TemporalInterval`, and `TemporalContext` define timezone-aware UTC-microsecond instants, half-open `[start, end)` intervals, and point/window matching.
+- `put_node_version`, `put_edge_version`, correction/retraction helpers, and `commit_versions` append immutable temporal history. They do not update current graph records, Cypher views, or sampler snapshots; TKG-02 history inspection is scan-based.
 
 ## Backend Guidance
 

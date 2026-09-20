@@ -17,6 +17,7 @@ sampling, and benchmarks.
    quickstart
    storage-backends
    serializers
+   temporal-versioning
    typed-sampling
    cypher
    performance

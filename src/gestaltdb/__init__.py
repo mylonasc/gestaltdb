@@ -31,7 +31,8 @@ main graph API lives in submodules rather than entirely at the package root:
 Import core graph classes from ``gestaltdb.graphdb``, storage backends from
 ``gestaltdb.kvstores``, serializers from ``gestaltdb.serializers``, canonical
 temporal values from ``gestaltdb.temporal``, and advanced sampling primitives
-from ``gestaltdb.sampling``. This package root re-exports selected ingestion
+from ``gestaltdb.sampling``. Immutable temporal version models and write
+descriptors live in ``gestaltdb.versioning``. This package root re-exports selected ingestion
 enums/containers, temporal values, ``QueryResult``, and sampling helpers for
 convenience.
 
@@ -40,6 +41,8 @@ Important usage notes for agents and developers:
 * Relationship traversal types come from ``Edge.properties["type"]``.
 * ``GraphDB.query`` implements a broad Cypher read/write subset.
 * Property indexes are explicit; create them before relying on property lookups.
+* Explicit temporal version writes append history without changing current
+  graph, Cypher, or sampler views.
 * Use ``GraphDB.ingest_arrow`` and ``GraphDB.ingest_polars`` for tabular bulk
   ingestion, and use ``SamplerSnapshot``/``SamplerEngine`` for ML-oriented
   array-native sampling.
