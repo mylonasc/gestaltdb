@@ -74,6 +74,7 @@ runnable usage patterns, and ``docs/`` for the Sphinx user guide.
 from .sampling import AsyncBatchFeeder, HardNegativeConfig, SampledSubgraphBatch, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .query_engine.cypher import QueryResult
+from .readview import GraphReadView, ProvenanceMismatchError, ReadViewProvenance
 from .temporal import (
     TemporalContext,
     TemporalDate,
@@ -91,6 +92,9 @@ __all__ = [
     "IndexMaintenanceMode",
     "NodeList",
     "QueryResult",
+    "GraphReadView",
+    "ProvenanceMismatchError",
+    "ReadViewProvenance",
     "AsyncBatchFeeder",
     "HardNegativeConfig",
     "SampledSubgraphBatch",

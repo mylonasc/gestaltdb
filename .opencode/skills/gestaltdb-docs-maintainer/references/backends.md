@@ -58,6 +58,8 @@ GestaltDB supports self-describing database directories using `gestaltdb_manifes
   Creates the store directory, records backend configuration, serializer configuration, and indexed property metadata in `gestaltdb_manifest.json`, and returns an open `GraphDB` instance.
 - `GraphDB.open(path, backend_options=...)`:
   Reads `gestaltdb_manifest.json`, restores backend, serializer, and property index configurations automatically.
+- Managed and migrated stores persist an immutable `database_id`; it remains stable when the directory moves and anchors `ReadViewProvenance` verification.
+- `GraphDB.read_view(valid_time=...)` pins immutable temporal reads to one visible commit on every backend. It does not promise consistent mutable current-state scans on stores without a unified backend snapshot.
 
 ---
 

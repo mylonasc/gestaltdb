@@ -54,6 +54,7 @@ _EDGE_PROPERTY_INDEXES_METADATA_KEY = b"schema:indexes:edge_properties"
 _NODE_CONSTRAINTS_METADATA_KEY = b"schema:constraints:nodes"
 _STALE_INDEXES_METADATA_KEY = b"schema:indexes:stale"
 _MANIFEST_METADATA_KEY = b"schema:manifest"
+_DATABASE_ID_METADATA_KEY = b"schema:database_identity:v1"
 MANIFEST_FILENAME = "gestaltdb_manifest.json"
 MANIFEST_FORMAT_VERSION = 1
 _VALID_INDEX_MODES = {IndexMaintenanceMode.MAINTAIN.value, IndexMaintenanceMode.DEFER.value}
@@ -70,6 +71,7 @@ _TEMPORAL_LOGICAL_VALID_INDEX = "temporal_v1_logical_valid"
 _TEMPORAL_SYSTEM_INDEX = "temporal_v1_system_commit"
 _TEMPORAL_EDGE_OUT_INDEX = "temporal_v1_edge_out"
 _TEMPORAL_EDGE_IN_INDEX = "temporal_v1_edge_in"
+_DATABASE_ID_LOCK = threading.Lock()
 
 
 def _utc_now_iso() -> str:
@@ -519,10 +521,12 @@ class GraphDB:
         """
         self.store = store
         self.serializer = serializer
-        self._store_path: Path | None = None
+        store_path = getattr(store, "path", None)
+        self._store_path: Path | None = None if store_path is None else Path(store_path)
         self._backend_name: str | None = _registry_name_for_instance(store, _backend_registry())
         self._serializer_name: str | None = _registry_name_for_instance(serializer, _serializer_registry())
         self._manifest: dict | None = None
+        self._database_id: str | None = None
         self._temporal_write_lock = threading.RLock()
         self._temporal_transaction_bound = False
         self._temporal_clock = lambda: datetime.datetime.now(datetime.timezone.utc)
@@ -594,20 +598,99 @@ class GraphDB:
 
         graph_metadata = manifest.get("graph", {})
         store = backend_cls(path=str(path), **options)
-        graph = cls(
-            store,
-            serializer_cls(),
-            indexed_node_properties=graph_metadata.get("indexed_node_properties") or [],
-            indexed_edge_properties=graph_metadata.get("indexed_edge_properties") or [],
-        )
+        try:
+            graph = cls(
+                store,
+                serializer_cls(),
+                indexed_node_properties=graph_metadata.get("indexed_node_properties") or [],
+                indexed_edge_properties=graph_metadata.get("indexed_edge_properties") or [],
+            )
+        except Exception:
+            store.close()
+            raise
         graph._store_path = path
         graph._backend_name = backend_name
         graph._serializer_name = serializer_name
-        graph._manifest = graph._manifest_from_current(created_at=manifest.get("created_at"))
+        try:
+            graph._initialize_database_id(manifest.get("database_id"))
+            graph._manifest = graph._manifest_from_current(created_at=manifest.get("created_at"))
+            if validate_manifest:
+                graph._validate_backend_manifest(manifest)
+            backend_manifest_payload = graph.store.get_metadata(_MANIFEST_METADATA_KEY)
+            backend_manifest = json.loads(backend_manifest_payload.decode("utf-8")) if backend_manifest_payload else {}
+            if manifest.get("database_id") is None or backend_manifest.get("database_id") is None:
+                graph.save_manifest(path)
+            return graph
+        except Exception:
+            graph.close()
+            raise
 
-        if validate_manifest:
-            graph._validate_backend_manifest(manifest)
-        return graph
+    @property
+    def database_id(self) -> str:
+        """Return the stable UUID persisted with this database."""
+        if self._database_id is not None:
+            return self._database_id
+        return self._initialize_database_id(None)
+
+    def _initialize_database_id(self, expected: str | None) -> str:
+        """Persist or reconcile the database UUID under a local filesystem lock."""
+        if expected is not None:
+            try:
+                expected = str(uuid.UUID(expected))
+            except (AttributeError, TypeError, ValueError) as exc:
+                raise ValueError("invalid database identity in root manifest") from exc
+        lock_handle = None
+        with _DATABASE_ID_LOCK:
+            if self._store_path is not None:
+                lock_path = self._store_path / ".gestaltdb_identity.lock"
+                lock_handle = lock_path.open("a+b")
+                if os.name == "posix":
+                    import fcntl
+
+                    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+                elif os.name == "nt":  # pragma: no cover - Windows-only
+                    import msvcrt
+
+                    lock_handle.write(b"\0")
+                    lock_handle.flush()
+                    lock_handle.seek(0)
+                    msvcrt.locking(lock_handle.fileno(), msvcrt.LK_LOCK, 1)
+                else:  # pragma: no cover - unsupported platform
+                    raise RuntimeError("database identity locking is unsupported on this platform")
+            try:
+                return self._initialize_database_id_locked(expected)
+            finally:
+                if lock_handle is not None:
+                    if os.name == "posix":
+                        import fcntl
+
+                        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+                    elif os.name == "nt":  # pragma: no cover - Windows-only
+                        import msvcrt
+
+                        lock_handle.seek(0)
+                        msvcrt.locking(lock_handle.fileno(), msvcrt.LK_UNLCK, 1)
+                    lock_handle.close()
+
+    def _initialize_database_id_locked(self, expected: str | None) -> str:
+        try:
+            payload = self.store.get_metadata(_DATABASE_ID_METADATA_KEY)
+        except NotImplementedError as exc:
+            raise ValueError("the configured store cannot persist a database identity") from exc
+        if payload is None:
+            if expected is None and self._store_path is None:
+                raise ValueError("cannot assign a database identity without a managed store path; call save_manifest(path=...)")
+            candidate = expected or str(uuid.uuid4())
+            self.store.put_metadata(_DATABASE_ID_METADATA_KEY, candidate.encode("ascii"))
+            payload = self.store.get_metadata(_DATABASE_ID_METADATA_KEY)
+        try:
+            value = str(uuid.UUID(payload.decode("ascii")))
+        except (AttributeError, UnicodeDecodeError, ValueError) as exc:
+            raise ValueError("invalid persisted database identity") from exc
+        if expected is not None and value != expected:
+            raise ValueError("persisted database identity does not match root manifest")
+        self._database_id = value
+        return value
 
     @property
     def manifest(self) -> dict:
@@ -623,6 +706,8 @@ class GraphDB:
             self._store_path = Path(path)
         if self._store_path is None:
             raise ValueError("cannot save manifest without a store path; pass graph.save_manifest(path=...)")
+        self._store_path.mkdir(parents=True, exist_ok=True)
+        self._initialize_database_id((self._manifest or {}).get("database_id"))
         if self._backend_name is None:
             self._backend_name = _registry_name_for_instance(self.store, _backend_registry())
         if self._serializer_name is None:
@@ -633,7 +718,6 @@ class GraphDB:
             raise ValueError("cannot infer serializer name for manifest; use an allowlisted serializer")
 
         manifest = self._manifest_from_current(created_at=(self._manifest or {}).get("created_at") if self._manifest else None)
-        self._store_path.mkdir(parents=True, exist_ok=True)
         with (self._store_path / MANIFEST_FILENAME).open("w", encoding="utf-8") as handle:
             json.dump(manifest, handle, indent=2, sort_keys=True)
         try:
@@ -679,6 +763,7 @@ class GraphDB:
             backend_options["transactional"] = True
         return {
             "format_version": MANIFEST_FORMAT_VERSION,
+            "database_id": self.database_id,
             "gestaltdb_version": _gestaltdb_version(),
             "backend": {
                 "name": backend_name,
@@ -713,6 +798,15 @@ class GraphDB:
             raise ValueError("GestaltDB manifest/backend metadata mismatch for backend name")
         if backend_manifest.get("serializer", {}).get("name") != root_manifest.get("serializer", {}).get("name"):
             raise ValueError("GestaltDB manifest/backend metadata mismatch for serializer name")
+        root_database_id = root_manifest.get("database_id")
+        backend_database_id = backend_manifest.get("database_id")
+        if root_database_id is not None and backend_database_id is not None and root_database_id != backend_database_id:
+            raise ValueError("GestaltDB manifest/backend metadata mismatch for database identity")
+        actual_database_id = self.database_id
+        if root_database_id is not None and root_database_id != actual_database_id:
+            raise ValueError("root manifest does not match persisted database identity")
+        if backend_database_id is not None and backend_database_id != actual_database_id:
+            raise ValueError("backend manifest does not match persisted database identity")
 
     def _load_stale_indexes(self) -> set[str]:
         """Load index families known to be stale after deferred bulk ingestion."""
@@ -1757,7 +1851,7 @@ class GraphDB:
 
         if source_db_reference and "source_db" not in kwargs:
             resolved_source_path = Path(source_db_path) if source_db_path is not None else self._store_path
-            if resolved_source_path is not None:
+            if resolved_source_path is not None and (resolved_source_path / MANIFEST_FILENAME).exists():
                 if source_db_path_mode not in {"relative", "absolute", "relative_to_snapshot", "relative_to_project"}:
                     raise ValueError("source_db_path_mode must be 'relative', 'absolute', 'relative_to_snapshot', or 'relative_to_project'")
                 path_type = "relative_to_snapshot" if source_db_path_mode == "relative" else source_db_path_mode
@@ -1768,6 +1862,50 @@ class GraphDB:
                     "serializer": self._serializer_name,
                 }
         return SamplerSnapshot.build(self, output_path, **kwargs)
+
+    @contextmanager
+    def read_view(self, *, valid_time, through_commit=None):
+        """Yield a temporal read view pinned to one visible commit horizon."""
+        from .readview import GraphReadView, ReadViewProvenance
+
+        instant = normalize_temporal_instant(valid_time)
+        allocated, _ = self._temporal_sequence()
+        latest = 0
+        markers = []
+        for commit_id in range(1, allocated + 1):
+            commit_candidate = self.get_temporal_commit(commit_id, _validate_supersession=False)
+            if commit_candidate is None:
+                break
+            marker_candidate = self.store.get_metadata(self._temporal_visible_key(commit_id))
+            markers.append(commit_id.to_bytes(8, "big") + marker_candidate)
+            latest = commit_id
+        if through_commit is None:
+            horizon = latest
+        else:
+            if isinstance(through_commit, bool) or not isinstance(through_commit, int) or through_commit < 0:
+                raise ValueError("through_commit must be a non-negative integer")
+            if through_commit > latest:
+                raise ValueError("through_commit is newer than the latest visible commit")
+            horizon = through_commit
+        commit = self.get_temporal_commit(horizon) if horizon else None
+        if horizon and commit is None:
+            raise ValueError("through_commit does not identify a visible commit")
+        marker = self.store.get_metadata(self._temporal_visible_key(horizon)) if horizon else None
+        visibility_digest = hashlib.sha256(b"".join(markers[:horizon])).hexdigest()
+        manifest = self.manifest
+        provenance = ReadViewProvenance(
+            database_id=self.database_id,
+            commit_horizon=horizon,
+            commit_system_time_us=None if commit is None else commit.system_time.epoch_microseconds,
+            commit_marker_sha256=None if marker is None else marker.hex(),
+            visibility_sha256=visibility_digest,
+            valid_time_us=instant.epoch_microseconds,
+            backend_name=manifest["backend"]["name"],
+            backend_layout_version=manifest["backend"]["layout_version"],
+            serializer_name=manifest["serializer"]["name"],
+            serializer_format_version=manifest["serializer"]["format_version"],
+        )
+        yield GraphReadView(self, provenance)
 
     def get_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out'):
         """Return typed adjacency records with clean direction semantics.

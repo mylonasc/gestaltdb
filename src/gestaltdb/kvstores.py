@@ -426,6 +426,7 @@ class LMDBStore(KVStore):
         except ImportError as exc:
             raise _missing_dependency_error("lmdb", feature_name="LMDBStore") from exc
 
+        self.path = path
         max_dbs = 6
         if map_keys:
             max_dbs += 2
@@ -995,6 +996,7 @@ class LevelDBStore(KVStore):
         except ImportError as exc:
             raise _missing_dependency_error("plyvel", feature_name="LevelDBStore") from exc
         
+        self.path = path
         self.db_paths = {'nodes' : os.path.join('nodes'), 'edges': os.path.join('edges'), 'adjacency' : os.path.join('adjacency'), 'typed_adjacency': os.path.join('typed_adjacency'), 'index': os.path.join('index'), 'metadata': os.path.join('metadata')}
         if not os.path.exists(path):
             os.makedirs(path, exist_ok=True)
@@ -1310,6 +1312,7 @@ class PyRexStore(KVStore):
         except ImportError as exc:
             raise _missing_dependency_error("pyrex", install_name="pyrex-rocksdb", feature_name="PyRexStore") from exc
 
+        self.path = path
         options = pyrex.PyOptions()
         options.create_if_missing = True
         if parallelism is not None:

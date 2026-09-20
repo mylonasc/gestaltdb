@@ -106,6 +106,36 @@ Temporal traversal resolves each logical edge before checking its winning
 source, target, and type, so interval-local topology corrections and retractions
 do not leak historical adjacency.
 
+Consistent Read Views
+---------------------
+
+``GraphDB.read_view`` captures the contiguous prefix of fully visible commits
+and a default valid-time instant. It stops before the first incomplete commit,
+so a later marker cannot change the view. Every history and as-of call through
+the view uses that horizon, even if newer commits are published through the
+graph handle.
+
+.. code-block:: python
+
+   with graph.read_view(valid_time="2025-01-01T00:00:00Z") as view:
+       alice = view.get_node_as_of("alice")
+       snapshot = view.build_sampler_snapshot("snapshots/2025-01-01")
+       token = view.provenance.token
+
+The immutable ``ReadViewProvenance`` records the stable database UUID, visible
+commit marker and full visibility-prefix digest, valid instant, backend layout,
+serializer format, and snapshot mechanism. Its token is SHA-256 over canonical
+JSON. Snapshot builds materialize nodes and edges from immutable temporal
+history at that exact point,
+publish through a staging directory, and store the authenticated provenance.
+``SamplerSnapshot.verify_source`` and provenance-aware node/edge hydration fail
+if the source identity, serializer, backend, commit marker, or token differs.
+Legacy snapshots without source provenance retain their existing unverified
+behavior.
+
+``through_commit`` may recreate an older visible view. Database paths are not
+part of provenance, so moving a managed database does not change its identity.
+
 Index Maintenance
 -----------------
 
@@ -120,10 +150,11 @@ append-only. A pre-index TKG-02 database is automatically reported with the
 Current Limits
 --------------
 
-Each API call captures its own latest horizon; stable multi-call read views are
-not implemented yet. Cypher scalar temporal values are available, but temporal
-graph views, temporal property indexes, and sampler snapshots are not temporal
-yet. Marker-backed data that fails hash
+Read views cover immutable temporal history on every backend. They do not make
+mutable current-state records snapshot-safe on backends without a unified read
+snapshot, and they do not change ordinary Cypher queries. Cypher scalar temporal
+values are available, but temporal graph views, temporal property indexes, and
+temporal sampler arrays are not implemented yet. Marker-backed data that fails hash
 or envelope validation raises
 ``TemporalCorruptionError`` rather than returning partial history.
 

@@ -113,6 +113,7 @@ class SamplerSnapshot:
         layout: str = "csr",
         source_db: dict | None = None,
         source_artifacts: dict | None = None,
+        source_provenance: dict | None = None,
     ) -> "SamplerSnapshot":
         """Build and persist a static sampler snapshot from a ``GraphDB``.
 
@@ -242,6 +243,10 @@ class SamplerSnapshot:
             metadata["source_db"] = cls._normalize_source_reference(source_db, path)
         if source_artifacts is not None:
             metadata["source_artifacts"] = cls._normalize_artifact_references(source_artifacts, path)
+        if source_provenance is not None:
+            from gestaltdb.readview import ReadViewProvenance
+
+            metadata["source_provenance"] = ReadViewProvenance.from_dict(source_provenance).to_dict()
 
         cls._write(path, metadata, node_ids, node_type_ids, edge_ids, relations, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, out, in_, incident, relation_out, relation_in, positive_triples)
         return cls.load(path)
@@ -554,7 +559,22 @@ class SamplerSnapshot:
             raise ValueError(f"SamplerSnapshot source DB path does not exist: {source_path}")
         from gestaltdb.graphdb import GraphDB
 
-        return GraphDB.open(source_path, backend_options=backend_options)
+        graph = GraphDB.open(source_path, backend_options=backend_options)
+        try:
+            self.verify_source(graph)
+        except Exception:
+            graph.close()
+            raise
+        return graph
+
+    def verify_source(self, graph) -> None:
+        """Verify provenance-bearing snapshots against a source graph."""
+        value = self.metadata.get("source_provenance")
+        if value is None:
+            return
+        from gestaltdb.readview import ReadViewProvenance
+
+        ReadViewProvenance.from_dict(value).verify_source(graph)
 
     def external_node_id(self, node_int) -> str:
         return str(self.external_node_ids[int(node_int)])
@@ -578,9 +598,33 @@ class SamplerSnapshot:
         )
 
     def get_node(self, graph, node_int):
+        provenance = self.metadata.get("source_provenance")
+        if provenance is not None:
+            from gestaltdb.readview import ReadViewProvenance
+
+            source = ReadViewProvenance.from_dict(provenance)
+            source.verify_source(graph)
+            version = graph.get_node_as_of(
+                self.external_node_id(node_int),
+                valid_time=source.valid_time_us,
+                through_commit=source.commit_horizon,
+            )
+            return None if version is None else version.node
         return graph.get_node(self.external_node_id(node_int).encode("utf-8"))
 
     def get_edge(self, graph, edge_int):
+        provenance = self.metadata.get("source_provenance")
+        if provenance is not None:
+            from gestaltdb.readview import ReadViewProvenance
+
+            source = ReadViewProvenance.from_dict(provenance)
+            source.verify_source(graph)
+            version = graph.get_edge_as_of(
+                self.external_edge_id(edge_int),
+                valid_time=source.valid_time_us,
+                through_commit=source.commit_horizon,
+            )
+            return None if version is None else version.edge
         return graph.get_edge(self.external_edge_id(edge_int).encode("utf-8"))
 
     def _resolve_source_graph_path(self, *, base_path=None) -> Path:
