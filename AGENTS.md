@@ -127,6 +127,13 @@ There are two sampling layers:
 
 `SampledSubgraphBatch` uses local node IDs in `senders`, `receivers`, `positives`, and `negatives`. Use `node_ids_global` to map local batch rows back to compact global snapshot IDs, and use `snapshot.external_node_id(...)` or `snapshot.global_triple_to_external(...)` to recover external IDs.
 
+## Visualization
+
+- Packaged offline viz lives in `src/gestaltdb/viz/` (Python, stdlib only) plus `web/` (React + D3 + Vite source, build-time only). The prebuilt bundle is committed at `src/gestaltdb/viz/static/` and shipped via `package-data`.
+- Import from `gestaltdb.viz.api` (`VizOptions`, `VizFigure`, `visualize_nodes_edges`, `visualize_query`, `visualize_sample`, `visualize_sampler_batch`) or use `graph.visualize(cypher=...)` / `graph.visualize(seeds=..., pattern=...)`.
+- `VizGraph` IR builders (`gestaltdb.viz.ir`) cover nodes/edges, Cypher results, sampled subgraphs, and sampler batches with deterministic caps (2000 nodes / 5000 edges, 2x absolute ceilings).
+- Rebuild the bundle with `npm run build` in `web/` after front-end changes (`npm ci` first; `npm run check:licenses` gates JS licenses). Python tests never need npm.
+
 ## Development Commands
 
 - Run tests: `uv run pytest`

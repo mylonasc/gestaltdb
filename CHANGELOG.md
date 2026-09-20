@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Added packaged offline graph visualization: deterministic `VizGraph` IR builders (nodes/edges, Cypher results, sampled subgraphs, sampler batches), self-contained `.html` artifacts with an inline-only CSP, and a prebuilt D3.js + React bundle shipped via `package-data` (no JS toolchain or network needed at runtime).
+- Added an interactive canvas (D3 force layout with pin/zoom/refit/pause, deterministic colorblind-safe legend, selection + property inspector, search, label/type filters, 1-hop focus, Cypher highlight overlay) with client-side SVG/PNG/JSON export.
+- Added the `gestaltdb.viz.api` surface (`VizOptions`, `VizFigure`, `visualize_nodes_edges/query/sample/sampler_batch`) with Jupyter `_repr_html_`, `GraphDB.visualize(cypher=...)` / `GraphDB.visualize(seeds=..., pattern=...)`, deterministic caps (2000 nodes / 5000 edges) with `TruncationWarning` plus exact on-canvas banners, and `VizCapExceededError` ceilings (default 2x caps) pointing at sampling.
+- Added `web/` build-time source (Vite + TypeScript, stable filenames, byte-identical rebuilds, `viz-manifest.json` freshness checks) with a permissive-license gate (`MIT`/`ISC`/`Apache-2.0`/`BSD`/`CC0`).
+- Added `docs/visualization.rst`, `EXAMPLES.md` entries, a packaged `visualization` agent-docs topic, and `AGENTS.md` contributor guidance for viz.
+
 ## 0.8.0
 
 - Added extended Cypher expressions, strict three-valued semantics, stable cross-type ordering, and scalar expressions containing aggregates.

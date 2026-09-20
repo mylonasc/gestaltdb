@@ -20,6 +20,7 @@ sampling, and benchmarks.
    temporal-versioning
    typed-sampling
    cypher
+   visualization
    performance
    notebooks
 

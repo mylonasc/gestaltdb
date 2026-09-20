@@ -3,6 +3,7 @@ import { GraphCanvas } from "./GraphCanvas";
 import { Inspector, type Selection } from "./Inspector";
 import { legendGroups, legendTypes } from "./graph";
 import { computeView } from "./view";
+import { exportJson, exportPng, exportSvg } from "./export";
 import { colorFor } from "./colors";
 import type { VizPayload, VizViewOptions } from "./viz-types";
 
@@ -56,6 +57,8 @@ export function App({ payload, initial = {} }: { payload: VizPayload; initial?: 
     return next;
   };
 
+  const canvasElement = (): SVGSVGElement | null => document.querySelector(".gdviz-canvas");
+
   return (
     <main className="gdviz" data-theme={theme}>
       <header className="gdviz-header">
@@ -107,6 +110,29 @@ export function App({ payload, initial = {} }: { payload: VizPayload; initial?: 
           </label>
           <button type="button" onClick={() => setTheme((value) => (value === "light" ? "dark" : "light"))}>
             {theme === "light" ? "Dark theme" : "Light theme"}
+          </button>
+        </div>
+        <div className="gdviz-toolbar" role="toolbar" aria-label="Export controls">
+          <button
+            type="button"
+            onClick={() => {
+              const svg = canvasElement();
+              if (svg) exportSvg(svg);
+            }}
+          >
+            Export SVG
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const svg = canvasElement();
+              if (svg) void exportPng(svg);
+            }}
+          >
+            Export PNG
+          </button>
+          <button type="button" onClick={() => exportJson(payload)}>
+            Download JSON
           </button>
         </div>
         <div className="gdviz-toolbar" role="toolbar" aria-label="Search and highlight controls">

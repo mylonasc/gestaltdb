@@ -96,3 +96,24 @@ Serializers
    :members:
    :undoc-members:
    :show-inheritance:
+
+Visualization IR
+----------------
+
+.. automodule:: gestaltdb.viz.ir
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Visualization Artifacts and API
+-------------------------------
+
+.. automodule:: gestaltdb.viz.api
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: gestaltdb.viz.html
+   :members:
+   :undoc-members:
+   :show-inheritance:

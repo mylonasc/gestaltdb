@@ -29,6 +29,7 @@ Available topics:
 - `indexing`: explicit property indexes, range lookups, deferred rebuilds.
 - `sampling`: typed traversal sampling vs snapshot/engine sampling.
 - `ingestion`: Arrow/Polars ingestion and index maintenance modes.
+- `visualization`: offline `visualize_*` entrypoints, `VizOptions` caps, `GraphDB.visualize`.
 
 ## Import Rules
 

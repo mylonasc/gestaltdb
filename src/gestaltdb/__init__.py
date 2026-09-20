@@ -47,6 +47,20 @@ Important usage notes for agents and developers:
   ingestion, and use ``SamplerSnapshot``/``SamplerEngine`` for ML-oriented
   array-native sampling.
 
+GestaltDB also ships offline interactive visualization. The D3.js + React
+front end is prebuilt and packaged, so this needs no JavaScript toolchain:
+
+.. code-block:: python
+
+   from gestaltdb.viz.api import visualize_query
+
+   figure = visualize_query(graph, 'MATCH (a:Person) RETURN a LIMIT 25')
+   figure.save("/tmp/graph.html")  # open offline in any browser
+
+See ``gestaltdb.viz.api`` (``VizOptions``, ``VizFigure``, ``visualize_*``),
+``gestaltdb.viz.ir`` (deterministic payload builders), and
+``GraphDB.visualize``.
+
 GestaltDB also ships a packaged opencode skill and queryable user examples. In
 an application project that uses GestaltDB, run ``python -m gestaltdb.agent_docs
 install-opencode-skill`` to copy the packaged skill into

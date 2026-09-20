@@ -1,6 +1,8 @@
 # Epic: Packaged JS-Based Graph Visualization
 
-Status: **in progress** (branch `grestaltdb-graph-visualization`)
+Status: **implemented** (branch `grestaltdb-graph-visualization`)
+
+GitHub parent: #65
 
 ## Objective
 
@@ -438,12 +440,12 @@ Every VIZ feature must:
 
 ## Current Implementation Status
 
-- [ ] Epic and dependency plan drafted.
-- [ ] `VIZ-01` Viz IR and Python export model.
-- [ ] `VIZ-02` JS scaffold, Vite build, and license gate.
-- [ ] `VIZ-03` offline HTML artifact builder.
-- [ ] `VIZ-04` core canvas (React shell + D3 force).
-- [ ] `VIZ-05` selection/inspection/search/highlight.
-- [ ] `VIZ-06` public Python API + Jupyter.
-- [ ] `VIZ-07` large-graph caps + sampling entrypoints.
-- [ ] `VIZ-08` packaging, docs, tests, hardening.
+- [x] Epic and dependency plan drafted.
+- [x] `VIZ-01` Viz IR and Python export model (#66).
+- [x] `VIZ-02` JS scaffold, Vite build, and license gate (#67).
+- [x] `VIZ-03` offline HTML artifact builder (#68).
+- [x] `VIZ-04` core canvas (React shell + D3 force) (#69).
+- [x] `VIZ-05` selection/inspection/search/highlight (#70).
+- [x] `VIZ-06` public Python API + Jupyter (#71).
+- [x] `VIZ-07` large-graph caps + sampling entrypoints (#72).
+- [x] `VIZ-08` packaging, docs, tests, hardening (#73).
