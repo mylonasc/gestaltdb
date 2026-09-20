@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.0
 
 - Added packaged offline graph visualization: deterministic `VizGraph` IR builders (nodes/edges, Cypher results, sampled subgraphs, sampler batches), self-contained `.html` artifacts with an inline-only CSP, and a prebuilt D3.js + React bundle shipped via `package-data` (no JS toolchain or network needed at runtime).
 - Added an interactive canvas (D3 force layout with pin/zoom/refit/pause, deterministic colorblind-safe legend, selection + property inspector, search, label/type filters, 1-hop focus, Cypher highlight overlay) with client-side SVG/PNG/JSON export.
