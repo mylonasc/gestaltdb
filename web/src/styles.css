@@ -1,0 +1,10 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.gdviz-scaffold {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
