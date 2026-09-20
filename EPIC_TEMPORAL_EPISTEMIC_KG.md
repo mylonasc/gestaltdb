@@ -3,7 +3,7 @@
 Status: **in progress** (`TKG-01` implementation started on
 `temporal-epistemic-kg`)
 
-GitHub parent: pending issue creation
+GitHub parent: [#63](https://github.com/mylonasc/gestaltdb/issues/63)
 
 ## Objective
 
@@ -78,7 +78,7 @@ TKG-01..TKG-13 ─> TKG-14
 
 ### TKG-01: Canonical Temporal Primitives and Sortable Encoding
 
-GitHub: pending issue creation
+GitHub: [#50](https://github.com/mylonasc/gestaltdb/issues/50)
 
 Dependencies: none.
 
@@ -109,7 +109,7 @@ Acceptance criteria:
 
 ### TKG-02: Immutable Bitemporal Node and Edge Versions
 
-GitHub: pending issue creation
+GitHub: [#49](https://github.com/mylonasc/gestaltdb/issues/49)
 
 Dependencies: TKG-01.
 
@@ -138,7 +138,7 @@ Acceptance criteria:
 
 ### TKG-03: Temporal Indexes and As-Of Traversal
 
-GitHub: pending issue creation
+GitHub: [#61](https://github.com/mylonasc/gestaltdb/issues/61)
 
 Dependencies: TKG-01, TKG-02.
 
@@ -171,7 +171,7 @@ Acceptance criteria:
 
 ### TKG-04: Cypher Temporal Values and Functions
 
-GitHub: pending issue creation
+GitHub: [#51](https://github.com/mylonasc/gestaltdb/issues/51)
 
 Dependencies: TKG-01.
 
@@ -200,7 +200,7 @@ Acceptance criteria:
 
 ### TKG-05: Consistent Read Views and Provenance Tokens
 
-GitHub: pending issue creation
+GitHub: [#52](https://github.com/mylonasc/gestaltdb/issues/52)
 
 Dependencies: TKG-02.
 
@@ -226,7 +226,7 @@ Acceptance criteria:
 
 ### TKG-06: Bitemporal As-Of Cypher Querying
 
-GitHub: pending issue creation
+GitHub: [#53](https://github.com/mylonasc/gestaltdb/issues/53)
 
 Dependencies: TKG-03, TKG-04, TKG-05.
 
@@ -256,7 +256,7 @@ Acceptance criteria:
 
 ### TKG-07: Temporal Sampler Snapshot Arrays and Indexes
 
-GitHub: pending issue creation
+GitHub: [#62](https://github.com/mylonasc/gestaltdb/issues/62)
 
 Dependencies: TKG-03, TKG-05.
 
@@ -285,7 +285,7 @@ Acceptance criteria:
 
 ### TKG-08: Runtime Temporal Neighbor and Subgraph Sampling
 
-GitHub: pending issue creation
+GitHub: [#55](https://github.com/mylonasc/gestaltdb/issues/55)
 
 Dependencies: TKG-07.
 
@@ -313,7 +313,7 @@ Acceptance criteria:
 
 ### TKG-09: Time-Aware Hard Negatives and Positive Membership
 
-GitHub: pending issue creation
+GitHub: [#54](https://github.com/mylonasc/gestaltdb/issues/54)
 
 Dependencies: TKG-08.
 
@@ -344,7 +344,7 @@ Acceptance criteria:
 
 ### TKG-10: Bitemporal Epistemic Claims and Provenance
 
-GitHub: pending issue creation
+GitHub: [#59](https://github.com/mylonasc/gestaltdb/issues/59)
 
 Dependencies: TKG-02, TKG-03, TKG-05.
 
@@ -374,7 +374,7 @@ Acceptance criteria:
 
 ### TKG-11: Rules and Semi-Naive Fixpoint Evaluation
 
-GitHub: pending issue creation
+GitHub: [#60](https://github.com/mylonasc/gestaltdb/issues/60)
 
 Dependencies: TKG-03, TKG-10.
 
@@ -404,7 +404,7 @@ Acceptance criteria:
 
 ### TKG-12: Incremental Truth Maintenance and Explanations
 
-GitHub: pending issue creation
+GitHub: [#56](https://github.com/mylonasc/gestaltdb/issues/56)
 
 Dependencies: TKG-02, TKG-10, TKG-11.
 
@@ -431,7 +431,7 @@ Acceptance criteria:
 
 ### TKG-13: Bounded Modal and Epistemic Evaluation
 
-GitHub: pending issue creation
+GitHub: [#57](https://github.com/mylonasc/gestaltdb/issues/57)
 
 Dependencies: TKG-10, TKG-11, TKG-12.
 
@@ -464,7 +464,7 @@ Acceptance criteria:
 
 ### TKG-14: Compatibility, Migration, Documentation, and Benchmarks
 
-GitHub: pending issue creation
+GitHub: [#58](https://github.com/mylonasc/gestaltdb/issues/58)
 
 Dependencies: TKG-01 through TKG-13.
 
