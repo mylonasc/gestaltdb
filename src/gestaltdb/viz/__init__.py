@@ -1,0 +1,30 @@
+"""Packaged visualization surface for GestaltDB graphs.
+
+The ``viz`` subpackage converts property graphs, Cypher results, and sampled
+ML subgraphs into a deterministic JSON-serializable intermediate
+representation (IR) that feeds the prebuilt D3.js + React front end
+(``VIZ-02`` onward) and self-contained offline HTML artifacts (``VIZ-03``).
+
+The Python side uses only the standard library so library users never need
+a JavaScript toolchain at runtime.
+"""
+
+from .ir import (
+    DEFAULT_MAX_EDGES,
+    DEFAULT_MAX_NODES,
+    VIZ_IR_VERSION,
+    TruncationInfo,
+    VizEdge,
+    VizGraph,
+    VizNode,
+)
+
+__all__ = [
+    "DEFAULT_MAX_EDGES",
+    "DEFAULT_MAX_NODES",
+    "VIZ_IR_VERSION",
+    "TruncationInfo",
+    "VizEdge",
+    "VizGraph",
+    "VizNode",
+]
