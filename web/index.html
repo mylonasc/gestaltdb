@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GestaltDB viz (dev)</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Dev-only fixture. Production artifacts inject the real payload via
+      // window.__GESTALTDB_VIZ__ in src/gestaltdb/viz/html.py (VIZ-03).
+      window.__GESTALTDB_VIZ__ = window.__GESTALTDB_VIZ__ || {
+        version: 1,
+        nodes: [
+          { id: "alice", labels: ["Person"], group: "Person", properties: { name: "Alice" }, extra: {} },
+          { id: "bob", labels: ["Person"], group: "Person", properties: { name: "Bob" }, extra: {} }
+        ],
+        edges: [
+          { id: "e1", source: "alice", target: "bob", type: "knows", properties: { since: 2024 }, extra: {} }
+        ],
+        highlight: { nodes: ["alice"], edges: ["e1"] },
+        truncation: { nodes_dropped: 0, edges_dropped: 0, truncated: false },
+        meta: { builder: "dev-fixture" }
+      };
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

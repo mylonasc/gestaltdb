@@ -59,6 +59,12 @@ TOPICS: dict[str, Topic] = {
         "Arrow/Polars ingestion and IndexMaintenanceMode choices.",
         "references/ingestion.md",
     ),
+    "visualization": Topic(
+        "visualization",
+        "Visualization For Library Users",
+        "Offline interactive HTML visualization: visualize_* entrypoints, VizOptions caps, and GraphDB.visualize.",
+        "references/visualization.md",
+    ),
 }
 
 

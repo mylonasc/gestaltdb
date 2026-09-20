@@ -349,6 +349,57 @@ with TemporaryDirectory() as tmpdir:
 
 Use `SamplerEngine.load(path, mode="memmap")` for large snapshots that should be memory mapped instead of eagerly loaded into RAM.
 
+## Visualize Graphs
+
+GestaltDB ships offline interactive visualization: the D3.js + React front
+end is prebuilt and packaged with the library, so saving `.html` artifacts
+or rendering inline in Jupyter needs no JavaScript toolchain or network.
+
+```python
+from tempfile import TemporaryDirectory
+
+from gestaltdb.graphdb import Edge, GraphDB, Node
+from gestaltdb.kvstores import LevelDBStore
+from gestaltdb.serializers import PickleSerializer
+from gestaltdb.viz.api import VizOptions, visualize_query
+
+with TemporaryDirectory() as tmpdir:
+    graph = GraphDB(LevelDBStore(path=f"{tmpdir}/graph"), PickleSerializer())
+    try:
+        graph.put_node(Node(node_id="alice", labels=["Person"], properties={"name": "Alice"}))
+        graph.put_node(Node(node_id="bob", labels=["Person"], properties={"name": "Bob"}))
+        graph.put_edge(Edge(edge_id="e1", source="alice", target="bob", properties={"type": "knows"}))
+
+        figure = visualize_query(
+            graph,
+            'MATCH (a:Person)-[r:knows]->(b) RETURN a, r, b',
+            options=VizOptions(title="Knows graph", theme="dark"),
+        )
+        figure.save(f"{tmpdir}/knows.html")  # open offline in any browser
+        print(repr(figure))
+    finally:
+        graph.close()
+```
+
+`GraphDB.visualize` is the same path as a method, and `visualize_sample`
+covers large graphs through typed sampling instead of full dumps:
+
+```python
+from gestaltdb.sampling import SamplingHop, SamplingPattern
+from gestaltdb.viz.api import VizOptions
+
+pattern = SamplingPattern([SamplingHop("binds", direction="out", sample_size=5)])
+figure = graph.visualize(seeds=["drug-1"], pattern=pattern)
+figure = graph.visualize(
+    'MATCH (a:Person) RETURN a LIMIT 25',
+    options=VizOptions(max_nodes=500, max_edges=1000),
+)
+```
+
+Caps (defaults 2000 nodes / 5000 edges) truncate deterministically with a
+`TruncationWarning` and an on-canvas banner; payloads beyond twice the caps
+raise `VizCapExceededError` naming the sampling alternative.
+
 ## Define Canonical Temporal Values
 
 Temporal values require timezone-aware datetimes, normalize to UTC
