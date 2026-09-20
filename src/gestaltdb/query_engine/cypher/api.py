@@ -19,6 +19,10 @@ from .ast import (
     ShowIndexes,
     ShowConstraints,
     UnionQuery,
+    MatchClause,
+    OptionalMatchClause,
+    SubqueryClause,
+    ForeachClause,
 )
 from .parser import parse as _parse_query
 from .parser import parse_ast as _parse_ast
@@ -134,7 +138,35 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
         logical_plan = plan_union_query(canonical)
     else:
         logical_plan = plan_staged_query(canonical)
-    if _plan_has_writes(logical_plan) and transaction_supported(graph):
+    qualifiers = _temporal_qualifiers(canonical)
+    if qualifiers:
+        from gestaltdb.temporal import TemporalInstant
+        from .expr import evaluate_expression
+
+        evaluation_context = QueryContext(graph=graph, parameters=parameters or {})
+        resolved: dict[str, object] = {}
+        for qualifier in qualifiers:
+            value = evaluate_expression(qualifier.expression, {}, evaluation_context)
+            if value is None:
+                raise ValueError("Temporal qualifier expressions cannot be null")
+            if not isinstance(value, TemporalInstant):
+                raise TypeError("Temporal qualifier expressions must resolve to datetime() values")
+            previous = resolved.get(qualifier.kind)
+            if previous is not None and previous != value:
+                raise ValueError(f"Conflicting query-wide {qualifier.kind}-time qualifiers")
+            resolved[qualifier.kind] = value
+        with graph.read_view(
+            valid_time=resolved["valid"], system_time=resolved.get("system")
+        ) as read_view:
+            records = execute_plan(
+                logical_plan,
+                QueryContext(
+                    graph=graph,
+                    parameters=parameters or {},
+                    read_view=read_view,
+                ),
+            )
+    elif _plan_has_writes(logical_plan) and transaction_supported(graph):
         with graph.transaction() as tx_graph:
             records = execute_plan(
                 logical_plan,
@@ -146,6 +178,22 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
             QueryContext(graph=graph, parameters=parameters or {}),
         )
     return QueryResult(columns=logical_plan.columns, records=records)
+
+
+def _temporal_qualifiers(value) -> tuple[object, ...]:
+    if not isinstance(value, (Query, UnionQuery)):
+        return ()
+    qualifiers = []
+    queries = value.branches if isinstance(value, UnionQuery) else (value,)
+    for branch in queries:
+        for clause in branch.clauses:
+            if isinstance(clause, (MatchClause, OptionalMatchClause)):
+                qualifiers.extend(clause.qualifiers)
+            elif isinstance(clause, SubqueryClause):
+                qualifiers.extend(_temporal_qualifiers(clause.query))
+            elif isinstance(clause, ForeachClause):
+                qualifiers.extend(_temporal_qualifiers(Query(clause.body, branch.source)))
+    return tuple(qualifiers)
 
 
 def _plan_has_writes(plan: LogicalPlan) -> bool:

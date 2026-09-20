@@ -71,6 +71,9 @@ _TEMPORAL_LOGICAL_VALID_INDEX = "temporal_v1_logical_valid"
 _TEMPORAL_SYSTEM_INDEX = "temporal_v1_system_commit"
 _TEMPORAL_EDGE_OUT_INDEX = "temporal_v1_edge_out"
 _TEMPORAL_EDGE_IN_INDEX = "temporal_v1_edge_in"
+_TEMPORAL_NODE_CATALOG_INDEX = "temporal_v1_node_catalog"
+_TEMPORAL_EDGE_OUT_CATALOG_INDEX = "temporal_v1_edge_out_catalog"
+_TEMPORAL_EDGE_IN_CATALOG_INDEX = "temporal_v1_edge_in_catalog"
 _DATABASE_ID_LOCK = threading.Lock()
 
 
@@ -1864,11 +1867,13 @@ class GraphDB:
         return SamplerSnapshot.build(self, output_path, **kwargs)
 
     @contextmanager
-    def read_view(self, *, valid_time, through_commit=None):
+    def read_view(self, *, valid_time, system_time=None, through_commit=None):
         """Yield a temporal read view pinned to one visible commit horizon."""
         from .readview import GraphReadView, ReadViewProvenance
 
         instant = normalize_temporal_instant(valid_time)
+        if system_time is not None and through_commit is not None:
+            raise ValueError("provide either system_time or through_commit, not both")
         allocated, _ = self._temporal_sequence()
         latest = 0
         markers = []
@@ -1879,6 +1884,10 @@ class GraphDB:
             marker_candidate = self.store.get_metadata(self._temporal_visible_key(commit_id))
             markers.append(commit_id.to_bytes(8, "big") + marker_candidate)
             latest = commit_id
+        if system_time is not None:
+            through_commit = min(
+                latest, self._temporal_system_horizon(system_time=system_time)
+            )
         if through_commit is None:
             horizon = latest
         else:
@@ -3429,7 +3438,13 @@ class GraphDB:
             return None
         try:
             value = json.loads(payload.decode("utf-8"))
-            if not isinstance(value, dict) or value.get("format_version") != 1:
+            if not isinstance(value, dict):
+                raise ValueError
+            if value.get("format_version") == 1:
+                # TKG-06 added node and untyped endpoint catalogs. Older
+                # derived indexes must be rebuilt before temporal querying.
+                return None
+            if value.get("format_version") != 2:
                 raise ValueError
             indexed = value["indexed_through_commit"]
             if isinstance(indexed, bool) or not isinstance(indexed, int) or indexed < 0:
@@ -3441,7 +3456,7 @@ class GraphDB:
     def _persist_temporal_index_state(self, commit_id: int) -> None:
         self.store.put_metadata(
             _TEMPORAL_INDEX_STATE_KEY,
-            canonical_json_bytes({"format_version": 1, "indexed_through_commit": commit_id}),
+            canonical_json_bytes({"format_version": 2, "indexed_through_commit": commit_id}),
         )
 
     def _ensure_temporal_indexes(self, horizon: int) -> None:
@@ -3472,7 +3487,30 @@ class GraphDB:
                 locator,
             ),
         ]
+        if isinstance(version, NodeVersion):
+            ranges.append(
+                (
+                    _TEMPORAL_NODE_CATALOG_INDEX,
+                    [b"nodes"],
+                    self._temporal_instant_index_value(version.valid.start),
+                    locator,
+                )
+            )
         if isinstance(version, EdgeVersion) and version.edge is not None:
+            ranges.extend([
+                (
+                    _TEMPORAL_EDGE_OUT_CATALOG_INDEX,
+                    [str(version.edge.source).encode("utf-8")],
+                    self._temporal_instant_index_value(version.valid.start),
+                    locator,
+                ),
+                (
+                    _TEMPORAL_EDGE_IN_CATALOG_INDEX,
+                    [str(version.edge.target).encode("utf-8")],
+                    self._temporal_instant_index_value(version.valid.start),
+                    locator,
+                ),
+            ])
             edge_type = version.edge.properties.get("type")
             if edge_type is not None:
                 ranges.extend([
@@ -4201,10 +4239,38 @@ class GraphDB:
             through_commit=through_commit,
         )
 
+    def iter_nodes_as_of(
+        self, *, valid_time, system_time=None, through_commit=None
+    ):
+        """Iterate node versions visible at one valid and system-time point."""
+        instant = normalize_temporal_instant(valid_time)
+        horizon = self._temporal_system_horizon(
+            system_time=system_time, through_commit=through_commit
+        )
+        self._ensure_temporal_indexes(horizon)
+        logical_ids = set()
+        for locator in self.store.iter_range_index(
+            _TEMPORAL_NODE_CATALOG_INDEX,
+            [b"nodes"],
+            None,
+            self._temporal_instant_index_value(instant),
+            True,
+            True,
+        ):
+            candidate = self._get_temporal_version_at(locator)
+            if isinstance(candidate, NodeVersion) and candidate.commit_id <= horizon:
+                logical_ids.add(candidate.logical_id)
+        for logical_id in sorted(logical_ids):
+            version = self.get_node_as_of(
+                logical_id, valid_time=instant, through_commit=horizon
+            )
+            if version is not None:
+                yield version
+
     def iter_edges_as_of(
         self,
         *,
-        edge_type,
+        edge_type=None,
         direction="out",
         source=None,
         target=None,
@@ -4212,25 +4278,34 @@ class GraphDB:
         system_time=None,
         through_commit=None,
     ):
-        """Iterate typed edges visible at valid time and a system horizon."""
+        """Iterate endpoint edges visible at valid time and a system horizon."""
         if direction not in {"out", "in"}:
             raise ValueError("direction must be 'out' or 'in'")
         if direction == "out" and (source is None or target is not None):
             raise ValueError("outgoing traversal requires source and rejects target")
         if direction == "in" and (target is None or source is not None):
             raise ValueError("incoming traversal requires target and rejects source")
-        if not isinstance(edge_type, str) or not edge_type:
-            raise ValueError("edge_type must be a non-empty string")
+        if edge_type is not None and (not isinstance(edge_type, str) or not edge_type):
+            raise ValueError("edge_type must be a non-empty string or None")
         horizon = self._temporal_system_horizon(
             system_time=system_time, through_commit=through_commit
         )
         self._ensure_temporal_indexes(horizon)
         node_id = source if direction == "out" else target
-        index_name = _TEMPORAL_EDGE_OUT_INDEX if direction == "out" else _TEMPORAL_EDGE_IN_INDEX
+        if edge_type is None:
+            index_name = (
+                _TEMPORAL_EDGE_OUT_CATALOG_INDEX
+                if direction == "out"
+                else _TEMPORAL_EDGE_IN_CATALOG_INDEX
+            )
+            parts = [str(node_id).encode("utf-8")]
+        else:
+            index_name = _TEMPORAL_EDGE_OUT_INDEX if direction == "out" else _TEMPORAL_EDGE_IN_INDEX
+            parts = [str(node_id).encode("utf-8"), edge_type.encode("utf-8")]
         upper = self._temporal_instant_index_value(normalize_temporal_instant(valid_time))
         locators = self.store.iter_range_index(
             index_name,
-            [str(node_id).encode("utf-8"), edge_type.encode("utf-8")],
+            parts,
             None,
             upper,
             True,
@@ -4245,7 +4320,9 @@ class GraphDB:
             version = self.get_edge_as_of(
                 logical_id, valid_time=valid_time, through_commit=horizon
             )
-            if version is None or version.edge.properties.get("type") != edge_type:
+            if version is None or (
+                edge_type is not None and version.edge.properties.get("type") != edge_type
+            ):
                 continue
             if direction == "out" and str(version.edge.source) != str(source):
                 continue

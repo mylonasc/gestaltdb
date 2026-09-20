@@ -104,6 +104,41 @@ inspect path values; bound paths remain usable downstream like any variable.
 
    graph_db.query('MATCH p = (d:Drug)-[:binds]->(t:Target) RETURN length(p) AS hops')
 
+Bitemporal Matches
+------------------
+
+Append ``FOR VALID_TIME AS OF <expression>`` to ``MATCH`` or ``OPTIONAL
+MATCH`` to query immutable temporal versions instead of mutable current graph
+records. Add ``FOR SYSTEM_TIME AS OF <expression>`` to select what was known at
+a historical system instant; a system-time qualifier requires a valid-time
+qualifier. Both expressions must produce ``datetime`` values and may use
+literals, parameters, and scalar functions, but not row variables or
+aggregates.
+
+.. code-block:: python
+
+   result = graph_db.query(
+       'MATCH (p:Person)-[r:WORKS_FOR]->(c:Company) '
+       'FOR VALID_TIME AS OF datetime($validAt) '
+       'FOR SYSTEM_TIME AS OF datetime($knownAt) '
+       'RETURN c.name, versionId(r), validFrom(r), validTo(r), systemFrom(r)',
+       parameters={"validAt": valid_at, "knownAt": known_at},
+   )
+
+Qualifiers are query-wide. Every chained or optional match, ``UNION`` branch,
+correlated subquery, fixed or variable path, and shortest path uses one valid
+instant and one read view captured at query start. Repeated qualifiers must
+resolve to the same instant. Temporal queries are read-only and reject all
+write clauses. ``versionId``, ``validFrom``, ``validTo``, and ``systemFrom``
+return temporal version metadata, propagate null, and return null for entities
+from unqualified current-graph queries; ``validTo`` is also null for an
+open-ended interval.
+
+Temporal matches use temporal node and endpoint catalogs plus typed temporal
+adjacency. Deferred temporal writes therefore require
+``rebuild_temporal_indexes()`` or ``rebuild_deferred_indexes()`` before they can
+be queried. Queries without qualifiers retain current-graph behavior.
+
 Writes
 ------
 

@@ -56,19 +56,73 @@ class QueryContext:
     node_cache: dict[bytes, object] = field(default_factory=dict)
     edge_cache: dict[bytes, object] = field(default_factory=dict)
     label_cardinalities: dict[str, int] = field(default_factory=dict)
+    read_view: object | None = None
+    entity_versions: dict[int, object] = field(default_factory=dict)
 
     def node_key_to_bytes(self, node_key):
         return self.graph.node_key_to_bytes(node_key)
 
     def get_node(self, node_id: bytes):
         if node_id not in self.node_cache:
-            self.node_cache[node_id] = self.graph.get_node(node_id)
+            if self.read_view is None:
+                self.node_cache[node_id] = self.graph.get_node(node_id)
+            else:
+                logical_id = self.graph.key_to_string(node_id)
+                version = self.read_view.get_node_as_of(logical_id)
+                value = None if version is None else version.node
+                if value is not None:
+                    self.entity_versions[id(value)] = version
+                self.node_cache[node_id] = value
         return self.node_cache[node_id]
 
     def get_edge(self, edge_id: bytes):
         if edge_id not in self.edge_cache:
-            self.edge_cache[edge_id] = self.graph.get_edge(edge_id)
+            if self.read_view is None:
+                self.edge_cache[edge_id] = self.graph.get_edge(edge_id)
+            else:
+                logical_id = self.graph.key_to_string(edge_id)
+                version = self.read_view.get_edge_as_of(logical_id)
+                value = None if version is None else version.edge
+                if value is not None:
+                    self.entity_versions[id(value)] = version
+                self.edge_cache[edge_id] = value
         return self.edge_cache[edge_id]
+
+    def iter_temporal_node_ids(self):
+        for version in self.read_view.iter_nodes_as_of():
+            node = version.node
+            self.entity_versions[id(node)] = version
+            node_id = self.node_key_to_bytes(version.logical_id)
+            self.node_cache[node_id] = node
+            yield node_id
+
+    def iter_temporal_adjacency(self, node_id: bytes, edge_types, direction: str):
+        logical_id = self.graph.key_to_string(node_id)
+        directions = ("out", "in") if direction == "any" else (direction,)
+        types = edge_types or (None,)
+        seen = set()
+        for current_direction in directions:
+            for edge_type in types:
+                kwargs = {"source": logical_id} if current_direction == "out" else {"target": logical_id}
+                for version in self.read_view.iter_edges_as_of(
+                    edge_type=edge_type, direction=current_direction, **kwargs
+                ):
+                    edge = version.edge
+                    edge_id = self.node_key_to_bytes(version.logical_id)
+                    neighbor = edge.target if current_direction == "out" else edge.source
+                    occurrence = (edge_id, self.node_key_to_bytes(neighbor))
+                    if occurrence in seen:
+                        continue
+                    seen.add(occurrence)
+                    self.entity_versions[id(edge)] = version
+                    self.edge_cache[edge_id] = edge
+                    yield {
+                        "edge_id": edge_id,
+                        "neighbor_id": occurrence[1],
+                    }
+
+    def version_for(self, entity):
+        return None if entity is None else self.entity_versions.get(id(entity))
 
     def resolve(self, value):
         if isinstance(value, Parameter):
@@ -715,6 +769,8 @@ def node_scan_ids(parsed: NodeScanQuery, context: QueryContext):
     """Yield node IDs for a label scan, using property indexes when available."""
     if parsed.limit == 0:
         return iter(())
+    if context.read_view is not None:
+        return context.iter_temporal_node_ids()
     label_ids = _node_ids_for_labels(parsed, context)
     range_scan = _node_range_scan(parsed, context)
     if range_scan is not None and parsed.property_name is None:
@@ -979,7 +1035,7 @@ def _indexed_first_hop_rows(row, clause: PathPatternClause, context: QueryContex
     eligible predicate), in which case the caller falls back to adjacency
     expansion.
     """
-    if not clause.hops:
+    if context.read_view is not None or not clause.hops:
         return None
     hop = clause.hops[0]
     source = clause.source
@@ -1492,6 +1548,9 @@ def _is_null_bound(row: BindingRow, variable: str | None) -> bool:
 
 
 def _iter_pattern_adjacency(context: QueryContext, node_id: bytes, hop: PatternHop):
+    if context.read_view is not None:
+        yield from context.iter_temporal_adjacency(node_id, hop.edge_types, hop.direction)
+        return
     if hop.edge_types:
         for edge_type in hop.edge_types:
             yield from context.graph.iter_typed_adjacency(node_id, edge_type, direction=hop.direction)
@@ -1574,7 +1633,7 @@ def _order_match_patterns(patterns, context: QueryContext):
     alter traversal cost and relationship-isomorphism state. Standalone node
     components with distinct variables are commutative Cartesian inputs.
     """
-    if len(patterns) < 2 or any(pattern.hops for pattern in patterns):
+    if context.read_view is not None or len(patterns) < 2 or any(pattern.hops for pattern in patterns):
         return patterns
     variables = [pattern.source.variable for pattern in patterns]
     if any(variable is None for variable in variables) or len(set(variables)) != len(variables):

@@ -122,6 +122,10 @@ graph handle.
        snapshot = view.build_sampler_snapshot("snapshots/2025-01-01")
        token = view.provenance.token
 
+Pass ``system_time=...`` to capture the visible prefix at a historical system
+instant, or ``through_commit=...`` to select a commit directly; these options
+are mutually exclusive.
+
 The immutable ``ReadViewProvenance`` records the stable database UUID, visible
 commit marker and full visibility-prefix digest, valid instant, backend layout,
 serializer format, and snapshot mechanism. Its token is SHA-256 over canonical
@@ -144,18 +148,22 @@ Temporal writes maintain indexes by default. Pass
 reads then fail closed until ``rebuild_temporal_indexes`` or
 ``rebuild_deferred_indexes`` succeeds. ``DEFER_REBUILD`` rebuilds before the
 write returns. Rebuilds are additive and idempotent because canonical history is
-append-only. A pre-index TKG-02 database is automatically reported with the
-``temporal`` stale family and can be migrated with ``rebuild_deferred_indexes``.
+append-only. Temporal node scans and untyped endpoint traversal use derived
+catalog indexes in addition to logical, system, and typed-adjacency indexes. A
+database predating any current temporal index format is automatically reported
+with the ``temporal`` stale family and can be migrated with
+``rebuild_deferred_indexes``.
 
 Current Limits
 --------------
 
-Read views cover immutable temporal history on every backend. They do not make
-mutable current-state records snapshot-safe on backends without a unified read
-snapshot, and they do not change ordinary Cypher queries. Cypher scalar temporal
-values are available, but temporal graph views, temporal property indexes, and
-temporal sampler arrays are not implemented yet. Marker-backed data that fails hash
-or envelope validation raises
+Read views cover immutable temporal history on every backend. Bitemporal Cypher
+``MATCH`` reads use these views, while unqualified Cypher retains mutable
+current-state behavior. Read views do not make mutable current-state records
+snapshot-safe on backends without a unified read snapshot. Temporal property
+indexes, interval-window matching, temporal writes through Cypher, and temporal
+sampler arrays are not implemented yet. Marker-backed data that fails hash or
+envelope validation raises
 ``TemporalCorruptionError`` rather than returning partial history.
 
 Version dataclasses contain immutable metadata and detached entity payloads.

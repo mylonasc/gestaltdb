@@ -163,6 +163,28 @@ def _analyze_query_with_scope(query: Query, initial: Scope, require_return: bool
         incoming = scope
         projections: tuple[ResolvedProjection, ...] = ()
         if isinstance(clause, (MatchClause, OptionalMatchClause)):
+            seen_qualifiers = set()
+            for qualifier in clause.qualifiers:
+                if qualifier.kind in seen_qualifiers:
+                    _raise_semantic(
+                        f"MATCH contains duplicate {qualifier.kind}-time qualifier",
+                        query.source,
+                        qualifier.span,
+                    )
+                seen_qualifiers.add(qualifier.kind)
+                if expression_variables(qualifier.expression):
+                    _raise_semantic(
+                        "Temporal qualifier expressions cannot reference row variables",
+                        query.source,
+                        qualifier.span,
+                    )
+                validate_function_calls(
+                    qualifier.expression,
+                    query.source,
+                    qualifier.span,
+                    allow_aggregate=False,
+                    clause="temporal qualifier",
+                )
             scope = _analyze_match(clause, scope, query.source)
         elif isinstance(clause, SubqueryClause):
             inner = _analyze_query_with_scope(clause.query, scope, True)

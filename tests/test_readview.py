@@ -161,7 +161,7 @@ def test_read_view_stops_before_gap_and_ignores_later_marker(memory_graph):
         Node("c", properties={"kind": "person"}),
         valid=TemporalInterval.parse("2024-01-01T00:00:00Z", None),
     )
-    memory_graph.put_node_version(
+    third = memory_graph.put_node_version(
         Node("d", properties={"kind": "person"}),
         valid=TemporalInterval.parse("2024-01-01T00:00:00Z", None),
     )
@@ -170,6 +170,11 @@ def test_read_view_stops_before_gap_and_ignores_later_marker(memory_graph):
 
     with memory_graph.read_view(valid_time="2024-06-01T00:00:00Z") as view:
         assert view.commit_horizon == 1
+        with memory_graph.read_view(
+            valid_time="2024-06-01T00:00:00Z",
+            system_time=third.system_time,
+        ) as system_view:
+            assert system_view.commit_horizon == 1
         memory_graph.store.put_metadata(marker_key, marker)
         assert view.get_node_as_of("c") is None
     with memory_graph.read_view(valid_time="2024-06-01T00:00:00Z") as newer:

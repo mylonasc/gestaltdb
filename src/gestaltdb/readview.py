@@ -263,6 +263,12 @@ class GraphReadView:
             **kwargs,
         )
 
+    def iter_nodes_as_of(self, *, valid_time=None):
+        return self._graph.iter_nodes_as_of(
+            valid_time=self.valid_time if valid_time is None else valid_time,
+            through_commit=self.commit_horizon,
+        )
+
     def get_node(self, key):
         logical_id = self._graph.key_to_string(key) if isinstance(key, bytes) else str(key)
         version = self.get_node_as_of(logical_id)

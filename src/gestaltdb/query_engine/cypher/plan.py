@@ -57,6 +57,7 @@ class MatchStep:
     group_id: int
     where: object = None
     selector: PathSelector | None = None
+    qualifiers: tuple[object, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,7 @@ class OptionalMatchStep:
     group_id: int
     where: object = None
     selector: PathSelector | None = None
+    qualifiers: tuple[object, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -286,9 +288,9 @@ def plan_staged_query(query: Query, scope=None, require_return: bool = True) -> 
             if index + 1 < len(clauses) and isinstance(clauses[index + 1], WhereClause):
                 attached_where = clauses[index + 1].expression
             if isinstance(clause, OptionalMatchClause):
-                operators.append(OptionalMatchStep(clause.patterns, group_id, attached_where, clause.selector))
+                operators.append(OptionalMatchStep(clause.patterns, group_id, attached_where, clause.selector, clause.qualifiers))
             else:
-                operators.append(MatchStep(clause.patterns, group_id, attached_where, clause.selector))
+                operators.append(MatchStep(clause.patterns, group_id, attached_where, clause.selector, clause.qualifiers))
             group_id += 1
         elif isinstance(clause, UnwindClause):
             operators.append(Unwind(clause.expression, clause.variable))

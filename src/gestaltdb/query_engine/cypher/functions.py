@@ -103,7 +103,7 @@ def _endpoint(args: list[object], context, *, name: str, attribute: str) -> obje
     endpoint = getattr(value, attribute, None)
     if endpoint is None:
         return None
-    node = context.graph.get_node(context.node_key_to_bytes(endpoint))
+    node = context.get_node(context.node_key_to_bytes(endpoint))
     return node
 
 
@@ -125,6 +125,24 @@ def _properties(args: list[object], context) -> object:
     if isinstance(properties, dict):
         return dict(properties)
     raise TypeError("properties() expects a map, node, or relationship")
+
+
+def _version_metadata(args: list[object], context, *, name: str) -> object:
+    (value,) = args
+    if value is None:
+        return None
+    if not _is_entity(value):
+        raise TypeError(f"{name}() expects a node or relationship")
+    version = context.version_for(value)
+    if version is None:
+        return None
+    if name == "versionId":
+        return version.version_id
+    if name == "validFrom":
+        return version.valid.start
+    if name == "validTo":
+        return version.valid.end
+    return version.system_time
 
 
 def _head(args: list[object], context) -> object:
@@ -451,6 +469,10 @@ FUNCTIONS: dict[str, FunctionDef] = {
     "startnode": _scalar("startnode", (1, 1), _start_node),
     "endnode": _scalar("endnode", (1, 1), _end_node),
     "properties": _scalar("properties", (1, 1), _properties),
+    "versionid": _scalar("versionid", (1, 1), partial(_version_metadata, name="versionId")),
+    "validfrom": _scalar("validfrom", (1, 1), partial(_version_metadata, name="validFrom")),
+    "validto": _scalar("validto", (1, 1), partial(_version_metadata, name="validTo")),
+    "systemfrom": _scalar("systemfrom", (1, 1), partial(_version_metadata, name="systemFrom")),
     "head": _scalar("head", (1, 1), _head),
     "last": _scalar("last", (1, 1), _last),
     "size": _scalar("size", (1, 1), _size),

@@ -43,6 +43,16 @@ class MatchClause:
     patterns: tuple[PathPatternClause, ...]
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
     selector: PathSelector | None = None
+    qualifiers: tuple[TemporalQualifier, ...] = ()
+
+
+@dataclass(frozen=True)
+class TemporalQualifier:
+    """One query-wide valid-time or system-time ``AS OF`` expression."""
+
+    kind: str
+    expression: object
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -64,6 +74,7 @@ class OptionalMatchClause:
     patterns: tuple[PathPatternClause, ...]
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
     selector: PathSelector | None = None
+    qualifiers: tuple[TemporalQualifier, ...] = ()
 
 
 @dataclass(frozen=True)

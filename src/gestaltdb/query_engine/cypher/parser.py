@@ -69,6 +69,7 @@ from .ast import (
     StringPredicate,
     SubqueryClause,
     SubscriptExpression,
+    TemporalQualifier,
     TraversalHop,
     UnaryExpression,
     UnionQuery,
@@ -97,8 +98,10 @@ _GRAMMAR = r"""
  show_indexes: "SHOW"i ("INDEX"i | "INDEXES"i)
 
   match_query: (match_clause | optional_match_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | merge_clause | foreach_clause) (match_clause | optional_match_clause | where_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | merge_clause | foreach_clause | with_section)* return_full
-  match_clause: "MATCH"i shortest_selector? pattern ("," pattern)*
-  optional_match_clause: "OPTIONAL"i "MATCH"i shortest_selector? pattern ("," pattern)*
+  match_clause: "MATCH"i shortest_selector? pattern ("," pattern)* temporal_qualifier*
+  optional_match_clause: "OPTIONAL"i "MATCH"i shortest_selector? pattern ("," pattern)* temporal_qualifier*
+  temporal_qualifier: "FOR"i "VALID_TIME"i "AS"i "OF"i expression -> valid_time_qualifier
+                    | "FOR"i "SYSTEM_TIME"i "AS"i "OF"i expression -> system_time_qualifier
   shortest_selector: QUANTIFIER "SHORTEST"i -> shortest_quantified
                    | "SHORTEST"i INTEGER? -> shortest_k
   create_clause: "CREATE"i pattern ("," pattern)*
@@ -299,6 +302,7 @@ class _MatchPatterns:
     span: SourceSpan
     optional: bool = False
     selector: PathSelector | None = None
+    qualifiers: tuple[TemporalQualifier, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -682,6 +686,7 @@ class _ASTBuilder(Transformer):
             _source_span(meta),
             False,
             selector,
+            tuple(item for item in children if isinstance(item, TemporalQualifier)),
         )
 
     @v_args(meta=True)
@@ -692,7 +697,16 @@ class _ASTBuilder(Transformer):
             _source_span(meta),
             True,
             selector,
+            tuple(item for item in children if isinstance(item, TemporalQualifier)),
         )
+
+    @v_args(meta=True)
+    def valid_time_qualifier(self, meta, children):
+        return TemporalQualifier("valid", children[0], span=_source_span(meta))
+
+    @v_args(meta=True)
+    def system_time_qualifier(self, meta, children):
+        return TemporalQualifier("system", children[0], span=_source_span(meta))
 
     def shortest_quantified(self, children):
         return PathSelector(str(children[0]).lower(), None)
@@ -998,6 +1012,12 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
             "Query cannot be represented by legacy parse(); use parse_ast()",
             query,
         )
+    if any(getattr(clause, "qualifiers", ()) for clause in canonical.clauses):
+        raise _located_error(
+            CypherSemanticError,
+            "Temporal qualifiers cannot be represented by legacy parse(); use parse_ast()",
+            query,
+        )
     if _canonical_uses_functions(canonical) or _canonical_uses_extended_expressions(canonical):
         raise _located_error(
             CypherSemanticError,
@@ -1016,11 +1036,58 @@ def parse_ast(query: str) -> Query | SampleTypedPathsCall | UnionQuery | CreateC
     if isinstance(parsed, (CreateConstraint, DropConstraint, ShowConstraints, ShowIndexes)):
         return parsed
     if isinstance(parsed, tuple) and parsed and parsed[0] == "union":
-        return _build_union_query(parsed, query)
+        canonical = _build_union_query(parsed, query)
+        _validate_temporal_contract(canonical, query)
+        return canonical
 
     canonical = _build_canonical_query(parsed, query)
     analyze_query(canonical)
+    _validate_temporal_contract(canonical, query)
     return canonical
+
+
+def _walk_queries(value):
+    """Yield a canonical query and all nested subquery/FOREACH queries."""
+    queries = value.branches if isinstance(value, UnionQuery) else (value,)
+    for query in queries:
+        yield query
+        for clause in query.clauses:
+            if isinstance(clause, SubqueryClause):
+                yield from _walk_queries(clause.query)
+            elif isinstance(clause, ForeachClause):
+                yield from _walk_queries(Query(clause.body, query.source))
+
+
+def _validate_temporal_contract(value, source: str) -> None:
+    """Validate query-wide qualifier dependencies and read-only semantics."""
+    qualifiers = [
+        qualifier
+        for query in _walk_queries(value)
+        for clause in query.clauses
+        if isinstance(clause, (MatchClause, OptionalMatchClause))
+        for qualifier in clause.qualifiers
+    ]
+    if not qualifiers:
+        return
+    if any(qualifier.kind == "system" for qualifier in qualifiers) and not any(
+        qualifier.kind == "valid" for qualifier in qualifiers
+    ):
+        raise _located_error(
+            CypherSemanticError,
+            "FOR SYSTEM_TIME requires FOR VALID_TIME in the same query",
+            source,
+        )
+    write_types = (CreateClause, SetClause, RemoveClause, DeleteClause, MergeClause, ForeachClause)
+    if any(
+        isinstance(clause, write_types)
+        for query in _walk_queries(value)
+        for clause in query.clauses
+    ):
+        raise _located_error(
+            CypherSemanticError,
+            "Temporal-qualified queries are read-only",
+            source,
+        )
 
 
 def _build_union_query(parsed, query: str) -> UnionQuery:
@@ -1104,9 +1171,9 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
                 raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
             close_projection()
             if item.optional:
-                clauses.append(OptionalMatchClause(item.values, span=item.span, selector=item.selector))
+                clauses.append(OptionalMatchClause(item.values, span=item.span, selector=item.selector, qualifiers=item.qualifiers))
             else:
-                clauses.append(MatchClause(item.values, span=item.span, selector=item.selector))
+                clauses.append(MatchClause(item.values, span=item.span, selector=item.selector, qualifiers=item.qualifiers))
         elif isinstance(item, _ParsedPart) and item.kind == "where":
             # A WHERE following WITH belongs to that WITH stage, so the open
             # projection must be closed first to preserve textual order.

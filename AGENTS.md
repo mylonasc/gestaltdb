@@ -109,6 +109,7 @@ Supported features include:
 - Stable `ORDER BY` with Cypher value ordering, nulls last ascending/first descending, and strict Boolean predicate/coercion rules.
 - `RETURN`, aliases, `RETURN *`, general projection expressions (including `CASE`, subscripts/slices, list comprehensions, `reduce`, map projections), `DISTINCT`, alias-aware `ORDER BY`, and literal or parameterized `SKIP`/`LIMIT`.
 - Chained `MATCH` clauses with clause-local `WHERE`.
+- Query-wide bitemporal `MATCH`/`OPTIONAL MATCH` qualifiers (`FOR VALID_TIME AS OF`, optional `FOR SYSTEM_TIME AS OF`) propagated through paths, `UNION`, and subqueries, with `versionId`/`validFrom`/`validTo`/`systemFrom` metadata functions; qualified queries are read-only.
 - `OPTIONAL MATCH` as a left-outer join with `None`-filled rows, post-optional `WHERE` filtering, and null-safe downstream matching.
 - `UNWIND list AS x` expanding rows per element, usable mid-pipeline or as the opening clause.
 - `UNION [ALL]` over independently planned branches with matching columns; branch modifiers apply within branches, `UNION` deduplicates cumulatively.
