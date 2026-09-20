@@ -1,6 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { ScaffoldApp } from "./App";
+import { App } from "./App";
 import type { VizPayload } from "./viz-types";
 import "./styles.css";
 
@@ -16,7 +16,7 @@ if (!payload || payload.version !== 1) {
 } else {
   createRoot(root).render(
     <React.StrictMode>
-      <ScaffoldApp payload={payload} />
+      <App payload={payload} />
     </React.StrictMode>
   );
 }
