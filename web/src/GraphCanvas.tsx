@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as d3 from "d3";
 import type { VizPayload } from "./viz-types";
+import type { Selection } from "./Inspector";
 import { colorFor } from "./colors";
 import { groupKey, typeKey } from "./graph";
 
@@ -18,6 +19,12 @@ interface Props {
   fitSignal: number;
   /** Increment to release all pinned nodes. */
   unpinSignal: number;
+  selection: Selection | null;
+  onSelect: (selection: Selection | null) => void;
+  hiddenNodes: string[];
+  hiddenEdges: string[];
+  dimNodes: string[];
+  dimEdges: string[];
 }
 
 interface SimNode extends d3.SimulationNodeDatum {
@@ -32,14 +39,34 @@ interface SimLink extends d3.SimulationLinkDatum<SimNode> {
 
 const NODE_RADIUS = 7;
 
-export function GraphCanvas({ payload, settings, fitSignal, unpinSignal }: Props) {
+export function GraphCanvas({
+  payload,
+  settings,
+  fitSignal,
+  unpinSignal,
+  selection,
+  onSelect,
+  hiddenNodes,
+  hiddenEdges,
+  dimNodes,
+  dimEdges,
+}: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const simRef = useRef<d3.Simulation<SimNode, SimLink> | null>(null);
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const nodesRef = useRef<SimNode[]>([]);
   const linksRef = useRef<SimLink[]>([]);
+  const nodeSelRef = useRef<d3.Selection<SVGGElement, SimNode, SVGGElement, unknown> | null>(null);
+  const labelSelRef = useRef<d3.Selection<SVGTextElement, SimNode, SVGGElement, unknown> | null>(null);
+  const edgeSelRef = useRef<d3.Selection<SVGLineElement, SimLink, SVGGElement, unknown> | null>(null);
+  const hitSelRef = useRef<d3.Selection<SVGLineElement, SimLink, SVGGElement, unknown> | null>(null);
+  const loopSelRef = useRef<d3.Selection<SVGPathElement, SimLink, SVGGElement, unknown> | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+  const viewRef = useRef({ selection, hiddenNodes, hiddenEdges, dimNodes, dimEdges, showLabels: settings.showLabels });
+  viewRef.current = { selection, hiddenNodes, hiddenEdges, dimNodes, dimEdges, showLabels: settings.showLabels };
 
   // Build (or rebuild) the simulation whenever the payload identity changes.
   useEffect(() => {
@@ -47,6 +74,7 @@ export function GraphCanvas({ payload, settings, fitSignal, unpinSignal }: Props
     if (!svgEl) return;
     const svg = d3.select(svgEl);
     svg.selectAll("*").remove();
+    svg.on("click", () => onSelectRef.current(null));
 
     const byId = new Map<string, SimNode>();
     payload.nodes.forEach((node, index) => {
@@ -92,6 +120,7 @@ export function GraphCanvas({ payload, settings, fitSignal, unpinSignal }: Props
     const viewport = svg.append("g").attr("class", "viewport");
     const edgeLayer = viewport.append("g").attr("class", "edges");
     const loopLayer = viewport.append("g").attr("class", "loops");
+    const hitLayer = viewport.append("g").attr("class", "hits");
     const nodeLayer = viewport.append("g").attr("class", "nodes");
     const labelLayer = viewport.append("g").attr("class", "labels");
 
@@ -124,10 +153,36 @@ export function GraphCanvas({ payload, settings, fitSignal, unpinSignal }: Props
       .selectAll<SVGLineElement, SimLink>("line")
       .data(plainLinks, (link) => link.uid)
       .join("line")
+      .attr("class", "edge")
       .attr("stroke", (link) => colorFor(link.etype))
       .attr("stroke-width", 1.2)
       .attr("stroke-opacity", 0.7)
       .attr("marker-end", (link) => `url(#gdviz-arrow-${typeIndex.get(link.etype) ?? 0})`);
+    edgeSelRef.current = edgeSel;
+
+    // Wide invisible hit targets make thin edges clickable/keyboardable.
+    const hitSel = hitLayer
+      .selectAll<SVGLineElement, SimLink>("line")
+      .data(plainLinks, (link) => link.uid)
+      .join("line")
+      .attr("class", "edge-hit")
+      .attr("stroke", "transparent")
+      .attr("stroke-width", 10)
+      .attr("tabindex", 0)
+      .attr("role", "button")
+      .attr("aria-label", (link) => `Edge ${link.uid}`)
+      .on("click", (event, link) => {
+        event.stopPropagation();
+        onSelectRef.current({ kind: "edge", id: link.uid });
+      })
+      .on("keydown", (event, link) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelectRef.current({ kind: "edge", id: link.uid });
+        }
+      });
+    hitSel.append("title").text((link) => `${link.uid} (${link.etype})`);
+    hitSelRef.current = hitSel;
 
     const loopSel = loopLayer
       .selectAll<SVGPathElement, SimLink>("path")
@@ -137,6 +192,7 @@ export function GraphCanvas({ payload, settings, fitSignal, unpinSignal }: Props
       .attr("stroke", (link) => colorFor(link.etype))
       .attr("stroke-width", 1.2)
       .attr("stroke-opacity", 0.7);
+    loopSelRef.current = loopSel;
 
     const drag = d3
       .drag<SVGGElement, SimNode>()
@@ -159,7 +215,20 @@ export function GraphCanvas({ payload, settings, fitSignal, unpinSignal }: Props
       .data(nodes, (node) => node.uid)
       .join("g")
       .attr("class", "node")
+      .attr("tabindex", 0)
+      .attr("role", "button")
+      .attr("aria-label", (node) => `Node ${node.uid}`)
       .call(drag)
+      .on("click", (event, node) => {
+        event.stopPropagation();
+        onSelectRef.current({ kind: "node", id: node.uid });
+      })
+      .on("keydown", (event, node) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelectRef.current({ kind: "node", id: node.uid });
+        }
+      })
       .on("dblclick", (_event, node) => {
         node.fx = null;
         node.fy = null;
@@ -172,6 +241,7 @@ export function GraphCanvas({ payload, settings, fitSignal, unpinSignal }: Props
       .attr("stroke", "currentColor")
       .attr("stroke-width", 1.2);
     nodeSel.append("title").text((node) => node.uid);
+    nodeSelRef.current = nodeSel;
 
     const labelSel = labelLayer
       .selectAll<SVGTextElement, SimNode>("text")
@@ -182,9 +252,15 @@ export function GraphCanvas({ payload, settings, fitSignal, unpinSignal }: Props
       .attr("dy", 4)
       .text((node) => node.uid);
     labelSel.attr("display", settingsRef.current.showLabels ? null : "none");
+    labelSelRef.current = labelSel;
 
     sim.on("tick", () => {
       edgeSel
+        .attr("x1", (link) => (link.source as SimNode).x ?? 0)
+        .attr("y1", (link) => (link.source as SimNode).y ?? 0)
+        .attr("x2", (link) => (link.target as SimNode).x ?? 0)
+        .attr("y2", (link) => (link.target as SimNode).y ?? 0);
+      hitSel
         .attr("x1", (link) => (link.source as SimNode).x ?? 0)
         .attr("y1", (link) => (link.source as SimNode).y ?? 0)
         .attr("x2", (link) => (link.target as SimNode).x ?? 0)
@@ -200,16 +276,47 @@ export function GraphCanvas({ payload, settings, fitSignal, unpinSignal }: Props
       labelSel.attr("x", (node) => node.x ?? 0).attr("y", (node) => node.y ?? 0);
     });
 
+    applyView();
     // Initial fit once geometry exists.
     fitViewport();
 
     return () => {
       sim.stop();
       simRef.current = null;
+      nodeSelRef.current = null;
+      labelSelRef.current = null;
+      edgeSelRef.current = null;
+      hitSelRef.current = null;
+      loopSelRef.current = null;
       svg.selectAll("*").remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload]);
+
+  function applyView() {
+    const view = viewRef.current;
+    const hiddenNodeSet = new Set(view.hiddenNodes);
+    const hiddenEdgeSet = new Set(view.hiddenEdges);
+    const dimNodeSet = new Set(view.dimNodes);
+    const dimEdgeSet = new Set(view.dimEdges);
+    const selected = view.selection;
+    nodeSelRef.current
+      ?.attr("display", (node) => (hiddenNodeSet.has(node.uid) ? "none" : null))
+      .attr("opacity", (node) => (dimNodeSet.has(node.uid) ? 0.15 : 1))
+      .classed("selected", (node) => selected?.kind === "node" && selected.id === node.uid);
+    labelSelRef.current
+      ?.attr("display", (node) =>
+        hiddenNodeSet.has(node.uid) || !view.showLabels ? "none" : null
+      )
+      .attr("opacity", (node) => (dimNodeSet.has(node.uid) ? 0.15 : 1));
+    edgeSelRef.current
+      ?.attr("display", (link) => (hiddenEdgeSet.has(link.uid) ? "none" : null))
+      .attr("stroke-opacity", (link) => (dimEdgeSet.has(link.uid) ? 0.12 : 0.7));
+    hitSelRef.current?.attr("display", (link) => (hiddenEdgeSet.has(link.uid) ? "none" : null));
+    loopSelRef.current
+      ?.attr("display", (link) => (hiddenEdgeSet.has(link.uid) ? "none" : null))
+      .attr("stroke-opacity", (link) => (dimEdgeSet.has(link.uid) ? 0.12 : 0.7));
+  }
 
   function fitViewport() {
     const svgEl = svgRef.current;
@@ -242,6 +349,12 @@ export function GraphCanvas({ payload, settings, fitSignal, unpinSignal }: Props
       .call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
   }
 
+  // Apply view sets (filters, focus, highlight, selection, labels) without
+  // restarting the layout.
+  useEffect(() => {
+    applyView();
+  }, [selection, hiddenNodes, hiddenEdges, dimNodes, dimEdges, settings.showLabels]);
+
   // Pause / resume.
   useEffect(() => {
     const sim = simRef.current;
@@ -267,16 +380,6 @@ export function GraphCanvas({ payload, settings, fitSignal, unpinSignal }: Props
     );
     if (!settings.paused) sim.alpha(0.5).restart();
   }, [settings.charge, settings.linkDistance, settings.paused]);
-
-  // Label visibility.
-  useEffect(() => {
-    const svgEl = svgRef.current;
-    if (!svgEl) return;
-    d3.select(svgEl)
-      .select("g.labels")
-      .selectAll("text")
-      .attr("display", settings.showLabels ? null : "none");
-  }, [settings.showLabels]);
 
   // Imperative signals.
   useEffect(() => {
