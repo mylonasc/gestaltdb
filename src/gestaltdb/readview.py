@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import shutil
-import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -280,8 +277,27 @@ class GraphReadView:
         return None if version is None else version.edge
 
     def build_sampler_snapshot(self, output_path, **kwargs):
-        """Build an ordinary sampler snapshot from this exact point view."""
+        """Build a sampler snapshot from this exact source view."""
         from .sampling import SamplerSnapshot
+
+        temporal = kwargs.pop("temporal", False)
+        source_db = kwargs.pop("source_db", None)
+        manifest_path = (
+            None
+            if self._graph._store_path is None
+            else self._graph._store_path / "gestaltdb_manifest.json"
+        )
+        if source_db is None and manifest_path is not None and manifest_path.exists():
+            source_db = {
+                "path": str(self._graph._store_path),
+                "path_type": "absolute",
+                "backend": self._graph._backend_name,
+                "serializer": self._graph._serializer_name,
+            }
+        if temporal:
+            return SamplerSnapshot.build_temporal(
+                self, output_path, source_db=source_db, **kwargs
+            )
 
         node_ids = sorted({version.logical_id for version in self.iter_node_versions()})
         edge_ids = sorted({version.logical_id for version in self.iter_edge_versions()})
@@ -296,37 +312,13 @@ class GraphReadView:
             if version is not None:
                 edges[self._graph.node_key_to_bytes(logical_id)] = version.edge
 
-        path = Path(output_path)
-        if path.exists():
-            raise ValueError(f"snapshot output already exists: {path}")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        staging = Path(tempfile.mkdtemp(prefix=f".{path.name}.", dir=path.parent))
-        source_db = kwargs.pop("source_db", None)
-        manifest_path = (
-            None
-            if self._graph._store_path is None
-            else self._graph._store_path / "gestaltdb_manifest.json"
+        return SamplerSnapshot.build(
+            _MaterializedGraph(self._graph, nodes, edges),
+            output_path,
+            source_db=source_db,
+            source_provenance=self.provenance.to_dict(),
+            **kwargs,
         )
-        if source_db is None and manifest_path is not None and manifest_path.exists():
-            source_db = {
-                "path": str(self._graph._store_path),
-                "path_type": "absolute",
-                "backend": self._graph._backend_name,
-                "serializer": self._graph._serializer_name,
-            }
-        try:
-            SamplerSnapshot.build(
-                _MaterializedGraph(self._graph, nodes, edges),
-                staging,
-                source_db=source_db,
-                source_provenance=self.provenance.to_dict(),
-                **kwargs,
-            )
-            os.replace(staging, path)
-        except Exception:
-            shutil.rmtree(staging, ignore_errors=True)
-            raise
-        return SamplerSnapshot.load(path)
 
     def verify_source(self) -> None:
         self.provenance.verify_source(self._graph)

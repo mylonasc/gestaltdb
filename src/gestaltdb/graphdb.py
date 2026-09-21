@@ -1836,6 +1836,9 @@ class GraphDB:
         self,
         output_path,
         *,
+        temporal: bool = False,
+        system_time=None,
+        time_bucket: str | None = None,
         source_db_reference: bool = True,
         source_db_path=None,
         source_db_path_mode: str = "relative",
@@ -1845,6 +1848,10 @@ class GraphDB:
 
         Args:
             output_path: Directory where snapshot arrays and metadata are written.
+            temporal: Build temporal-history arrays from one pinned read view.
+            system_time: Optional system-time horizon for a temporal build.
+            time_bucket: Temporal candidate-index bucket policy: ``None``,
+                ``"none"``, ``"hour"``, or ``"day"``.
             **kwargs: Options forwarded to ``SamplerSnapshot.build``.
 
         Returns:
@@ -1864,6 +1871,14 @@ class GraphDB:
                     "backend": self._backend_name,
                     "serializer": self._serializer_name,
                 }
+        if temporal:
+            with self.read_view(valid_time=0, system_time=system_time) as view:
+                return view.build_sampler_snapshot(
+                    output_path, temporal=True, time_bucket=time_bucket,
+                    **kwargs,
+                )
+        if system_time is not None or time_bucket is not None:
+            raise ValueError("system_time and time_bucket require temporal=True")
         return SamplerSnapshot.build(self, output_path, **kwargs)
 
     @contextmanager

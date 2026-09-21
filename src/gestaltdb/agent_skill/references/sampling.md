@@ -16,6 +16,10 @@ Use this for application code and external node IDs:
 
 Use `SamplerSnapshot` and `SamplerEngine` for ML training pipelines. These APIs use compact integer IDs internally. Convert back with `snapshot.external_node_id(...)` or `snapshot.global_triple_to_external(...)`.
 
+Build temporal history through one authenticated source view with `graph.build_sampler_snapshot(path, temporal=True, system_time=known_at, time_bucket="day")`. Temporal format-v2 snapshots align edge-version IDs, validity arrays, open-end masks, and commit/system provenance with compact edge rows. Their endpoint/relation indexes are ordered by valid start. Loading validates the completion manifest, checksums, schemas, intervals, CSR bounds, and provenance in RAM and memmap modes. Legacy format-v1 snapshots remain readable without temporal or integrity guarantees.
+
+`snapshot.temporal_candidates(...)` provides start-time candidate pruning only. Exact temporal filtering during sampling is not implemented yet.
+
 ## Example
 
 ```python

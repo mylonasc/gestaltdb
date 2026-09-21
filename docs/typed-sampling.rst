@@ -150,3 +150,38 @@ them from stored edges.
 
    rebuilt = graph_db.rebuild_typed_adjacency()
    print(f"rebuilt {rebuilt} typed adjacency records")
+
+Temporal Sampler Snapshots
+--------------------------
+
+Format-v2 snapshots can preserve the edge history visible at one system-time
+horizon. Each compact edge row has an edge-version ID, half-open valid interval,
+open-end mask, commit ID, and system time. The temporal outgoing and incoming
+CSR indexes are ordered by endpoint, relation, and valid-time start.
+
+.. code-block:: python
+
+   snapshot = graph_db.build_sampler_snapshot(
+       "snapshots/history",
+       temporal=True,
+       system_time="2026-01-01T00:00:00Z",
+       time_bucket="day",
+   )
+
+   assert snapshot.temporal
+   print(snapshot.edge_version_ids)
+   print(snapshot.valid_from_us, snapshot.valid_to_us, snapshot.valid_to_open)
+
+The build captures exactly one authenticated ``GraphReadView``. Corrections and
+retractions are resolved at its system horizon, including splitting a surviving
+version into multiple edge rows when only part of its validity is retracted.
+``temporal_candidates(node, relation, valid_time, direction=...)`` uses the
+start-time ordering to return a candidate superset; exact interval filtering and
+temporal sampling are reserved for TKG-08.
+
+V2 publication is atomic: arrays and canonical metadata are written in a sibling
+staging directory, checksummed, and followed by ``completion.json`` before the
+directory is renamed into place. Loading in RAM or memmap mode validates the
+completion record, artifact catalog, SHA-256 checksums, dtypes, shapes, aligned
+lengths, CSR bounds, interval invariants, and source-provenance token. Existing
+format-v1 snapshots still load, but have no integrity or temporal guarantees.
