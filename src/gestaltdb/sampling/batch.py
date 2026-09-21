@@ -27,6 +27,11 @@ class SampledSubgraphBatch:
             negatives_per_positive, 3)``.
         graph_node_offsets: Optional graph component offsets for packed batches.
         graph_edge_offsets: Optional edge component offsets for packed batches.
+        edge_version_ids: Edge-version IDs aligned with ``edge_ids_global`` for
+            temporal snapshots, otherwise ``None``.
+        valid_from_us: Inclusive valid starts aligned with sampled edges.
+        valid_to_us: Exclusive valid ends, with zero for open intervals.
+        valid_to_open: Open-end masks aligned with sampled edges.
 
     Examples:
         Convert to plain NumPy arrays::
@@ -45,6 +50,10 @@ class SampledSubgraphBatch:
     negatives: np.ndarray
     graph_node_offsets: np.ndarray | None = None
     graph_edge_offsets: np.ndarray | None = None
+    edge_version_ids: np.ndarray | None = None
+    valid_from_us: np.ndarray | None = None
+    valid_to_us: np.ndarray | None = None
+    valid_to_open: np.ndarray | None = None
 
     @property
     def n_nodes(self) -> int:
@@ -71,6 +80,13 @@ class SampledSubgraphBatch:
             "positives": self.positives,
             "negatives": self.negatives,
         }
+        if self.edge_version_ids is not None:
+            result.update({
+                "edge_version_ids": self.edge_version_ids,
+                "valid_from_us": self.valid_from_us,
+                "valid_to_us": self.valid_to_us,
+                "valid_to_open": self.valid_to_open,
+            })
         if self.graph_node_offsets is not None:
             result["graph_node_offsets"] = self.graph_node_offsets
         if self.graph_edge_offsets is not None:
@@ -100,14 +116,22 @@ class SampledSubgraphBatch:
             raise ImportError("Missing optional dependency 'pyarrow' required for SampledSubgraphBatch.to_arrow") from exc
         positives = self.positives.reshape(-1, 3) if self.positives.size else np.empty((0, 3), dtype=np.int64)
         negatives = self.negatives.reshape(-1, 3) if self.negatives.size else np.empty((0, 3), dtype=np.int64)
+        edge_columns = {
+            "edge_id_global": self.edge_ids_global,
+            "sender": self.senders,
+            "receiver": self.receivers,
+            "relation_id": self.edge_relation_ids,
+        }
+        if self.edge_version_ids is not None:
+            edge_columns.update({
+                "edge_version_id": self.edge_version_ids,
+                "valid_from_us": self.valid_from_us,
+                "valid_to_us": self.valid_to_us,
+                "valid_to_open": self.valid_to_open,
+            })
         result = {
             "nodes": pa.table({"node_id_global": self.node_ids_global, "node_type_id": self.node_type_ids}),
-            "edges": pa.table({
-                "edge_id_global": self.edge_ids_global,
-                "sender": self.senders,
-                "receiver": self.receivers,
-                "relation_id": self.edge_relation_ids,
-            }),
+            "edges": pa.table(edge_columns),
             "positives": pa.table({"src": positives[:, 0], "rel": positives[:, 1], "dst": positives[:, 2]}),
             "negatives": pa.table({"src": negatives[:, 0], "rel": negatives[:, 1], "dst": negatives[:, 2]}),
         }
@@ -120,7 +144,8 @@ class SampledSubgraphBatch:
 
         Returns:
             Dictionary with ``edge_index``, node/edge type tensors, global ID
-            tensors, and positive/negative label tensors.
+            tensors, positive/negative label tensors, and temporal edge-version
+            IDs as string-array metadata when present.
 
         Raises:
             ImportError: If ``torch`` is not installed.
@@ -129,7 +154,7 @@ class SampledSubgraphBatch:
             import torch
         except ImportError as exc:
             raise ImportError("Missing optional dependency 'torch' required for SampledSubgraphBatch.to_pyg") from exc
-        return {
+        result = {
             "num_nodes": self.n_nodes,
             "edge_index": torch.as_tensor(np.stack([self.senders, self.receivers]), dtype=torch.long),
             "node_type": torch.as_tensor(self.node_type_ids, dtype=torch.long),
@@ -139,6 +164,14 @@ class SampledSubgraphBatch:
             "positives": torch.as_tensor(self.positives, dtype=torch.long),
             "negatives": torch.as_tensor(self.negatives, dtype=torch.long),
         }
+        if self.edge_version_ids is not None:
+            result.update({
+                "edge_version_ids": self.edge_version_ids.copy(),
+                "valid_from_us": torch.as_tensor(self.valid_from_us, dtype=torch.long),
+                "valid_to_us": torch.as_tensor(self.valid_to_us, dtype=torch.long),
+                "valid_to_open": torch.as_tensor(self.valid_to_open, dtype=torch.bool),
+            })
+        return result
 
     def to_tf_gnns(self):
         """Return a TensorFlow-friendly graph dictionary and labels.
@@ -166,6 +199,13 @@ class SampledSubgraphBatch:
             "n_edges": tf.convert_to_tensor([self.n_edges], dtype=tf.int64),
             "n_graphs": tf.convert_to_tensor([1], dtype=tf.int64),
         }
+        if self.edge_version_ids is not None:
+            graph.update({
+                "edge_version_ids": tf.convert_to_tensor(self.edge_version_ids, dtype=tf.string),
+                "valid_from_us": tf.convert_to_tensor(self.valid_from_us, dtype=tf.int64),
+                "valid_to_us": tf.convert_to_tensor(self.valid_to_us, dtype=tf.int64),
+                "valid_to_open": tf.convert_to_tensor(self.valid_to_open, dtype=tf.bool),
+            })
         labels = {
             "positives": tf.convert_to_tensor(self.positives, dtype=tf.int64),
             "negatives": tf.convert_to_tensor(self.negatives, dtype=tf.int64),
@@ -177,7 +217,8 @@ class SampledSubgraphBatch:
 
         Returns:
             Tuple ``(graph, labels)`` where ``graph`` is a DGL graph and labels
-            contains positive and negative PyTorch tensors.
+            contains positive and negative PyTorch tensors. Temporal graphs keep
+            string edge-version IDs on ``graph.edge_version_ids``.
 
         Raises:
             ImportError: If ``dgl`` or ``torch`` is not installed.
@@ -192,6 +233,11 @@ class SampledSubgraphBatch:
         graph.ndata["global_id"] = torch.as_tensor(self.node_ids_global, dtype=torch.long)
         graph.edata["relation_id"] = torch.as_tensor(self.edge_relation_ids, dtype=torch.long)
         graph.edata["global_id"] = torch.as_tensor(self.edge_ids_global, dtype=torch.long)
+        if self.edge_version_ids is not None:
+            graph.edge_version_ids = self.edge_version_ids.copy()
+            graph.edata["valid_from_us"] = torch.as_tensor(self.valid_from_us, dtype=torch.long)
+            graph.edata["valid_to_us"] = torch.as_tensor(self.valid_to_us, dtype=torch.long)
+            graph.edata["valid_to_open"] = torch.as_tensor(self.valid_to_open, dtype=torch.bool)
         return graph, {
             "positives": torch.as_tensor(self.positives, dtype=torch.long),
             "negatives": torch.as_tensor(self.negatives, dtype=torch.long),

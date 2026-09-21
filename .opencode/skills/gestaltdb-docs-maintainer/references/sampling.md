@@ -47,7 +47,7 @@ This generates binary `.npy` CSR-style arrays (`row_ptr`, `col_idx`, `relations`
 
 Format v2 is atomically published with a completion manifest and a SHA-256/dtype/shape record for every array. The loader validates those records, CSR bounds, aligned lengths, interval invariants, and provenance before exposing RAM or memmap arrays. Format-v1 snapshots remain loadable without these guarantees.
 
-Temporal snapshots expose `edge_version_ids`, `valid_from_us`, `valid_to_us`, `valid_to_open`, `edge_system_time_us`, and `edge_commit_ids`, all aligned with compact edge rows. `temporal_out` and `temporal_in` group rows by endpoint/relation and valid start. `temporal_candidates(...)` only prunes by start time and returns a superset; exact runtime temporal filtering is not available until TKG-08.
+Temporal snapshots expose `edge_version_ids`, `valid_from_us`, `valid_to_us`, `valid_to_open`, `edge_system_time_us`, and `edge_commit_ids`, all aligned with compact edge rows. `temporal_out` and `temporal_in` group rows by endpoint/relation and valid start. `SamplerEngine` uses those indexes and then applies exact half-open point/window predicates before random selection. Pass `temporal=TemporalContext.as_of(...)` or `TemporalContext.during(...)`; windows support `window_policy="overlap"` and `"contained"`, and multihop/subgraph calls support `causal_policy="none"`, `"nondecreasing"`, or `"nonincreasing"`. Temporal neighbor and batch results carry aligned edge-version and validity arrays.
 
 ### Loading into Engine
 - `SamplerEngine.load(snapshot_path, mode="ram", seed=42)`: Eagerly loads all arrays into process RAM.

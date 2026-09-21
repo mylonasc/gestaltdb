@@ -1,9 +1,12 @@
 import random
+import sys
+from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from gestaltdb.graphdb import Edge, Node
-from gestaltdb.sampling import AsyncBatchFeeder, HardNegativeConfig, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
+from gestaltdb.sampling import AsyncBatchFeeder, HardNegativeConfig, SampledSubgraphBatch, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
 from gestaltdb.sampling import as_sampling_pattern
 
 from .conftest import blocked_import, populate_typed_graph
@@ -274,6 +277,57 @@ def test_sampled_batch_optional_adapter_dependency_errors(tmp_path):
     with blocked_import("torch"):
         with pytest.raises(ImportError, match="torch"):
             batch.to_pyg()
+
+
+def test_sampled_batch_preserves_positional_graph_offsets():
+    arrays = [np.empty(0, dtype=np.int64) for _ in range(8)]
+    node_offsets = np.array([0], dtype=np.int64)
+    edge_offsets = np.array([0], dtype=np.int64)
+
+    batch = SampledSubgraphBatch(*arrays, node_offsets, edge_offsets)
+
+    assert batch.graph_node_offsets is node_offsets
+    assert batch.graph_edge_offsets is edge_offsets
+    assert batch.edge_version_ids is None
+
+
+def test_temporal_batch_adapters_preserve_edge_version_ids(monkeypatch):
+    batch = SampledSubgraphBatch(
+        node_ids_global=np.array([0, 1], dtype=np.int64),
+        node_type_ids=np.array([-1, -1], dtype=np.int64),
+        senders=np.array([0], dtype=np.int64),
+        receivers=np.array([1], dtype=np.int64),
+        edge_ids_global=np.array([3], dtype=np.int64),
+        edge_relation_ids=np.array([0], dtype=np.int64),
+        positives=np.empty((0, 3), dtype=np.int64),
+        negatives=np.empty((0, 3), dtype=np.int64),
+        edge_version_ids=np.array(["00000000-0000-0000-0000-000000000003"]),
+        valid_from_us=np.array([10], dtype=np.int64),
+        valid_to_us=np.array([20], dtype=np.int64),
+        valid_to_open=np.array([False]),
+    )
+    fake_torch = SimpleNamespace(
+        long=np.int64,
+        bool=np.bool_,
+        as_tensor=lambda value, dtype: np.asarray(value, dtype=dtype),
+    )
+
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    pyg = batch.to_pyg()
+
+    class FakeGraph:
+        def __init__(self):
+            self.ndata = {}
+            self.edata = {}
+
+    graph = FakeGraph()
+    monkeypatch.setitem(sys.modules, "dgl", SimpleNamespace(graph=lambda *args, **kwargs: graph))
+    dgl_graph, _ = batch.to_dgl()
+
+    assert pyg["edge_version_ids"].tolist() == batch.edge_version_ids.tolist()
+    assert dgl_graph.edge_version_ids.tolist() == batch.edge_version_ids.tolist()
+    assert np.array_equal(pyg["valid_from_us"], batch.valid_from_us)
+    assert np.array_equal(dgl_graph.edata["valid_from_us"], batch.valid_from_us)
 
 
 def test_async_batch_feeder_prefetches_batches(tmp_path):

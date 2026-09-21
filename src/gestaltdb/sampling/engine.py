@@ -8,6 +8,7 @@ from typing import Iterable, Sequence
 
 import numpy as np
 
+from ..temporal import TemporalContext
 from .batch import SampledSubgraphBatch
 from .negatives import HardNegativeConfig
 from .snapshot import SamplerSnapshot
@@ -24,6 +25,10 @@ class SampledNeighbors:
         neighbor_nodes: Neighbor compact node IDs aligned with ``edge_indices``.
         offsets: Prefix-sum offsets into ``edge_indices`` and ``neighbor_nodes``.
             Samples for ``input_nodes[i]`` are in ``offsets[i]:offsets[i + 1]``.
+        edge_version_ids: Sampled edge-version IDs for temporal snapshots.
+        valid_from_us: Inclusive valid starts aligned with sampled edges.
+        valid_to_us: Exclusive valid ends, with zero for open intervals.
+        valid_to_open: Open-end masks aligned with sampled edges.
 
     Examples:
         Iterate over sampled neighbors for each input node::
@@ -38,6 +43,10 @@ class SampledNeighbors:
     edge_indices: np.ndarray
     neighbor_nodes: np.ndarray
     offsets: np.ndarray
+    edge_version_ids: np.ndarray | None = None
+    valid_from_us: np.ndarray | None = None
+    valid_to_us: np.ndarray | None = None
+    valid_to_open: np.ndarray | None = None
 
 
 class SamplerEngine:
@@ -98,6 +107,9 @@ class SamplerEngine:
         direction: str = "out",
         relations: Sequence[int] | np.ndarray | None = None,
         replace: bool = False,
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+        causal_policy: str = "none",
     ) -> SampledNeighbors:
         """Sample neighbors for each input node.
 
@@ -108,6 +120,12 @@ class SamplerEngine:
                 target-to-source, or ``"any"`` for incident traversal.
             relations: Optional compact relation IDs to restrict traversal.
             replace: Whether to sample with replacement.
+            temporal: Optional point or finite-window validity filter. Requires a
+                temporal format-v2 snapshot.
+            window_policy: ``"overlap"`` selects intervals intersecting a
+                window; ``"contained"`` selects intervals fully inside it.
+            causal_policy: Accepted for API consistency. It constrains valid
+                starts across hops in multihop and subgraph sampling.
 
         Returns:
             ``SampledNeighbors`` with concatenated edge and neighbor arrays.
@@ -122,18 +140,44 @@ class SamplerEngine:
                     [drug_id], fanout=10, direction="out", relations=[binds_id]
                 )
         """
-        if fanout < 0:
-            raise ValueError("fanout must be non-negative")
-        if direction not in {"out", "in", "any"}:
-            raise ValueError("direction must be 'out', 'in', or 'any'")
+        self._validate_sampling_options(
+            fanout=fanout, direction=direction, temporal=temporal,
+            window_policy=window_policy, causal_policy=causal_policy,
+        )
+        return self._sample_neighbors(
+            nodes, fanout, direction=direction, relations=relations, replace=replace,
+            temporal=temporal, window_policy=window_policy, causal_policy=causal_policy,
+        )
+
+    def _sample_neighbors(
+        self,
+        nodes,
+        fanout,
+        *,
+        direction,
+        relations,
+        replace=False,
+        temporal=None,
+        window_policy="overlap",
+        causal_policy="none",
+        causal_starts=None,
+    ) -> SampledNeighbors:
         input_nodes = np.asarray(nodes, dtype=np.int64)
+        if causal_starts is not None and len(causal_starts) != input_nodes.size:
+            raise ValueError("causal_starts must align with input nodes")
         offsets = [0]
         sampled_edges: list[np.ndarray] = []
         sampled_neighbors: list[np.ndarray] = []
         relation_filter = None if relations is None else set(np.asarray(relations, dtype=np.int64).tolist())
 
-        for node in input_nodes.tolist():
-            candidates = self._candidate_edges(node, direction, relation_filter)
+        for row, node in enumerate(input_nodes.tolist()):
+            candidates = self._candidate_edges(node, direction, relation_filter, temporal, window_policy)
+            if causal_starts is not None and causal_starts[row] is not None and candidates.size:
+                starts = self.snapshot.valid_from_us[candidates]
+                if causal_policy == "nondecreasing":
+                    candidates = candidates[starts >= causal_starts[row]]
+                elif causal_policy == "nonincreasing":
+                    candidates = candidates[starts <= causal_starts[row]]
             if fanout == 0 or candidates.size == 0:
                 chosen = np.empty(0, dtype=np.int64)
             elif replace:
@@ -150,7 +194,11 @@ class SamplerEngine:
 
         edge_indices = np.concatenate(sampled_edges) if sampled_edges else np.empty(0, dtype=np.int64)
         neighbor_nodes = np.concatenate(sampled_neighbors) if sampled_neighbors else np.empty(0, dtype=np.int64)
-        return SampledNeighbors(input_nodes, edge_indices, neighbor_nodes, np.asarray(offsets, dtype=np.int64))
+        temporal_arrays = self._temporal_arrays(edge_indices)
+        return SampledNeighbors(
+            input_nodes, edge_indices, neighbor_nodes, np.asarray(offsets, dtype=np.int64),
+            *temporal_arrays,
+        )
 
     def sample_multihop(
         self,
@@ -159,6 +207,9 @@ class SamplerEngine:
         *,
         direction: str = "any",
         relations: Sequence[int] | np.ndarray | None = None,
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+        causal_policy: str = "none",
     ) -> SampledSubgraphBatch:
         """Sample a merged multihop subgraph around seed nodes.
 
@@ -167,6 +218,11 @@ class SamplerEngine:
             fanouts: Fanout per hop. ``[15, 10]`` performs two hops.
             direction: Traversal direction for all hops.
             relations: Optional relation filter applied to all hops.
+            temporal: Optional point or finite-window validity filter.
+            window_policy: Window matching policy, ``"overlap"`` or
+                ``"contained"``.
+            causal_policy: Valid-start policy across each sampled path:
+                ``"none"``, ``"nondecreasing"``, or ``"nonincreasing"``.
 
         Returns:
             ``SampledSubgraphBatch`` containing one merged sampled graph.
@@ -176,17 +232,68 @@ class SamplerEngine:
 
                 batch = engine.sample_multihop([u, v], [15, 10], direction="any")
         """
-        nodes = {int(node) for node in np.asarray(seeds, dtype=np.int64).tolist()}
-        edges: set[int] = set()
-        frontier = np.asarray(sorted(nodes), dtype=np.int64)
         for fanout in fanouts:
-            sampled = self.sample_neighbors(frontier, fanout, direction=direction, relations=relations)
-            edges.update(int(edge) for edge in sampled.edge_indices.tolist())
-            next_frontier = [int(node) for node in sampled.neighbor_nodes.tolist() if int(node) not in nodes]
-            nodes.update(next_frontier)
-            frontier = np.asarray(next_frontier, dtype=np.int64)
-            if frontier.size == 0:
+            self._validate_sampling_options(
+                fanout=fanout, direction=direction, temporal=temporal,
+                window_policy=window_policy, causal_policy=causal_policy,
+            )
+        return self._sample_multihop(
+            seeds, fanouts, direction=direction, relations=relations, temporal=temporal,
+            window_policy=window_policy, causal_policy=causal_policy,
+        )
+
+    def _sample_multihop(
+        self, seeds, fanouts, *, direction, relations, temporal,
+        window_policy, causal_policy, initial_states=None,
+    ) -> SampledSubgraphBatch:
+        seed_values = np.asarray(seeds, dtype=np.int64).tolist()
+        nodes = {int(node) for node in seed_values}
+        edges: set[int] = set()
+        self._validate_sampling_options(
+            fanout=0, direction=direction, temporal=temporal,
+            window_policy=window_policy, causal_policy=causal_policy,
+        )
+        if causal_policy == "none":
+            frontier = np.asarray(sorted(nodes), dtype=np.int64)
+            for fanout in fanouts:
+                sampled = self._sample_neighbors(
+                    frontier, fanout, direction=direction, relations=relations,
+                    temporal=temporal, window_policy=window_policy,
+                )
+                edges.update(int(edge) for edge in sampled.edge_indices.tolist())
+                next_frontier = [
+                    int(node) for node in sampled.neighbor_nodes.tolist()
+                    if int(node) not in nodes
+                ]
+                nodes.update(next_frontier)
+                frontier = np.asarray(next_frontier, dtype=np.int64)
+                if frontier.size == 0:
+                    break
+            return self._batch_from_edges(
+                nodes, edges, positives=np.empty((0, 3), dtype=np.int64),
+                negatives=np.empty((0, 3), dtype=np.int64),
+            )
+
+        states = initial_states or [(node, None) for node in sorted(nodes)]
+        for fanout in fanouts:
+            if not states:
                 break
+            frontier = np.asarray([state[0] for state in states], dtype=np.int64)
+            sampled = self._sample_neighbors(
+                frontier, fanout, direction=direction, relations=relations,
+                temporal=temporal, window_policy=window_policy, causal_policy=causal_policy,
+                causal_starts=[state[1] for state in states] if causal_policy != "none" else None,
+            )
+            edges.update(int(edge) for edge in sampled.edge_indices.tolist())
+            next_states = []
+            for row in range(frontier.size):
+                start, end = sampled.offsets[row:row + 2]
+                for position in range(int(start), int(end)):
+                    node = int(sampled.neighbor_nodes[position])
+                    edge = int(sampled.edge_indices[position])
+                    next_states.append((node, int(self.snapshot.valid_from_us[edge])))
+            nodes.update(state[0] for state in next_states)
+            states = list(dict.fromkeys(next_states))
         return self._batch_from_edges(nodes, edges, positives=np.empty((0, 3), dtype=np.int64), negatives=np.empty((0, 3), dtype=np.int64))
 
     def sample_subgraph(
@@ -197,6 +304,9 @@ class SamplerEngine:
         direction: str = "any",
         relations: Sequence[int] | np.ndarray | None = None,
         negative_config: HardNegativeConfig | None = None,
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+        causal_policy: str = "none",
     ) -> SampledSubgraphBatch:
         """Sample a merged training subgraph around positive seed edges.
 
@@ -208,6 +318,12 @@ class SamplerEngine:
             negative_config: Optional hard-negative configuration. When provided,
                 negatives are returned as ``(positives, negatives_per_positive,
                 3)`` local triples.
+            temporal: Optional point or finite-window validity filter applied to
+                seed and context edges.
+            window_policy: Window matching policy, ``"overlap"`` or
+                ``"contained"``.
+            causal_policy: Valid-start policy propagated from each seed edge
+                through context hops.
 
         Returns:
             ``SampledSubgraphBatch`` with local node IDs in positive and negative
@@ -222,10 +338,32 @@ class SamplerEngine:
                     negative_config=HardNegativeConfig(negatives_per_positive=8),
                 )
         """
+        self._validate_sampling_options(
+            fanout=0, direction=direction, temporal=temporal,
+            window_policy=window_policy, causal_policy=causal_policy,
+        )
+        for fanout in fanouts:
+            self._validate_sampling_options(
+                fanout=fanout, direction=direction, temporal=temporal,
+                window_policy=window_policy, causal_policy=causal_policy,
+            )
         seed_edges = np.asarray(seed_edges, dtype=np.int64)
+        if temporal is not None:
+            seed_edges = self._filter_temporal_edges(seed_edges, temporal, window_policy)
         seed_nodes = set(self.snapshot.src_int[seed_edges].astype(np.int64).tolist())
         seed_nodes.update(self.snapshot.dst_int[seed_edges].astype(np.int64).tolist())
-        batch = self.sample_multihop(sorted(seed_nodes), fanouts, direction=direction, relations=relations)
+        initial_states = None
+        if causal_policy != "none":
+            initial_states = []
+            for edge in seed_edges.tolist():
+                start = int(self.snapshot.valid_from_us[edge])
+                initial_states.extend([(int(self.snapshot.src_int[edge]), start), (int(self.snapshot.dst_int[edge]), start)])
+            initial_states = list(dict.fromkeys(initial_states))
+        batch = self._sample_multihop(
+            sorted(seed_nodes), fanouts, direction=direction, relations=relations,
+            temporal=temporal, window_policy=window_policy, causal_policy=causal_policy,
+            initial_states=initial_states,
+        )
         edge_set = set(batch.edge_ids_global.astype(np.int64).tolist())
         edge_set.update(seed_edges.astype(np.int64).tolist())
         positives = np.stack(
@@ -299,7 +437,25 @@ class SamplerEngine:
                 result[row_idx, neg_idx] = self._one_negative(int(src), int(rel), int(dst), context, config, group_seen, candidate_cache)
         return result
 
-    def _candidate_edges(self, node: int, direction: str, relation_filter: set[int] | None) -> np.ndarray:
+    def _candidate_edges(
+        self, node: int, direction: str, relation_filter: set[int] | None,
+        temporal: TemporalContext | None = None, window_policy: str = "overlap",
+    ) -> np.ndarray:
+        if temporal is not None:
+            relations = range(self.snapshot.num_relations) if relation_filter is None else sorted(relation_filter)
+            query_time = temporal.instant
+            if temporal.interval is not None:
+                query_time = temporal.interval.end.epoch_microseconds - 1
+            ranges = []
+            directions = ("out", "in") if direction == "any" else (direction,)
+            for candidate_direction in directions:
+                for relation in relations:
+                    if 0 <= relation < self.snapshot.num_relations:
+                        ranges.append(self.snapshot.temporal_candidates(
+                            node, relation, query_time, direction=candidate_direction,
+                        ))
+            candidates = np.concatenate(ranges) if ranges else np.empty(0, dtype=np.int64)
+            return self._filter_temporal_edges(candidates, temporal, window_policy)
         if relation_filter is not None and direction in {"out", "in"}:
             relation_adj = self.snapshot.relation_out if direction == "out" else self.snapshot.relation_in
             ranges = []
@@ -321,6 +477,49 @@ class SamplerEngine:
             return candidates
         mask = np.isin(self.snapshot.rel_int[candidates], np.fromiter(relation_filter, dtype=np.int64))
         return candidates[mask]
+
+    def _filter_temporal_edges(self, edges, temporal: TemporalContext, window_policy: str) -> np.ndarray:
+        edges = np.asarray(edges, dtype=np.int64)
+        if edges.size == 0:
+            return edges
+        starts = self.snapshot.valid_from_us[edges]
+        ends = self.snapshot.valid_to_us[edges]
+        open_ends = self.snapshot.valid_to_open[edges]
+        if temporal.instant is not None:
+            instant = temporal.instant.epoch_microseconds
+            mask = (starts <= instant) & (open_ends | (instant < ends))
+        else:
+            window_start = temporal.interval.start.epoch_microseconds
+            window_end = temporal.interval.end.epoch_microseconds
+            if window_policy == "overlap":
+                mask = (starts < window_end) & (open_ends | (window_start < ends))
+            else:
+                mask = (window_start <= starts) & ~open_ends & (ends <= window_end)
+        return edges[mask]
+
+    def _validate_sampling_options(self, *, fanout, direction, temporal, window_policy, causal_policy):
+        if fanout < 0:
+            raise ValueError("fanout must be non-negative")
+        if direction not in {"out", "in", "any"}:
+            raise ValueError("direction must be 'out', 'in', or 'any'")
+        if temporal is not None and not isinstance(temporal, TemporalContext):
+            raise TypeError("temporal must be a TemporalContext")
+        if window_policy not in {"overlap", "contained"}:
+            raise ValueError("window_policy must be 'overlap' or 'contained'")
+        if causal_policy not in {"none", "nondecreasing", "nonincreasing"}:
+            raise ValueError("causal_policy must be 'none', 'nondecreasing', or 'nonincreasing'")
+        if (temporal is not None or causal_policy != "none") and not self.snapshot.temporal:
+            raise ValueError("temporal sampling requires a format-v2 temporal snapshot")
+
+    def _temporal_arrays(self, edge_indices):
+        if not self.snapshot.temporal:
+            return (None, None, None, None)
+        return (
+            self.snapshot.edge_version_ids[edge_indices],
+            self.snapshot.valid_from_us[edge_indices],
+            self.snapshot.valid_to_us[edge_indices],
+            self.snapshot.valid_to_open[edge_indices],
+        )
 
     def _one_negative(
         self,
@@ -440,6 +639,10 @@ class SamplerEngine:
             edge_relation_ids=self.snapshot.rel_int[ordered_edges] if ordered_edges.size else np.empty(0, dtype=np.int64),
             positives=localize_triples(positives),
             negatives=localize_triples(negatives),
+            edge_version_ids=self.snapshot.edge_version_ids[ordered_edges] if self.snapshot.temporal else None,
+            valid_from_us=self.snapshot.valid_from_us[ordered_edges] if self.snapshot.temporal else None,
+            valid_to_us=self.snapshot.valid_to_us[ordered_edges] if self.snapshot.temporal else None,
+            valid_to_open=self.snapshot.valid_to_open[ordered_edges] if self.snapshot.temporal else None,
         )
 
     def _pack_triple(self, src: int, rel: int, dst: int) -> np.uint64:

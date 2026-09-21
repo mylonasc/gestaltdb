@@ -13,8 +13,8 @@ import pytest
 import gestaltdb.graphdb as graphdb_module
 from gestaltdb.graphdb import Edge, GraphDB, Node
 from gestaltdb.readview import ProvenanceMismatchError, ReadViewProvenance
-from gestaltdb.sampling import SamplerSnapshot
-from gestaltdb.temporal import TemporalInterval
+from gestaltdb.sampling import SamplerEngine, SamplerSnapshot
+from gestaltdb.temporal import TemporalContext, TemporalInterval
 from gestaltdb.versioning import EdgeVersionWrite, NodeVersionWrite
 from tests.test_temporal_as_of import _MetadataStore
 
@@ -251,6 +251,23 @@ def _populate_temporal_snapshot_history(graph):
     return nodes, corrected, retracted
 
 
+def _build_runtime_temporal_snapshot(graph, path):
+    graph.commit_versions([
+        NodeVersionWrite.assertion(Node(node_id), (-20, None))
+        for node_id in ["a", "b", "c", "d", "x"]
+    ])
+    for edge, valid in [
+        (Edge("old", "a", "b", properties={"type": "R"}), (0, 10)),
+        (Edge("new", "a", "c", properties={"type": "R"}), (10, 20)),
+        (Edge("open", "a", "d", properties={"type": "S"}), (5, None)),
+        (Edge("incoming", "x", "a", properties={"type": "R"}), (0, 20)),
+        (Edge("forward", "b", "c", properties={"type": "R"}), (10, 30)),
+        (Edge("backward", "b", "d", properties={"type": "R"}), (-5, 30)),
+    ]:
+        graph.put_edge_version(edge, valid=valid)
+    return graph.build_sampler_snapshot(path, temporal=True, time_bucket="none")
+
+
 def test_temporal_snapshot_materializes_horizon_intervals_and_time_indexes(memory_graph, tmp_path):
     first, corrected, _ = _populate_temporal_snapshot_history(memory_graph)
     early = memory_graph.build_sampler_snapshot(
@@ -278,6 +295,187 @@ def test_temporal_snapshot_materializes_horizon_intervals_and_time_indexes(memor
     }
     assert exact <= set(candidates.tolist())
     assert candidates.tolist() == [0]
+
+
+def test_temporal_neighbor_sampling_composes_exact_filters(memory_graph, tmp_path):
+    snapshot = _build_runtime_temporal_snapshot(memory_graph, tmp_path / "runtime")
+    engine = SamplerEngine(snapshot, seed=7)
+    node_ids = snapshot.external_node_ids.tolist()
+    relations = snapshot.external_relation_ids.tolist()
+    a = node_ids.index("a")
+    b = node_ids.index("b")
+    r = relations.index("R")
+    s = relations.index("S")
+
+    at_boundary = engine.sample_neighbors(
+        [a], 10, direction="out", relations=[r], temporal=TemporalContext.as_of(10)
+    )
+    incoming = engine.sample_neighbors(
+        [a], 10, direction="in", relations=[r], temporal=TemporalContext.as_of(10)
+    )
+    open_edge = engine.sample_neighbors(
+        [a], 10, direction="out", relations=[s], temporal=TemporalContext.as_of(10)
+    )
+    pre_epoch = engine.sample_neighbors(
+        [b], 10, direction="out", relations=[r], temporal=TemporalContext.as_of(-5)
+    )
+    empty = engine.sample_neighbors(
+        [a], 10, direction="out", relations=[r], temporal=TemporalContext.as_of(100)
+    )
+
+    assert snapshot.external_edge_ids[at_boundary.edge_indices].tolist() == ["new"]
+    assert snapshot.external_edge_ids[incoming.edge_indices].tolist() == ["incoming"]
+    assert snapshot.external_edge_ids[open_edge.edge_indices].tolist() == ["open"]
+    assert snapshot.external_edge_ids[pre_epoch.edge_indices].tolist() == ["backward"]
+    assert empty.edge_indices.size == 0
+    assert empty.edge_version_ids.size == 0
+    assert at_boundary.edge_version_ids.tolist() == snapshot.edge_version_ids[at_boundary.edge_indices].tolist()
+    assert at_boundary.valid_from_us.tolist() == [10]
+    assert at_boundary.valid_to_us.tolist() == [20]
+    assert at_boundary.valid_to_open.tolist() == [False]
+
+
+def test_temporal_window_policies_filter_before_fanout(memory_graph, tmp_path):
+    snapshot = _build_runtime_temporal_snapshot(memory_graph, tmp_path / "windows")
+    a = snapshot.external_node_ids.tolist().index("a")
+    relation = snapshot.external_relation_ids.tolist().index("R")
+    window = TemporalContext.during(5, 20)
+
+    overlap = SamplerEngine(snapshot, seed=3).sample_neighbors(
+        [a], 10, direction="out", relations=[relation], temporal=window,
+        window_policy="overlap",
+    )
+    contained = SamplerEngine(snapshot, seed=3).sample_neighbors(
+        [a], 10, direction="out", relations=[relation], temporal=window,
+        window_policy="contained",
+    )
+    contained_open = SamplerEngine(snapshot, seed=3).sample_neighbors(
+        [a], 10, direction="out", relations=[snapshot.external_relation_ids.tolist().index("S")],
+        temporal=window, window_policy="contained",
+    )
+    sampled = SamplerEngine(snapshot, seed=3).sample_neighbors(
+        [a], 1, direction="out", relations=[relation],
+        temporal=TemporalContext.as_of(10),
+    )
+
+    assert set(snapshot.external_edge_ids[overlap.edge_indices].tolist()) == {"old", "new"}
+    assert snapshot.external_edge_ids[contained.edge_indices].tolist() == ["new"]
+    assert contained_open.edge_indices.size == 0
+    assert snapshot.external_edge_ids[sampled.edge_indices].tolist() == ["new"]
+
+
+@pytest.mark.parametrize(
+    ("causal_policy", "present", "absent"),
+    [("nondecreasing", "forward", "backward"), ("nonincreasing", "backward", "forward")],
+)
+def test_temporal_multihop_enforces_causal_path_starts(
+    memory_graph, tmp_path, causal_policy, present, absent
+):
+    snapshot = _build_runtime_temporal_snapshot(memory_graph, tmp_path / causal_policy)
+    a = snapshot.external_node_ids.tolist().index("a")
+    relation = snapshot.external_relation_ids.tolist().index("R")
+
+    batch = SamplerEngine(snapshot, seed=5).sample_multihop(
+        [a], [10, 10], direction="out", relations=[relation],
+        temporal=TemporalContext.during(-20, 40), causal_policy=causal_policy,
+    )
+    sampled_ids = set(snapshot.external_edge_ids[batch.edge_ids_global].tolist())
+
+    assert present in sampled_ids
+    assert absent not in sampled_ids
+    assert batch.edge_version_ids.tolist() == snapshot.edge_version_ids[batch.edge_ids_global].tolist()
+    assert batch.to_numpy()["valid_from_us"].shape == batch.edge_ids_global.shape
+
+
+def test_temporal_multihop_propagates_converged_causal_states(memory_graph, tmp_path):
+    memory_graph.commit_versions([
+        NodeVersionWrite.assertion(Node(node_id), (-10, None))
+        for node_id in ["a", "b", "c", "d"]
+    ])
+    for edge_id, source, target, start in [
+        ("a-b-late", "a", "b", 5),
+        ("a-c", "a", "c", 1),
+        ("c-b", "c", "b", 2),
+        ("b-d", "b", "d", 3),
+    ]:
+        memory_graph.put_edge_version(
+            Edge(edge_id, source, target, properties={"type": "R"}),
+            valid=(start, 100),
+        )
+    snapshot = memory_graph.build_sampler_snapshot(
+        tmp_path / "causal-convergence", temporal=True, time_bucket="none"
+    )
+    a = snapshot.external_node_ids.tolist().index("a")
+
+    batch = SamplerEngine(snapshot, seed=1).sample_multihop(
+        [a], [10, 10, 10], direction="out",
+        temporal=TemporalContext.during(0, 100),
+        causal_policy="nondecreasing",
+    )
+
+    assert set(snapshot.external_edge_ids[batch.edge_ids_global].tolist()) == {
+        "a-b-late", "a-c", "c-b", "b-d",
+    }
+
+
+def test_temporal_subgraph_filters_seed_edges_and_preserves_alignment(memory_graph, tmp_path):
+    snapshot = _build_runtime_temporal_snapshot(memory_graph, tmp_path / "subgraph")
+    old = snapshot.external_edge_ids.tolist().index("old")
+    new = snapshot.external_edge_ids.tolist().index("new")
+    engine = SamplerEngine(snapshot, seed=9)
+
+    excluded = engine.sample_subgraph([old], [], temporal=TemporalContext.as_of(10))
+    included = engine.sample_subgraph([new], [0], temporal=TemporalContext.as_of(10))
+
+    assert excluded.n_edges == 0
+    assert excluded.positives.shape == (0, 3)
+    assert included.edge_ids_global.tolist() == [new]
+    assert included.edge_version_ids.tolist() == [snapshot.edge_version_ids[new]]
+    assert included.valid_from_us.tolist() == [10]
+
+
+def test_temporal_sampling_duplicate_versions_and_ram_memmap_parity(memory_graph, tmp_path):
+    _, corrected, _ = _populate_temporal_snapshot_history(memory_graph)
+    snapshot = memory_graph.build_sampler_snapshot(tmp_path / "history", temporal=True, time_bucket="day")
+    node = snapshot.external_node_ids.tolist().index("a")
+    relation = snapshot.external_relation_ids.tolist().index("KNOWS")
+    context = TemporalContext.during(-20, 40)
+    ram = SamplerEngine.load(snapshot.path, mode="ram", seed=17)
+    mapped = SamplerEngine.load(snapshot.path, mode="memmap", seed=17)
+
+    ram_sample = ram.sample_neighbors([node], 1, relations=[relation], temporal=context)
+    mapped_sample = mapped.sample_neighbors([node], 1, relations=[relation], temporal=context)
+    all_versions = SamplerEngine(snapshot).sample_neighbors(
+        [node], 10, relations=[relation], temporal=context
+    )
+
+    assert np.array_equal(ram_sample.edge_indices, mapped_sample.edge_indices)
+    assert np.array_equal(ram_sample.edge_version_ids, mapped_sample.edge_version_ids)
+    assert all_versions.edge_version_ids.tolist() == [corrected.version_id, corrected.version_id]
+    assert all_versions.valid_from_us.tolist() == [-10, 30]
+
+
+def test_temporal_sampling_validates_context_and_policies(memory_graph, tmp_path):
+    snapshot = _build_runtime_temporal_snapshot(memory_graph, tmp_path / "validation")
+    engine = SamplerEngine(snapshot)
+
+    with pytest.raises(TypeError, match="TemporalContext"):
+        engine.sample_neighbors([0], 1, temporal=10)
+    with pytest.raises(ValueError, match="window_policy"):
+        engine.sample_multihop([0], [], window_policy="covers")
+    with pytest.raises(ValueError, match="causal_policy"):
+        engine.sample_subgraph([], [], causal_policy="increasing")
+
+
+def test_temporal_sampling_rejects_non_temporal_snapshot(tmp_path):
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "static", external_node_ids=["a", "b"],
+        external_edge_ids=["ab"], external_relation_ids=["R"],
+        src_int=[0], dst_int=[1], rel_int=[0],
+    )
+
+    with pytest.raises(ValueError, match="temporal snapshot"):
+        SamplerEngine(snapshot).sample_neighbors([0], 1, temporal=TemporalContext.as_of(0))
 
 
 @pytest.mark.parametrize("reserved", ["source_provenance", "temporal_encoding"])

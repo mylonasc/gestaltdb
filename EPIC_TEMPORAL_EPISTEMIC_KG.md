@@ -509,4 +509,5 @@ Every TKG feature must:
 - [x] `TKG-05` implemented with consistent read views and authenticated provenance.
 - [x] `TKG-06` implemented with stable query-wide bitemporal Cypher views.
 - [x] `TKG-07` implemented with authenticated temporal sampler snapshot arrays.
-- [ ] `TKG-08` onward.
+- [x] `TKG-08` implemented with point/window and causal runtime sampling.
+- [ ] `TKG-09` onward.

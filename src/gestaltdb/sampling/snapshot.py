@@ -126,9 +126,9 @@ class SamplerSnapshot:
     def temporal_candidates(self, node: int, relation: int, valid_time, *, direction: str = "out") -> np.ndarray:
         """Return a start-time-pruned superset for a temporal point query.
 
-        Exact interval filtering intentionally belongs to TKG-08. This helper
-        exposes the TKG-07 index guarantee: no edge valid at ``valid_time`` is
-        omitted, while edges starting after the selected bucket are pruned.
+        No edge valid at ``valid_time`` is omitted, while edges starting after
+        the selected bucket are pruned. ``SamplerEngine`` applies the exact
+        half-open point or window predicate before random selection.
         """
         if not self.temporal or self.temporal_out is None or self.temporal_in is None:
             raise ValueError("snapshot does not contain temporal indexes")

@@ -18,7 +18,7 @@ Use `SamplerSnapshot` and `SamplerEngine` for ML training pipelines. These APIs 
 
 Build temporal history through one authenticated source view with `graph.build_sampler_snapshot(path, temporal=True, system_time=known_at, time_bucket="day")`. Temporal format-v2 snapshots align edge-version IDs, validity arrays, open-end masks, and commit/system provenance with compact edge rows. Their endpoint/relation indexes are ordered by valid start. Loading validates the completion manifest, checksums, schemas, intervals, CSR bounds, and provenance in RAM and memmap modes. Legacy format-v1 snapshots remain readable without temporal or integrity guarantees.
 
-`snapshot.temporal_candidates(...)` provides start-time candidate pruning only. Exact temporal filtering during sampling is not implemented yet.
+Pass `temporal=TemporalContext.as_of(...)` or `TemporalContext.during(...)` to engine neighbor, multihop, and subgraph sampling. Exact half-open filtering runs before fanout. Windows support `window_policy="overlap"` or `"contained"`; multihop/subgraph traversal also supports `causal_policy="nondecreasing"` and `"nonincreasing"` valid-start ordering. Temporal results expose aligned `edge_version_ids`, `valid_from_us`, `valid_to_us`, and `valid_to_open` arrays. These options require a temporal format-v2 snapshot.
 
 ## Example
 

@@ -131,7 +131,7 @@ There are two sampling layers:
 
 `SamplerSnapshot.build(graph, output_path, ...)` and `graph.build_sampler_snapshot(output_path, ...)` persist immutable `.npy` arrays and metadata. `SamplerEngine.load(path, mode="ram"|"memmap", seed=...)` loads the arrays for neighbor, multihop, subgraph, positive-triple, and hard-negative sampling.
 
-`graph.build_sampler_snapshot(output_path, temporal=True, system_time=..., time_bucket="day")` builds format-v2 temporal history from one authenticated read view. It persists edge-version validity and commit/system provenance plus source/relation/start-time indexes. V2 loads authenticate the completion manifest and every array; legacy v1 snapshots remain loadable without temporal guarantees. Runtime temporal filtering is not implemented until TKG-08.
+`graph.build_sampler_snapshot(output_path, temporal=True, system_time=..., time_bucket="day")` builds format-v2 temporal history from one authenticated read view. It persists edge-version validity and commit/system provenance plus source/relation/start-time indexes. V2 loads authenticate the completion manifest and every array; legacy v1 snapshots remain loadable without temporal guarantees. `SamplerEngine` accepts `TemporalContext` point/window filters, `overlap`/`contained` window policies, and monotonic valid-start causal policies; filters run before fanout and temporal result arrays stay aligned with sampled edges.
 
 `SampledSubgraphBatch` uses local node IDs in `senders`, `receivers`, `positives`, and `negatives`. Use `node_ids_global` to map local batch rows back to compact global snapshot IDs, and use `snapshot.external_node_id(...)` or `snapshot.global_triple_to_external(...)` to recover external IDs.
 

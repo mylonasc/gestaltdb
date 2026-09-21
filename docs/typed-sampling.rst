@@ -176,8 +176,40 @@ The build captures exactly one authenticated ``GraphReadView``. Corrections and
 retractions are resolved at its system horizon, including splitting a surviving
 version into multiple edge rows when only part of its validity is retracted.
 ``temporal_candidates(node, relation, valid_time, direction=...)`` uses the
-start-time ordering to return a candidate superset; exact interval filtering and
-temporal sampling are reserved for TKG-08.
+start-time ordering to return a candidate superset. ``SamplerEngine`` then
+applies exact half-open validity filtering before fanout and random selection:
+
+.. code-block:: python
+
+   from gestaltdb.sampling import SamplerEngine
+   from gestaltdb.temporal import TemporalContext
+
+   engine = SamplerEngine.load(snapshot.path, mode="memmap", seed=7)
+   sampled = engine.sample_neighbors(
+       [alice_id],
+       fanout=20,
+       direction="out",
+       relations=[works_for_id],
+       temporal=TemporalContext.as_of(cutoff),
+   )
+
+Point selection honors exclusive valid-to boundaries. For finite windows,
+``window_policy="overlap"`` selects edge intervals with a non-empty
+intersection, while ``window_policy="contained"`` requires the complete edge
+interval to lie inside the window (open-ended edges therefore cannot be
+contained). ``sample_multihop`` and ``sample_subgraph`` accept the same options.
+Set ``causal_policy`` to ``"nondecreasing"`` or ``"nonincreasing"`` to compare
+edge valid-start instants hop by hop along each sampled path. Temporal, relation,
+direction, and causal filters all run before fanout selection.
+
+Temporal ``SampledNeighbors`` and ``SampledSubgraphBatch`` values expose
+``edge_version_ids``, ``valid_from_us``, ``valid_to_us``, and
+``valid_to_open`` aligned with their sampled edge arrays. Supplying a temporal
+filter or causal policy to a non-temporal/legacy snapshot raises ``ValueError``.
+PyG dictionaries and DGL graphs retain string ``edge_version_ids`` as Python
+metadata because their edge-feature stores only accept numeric tensors.
+Hard-negative temporal-history rejection is not part of this API and remains a
+separate capability.
 
 V2 publication is atomic: arrays and canonical metadata are written in a sibling
 staging directory, checksummed, and followed by ``completion.json`` before the
