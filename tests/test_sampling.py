@@ -261,6 +261,59 @@ def test_sampler_engine_relation_endpoint_type_negatives(tmp_path):
     assert snapshot.relation_src_type_ids[rel_id] == snapshot.node_type_ids[global_head]
 
 
+@pytest.mark.parametrize(
+    "kwargs,expected",
+    [
+        ({"temporal_positive_policy": "sometimes"}, "temporal_positive_policy"),
+        ({"temporal_positive_window_policy": "touches"}, "temporal_positive_window_policy"),
+        ({"temporal_candidate_window_days": 0}, "temporal_candidate_window_days"),
+        ({"exhaustion_policy": "truncate"}, "exhaustion_policy"),
+    ],
+)
+def test_hard_negative_config_validates_temporal_controls(kwargs, expected):
+    with pytest.raises(ValueError, match=expected):
+        HardNegativeConfig(**kwargs)
+
+
+def test_hard_negative_relation_candidates_sort_sources_and_candidates(tmp_path):
+    snapshot = _FakeSamplerGraph().build_sampler_snapshot(tmp_path / "sampler")
+    engine = SamplerEngine(snapshot, seed=1)
+    observed = {}
+
+    def sample_neighbors(nodes, *args, **kwargs):
+        observed["sources"] = nodes.tolist()
+        return SimpleNamespace(neighbor_nodes=np.array([4, 2, 3], dtype=np.int64))
+
+    def shuffle(values):
+        observed["candidates"] = list(values)
+
+    engine.sample_neighbors = sample_neighbors
+    engine.rng = SimpleNamespace(shuffle=shuffle)
+
+    candidates = engine._negative_candidates(
+        0, 0, 1, {3, 2}, False,
+        HardNegativeConfig(source="context_relation_neighbors", candidate_fanout=1),
+        None, None,
+    )
+    assert observed == {"sources": [2, 3], "candidates": [2, 3, 4]}
+    assert candidates == [2, 3, 4]
+
+    observed["default_sources"] = []
+
+    def candidate_edges(node, *args, **kwargs):
+        observed["default_sources"].append(node)
+        return np.empty(0, dtype=np.int64)
+
+    engine._candidate_edges = candidate_edges
+    engine._negative_candidates(
+        0, 0, 1, {3, 2}, False,
+        HardNegativeConfig(source="context_relation_neighbors"),
+        None, None,
+    )
+
+    assert observed["default_sources"] == [2, 3]
+
+
 def test_sampled_batch_optional_adapter_dependency_errors(tmp_path):
     graph = _FakeSamplerGraph()
     snapshot = graph.build_sampler_snapshot(tmp_path / "sampler")
@@ -328,6 +381,25 @@ def test_temporal_batch_adapters_preserve_edge_version_ids(monkeypatch):
     assert dgl_graph.edge_version_ids.tolist() == batch.edge_version_ids.tolist()
     assert np.array_equal(pyg["valid_from_us"], batch.valid_from_us)
     assert np.array_equal(dgl_graph.edata["valid_from_us"], batch.valid_from_us)
+
+
+def test_arrow_adapter_preserves_temporal_negative_times(monkeypatch):
+    arrays = [np.empty(0, dtype=np.int64) for _ in range(8)]
+    batch = SampledSubgraphBatch(
+        *arrays,
+        positive_time_us=np.array([10], dtype=np.int64),
+        negative_time_us=np.array([[10, 10]], dtype=np.int64),
+    )
+    fake_arrow = SimpleNamespace(
+        array=lambda value: np.asarray(value),
+        table=lambda columns: columns,
+    )
+    monkeypatch.setitem(sys.modules, "pyarrow", fake_arrow)
+
+    converted = batch.to_arrow()
+
+    assert converted["positive_time_us"].tolist() == [10]
+    assert converted["negative_time_us"].tolist() == [10, 10]
 
 
 def test_async_batch_feeder_prefetches_batches(tmp_path):

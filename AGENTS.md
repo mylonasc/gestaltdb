@@ -133,6 +133,8 @@ There are two sampling layers:
 
 `graph.build_sampler_snapshot(output_path, temporal=True, system_time=..., time_bucket="day")` builds format-v2 temporal history from one authenticated read view. It persists edge-version validity and commit/system provenance plus source/relation/start-time indexes. V2 loads authenticate the completion manifest and every array; legacy v1 snapshots remain loadable without temporal guarantees. `SamplerEngine` accepts `TemporalContext` point/window filters, `overlap`/`contained` window policies, and monotonic valid-start causal policies; filters run before fanout and temporal result arrays stay aligned with sampled edges.
 
+Temporal snapshots also index node availability and positive-triple intervals. `HardNegativeConfig` supports `any_time`, `at_positive_time`, and window positive rejection, trailing candidate windows, explicit future-candidate opt-in, and deterministic `raise`/`repeat` exhaustion. Temporal batches return aligned positive/negative example times and rejection diagnostics.
+
 `SampledSubgraphBatch` uses local node IDs in `senders`, `receivers`, `positives`, and `negatives`. Use `node_ids_global` to map local batch rows back to compact global snapshot IDs, and use `snapshot.external_node_id(...)` or `snapshot.global_triple_to_external(...)` to recover external IDs.
 
 ## Visualization

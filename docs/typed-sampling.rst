@@ -208,8 +208,51 @@ Temporal ``SampledNeighbors`` and ``SampledSubgraphBatch`` values expose
 filter or causal policy to a non-temporal/legacy snapshot raises ``ValueError``.
 PyG dictionaries and DGL graphs retain string ``edge_version_ids`` as Python
 metadata because their edge-feature stores only accept numeric tensors.
-Hard-negative temporal-history rejection is not part of this API and remains a
-separate capability.
+
+Time-Aware Hard Negatives
+-------------------------
+
+Temporal snapshots also contain authenticated positive-triple history and node
+availability indexes. ``is_positive`` can test all known history, one example
+instant, or a query window. Hard-negative sampling applies endpoint type and
+relation constraints first, temporal candidate availability second, and
+positive-history rejection last:
+
+.. code-block:: python
+
+   from gestaltdb.sampling import HardNegativeConfig
+
+   config = HardNegativeConfig(
+       negatives_per_positive=8,
+       temporal_positive_policy="at_positive_time",
+       temporal_candidate_window_days=90,
+       exhaustion_policy="raise",
+   )
+   batch = engine.sample_subgraph(
+       seed_edges,
+       fanouts=[15, 10],
+       negative_config=config,
+       temporal=TemporalContext.as_of(cutoff),
+   )
+
+``temporal_positive_policy`` is ``"any_time"`` (the compatibility default),
+``"at_positive_time"``, or ``"window"``. Window rejection uses
+``temporal_positive_window_policy="overlap"`` or ``"contained"``. A candidate
+window is trailing: candidates and relation neighborhoods must have been
+available during the configured number of days ending at the example time.
+Without a candidate window they must be available at the example time. Future
+candidates are excluded unless ``allow_future_candidates=True``.
+
+``sample_hard_negatives`` accepts aligned ``positive_times_us`` and optionally
+returns deterministic rejection counters with ``return_diagnostics=True``.
+Direct calls on temporal snapshots must supply ``positive_times_us`` or a
+``temporal`` context unless ``allow_future_candidates=True``; this prevents an
+ambiguous default call from drawing nodes that only become available later.
+``SampledSubgraphBatch`` carries ``positive_time_us``, ``negative_time_us``, and
+``negative_diagnostics``. ``exhaustion_policy="raise"`` fails when unique
+negatives are exhausted; ``"repeat"`` deterministically reuses an accepted
+negative while preserving temporal-positive rejection. RAM and memmap engines
+produce the same seeded result.
 
 V2 publication is atomic: arrays and canonical metadata are written in a sibling
 staging directory, checksummed, and followed by ``completion.json`` before the

@@ -161,8 +161,9 @@ Read views cover immutable temporal history on every backend. Bitemporal Cypher
 ``MATCH`` reads use these views, while unqualified Cypher retains mutable
 current-state behavior. Read views do not make mutable current-state records
 snapshot-safe on backends without a unified read snapshot. Temporal property
-indexes, interval-window matching, temporal writes through Cypher, and temporal
-sampler arrays are not implemented yet. Marker-backed data that fails hash or
+indexes and temporal writes through Cypher are not implemented yet. Temporal
+sampler snapshots support point/window traversal, causal paths, node
+availability, and time-aware hard-negative rejection. Marker-backed data that fails hash or
 envelope validation raises
 ``TemporalCorruptionError`` rather than returning partial history.
 

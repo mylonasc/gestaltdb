@@ -20,6 +20,8 @@ Build temporal history through one authenticated source view with `graph.build_s
 
 Pass `temporal=TemporalContext.as_of(...)` or `TemporalContext.during(...)` to engine neighbor, multihop, and subgraph sampling. Exact half-open filtering runs before fanout. Windows support `window_policy="overlap"` or `"contained"`; multihop/subgraph traversal also supports `causal_policy="nondecreasing"` and `"nonincreasing"` valid-start ordering. Temporal results expose aligned `edge_version_ids`, `valid_from_us`, `valid_to_us`, and `valid_to_open` arrays. These options require a temporal format-v2 snapshot.
 
+Temporal snapshots index positive-triple and node-availability intervals for leakage-safe hard negatives. Configure `HardNegativeConfig(temporal_positive_policy="at_positive_time", temporal_candidate_window_days=90)` for example-time rejection and a trailing candidate window. Policies are `"any_time"`, `"at_positive_time"`, and `"window"`; window membership supports overlap or containment. Future candidates require explicit `allow_future_candidates=True`, so direct temporal calls must otherwise provide `positive_times_us` or a `temporal` context. Temporal batches include aligned `positive_time_us`, `negative_time_us`, and deterministic rejection diagnostics. Exhaustion either raises or repeats an accepted negative according to `exhaustion_policy`.
+
 ## Example
 
 ```python

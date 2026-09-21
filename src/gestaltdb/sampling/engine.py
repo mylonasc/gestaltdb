@@ -73,6 +73,7 @@ class SamplerEngine:
         self.snapshot = snapshot
         self.rng = np.random.default_rng(seed)
         self._positive_codes = self._build_positive_codes()
+        self._positive_history_groups = self._build_positive_history_groups()
 
     @classmethod
     def load(cls, path: str | Path, *, mode: str = "ram", seed: int | None = None, **_kwargs) -> "SamplerEngine":
@@ -359,9 +360,21 @@ class SamplerEngine:
                 start = int(self.snapshot.valid_from_us[edge])
                 initial_states.extend([(int(self.snapshot.src_int[edge]), start), (int(self.snapshot.dst_int[edge]), start)])
             initial_states = list(dict.fromkeys(initial_states))
+        context_temporal = temporal
+        if (
+            context_temporal is None and negative_config is not None
+            and self.snapshot.temporal and not negative_config.allow_future_candidates
+            and seed_edges.size
+        ):
+            cutoff = int(np.min(self.snapshot.valid_from_us[seed_edges]))
+            if negative_config.temporal_candidate_window_days is None:
+                context_temporal = TemporalContext.as_of(cutoff)
+            else:
+                width = self._candidate_window_us(negative_config)
+                context_temporal = TemporalContext.during(cutoff - width, cutoff + 1)
         batch = self._sample_multihop(
             sorted(seed_nodes), fanouts, direction=direction, relations=relations,
-            temporal=temporal, window_policy=window_policy, causal_policy=causal_policy,
+            temporal=context_temporal, window_policy=window_policy, causal_policy=causal_policy,
             initial_states=initial_states,
         )
         edge_set = set(batch.edge_ids_global.astype(np.int64).tolist())
@@ -373,17 +386,40 @@ class SamplerEngine:
         nodes = set(batch.node_ids_global.astype(np.int64).tolist())
         nodes.update(positives[:, 0].astype(np.int64).tolist() if positives.size else [])
         nodes.update(positives[:, 2].astype(np.int64).tolist() if positives.size else [])
-        negatives = self.sample_hard_negatives(positives, nodes, negative_config) if negative_config is not None else np.empty((0, 3), dtype=np.int64)
+        positive_times = None
+        diagnostics = None
+        if self.snapshot.temporal and seed_edges.size:
+            if temporal is not None and temporal.instant is not None:
+                positive_times = np.full(seed_edges.size, temporal.instant.epoch_microseconds, dtype=np.int64)
+            else:
+                positive_times = self.snapshot.valid_from_us[seed_edges].astype(np.int64, copy=True)
+        if negative_config is not None:
+            negatives, diagnostics = self.sample_hard_negatives(
+                positives, nodes, negative_config, positive_times_us=positive_times,
+                temporal=temporal, return_diagnostics=True,
+            )
+        else:
+            negatives = np.empty((0, 3), dtype=np.int64)
         if negatives.size:
             nodes.update(negatives[..., 0].astype(np.int64).ravel().tolist())
             nodes.update(negatives[..., 2].astype(np.int64).ravel().tolist())
-        return self._batch_from_edges(nodes, edge_set, positives=positives, negatives=negatives)
+        negative_times = None if positive_times is None or negative_config is None else np.repeat(
+            positive_times[:, None], negative_config.negatives_per_positive, axis=1
+        )
+        return self._batch_from_edges(
+            nodes, edge_set, positives=positives, negatives=negatives,
+            positive_times=positive_times, negative_times=negative_times,
+            negative_diagnostics=diagnostics,
+        )
 
     def sample_subgraphs(self, *args, **kwargs) -> SampledSubgraphBatch:
         """Batched alias for ``sample_subgraph``."""
         return self.sample_subgraph(*args, **kwargs)
 
-    def is_positive(self, src: int, rel: int, dst: int) -> bool:
+    def is_positive(
+        self, src: int, rel: int, dst: int, *, temporal: TemporalContext | None = None,
+        policy: str = "any_time", window_policy: str = "overlap",
+    ) -> bool:
         """Return whether a triple is a known positive in the snapshot.
 
         Args:
@@ -394,14 +430,55 @@ class SamplerEngine:
         Returns:
             ``True`` if ``(src, rel, dst)`` exists in the snapshot positives.
         """
-        return int(self._pack_triple(src, rel, dst)) in self._positive_codes
+        if policy not in {"any_time", "at_positive_time", "window"}:
+            raise ValueError("policy must be 'any_time', 'at_positive_time', or 'window'")
+        if window_policy not in {"overlap", "contained"}:
+            raise ValueError("window_policy must be 'overlap' or 'contained'")
+        code = int(self._pack_triple(src, rel, dst))
+        if policy == "any_time":
+            return code in self._positive_codes
+        if temporal is None:
+            raise ValueError("temporal positive membership requires a temporal context")
+        if not self.snapshot.temporal:
+            raise ValueError("temporal positive membership requires a format-v2 temporal snapshot")
+        group = self._positive_history_groups.get(code)
+        if group is None:
+            return False
+        start, end = self.snapshot.positive_history_indptr[group:group + 2]
+        edges = self.snapshot.positive_history_edge_indices[int(start):int(end)]
+        if policy == "at_positive_time":
+            if temporal.instant is None:
+                raise ValueError("at_positive_time requires an instant temporal context")
+            instant = temporal.instant.epoch_microseconds
+            return bool(np.any(
+                (self.snapshot.valid_from_us[edges] <= instant)
+                & (self.snapshot.valid_to_open[edges] | (instant < self.snapshot.valid_to_us[edges]))
+            ))
+        if temporal.interval is None:
+            raise ValueError("window positive policy requires a window temporal context")
+        window_start = temporal.interval.start.epoch_microseconds
+        window_end = temporal.interval.end.epoch_microseconds
+        if window_policy == "overlap":
+            return bool(np.any(
+                (self.snapshot.valid_from_us[edges] < window_end)
+                & (self.snapshot.valid_to_open[edges] | (window_start < self.snapshot.valid_to_us[edges]))
+            ))
+        return bool(np.any(
+            (window_start <= self.snapshot.valid_from_us[edges])
+            & ~self.snapshot.valid_to_open[edges]
+            & (self.snapshot.valid_to_us[edges] <= window_end)
+        ))
 
     def sample_hard_negatives(
         self,
         positive_triples: Sequence[Sequence[int]] | np.ndarray,
         context_nodes: Iterable[int] | None = None,
         config: HardNegativeConfig | None = None,
-    ) -> np.ndarray:
+        *,
+        positive_times_us: Sequence[int] | np.ndarray | None = None,
+        temporal: TemporalContext | None = None,
+        return_diagnostics: bool = False,
+    ) -> np.ndarray | tuple[np.ndarray, dict[str, int]]:
         """Generate grouped hard negatives for positive triples.
 
         Args:
@@ -411,10 +488,15 @@ class SamplerEngine:
                 Context-aware negative sources draw candidates from this set.
             config: Negative sampling configuration. Defaults to
                 ``HardNegativeConfig()``.
+            positive_times_us: Optional example instants aligned with positives.
+                Required by example-time policies and by leakage-safe candidate
+                filtering unless ``temporal`` provides the needed context.
+            temporal: Optional point/window used by temporal positive rejection.
+            return_diagnostics: Return ``(negatives, counters)`` when true.
 
         Returns:
             Array shaped ``(num_positives, negatives_per_positive, 3)`` using
-            compact global IDs.
+            compact global IDs, optionally paired with rejection counters.
 
         Raises:
             ValueError: If ``positive_triples`` is not shaped ``(n, 3)``.
@@ -423,19 +505,52 @@ class SamplerEngine:
         """
         config = config or HardNegativeConfig()
         positives = np.asarray(positive_triples, dtype=np.int64)
+        diagnostics = {
+            "attempted": 0, "accepted": 0, "rejected_self_loop": 0,
+            "rejected_duplicate": 0, "rejected_type": 0,
+            "rejected_unavailable": 0, "rejected_positive": 0, "repeated": 0,
+        }
         if positives.size == 0 or config.negatives_per_positive == 0:
-            return np.empty((positives.shape[0] if positives.ndim else 0, 0, 3), dtype=np.int64)
+            empty = np.empty((positives.shape[0] if positives.ndim else 0, 0, 3), dtype=np.int64)
+            return (empty, diagnostics) if return_diagnostics else empty
         if positives.ndim != 2 or positives.shape[1] != 3:
             raise ValueError("positive_triples must have shape (n, 3)")
         context = set(int(node) for node in context_nodes) if context_nodes is not None else set()
+        times = None if positive_times_us is None else np.asarray(positive_times_us, dtype=np.int64)
+        if times is not None and times.shape != (positives.shape[0],):
+            raise ValueError("positive_times_us must align with positive_triples")
+        if (
+            self.snapshot.temporal and not config.allow_future_candidates
+            and times is None and temporal is None
+        ):
+            raise ValueError(
+                "temporal hard negatives require aligned positive_times_us or a temporal context "
+                "when future candidates are disabled"
+            )
+        needs_time = config.temporal_positive_policy != "any_time" or config.temporal_candidate_window_days is not None
+        if needs_time and not self.snapshot.temporal:
+            raise ValueError("temporal hard negatives require a format-v2 temporal snapshot")
+        window_context_suffices = (
+            config.temporal_positive_policy == "window"
+            and config.temporal_candidate_window_days is None
+            and temporal is not None and temporal.interval is not None
+        )
+        if needs_time and times is None and (temporal is None or temporal.instant is None) and not window_context_suffices:
+            raise ValueError("temporal hard negatives require aligned positive_times_us or an instant context")
+        if times is None and temporal is not None and temporal.instant is not None:
+            times = np.full(positives.shape[0], temporal.instant.epoch_microseconds, dtype=np.int64)
         result = np.empty((positives.shape[0], config.negatives_per_positive, 3), dtype=np.int64)
-        candidate_cache: dict[tuple[int, bool], list[int]] = {}
+        candidate_cache: dict[tuple[int, int, int, bool, int | None], list[int]] = {}
 
         for row_idx, (src, rel, dst) in enumerate(positives.tolist()):
             group_seen: set[tuple[int, int, int]] = set()
             for neg_idx in range(config.negatives_per_positive):
-                result[row_idx, neg_idx] = self._one_negative(int(src), int(rel), int(dst), context, config, group_seen, candidate_cache)
-        return result
+                result[row_idx, neg_idx] = self._one_negative(
+                    int(src), int(rel), int(dst), context, config, group_seen,
+                    candidate_cache, None if times is None else int(times[row_idx]), temporal,
+                    diagnostics,
+                )
+        return (result, diagnostics) if return_diagnostics else result
 
     def _candidate_edges(
         self, node: int, direction: str, relation_filter: set[int] | None,
@@ -529,45 +644,74 @@ class SamplerEngine:
         context_nodes: set[int],
         config: HardNegativeConfig,
         group_seen: set[tuple[int, int, int]],
-        candidate_cache: dict[tuple[int, bool], list[int]],
+        candidate_cache: dict[tuple[int, int, int, bool, int | None], list[int]],
+        positive_time: int | None,
+        temporal: TemporalContext | None,
+        diagnostics: dict[str, int],
     ) -> tuple[int, int, int]:
         first_direction = bool(self.rng.random() < config.head_probability)
         for corrupt_head in (first_direction, not first_direction):
-            cache_key = (rel, corrupt_head)
+            cache_key = (src, rel, dst, corrupt_head, positive_time)
             if cache_key not in candidate_cache:
-                candidate_cache[cache_key] = self._negative_candidates(src, rel, dst, context_nodes, corrupt_head, config)
+                candidate_cache[cache_key] = self._negative_candidates(
+                    src, rel, dst, context_nodes, corrupt_head, config, positive_time,
+                    temporal,
+                )
             candidates = candidate_cache[cache_key]
             for cand in candidates:
                 candidate = (int(cand), rel, dst) if corrupt_head else (src, rel, int(cand))
-                if self._accept_negative(candidate, src, dst, corrupt_head, config, group_seen):
+                rejection = self._negative_rejection(
+                    candidate, src, dst, corrupt_head, config, group_seen,
+                    positive_time, temporal,
+                )
+                diagnostics["attempted"] += 1
+                if rejection is None:
                     group_seen.add(candidate)
+                    diagnostics["accepted"] += 1
                     return candidate
-            for _ in range(config.max_retries):
-                cand = int(self.rng.integers(self.snapshot.num_nodes))
+                diagnostics[rejection] += 1
+            fallback = np.arange(self.snapshot.num_nodes, dtype=np.int64)
+            self.rng.shuffle(fallback)
+            for cand in fallback[:config.max_retries].tolist():
                 candidate = (cand, rel, dst) if corrupt_head else (src, rel, cand)
-                if self._accept_negative(candidate, src, dst, corrupt_head, config, group_seen):
+                rejection = self._negative_rejection(
+                    candidate, src, dst, corrupt_head, config, group_seen,
+                    positive_time, temporal,
+                )
+                diagnostics["attempted"] += 1
+                if rejection is None:
                     group_seen.add(candidate)
+                    diagnostics["accepted"] += 1
                     return candidate
+                diagnostics[rejection] += 1
+        if config.exhaustion_policy == "repeat" and group_seen:
+            diagnostics["repeated"] += 1
+            diagnostics["accepted"] += 1
+            return sorted(group_seen)[0]
         raise RuntimeError("failed to sample a hard negative that is not a known positive")
 
-    def _negative_candidates(self, src: int, rel: int, dst: int, context_nodes: set[int], corrupt_head: bool, config: HardNegativeConfig) -> list[int]:
+    def _negative_candidates(self, src: int, rel: int, dst: int, context_nodes: set[int], corrupt_head: bool, config: HardNegativeConfig, positive_time: int | None, query_temporal: TemporalContext | None) -> list[int]:
         if config.source == "random" or not context_nodes:
             return []
         if config.source not in {"non_visited_relation_neighbors", "context_relation_neighbors"}:
             raise ValueError("negative source must be 'random', 'non_visited_relation_neighbors', or 'context_relation_neighbors'")
         candidates: set[int] = set()
         direction = "in" if corrupt_head else "out"
+        temporal = self._candidate_context(config, positive_time)
+        if temporal is None and positive_time is None and not config.allow_future_candidates:
+            temporal = query_temporal
         if config.candidate_fanout is not None:
             sampled = self.sample_neighbors(
-                np.fromiter(context_nodes, dtype=np.int64),
+                np.fromiter(sorted(context_nodes), dtype=np.int64),
                 config.candidate_fanout,
                 direction=direction,
                 relations=[rel],
+                temporal=temporal,
             )
             candidates.update(sampled.neighbor_nodes.astype(np.int64).tolist())
         else:
-            for node in context_nodes:
-                edge_indices = self._candidate_edges(node, direction, {rel})
+            for node in sorted(context_nodes):
+                edge_indices = self._candidate_edges(node, direction, {rel}, temporal)
                 if edge_indices.size == 0:
                     continue
                 candidates.update(self._neighbors_for_edges(node, edge_indices, direction).astype(np.int64).tolist())
@@ -575,11 +719,11 @@ class SamplerEngine:
             candidates.difference_update(context_nodes)
         candidates.discard(src)
         candidates.discard(dst)
-        ordered = list(candidates)
+        ordered = sorted(candidates)
         self.rng.shuffle(ordered)
         return ordered
 
-    def _accept_negative(
+    def _negative_rejection(
         self,
         candidate: tuple[int, int, int],
         positive_src: int,
@@ -587,23 +731,39 @@ class SamplerEngine:
         corrupt_head: bool,
         config: HardNegativeConfig,
         group_seen: set[tuple[int, int, int]],
-    ) -> bool:
+        positive_time: int | None,
+        temporal: TemporalContext | None,
+    ) -> str | None:
         src, rel, dst = candidate
-        if src == dst or candidate in group_seen:
-            return False
+        if src == dst:
+            return "rejected_self_loop"
+        if candidate in group_seen:
+            return "rejected_duplicate"
         if config.same_endpoint_type:
             original = positive_src if corrupt_head else positive_dst
             replacement = src if corrupt_head else dst
             if self.snapshot.node_type_ids[replacement] != self.snapshot.node_type_ids[original]:
-                return False
+                return "rejected_type"
         if config.relation_endpoint_types:
             expected_type = self.snapshot.relation_src_type_ids[rel] if corrupt_head else self.snapshot.relation_dst_type_ids[rel]
             replacement = src if corrupt_head else dst
             if expected_type >= 0 and self.snapshot.node_type_ids[replacement] != expected_type:
-                return False
-        if config.reject_known_positives and self.is_positive(src, rel, dst):
-            return False
-        return True
+                return "rejected_type"
+        replacement = src if corrupt_head else dst
+        candidate_context = self._candidate_context(config, positive_time)
+        if candidate_context is None and positive_time is None and not config.allow_future_candidates:
+            candidate_context = temporal
+        if candidate_context is not None and not self._node_available(replacement, candidate_context):
+            return "rejected_unavailable"
+        if config.reject_known_positives:
+            positive_context = self._positive_context(config, positive_time, temporal)
+            if self.is_positive(
+                src, rel, dst, temporal=positive_context,
+                policy=config.temporal_positive_policy,
+                window_policy=config.temporal_positive_window_policy,
+            ):
+                return "rejected_positive"
+        return None
 
     def _neighbors_for_edges(self, node: int, edge_indices: np.ndarray, direction: str) -> np.ndarray:
         if edge_indices.size == 0:
@@ -616,7 +776,60 @@ class SamplerEngine:
         dst = self.snapshot.dst_int[edge_indices]
         return np.where(src == int(node), dst, src).astype(np.int64, copy=False)
 
-    def _batch_from_edges(self, nodes: Iterable[int], edges: Iterable[int], *, positives: np.ndarray, negatives: np.ndarray) -> SampledSubgraphBatch:
+    @staticmethod
+    def _candidate_window_us(config: HardNegativeConfig) -> int:
+        return int(config.temporal_candidate_window_days * 86_400_000_000)
+
+    def _candidate_context(
+        self, config: HardNegativeConfig, positive_time: int | None
+    ) -> TemporalContext | None:
+        if positive_time is None or config.allow_future_candidates:
+            return None
+        if config.temporal_candidate_window_days is None:
+            return TemporalContext.as_of(positive_time)
+        width = self._candidate_window_us(config)
+        return TemporalContext.during(positive_time - width, positive_time + 1)
+
+    def _positive_context(
+        self,
+        config: HardNegativeConfig,
+        positive_time: int | None,
+        temporal: TemporalContext | None,
+    ) -> TemporalContext | None:
+        if config.temporal_positive_policy == "any_time":
+            return None
+        if config.temporal_positive_policy == "at_positive_time":
+            return TemporalContext.as_of(positive_time)
+        if temporal is not None and temporal.interval is not None:
+            return temporal
+        if config.temporal_candidate_window_days is None:
+            raise ValueError("window positive policy requires a temporal window or temporal_candidate_window_days")
+        width = self._candidate_window_us(config)
+        return TemporalContext.during(positive_time - width, positive_time + 1)
+
+    def _node_available(self, node: int, temporal: TemporalContext | None) -> bool:
+        if temporal is None:
+            return True
+        start = int(self.snapshot.node_history_indptr[node])
+        end = int(self.snapshot.node_history_indptr[node + 1])
+        if start == end:
+            return False
+        starts = self.snapshot.node_valid_from_us[start:end]
+        ends = self.snapshot.node_valid_to_us[start:end]
+        open_ends = self.snapshot.node_valid_to_open[start:end]
+        if temporal.instant is not None:
+            instant = temporal.instant.epoch_microseconds
+            return bool(np.any((starts <= instant) & (open_ends | (instant < ends))))
+        window_start = temporal.interval.start.epoch_microseconds
+        window_end = temporal.interval.end.epoch_microseconds
+        return bool(np.any((starts < window_end) & (open_ends | (window_start < ends))))
+
+    def _batch_from_edges(
+        self, nodes: Iterable[int], edges: Iterable[int], *, positives: np.ndarray,
+        negatives: np.ndarray, positive_times: np.ndarray | None = None,
+        negative_times: np.ndarray | None = None,
+        negative_diagnostics: dict[str, int] | None = None,
+    ) -> SampledSubgraphBatch:
         ordered_nodes = np.asarray(sorted(set(int(node) for node in nodes)), dtype=np.int64)
         ordered_edges = np.asarray(sorted(set(int(edge) for edge in edges)), dtype=np.int64)
         local_src = np.searchsorted(ordered_nodes, self.snapshot.src_int[ordered_edges]) if ordered_edges.size else np.empty(0, dtype=np.int64)
@@ -643,6 +856,9 @@ class SamplerEngine:
             valid_from_us=self.snapshot.valid_from_us[ordered_edges] if self.snapshot.temporal else None,
             valid_to_us=self.snapshot.valid_to_us[ordered_edges] if self.snapshot.temporal else None,
             valid_to_open=self.snapshot.valid_to_open[ordered_edges] if self.snapshot.temporal else None,
+            positive_time_us=positive_times,
+            negative_time_us=negative_times,
+            negative_diagnostics=negative_diagnostics,
         )
 
     def _pack_triple(self, src: int, rel: int, dst: int) -> np.uint64:
@@ -659,3 +875,13 @@ class SamplerEngine:
             raise OverflowError("positive triple packing exceeds uint64")
         codes = [int(self._pack_triple(src, rel, dst)) for src, rel, dst in triples.tolist()]
         return set(codes)
+
+    def _build_positive_history_groups(self) -> dict[int, int]:
+        if not self.snapshot.temporal:
+            return {}
+        return {
+            int(self._pack_triple(src, rel, dst)): index
+            for index, (src, rel, dst) in enumerate(
+                self.snapshot.positive_history_triples.tolist()
+            )
+        }

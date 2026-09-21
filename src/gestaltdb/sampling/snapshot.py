@@ -64,6 +64,13 @@ class SamplerSnapshot:
             with ``valid_to_open``.
         temporal_out: Source/relation CSR ordered by valid start.
         temporal_in: Target/relation CSR ordered by valid start.
+        positive_history_triples: Unique temporal positive triples.
+        positive_history_indptr: Group offsets into positive history edge rows.
+        positive_history_edge_indices: Edge rows ordered by triple and valid start.
+        node_history_indptr: Node offsets into availability intervals.
+        node_valid_from_us: Node availability interval starts.
+        node_valid_to_us: Node availability interval ends.
+        node_valid_to_open: Node availability open-end masks.
 
     Examples:
         Build from already compact arrays and sample with ``SamplerEngine``::
@@ -105,6 +112,13 @@ class SamplerSnapshot:
     edge_commit_ids: np.ndarray | None = None
     temporal_out: CSRAdjacency | None = None
     temporal_in: CSRAdjacency | None = None
+    positive_history_triples: np.ndarray | None = None
+    positive_history_indptr: np.ndarray | None = None
+    positive_history_edge_indices: np.ndarray | None = None
+    node_history_indptr: np.ndarray | None = None
+    node_valid_from_us: np.ndarray | None = None
+    node_valid_to_us: np.ndarray | None = None
+    node_valid_to_open: np.ndarray | None = None
 
     @property
     def num_nodes(self) -> int:
@@ -333,7 +347,9 @@ class SamplerSnapshot:
             raise ValueError("only layout='csr' is currently supported")
 
         node_payloads = {}
+        node_versions = {}
         for version in read_view.iter_node_versions():
+            node_versions.setdefault(version.logical_id, []).append(version)
             if version.operation is not VersionOperation.RETRACT and version.node is not None:
                 current = node_payloads.get(version.logical_id)
                 if current is None or (version.commit_id, version.commit_ordinal) > (current.commit_id, current.commit_ordinal):
@@ -378,6 +394,28 @@ class SamplerSnapshot:
             record for record in records
             if str(record[2].source) in node_to_int and str(record[2].target) in node_to_int
         ]
+        node_intervals = []
+        for node_id in node_ids:
+            covered = []
+            available = []
+            versions = sorted(
+                node_versions.get(node_id, ()),
+                key=lambda item: (item.commit_id, item.commit_ordinal, item.version_id),
+                reverse=True,
+            )
+            for version in versions:
+                start = version.valid.start.epoch_microseconds
+                end = None if version.valid.end is None else version.valid.end.epoch_microseconds
+                pieces = _subtract_intervals(start, end, covered)
+                if version.operation is not VersionOperation.RETRACT and version.node is not None:
+                    available.extend(pieces)
+                covered = _merge_intervals([*covered, (start, end)])
+            if not versions:
+                available = [
+                    (record[4], record[5]) for record in records
+                    if str(record[2].source) == node_id or str(record[2].target) == node_id
+                ]
+            node_intervals.append(_merge_intervals(available))
         node_type_values = [
             None if node_id not in node_payloads else node_payloads[node_id].node.properties.get(node_type_property)
             for node_id in node_ids
@@ -422,6 +460,7 @@ class SamplerSnapshot:
             valid_to_open=[record[5] is None for record in records],
             edge_system_time_us=[record[6] for record in records],
             edge_commit_ids=[record[7] for record in records],
+            node_intervals=node_intervals,
             source_db=source_db,
             metadata=snapshot_metadata,
         )
@@ -581,6 +620,7 @@ class SamplerSnapshot:
         valid_to_open=None,
         edge_system_time_us=None,
         edge_commit_ids=None,
+        node_intervals=None,
         source_db: dict | None = None,
         source_artifacts: dict | None = None,
         metadata: dict | None = None,
@@ -674,6 +714,17 @@ class SamplerSnapshot:
             )
             if any(array.size != src_int.size for array in temporal_values):
                 raise ValueError("temporal edge arrays must align with edge arrays")
+            if node_intervals is None:
+                node_intervals = []
+                for node in range(external_node_ids.size):
+                    intervals = [
+                        (int(valid_from_us[edge]), None if valid_to_open[edge] else int(valid_to_us[edge]))
+                        for edge in range(src_int.size)
+                        if src_int[edge] == node or dst_int[edge] == node
+                    ]
+                    node_intervals.append(_merge_intervals(intervals))
+            elif len(node_intervals) != external_node_ids.size:
+                raise ValueError("node availability intervals must align with nodes")
         snapshot_metadata = {
             "format_version": SNAPSHOT_FORMAT_VERSION,
             "node_count": int(external_node_ids.size),
@@ -707,6 +758,7 @@ class SamplerSnapshot:
             external_relation_ids, relation_src_type_ids, relation_dst_type_ids, src_int,
             dst_int, rel_int, out, in_, incident, relation_out, relation_in,
             positive_triples, temporal_values=temporal_values,
+            node_intervals=node_intervals,
         )
         return cls.load(path)
 
@@ -747,6 +799,7 @@ class SamplerSnapshot:
         if version == SNAPSHOT_FORMAT_VERSION:
             cls._validate_v2_files(path, metadata, metadata_bytes)
         temporal = version == SNAPSHOT_FORMAT_VERSION and metadata.get("temporal") is True
+        temporal_history_indexes = temporal and metadata.get("temporal_history_indexes") is True
         mmap_mode = "r" if mmap else None
 
         def load_array(name: str) -> np.ndarray:
@@ -784,7 +837,16 @@ class SamplerSnapshot:
                 CSRAdjacency(load_array("temporal_in_indptr"), load_array("temporal_in_edge_indices"))
                 if temporal else None
             ),
+            positive_history_triples=load_array("positive_history_triples") if temporal_history_indexes else None,
+            positive_history_indptr=load_array("positive_history_indptr") if temporal_history_indexes else None,
+            positive_history_edge_indices=load_array("positive_history_edge_indices") if temporal_history_indexes else None,
+            node_history_indptr=load_array("node_history_indptr") if temporal_history_indexes else None,
+            node_valid_from_us=load_array("node_valid_from_us") if temporal_history_indexes else None,
+            node_valid_to_us=load_array("node_valid_to_us") if temporal_history_indexes else None,
+            node_valid_to_open=load_array("node_valid_to_open") if temporal_history_indexes else None,
         )
+        if temporal and not temporal_history_indexes:
+            snapshot._derive_temporal_history_indexes()
         if version == SNAPSHOT_FORMAT_VERSION:
             snapshot._validate_v2_arrays()
         return snapshot
@@ -943,6 +1005,14 @@ class SamplerSnapshot:
                 "edge_system_time_us", "edge_commit_ids", "temporal_out_indptr",
                 "temporal_out_edge_indices", "temporal_in_indptr", "temporal_in_edge_indices",
             })
+        if metadata.get("temporal_history_indexes") is True:
+            expected.update({
+                "positive_history_triples", "positive_history_indptr",
+                "positive_history_edge_indices", "node_history_indptr",
+                "node_valid_from_us", "node_valid_to_us", "node_valid_to_open",
+            })
+        elif metadata.get("temporal_history_indexes") not in {None, False}:
+            raise ValueError("invalid temporal history index flag")
         if set(catalog) != expected:
             raise ValueError("sampler snapshot artifact catalog is incomplete or contains unknown arrays")
         for name, record in catalog.items():
@@ -1082,6 +1152,83 @@ class SamplerSnapshot:
                     candidates = adjacency.edge_range(key)
                     if np.any(self.valid_from_us[candidates][1:] < self.valid_from_us[candidates][:-1]):
                         raise ValueError("temporal snapshot index is not ordered by valid start")
+            history_count = self.positive_history_triples.shape[0]
+            if self.positive_history_triples.ndim != 2 or self.positive_history_triples.shape[1] != 3:
+                raise ValueError("temporal positive-history triples are invalid")
+            if self.positive_history_triples.dtype != np.dtype("int64"):
+                raise ValueError("temporal positive-history triples must use int64")
+            if self.positive_history_indptr.shape != (history_count + 1,) or self.positive_history_edge_indices.shape != (edge_count,):
+                raise ValueError("temporal positive-history index is misaligned")
+            expected_triples, expected_indptr, expected_edges = _build_positive_history_index(
+                self.src_int, self.rel_int, self.dst_int, self.valid_from_us
+            )
+            if not (
+                np.array_equal(self.positive_history_triples, expected_triples)
+                and np.array_equal(self.positive_history_indptr, expected_indptr)
+                and np.array_equal(self.positive_history_edge_indices, expected_edges)
+            ):
+                raise ValueError("temporal positive-history index is inconsistent")
+            node_interval_count = int(self.node_valid_from_us.size)
+            if self.node_history_indptr.shape != (node_count + 1,) or not (
+                self.node_valid_to_us.shape == (node_interval_count,)
+                and self.node_valid_to_open.shape == (node_interval_count,)
+                and self.node_history_indptr[0] == 0
+                and self.node_history_indptr[-1] == node_interval_count
+                and np.all(self.node_history_indptr[1:] >= self.node_history_indptr[:-1])
+            ):
+                raise ValueError("temporal node-history index is invalid")
+            if any(array.dtype != np.dtype("int64") for array in (
+                self.positive_history_indptr, self.positive_history_edge_indices,
+                self.node_history_indptr, self.node_valid_from_us, self.node_valid_to_us,
+            )) or self.node_valid_to_open.dtype != np.dtype("bool"):
+                raise ValueError("temporal history indexes use invalid dtypes")
+            finite_nodes = ~self.node_valid_to_open
+            if np.any(self.node_valid_to_us[finite_nodes] <= self.node_valid_from_us[finite_nodes]):
+                raise ValueError("temporal node history contains an invalid interval")
+            if np.any(self.node_valid_to_us[self.node_valid_to_open] != 0):
+                raise ValueError("open node intervals must use a zero valid-to sentinel")
+            for node in range(node_count):
+                start = int(self.node_history_indptr[node])
+                end = int(self.node_history_indptr[node + 1])
+                starts = self.node_valid_from_us[start:end]
+                ends = self.node_valid_to_us[start:end]
+                open_ends = self.node_valid_to_open[start:end]
+                if np.any(starts[1:] < starts[:-1]):
+                    raise ValueError("temporal node-history index is not ordered")
+                if len(starts) > 1:
+                    previous_ends = ends[:-1]
+                    if np.any(open_ends[:-1]) or np.any(previous_ends >= starts[1:]):
+                        raise ValueError("temporal node-history intervals overlap")
+
+    def _derive_temporal_history_indexes(self) -> None:
+        triples, indptr, edges = _build_positive_history_index(
+            self.src_int, self.rel_int, self.dst_int, self.valid_from_us
+        )
+        node_indptr = [0]
+        node_starts = []
+        node_ends = []
+        node_open = []
+        for node in range(self.num_nodes):
+            intervals = _merge_intervals([
+                (
+                    int(self.valid_from_us[edge]),
+                    None if self.valid_to_open[edge] else int(self.valid_to_us[edge]),
+                )
+                for edge in range(self.num_edges)
+                if self.src_int[edge] == node or self.dst_int[edge] == node
+            ])
+            for start, end in intervals:
+                node_starts.append(start)
+                node_ends.append(0 if end is None else end)
+                node_open.append(end is None)
+            node_indptr.append(len(node_starts))
+        self.positive_history_triples = triples
+        self.positive_history_indptr = indptr
+        self.positive_history_edge_indices = edges
+        self.node_history_indptr = np.asarray(node_indptr, dtype=np.int64)
+        self.node_valid_from_us = np.asarray(node_starts, dtype=np.int64)
+        self.node_valid_to_us = np.asarray(node_ends, dtype=np.int64)
+        self.node_valid_to_open = np.asarray(node_open, dtype=np.bool_)
 
     @staticmethod
     def _validate_csr(
@@ -1180,7 +1327,7 @@ class SamplerSnapshot:
         return relation_src_type_ids, relation_dst_type_ids
 
     @classmethod
-    def _write(cls, path: Path, metadata: dict, node_ids, node_type_ids, edge_ids, relations, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, out, in_, incident, relation_out, relation_in, positive_triples, *, temporal_values=None) -> None:
+    def _write(cls, path: Path, metadata: dict, node_ids, node_type_ids, edge_ids, relations, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, out, in_, incident, relation_out, relation_in, positive_triples, *, temporal_values=None, node_intervals=None) -> None:
         if path.exists():
             raise ValueError(f"snapshot output already exists: {path}")
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1230,6 +1377,28 @@ class SamplerSnapshot:
                 "temporal_in_indptr": temporal_in.indptr,
                 "temporal_in_edge_indices": temporal_in.edge_indices,
             })
+            history_triples, history_indptr, history_edges = _build_positive_history_index(
+                src_int, rel_int, dst_int, valid_from_us
+            )
+            node_history_indptr = [0]
+            node_starts = []
+            node_ends = []
+            node_open = []
+            for intervals in node_intervals:
+                for start, end in intervals:
+                    node_starts.append(start)
+                    node_ends.append(0 if end is None else end)
+                    node_open.append(end is None)
+                node_history_indptr.append(len(node_starts))
+            arrays.update({
+                "positive_history_triples": history_triples,
+                "positive_history_indptr": history_indptr,
+                "positive_history_edge_indices": history_edges,
+                "node_history_indptr": np.asarray(node_history_indptr, dtype=np.int64),
+                "node_valid_from_us": np.asarray(node_starts, dtype=np.int64),
+                "node_valid_to_us": np.asarray(node_ends, dtype=np.int64),
+                "node_valid_to_open": np.asarray(node_open, dtype=np.bool_),
+            })
         try:
             catalog = {}
             for name, value in arrays.items():
@@ -1242,6 +1411,8 @@ class SamplerSnapshot:
                     "shape": list(array.shape),
                 }
             metadata = dict(metadata)
+            if temporal_values is not None:
+                metadata["temporal_history_indexes"] = True
             metadata["format_version"] = SNAPSHOT_FORMAT_VERSION
             metadata["artifacts"] = catalog
             metadata_bytes = _canonical_json_bytes(metadata)
@@ -1300,6 +1471,21 @@ def _build_temporal_csr(keys, valid_from_us, edge_indices, size: int) -> CSRAdja
     indptr[0] = 0
     np.cumsum(counts, out=indptr[1:])
     return CSRAdjacency(indptr, edges[order])
+
+
+def _build_positive_history_index(src, rel, dst, valid_from_us):
+    triples = np.stack([src, rel, dst], axis=1) if len(src) else np.empty((0, 3), dtype=np.int64)
+    if not len(triples):
+        return triples, np.zeros(1, dtype=np.int64), np.empty(0, dtype=np.int64)
+    edge_indices = np.arange(len(triples), dtype=np.int64)
+    order = np.lexsort((edge_indices, valid_from_us, dst, rel, src))
+    ordered = triples[order]
+    starts = np.empty(len(ordered), dtype=np.bool_)
+    starts[0] = True
+    starts[1:] = np.any(ordered[1:] != ordered[:-1], axis=1)
+    group_starts = np.flatnonzero(starts).astype(np.int64)
+    indptr = np.concatenate([group_starts, np.asarray([len(ordered)], dtype=np.int64)])
+    return ordered[group_starts], indptr, edge_indices[order]
 
 
 def _subtract_intervals(start: int, end: int | None, covered) -> list[tuple[int, int | None]]:

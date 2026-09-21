@@ -1,6 +1,6 @@
 # Epic: Temporal and Epistemic Knowledge Graphs
 
-Status: **in progress** (`TKG-01` through `TKG-07` implemented on
+Status: **in progress** (`TKG-01` through `TKG-09` implemented on
 `temporal-epistemic-kg`)
 
 GitHub parent: [#63](https://github.com/mylonasc/gestaltdb/issues/63)
@@ -510,4 +510,5 @@ Every TKG feature must:
 - [x] `TKG-06` implemented with stable query-wide bitemporal Cypher views.
 - [x] `TKG-07` implemented with authenticated temporal sampler snapshot arrays.
 - [x] `TKG-08` implemented with point/window and causal runtime sampling.
-- [ ] `TKG-09` onward.
+- [x] `TKG-09` implemented with time-aware positives and hard negatives.
+- [ ] `TKG-10` onward.

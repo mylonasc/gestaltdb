@@ -13,7 +13,7 @@ import pytest
 import gestaltdb.graphdb as graphdb_module
 from gestaltdb.graphdb import Edge, GraphDB, Node
 from gestaltdb.readview import ProvenanceMismatchError, ReadViewProvenance
-from gestaltdb.sampling import SamplerEngine, SamplerSnapshot
+from gestaltdb.sampling import HardNegativeConfig, SamplerEngine, SamplerSnapshot
 from gestaltdb.temporal import TemporalContext, TemporalInterval
 from gestaltdb.versioning import EdgeVersionWrite, NodeVersionWrite
 from tests.test_temporal_as_of import _MetadataStore
@@ -295,6 +295,12 @@ def test_temporal_snapshot_materializes_horizon_intervals_and_time_indexes(memor
     }
     assert exact <= set(candidates.tolist())
     assert candidates.tolist() == [0]
+    engine = SamplerEngine(current)
+    a = current.external_node_ids.tolist().index("a")
+    b = current.external_node_ids.tolist().index("b")
+    assert engine.is_positive(a, relation, b, temporal=TemporalContext.as_of(19), policy="at_positive_time")
+    assert not engine.is_positive(a, relation, b, temporal=TemporalContext.as_of(20), policy="at_positive_time")
+    assert engine.is_positive(a, relation, b, temporal=TemporalContext.as_of(30), policy="at_positive_time")
 
 
 def test_temporal_neighbor_sampling_composes_exact_filters(memory_graph, tmp_path):
@@ -455,6 +461,175 @@ def test_temporal_sampling_duplicate_versions_and_ram_memmap_parity(memory_graph
     assert all_versions.valid_from_us.tolist() == [-10, 30]
 
 
+def _build_temporal_negative_snapshot(graph, path):
+    graph.commit_versions([
+        NodeVersionWrite.assertion(Node(node_id), valid)
+        for node_id, valid in [
+            ("a", (0, None)), ("b", (0, None)), ("c", (0, None)),
+            ("future", (100, None)),
+        ]
+    ])
+    graph.put_edge_version(
+        Edge("seed", "a", "b", properties={"type": "R"}), valid=(0, 50)
+    )
+    graph.put_edge_version(
+        Edge("future-positive", "a", "c", properties={"type": "R"}), valid=(20, 50)
+    )
+    return graph.build_sampler_snapshot(path, temporal=True, time_bucket="none")
+
+
+def test_temporal_positive_membership_uses_half_open_history(memory_graph, tmp_path):
+    snapshot = _build_temporal_negative_snapshot(memory_graph, tmp_path / "membership")
+    engine = SamplerEngine(snapshot)
+    nodes = snapshot.external_node_ids.tolist()
+    relation = snapshot.external_relation_ids.tolist().index("R")
+    a, c = nodes.index("a"), nodes.index("c")
+
+    assert engine.is_positive(a, relation, c)
+    assert not engine.is_positive(
+        a, relation, c, temporal=TemporalContext.as_of(19), policy="at_positive_time"
+    )
+    assert engine.is_positive(
+        a, relation, c, temporal=TemporalContext.as_of(20), policy="at_positive_time"
+    )
+    assert not engine.is_positive(
+        a, relation, c, temporal=TemporalContext.as_of(50), policy="at_positive_time"
+    )
+    assert engine.is_positive(
+        a, relation, c, temporal=TemporalContext.during(10, 21), policy="window"
+    )
+    assert not engine.is_positive(
+        a, relation, c, temporal=TemporalContext.during(10, 20), policy="window"
+    )
+    with pytest.raises(ValueError, match="temporal context"):
+        engine.is_positive(a, relation, c, policy="at_positive_time")
+    with pytest.raises(ValueError, match="policy"):
+        engine.is_positive(a, relation, c, policy="eventually")
+
+
+def test_window_hard_negatives_accept_query_context_without_example_times(memory_graph, tmp_path):
+    snapshot = _build_temporal_negative_snapshot(memory_graph, tmp_path / "window-negatives")
+    nodes = snapshot.external_node_ids.tolist()
+    relation = snapshot.external_relation_ids.tolist().index("R")
+    query = TemporalContext.during(10, 21)
+
+    negatives = SamplerEngine(snapshot, seed=5).sample_hard_negatives(
+        [[nodes.index("a"), relation, nodes.index("b")]],
+        config=HardNegativeConfig(temporal_positive_policy="window"),
+        temporal=query,
+    )
+
+    assert all(
+        not SamplerEngine(snapshot).is_positive(*triple, temporal=query, policy="window")
+        for triple in negatives.reshape(-1, 3)
+    )
+
+
+def test_temporal_hard_negatives_separate_future_positive_and_candidate_policies(memory_graph, tmp_path):
+    snapshot = _build_temporal_negative_snapshot(memory_graph, tmp_path / "negatives")
+    nodes = snapshot.external_node_ids.tolist()
+    relation = snapshot.external_relation_ids.tolist().index("R")
+    positive = np.array([[nodes.index("a"), relation, nodes.index("b")]], dtype=np.int64)
+    config = HardNegativeConfig(
+        negatives_per_positive=3,
+        head_probability=0.0,
+        temporal_positive_policy="at_positive_time",
+        exhaustion_policy="repeat",
+    )
+
+    negatives, diagnostics = SamplerEngine(snapshot, seed=7).sample_hard_negatives(
+        positive, config=config, positive_times_us=[10], return_diagnostics=True
+    )
+
+    assert all(nodes.index("c") in (int(triple[0]), int(triple[2])) for triple in negatives[0])
+    assert nodes.index("future") not in negatives
+    assert diagnostics["repeated"] == 1
+    assert diagnostics["rejected_unavailable"] > 0
+    any_time = SamplerEngine(snapshot, seed=7).sample_hard_negatives(
+        positive,
+        config=HardNegativeConfig(
+            head_probability=0.0, temporal_positive_policy="any_time"
+        ),
+        positive_times_us=[10],
+    )
+    assert all(not SamplerEngine(snapshot).is_positive(*triple) for triple in any_time.reshape(-1, 3))
+
+
+def test_temporal_hard_negatives_reject_ambiguous_candidate_time(memory_graph, tmp_path):
+    snapshot = _build_temporal_negative_snapshot(memory_graph, tmp_path / "ambiguous-negatives")
+    nodes = snapshot.external_node_ids.tolist()
+    relation = snapshot.external_relation_ids.tolist().index("R")
+    positive = [[nodes.index("a"), relation, nodes.index("b")]]
+
+    with pytest.raises(ValueError, match="positive_times_us or a temporal context"):
+        SamplerEngine(snapshot, seed=3).sample_hard_negatives(positive)
+
+    negatives = SamplerEngine(snapshot, seed=3).sample_hard_negatives(
+        positive, positive_times_us=[10]
+    )
+
+    assert nodes.index("future") not in negatives
+
+
+def test_temporal_snapshot_does_not_resurrect_fully_retracted_node(memory_graph, tmp_path):
+    memory_graph.commit_versions([
+        NodeVersionWrite.assertion(Node("a"), (0, None)),
+        NodeVersionWrite.assertion(Node("gone"), (0, 10)),
+        EdgeVersionWrite.assertion(
+            Edge("a-gone", "a", "gone", properties={"type": "R"}), (0, None)
+        ),
+    ])
+    memory_graph.commit_versions([
+        NodeVersionWrite.retraction("gone", valid=(0, 10)),
+    ])
+    snapshot = memory_graph.build_sampler_snapshot(
+        tmp_path / "retracted-node", temporal=True, time_bucket="none"
+    )
+    gone = snapshot.external_node_ids.tolist().index("gone")
+
+    assert snapshot.node_history_indptr[gone] == snapshot.node_history_indptr[gone + 1]
+    assert not SamplerEngine(snapshot)._node_available(gone, TemporalContext.as_of(5))
+
+
+def test_temporal_negative_batch_returns_aligned_times_and_diagnostics(memory_graph, tmp_path):
+    snapshot = _build_temporal_negative_snapshot(memory_graph, tmp_path / "batch-negatives")
+    seed = snapshot.external_edge_ids.tolist().index("seed")
+    config = HardNegativeConfig(
+        negatives_per_positive=2,
+        head_probability=0.0,
+        temporal_positive_policy="at_positive_time",
+        exhaustion_policy="repeat",
+    )
+
+    batch = SamplerEngine(snapshot, seed=11).sample_subgraph(
+        [seed], [], negative_config=config, temporal=TemporalContext.as_of(10)
+    )
+
+    assert batch.positive_time_us.tolist() == [10]
+    assert batch.negative_time_us.tolist() == [[10, 10]]
+    assert batch.to_numpy()["negative_time_us"].shape == (1, 2)
+    assert batch.negative_diagnostics["accepted"] == 2
+
+
+def test_temporal_negative_sampling_ram_memmap_parity(memory_graph, tmp_path):
+    snapshot = _build_temporal_negative_snapshot(memory_graph, tmp_path / "negative-parity")
+    nodes = snapshot.external_node_ids.tolist()
+    relation = snapshot.external_relation_ids.tolist().index("R")
+    positive = [[nodes.index("a"), relation, nodes.index("b")]]
+    config = HardNegativeConfig(
+        head_probability=0.0, temporal_positive_policy="at_positive_time"
+    )
+
+    ram = SamplerEngine.load(snapshot.path, mode="ram", seed=19).sample_hard_negatives(
+        positive, config=config, positive_times_us=[10]
+    )
+    mapped = SamplerEngine.load(snapshot.path, mode="memmap", seed=19).sample_hard_negatives(
+        positive, config=config, positive_times_us=[10]
+    )
+
+    assert np.array_equal(ram, mapped)
+
+
 def test_temporal_sampling_validates_context_and_policies(memory_graph, tmp_path):
     snapshot = _build_runtime_temporal_snapshot(memory_graph, tmp_path / "validation")
     engine = SamplerEngine(snapshot)
@@ -530,6 +705,38 @@ def test_temporal_snapshot_ram_memmap_parity_and_deterministic_rebuild(memory_gr
     assert np.array_equal(mapped.temporal_out.edge_indices, first.temporal_out.edge_indices)
 
 
+def test_pre_tkg09_temporal_v2_snapshot_derives_compatibility_indexes(memory_graph, tmp_path):
+    snapshot = _build_runtime_temporal_snapshot(memory_graph, tmp_path / "legacy-v2")
+    metadata_path = snapshot.path / "metadata.json"
+    completion_path = snapshot.path / "completion.json"
+    metadata = json.loads(metadata_path.read_text())
+    history_arrays = {
+        "positive_history_triples", "positive_history_indptr",
+        "positive_history_edge_indices", "node_history_indptr",
+        "node_valid_from_us", "node_valid_to_us", "node_valid_to_open",
+    }
+    metadata.pop("temporal_history_indexes")
+    for name in history_arrays:
+        metadata["artifacts"].pop(name)
+        (snapshot.path / f"{name}.npy").unlink()
+    metadata_bytes = json.dumps(
+        metadata, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode()
+    metadata_path.write_bytes(metadata_bytes)
+    completion = json.loads(completion_path.read_text())
+    completion["metadata_sha256"] = hashlib.sha256(metadata_bytes).hexdigest()
+    catalog_bytes = json.dumps(
+        metadata["artifacts"], sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode()
+    completion["artifact_catalog_sha256"] = hashlib.sha256(catalog_bytes).hexdigest()
+    completion_path.write_text(json.dumps(completion, sort_keys=True, separators=(",", ":")))
+
+    loaded = SamplerSnapshot.load(snapshot.path, mmap=True)
+
+    assert loaded.positive_history_triples.shape[1] == 3
+    assert loaded.node_history_indptr.shape == (loaded.num_nodes + 1,)
+
+
 def test_empty_temporal_snapshot_is_complete_and_loadable(memory_graph, tmp_path):
     snapshot = memory_graph.build_sampler_snapshot(tmp_path / "empty", temporal=True)
 
@@ -591,6 +798,18 @@ def test_temporal_snapshot_rejects_candidate_index_with_wrong_key_membership(mem
     _resign_snapshot(snapshot.path, "temporal_out_edge_indices")
 
     with pytest.raises(ValueError, match="temporal_out CSR membership"):
+        SamplerSnapshot.load(snapshot.path)
+
+
+def test_temporal_snapshot_rejects_corrupt_positive_history_index(memory_graph, tmp_path):
+    snapshot = _build_temporal_negative_snapshot(memory_graph, tmp_path / "positive-corruption")
+    index_path = snapshot.path / "positive_history_edge_indices.npy"
+    indices = np.load(index_path)
+    indices[[0, -1]] = indices[[-1, 0]]
+    np.save(index_path, indices, allow_pickle=False)
+    _resign_snapshot(snapshot.path, "positive_history_edge_indices")
+
+    with pytest.raises(ValueError, match="positive-history index is inconsistent"):
         SamplerSnapshot.load(snapshot.path)
 
 

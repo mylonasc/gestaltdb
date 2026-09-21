@@ -32,6 +32,9 @@ class SampledSubgraphBatch:
         valid_from_us: Inclusive valid starts aligned with sampled edges.
         valid_to_us: Exclusive valid ends, with zero for open intervals.
         valid_to_open: Open-end masks aligned with sampled edges.
+        positive_time_us: Example times aligned with positive triples.
+        negative_time_us: Example times aligned with grouped negatives.
+        negative_diagnostics: Deterministic rejection and exhaustion counters.
 
     Examples:
         Convert to plain NumPy arrays::
@@ -54,6 +57,9 @@ class SampledSubgraphBatch:
     valid_from_us: np.ndarray | None = None
     valid_to_us: np.ndarray | None = None
     valid_to_open: np.ndarray | None = None
+    positive_time_us: np.ndarray | None = None
+    negative_time_us: np.ndarray | None = None
+    negative_diagnostics: dict[str, int] | None = None
 
     @property
     def n_nodes(self) -> int:
@@ -87,6 +93,9 @@ class SampledSubgraphBatch:
                 "valid_to_us": self.valid_to_us,
                 "valid_to_open": self.valid_to_open,
             })
+        if self.positive_time_us is not None:
+            result["positive_time_us"] = self.positive_time_us
+            result["negative_time_us"] = self.negative_time_us
         if self.graph_node_offsets is not None:
             result["graph_node_offsets"] = self.graph_node_offsets
         if self.graph_edge_offsets is not None:
@@ -135,6 +144,9 @@ class SampledSubgraphBatch:
             "positives": pa.table({"src": positives[:, 0], "rel": positives[:, 1], "dst": positives[:, 2]}),
             "negatives": pa.table({"src": negatives[:, 0], "rel": negatives[:, 1], "dst": negatives[:, 2]}),
         }
+        if self.positive_time_us is not None:
+            result["positive_time_us"] = pa.array(self.positive_time_us)
+            result["negative_time_us"] = pa.array(self.negative_time_us.reshape(-1))
         if self.negatives.ndim == 3:
             result["negative_group_offsets"] = pa.array(np.arange(self.negatives.shape[0] + 1) * self.negatives.shape[1])
         return result
@@ -171,6 +183,9 @@ class SampledSubgraphBatch:
                 "valid_to_us": torch.as_tensor(self.valid_to_us, dtype=torch.long),
                 "valid_to_open": torch.as_tensor(self.valid_to_open, dtype=torch.bool),
             })
+        if self.positive_time_us is not None:
+            result["positive_time_us"] = torch.as_tensor(self.positive_time_us, dtype=torch.long)
+            result["negative_time_us"] = torch.as_tensor(self.negative_time_us, dtype=torch.long)
         return result
 
     def to_tf_gnns(self):
@@ -210,6 +225,9 @@ class SampledSubgraphBatch:
             "positives": tf.convert_to_tensor(self.positives, dtype=tf.int64),
             "negatives": tf.convert_to_tensor(self.negatives, dtype=tf.int64),
         }
+        if self.positive_time_us is not None:
+            labels["positive_time_us"] = tf.convert_to_tensor(self.positive_time_us, dtype=tf.int64)
+            labels["negative_time_us"] = tf.convert_to_tensor(self.negative_time_us, dtype=tf.int64)
         return graph, labels
 
     def to_dgl(self):
@@ -238,7 +256,11 @@ class SampledSubgraphBatch:
             graph.edata["valid_from_us"] = torch.as_tensor(self.valid_from_us, dtype=torch.long)
             graph.edata["valid_to_us"] = torch.as_tensor(self.valid_to_us, dtype=torch.long)
             graph.edata["valid_to_open"] = torch.as_tensor(self.valid_to_open, dtype=torch.bool)
-        return graph, {
+        labels = {
             "positives": torch.as_tensor(self.positives, dtype=torch.long),
             "negatives": torch.as_tensor(self.negatives, dtype=torch.long),
         }
+        if self.positive_time_us is not None:
+            labels["positive_time_us"] = torch.as_tensor(self.positive_time_us, dtype=torch.long)
+            labels["negative_time_us"] = torch.as_tensor(self.negative_time_us, dtype=torch.long)
+        return graph, labels
