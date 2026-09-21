@@ -514,4 +514,5 @@ Every TKG feature must:
 - [x] `TKG-10` implemented with bitemporal sourced claims and four-valued status.
 - [x] `TKG-11` implemented with versioned safe rules and bounded semi-naive evaluation.
 - [x] `TKG-12` implemented with incremental truth maintenance and explanations.
-- [ ] `TKG-13` onward.
+- [x] `TKG-13` implemented with bounded paraconsistent modal evaluation.
+- [ ] `TKG-14` onward.

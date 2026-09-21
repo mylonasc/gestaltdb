@@ -482,8 +482,8 @@ Registered Procedures
 Top-level registered procedure calls use ``CALL qualified.name(...) YIELD``.
 Yielded fields may be aliased, arguments may use parameters, and unknown
 procedure names or fields produce source-located semantic errors. Generalized
-syntax does not enable arbitrary dispatch: ``pg.sample_typed_paths`` is the
-currently registered procedure.
+syntax does not enable arbitrary dispatch. ``pg.sample_typed_paths`` and the
+bounded temporal-epistemic ``kg.entails`` procedure are registered.
 
 .. code-block:: python
 
@@ -495,6 +495,10 @@ currently registered procedure.
            "pattern": [{"edge_type": "binds", "direction": "out", "sample_size": 2}],
        },
    )
+
+``kg.entails`` accepts agent, proposition, modal operator, and options. It can
+yield ``status``, ``confidence``, and ``explanation``. See
+:doc:`modal-epistemic` for its world, temporal, formula, and limit semantics.
 
 Aggregation and Implicit Grouping
 ---------------------------------
@@ -535,4 +539,4 @@ locations. The current Cypher API does not yet support:
 - pattern comprehensions and ``exists()`` with a pattern argument
 - GQL quantified relationships/path patterns; errors suggest legacy ``*min..max`` syntax
 - scalar functions beyond the documented core set
-- procedures other than the registered ``pg.sample_typed_paths`` call
+- procedures other than the registered ``pg.sample_typed_paths`` and ``kg.entails`` calls

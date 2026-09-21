@@ -18,6 +18,7 @@ sampling, and benchmarks.
    storage-backends
    serializers
    temporal-versioning
+   modal-epistemic
    typed-sampling
    cypher
    visualization

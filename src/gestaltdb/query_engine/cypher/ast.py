@@ -683,6 +683,19 @@ class SampleTypedPathsCall:
 
 
 @dataclass(frozen=True)
+class EntailsCall:
+    """Parsed allowlisted ``kg.entails`` procedure call."""
+
+    agent: object
+    proposition: object
+    mode: object
+    options: object
+    yields: tuple[tuple[str, str], ...]
+    returns: tuple[str, ...]
+    limit: int | Parameter | None = None
+
+
+@dataclass(frozen=True)
 class NodeScanQuery:
     """Parsed indexed node label scan query."""
 

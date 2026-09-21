@@ -75,6 +75,14 @@ runnable usage patterns, and ``docs/`` for the Sphinx user guide.
 
 from .sampling import AsyncBatchFeeder, HardNegativeConfig, SampledSubgraphBatch, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
 from .epistemic import Claim, ClaimObjectKind, ClaimPolarity, ClaimStatus, claim_statement_id
+from .modal import (
+    AccessibilityKind,
+    ModalEntailmentResult,
+    ModalError,
+    ModalEvaluationLimitError,
+    ModalExpression,
+    ModalOperator,
+)
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .query_engine.cypher import QueryResult
 from .readview import GraphReadView, ProvenanceMismatchError, ReadViewProvenance
@@ -107,11 +115,17 @@ __all__ = [
     "ClaimObjectKind",
     "ClaimPolarity",
     "ClaimStatus",
+    "AccessibilityKind",
     "ClaimExplanation",
     "EdgeList",
     "ExplanationEdge",
     "ExplanationNode",
     "IndexMaintenanceMode",
+    "ModalEntailmentResult",
+    "ModalError",
+    "ModalEvaluationLimitError",
+    "ModalExpression",
+    "ModalOperator",
     "NodeList",
     "QueryResult",
     "GraphReadView",

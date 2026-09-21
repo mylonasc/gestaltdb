@@ -20,6 +20,10 @@ valid/system time, or distinguishing contradictory evidence from uncertainty.
 - Set `max_iterations`, `max_derivations`, and `max_justifications` for workload bounds. A limit error persists no partial conclusions, and an unchanged repeat run is idempotent.
 - Call `maintain_truth(as_of=...)` after premise or rule changes. It keeps independent supports, corrects changed justifications, and retracts a conclusion only after its final support disappears. Later calls can omit `as_of` to resume the previous valid time.
 - `explain_claim(claim_id, valid_time=..., system_time=...)` returns exact claim/rule version nodes and ordered derivation edges. Use `max_depth` and `max_nodes` to bound traversal; inspect `truncated` to detect a reached bound.
+- `assert_world_accessibility(agent=..., from_world=..., to_world=..., kind=...)` stores positive temporal links in independent `belief`, `knowledge`, and `modal` frames.
+- `entails(agent, proposition, mode, world=..., valid_time=...)` evaluates `BELIEVES`, `KNOWS`, `POSSIBLE`, or `NECESSARY` in one pinned read view. Always set finite `max_depth` and `max_states` appropriate to the workload.
+- Modal formulas accept atoms plus `NOT`, `AND`, `OR`, and nested modal operators. They use four-valued paraconsistent semantics; missing accessibility is `unknown`, and contradictions do not entail unrelated atoms.
+- `CALL kg.entails(...) YIELD status, confidence, explanation RETURN ...` exposes the same bounded evaluator. Options require `world` and `validTime`; `systemTime` selects historical knowledge.
 
 ## Example
 

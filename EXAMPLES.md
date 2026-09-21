@@ -145,6 +145,55 @@ with TemporaryDirectory() as tmpdir:
         graph.close()
 ```
 
+## Evaluate Bounded Belief and Knowledge
+
+Accessibility is an explicit temporal fact. Belief and knowledge use separate
+agent frames, and every evaluation has finite depth and state limits.
+
+```python
+from tempfile import TemporaryDirectory
+
+from gestaltdb import ClaimStatus
+from gestaltdb.graphdb import GraphDB
+
+with TemporaryDirectory() as tmpdir:
+    graph = GraphDB.create(f"{tmpdir}/graph", backend="leveldb", serializer="json")
+    try:
+        graph.assert_world_accessibility(
+            agent="alice", from_world="actual", to_world="alice-belief",
+            kind="belief", valid_from="2025-01-01T00:00:00Z",
+        )
+        graph.assert_claim(
+            subject="bob", predicate="LOCATED_IN", object="paris",
+            polarity="positive", agent="source:registry", world="alice-belief",
+            confidence=0.9, valid_from="2025-01-01T00:00:00Z",
+        )
+        result = graph.entails(
+            "alice",
+            {"subject": "bob", "predicate": "LOCATED_IN", "object": "paris"},
+            "BELIEVES",
+            world="actual",
+            valid_time="2025-06-01T00:00:00Z",
+            max_depth=4,
+            max_states=1000,
+        )
+        assert result.status is ClaimStatus.SUPPORTED
+
+        cypher = graph.query(
+            "CALL kg.entails($agent, $claim, 'BELIEVES', $options) "
+            "YIELD status, confidence, explanation "
+            "RETURN status, confidence, explanation",
+            parameters={
+                "agent": "alice",
+                "claim": {"subject": "bob", "predicate": "LOCATED_IN", "object": "paris"},
+                "options": {"world": "actual", "validTime": "2025-06-01T00:00:00Z"},
+            },
+        )
+        assert cypher.records[0]["status"] == "supported"
+    finally:
+        graph.close()
+```
+
 ## Use a Self-Describing Store
 
 `GraphDB.create` writes a manifest next to the database. `GraphDB.open` uses that manifest to choose the backend and serializer.

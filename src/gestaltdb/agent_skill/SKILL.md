@@ -57,13 +57,15 @@ The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storag
 - Use `SamplerSnapshot` and `SamplerEngine` only when you need compact array-native IDs for ML data loading.
 - Use `assert_claim` for sourced positive/negative propositions and `claim_status` for open-world four-valued evaluation at valid/system time.
 - Use `create_rule` and bounded `run_rules(as_of=...)` for positive Horn inference over entity claims; use `maintain_truth` after premise/rule changes and `explain_claim` for bounded historical derivation graphs.
+- Use `assert_world_accessibility` plus bounded `entails` for temporal `BELIEVES`, `KNOWS`, `POSSIBLE`, and `NECESSARY` evaluation. Belief, knowledge, and generic modal accessibility are separate frames.
 
 ## Cypher Boundaries
 
 `GraphDB.query(cypher, parameters=None)` supports reads and writes, including
 read composition, paths, core expressions and aggregates, mutations, persisted
 node constraints, and `SHOW CONSTRAINTS`/`SHOW INDEXES`. Registered procedures
-use `CALL name(...) YIELD ...`; currently only `pg.sample_typed_paths` executes.
+use `CALL name(...) YIELD ...`; `pg.sample_typed_paths` and bounded
+`kg.entails` execute.
 
 Do not use pattern comprehensions, pattern arguments to `exists()`, GQL
 quantified paths, relationship/multi-property constraints, or unregistered

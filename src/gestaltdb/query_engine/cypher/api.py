@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from .ast import (
     CreateConstraint,
     DropConstraint,
+    EntailsCall,
     Query,
     SampleTypedPathsCall,
     ShowIndexes,
@@ -69,7 +70,7 @@ class QueryResult:
         return len(self.records)
 
 
-def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | RelationshipScanQuery | MultiMatchQuery:
+def parse(query: str) -> MatchQuery | SampleTypedPathsCall | EntailsCall | NodeScanQuery | RelationshipScanQuery | MultiMatchQuery:
     """Parse the supported Cypher subset.
 
     Args:
@@ -90,7 +91,7 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
 
 def parse_ast(
     query: str,
-) -> Query | SampleTypedPathsCall | UnionQuery | CreateConstraint | DropConstraint | ShowConstraints | ShowIndexes:
+) -> Query | SampleTypedPathsCall | EntailsCall | UnionQuery | CreateConstraint | DropConstraint | ShowConstraints | ShowIndexes:
     """Parse the supported Cypher subset into its canonical clause AST."""
     return _parse_ast(query)
 
@@ -104,7 +105,7 @@ def plan(query: str) -> LogicalPlan:
     directly and cannot be planned.
     """
     canonical = _parse_ast(query)
-    if isinstance(canonical, SampleTypedPathsCall):
+    if isinstance(canonical, (SampleTypedPathsCall, EntailsCall)):
         return plan_query(canonical)
     if isinstance(canonical, UnionQuery):
         return plan_union_query(canonical)
@@ -132,7 +133,7 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
     if isinstance(canonical, (CreateConstraint, DropConstraint, ShowConstraints, ShowIndexes)):
         columns, records = execute_ddl(graph, canonical)
         return QueryResult(columns=columns, records=records)
-    if isinstance(canonical, SampleTypedPathsCall):
+    if isinstance(canonical, (SampleTypedPathsCall, EntailsCall)):
         logical_plan = plan_query(canonical)
     elif isinstance(canonical, UnionQuery):
         logical_plan = plan_union_query(canonical)

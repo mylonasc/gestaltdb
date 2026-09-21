@@ -10,6 +10,7 @@ from typing import Protocol
 from .ast import (
     AndExpression,
     ComparisonExpression,
+    EntailsCall,
     NodePattern,
     NodeScanQuery,
     Parameter,
@@ -400,7 +401,38 @@ def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, obj
 
 
 def _procedure_rows(source: ProcedureSource, context: QueryContext) -> Iterator[BindingRow]:
-    """Seed binding rows from a sampling procedure call."""
+    """Seed binding rows from an allowlisted procedure call."""
+    if isinstance(source.query, EntailsCall):
+        agent = evaluate_expression(source.query.agent, {}, context)
+        proposition = evaluate_expression(source.query.proposition, {}, context)
+        mode = evaluate_expression(source.query.mode, {}, context)
+        options = evaluate_expression(source.query.options, {}, context)
+        if not isinstance(options, dict):
+            raise ValueError("kg.entails options must be a map")
+        allowed_options = {"world", "validTime", "systemTime", "throughCommit", "maxDepth", "maxStates"}
+        unknown = sorted(set(options) - allowed_options)
+        if unknown:
+            raise ValueError(f"kg.entails unsupported option: {unknown[0]}")
+        if "world" not in options or "validTime" not in options:
+            raise ValueError("kg.entails options require world and validTime")
+        result = context.graph.entails(
+            agent,
+            proposition,
+            mode,
+            world=options["world"],
+            valid_time=options["validTime"],
+            system_time=options.get("systemTime"),
+            through_commit=options.get("throughCommit"),
+            max_depth=options.get("maxDepth", 4),
+            max_states=options.get("maxStates", 1_000),
+        )
+        values = {
+            "status": result.status.value,
+            "confidence": result.confidence,
+            "explanation": dict(result.explanation),
+        }
+        bindings = {alias: values[field] for field, alias in source.query.yields}
+        return iter((BindingRow(bindings=bindings),))
     seed_ids = context.resolve(source.query.seed_ids)
     pattern = context.resolve(source.query.pattern)
     if not isinstance(seed_ids, list) or not all(isinstance(seed_id, str) for seed_id in seed_ids):

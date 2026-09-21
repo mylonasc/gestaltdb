@@ -14,6 +14,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Canonical temporal values and selection semantics: `src/gestaltdb/temporal.py`
 - Immutable temporal version records and write descriptors: `src/gestaltdb/versioning.py`
 - Epistemic claim values and four-valued status: `src/gestaltdb/epistemic.py`
+- Bounded modal expressions and evaluation: `src/gestaltdb/modal.py`
 - Positive Horn rule values and evaluation results: `src/gestaltdb/rules.py`
 - Cypher engine: `src/gestaltdb/query_engine/cypher/`
 - Legacy Cypher import shims: `src/gestaltdb/cypher.py` and `src/gestaltdb/cypher_*.py`
@@ -43,6 +44,8 @@ from gestaltdb import TemporalDate, TemporalDuration, TemporalLocalDateTime
 from gestaltdb import TemporalLocalTime, TemporalTime
 from gestaltdb import GraphReadView, ReadViewProvenance
 from gestaltdb import Claim, ClaimObjectKind, ClaimPolarity, ClaimStatus
+from gestaltdb import AccessibilityKind, ModalExpression, ModalOperator
+from gestaltdb import ModalEntailmentResult, ModalEvaluationLimitError
 from gestaltdb import ClaimExplanation, RuleEvaluationLimitError, RuleRunResult
 from gestaltdb import RuleVersion, TruthMaintenanceResult
 ```
@@ -64,6 +67,7 @@ Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes 
 - `assert_claim`, `correct_claim`, and `retract_claim` append serializer-neutral sourced claims to temporal history. Deterministic statement IDs identify propositions; claim IDs additionally include polarity, agent, source, and world. `iter_claims_as_of` and `claim_status` provide indexed bitemporal lookup and open-world `supported`/`refuted`/`both`/`unknown` semantics.
 - `create_rule` appends validated safe positive Horn-rule versions. `run_rules(as_of=...)` performs bounded semi-naive evaluation over positive entity claims in a shared world, intersects premise validity, and persists deduplicated conclusions with rule and premise version justifications. Limit failures publish no partial derivations.
 - `maintain_truth(as_of=...)` incrementally reconciles derived claims, retracting a conclusion only after its final independent support disappears. `explain_claim` returns a bounded finite graph of exact historical claim/rule versions; retries after interrupted dependency-index publication are idempotent.
+- `assert_world_accessibility` stores agent-specific temporal links in separate belief, knowledge, and modal frames. `entails` and allowlisted `kg.entails` evaluate finite nested modal formulas under one read view with explicit depth/state bounds and deterministic temporal/derivation evidence.
 
 ## Backend Guidance
 
@@ -126,7 +130,7 @@ Supported features include:
 - Core aggregates (`count`, `collect`, `sum`, `avg`, `min`, `max`) with implicit grouping, aggregate `DISTINCT`, and documented null/empty-input behavior.
 - Scalar expressions containing aggregate results, such as `count(*) + 1`.
 - Core scalar functions (`coalesce`, `id`/`elementId`, `type`, `labels`, `startNode`/`endNode`, `properties`, `head`/`last`, `size`/`length`, `toBoolean`/`toInteger`/`toFloat`/`toString`, string ops, math ops including `sign`/`exp`/`log`/`sin`/`cos`/`tan`/`pi`/`e`, `rand`/`randomUUID`, `range`, `reverse`, `tail`, `keys`), including property access on computed values such as `startNode(r).name`.
-- Generalized top-level `CALL name(...) YIELD field [AS alias] RETURN alias` parsing with allowlisted execution; `pg.sample_typed_paths` is registered and accepts parameters.
+- Generalized top-level `CALL name(...) YIELD field [AS alias] RETURN alias` parsing with allowlisted execution; `pg.sample_typed_paths` and `kg.entails` are registered and accept parameters.
 
 Unsupported Cypher currently includes mutating clauses beyond `CREATE`/`SET`/`REMOVE`/`DELETE`/`MERGE`/`FOREACH`, pattern comprehensions, `exists()` with patterns, GQL quantified paths (with migration hints), unregistered procedures, and relationship or multi-property constraints.
 

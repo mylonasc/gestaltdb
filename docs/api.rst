@@ -37,6 +37,13 @@ Positive Horn Rules
    :members:
    :show-inheritance:
 
+Modal Evaluation
+----------------
+
+.. automodule:: gestaltdb.modal
+   :members:
+   :show-inheritance:
+
 Consistent Read Views
 ---------------------
 

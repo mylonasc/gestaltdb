@@ -19,6 +19,7 @@ from .ast import (
     CreateConstraint,
     DeleteClause,
     DropConstraint,
+    EntailsCall,
     ExistsExpression,
     ForeachClause,
     FunctionCall,
@@ -138,9 +139,11 @@ limit_clause: "LIMIT"i pagination_value
 ?pagination_value: INTEGER -> integer
                  | parameter
 
-procedure_call: "CALL"i qualified_name "(" call_arguments ")" "YIELD"i yield_item "RETURN"i symbolic_name limit_clause?
+procedure_call: "CALL"i qualified_name "(" call_arguments ")" "YIELD"i yield_items "RETURN"i procedure_returns limit_clause?
 qualified_name: symbolic_name ("." symbolic_name)*
+yield_items: yield_item ("," yield_item)*
 yield_item: symbolic_name ("AS"i symbolic_name)?
+procedure_returns: symbolic_name ("," symbolic_name)*
 call_arguments: [expression ("," expression)*]
 
   pattern: node_pattern traversal_hop*
@@ -962,6 +965,12 @@ class _ASTBuilder(Transformer):
     def yield_item(self, children):
         return ("yield", children[0], children[-1])
 
+    def yield_items(self, children):
+        return ("yields", tuple(children))
+
+    def procedure_returns(self, children):
+        return ("returns", tuple(children))
+
     def procedure_call(self, children):
         limit = next(
             (
@@ -973,15 +982,15 @@ class _ASTBuilder(Transformer):
         )
         name = next(item for item in children if isinstance(item, str))
         arguments = next(item[1] for item in children if isinstance(item, tuple) and item and item[0] == "arguments")
-        yielded = next(item for item in children if isinstance(item, tuple) and item and item[0] == "yield")
-        return_name = next(item for item in reversed(children) if isinstance(item, str))
-        return ("procedure", name, arguments, yielded[1], yielded[2], return_name, limit)
+        yielded = next(item[1] for item in children if isinstance(item, tuple) and item and item[0] == "yields")
+        returns = next(item[1] for item in children if isinstance(item, tuple) and item and item[0] == "returns")
+        return ("procedure", name, arguments, yielded, returns, limit)
 
 
 _BUILDER = _ASTBuilder()
 
 
-def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | RelationshipScanQuery | MultiMatchQuery:
+def parse(query: str) -> MatchQuery | SampleTypedPathsCall | EntailsCall | NodeScanQuery | RelationshipScanQuery | MultiMatchQuery:
     """Parse the supported Cypher subset into runtime-compatible AST objects."""
     parsed = _parse_source(query)
 
@@ -1028,7 +1037,7 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
     return _build_match_query(parsed, query, analysis)
 
 
-def parse_ast(query: str) -> Query | SampleTypedPathsCall | UnionQuery | CreateConstraint | DropConstraint | ShowConstraints | ShowIndexes:
+def parse_ast(query: str) -> Query | SampleTypedPathsCall | EntailsCall | UnionQuery | CreateConstraint | DropConstraint | ShowConstraints | ShowIndexes:
     """Parse the supported Cypher subset into the canonical clause AST."""
     parsed = _parse_source(query)
     if isinstance(parsed, tuple) and parsed and parsed[0] == "procedure":
@@ -1293,23 +1302,47 @@ def _parse_source(query: str):
     return parsed
 
 
-def _build_sample_call(parsed, query: str) -> SampleTypedPathsCall:
-    _, name, arguments, yielded, output_name, return_name, limit = parsed
-    if name.lower() != "pg.sample_typed_paths":
+def _build_sample_call(parsed, query: str) -> SampleTypedPathsCall | EntailsCall:
+    _, name, arguments, yields, returns, limit = parsed
+    procedure = name.lower()
+    if procedure not in {"pg.sample_typed_paths", "kg.entails"}:
         raise _located_error(CypherSemanticError, f"Unsupported procedure: {name}", query, name)
-    if yielded.lower() != "path":
+    allowed = {"path"} if procedure == "pg.sample_typed_paths" else {"status", "confidence", "explanation"}
+    yielded_fields = [item[1].lower() for item in yields]
+    if len(set(yielded_fields)) != len(yielded_fields):
+        raise _located_error(CypherSemanticError, f"Procedure {name} yields a field more than once", query)
+    unsupported = next((item[1] for item in yields if item[1].lower() not in allowed), None)
+    if unsupported is not None:
         raise _located_error(
             CypherSemanticError,
-            f"Procedure pg.sample_typed_paths does not yield field: {yielded}",
+            f"Procedure {name} does not yield field: {unsupported}",
             query,
-            yielded,
+            unsupported,
         )
-    if return_name != output_name:
+    aliases = {item[2] for item in yields}
+    if len(aliases) != len(yields):
+        raise _located_error(
+            CypherSemanticError, f"Procedure {name} yields an alias more than once", query
+        )
+    invalid_return = next((item for item in returns if item not in aliases), None)
+    if invalid_return is not None:
         raise _located_error(
             CypherSemanticError,
-            f"RETURN must reference yielded variable: {output_name}",
+            f"RETURN must reference a yielded variable: {invalid_return}",
             query,
-            return_name,
+            invalid_return,
+        )
+    if procedure == "kg.entails":
+        if len(arguments) != 4:
+            raise _located_error(
+                CypherSemanticError,
+                "kg.entails expects agent, proposition, mode, and options",
+                query,
+            )
+        return EntailsCall(
+            agent=arguments[0], proposition=arguments[1], mode=arguments[2], options=arguments[3],
+            yields=tuple((item[1].lower(), item[2]) for item in yields),
+            returns=tuple(returns), limit=limit,
         )
     if len(arguments) != 2:
         raise _located_error(CypherSemanticError, "pg.sample_typed_paths expects seed IDs and a sampling pattern", query)
@@ -1321,9 +1354,9 @@ def _build_sample_call(parsed, query: str) -> SampleTypedPathsCall:
     return SampleTypedPathsCall(
         seed_ids=seed_ids,
         pattern=pattern,
-        returns=(output_name,),
+        returns=tuple(returns),
         limit=limit,
-        output_name=output_name,
+        output_name=yields[0][2],
     )
 
 

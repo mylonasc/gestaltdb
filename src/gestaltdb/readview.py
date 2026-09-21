@@ -283,6 +283,14 @@ class GraphReadView:
             **kwargs,
         )
 
+    def evaluate_modal(self, expression, *, world, max_depth=4, max_states=1_000):
+        """Evaluate a bounded modal expression at this view's fixed horizon."""
+        from .modal import evaluate_modal
+
+        return evaluate_modal(
+            self, expression, world=world, max_depth=max_depth, max_states=max_states
+        )
+
     def iter_edges_as_of(self, *, valid_time=None, **kwargs):
         return self._graph.iter_edges_as_of(
             valid_time=self.valid_time if valid_time is None else valid_time,

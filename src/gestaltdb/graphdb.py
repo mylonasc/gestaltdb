@@ -27,6 +27,7 @@ import struct
 
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .epistemic import Claim, ClaimObjectKind, ClaimPolarity, ClaimStatus, claim_statement_id
+from .modal import ACCESSIBILITY_PREDICATES, AccessibilityKind, ModalExpression, ModalOperator, evaluate_modal
 from .rules import (
     ClaimExplanation,
     ExplanationEdge,
@@ -4638,6 +4639,79 @@ class GraphDB:
             index_mode=index_mode,
         )
         return commit.versions[0]  # type: ignore[return-value]
+
+    def assert_world_accessibility(
+        self,
+        *,
+        agent,
+        from_world,
+        to_world,
+        kind,
+        valid=None,
+        valid_from=None,
+        valid_to=None,
+        source=None,
+        provenance=None,
+        version_id=None,
+        metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
+    ) -> ClaimVersion:
+        """Append a positive temporal accessibility fact for one agent frame."""
+        try:
+            frame = AccessibilityKind(kind)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("kind must be 'belief', 'knowledge', or 'modal'") from exc
+        return self.assert_claim(
+            subject=from_world,
+            predicate=ACCESSIBILITY_PREDICATES[frame],
+            object=to_world,
+            polarity=ClaimPolarity.POSITIVE,
+            agent=agent,
+            source=source,
+            world=from_world,
+            provenance={} if provenance is None else provenance,
+            valid=valid,
+            valid_from=valid_from,
+            valid_to=valid_to,
+            version_id=version_id,
+            metadata=metadata,
+            index_mode=index_mode,
+        )
+
+    def entails(
+        self,
+        agent,
+        proposition,
+        mode,
+        *,
+        world,
+        valid_time,
+        system_time=None,
+        through_commit=None,
+        max_depth=4,
+        max_states=1_000,
+    ):
+        """Evaluate a bounded modal proposition under one pinned temporal view."""
+        try:
+            operator = ModalOperator(str(mode).upper())
+        except ValueError as exc:
+            raise ValueError("mode must be BELIEVES, KNOWS, POSSIBLE, or NECESSARY") from exc
+        if operator not in {
+            ModalOperator.BELIEVES, ModalOperator.KNOWS,
+            ModalOperator.POSSIBLE, ModalOperator.NECESSARY,
+        }:
+            raise ValueError("mode must be BELIEVES, KNOWS, POSSIBLE, or NECESSARY")
+        expression = ModalExpression.from_value({
+            "operator": operator.value,
+            "agent": agent,
+            "formula": proposition,
+        })
+        with self.read_view(
+            valid_time=valid_time, system_time=system_time, through_commit=through_commit
+        ) as view:
+            return evaluate_modal(
+                view, expression, world=world, max_depth=max_depth, max_states=max_states
+            )
 
     def correct_claim(
         self,

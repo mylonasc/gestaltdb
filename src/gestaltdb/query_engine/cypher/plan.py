@@ -7,6 +7,7 @@ from dataclasses import dataclass, fields, is_dataclass, replace
 from .ast import (
     CreateClause,
     DeleteClause,
+    EntailsCall,
     ForeachClause,
     FunctionCall,
     MatchClause,
@@ -179,7 +180,7 @@ class Aggregate:
 class ProcedureSource:
     """Produce binding rows from a supported procedure call."""
 
-    query: SampleTypedPathsCall
+    query: SampleTypedPathsCall | EntailsCall
 
 
 @dataclass(frozen=True)
@@ -229,9 +230,10 @@ class ProcedureCall:
     name: str
 
 
-def plan_query(parsed: SampleTypedPathsCall) -> LogicalPlan:
-    """Create a source-backed logical plan for a sampling procedure call."""
-    operators = [ProcedureCall("pg.sample_typed_paths"), Project(parsed.returns)]
+def plan_query(parsed: SampleTypedPathsCall | EntailsCall) -> LogicalPlan:
+    """Create a source-backed logical plan for an allowlisted procedure call."""
+    name = "kg.entails" if isinstance(parsed, EntailsCall) else "pg.sample_typed_paths"
+    operators = [ProcedureCall(name), Project(parsed.returns)]
     _append_result_operators(operators, parsed)
     return LogicalPlan(
         tuple(operators), ProcedureSource(parsed), parsed.returns
