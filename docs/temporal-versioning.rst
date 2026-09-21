@@ -216,8 +216,48 @@ intervals. Corrections and retractions append history:
 least one matching positive claim is visible, ``REFUTED`` for negative only,
 ``BOTH`` when both polarities coexist, and ``UNKNOWN`` when neither is visible.
 A ``GraphReadView`` exposes the same claim lookup, iteration, and status methods
-at its pinned system horizon and default valid time. Rule inference and modal
-query syntax are outside this API.
+at its pinned system horizon and default valid time.
+
+Positive Horn Rules
+-------------------
+
+``create_rule`` validates and appends immutable system-time versions of named
+positive Horn rules. Predicates are constants, and every variable in the head
+must occur in the body. Invalid or unsafe definitions are rejected before the
+catalog changes. Reusing a rule name creates a new version; ``get_rule`` and
+``iter_rule_versions`` accept a system-time horizon.
+
+.. code-block:: python
+
+   rule = graph.create_rule(
+       "employment-implies-affiliation",
+       when=[("?p", "WORKS_FOR", "?c"), ("?c", "MEMBER_OF", "?g")],
+       then=("?p", "AFFILIATED_WITH", "?g"),
+   )
+   result = graph.run_rules(
+       as_of="2024-06-01T00:00:00Z",
+       max_iterations=100,
+       max_derivations=10_000,
+       max_justifications=100_000,
+   )
+
+``run_rules`` evaluates the latest version of each rule with semi-naive deltas.
+Only positive entity-object claims participate. All premises in a match must
+share a world, and each justification contributes the intersection of its
+premises' half-open valid-time intervals. Overlapping supports for an equivalent
+conclusion are consolidated into one validity interval. Derived conclusions use the
+reserved ``gestaltdb:rules`` agent identity and retain canonical justification
+records containing the rule version ID and ordered premise version IDs.
+Recursive finite rule sets stop at a fixpoint, and repeating an unchanged run
+is idempotent.
+
+The three positive resource limits are mandatory safeguards. Exceeding one
+raises ``RuleEvaluationLimitError`` before any staged conclusion is persisted.
+Successful conclusions are published together in one temporal commit and
+remain separate from mutable graph edges and unqualified Cypher. Rule
+evaluation does not consume negative claims, literal-object claims, or claims
+from different worlds in one match. Incremental truth maintenance and modal
+query syntax remain outside this API.
 
 Current Limits
 --------------
@@ -228,8 +268,8 @@ current-state behavior. Read views do not make mutable current-state records
 snapshot-safe on backends without a unified read snapshot. Temporal property
 indexes and temporal writes through Cypher are not implemented yet. Temporal
 sampler snapshots support point/window traversal, causal paths, node
-availability, and time-aware hard-negative rejection. Claim Cypher syntax is
-not implemented. Marker-backed data that fails hash or
+availability, and time-aware hard-negative rejection. Claim and rule Cypher
+syntax is not implemented. Marker-backed data that fails hash or
 envelope validation raises
 ``TemporalCorruptionError`` rather than returning partial history.
 

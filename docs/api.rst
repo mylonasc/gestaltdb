@@ -30,6 +30,13 @@ Epistemic Claims
    :members:
    :show-inheritance:
 
+Positive Horn Rules
+-------------------
+
+.. automodule:: gestaltdb.rules
+   :members:
+   :show-inheritance:
+
 Consistent Read Views
 ---------------------
 

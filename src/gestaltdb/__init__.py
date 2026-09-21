@@ -31,10 +31,10 @@ main graph API lives in submodules rather than entirely at the package root:
 Import core graph classes from ``gestaltdb.graphdb``, storage backends from
 ``gestaltdb.kvstores``, serializers from ``gestaltdb.serializers``, canonical
 temporal values from ``gestaltdb.temporal``, epistemic claim values from
-``gestaltdb.epistemic``, and advanced sampling primitives from
+``gestaltdb.epistemic``, positive Horn-rule values from ``gestaltdb.rules``, and advanced sampling primitives from
 ``gestaltdb.sampling``. Immutable temporal version models and write
 descriptors live in ``gestaltdb.versioning``. This package root re-exports
-selected ingestion enums/containers, temporal and epistemic values,
+selected ingestion enums/containers, temporal, epistemic, and rule values,
 ``QueryResult``, and sampling helpers for convenience.
 
 Important usage notes for agents and developers:
@@ -77,6 +77,7 @@ from .epistemic import Claim, ClaimObjectKind, ClaimPolarity, ClaimStatus, claim
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .query_engine.cypher import QueryResult
 from .readview import GraphReadView, ProvenanceMismatchError, ReadViewProvenance
+from .rules import RuleAtom, RuleError, RuleEvaluationLimitError, RuleJustification, RuleRunResult, RuleVersion
 from .temporal import (
     TemporalContext,
     TemporalDate,
@@ -101,6 +102,12 @@ __all__ = [
     "GraphReadView",
     "ProvenanceMismatchError",
     "ReadViewProvenance",
+    "RuleAtom",
+    "RuleError",
+    "RuleEvaluationLimitError",
+    "RuleJustification",
+    "RuleRunResult",
+    "RuleVersion",
     "AsyncBatchFeeder",
     "HardNegativeConfig",
     "SampledSubgraphBatch",

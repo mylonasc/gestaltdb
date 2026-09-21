@@ -83,6 +83,50 @@ with TemporaryDirectory() as tmpdir:
         graph.close()
 ```
 
+## Derive Temporal Claims With Rules
+
+Rules use positive entity claims from one world. Each support contributes the
+intersection of its premise validity, and provenance records the exact rule and
+premise versions used.
+
+```python
+from tempfile import TemporaryDirectory
+
+from gestaltdb.graphdb import GraphDB
+
+with TemporaryDirectory() as tmpdir:
+    graph = GraphDB.create(f"{tmpdir}/graph", backend="leveldb", serializer="json")
+    try:
+        graph.assert_claim(
+            subject="alice", predicate="WORKS_FOR", object="acme",
+            polarity="positive", agent="source:hr", world="reported",
+            valid_from="2024-01-01T00:00:00Z",
+        )
+        graph.assert_claim(
+            subject="acme", predicate="MEMBER_OF", object="industry",
+            polarity="positive", agent="source:registry", world="reported",
+            valid_from="2024-03-01T00:00:00Z",
+        )
+        graph.create_rule(
+            "employment-implies-affiliation",
+            when=[("?p", "WORKS_FOR", "?c"), ("?c", "MEMBER_OF", "?g")],
+            then=("?p", "AFFILIATED_WITH", "?g"),
+        )
+
+        result = graph.run_rules(
+            as_of="2024-06-01T00:00:00Z",
+            max_iterations=100,
+            max_derivations=10_000,
+        )
+        assert result.derived_count == 1
+        derived = result.versions[0]
+        assert derived.claim.subject == "alice"
+        assert derived.claim.object == "industry"
+        assert len(derived.claim.provenance["justifications"]) == 1
+    finally:
+        graph.close()
+```
+
 ## Use a Self-Describing Store
 
 `GraphDB.create` writes a manifest next to the database. `GraphDB.open` uses that manifest to choose the backend and serializer.

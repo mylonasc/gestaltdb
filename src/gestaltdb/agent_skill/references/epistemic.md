@@ -15,6 +15,9 @@ valid/system time, or distinguishing contradictory evidence from uncertainty.
 - `claim_status` returns `ClaimStatus.SUPPORTED`, `REFUTED`, `BOTH`, or `UNKNOWN` under open-world semantics.
 - Pass either `system_time` or `through_commit` for historical knowledge. A `GraphReadView` pins the horizon and supplies a default valid time.
 - Deferred claim writes make the temporal index family stale; rebuild the temporal indexes before indexed reads.
+- `create_rule(name, when=[...], then=...)` versions safe positive Horn rules; head variables must be bound in the body and predicates must be constants.
+- `run_rules(as_of=...)` joins positive entity claims within one world, intersects premise validity, and stores conclusions under the `gestaltdb:rules` agent with rule/premise version justifications.
+- Set `max_iterations`, `max_derivations`, and `max_justifications` for workload bounds. A limit error persists no partial conclusions, and an unchanged repeat run is idempotent.
 
 ## Example
 
@@ -49,6 +52,19 @@ with TemporaryDirectory() as tmpdir:
             confidence=0.99,
             provenance={"reviewed": True},
         )
+
+        graph.assert_claim(
+            subject="acme", predicate="MEMBER_OF", object="industry",
+            polarity="positive", agent="source:registry", world="reported",
+            valid_from="2024-03-01T00:00:00Z",
+        )
+        graph.create_rule(
+            "employment-implies-affiliation",
+            when=[("?p", "WORKS_FOR", "?c"), ("?c", "MEMBER_OF", "?g")],
+            then=("?p", "AFFILIATED_WITH", "?g"),
+        )
+        result = graph.run_rules(as_of="2024-06-01T00:00:00Z")
+        assert result.derived_count == 1
     finally:
         graph.close()
 ```

@@ -12,6 +12,7 @@ import threading
 import time
 import uuid
 import base64
+from collections.abc import Mapping
 from contextlib import contextmanager
 from importlib import metadata as importlib_metadata
 from pathlib import Path
@@ -26,6 +27,14 @@ import struct
 
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .epistemic import Claim, ClaimObjectKind, ClaimPolarity, ClaimStatus, claim_statement_id
+from .rules import (
+    RuleError,
+    RuleEvaluationLimitError,
+    RuleJustification,
+    RuleRunResult,
+    RuleVersion,
+    normalize_rule_definition,
+)
 from .sampling import SamplingPattern, as_sampling_pattern
 from .serializers import JSONSerializer
 from .temporal import TemporalInstant, TemporalInterval
@@ -80,6 +89,8 @@ _TEMPORAL_EDGE_IN_CATALOG_INDEX = "temporal_v1_edge_in_catalog"
 _TEMPORAL_CLAIM_CATALOG_INDEX = "temporal_v1_claim_catalog"
 _TEMPORAL_CLAIM_STATEMENT_INDEX = "temporal_v1_claim_statement"
 _TEMPORAL_CLAIM_DIMENSION_INDEX = "temporal_v1_claim_dimension"
+_RULE_CATALOG_KEY = b"rules:catalog:v1"
+_RULE_ENGINE_AGENT = "gestaltdb:rules"
 _DATABASE_ID_LOCK = threading.Lock()
 _UNSET = object()
 
@@ -3639,6 +3650,347 @@ class GraphDB:
         if previous is not None and instant <= previous:
             return TemporalInstant(previous.epoch_microseconds + 1)
         return instant
+
+    # ------------------------
+    # Positive Horn Rules
+    # ------------------------
+
+    def _load_rule_catalog(self) -> tuple[RuleVersion, ...]:
+        payload = self.store.get_metadata(_RULE_CATALOG_KEY)
+        if payload is None:
+            return ()
+        try:
+            decoded = json.loads(payload.decode("utf-8"))
+            if not isinstance(decoded, dict) or decoded.get("format_version") != 1:
+                raise TypeError
+            versions = tuple(RuleVersion.from_dict(item) for item in decoded["versions"])
+            if [item.catalog_ordinal for item in versions] != list(range(1, len(versions) + 1)):
+                raise ValueError
+            if len({item.version_id for item in versions}) != len(versions):
+                raise ValueError
+            return versions
+        except (KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuleError("invalid rule catalog") from exc
+
+    def create_rule(self, rule_id, *, when, then, version_id=None) -> RuleVersion:
+        """Validate and append one immutable version of a positive Horn rule."""
+        with self._temporal_write_lock:
+            catalog = self._load_rule_catalog()
+            normalized_version_id = normalize_version_id(version_id)
+            if any(item.version_id == normalized_version_id for item in catalog):
+                raise RuleError(f"rule version ID already exists: {normalized_version_id}")
+            previous_time = catalog[-1].system_time if catalog else None
+            system_time = self._next_temporal_system_time(previous_time)
+            rule = normalize_rule_definition(
+                rule_id,
+                when,
+                then,
+                version_id=normalized_version_id,
+                system_time=system_time,
+                catalog_ordinal=len(catalog) + 1,
+            )
+            self.store.put_metadata(
+                _RULE_CATALOG_KEY,
+                canonical_json_bytes({
+                    "format_version": 1,
+                    "versions": [item.to_dict() for item in (*catalog, rule)],
+                }),
+            )
+            return rule
+
+    def iter_rule_versions(self, rule_id=None, *, system_time=None):
+        """Iterate immutable rule versions in catalog order at a system-time horizon."""
+        if rule_id is not None and (not isinstance(rule_id, str) or not rule_id):
+            raise RuleError("rule_id must be a non-empty string")
+        horizon = None if system_time is None else normalize_temporal_instant(system_time)
+        for rule in self._load_rule_catalog():
+            if horizon is not None and rule.system_time > horizon:
+                continue
+            if rule_id is None or rule.rule_id == rule_id:
+                yield rule
+
+    def get_rule(self, rule_id, *, system_time=None) -> RuleVersion | None:
+        """Return the latest version of a named rule at a system-time horizon."""
+        versions = tuple(self.iter_rule_versions(rule_id, system_time=system_time))
+        return versions[-1] if versions else None
+
+    @staticmethod
+    def _rule_justifications(provenance) -> set[tuple[str, tuple[str, ...]]]:
+        if not isinstance(provenance, Mapping) or provenance.get("derived_by") != "gestaltdb.rules":
+            return set()
+        result = set()
+        values = provenance.get("justifications", ())
+        if not isinstance(values, (tuple, list)):
+            return result
+        for value in values:
+            if not isinstance(value, Mapping):
+                continue
+            try:
+                justification = RuleJustification(
+                    value["rule_version_id"], tuple(value["premise_version_ids"])
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+            result.add((justification.rule_version_id, justification.premise_version_ids))
+        return result
+
+    def run_rules(
+        self,
+        *,
+        as_of,
+        system_time=None,
+        world=None,
+        max_iterations=100,
+        max_derivations=10_000,
+        max_justifications=100_000,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
+    ) -> RuleRunResult:
+        """Evaluate active rules semi-naively and persist a bounded fixpoint.
+
+        Only positive entity-object claims participate. Premises must share a
+        world, and each conclusion receives their half-open validity
+        intersection. No claims are written if any resource bound is exceeded.
+        """
+        limits = {
+            "max_iterations": max_iterations,
+            "max_derivations": max_derivations,
+            "max_justifications": max_justifications,
+        }
+        for name, value in limits.items():
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if world is not None and (not isinstance(world, str) or not world):
+            raise ValueError("world must be a non-empty string or None")
+        mode = index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode
+        if mode not in {item.value for item in IndexMaintenanceMode}:
+            raise ValueError("index_mode must be a valid IndexMaintenanceMode")
+
+        instant = normalize_temporal_instant(as_of)
+        horizon = self._temporal_system_horizon(system_time=system_time)
+        rules_by_id = {}
+        for rule in self.iter_rule_versions(system_time=system_time):
+            rules_by_id[rule.rule_id] = rule
+        rules = tuple(sorted(rules_by_id.values(), key=lambda item: item.rule_id))
+        if not rules:
+            return RuleRunResult(0, 0, 0, None, ())
+
+        facts = []
+        facts_by_predicate = {}
+        existing_derived = {}
+
+        def conclusion_key(subject, predicate, object_value, claim_world):
+            return subject, predicate, object_value, claim_world
+
+        def union_validity(left, right):
+            start = min(left.start, right.start)
+            if left.end is None or right.end is None:
+                end = None
+            else:
+                end = max(left.end, right.end)
+            return TemporalInterval(start, end)
+
+        def add_fact(version_id, claim, valid):
+            fact = {
+                "version_id": version_id,
+                "subject": claim.subject,
+                "predicate": claim.predicate,
+                "object": claim.object,
+                "world": claim.world,
+                "valid": valid,
+            }
+            facts.append(fact)
+            facts_by_predicate.setdefault(claim.predicate, []).append(fact)
+            return fact
+
+        for version in self.iter_claims_as_of(
+            valid_time=instant,
+            polarity=ClaimPolarity.POSITIVE,
+            world=world,
+            through_commit=horizon,
+        ):
+            claim = version.claim
+            if claim is None or claim.object_kind is not ClaimObjectKind.ENTITY:
+                continue
+            fact = add_fact(version.version_id, claim, version.valid)
+            if claim.agent == _RULE_ENGINE_AGENT and claim.provenance.get("derived_by") == "gestaltdb.rules":
+                existing_derived[conclusion_key(
+                    claim.subject, claim.predicate, claim.object, claim.world
+                )] = (version, fact)
+
+        delta_ids = {fact["version_id"] for fact in facts}
+        outputs = {}
+        generated_justifications = set()
+        generated_count = 0
+        iterations = 0
+
+        def unify(term, value, bindings):
+            if not term.startswith("?"):
+                return bindings if term == value else None
+            current = bindings.get(term, _UNSET)
+            if current is not _UNSET:
+                return bindings if current == value else None
+            updated = dict(bindings)
+            updated[term] = value
+            return updated
+
+        while delta_ids:
+            if iterations >= max_iterations:
+                raise RuleEvaluationLimitError(
+                    f"rule evaluation exceeded max_iterations={max_iterations}"
+                )
+            next_delta = {}
+            for rule in rules:
+                rows = [({}, (), None, None, False)]
+                for atom in rule.when:
+                    joined = []
+                    for bindings, premises, valid, row_world, used_delta in rows:
+                        for fact in facts_by_predicate.get(atom.predicate, ()):
+                            if row_world is not None and fact["world"] != row_world:
+                                continue
+                            subject_bindings = unify(atom.subject, fact["subject"], bindings)
+                            if subject_bindings is None:
+                                continue
+                            bound = unify(atom.object, fact["object"], subject_bindings)
+                            if bound is None:
+                                continue
+                            intersection = fact["valid"] if valid is None else valid.intersection(fact["valid"])
+                            if intersection is None:
+                                continue
+                            joined.append((
+                                bound,
+                                (*premises, fact["version_id"]),
+                                intersection,
+                                fact["world"],
+                                used_delta or fact["version_id"] in delta_ids,
+                            ))
+                    rows = joined
+                    if not rows:
+                        break
+                for bindings, premises, valid, row_world, used_delta in rows:
+                    if not used_delta:
+                        continue
+                    subject = bindings.get(rule.then.subject, rule.then.subject)
+                    object_value = bindings.get(rule.then.object, rule.then.object)
+                    key = conclusion_key(subject, rule.then.predicate, object_value, row_world)
+                    justification = (rule.version_id, premises)
+                    marker = (key, justification)
+                    output = outputs.get(key)
+                    if output is None:
+                        existing_entry = existing_derived.get(key)
+                        existing = None if existing_entry is None else existing_entry[0]
+                        version_id = (
+                            existing.version_id if existing is not None else normalize_version_id()
+                        )
+                        output = {
+                            "existing": existing,
+                            "version_id": version_id,
+                            "subject": subject,
+                            "predicate": rule.then.predicate,
+                            "object": object_value,
+                            "world": row_world,
+                            "valid": existing.valid if existing is not None else valid,
+                            "fact": None if existing_entry is None else existing_entry[1],
+                            "justifications": set(),
+                        }
+                        outputs[key] = output
+                        if existing is None:
+                            generated_count += 1
+                            if generated_count > max_derivations:
+                                raise RuleEvaluationLimitError(
+                                    f"rule evaluation exceeded max_derivations={max_derivations}"
+                                )
+                            next_delta[key] = output
+                    merged_valid = union_validity(output["valid"], valid)
+                    if merged_valid != output["valid"]:
+                        output["valid"] = merged_valid
+                        next_delta[key] = output
+                    if marker in generated_justifications:
+                        continue
+                    generated_justifications.add(marker)
+                    if len(generated_justifications) > max_justifications:
+                        raise RuleEvaluationLimitError(
+                            f"rule evaluation exceeded max_justifications={max_justifications}"
+                        )
+                    output["justifications"].add(justification)
+            iterations += 1
+            added_facts = []
+            for output in next_delta.values():
+                fact = output["fact"]
+                if fact is None:
+                    claim = Claim(
+                        output["subject"], output["predicate"], output["object"],
+                        ClaimPolarity.POSITIVE, _RULE_ENGINE_AGENT,
+                        world=output["world"],
+                        provenance={"derived_by": "gestaltdb.rules"},
+                    )
+                    fact = add_fact(output["version_id"], claim, output["valid"])
+                    output["fact"] = fact
+                else:
+                    fact["valid"] = output["valid"]
+                added_facts.append(fact)
+            delta_ids = {fact["version_id"] for fact in added_facts}
+
+        writes = []
+        output_order = sorted(outputs)
+        for key in output_order:
+            output = outputs[key]
+            existing = output["existing"]
+            justifications = set(output["justifications"])
+            if existing is not None:
+                justifications.update(self._rule_justifications(existing.claim.provenance))
+            encoded_justifications = [
+                RuleJustification(rule_version_id, premise_ids).to_dict()
+                for rule_version_id, premise_ids in sorted(justifications)
+            ]
+            if (
+                existing is not None
+                and output["valid"] == existing.valid
+                and justifications == self._rule_justifications(existing.claim.provenance)
+            ):
+                continue
+            claim = Claim(
+                output["subject"],
+                output["predicate"],
+                output["object"],
+                ClaimPolarity.POSITIVE,
+                _RULE_ENGINE_AGENT,
+                world=output["world"],
+                provenance={
+                    "derived_by": "gestaltdb.rules",
+                    "justifications": encoded_justifications,
+                },
+            )
+            if existing is None:
+                writes.append(ClaimVersionWrite.assertion(
+                    claim, output["valid"], version_id=output["version_id"]
+                ))
+            else:
+                writes.append(ClaimVersionWrite.correction(
+                    claim,
+                    supersedes_version_id=existing.version_id,
+                    valid=output["valid"],
+                ))
+
+        if not writes:
+            return RuleRunResult(iterations, 0, len(generated_justifications), None, ())
+        commit = self.commit_versions(
+            writes,
+            metadata={
+                "rule_run": {
+                    "as_of_us": instant.epoch_microseconds,
+                    "input_through_commit": horizon,
+                    "iterations": iterations,
+                }
+            },
+            index_mode=index_mode,
+        )
+        return RuleRunResult(
+            iterations,
+            len(commit.versions),
+            len(generated_justifications),
+            commit.commit_id,
+            commit.versions,
+        )
 
     def put_node_version(
         self, node: Node, *, valid, version_id=None, metadata=None,
