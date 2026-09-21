@@ -1,6 +1,6 @@
 ---
 name: gestaltdb-user-guide
-description: Use when writing application code that uses GestaltDB, especially GraphDB creation, explicit imports, Cypher queries, indexing, ingestion, and typed sampling.
+description: Use when writing application code that uses GestaltDB, especially GraphDB creation, explicit imports, Cypher queries, indexing, ingestion, epistemic claims, and typed sampling.
 ---
 
 # GestaltDB User Guide For Agents
@@ -30,6 +30,7 @@ Available topics:
 - `sampling`: typed traversal sampling vs snapshot/engine sampling.
 - `ingestion`: Arrow/Polars ingestion and index maintenance modes.
 - `visualization`: offline `visualize_*` entrypoints, `VizOptions` caps, `GraphDB.visualize`.
+- `epistemic`: sourced bitemporal claims, provenance, contradiction, and four-valued status.
 
 ## Import Rules
 
@@ -41,7 +42,7 @@ from gestaltdb.kvstores import LevelDBStore
 from gestaltdb.serializers import JSONSerializer, PickleSerializer
 ```
 
-The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storage backends, or serializers. The root does export selected ingestion, Cypher result, and sampling helpers such as `IndexMaintenanceMode`, `QueryResult`, `SamplingHop`, and `SamplingPattern`.
+The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storage backends, or serializers. The root does export selected ingestion, epistemic, Cypher result, and sampling helpers such as `ClaimStatus`, `IndexMaintenanceMode`, `QueryResult`, `SamplingHop`, and `SamplingPattern`.
 
 ## Core Usage Rules
 
@@ -54,6 +55,7 @@ The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storag
 - Run `graph.rebuild_deferred_indexes()` before relying on secondary indexes after deferred ingestion.
 - Use `SamplingHop` and `SamplingPattern` for GraphDB typed traversal sampling with external node IDs.
 - Use `SamplerSnapshot` and `SamplerEngine` only when you need compact array-native IDs for ML data loading.
+- Use `assert_claim` for sourced positive/negative propositions and `claim_status` for open-world four-valued evaluation at valid/system time.
 
 ## Cypher Boundaries
 

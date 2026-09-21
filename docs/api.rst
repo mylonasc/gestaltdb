@@ -23,6 +23,13 @@ Temporal Version History
    :members:
    :show-inheritance:
 
+Epistemic Claims
+----------------
+
+.. automodule:: gestaltdb.epistemic
+   :members:
+   :show-inheritance:
+
 Consistent Read Views
 ---------------------
 

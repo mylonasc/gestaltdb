@@ -25,10 +25,13 @@ import datetime
 import struct
 
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
+from .epistemic import Claim, ClaimObjectKind, ClaimPolarity, ClaimStatus, claim_statement_id
 from .sampling import SamplingPattern, as_sampling_pattern
 from .serializers import JSONSerializer
 from .temporal import TemporalInstant, TemporalInterval
 from .versioning import (
+    ClaimVersion,
+    ClaimVersionWrite,
     EdgeVersion,
     EdgeVersionWrite,
     NodeVersion,
@@ -74,7 +77,11 @@ _TEMPORAL_EDGE_IN_INDEX = "temporal_v1_edge_in"
 _TEMPORAL_NODE_CATALOG_INDEX = "temporal_v1_node_catalog"
 _TEMPORAL_EDGE_OUT_CATALOG_INDEX = "temporal_v1_edge_out_catalog"
 _TEMPORAL_EDGE_IN_CATALOG_INDEX = "temporal_v1_edge_in_catalog"
+_TEMPORAL_CLAIM_CATALOG_INDEX = "temporal_v1_claim_catalog"
+_TEMPORAL_CLAIM_STATEMENT_INDEX = "temporal_v1_claim_statement"
+_TEMPORAL_CLAIM_DIMENSION_INDEX = "temporal_v1_claim_dimension"
 _DATABASE_ID_LOCK = threading.Lock()
+_UNSET = object()
 
 
 def _utc_now_iso() -> str:
@@ -3455,11 +3462,11 @@ class GraphDB:
             value = json.loads(payload.decode("utf-8"))
             if not isinstance(value, dict):
                 raise ValueError
-            if value.get("format_version") == 1:
-                # TKG-06 added node and untyped endpoint catalogs. Older
-                # derived indexes must be rebuilt before temporal querying.
+            if value.get("format_version") in {1, 2}:
+                # Later temporal stages added catalogs and epistemic indexes.
+                # Older derived indexes must be rebuilt before querying.
                 return None
-            if value.get("format_version") != 2:
+            if value.get("format_version") != 3:
                 raise ValueError
             indexed = value["indexed_through_commit"]
             if isinstance(indexed, bool) or not isinstance(indexed, int) or indexed < 0:
@@ -3471,7 +3478,7 @@ class GraphDB:
     def _persist_temporal_index_state(self, commit_id: int) -> None:
         self.store.put_metadata(
             _TEMPORAL_INDEX_STATE_KEY,
-            canonical_json_bytes({"format_version": 2, "indexed_through_commit": commit_id}),
+            canonical_json_bytes({"format_version": 3, "indexed_through_commit": commit_id}),
         )
 
     def _ensure_temporal_indexes(self, horizon: int) -> None:
@@ -3490,7 +3497,12 @@ class GraphDB:
         )
 
     def _temporal_index_entries(self, version):
-        kind = b"n" if isinstance(version, NodeVersion) else b"e"
+        if isinstance(version, NodeVersion):
+            kind = b"n"
+        elif isinstance(version, EdgeVersion):
+            kind = b"e"
+        else:
+            kind = b"c"
         locator = self._temporal_locator(version.commit_id, version.commit_ordinal)
         exact = [(_TEMPORAL_VERSION_INDEX, [version.version_id.encode("ascii")], locator)]
         ranges = [
@@ -3542,6 +3554,34 @@ class GraphDB:
                         locator,
                     ),
                 ])
+        if isinstance(version, ClaimVersion) and version.claim is not None:
+            claim = version.claim
+            start = self._temporal_instant_index_value(version.valid.start)
+            ranges.extend([
+                (_TEMPORAL_CLAIM_CATALOG_INDEX, [b"claims"], start, locator),
+                (
+                    _TEMPORAL_CLAIM_STATEMENT_INDEX,
+                    [claim.statement_id.encode("ascii")],
+                    start,
+                    locator,
+                ),
+            ])
+            dimensions = {
+                "subject": claim.subject,
+                "predicate": claim.predicate,
+                "agent": claim.agent,
+                "source": claim.source,
+                "world": claim.world,
+                "polarity": claim.polarity.value,
+                "object_kind": claim.object_kind.value,
+            }
+            for name, value in dimensions.items():
+                ranges.append((
+                    _TEMPORAL_CLAIM_DIMENSION_INDEX,
+                    [name.encode("ascii"), canonical_json_bytes(value)],
+                    start,
+                    locator,
+                ))
         return exact, ranges
 
     def _write_temporal_indexes(self, versions, commit_id: int) -> dict[str, int]:
@@ -3714,6 +3754,133 @@ class GraphDB:
         ], metadata=metadata, index_mode=index_mode)
         return commit.versions[0]  # type: ignore[return-value]
 
+    def assert_claim(
+        self,
+        *,
+        subject,
+        predicate,
+        object,
+        polarity,
+        agent,
+        source=None,
+        confidence=None,
+        world="default",
+        provenance=None,
+        object_kind=ClaimObjectKind.ENTITY,
+        valid=None,
+        valid_from=None,
+        valid_to=None,
+        version_id=None,
+        metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
+    ) -> ClaimVersion:
+        """Append an immutable sourced assertion or denial."""
+        interval = self._claim_valid_interval(valid, valid_from, valid_to, required=True)
+        claim = Claim(
+            subject=subject,
+            predicate=predicate,
+            object=object,
+            object_kind=object_kind,
+            polarity=polarity,
+            agent=agent,
+            source=source,
+            confidence=confidence,
+            world=world,
+            provenance={} if provenance is None else provenance,
+        )
+        commit = self.commit_versions(
+            [ClaimVersionWrite.assertion(claim, interval, version_id=version_id)],
+            metadata=metadata,
+            index_mode=index_mode,
+        )
+        return commit.versions[0]  # type: ignore[return-value]
+
+    def correct_claim(
+        self,
+        claim,
+        *,
+        supersedes_version_id,
+        confidence=_UNSET,
+        provenance=_UNSET,
+        valid=None,
+        valid_from=None,
+        valid_to=None,
+        version_id=None,
+        metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
+    ) -> ClaimVersion:
+        """Append corrected confidence/provenance for one claim identity."""
+        target = self._get_temporal_version(normalize_version_id(supersedes_version_id))
+        if not isinstance(target, ClaimVersion) or target.claim is None:
+            raise TemporalVersionError("superseded claim version does not exist")
+        if isinstance(claim, Claim):
+            corrected = claim
+        else:
+            claim_id = normalize_logical_id(claim)
+            if claim_id != target.logical_id:
+                raise TemporalVersionError("superseded claim version has a different claim ID")
+            payload = target.claim.to_dict()
+            if confidence is not _UNSET:
+                payload["confidence"] = confidence
+            if provenance is not _UNSET:
+                payload["provenance"] = provenance
+            corrected = Claim.from_dict(payload)
+        if corrected.claim_id != target.logical_id:
+            raise TemporalVersionError("claim corrections cannot change epistemic identity")
+        interval = self._claim_valid_interval(valid, valid_from, valid_to, required=False)
+        commit = self.commit_versions([
+            ClaimVersionWrite.correction(
+                corrected,
+                supersedes_version_id=supersedes_version_id,
+                valid=interval,
+                version_id=version_id,
+            )
+        ], metadata=metadata, index_mode=index_mode)
+        return commit.versions[0]  # type: ignore[return-value]
+
+    def retract_claim(
+        self,
+        claim_id,
+        *,
+        valid=None,
+        valid_from=None,
+        valid_to=None,
+        supersedes_version_id=None,
+        reason=None,
+        version_id=None,
+        metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
+    ) -> ClaimVersion:
+        """Append a bitemporal retraction without deleting claim history."""
+        interval = self._claim_valid_interval(valid, valid_from, valid_to, required=False)
+        commit = self.commit_versions([
+            ClaimVersionWrite.retraction(
+                claim_id,
+                valid=interval,
+                supersedes_version_id=supersedes_version_id,
+                reason=reason,
+                version_id=version_id,
+            )
+        ], metadata=metadata, index_mode=index_mode)
+        return commit.versions[0]  # type: ignore[return-value]
+
+    @staticmethod
+    def _claim_valid_interval(valid, valid_from, valid_to, *, required):
+        if valid is not None and (valid_from is not None or valid_to is not None):
+            raise TemporalVersionError("provide either valid or valid_from/valid_to, not both")
+        if valid is not None:
+            return normalize_temporal_interval(valid)
+        if valid_from is None:
+            if valid_to is not None:
+                raise TemporalVersionError("valid_to requires valid_from")
+            if required:
+                raise TemporalVersionError("claim assertion requires valid or valid_from")
+            return None
+        return TemporalInterval(
+            normalize_temporal_instant(valid_from),
+            None if valid_to is None else normalize_temporal_instant(valid_to),
+        )
+
     def commit_versions(
         self, writes, *, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN
     ) -> TemporalCommit:
@@ -3750,8 +3917,10 @@ class GraphDB:
         for ordinal, write in enumerate(writes):
             if ordinal >= 1 << 32:
                 raise TemporalVersionError("temporal commit contains too many versions")
-            if not isinstance(write, (NodeVersionWrite, EdgeVersionWrite)):
-                raise TypeError("writes must contain NodeVersionWrite or EdgeVersionWrite values")
+            if not isinstance(write, (NodeVersionWrite, EdgeVersionWrite, ClaimVersionWrite)):
+                raise TypeError(
+                    "writes must contain NodeVersionWrite, EdgeVersionWrite, or ClaimVersionWrite values"
+                )
             if not isinstance(write.operation, VersionOperation):
                 raise TemporalVersionError("temporal version operation is invalid")
             valid_input = write.valid
@@ -3772,8 +3941,12 @@ class GraphDB:
                 target = self._get_temporal_version(supersedes_version_id)
                 if target is None:
                     raise TemporalVersionError("superseded temporal version does not exist")
-                expected_node = isinstance(write, NodeVersionWrite)
-                if isinstance(target, NodeVersion) != expected_node or target.logical_id != logical_id:
+                expected_type = {
+                    NodeVersionWrite: NodeVersion,
+                    EdgeVersionWrite: EdgeVersion,
+                    ClaimVersionWrite: ClaimVersion,
+                }[type(write)]
+                if not isinstance(target, expected_type) or target.logical_id != logical_id:
                     raise TemporalVersionError("superseded temporal version has a different kind or logical ID")
             if write.operation is VersionOperation.ASSERT and write.supersedes_version_id is not None:
                 raise TemporalVersionError("assertions cannot supersede another version")
@@ -3796,7 +3969,7 @@ class GraphDB:
                     raise TemporalVersionError("node payload ID does not match logical ID")
                 payload = b"" if entity is None else self.entity_serializer.serialize(entity, "Node")
                 entity_type = "Node"
-            else:
+            elif isinstance(write, EdgeVersionWrite):
                 entity_kind = "edge"
                 entity = write.edge
                 if write.operation is not VersionOperation.RETRACT and not isinstance(entity, Edge):
@@ -3805,6 +3978,15 @@ class GraphDB:
                     raise TemporalVersionError("edge payload ID does not match logical ID")
                 payload = b"" if entity is None else self.entity_serializer.serialize(entity, "Edge")
                 entity_type = "Edge"
+            else:
+                entity_kind = "claim"
+                entity = write.claim
+                if write.operation is not VersionOperation.RETRACT and not isinstance(entity, Claim):
+                    raise TemporalVersionError("claim assertions and corrections require a Claim payload")
+                if entity is not None and entity.claim_id != logical_id:
+                    raise TemporalVersionError("claim payload ID does not match logical ID")
+                payload = b"" if entity is None else canonical_json_bytes(entity.to_dict())
+                entity_type = "Claim"
             if write.operation is VersionOperation.RETRACT and entity is not None:
                 raise TemporalVersionError("retractions cannot contain entity payloads")
             if not isinstance(payload, bytes):
@@ -3812,13 +3994,23 @@ class GraphDB:
             if write.operation is not VersionOperation.RETRACT:
                 if not payload:
                     raise TemporalVersionError("temporal entity payload cannot be empty")
-                try:
-                    decoded_entity = self.entity_serializer.deserialize(payload, entity_type)
-                except Exception as exc:
-                    raise TemporalVersionError("the configured serializer cannot decode its temporal payload") from exc
-                expected_type = Node if entity_type == "Node" else Edge
-                if not isinstance(decoded_entity, expected_type) or decoded_entity.get_id != logical_id:
-                    raise TemporalVersionError("serialized temporal payload changed its logical ID")
+                if entity_type == "Claim":
+                    try:
+                        decoded_entity = Claim.from_dict(json.loads(payload.decode("utf-8")))
+                    except (UnicodeDecodeError, json.JSONDecodeError, TemporalVersionError) as exc:
+                        raise TemporalVersionError("cannot decode temporal claim payload") from exc
+                    if decoded_entity.claim_id != logical_id:
+                        raise TemporalVersionError("serialized temporal payload changed its logical ID")
+                else:
+                    try:
+                        decoded_entity = self.entity_serializer.deserialize(payload, entity_type)
+                    except Exception as exc:
+                        raise TemporalVersionError(
+                            "the configured serializer cannot decode its temporal payload"
+                        ) from exc
+                    expected_type = Node if entity_type == "Node" else Edge
+                    if not isinstance(decoded_entity, expected_type) or decoded_entity.get_id != logical_id:
+                        raise TemporalVersionError("serialized temporal payload changed its logical ID")
 
             header = {
                 "entity_kind": entity_kind,
@@ -3967,7 +4159,7 @@ class GraphDB:
                 )
                 if target is None:
                     raise TemporalCorruptionError("temporal version supersedes a missing version")
-                if isinstance(target, NodeVersion) != isinstance(version, NodeVersion) or target.logical_id != version.logical_id:
+                if type(target) is not type(version) or target.logical_id != version.logical_id:
                     raise TemporalCorruptionError("temporal supersession kind or logical ID mismatch")
         return TemporalCommit(commit_id, system_time, metadata, tuple(versions))
 
@@ -4040,14 +4232,23 @@ class GraphDB:
                 entity = self.entity_serializer.deserialize(payload, "Edge")
             except Exception as exc:
                 raise TemporalCorruptionError("cannot decode temporal edge payload") from exc
+        elif header["entity_kind"] == "claim":
+            try:
+                entity = Claim.from_dict(json.loads(payload.decode("utf-8")))
+            except (UnicodeDecodeError, json.JSONDecodeError, TemporalVersionError) as exc:
+                raise TemporalCorruptionError("cannot decode temporal claim payload") from exc
         else:
             raise TemporalCorruptionError("unknown temporal entity kind")
-        if entity is not None and entity.get_id != common["logical_id"]:
-            raise TemporalCorruptionError("temporal payload ID does not match its logical ID")
+        if entity is not None:
+            entity_id = entity.claim_id if isinstance(entity, Claim) else entity.get_id
+            if entity_id != common["logical_id"]:
+                raise TemporalCorruptionError("temporal payload ID does not match its logical ID")
         if header["entity_kind"] == "node":
             return NodeVersion(**common, node=entity)
         if header["entity_kind"] == "edge":
             return EdgeVersion(**common, edge=entity)
+        if header["entity_kind"] == "claim":
+            return ClaimVersion(**common, claim=entity)
         raise TemporalCorruptionError("unknown temporal entity kind")
 
     def iter_temporal_commits(self, *, through_commit=None):
@@ -4115,6 +4316,22 @@ class GraphDB:
             return None
         return version if isinstance(version, EdgeVersion) else None
 
+    def get_claim_version(
+        self, version_id: str, *, system_time=None, through_commit=None
+    ) -> ClaimVersion | None:
+        """Return a visible epistemic claim version by UUID."""
+        horizon = self._temporal_system_horizon(
+            system_time=system_time, through_commit=through_commit
+        )
+        self._ensure_temporal_indexes(horizon)
+        locators = list(self.store.iter_index_prefix(
+            _TEMPORAL_VERSION_INDEX, [normalize_version_id(version_id).encode("ascii")]
+        ))
+        version = self._get_temporal_version_at(locators[-1]) if locators else None
+        if version is not None and version.commit_id > horizon:
+            return None
+        return version if isinstance(version, ClaimVersion) else None
+
     def iter_node_versions(self, logical_id=None, *, system_time=None, through_commit=None):
         """Iterate node versions, using the logical-history index when filtered."""
         if logical_id is not None:
@@ -4165,6 +4382,35 @@ class GraphDB:
                 if isinstance(version, EdgeVersion):
                     yield version
 
+    def iter_claim_versions(self, claim_id=None, *, system_time=None, through_commit=None):
+        """Iterate claim versions, optionally restricted to one deterministic claim ID."""
+        if claim_id is not None:
+            claim_id = normalize_logical_id(claim_id)
+            horizon = self._temporal_system_horizon(
+                system_time=system_time, through_commit=through_commit
+            )
+            self._ensure_temporal_indexes(horizon)
+            end = self._temporal_locator(horizon, (1 << 32) - 1)
+            for locator in self.store.iter_range_index(
+                _TEMPORAL_LOGICAL_COMMIT_INDEX,
+                [b"c", claim_id.encode("utf-8")],
+                None,
+                end,
+                True,
+                True,
+            ):
+                version = self._get_temporal_version_at(locator)
+                if isinstance(version, ClaimVersion):
+                    yield version
+            return
+        horizon = self._temporal_system_horizon(
+            system_time=system_time, through_commit=through_commit
+        )
+        for commit in self.iter_temporal_commits(through_commit=horizon):
+            for version in commit.versions:
+                if isinstance(version, ClaimVersion):
+                    yield version
+
     def _temporal_system_horizon(self, *, system_time=None, through_commit=None) -> int:
         if system_time is not None and through_commit is not None:
             raise ValueError("provide either system_time or through_commit, not both")
@@ -4210,7 +4456,7 @@ class GraphDB:
             system_time=system_time, through_commit=through_commit
         )
         self._ensure_temporal_indexes(horizon)
-        kind_bytes = b"n" if kind == "node" else b"e"
+        kind_bytes = {"node": b"n", "edge": b"e", "claim": b"c"}[kind]
         upper = self._temporal_instant_index_value(instant)
         locators = self.store.iter_range_index(
             _TEMPORAL_LOGICAL_VALID_INDEX,
@@ -4253,6 +4499,162 @@ class GraphDB:
             system_time=system_time,
             through_commit=through_commit,
         )
+
+    def get_claim_as_of(
+        self, claim_id, *, valid_time, system_time=None, through_commit=None
+    ) -> ClaimVersion | None:
+        """Resolve one claim identity at valid time and an optional system horizon."""
+        return self._temporal_entity_as_of(
+            "claim",
+            claim_id,
+            valid_time=valid_time,
+            system_time=system_time,
+            through_commit=through_commit,
+        )
+
+    def iter_claims_as_of(
+        self,
+        *,
+        valid_time,
+        statement_id=None,
+        subject=None,
+        predicate=None,
+        object=_UNSET,
+        object_kind=None,
+        agent=None,
+        source=_UNSET,
+        world=None,
+        polarity=None,
+        system_time=None,
+        through_commit=None,
+    ):
+        """Iterate visible claims matching indexed epistemic dimensions."""
+        instant = normalize_temporal_instant(valid_time)
+        horizon = self._temporal_system_horizon(
+            system_time=system_time, through_commit=through_commit
+        )
+        self._ensure_temporal_indexes(horizon)
+        if statement_id is not None:
+            digest = statement_id.removeprefix("statement:") if isinstance(statement_id, str) else ""
+            if (
+                not isinstance(statement_id, str)
+                or not statement_id.startswith("statement:")
+                or len(digest) != 64
+                or any(character not in "0123456789abcdef" for character in digest)
+            ):
+                raise ValueError("statement_id must be a deterministic statement ID")
+        effective_object_kind = (
+            ClaimObjectKind.ENTITY if object_kind is None and object is not _UNSET else object_kind
+        )
+        if object is not _UNSET and statement_id is None and subject is not None and predicate is not None:
+            statement_id = claim_statement_id(
+                subject, predicate, object, object_kind=effective_object_kind
+            )
+        dimension_filters = {
+            "subject": subject,
+            "predicate": predicate,
+            "agent": agent,
+            "world": world,
+            "polarity": None if polarity is None else ClaimPolarity(polarity).value,
+            "object_kind": (
+                None
+                if effective_object_kind is None
+                else ClaimObjectKind(effective_object_kind).value
+            ),
+        }
+        if source is not _UNSET:
+            dimension_filters["source"] = source
+        indexed_filter = next(
+            ((name, value) for name, value in dimension_filters.items() if value is not None),
+            None,
+        )
+        if statement_id is not None:
+            index_name = _TEMPORAL_CLAIM_STATEMENT_INDEX
+            parts = [statement_id.encode("ascii")]
+        elif indexed_filter is not None:
+            name, value = indexed_filter
+            index_name = _TEMPORAL_CLAIM_DIMENSION_INDEX
+            parts = [name.encode("ascii"), canonical_json_bytes(value)]
+        else:
+            index_name = _TEMPORAL_CLAIM_CATALOG_INDEX
+            parts = [b"claims"]
+        logical_ids = set()
+        for locator in self.store.iter_range_index(
+            index_name,
+            parts,
+            None,
+            self._temporal_instant_index_value(instant),
+            True,
+            True,
+        ):
+            candidate = self._get_temporal_version_at(locator)
+            if isinstance(candidate, ClaimVersion) and candidate.commit_id <= horizon:
+                logical_ids.add(candidate.logical_id)
+        for claim_id in sorted(logical_ids):
+            version = self.get_claim_as_of(
+                claim_id, valid_time=instant, through_commit=horizon
+            )
+            if version is None or version.claim is None:
+                continue
+            claim = version.claim
+            if statement_id is not None and claim.statement_id != statement_id:
+                continue
+            if any(
+                value is not None and getattr(claim, name) != value
+                for name, value in dimension_filters.items()
+            ):
+                continue
+            if source is not _UNSET and claim.source != source:
+                continue
+            if object is not _UNSET and claim.object != Claim(
+                subject=claim.subject,
+                predicate=claim.predicate,
+                object=object,
+                object_kind=effective_object_kind,
+                polarity=claim.polarity,
+                agent=claim.agent,
+                source=claim.source,
+                world=claim.world,
+            ).object:
+                continue
+            yield version
+
+    def claim_status(
+        self,
+        subject,
+        predicate,
+        object,
+        *,
+        valid_time,
+        object_kind=ClaimObjectKind.ENTITY,
+        agent=None,
+        source=_UNSET,
+        world=None,
+        system_time=None,
+        through_commit=None,
+    ) -> ClaimStatus:
+        """Return supported/refuted/both/unknown under open-world semantics."""
+        polarities = {
+            version.claim.polarity
+            for version in self.iter_claims_as_of(
+                valid_time=valid_time,
+                statement_id=claim_statement_id(
+                    subject, predicate, object, object_kind=object_kind
+                ),
+                agent=agent,
+                source=source,
+                world=world,
+                system_time=system_time,
+                through_commit=through_commit,
+            )
+        }
+        if polarities == {ClaimPolarity.POSITIVE, ClaimPolarity.NEGATIVE}:
+            return ClaimStatus.BOTH
+        if ClaimPolarity.POSITIVE in polarities:
+            return ClaimStatus.SUPPORTED
+        if ClaimPolarity.NEGATIVE in polarities:
+            return ClaimStatus.REFUTED
+        return ClaimStatus.UNKNOWN
 
     def iter_nodes_as_of(
         self, *, valid_time, system_time=None, through_commit=None

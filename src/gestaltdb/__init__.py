@@ -30,19 +30,20 @@ main graph API lives in submodules rather than entirely at the package root:
 
 Import core graph classes from ``gestaltdb.graphdb``, storage backends from
 ``gestaltdb.kvstores``, serializers from ``gestaltdb.serializers``, canonical
-temporal values from ``gestaltdb.temporal``, and advanced sampling primitives
-from ``gestaltdb.sampling``. Immutable temporal version models and write
-descriptors live in ``gestaltdb.versioning``. This package root re-exports selected ingestion
-enums/containers, temporal values, ``QueryResult``, and sampling helpers for
-convenience.
+temporal values from ``gestaltdb.temporal``, epistemic claim values from
+``gestaltdb.epistemic``, and advanced sampling primitives from
+``gestaltdb.sampling``. Immutable temporal version models and write
+descriptors live in ``gestaltdb.versioning``. This package root re-exports
+selected ingestion enums/containers, temporal and epistemic values,
+``QueryResult``, and sampling helpers for convenience.
 
 Important usage notes for agents and developers:
 
 * Relationship traversal types come from ``Edge.properties["type"]``.
 * ``GraphDB.query`` implements a broad Cypher read/write subset.
 * Property indexes are explicit; create them before relying on property lookups.
-* Explicit temporal version writes append indexed history without changing
-  current graph, Cypher, or sampler views.
+* Explicit temporal entity and epistemic claim writes append indexed history
+  without changing current graph, Cypher, or sampler views.
 * Use ``GraphDB.ingest_arrow`` and ``GraphDB.ingest_polars`` for tabular bulk
   ingestion, and use ``SamplerSnapshot``/``SamplerEngine`` for ML-oriented
   array-native sampling.
@@ -72,6 +73,7 @@ runnable usage patterns, and ``docs/`` for the Sphinx user guide.
 """
 
 from .sampling import AsyncBatchFeeder, HardNegativeConfig, SampledSubgraphBatch, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
+from .epistemic import Claim, ClaimObjectKind, ClaimPolarity, ClaimStatus, claim_statement_id
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .query_engine.cypher import QueryResult
 from .readview import GraphReadView, ProvenanceMismatchError, ReadViewProvenance
@@ -88,6 +90,10 @@ from .temporal import (
 
 __all__ = [
     "ColumnarIngestionMode",
+    "Claim",
+    "ClaimObjectKind",
+    "ClaimPolarity",
+    "ClaimStatus",
     "EdgeList",
     "IndexMaintenanceMode",
     "NodeList",
@@ -110,4 +116,5 @@ __all__ = [
     "TemporalLocalDateTime",
     "TemporalLocalTime",
     "TemporalTime",
+    "claim_statement_id",
 ]

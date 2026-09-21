@@ -34,6 +34,55 @@ with TemporaryDirectory() as tmpdir:
         graph.close()
 ```
 
+## Record Contradictory Epistemic Claims
+
+Claims keep polarity separate from confidence and preserve contradictory
+sources. Status is open-world and evaluated at a valid-time point and a
+system-time commit horizon.
+
+```python
+from tempfile import TemporaryDirectory
+
+from gestaltdb import ClaimStatus
+from gestaltdb.graphdb import GraphDB
+from gestaltdb.kvstores import LevelDBStore
+from gestaltdb.serializers import JSONSerializer
+
+with TemporaryDirectory() as tmpdir:
+    graph = GraphDB(LevelDBStore(path=f"{tmpdir}/graph"), JSONSerializer())
+    try:
+        positive = graph.assert_claim(
+            subject="alice", predicate="WORKS_FOR", object="acme",
+            polarity="positive", agent="source:hr-feed", source="hr.csv",
+            confidence=0.97, world="reported", provenance={"row": 42},
+            valid_from="2024-01-01T00:00:00Z",
+        )
+        graph.assert_claim(
+            subject="alice", predicate="WORKS_FOR", object="acme",
+            polarity="negative", agent="source:investigator", confidence=0.6,
+            world="reported", valid_from="2024-01-01T00:00:00Z",
+        )
+        assert graph.claim_status(
+            "alice", "WORKS_FOR", "acme",
+            valid_time="2024-06-01T00:00:00Z", world="reported",
+        ) is ClaimStatus.BOTH
+
+        reviewed = graph.correct_claim(
+            positive.logical_id,
+            supersedes_version_id=positive.version_id,
+            confidence=0.99,
+            provenance={"row": 42, "reviewed": True},
+        )
+        graph.retract_claim(
+            positive.logical_id,
+            supersedes_version_id=reviewed.version_id,
+            valid_from="2025-01-01T00:00:00Z",
+            reason="feed correction",
+        )
+    finally:
+        graph.close()
+```
+
 ## Use a Self-Describing Store
 
 `GraphDB.create` writes a manifest next to the database. `GraphDB.open` uses that manifest to choose the backend and serializer.

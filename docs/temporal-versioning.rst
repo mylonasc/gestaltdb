@@ -154,6 +154,71 @@ database predating any current temporal index format is automatically reported
 with the ``temporal`` stale family and can be migrated with
 ``rebuild_deferred_indexes``.
 
+Epistemic Claims and Provenance
+-------------------------------
+
+Epistemic claims are immutable, sourced subject-predicate-object assertions or
+denials. They use the same valid/system-time commits and read views as node and
+edge versions, but remain separate from graph edges and current-state Cypher.
+Entity objects are stable graph IDs; pass ``object_kind="literal"`` for a
+JSON-compatible literal value.
+
+.. code-block:: python
+
+   from gestaltdb import ClaimStatus
+
+   reported = graph.assert_claim(
+       subject="alice", predicate="WORKS_FOR", object="acme",
+       polarity="positive", agent="source:hr-feed", source="hr-2024.csv",
+       confidence=0.97, world="reported", provenance={"row": 42},
+       valid_from="2024-01-01T00:00:00Z",
+   )
+   graph.assert_claim(
+       subject="alice", predicate="WORKS_FOR", object="acme",
+       polarity="negative", agent="source:investigator", source="interview-7",
+       confidence=0.6, world="reported",
+       valid_from="2024-01-01T00:00:00Z",
+   )
+   assert graph.claim_status(
+       "alice", "WORKS_FOR", "acme",
+       valid_time="2024-06-01T00:00:00Z", world="reported",
+   ) is ClaimStatus.BOTH
+
+``Claim.statement_id`` is a deterministic SHA-256 identity for the proposition
+only. ``Claim.claim_id`` additionally includes polarity, agent, source, and
+world. Confidence and provenance are not identity fields, so
+``correct_claim`` can revise them while preserving the sourced claim identity.
+Confidence is optional or a finite number from 0 through 1; it never determines
+polarity. Claim payloads and provenance are canonical JSON and therefore do not
+depend on the graph's configured entity serializer.
+
+``iter_claims_as_of`` filters by statement, subject, predicate, object kind,
+agent, source, world, and polarity. ``get_claim_as_of`` resolves one claim ID.
+Both accept ``system_time`` or ``through_commit`` and use half-open valid-time
+intervals. Corrections and retractions append history:
+
+.. code-block:: python
+
+   reviewed = graph.correct_claim(
+       reported.logical_id,
+       supersedes_version_id=reported.version_id,
+       confidence=0.99,
+       provenance={"row": 42, "reviewed": True},
+   )
+   graph.retract_claim(
+       reported.logical_id,
+       supersedes_version_id=reviewed.version_id,
+       valid_from="2025-01-01T00:00:00Z",
+       reason="source withdrew the assertion",
+   )
+
+``claim_status`` uses open-world four-valued semantics: ``SUPPORTED`` when at
+least one matching positive claim is visible, ``REFUTED`` for negative only,
+``BOTH`` when both polarities coexist, and ``UNKNOWN`` when neither is visible.
+A ``GraphReadView`` exposes the same claim lookup, iteration, and status methods
+at its pinned system horizon and default valid time. Rule inference and modal
+query syntax are outside this API.
+
 Current Limits
 --------------
 
@@ -163,7 +228,8 @@ current-state behavior. Read views do not make mutable current-state records
 snapshot-safe on backends without a unified read snapshot. Temporal property
 indexes and temporal writes through Cypher are not implemented yet. Temporal
 sampler snapshots support point/window traversal, causal paths, node
-availability, and time-aware hard-negative rejection. Marker-backed data that fails hash or
+availability, and time-aware hard-negative rejection. Claim Cypher syntax is
+not implemented. Marker-backed data that fails hash or
 envelope validation raises
 ``TemporalCorruptionError`` rather than returning partial history.
 

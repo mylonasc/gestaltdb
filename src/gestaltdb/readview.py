@@ -233,11 +233,17 @@ class GraphReadView:
     def get_edge_version(self, version_id):
         return self._graph.get_edge_version(version_id, through_commit=self.commit_horizon)
 
+    def get_claim_version(self, version_id):
+        return self._graph.get_claim_version(version_id, through_commit=self.commit_horizon)
+
     def iter_node_versions(self, logical_id=None):
         return self._graph.iter_node_versions(logical_id, through_commit=self.commit_horizon)
 
     def iter_edge_versions(self, logical_id=None):
         return self._graph.iter_edge_versions(logical_id, through_commit=self.commit_horizon)
+
+    def iter_claim_versions(self, claim_id=None):
+        return self._graph.iter_claim_versions(claim_id, through_commit=self.commit_horizon)
 
     def get_node_as_of(self, logical_id, *, valid_time=None):
         return self._graph.get_node_as_of(
@@ -251,6 +257,30 @@ class GraphReadView:
             logical_id,
             valid_time=self.valid_time if valid_time is None else valid_time,
             through_commit=self.commit_horizon,
+        )
+
+    def get_claim_as_of(self, claim_id, *, valid_time=None):
+        return self._graph.get_claim_as_of(
+            claim_id,
+            valid_time=self.valid_time if valid_time is None else valid_time,
+            through_commit=self.commit_horizon,
+        )
+
+    def iter_claims_as_of(self, *, valid_time=None, **kwargs):
+        return self._graph.iter_claims_as_of(
+            valid_time=self.valid_time if valid_time is None else valid_time,
+            through_commit=self.commit_horizon,
+            **kwargs,
+        )
+
+    def claim_status(self, subject, predicate, object, *, valid_time=None, **kwargs):
+        return self._graph.claim_status(
+            subject,
+            predicate,
+            object,
+            valid_time=self.valid_time if valid_time is None else valid_time,
+            through_commit=self.commit_horizon,
+            **kwargs,
         )
 
     def iter_edges_as_of(self, *, valid_time=None, **kwargs):

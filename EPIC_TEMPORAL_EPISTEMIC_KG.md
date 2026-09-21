@@ -511,4 +511,5 @@ Every TKG feature must:
 - [x] `TKG-07` implemented with authenticated temporal sampler snapshot arrays.
 - [x] `TKG-08` implemented with point/window and causal runtime sampling.
 - [x] `TKG-09` implemented with time-aware positives and hard negatives.
-- [ ] `TKG-10` onward.
+- [x] `TKG-10` implemented with bitemporal sourced claims and four-valued status.
+- [ ] `TKG-11` onward.

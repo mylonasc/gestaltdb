@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Iterable, Mapping, Optional, Tuple, Union
 from .temporal import TemporalInput, TemporalInstant, TemporalInterval, as_temporal_interval
 
 if TYPE_CHECKING:
+    from .epistemic import Claim
     from .graphdb import Edge, Node
 
 
@@ -134,7 +135,14 @@ class EdgeVersion(TemporalVersionMetadata):
     edge: Optional["Edge"] = None
 
 
-TemporalVersion = Union[NodeVersion, EdgeVersion]
+@dataclass(frozen=True)
+class ClaimVersion(TemporalVersionMetadata):
+    """An immutable metadata envelope with an optional epistemic claim."""
+
+    claim: Optional["Claim"] = None
+
+
+TemporalVersion = Union[NodeVersion, EdgeVersion, ClaimVersion]
 
 
 @dataclass(frozen=True)
@@ -263,7 +271,65 @@ class EdgeVersionWrite:
         )
 
 
-TemporalVersionWrite = Union[NodeVersionWrite, EdgeVersionWrite]
+@dataclass(frozen=True)
+class ClaimVersionWrite:
+    """Validated input describing an epistemic claim-version operation."""
+
+    operation: VersionOperation
+    logical_id: str
+    valid: Optional[TemporalInterval]
+    claim: Optional["Claim"] = None
+    version_id: Optional[str] = None
+    supersedes_version_id: Optional[str] = None
+    reason: Optional[str] = None
+
+    @classmethod
+    def assertion(cls, claim: "Claim", valid, *, version_id=None) -> "ClaimVersionWrite":
+        return cls(
+            VersionOperation.ASSERT,
+            normalize_logical_id(claim.claim_id),
+            normalize_temporal_interval(valid),
+            claim=claim,
+            version_id=version_id,
+        )
+
+    @classmethod
+    def correction(
+        cls, claim: "Claim", *, supersedes_version_id: str, valid=None, version_id=None
+    ) -> "ClaimVersionWrite":
+        return cls(
+            VersionOperation.CORRECT,
+            normalize_logical_id(claim.claim_id),
+            None if valid is None else normalize_temporal_interval(valid),
+            claim=claim,
+            version_id=version_id,
+            supersedes_version_id=normalize_version_id(supersedes_version_id),
+        )
+
+    @classmethod
+    def retraction(
+        cls,
+        claim_id: str,
+        *,
+        valid=None,
+        valid_from=None,
+        supersedes_version_id=None,
+        reason=None,
+        version_id=None,
+    ) -> "ClaimVersionWrite":
+        return cls(
+            VersionOperation.RETRACT,
+            normalize_logical_id(claim_id),
+            _retraction_interval(valid, valid_from),
+            version_id=version_id,
+            supersedes_version_id=(
+                None if supersedes_version_id is None else normalize_version_id(supersedes_version_id)
+            ),
+            reason=_normalize_reason(reason),
+        )
+
+
+TemporalVersionWrite = Union[NodeVersionWrite, EdgeVersionWrite, ClaimVersionWrite]
 
 
 def _retraction_interval(valid, valid_from) -> Optional[TemporalInterval]:
@@ -342,6 +408,8 @@ def commit_descriptor_bytes(
 
 
 __all__ = [
+    "ClaimVersion",
+    "ClaimVersionWrite",
     "EdgeVersion",
     "EdgeVersionWrite",
     "NodeVersion",

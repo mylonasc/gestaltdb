@@ -65,6 +65,12 @@ TOPICS: dict[str, Topic] = {
         "Offline interactive HTML visualization: visualize_* entrypoints, VizOptions caps, and GraphDB.visualize.",
         "references/visualization.md",
     ),
+    "epistemic": Topic(
+        "epistemic",
+        "Bitemporal Epistemic Claims",
+        "Sourced assertions/denials, provenance, contradiction, correction/retraction, and four-valued status.",
+        "references/epistemic.md",
+    ),
 }
 
 
