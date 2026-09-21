@@ -56,7 +56,7 @@ The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storag
 - Use `SamplingHop` and `SamplingPattern` for GraphDB typed traversal sampling with external node IDs.
 - Use `SamplerSnapshot` and `SamplerEngine` only when you need compact array-native IDs for ML data loading.
 - Use `assert_claim` for sourced positive/negative propositions and `claim_status` for open-world four-valued evaluation at valid/system time.
-- Use `create_rule` and bounded `run_rules(as_of=...)` for positive Horn inference over entity claims; derived claims retain rule and premise version IDs.
+- Use `create_rule` and bounded `run_rules(as_of=...)` for positive Horn inference over entity claims; use `maintain_truth` after premise/rule changes and `explain_claim` for bounded historical derivation graphs.
 
 ## Cypher Boundaries
 

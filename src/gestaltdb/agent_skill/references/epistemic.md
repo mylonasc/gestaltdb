@@ -18,6 +18,8 @@ valid/system time, or distinguishing contradictory evidence from uncertainty.
 - `create_rule(name, when=[...], then=...)` versions safe positive Horn rules; head variables must be bound in the body and predicates must be constants.
 - `run_rules(as_of=...)` joins positive entity claims within one world, intersects premise validity, and stores conclusions under the `gestaltdb:rules` agent with rule/premise version justifications.
 - Set `max_iterations`, `max_derivations`, and `max_justifications` for workload bounds. A limit error persists no partial conclusions, and an unchanged repeat run is idempotent.
+- Call `maintain_truth(as_of=...)` after premise or rule changes. It keeps independent supports, corrects changed justifications, and retracts a conclusion only after its final support disappears. Later calls can omit `as_of` to resume the previous valid time.
+- `explain_claim(claim_id, valid_time=..., system_time=...)` returns exact claim/rule version nodes and ordered derivation edges. Use `max_depth` and `max_nodes` to bound traversal; inspect `truncated` to detect a reached bound.
 
 ## Example
 
@@ -65,6 +67,11 @@ with TemporaryDirectory() as tmpdir:
         )
         result = graph.run_rules(as_of="2024-06-01T00:00:00Z")
         assert result.derived_count == 1
+        derived = result.versions[0]
+        explanation = graph.explain_claim(
+            derived.logical_id, valid_time="2024-06-01T00:00:00Z"
+        )
+        assert explanation.root_version_id == derived.version_id
     finally:
         graph.close()
 ```

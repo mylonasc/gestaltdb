@@ -256,8 +256,55 @@ raises ``RuleEvaluationLimitError`` before any staged conclusion is persisted.
 Successful conclusions are published together in one temporal commit and
 remain separate from mutable graph edges and unqualified Cypher. Rule
 evaluation does not consume negative claims, literal-object claims, or claims
-from different worlds in one match. Incremental truth maintenance and modal
-query syntax remain outside this API.
+from different worlds in one match.
+
+Incremental Truth Maintenance and Explanations
+-----------------------------------------------
+
+``maintain_truth`` reconciles rule-derived claims after claims or rule versions
+change. It recomputes a bounded fixpoint from non-derived positive entity
+claims, indexes premise/rule dependents and independent supports, and appends
+only changed derivations. Removing one support corrects the conclusion's
+justifications; the conclusion is retracted only after its final support
+disappears. Derived claims are never authoritative seeds, so unsupported rule
+cycles terminate instead of sustaining themselves.
+
+.. code-block:: python
+
+   graph.retract_claim(
+       reported.logical_id,
+       supersedes_version_id=reviewed.version_id,
+       reason="source correction",
+   )
+   maintained = graph.maintain_truth(
+       as_of="2024-06-01T00:00:00Z",
+       max_iterations=100,
+       max_derivations=10_000,
+       max_justifications=100_000,
+   )
+
+The first pass requires ``as_of``. Later calls may omit it to resume the valid
+time recorded by the latest completed rule run or maintenance pass. Conclusions
+are published in one temporal commit before the rebuildable dependency index;
+retrying after interruption is therefore idempotent. A bound failure publishes
+no maintenance commit.
+
+``explain_claim`` resolves the claim at both valid and system time and returns a
+``ClaimExplanation`` graph. Claim nodes contain exact immutable
+``ClaimVersion`` values, rule nodes contain exact ``RuleVersion`` values, and
+``derived_by``/``premise`` edges retain premise order. Historical horizons keep
+earlier explanations reproducible after later corrections or retractions.
+Traversal tracks visited version IDs and accepts ``max_depth`` and ``max_nodes``
+bounds; ``truncated`` reports a reached bound.
+
+.. code-block:: python
+
+   explanation = graph.explain_claim(
+       derived.logical_id,
+       valid_time="2024-06-01T00:00:00Z",
+       system_time=derived.system_time,
+   )
+   assert explanation.root_version_id == derived.version_id
 
 Current Limits
 --------------
@@ -268,8 +315,8 @@ current-state behavior. Read views do not make mutable current-state records
 snapshot-safe on backends without a unified read snapshot. Temporal property
 indexes and temporal writes through Cypher are not implemented yet. Temporal
 sampler snapshots support point/window traversal, causal paths, node
-availability, and time-aware hard-negative rejection. Claim and rule Cypher
-syntax is not implemented. Marker-backed data that fails hash or
+availability, and time-aware hard-negative rejection. Claim, rule, and
+explanation Cypher syntax is not implemented. Marker-backed data that fails hash or
 envelope validation raises
 ``TemporalCorruptionError`` rather than returning partial history.
 

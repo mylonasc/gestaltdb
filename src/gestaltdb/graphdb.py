@@ -28,11 +28,15 @@ import struct
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .epistemic import Claim, ClaimObjectKind, ClaimPolarity, ClaimStatus, claim_statement_id
 from .rules import (
+    ClaimExplanation,
+    ExplanationEdge,
+    ExplanationNode,
     RuleError,
     RuleEvaluationLimitError,
     RuleJustification,
     RuleRunResult,
     RuleVersion,
+    TruthMaintenanceResult,
     normalize_rule_definition,
 )
 from .sampling import SamplingPattern, as_sampling_pattern
@@ -90,6 +94,7 @@ _TEMPORAL_CLAIM_CATALOG_INDEX = "temporal_v1_claim_catalog"
 _TEMPORAL_CLAIM_STATEMENT_INDEX = "temporal_v1_claim_statement"
 _TEMPORAL_CLAIM_DIMENSION_INDEX = "temporal_v1_claim_dimension"
 _RULE_CATALOG_KEY = b"rules:catalog:v1"
+_TRUTH_MAINTENANCE_STATE_KEY = b"rules:truth-maintenance:v1"
 _RULE_ENGINE_AGENT = "gestaltdb:rules"
 _DATABASE_ID_LOCK = threading.Lock()
 _UNSET = object()
@@ -3990,6 +3995,493 @@ class GraphDB:
             len(generated_justifications),
             commit.commit_id,
             commit.versions,
+        )
+
+    def _last_truth_maintenance_instant(self) -> TemporalInstant | None:
+        payload = self.store.get_metadata(_TRUTH_MAINTENANCE_STATE_KEY)
+        state_instant = None
+        state_horizon = -1
+        if payload is not None:
+            try:
+                state = json.loads(payload.decode("utf-8"))
+                if state.get("format_version") == 1:
+                    state_instant = TemporalInstant(state["valid_time_us"])
+                    state_horizon = state["through_commit"]
+                    if isinstance(state_horizon, bool) or not isinstance(state_horizon, int):
+                        raise TypeError
+            except (AttributeError, KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+                state_instant = None
+                state_horizon = -1
+        last_commit_id, _ = self._temporal_sequence()
+        for commit_id in range(last_commit_id, 0, -1):
+            commit = self.get_temporal_commit(commit_id)
+            if commit is None:
+                continue
+            for name in ("truth_maintenance", "rule_run"):
+                value = commit.metadata.get(name)
+                if isinstance(value, Mapping) and isinstance(value.get("as_of_us"), int):
+                    if commit_id > state_horizon:
+                        return TemporalInstant(value["as_of_us"])
+                    return state_instant
+        return state_instant
+
+    def maintain_truth(
+        self,
+        *,
+        as_of=None,
+        system_time=None,
+        world=None,
+        max_iterations=100,
+        max_derivations=10_000,
+        max_justifications=100_000,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
+    ) -> TruthMaintenanceResult:
+        """Incrementally reconcile derived claims with the current rule fixpoint.
+
+        The authoritative base excludes claims emitted by the rule engine, so a
+        cycle cannot preserve itself after its final independent support is
+        removed. If ``as_of`` is omitted, the valid time from the most recent
+        rule run or maintenance pass is resumed.
+        """
+        limits = {
+            "max_iterations": max_iterations,
+            "max_derivations": max_derivations,
+            "max_justifications": max_justifications,
+        }
+        for name, value in limits.items():
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if world is not None and (not isinstance(world, str) or not world):
+            raise ValueError("world must be a non-empty string or None")
+        mode = index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode
+        if mode not in {item.value for item in IndexMaintenanceMode}:
+            raise ValueError("index_mode must be a valid IndexMaintenanceMode")
+        instant = self._last_truth_maintenance_instant() if as_of is None else normalize_temporal_instant(as_of)
+        if instant is None:
+            raise ValueError("as_of is required for the first truth-maintenance pass")
+
+        with self._temporal_write_lock:
+            input_horizon = self._temporal_system_horizon(system_time=system_time)
+            rules_by_id = {}
+            for rule in self.iter_rule_versions(system_time=system_time):
+                rules_by_id[rule.rule_id] = rule
+            rules = tuple(sorted(rules_by_id.values(), key=lambda item: item.rule_id))
+
+            facts = []
+            facts_by_predicate = {}
+            existing = {}
+
+            def conclusion_key(subject, predicate, object_value, claim_world):
+                return subject, predicate, object_value, claim_world
+
+            def add_fact(reference, subject, predicate, object_value, claim_world, valid):
+                fact = {
+                    "ref": reference,
+                    "subject": subject,
+                    "predicate": predicate,
+                    "object": object_value,
+                    "world": claim_world,
+                    "valid": valid,
+                }
+                facts.append(fact)
+                facts_by_predicate.setdefault(predicate, []).append(fact)
+                return fact
+
+            for version in self.iter_claims_as_of(
+                valid_time=instant,
+                polarity=ClaimPolarity.POSITIVE,
+                world=world,
+                through_commit=input_horizon,
+            ):
+                claim = version.claim
+                if claim is None or claim.object_kind is not ClaimObjectKind.ENTITY:
+                    continue
+                key = conclusion_key(claim.subject, claim.predicate, claim.object, claim.world)
+                if claim.agent == _RULE_ENGINE_AGENT and claim.provenance.get("derived_by") == "gestaltdb.rules":
+                    existing[key] = version
+                    continue
+                add_fact(
+                    ("version", version.version_id),
+                    claim.subject,
+                    claim.predicate,
+                    claim.object,
+                    claim.world,
+                    version.valid,
+                )
+
+            def union_validity(left, right):
+                start = min(left.start, right.start)
+                end = None if left.end is None or right.end is None else max(left.end, right.end)
+                return TemporalInterval(start, end)
+
+            def unify(term, value, bindings):
+                if not term.startswith("?"):
+                    return bindings if term == value else None
+                current = bindings.get(term, _UNSET)
+                if current is not _UNSET:
+                    return bindings if current == value else None
+                updated = dict(bindings)
+                updated[term] = value
+                return updated
+
+            outputs = {}
+            delta = {fact["ref"] for fact in facts}
+            iterations = 0
+            support_count = 0
+            while delta:
+                if iterations >= max_iterations:
+                    raise RuleEvaluationLimitError(
+                        f"truth maintenance exceeded max_iterations={max_iterations}"
+                    )
+                next_delta = {}
+                for rule in rules:
+                    rows = [({}, (), None, None, False)]
+                    for atom in rule.when:
+                        joined = []
+                        for bindings, premises, valid, row_world, used_delta in rows:
+                            for fact in facts_by_predicate.get(atom.predicate, ()):
+                                if row_world is not None and fact["world"] != row_world:
+                                    continue
+                                subject_bindings = unify(atom.subject, fact["subject"], bindings)
+                                if subject_bindings is None:
+                                    continue
+                                bound = unify(atom.object, fact["object"], subject_bindings)
+                                if bound is None:
+                                    continue
+                                intersection = fact["valid"] if valid is None else valid.intersection(fact["valid"])
+                                if intersection is None:
+                                    continue
+                                joined.append((
+                                    bound,
+                                    (*premises, fact["ref"]),
+                                    intersection,
+                                    fact["world"],
+                                    used_delta or fact["ref"] in delta,
+                                ))
+                        rows = joined
+                        if not rows:
+                            break
+                    for bindings, premises, valid, row_world, used_delta in rows:
+                        if not used_delta:
+                            continue
+                        subject = bindings.get(rule.then.subject, rule.then.subject)
+                        object_value = bindings.get(rule.then.object, rule.then.object)
+                        key = conclusion_key(subject, rule.then.predicate, object_value, row_world)
+                        output = outputs.get(key)
+                        if output is None:
+                            if len(outputs) >= max_derivations:
+                                raise RuleEvaluationLimitError(
+                                    f"truth maintenance exceeded max_derivations={max_derivations}"
+                                )
+                            output = {
+                                "subject": subject,
+                                "predicate": rule.then.predicate,
+                                "object": object_value,
+                                "world": row_world,
+                                "valid": valid,
+                                "supports": set(),
+                                "fact": None,
+                            }
+                            outputs[key] = output
+                            next_delta[key] = output
+                        merged = union_validity(output["valid"], valid)
+                        if merged != output["valid"]:
+                            output["valid"] = merged
+                            next_delta[key] = output
+                        support = (rule.version_id, premises)
+                        if support not in output["supports"]:
+                            support_count += 1
+                            if support_count > max_justifications:
+                                raise RuleEvaluationLimitError(
+                                    f"truth maintenance exceeded max_justifications={max_justifications}"
+                                )
+                            output["supports"].add(support)
+                iterations += 1
+                added = []
+                for key, output in next_delta.items():
+                    fact = output["fact"]
+                    if fact is None:
+                        fact = add_fact(
+                            ("derived", key),
+                            output["subject"],
+                            output["predicate"],
+                            output["object"],
+                            output["world"],
+                            output["valid"],
+                        )
+                        output["fact"] = fact
+                    else:
+                        fact["valid"] = output["valid"]
+                    added.append(fact)
+                delta = {fact["ref"] for fact in added}
+
+            def semantic_premise(version_id):
+                premise = self.get_claim_version(version_id, through_commit=input_horizon)
+                if (
+                    premise is not None
+                    and premise.claim is not None
+                    and premise.claim.agent == _RULE_ENGINE_AGENT
+                    and premise.claim.provenance.get("derived_by") == "gestaltdb.rules"
+                ):
+                    claim = premise.claim
+                    return ("derived", conclusion_key(
+                        claim.subject, claim.predicate, claim.object, claim.world
+                    ))
+                return ("version", version_id)
+
+            def existing_semantic_supports(version):
+                return {
+                    (rule_id, tuple(semantic_premise(premise) for premise in premises))
+                    for rule_id, premises in self._rule_justifications(version.claim.provenance)
+                }
+
+            changed = set()
+            for key, output in outputs.items():
+                current = existing.get(key)
+                if (
+                    current is None
+                    or current.valid != output["valid"]
+                    or existing_semantic_supports(current) != output["supports"]
+                ):
+                    changed.add(key)
+            propagated = True
+            while propagated:
+                propagated = False
+                for key, output in outputs.items():
+                    if key in changed:
+                        continue
+                    if any(
+                        reference[0] == "derived" and reference[1] in changed
+                        for _, premises in output["supports"]
+                        for reference in premises
+                    ):
+                        changed.add(key)
+                        propagated = True
+
+            result_ids = {}
+            for key in outputs:
+                current = existing.get(key)
+                result_ids[key] = (
+                    normalize_version_id()
+                    if current is None or key in changed
+                    else current.version_id
+                )
+
+            def encoded_supports(output):
+                encoded = []
+                for rule_id, premises in sorted(output["supports"]):
+                    premise_ids = tuple(
+                        reference[1]
+                        if reference[0] == "version"
+                        else result_ids[reference[1]]
+                        for reference in premises
+                    )
+                    encoded.append(RuleJustification(rule_id, premise_ids).to_dict())
+                return encoded
+
+            writes = []
+            operations = []
+            for key in sorted(outputs):
+                if key not in changed:
+                    continue
+                output = outputs[key]
+                claim = Claim(
+                    output["subject"],
+                    output["predicate"],
+                    output["object"],
+                    ClaimPolarity.POSITIVE,
+                    _RULE_ENGINE_AGENT,
+                    world=output["world"],
+                    provenance={
+                        "derived_by": "gestaltdb.rules",
+                        "justifications": encoded_supports(output),
+                    },
+                )
+                current = existing.get(key)
+                if current is None:
+                    writes.append(ClaimVersionWrite.assertion(
+                        claim, output["valid"], version_id=result_ids[key]
+                    ))
+                    operations.append("assert")
+                else:
+                    writes.append(ClaimVersionWrite.correction(
+                        claim,
+                        supersedes_version_id=current.version_id,
+                        valid=output["valid"],
+                        version_id=result_ids[key],
+                    ))
+                    operations.append("correct")
+                    if current.valid.start < output["valid"].start:
+                        writes.append(ClaimVersionWrite.retraction(
+                            current.logical_id,
+                            supersedes_version_id=current.version_id,
+                            valid=TemporalInterval(
+                                current.valid.start, output["valid"].start
+                            ),
+                            reason="derived validity no longer supported",
+                        ))
+                    if output["valid"].end is not None and (
+                        current.valid.end is None
+                        or current.valid.end > output["valid"].end
+                    ):
+                        writes.append(ClaimVersionWrite.retraction(
+                            current.logical_id,
+                            supersedes_version_id=current.version_id,
+                            valid=TemporalInterval(
+                                output["valid"].end, current.valid.end
+                            ),
+                            reason="derived validity no longer supported",
+                        ))
+            for key in sorted(set(existing) - set(outputs)):
+                current = existing[key]
+                writes.append(ClaimVersionWrite.retraction(
+                    current.logical_id,
+                    supersedes_version_id=current.version_id,
+                    valid=current.valid,
+                    reason="final rule support disappeared",
+                ))
+                operations.append("retract")
+
+            commit = None
+            if writes:
+                commit = self.commit_versions(
+                    writes,
+                    metadata={
+                        "truth_maintenance": {
+                            "as_of_us": instant.epoch_microseconds,
+                            "input_through_commit": input_horizon,
+                            "iterations": iterations,
+                        }
+                    },
+                    index_mode=index_mode,
+                )
+
+            premise_dependents = {}
+            rule_dependents = {}
+            derived = {}
+            for key, output in outputs.items():
+                claim = Claim(
+                    output["subject"], output["predicate"], output["object"],
+                    ClaimPolarity.POSITIVE, _RULE_ENGINE_AGENT, world=output["world"],
+                )
+                derived[claim.claim_id] = {
+                    "version_id": result_ids[key],
+                    "support_count": len(output["supports"]),
+                }
+                for justification in encoded_supports(output):
+                    rule_dependents.setdefault(justification["rule_version_id"], set()).add(claim.claim_id)
+                    for premise_id in justification["premise_version_ids"]:
+                        premise_dependents.setdefault(premise_id, set()).add(claim.claim_id)
+            state_horizon = commit.commit_id if commit is not None else input_horizon
+            self.store.put_metadata(_TRUTH_MAINTENANCE_STATE_KEY, canonical_json_bytes({
+                "format_version": 1,
+                "valid_time_us": instant.epoch_microseconds,
+                "through_commit": state_horizon,
+                "derived": derived,
+                "premise_dependents": {
+                    key: sorted(value) for key, value in sorted(premise_dependents.items())
+                },
+                "rule_dependents": {
+                    key: sorted(value) for key, value in sorted(rule_dependents.items())
+                },
+            }))
+            versions = () if commit is None else commit.versions
+            return TruthMaintenanceResult(
+                input_horizon,
+                None if commit is None else commit.commit_id,
+                operations.count("assert"),
+                operations.count("correct"),
+                operations.count("retract"),
+                support_count,
+                versions,
+            )
+
+    def explain_claim(
+        self,
+        claim_id,
+        *,
+        valid_time,
+        system_time=None,
+        max_depth=100,
+        max_nodes=10_000,
+    ) -> ClaimExplanation | None:
+        """Return a finite derivation graph for a visible historical claim."""
+        if isinstance(max_depth, bool) or not isinstance(max_depth, int) or max_depth < 0:
+            raise ValueError("max_depth must be a non-negative integer")
+        if isinstance(max_nodes, bool) or not isinstance(max_nodes, int) or max_nodes < 1:
+            raise ValueError("max_nodes must be a positive integer")
+        instant = normalize_temporal_instant(valid_time)
+        horizon = self._temporal_system_horizon(system_time=system_time)
+        root = self.get_claim_as_of(claim_id, valid_time=instant, through_commit=horizon)
+        if root is None:
+            return None
+        commit = self.get_temporal_commit(horizon)
+        if commit is None:
+            raise TemporalCorruptionError("explanation horizon has no visible commit")
+        rules = {rule.version_id: rule for rule in self.iter_rule_versions()}
+        nodes = {}
+        edges = set()
+        expanded = set()
+        truncated = False
+
+        def add_node(node_id, kind, value):
+            nonlocal truncated
+            if node_id in nodes:
+                return True
+            if len(nodes) >= max_nodes:
+                truncated = True
+                return False
+            nodes[node_id] = ExplanationNode(node_id, kind, value)
+            return True
+
+        def visit(version, depth):
+            nonlocal truncated
+            if not add_node(version.version_id, "claim", version):
+                return
+            if version.version_id in expanded:
+                return
+            expanded.add(version.version_id)
+            supports = self._rule_justifications(version.claim.provenance)
+            if not supports:
+                return
+            if depth >= max_depth:
+                truncated = True
+                return
+            for rule_id, premise_ids in sorted(supports):
+                rule = rules.get(rule_id)
+                if rule is None or not add_node(rule_id, "rule", rule):
+                    truncated = True
+                    continue
+                edges.add(ExplanationEdge(version.version_id, rule_id, "derived_by"))
+                for ordinal, premise_id in enumerate(premise_ids):
+                    premise = self.get_claim_version(premise_id, through_commit=horizon)
+                    if premise is None:
+                        truncated = True
+                        continue
+                    if not add_node(premise_id, "claim", premise):
+                        continue
+                    edges.add(ExplanationEdge(rule_id, premise_id, "premise", ordinal))
+                    visit(premise, depth + 1)
+
+        visit(root, 0)
+        ordered_nodes = tuple(nodes[key] for key in sorted(nodes))
+        ordered_edges = tuple(sorted(
+            edges,
+            key=lambda edge: (
+                edge.source_id,
+                edge.target_id,
+                edge.relationship,
+                -1 if edge.premise_ordinal is None else edge.premise_ordinal,
+            ),
+        ))
+        return ClaimExplanation(
+            root.logical_id,
+            root.version_id,
+            instant,
+            commit.system_time,
+            ordered_nodes,
+            ordered_edges,
+            truncated,
         )
 
     def put_node_version(

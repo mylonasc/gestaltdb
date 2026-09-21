@@ -97,7 +97,7 @@ from gestaltdb.graphdb import GraphDB
 with TemporaryDirectory() as tmpdir:
     graph = GraphDB.create(f"{tmpdir}/graph", backend="leveldb", serializer="json")
     try:
-        graph.assert_claim(
+        employment = graph.assert_claim(
             subject="alice", predicate="WORKS_FOR", object="acme",
             polarity="positive", agent="source:hr", world="reported",
             valid_from="2024-01-01T00:00:00Z",
@@ -123,6 +123,24 @@ with TemporaryDirectory() as tmpdir:
         assert derived.claim.subject == "alice"
         assert derived.claim.object == "industry"
         assert len(derived.claim.provenance["justifications"]) == 1
+
+        explanation = graph.explain_claim(
+            derived.logical_id,
+            valid_time="2024-06-01T00:00:00Z",
+        )
+        assert explanation.root_version_id == derived.version_id
+
+        graph.retract_claim(
+            employment.logical_id,
+            supersedes_version_id=employment.version_id,
+            reason="source correction",
+        )
+        maintained = graph.maintain_truth()
+        assert maintained.retracted_count == 1
+        assert graph.get_claim_as_of(
+            derived.logical_id,
+            valid_time="2024-06-01T00:00:00Z",
+        ) is None
     finally:
         graph.close()
 ```

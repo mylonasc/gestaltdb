@@ -43,7 +43,8 @@ Important usage notes for agents and developers:
 * ``GraphDB.query`` implements a broad Cypher read/write subset.
 * Property indexes are explicit; create them before relying on property lookups.
 * Explicit temporal entity and epistemic claim writes append indexed history
-  without changing current graph, Cypher, or sampler views.
+  without changing current graph, Cypher, or sampler views. Bounded truth
+  maintenance and historical claim explanations operate on that history.
 * Use ``GraphDB.ingest_arrow`` and ``GraphDB.ingest_polars`` for tabular bulk
   ingestion, and use ``SamplerSnapshot``/``SamplerEngine`` for ML-oriented
   array-native sampling.
@@ -77,7 +78,18 @@ from .epistemic import Claim, ClaimObjectKind, ClaimPolarity, ClaimStatus, claim
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .query_engine.cypher import QueryResult
 from .readview import GraphReadView, ProvenanceMismatchError, ReadViewProvenance
-from .rules import RuleAtom, RuleError, RuleEvaluationLimitError, RuleJustification, RuleRunResult, RuleVersion
+from .rules import (
+    ClaimExplanation,
+    ExplanationEdge,
+    ExplanationNode,
+    RuleAtom,
+    RuleError,
+    RuleEvaluationLimitError,
+    RuleJustification,
+    RuleRunResult,
+    RuleVersion,
+    TruthMaintenanceResult,
+)
 from .temporal import (
     TemporalContext,
     TemporalDate,
@@ -95,7 +107,10 @@ __all__ = [
     "ClaimObjectKind",
     "ClaimPolarity",
     "ClaimStatus",
+    "ClaimExplanation",
     "EdgeList",
+    "ExplanationEdge",
+    "ExplanationNode",
     "IndexMaintenanceMode",
     "NodeList",
     "QueryResult",
@@ -108,6 +123,7 @@ __all__ = [
     "RuleJustification",
     "RuleRunResult",
     "RuleVersion",
+    "TruthMaintenanceResult",
     "AsyncBatchFeeder",
     "HardNegativeConfig",
     "SampledSubgraphBatch",

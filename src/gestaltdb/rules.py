@@ -161,6 +161,51 @@ class RuleRunResult:
     versions: tuple[object, ...]
 
 
+@dataclass(frozen=True)
+class TruthMaintenanceResult:
+    """Summary of one bounded incremental truth-maintenance pass."""
+
+    input_commit_id: int
+    commit_id: int | None
+    asserted_count: int
+    corrected_count: int
+    retracted_count: int
+    support_count: int
+    versions: tuple[object, ...]
+
+
+@dataclass(frozen=True)
+class ExplanationNode:
+    """One immutable claim or rule version in an explanation graph."""
+
+    node_id: str
+    kind: str
+    value: object
+
+
+@dataclass(frozen=True)
+class ExplanationEdge:
+    """A directed derivation or premise edge in an explanation graph."""
+
+    source_id: str
+    target_id: str
+    relationship: str
+    premise_ordinal: int | None = None
+
+
+@dataclass(frozen=True)
+class ClaimExplanation:
+    """A finite historical explanation rooted at one visible claim version."""
+
+    claim_id: str
+    root_version_id: str
+    valid_time: TemporalInstant
+    system_time: TemporalInstant
+    nodes: tuple[ExplanationNode, ...]
+    edges: tuple[ExplanationEdge, ...]
+    truncated: bool = False
+
+
 def normalize_rule_definition(
     rule_id: object, when: Iterable[object], then: object, *, version_id: str,
     system_time: TemporalInstant, catalog_ordinal: int,
@@ -183,10 +228,14 @@ def normalize_rule_definition(
 
 
 __all__ = [
+    "ClaimExplanation",
+    "ExplanationEdge",
+    "ExplanationNode",
     "RuleAtom",
     "RuleError",
     "RuleEvaluationLimitError",
     "RuleJustification",
     "RuleRunResult",
     "RuleVersion",
+    "TruthMaintenanceResult",
 ]

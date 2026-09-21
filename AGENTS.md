@@ -43,7 +43,8 @@ from gestaltdb import TemporalDate, TemporalDuration, TemporalLocalDateTime
 from gestaltdb import TemporalLocalTime, TemporalTime
 from gestaltdb import GraphReadView, ReadViewProvenance
 from gestaltdb import Claim, ClaimObjectKind, ClaimPolarity, ClaimStatus
-from gestaltdb import RuleEvaluationLimitError, RuleRunResult, RuleVersion
+from gestaltdb import ClaimExplanation, RuleEvaluationLimitError, RuleRunResult
+from gestaltdb import RuleVersion, TruthMaintenanceResult
 ```
 
 Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes are available from `import gestaltdb`; import them from their modules unless the API is intentionally changed.
@@ -62,6 +63,7 @@ Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes 
 - `graph.read_view(valid_time=...)` pins temporal reads and point-materialized sampler builds to one contiguous visible commit prefix. Its authenticated `ReadViewProvenance` verifies stable database, backend, serializer, commit, and visibility identity during snapshot hydration.
 - `assert_claim`, `correct_claim`, and `retract_claim` append serializer-neutral sourced claims to temporal history. Deterministic statement IDs identify propositions; claim IDs additionally include polarity, agent, source, and world. `iter_claims_as_of` and `claim_status` provide indexed bitemporal lookup and open-world `supported`/`refuted`/`both`/`unknown` semantics.
 - `create_rule` appends validated safe positive Horn-rule versions. `run_rules(as_of=...)` performs bounded semi-naive evaluation over positive entity claims in a shared world, intersects premise validity, and persists deduplicated conclusions with rule and premise version justifications. Limit failures publish no partial derivations.
+- `maintain_truth(as_of=...)` incrementally reconciles derived claims, retracting a conclusion only after its final independent support disappears. `explain_claim` returns a bounded finite graph of exact historical claim/rule versions; retries after interrupted dependency-index publication are idempotent.
 
 ## Backend Guidance
 
