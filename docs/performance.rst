@@ -57,6 +57,27 @@ Install Benchmark Dependencies
 Backend Benchmarks
 ------------------
 
+Temporal Hardening Smoke
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+``python -m benchmarks temporal`` runs a deterministic generated workload over
+temporal writes, as-of lookups, snapshot construction, seeded temporal sampling,
+rule evaluation, and modal entailment. It reports write throughput, query p50/p95
+latency, phase timings, peak ``tracemalloc`` memory, database bytes, and storage
+amplification relative to serialized entity payloads.
+
+.. code-block:: sh
+
+   python -m benchmarks temporal \
+      --backend leveldb --serializer json \
+      --nodes 1000 --edges 5000 --queries 1000 \
+      --seed 42 --output benchmark_results/temporal-smoke.json
+
+The seed and generated graph are deterministic; elapsed time, traced memory, and
+backend file size are environment-dependent observations. CI smoke tests assert
+workload counts and outcomes, never timing thresholds. Run a backend/serializer
+matrix on deployment hosts before setting service objectives.
+
 Use ``benchmarks/quick.py`` (or ``python -m benchmarks quick``; ``benchmarks.py`` is retained as a compatibility forwarder) for a quick backend comparison on the same append-only
 workload.
 

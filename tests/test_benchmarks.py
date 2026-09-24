@@ -61,7 +61,7 @@ from benchmarks.common.workloads import (
     gestaltdb_star_traversal,
     gestaltdb_typed_path,
 )
-from benchmarks import cli, quick
+from benchmarks import cli, quick, temporal
 
 
 def test_timing_seconds():
@@ -284,6 +284,29 @@ def test_quick_benchmark_smoke(tmp_path):
         "--sample-size", "2",
     ])
     quick.run_benchmark(args)
+
+
+def test_temporal_benchmark_smoke():
+    args = temporal.build_parser().parse_args([
+        "--backend", "leveldb",
+        "--serializer", "json",
+        "--nodes", "20",
+        "--edges", "40",
+        "--queries", "10",
+        "--sample-seeds", "5",
+        "--fanout", "2",
+        "--seed", "7",
+    ])
+    result = temporal.run_benchmark(args)
+    if result["status"] == "skipped":
+        pytest.skip(result["skip_reason"])
+    assert result["versions_written"] == 60
+    assert result["query_count"] == 10
+    assert result["sampled_edges"] > 0
+    assert result["derived_claims"] == 1
+    assert result["modal_status"] == "supported"
+    assert result["peak_traced_memory_bytes"] > 0
+    assert result["storage_amplification"] > 0
 
 
 def test_cli_help(capsys):

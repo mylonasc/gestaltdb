@@ -1,6 +1,6 @@
 # Epic: Temporal and Epistemic Knowledge Graphs
 
-Status: **in progress** (`TKG-01` through `TKG-12` implemented on
+Status: **implemented** (`TKG-01` through `TKG-14` implemented on
 `temporal-epistemic-kg`)
 
 GitHub parent: [#63](https://github.com/mylonasc/gestaltdb/issues/63)
@@ -515,4 +515,4 @@ Every TKG feature must:
 - [x] `TKG-11` implemented with versioned safe rules and bounded semi-naive evaluation.
 - [x] `TKG-12` implemented with incremental truth maintenance and explanations.
 - [x] `TKG-13` implemented with bounded paraconsistent modal evaluation.
-- [ ] `TKG-14` onward.
+- [x] `TKG-14` implemented with compatibility, migration, documentation, benchmarks, and release hardening.

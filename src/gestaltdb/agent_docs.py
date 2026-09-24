@@ -71,6 +71,12 @@ TOPICS: dict[str, Topic] = {
         "Sourced assertions/denials, provenance, contradiction, correction/retraction, and four-valued status.",
         "references/epistemic.md",
     ),
+    "temporal": Topic(
+        "temporal",
+        "Temporal History And Migration",
+        "Versioned graph reads, TimeIndexedEdge migration, compatibility, recovery, and retention limits.",
+        "references/temporal.md",
+    ),
 }
 
 

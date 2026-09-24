@@ -564,7 +564,9 @@ raise `VizCapExceededError` naming the sampling alternative.
 
 Temporal values require timezone-aware datetimes, normalize to UTC
 microseconds, and use half-open intervals `[start, end)`. These values establish
-shared semantics; they do not yet filter `GraphDB` records or sampler snapshots.
+shared semantics for temporal history, read views, Cypher qualifiers, and
+temporal sampler snapshots; they do not make mutable current-state records
+temporal.
 
 ```python
 from datetime import datetime, timedelta, timezone
@@ -628,6 +630,47 @@ with TemporaryDirectory() as tmpdir:
             "alice", valid_time="2025-01-01T00:00:00Z"
         )
         assert at_2025.node.properties["name"] == "Alicia"
+    finally:
+        graph.close()
+```
+
+## Migrate Legacy `TimeIndexedEdge` Records
+
+`TimeIndexedEdge` is a deprecated timestamp-prefixed current-state layout. Back
+up and quiesce the database, migrate without deletion, validate temporal reads,
+then run cleanup. The example creates legacy data only to demonstrate the
+migration; new code should call `put_edge_version` directly.
+
+```python
+from datetime import datetime, timedelta, timezone
+from tempfile import TemporaryDirectory
+
+from gestaltdb.graphdb import GraphDB, TimeIndexedEdge
+from gestaltdb.kvstores import LevelDBStore
+from gestaltdb.serializers import PickleSerializer
+
+with TemporaryDirectory() as tmpdir:
+    graph = GraphDB(LevelDBStore(path=f"{tmpdir}/graph"), PickleSerializer())
+    try:
+        first = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        graph.put_edge(TimeIndexedEdge(
+            first, edge_id="employment", source="alice", target="acme",
+            properties={"type": "WORKS_FOR", "revision": 1},
+        ), update_adjacency=False)
+        graph.put_edge(TimeIndexedEdge(
+            first + timedelta(days=30), edge_id="employment",
+            source="alice", target="acme",
+            properties={"type": "WORKS_FOR", "revision": 2},
+        ), update_adjacency=False)
+
+        migrated = graph.migrate_time_indexed_edges(delete_legacy=False)
+        assert len(migrated) == 2
+        assert graph.get_edge_as_of(
+            "employment", valid_time="2024-01-15T00:00:00Z"
+        ).edge.properties["revision"] == 1
+
+        assert graph.migrate_time_indexed_edges(delete_legacy=True) == ()
+        assert len(list(graph.iter_edge_versions("employment"))) == 2
     finally:
         graph.close()
 ```

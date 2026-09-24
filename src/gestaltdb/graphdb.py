@@ -401,7 +401,11 @@ class Edge:
                    properties=data['properties'])
 
 class TimeIndexedEdge(Edge):
-    """Edge whose byte key is prefixed by a timestamp.
+    """Deprecated edge whose byte key is prefixed by a timestamp.
+
+    This legacy current-state layout is not the immutable temporal storage
+    model. Use :meth:`GraphDB.migrate_time_indexed_edges` to append equivalent
+    edge history before adopting temporal reads or snapshots.
 
     Args:
         timestamp_dat: Datetime used as the sortable key prefix.
@@ -479,7 +483,7 @@ class GraphEntityDictSerializer:
     }
 
     _ent_type_decoder = {
-        'Edge' : lambda x : Edge.from_dict(x),
+        'Edge' : lambda x : TimeIndexedEdge.from_dict(x) if 'timestamp_dat' in x else Edge.from_dict(x),
         'Node' : lambda x : Node.from_dict(x),
         'AdjacencyList' : lambda x : x
     }
@@ -4506,6 +4510,131 @@ class GraphDB:
             metadata=metadata, index_mode=index_mode,
         )
         return commit.versions[0]  # type: ignore[return-value]
+
+    def migrate_time_indexed_edges(
+        self,
+        *,
+        delete_legacy: bool = False,
+        metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
+    ) -> tuple[EdgeVersion, ...]:
+        """Append legacy ``TimeIndexedEdge`` records as temporal edge history.
+
+        Records are grouped by logical edge ID and ordered by timestamp. Each
+        record is valid until the next timestamp for that ID; the final record
+        has an open end. Existing equivalent assertions from an earlier run are
+        skipped, making cleanup retryable after a completed or interrupted
+        migration. Changed legacy input after a successful migration is rejected
+        instead of creating overlapping history. When requested, legacy
+        current-state records are deleted only after the temporal commit is
+        visible.
+
+        Returns:
+            Newly appended edge versions in migration order.
+
+        Raises:
+            TemporalVersionError: If timestamps are duplicated or legacy input
+                changed after an earlier migration.
+            TemporalCorruptionError: If a legacy record cannot be decoded or its
+                timestamp-prefixed key does not match its payload.
+        """
+        grouped: dict[str, list[tuple[bytes, TimeIndexedEdge, TemporalInstant]]] = {}
+        for raw_key in self.store.get_edge_keys_generator():
+            try:
+                edge = self.get_edge(raw_key)
+            except Exception as exc:
+                raise TemporalCorruptionError(
+                    f"cannot decode legacy edge record at key {raw_key!r}"
+                ) from exc
+            if not isinstance(edge, TimeIndexedEdge):
+                continue
+            try:
+                instant = normalize_temporal_instant(edge.timestamp_dat)
+                expected_key = edge.get_id_bytes
+            except (TypeError, ValueError, OverflowError, struct.error) as exc:
+                raise TemporalCorruptionError(
+                    f"legacy TimeIndexedEdge '{edge.get_id}' has an invalid timestamp"
+                ) from exc
+            if raw_key != expected_key:
+                raise TemporalCorruptionError(
+                    f"legacy TimeIndexedEdge '{edge.get_id}' key does not match its payload"
+                )
+            grouped.setdefault(edge.get_id, []).append((raw_key, edge, instant))
+
+        existing_migration_versions: dict[str, list[EdgeVersion]] = {}
+        migration_exists = False
+        for commit in self.iter_temporal_commits():
+            if commit.metadata.get("migration") != "TimeIndexedEdge":
+                continue
+            migration_exists = True
+            for version in commit.versions:
+                if isinstance(version, EdgeVersion):
+                    existing_migration_versions.setdefault(version.logical_id, []).append(version)
+
+        unseen_logical_ids = sorted(set(grouped) - set(existing_migration_versions))
+        if migration_exists and unseen_logical_ids:
+            raise TemporalVersionError(
+                "legacy TimeIndexedEdge input contains new logical IDs after migration: "
+                + ", ".join(unseen_logical_ids)
+            )
+
+        writes: list[EdgeVersionWrite] = []
+        migrated_keys: list[bytes] = []
+        for logical_id in sorted(grouped):
+            records = sorted(grouped[logical_id], key=lambda item: (item[2].epoch_microseconds, item[0]))
+            starts = [item[2].epoch_microseconds for item in records]
+            if len(starts) != len(set(starts)):
+                raise TemporalVersionError(
+                    f"legacy TimeIndexedEdge '{logical_id}' has duplicate timestamps"
+                )
+            existing_versions = existing_migration_versions.get(logical_id, [])
+            existing_assertions = [
+                version for version in existing_versions
+                if version.operation is VersionOperation.ASSERT and version.edge is not None
+            ]
+            for index, (raw_key, edge, start) in enumerate(records):
+                end = records[index + 1][2] if index + 1 < len(records) else None
+                plain_edge = Edge(
+                    edge_id=edge.get_id,
+                    source=edge.source,
+                    target=edge.target,
+                    properties=edge.properties,
+                )
+                valid = TemporalInterval(start, end)
+                matching_version = any(
+                    version.operation is VersionOperation.ASSERT
+                    and version.valid.start == start
+                    and version.edge is not None
+                    and version.edge.to_dict() == plain_edge.to_dict()
+                    for version in existing_assertions
+                )
+                if existing_versions and not matching_version:
+                    raise TemporalVersionError(
+                        f"legacy TimeIndexedEdge '{logical_id}' changed after migration"
+                    )
+                if not existing_versions:
+                    writes.append(EdgeVersionWrite.assertion(plain_edge, valid))
+                migrated_keys.append(raw_key)
+
+        versions: tuple[EdgeVersion, ...] = ()
+        if writes:
+            migration_metadata = {
+                "migration": "TimeIndexedEdge",
+                "interval_policy": "successive",
+            }
+            if metadata is not None:
+                migration_metadata["user"] = dict(metadata)
+            commit = self.commit_versions(
+                writes,
+                metadata=migration_metadata,
+                index_mode=index_mode,
+            )
+            versions = tuple(commit.versions)  # type: ignore[assignment]
+
+        if delete_legacy:
+            for raw_key in migrated_keys:
+                self.delete_edge(raw_key)
+        return versions
 
     def correct_node_version(
         self,

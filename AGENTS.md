@@ -63,6 +63,7 @@ Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes 
 - `TemporalInstant`, `TemporalInterval`, and `TemporalContext` define timezone-aware UTC-microsecond instants, half-open `[start, end)` intervals, and point/window matching.
 - Cypher temporal expressions return immutable `TemporalDate`, `TemporalTime`, `TemporalLocalTime`, `TemporalLocalDateTime`, `TemporalInstant`, and `TemporalDuration` values. They are query-only and cannot yet be persisted as graph properties.
 - `put_node_version`, `put_edge_version`, correction/retraction helpers, and `commit_versions` append immutable temporal history. `get_node_as_of`, `get_edge_as_of`, and `iter_edges_as_of` use derived temporal indexes; deferred temporal writes require `rebuild_temporal_indexes()` or `rebuild_deferred_indexes()`. Current graph records, Cypher views, and sampler snapshots remain separate.
+- Deprecated `TimeIndexedEdge` records are mutable legacy data, not temporal history. Back up and quiesce the database, run `migrate_time_indexed_edges(delete_legacy=False)`, validate, then rerun with deletion; changed or corrupt legacy input fails closed.
 - `graph.read_view(valid_time=...)` pins temporal reads and point-materialized sampler builds to one contiguous visible commit prefix. Its authenticated `ReadViewProvenance` verifies stable database, backend, serializer, commit, and visibility identity during snapshot hydration.
 - `assert_claim`, `correct_claim`, and `retract_claim` append serializer-neutral sourced claims to temporal history. Deterministic statement IDs identify propositions; claim IDs additionally include polarity, agent, source, and world. `iter_claims_as_of` and `claim_status` provide indexed bitemporal lookup and open-world `supported`/`refuted`/`both`/`unknown` semantics.
 - `create_rule` appends validated safe positive Horn-rule versions. `run_rules(as_of=...)` performs bounded semi-naive evaluation over positive entity claims in a shared world, intersects premise validity, and persists deduplicated conclusions with rule and premise version justifications. Limit failures publish no partial derivations.
@@ -160,6 +161,7 @@ Temporal snapshots also index node availability and positive-triple intervals. `
 
 - Run tests: `uv run pytest`
 - Run a focused test: `uv run pytest tests/test_cypher.py -q`
+- Run the deterministic temporal smoke: `uv run python -m benchmarks temporal --nodes 100 --edges 500 --queries 100`
 - Check documentation & API drift: `uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/check_docs.py`
 - Test documentation examples: `uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py test-examples`
 - Build Sphinx docs: `uv run sphinx-build -b html docs docs/_build/html`

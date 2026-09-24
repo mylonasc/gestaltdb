@@ -260,3 +260,6 @@ directory is renamed into place. Loading in RAM or memmap mode validates the
 completion record, artifact catalog, SHA-256 checksums, dtypes, shapes, aligned
 lengths, CSR bounds, interval invariants, and source-provenance token. Existing
 format-v1 snapshots still load, but have no integrity or temporal guarantees.
+Rebuild v1 snapshots from their source database to migrate to v2; snapshots are
+immutable and have no in-place upgrade path. Unknown format versions and corrupt
+v2 artifacts fail closed.

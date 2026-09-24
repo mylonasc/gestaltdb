@@ -31,6 +31,7 @@ Available topics:
 - `ingestion`: Arrow/Polars ingestion and index maintenance modes.
 - `visualization`: offline `visualize_*` entrypoints, `VizOptions` caps, `GraphDB.visualize`.
 - `epistemic`: sourced bitemporal claims, provenance, contradiction, and four-valued status.
+- `temporal`: version history, legacy migration, recovery, and compatibility limits.
 
 ## Import Rules
 
@@ -58,6 +59,7 @@ The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storag
 - Use `assert_claim` for sourced positive/negative propositions and `claim_status` for open-world four-valued evaluation at valid/system time.
 - Use `create_rule` and bounded `run_rules(as_of=...)` for positive Horn inference over entity claims; use `maintain_truth` after premise/rule changes and `explain_claim` for bounded historical derivation graphs.
 - Use `assert_world_accessibility` plus bounded `entails` for temporal `BELIEVES`, `KNOWS`, `POSSIBLE`, and `NECESSARY` evaluation. Belief, knowledge, and generic modal accessibility are separate frames.
+- Treat `TimeIndexedEdge` as deprecated legacy data. Back up and stop writers before `migrate_time_indexed_edges`; validate before deleting legacy records.
 
 ## Cypher Boundaries
 

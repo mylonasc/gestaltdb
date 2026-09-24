@@ -140,6 +140,59 @@ behavior.
 ``through_commit`` may recreate an older visible view. Database paths are not
 part of provenance, so moving a managed database does not change its identity.
 
+End-to-End Temporal Knowledge Workflow
+--------------------------------------
+
+A production workflow can keep one graph fact aligned across each read layer:
+
+.. code-block:: python
+
+   from gestaltdb import ClaimStatus, SamplerEngine, TemporalContext, TemporalInstant
+
+   # Append node and edge versions, then query the same valid instant through Cypher.
+   graph.put_edge_version(employment_edge, valid=(0, None))
+   rows = graph.query(
+       "MATCH (a {id: 'alice'})-[:WORKS_FOR]->(b) "
+       "FOR VALID_TIME AS OF datetime($at) RETURN b.id AS company",
+       {"at": "2024-06-01T00:00:00Z"},
+   )
+
+   # Export one authenticated history horizon and filter before seeded fanout.
+   snapshot = graph.build_sampler_snapshot(
+       "snapshots/knowledge", temporal=True, time_bucket="day"
+   )
+   engine = SamplerEngine(snapshot, seed=7)
+   sampled = engine.sample_neighbors(
+       [alice_compact_id], fanout=10,
+       temporal=TemporalContext.as_of(TemporalInstant.parse("2024-06-01T00:00:00Z")),
+   )
+
+   # Claims remain sourced; rules derive claims; modal evaluation returns evidence.
+   graph.assert_claim(
+       subject="alice", predicate="WORKS_FOR", object="acme",
+       polarity="positive", agent="source:hr", world="verified", valid=(0, None),
+   )
+   graph.create_rule(
+       "employment-implies-affiliation",
+       when=[("?p", "WORKS_FOR", "?c")], then=("?p", "AFFILIATED_WITH", "?c"),
+   )
+   graph.run_rules(as_of=0, world="verified")
+   graph.assert_world_accessibility(
+       agent="auditor", from_world="actual", to_world="verified",
+       kind="knowledge", valid=(0, None),
+   )
+   result = graph.entails(
+       "auditor",
+       {"subject": "alice", "predicate": "AFFILIATED_WITH", "object": "acme"},
+       "KNOWS", world="actual", valid_time=0, max_depth=4, max_states=100,
+   )
+   assert result.status is ClaimStatus.SUPPORTED
+
+Temporal snapshots contain graph history, not claims. Claims, rule conclusions,
+truth maintenance, and modal evidence remain in the source database and share
+the read-view commit horizon. Use time-aware hard-negative policies described in
+:doc:`typed-sampling` to prevent future positives from leaking into training.
+
 Index Maintenance
 -----------------
 
@@ -153,6 +206,22 @@ catalog indexes in addition to logical, system, and typed-adjacency indexes. A
 database predating any current temporal index format is automatically reported
 with the ``temporal`` stale family and can be migrated with
 ``rebuild_deferred_indexes``.
+
+Migrating ``TimeIndexedEdge``
+-----------------------------
+
+The deprecated ``TimeIndexedEdge`` class encoded a datetime in a mutable edge
+key; it is not an immutable temporal version. Use
+``migrate_time_indexed_edges`` once, with concurrent writers stopped. The method
+maps successive timestamps for each logical edge ID to half-open intervals,
+publishes all new versions in one temporal commit, and can optionally delete the
+legacy records after publication. Validate first with ``delete_legacy=False``;
+cleanup is independently retryable.
+
+Migration fails closed for undecodable payloads, payload/key mismatches,
+duplicate timestamps, or changed legacy input after a previous migration. It
+does not rewrite existing temporal history or snapshots. See :doc:`operations`
+for the backup, retry, serializer, snapshot, and recovery contract.
 
 Epistemic Claims and Provenance
 -------------------------------
@@ -325,3 +394,6 @@ Version dataclasses contain immutable metadata and detached entity payloads.
 a returned payload never changes persisted history, and a later read returns a
 fresh decoded payload whose hash still matches storage. Temporal history must be
 reopened with the same configured serializer used to write it.
+There is no temporal-history pruning or TTL API; canonical commits are retained
+indefinitely. Derived temporal indexes and sampler snapshots are rebuildable,
+but corrupted canonical history requires restoring a complete backup.

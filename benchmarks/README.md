@@ -25,6 +25,7 @@ benchmarks/
 ├── matrix.py               # Matrix runner across backends, sizes, cores, and ingest modes
 ├── compaction.py           # LSM overwrite & compaction pressure benchmark
 ├── sampler.py              # SamplerEngine array sampler vs baseline graph traversal
+├── temporal.py             # Temporal storage/query/sampling/reasoning hardening smoke
 ├── embedded.py             # Embedded graph databases: GestaltDB vs LatticeDB vs LadybugDB
 ├── external.py             # External graph databases: GestaltDB vs Neo4j, Memgraph, ArcadeDB, AGE
 ├── arcadedb.py             # Focused comparison between GestaltDB and ArcadeDB embedded
@@ -69,6 +70,7 @@ python -m benchmarks quick --backend leveldb --nodes 10000 --edges 50000
 python -m benchmarks matrix --backends rocksdb --sizes 10000 100000 --cores 2 4
 python -m benchmarks compaction --configs leveldb rocksdb-p4-bg4-largebuf --keys 100000
 python -m benchmarks sampler --nodes 1000 --edges 500000 --iterations 100
+python -m benchmarks temporal --backend leveldb --serializer json --nodes 1000 --edges 5000
 python -m benchmarks embedded --engines gestaltdb latticedb --nodes 10000 --edges 50000
 python -m benchmarks external --engines gestaltdb arcadedb --workloads neighbors star_traversal
 python -m benchmarks tuning --nodes 20000 --edges 100000
