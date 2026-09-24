@@ -114,6 +114,27 @@ mark in ``.gestaltdb_temporal_sequence`` and serialize writers with
 ``.gestaltdb_temporal_writer.lock``. Include both files in whole-database backups
 and never delete or edit internal metadata or sidecar files manually.
 
+Inspect failed publications before deleting anything:
+
+.. code-block:: python
+
+   report = graph.list_temporal_orphans()
+   for artifact in report.artifacts:
+       print(artifact.commit_id, artifact.kind, artifact.present_record_count)
+
+After confirming an inclusive recovery horizon, reclaim only through that ID:
+
+.. code-block:: python
+
+   result = graph.reclaim_temporal_orphans(through_commit=report.through_commit)
+
+Reclamation never lowers the allocation high-water mark or reuses commit IDs.
+It validates unpublished descriptors and records, deletes their derivable index
+entries before canonical artifacts, and rebuilds indexes from visible history.
+Malformed artifacts fail closed. Cleanup is transactional where the backend
+supports graph transactions; LevelDB and default PyRex cleanup is ordered and
+retryable, and physical disk space may require backend compaction.
+
 Hash, envelope, descriptor, marker, or canonical-record corruption raises
 ``TemporalCorruptionError``. Index rebuilds do not repair corrupted canonical
 history: stop writes and restore the complete backend directory from a known
@@ -121,7 +142,8 @@ good backup. Copy databases only while closed or with a backend-supported
 consistent backup mechanism. Snapshot corruption is recovered by rebuilding the
 snapshot from a verified read view.
 
-Temporal history, claims, rules, and commits currently have no pruning, TTL, or
-compaction API. Retain all canonical history and include it in capacity plans.
+Visible temporal history, claims, rules, and commits have no pruning or TTL API.
+Orphan reclamation removes only unpublished artifacts. Retain all canonical
+history and include it in capacity plans.
 Deleting mutable graph records does not delete temporal versions, and deleting
 old snapshots does not affect source history.

@@ -14,8 +14,8 @@ Read this topic for immutable graph history, bitemporal reads, legacy
 - Migration retries skip exact prior results. Corrupt keys/payloads and changed post-migration input fail closed.
 - Open a database with the serializer that wrote it. Temporal graph payloads support Pickle, JSON, MessagePack, and Protobuf when their dependencies and property types are compatible.
 - Format-v1 snapshots still load without temporal/integrity guarantees. Rebuild from source for authenticated format v2; there is no in-place snapshot upgrade.
-- Rebuild derived indexes after an interrupted deferred write. Restore canonical-history corruption from a complete backup.
-- Temporal history has no pruning or TTL API. Deleting mutable records or snapshots does not remove history.
+- Rebuild derived indexes after an interrupted deferred write. Use `list_temporal_orphans()` before bounded `reclaim_temporal_orphans(through_commit=...)`; malformed artifacts fail closed and commit IDs are never reused.
+- Visible temporal history has no pruning or TTL API. Orphan reclamation removes only unpublished artifacts; deleting mutable records or snapshots does not remove history.
 
 ## Example
 

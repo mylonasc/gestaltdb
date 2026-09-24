@@ -75,6 +75,12 @@ marker last. Records without a valid marker remain invisible. Reservations are
 never reused, including when an outer backend transaction rolls back, so visible
 commit IDs may contain gaps.
 
+``list_temporal_orphans()`` reports empty reservation gaps and validated
+incomplete publications. ``reclaim_temporal_orphans(through_commit=...)``
+removes only unmarked artifacts through an explicit inclusive horizon, rebuilds
+derived indexes, and never reuses reclaimed commit IDs. Use the recovery
+procedure in :doc:`operations`; malformed unpublished data fails closed.
+
 As-Of Resolution and Traversal
 ------------------------------
 

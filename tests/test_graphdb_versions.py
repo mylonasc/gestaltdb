@@ -17,6 +17,7 @@ from gestaltdb.versioning import (
     TemporalCorruptionError,
     TemporalVersionError,
     VersionOperation,
+    canonical_json_bytes,
 )
 
 
@@ -34,12 +35,18 @@ class _MetadataStore:
     def put_metadata(self, key, value):
         self.metadata[key] = value
 
+    def delete_metadata(self, key):
+        self.metadata.pop(key, None)
+
     def put_index_entry(self, name, parts, value):
         self.indexes.setdefault((name, tuple(parts)), set()).add(value)
 
     def put_index_entries_bulk(self, entries):
         for name, parts, value in entries:
             self.put_index_entry(name, parts, value)
+
+    def delete_index_entry(self, name, parts, value):
+        self.indexes.get((name, tuple(parts)), set()).discard(value)
 
     def iter_index_prefix(self, name, parts):
         return iter(sorted(self.indexes.get((name, tuple(parts)), set())))
@@ -50,6 +57,9 @@ class _MetadataStore:
     def put_range_index_entries_bulk(self, entries):
         for name, parts, range_value, value in entries:
             self.put_range_index_entry(name, parts, range_value, value)
+
+    def delete_range_index_entry(self, name, parts, range_value, value):
+        self.range_indexes.get((name, tuple(parts)), set()).discard((range_value, value))
 
     def iter_range_index(self, name, parts, start=None, end=None, include_start=True, include_end=True):
         values = []
@@ -249,6 +259,49 @@ def test_marker_last_failures_remain_invisible_and_skip_reserved_commit(fail_on_
     store.fail_on_put = -1
     succeeding = graph.put_node_version(Node("succeeds"), valid=(0, None))
     assert succeeding.commit_id == 2
+
+
+def test_temporal_orphans_can_be_listed_and_reclaimed():
+    store = _FailingMetadataStore(fail_on_put=4)
+    graph = GraphDB(store, JSONSerializer())
+
+    with pytest.raises(RuntimeError, match="injected"):
+        graph.put_node_version(Node("failed"), valid=(0, None))
+    store.fail_on_put = -1
+
+    report = graph.list_temporal_orphans()
+    assert report.allocation_horizon == 1
+    assert [(item.commit_id, item.kind, item.present_record_count) for item in report.artifacts] == [
+        (1, "incomplete_commit", 1)
+    ]
+
+    result = graph.reclaim_temporal_orphans(through_commit=1)
+    assert result.reclaimed_commit_ids == (1,)
+    assert result.indexes_rebuilt
+    assert graph.store.get_metadata(graph._temporal_commit_key(1)) is None
+    assert graph.store.get_metadata(graph._temporal_record_key(1, 0)) is None
+    assert graph._temporal_sequence()[0] == 1
+
+    succeeding = graph.put_node_version(Node("succeeds"), valid=(0, None))
+    assert succeeding.commit_id == 2
+    assert [commit.commit_id for commit in graph.iter_temporal_commits()] == [2]
+
+
+def test_temporal_orphan_listing_distinguishes_empty_reservation_gaps(temporal_graph):
+    temporal_graph.put_node_version(Node("visible"), valid=(0, None))
+    temporal_graph.store.metadata[b"temporal:v1:sequence"] = canonical_json_bytes({
+        "commit_id": 2,
+        "system_time_us": 1,
+    })
+
+    report = temporal_graph.list_temporal_orphans()
+    assert [(item.commit_id, item.kind) for item in report.artifacts] == [
+        (2, "reservation_gap")
+    ]
+    result = temporal_graph.reclaim_temporal_orphans(through_commit=2)
+    assert result.reclaimed_commit_ids == ()
+    assert result.reservation_gap_ids == (2,)
+    assert not result.indexes_rebuilt
 
 
 def test_incomplete_commit_is_invisible_and_marker_corruption_is_detected(temporal_graph):

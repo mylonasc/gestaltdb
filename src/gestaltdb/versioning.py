@@ -156,6 +156,37 @@ class TemporalCommit:
 
 
 @dataclass(frozen=True)
+class TemporalOrphanArtifact:
+    """One durable reservation gap or incomplete unpublished commit."""
+
+    commit_id: int
+    kind: str
+    system_time: Optional[TemporalInstant]
+    expected_record_count: Optional[int]
+    present_record_count: int
+
+
+@dataclass(frozen=True)
+class TemporalOrphanReport:
+    """Read-only inventory of temporal publication artifacts."""
+
+    allocation_horizon: int
+    through_commit: int
+    artifacts: Tuple[TemporalOrphanArtifact, ...]
+
+
+@dataclass(frozen=True)
+class TemporalOrphanReclaimResult:
+    """Summary of one bounded orphan-reclamation run."""
+
+    allocation_horizon: int
+    through_commit: int
+    reclaimed_commit_ids: Tuple[int, ...]
+    reservation_gap_ids: Tuple[int, ...]
+    indexes_rebuilt: bool
+
+
+@dataclass(frozen=True)
 class NodeVersionWrite:
     """Validated input describing a node-version operation."""
 

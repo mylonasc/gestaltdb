@@ -52,6 +52,9 @@ from .versioning import (
     NodeVersionWrite,
     TemporalCommit,
     TemporalCorruptionError,
+    TemporalOrphanArtifact,
+    TemporalOrphanReclaimResult,
+    TemporalOrphanReport,
     TemporalVersionError,
     VersionOperation,
     canonical_json_bytes,
@@ -5464,6 +5467,174 @@ class GraphDB:
             if commit is not None:
                 yield commit
 
+    def _temporal_orphan_details(self, commit_id: int, descriptor_payload: bytes):
+        try:
+            descriptor = json.loads(descriptor_payload.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise TemporalCorruptionError("invalid unpublished temporal commit descriptor") from exc
+        if not isinstance(descriptor, dict):
+            raise TemporalCorruptionError("unpublished temporal commit descriptor must be an object")
+        if descriptor.get("format_version") != 1 or descriptor.get("commit_id") != commit_id:
+            raise TemporalCorruptionError("invalid unpublished temporal commit descriptor")
+        version_ids = descriptor.get("version_ids")
+        record_digests = descriptor.get("record_digests")
+        if (
+            not isinstance(version_ids, list)
+            or not version_ids
+            or not all(isinstance(value, str) for value in version_ids)
+            or len(set(version_ids)) != len(version_ids)
+            or not isinstance(record_digests, list)
+            or len(version_ids) != len(record_digests)
+            or not all(
+                isinstance(value, str)
+                and len(value) == 64
+                and all(character in "0123456789abcdef" for character in value)
+                for value in record_digests
+            )
+        ):
+            raise TemporalCorruptionError("invalid unpublished temporal commit record catalog")
+        try:
+            normalized_version_ids = [normalize_version_id(value) for value in version_ids]
+            system_time_us = descriptor["system_time_us"]
+            if isinstance(system_time_us, bool) or not isinstance(system_time_us, int):
+                raise TypeError
+            system_time = TemporalInstant(system_time_us)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise TemporalCorruptionError("invalid unpublished temporal commit metadata") from exc
+        if normalized_version_ids != version_ids:
+            raise TemporalCorruptionError("unpublished temporal commit contains a non-canonical version ID")
+
+        versions = []
+        for ordinal, (version_id, expected_digest) in enumerate(zip(version_ids, record_digests)):
+            envelope = self.store.get_metadata(self._temporal_record_key(commit_id, ordinal))
+            if envelope is None:
+                continue
+            if hashlib.sha256(envelope).hexdigest() != expected_digest:
+                raise TemporalCorruptionError("unpublished temporal commit record is corrupt")
+            version = self._decode_temporal_version(envelope)
+            if (
+                version.version_id != version_id
+                or version.commit_id != commit_id
+                or version.commit_ordinal != ordinal
+                or version.system_time != system_time
+            ):
+                raise TemporalCorruptionError("unpublished temporal record does not match its descriptor")
+            versions.append(version)
+        return descriptor, system_time, tuple(versions)
+
+    def _list_temporal_orphans_locked(self, through_commit=None) -> TemporalOrphanReport:
+        allocation_horizon, _ = self._temporal_sequence()
+        if through_commit is None:
+            through_commit = allocation_horizon
+        if (
+            isinstance(through_commit, bool)
+            or not isinstance(through_commit, int)
+            or through_commit < 0
+        ):
+            raise ValueError("through_commit must be a non-negative integer")
+        if through_commit > allocation_horizon:
+            raise ValueError("through_commit is newer than the allocation horizon")
+
+        artifacts = []
+        for commit_id in range(1, through_commit + 1):
+            marker = self.store.get_metadata(self._temporal_visible_key(commit_id))
+            descriptor_payload = self.store.get_metadata(self._temporal_commit_key(commit_id))
+            if marker is not None:
+                self.get_temporal_commit(commit_id)
+                continue
+            if descriptor_payload is None:
+                artifacts.append(TemporalOrphanArtifact(
+                    commit_id=commit_id,
+                    kind="reservation_gap",
+                    system_time=None,
+                    expected_record_count=None,
+                    present_record_count=0,
+                ))
+                continue
+            descriptor, system_time, versions = self._temporal_orphan_details(
+                commit_id, descriptor_payload
+            )
+            artifacts.append(TemporalOrphanArtifact(
+                commit_id=commit_id,
+                kind="incomplete_commit",
+                system_time=system_time,
+                expected_record_count=len(descriptor["version_ids"]),
+                present_record_count=len(versions),
+            ))
+        return TemporalOrphanReport(allocation_horizon, through_commit, tuple(artifacts))
+
+    def list_temporal_orphans(self, *, through_commit=None) -> TemporalOrphanReport:
+        """List durable allocation gaps and incomplete unpublished commits."""
+        with self._temporal_writer_guard():
+            return self._list_temporal_orphans_locked(through_commit)
+
+    def reclaim_temporal_orphans(self, *, through_commit: int) -> TemporalOrphanReclaimResult:
+        """Delete validated unpublished artifacts through an explicit commit horizon."""
+        with self._temporal_writer_guard():
+            if getattr(self.store, "supports_transactions", False) and not self._temporal_transaction_bound:
+                with self.transaction() as transaction:
+                    return transaction._reclaim_temporal_orphans_locked(through_commit)
+            return self._reclaim_temporal_orphans_locked(through_commit)
+
+    def _reclaim_temporal_orphans_locked(self, through_commit: int) -> TemporalOrphanReclaimResult:
+        report = self._list_temporal_orphans_locked(through_commit)
+        incomplete = [
+            artifact for artifact in report.artifacts
+            if artifact.kind == "incomplete_commit"
+        ]
+        gaps = tuple(
+            artifact.commit_id for artifact in report.artifacts
+            if artifact.kind == "reservation_gap"
+        )
+        if not incomplete:
+            return TemporalOrphanReclaimResult(
+                report.allocation_horizon,
+                report.through_commit,
+                (),
+                gaps,
+                False,
+            )
+
+        self._mark_indexes_stale("temporal")
+        cleanup = []
+        for artifact in incomplete:
+            descriptor_key = self._temporal_commit_key(artifact.commit_id)
+            descriptor_payload = self.store.get_metadata(descriptor_key)
+            if descriptor_payload is None:
+                raise TemporalCorruptionError("temporal orphan changed during reclamation")
+            descriptor, system_time, versions = self._temporal_orphan_details(
+                artifact.commit_id, descriptor_payload
+            )
+            cleanup.append((artifact.commit_id, descriptor_key, descriptor, system_time, versions))
+
+        for commit_id, _, _, system_time, versions in cleanup:
+            for version in versions:
+                exact_entries, range_entries = self._temporal_index_entries(version)
+                for index_name, parts, value in exact_entries:
+                    self.store.delete_index_entry(index_name, parts, value)
+                for index_name, parts, range_value, value in range_entries:
+                    self.store.delete_range_index_entry(index_name, parts, range_value, value)
+            self.store.delete_range_index_entry(
+                _TEMPORAL_SYSTEM_INDEX,
+                [b"commit"],
+                self._temporal_instant_index_value(system_time),
+                f"{commit_id:016x}".encode("ascii"),
+            )
+
+        for commit_id, descriptor_key, descriptor, _, _ in cleanup:
+            for ordinal in range(len(descriptor["version_ids"])):
+                self.store.delete_metadata(self._temporal_record_key(commit_id, ordinal))
+            self.store.delete_metadata(descriptor_key)
+
+        self.rebuild_temporal_indexes()
+        return TemporalOrphanReclaimResult(
+            report.allocation_horizon,
+            report.through_commit,
+            tuple(item[0] for item in cleanup),
+            gaps,
+            True,
+        )
+
     def _get_temporal_version(self, version_id: str):
         last_commit_id, _ = self._temporal_sequence()
         return self._get_temporal_version_through(version_id, last_commit_id)
@@ -5953,7 +6124,7 @@ class GraphDB:
 
     def rebuild_temporal_indexes(self, *, through_commit=None) -> dict[str, int]:
         """Rebuild all derived temporal indexes from visible canonical history."""
-        with self._temporal_write_lock:
+        with self._temporal_writer_guard():
             self._mark_indexes_stale("temporal")
             latest_horizon = self._temporal_system_horizon()
             horizon = self._temporal_system_horizon(through_commit=through_commit)
