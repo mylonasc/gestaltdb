@@ -11,6 +11,31 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install LevelDB build dependency
+        run: sudo apt-get update && sudo apt-get install --yes libleveldb-dev
+
+      - name: Install package with test dependencies
+        run: python -m pip install -e ".[coverage]"
+
+      - name: Run tests
+        run: python -m pytest
+
+  optional-integrations:
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
@@ -21,7 +46,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install package with test extras
+      - name: Install package with all optional integrations
         run: python -m pip install -e ".[all,coverage]"
 
       - name: Run tests

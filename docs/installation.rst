@@ -4,7 +4,7 @@ Installation
 Python Version
 --------------
 
-GestaltDB targets Python 3.9 through 3.13. The LevelDB backend uses ``plyvel``;
+GestaltDB targets Python 3.10 through 3.13. The LevelDB backend uses ``plyvel``;
 at the time of writing, ``plyvel`` wheels are not available for Python 3.14 or
 free-threaded Python builds. Use Python 3.12 or 3.13 for notebooks that need the
 LevelDB backend.
