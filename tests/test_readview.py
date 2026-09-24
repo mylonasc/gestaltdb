@@ -186,6 +186,20 @@ def test_read_view_stops_before_gap_and_ignores_later_marker(memory_graph):
         assert newer.get_node_as_of("c") is not None
 
 
+def test_read_view_crosses_empty_abandoned_commit_reservation(memory_graph):
+    _populate_history(memory_graph)
+    abandoned = memory_graph.put_node_version(Node("abandoned"), valid=(0, None))
+    later = memory_graph.put_node_version(Node("later"), valid=(0, None))
+    memory_graph.store.metadata.pop(memory_graph._temporal_visible_key(abandoned.commit_id))
+    memory_graph.store.metadata.pop(memory_graph._temporal_commit_key(abandoned.commit_id))
+
+    with memory_graph.read_view(valid_time="2024-06-01T00:00:00Z") as view:
+        assert view.commit_horizon == later.commit_id
+        assert view.get_node_as_of("later") is not None
+
+    view.provenance.verify_source(memory_graph)
+
+
 def test_read_view_core_guarantees_run_without_optional_backends(memory_graph, tmp_path):
     first = _populate_history(memory_graph)
     original = first.versions[0]

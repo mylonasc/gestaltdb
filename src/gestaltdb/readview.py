@@ -181,6 +181,8 @@ class ReadViewProvenance:
         markers = []
         for commit_id in range(1, self.commit_horizon + 1):
             if graph.get_temporal_commit(commit_id, _validate_supersession=False) is None:
+                if graph.store.get_metadata(graph._temporal_commit_key(commit_id)) is None:
+                    continue
                 raise ProvenanceMismatchError("source visible commit prefix mismatch")
             commit_marker = graph.store.get_metadata(graph._temporal_visible_key(commit_id))
             markers.append(commit_id.to_bytes(8, "big") + commit_marker)

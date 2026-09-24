@@ -94,11 +94,82 @@ _TEMPORAL_EDGE_IN_CATALOG_INDEX = "temporal_v1_edge_in_catalog"
 _TEMPORAL_CLAIM_CATALOG_INDEX = "temporal_v1_claim_catalog"
 _TEMPORAL_CLAIM_STATEMENT_INDEX = "temporal_v1_claim_statement"
 _TEMPORAL_CLAIM_DIMENSION_INDEX = "temporal_v1_claim_dimension"
+_TEMPORAL_SEQUENCE_FILENAME = ".gestaltdb_temporal_sequence"
+_TEMPORAL_WRITER_LOCK_FILENAME = ".gestaltdb_temporal_writer.lock"
 _RULE_CATALOG_KEY = b"rules:catalog:v1"
 _TRUTH_MAINTENANCE_STATE_KEY = b"rules:truth-maintenance:v1"
 _RULE_ENGINE_AGENT = "gestaltdb:rules"
 _DATABASE_ID_LOCK = threading.Lock()
+_TEMPORAL_WRITER_LOCKS_LOCK = threading.Lock()
+_TEMPORAL_WRITER_LOCKS = {}
 _UNSET = object()
+
+
+class _TemporalWriterLock:
+    def __init__(self, path: Path):
+        self.path = path
+        self._lock = threading.RLock()
+        self._depth = 0
+        self._handle = None
+
+    def __enter__(self):
+        self._lock.acquire()
+        try:
+            if self._depth == 0:
+                handle = self.path.open("a+b")
+                try:
+                    if os.name == "posix":
+                        import fcntl
+
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                    elif os.name == "nt":  # pragma: no cover - Windows-only
+                        import msvcrt
+
+                        handle.write(b"\0")
+                        handle.flush()
+                        handle.seek(0)
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+                    else:  # pragma: no cover - unsupported platform
+                        raise RuntimeError("temporal writer locking is unsupported on this platform")
+                except Exception:
+                    handle.close()
+                    raise
+                self._handle = handle
+            self._depth += 1
+            return self
+        except Exception:
+            self._lock.release()
+            raise
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self._depth -= 1
+        try:
+            if self._depth == 0:
+                handle = self._handle
+                self._handle = None
+                if os.name == "posix":
+                    import fcntl
+
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                elif os.name == "nt":  # pragma: no cover - Windows-only
+                    import msvcrt
+
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                handle.close()
+        finally:
+            self._lock.release()
+
+
+def _temporal_writer_lock(path: Path) -> _TemporalWriterLock:
+    canonical = path.resolve()
+    key = str(canonical)
+    with _TEMPORAL_WRITER_LOCKS_LOCK:
+        lock = _TEMPORAL_WRITER_LOCKS.get(key)
+        if lock is None:
+            lock = _TemporalWriterLock(canonical / _TEMPORAL_WRITER_LOCK_FILENAME)
+            _TEMPORAL_WRITER_LOCKS[key] = lock
+        return lock
 
 
 def _utc_now_iso() -> str:
@@ -1923,6 +1994,8 @@ class GraphDB:
         for commit_id in range(1, allocated + 1):
             commit_candidate = self.get_temporal_commit(commit_id, _validate_supersession=False)
             if commit_candidate is None:
+                if self.store.get_metadata(self._temporal_commit_key(commit_id)) is None:
+                    continue
                 break
             marker_candidate = self.store.get_metadata(self._temporal_visible_key(commit_id))
             markers.append(commit_id.to_bytes(8, "big") + marker_candidate)
@@ -1943,7 +2016,9 @@ class GraphDB:
         if horizon and commit is None:
             raise ValueError("through_commit does not identify a visible commit")
         marker = self.store.get_metadata(self._temporal_visible_key(horizon)) if horizon else None
-        visibility_digest = hashlib.sha256(b"".join(markers[:horizon])).hexdigest()
+        visibility_digest = hashlib.sha256(b"".join(
+            value for value in markers if int.from_bytes(value[:8], "big") <= horizon
+        )).hexdigest()
         manifest = self.manifest
         provenance = ReadViewProvenance(
             database_id=self.database_id,
@@ -3627,13 +3702,18 @@ class GraphDB:
         self._persist_temporal_index_state(commit_id)
         return {"temporal_exact": len(exact_entries), "temporal_range": len(range_entries) + (1 if commit else 0)}
 
-    def _temporal_sequence(self) -> tuple[int, TemporalInstant | None]:
-        try:
-            payload = self.store.get_metadata(_TEMPORAL_SEQUENCE_KEY)
-        except NotImplementedError as exc:
-            raise TemporalVersionError("the configured store does not support temporal metadata") from exc
-        if payload is None:
-            return 0, None
+    @contextmanager
+    def _temporal_writer_guard(self):
+        if self._store_path is None:
+            with self._temporal_write_lock:
+                yield
+            return
+        self.database_id
+        with _temporal_writer_lock(self._store_path):
+            yield
+
+    @staticmethod
+    def _decode_temporal_sequence(payload: bytes) -> tuple[int, TemporalInstant]:
         try:
             decoded = json.loads(payload.decode("utf-8"))
             if not isinstance(decoded, dict):
@@ -3649,6 +3729,59 @@ class GraphDB:
             raise TemporalCorruptionError("invalid temporal commit sequence") from exc
         if commit_id < 0:
             raise TemporalCorruptionError("invalid temporal commit sequence")
+        return commit_id, system_time
+
+    def _temporal_sequence(self) -> tuple[int, TemporalInstant | None]:
+        try:
+            payload = self.store.get_metadata(_TEMPORAL_SEQUENCE_KEY)
+        except NotImplementedError as exc:
+            raise TemporalVersionError("the configured store does not support temporal metadata") from exc
+        stored = (0, None) if payload is None else self._decode_temporal_sequence(payload)
+        if self._store_path is None:
+            return stored
+        sequence_path = self._store_path / _TEMPORAL_SEQUENCE_FILENAME
+        try:
+            sidecar_payload = sequence_path.read_bytes()
+        except FileNotFoundError:
+            return stored
+        sidecar = self._decode_temporal_sequence(sidecar_payload)
+        if sidecar[0] < stored[0]:
+            raise TemporalCorruptionError("durable temporal sequence trails stored sequence")
+        return sidecar
+
+    def _reserve_temporal_sequence(self) -> tuple[int, TemporalInstant]:
+        previous_commit_id, previous_system_time = self._temporal_sequence()
+        commit_id = previous_commit_id + 1
+        if commit_id >= 1 << 64:
+            raise TemporalVersionError("temporal commit ID space is exhausted")
+        system_time = self._next_temporal_system_time(previous_system_time)
+        payload = canonical_json_bytes({
+            "commit_id": commit_id,
+            "system_time_us": system_time.epoch_microseconds,
+        })
+        if self._store_path is None:
+            self.store.put_metadata(_TEMPORAL_SEQUENCE_KEY, payload)
+            return commit_id, system_time
+
+        sequence_path = self._store_path / _TEMPORAL_SEQUENCE_FILENAME
+        temporary_path = self._store_path / f"{_TEMPORAL_SEQUENCE_FILENAME}.{uuid.uuid4().hex}.tmp"
+        try:
+            with temporary_path.open("xb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, sequence_path)
+            if os.name == "posix":
+                directory_fd = os.open(self._store_path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+        finally:
+            try:
+                temporary_path.unlink()
+            except FileNotFoundError:
+                pass
         return commit_id, system_time
 
     def _next_temporal_system_time(self, previous: TemporalInstant | None) -> TemporalInstant:
@@ -4942,24 +5075,18 @@ class GraphDB:
         rebuild_after = mode == IndexMaintenanceMode.DEFER_REBUILD.value
         write_mode = IndexMaintenanceMode.DEFER.value if rebuild_after else mode
         normalized_metadata = json.loads(canonical_json_bytes(dict(metadata or {})).decode("utf-8"))
-        if getattr(self.store, "supports_transactions", False) and not self._temporal_transaction_bound:
-            with self.transaction() as transaction:
-                result = transaction._commit_versions_direct(writes, normalized_metadata, write_mode)
-        else:
-            with self._temporal_write_lock:
+        with self._temporal_writer_guard():
+            if getattr(self.store, "supports_transactions", False) and not self._temporal_transaction_bound:
+                with self.transaction() as transaction:
+                    result = transaction._commit_versions_direct(writes, normalized_metadata, write_mode)
+            else:
                 result = self._commit_versions_direct(writes, normalized_metadata, write_mode)
         if rebuild_after:
             self.rebuild_temporal_indexes()
         return result
 
     def _commit_versions_direct(self, writes, metadata, index_mode) -> TemporalCommit:
-        previous_commit_id, previous_system_time = self._temporal_sequence()
-        commit_id = previous_commit_id + 1
-        if commit_id >= 1 << 64:
-            raise TemporalVersionError("temporal commit ID space is exhausted")
-        system_time = self._next_temporal_system_time(previous_system_time)
-
-        prepared = []
+        prepared_inputs = []
         batch_version_ids = set()
         for ordinal, write in enumerate(writes):
             if ordinal >= 1 << 32:
@@ -5059,6 +5186,30 @@ class GraphDB:
                     if not isinstance(decoded_entity, expected_type) or decoded_entity.get_id != logical_id:
                         raise TemporalVersionError("serialized temporal payload changed its logical ID")
 
+            prepared_inputs.append((
+                entity_kind,
+                version_id,
+                logical_id,
+                valid,
+                write.operation,
+                supersedes_version_id,
+                write.reason,
+                payload,
+            ))
+
+        commit_id, system_time = self._reserve_temporal_sequence()
+        previous_commit_id = commit_id - 1
+        prepared = []
+        for ordinal, (
+            entity_kind,
+            version_id,
+            logical_id,
+            valid,
+            operation,
+            supersedes_version_id,
+            reason,
+            payload,
+        ) in enumerate(prepared_inputs):
             header = {
                 "entity_kind": entity_kind,
                 "version_id": version_id,
@@ -5068,12 +5219,11 @@ class GraphDB:
                 "commit_id": commit_id,
                 "commit_ordinal": ordinal,
                 "system_time_us": system_time.epoch_microseconds,
-                "operation": write.operation.value,
+                "operation": operation.value,
                 "supersedes_version_id": supersedes_version_id,
-                "reason": write.reason,
+                "reason": reason,
             }
-            envelope = encode_version_envelope(header, payload)
-            prepared.append((version_id, envelope))
+            prepared.append((version_id, encode_version_envelope(header, payload)))
 
         sequence = canonical_json_bytes({
             "commit_id": commit_id,
@@ -5097,14 +5247,21 @@ class GraphDB:
                 raise TemporalCorruptionError("temporal sequence would overwrite an existing record")
 
         # The sequence reserves the ID. The visibility marker is always written last.
-        self.store.put_metadata(_TEMPORAL_SEQUENCE_KEY, sequence)
+        if self._store_path is not None:
+            self.store.put_metadata(_TEMPORAL_SEQUENCE_KEY, sequence)
         self.store.put_metadata(self._temporal_commit_key(commit_id), descriptor)
         for ordinal, (_, envelope) in enumerate(prepared):
             self.store.put_metadata(self._temporal_record_key(commit_id, ordinal), envelope)
         if index_mode == IndexMaintenanceMode.DEFER.value:
             self._mark_indexes_stale("temporal")
         else:
+            prior_visible = False
             if previous_commit_id > 0 and self._temporal_index_state() is None:
+                prior_visible = any(
+                    self.get_temporal_commit(candidate, _validate_supersession=False) is not None
+                    for candidate in range(1, commit_id)
+                )
+            if prior_visible:
                 self._mark_indexes_stale("temporal")
             indexed_versions = [self._decode_temporal_version(envelope) for _, envelope in prepared]
             self._write_temporal_indexes(indexed_versions, commit_id)
@@ -5880,24 +6037,26 @@ class GraphDB:
         The transaction commits on clean context exit and rolls back if an
         exception leaves the context.
         """
-        tx_store = self.store.transaction(**options)
-        try:
-            tx_graph = GraphDB(tx_store, self.serializer)
-            tx_graph.indexed_node_properties = set(self.indexed_node_properties)
-            tx_graph.indexed_edge_properties = set(self.indexed_edge_properties)
-            tx_graph._store_path = self._store_path
-            tx_graph._backend_name = self._backend_name
-            tx_graph._serializer_name = self._serializer_name
-            tx_graph._manifest = self._manifest
-            tx_graph._temporal_write_lock = self._temporal_write_lock
-            tx_graph._temporal_transaction_bound = True
-            tx_graph._temporal_clock = self._temporal_clock
-            yield tx_graph
-        except Exception:
-            tx_store.rollback()
-            raise
-        else:
-            tx_store.commit()
+        with self._temporal_writer_guard():
+            tx_store = self.store.transaction(**options)
+            try:
+                tx_graph = GraphDB(tx_store, self.serializer)
+                tx_graph.indexed_node_properties = set(self.indexed_node_properties)
+                tx_graph.indexed_edge_properties = set(self.indexed_edge_properties)
+                tx_graph._store_path = self._store_path
+                tx_graph._backend_name = self._backend_name
+                tx_graph._serializer_name = self._serializer_name
+                tx_graph._manifest = self._manifest
+                tx_graph._database_id = self._database_id
+                tx_graph._temporal_write_lock = self._temporal_write_lock
+                tx_graph._temporal_transaction_bound = True
+                tx_graph._temporal_clock = self._temporal_clock
+                yield tx_graph
+            except Exception:
+                tx_store.rollback()
+                raise
+            else:
+                tx_store.commit()
 
     def close(self):
         """Close the underlying key-value store.

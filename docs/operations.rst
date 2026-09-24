@@ -109,7 +109,10 @@ For deferred writes, indexed reads fail until
 ``rebuild_temporal_indexes()`` or ``rebuild_deferred_indexes()`` succeeds.
 Derived indexes may be rebuilt from canonical history. A marker-last crash can
 leave reserved records, but an unmarked commit is invisible and the next commit
-uses a new ID. Never delete internal metadata keys manually.
+uses a new ID. Filesystem-backed stores keep the durable allocation high-water
+mark in ``.gestaltdb_temporal_sequence`` and serialize writers with
+``.gestaltdb_temporal_writer.lock``. Include both files in whole-database backups
+and never delete or edit internal metadata or sidecar files manually.
 
 Hash, envelope, descriptor, marker, or canonical-record corruption raises
 ``TemporalCorruptionError``. Index rebuilds do not repair corrupted canonical

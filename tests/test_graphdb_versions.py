@@ -6,7 +6,7 @@ from types import MappingProxyType
 import pytest
 
 from gestaltdb.graphdb import Edge, GraphDB, Node
-from gestaltdb.kvstores import LevelDBStore
+from gestaltdb.kvstores import LMDBStore, LevelDBStore
 from gestaltdb.serializers import JSONSerializer, MessagePackSerializer, PickleSerializer, ProtobufSerializer, Serializer
 from gestaltdb.temporal import TemporalInstant, TemporalInterval
 from gestaltdb.versioning import (
@@ -365,9 +365,10 @@ def test_temporal_versions_round_trip_supported_serializers(serializer):
 
 
 def test_temporal_versions_participate_in_supported_outer_transactions(lmdb_graph_db):
+    rolled_back = None
     with pytest.raises(RuntimeError):
         with lmdb_graph_db.transaction() as transaction:
-            transaction.put_node_version(Node("rolled-back"), valid=(0, None))
+            rolled_back = transaction.put_node_version(Node("rolled-back"), valid=(0, None))
             raise RuntimeError("rollback")
 
     assert list(lmdb_graph_db.iter_node_versions("rolled-back")) == []
@@ -375,7 +376,46 @@ def test_temporal_versions_participate_in_supported_outer_transactions(lmdb_grap
     with lmdb_graph_db.transaction() as transaction:
         committed = transaction.put_node_version(Node("committed"), valid=(0, None))
 
+    assert committed.commit_id > rolled_back.commit_id
     assert lmdb_graph_db.get_node_version(committed.version_id) is not None
+
+
+def test_all_temporal_ids_from_rolled_back_outer_transaction_are_consumed(lmdb_graph_db):
+    rolled_back = []
+    with pytest.raises(RuntimeError):
+        with lmdb_graph_db.transaction() as transaction:
+            rolled_back.append(transaction.put_node_version(Node("first"), valid=(0, None)))
+            rolled_back.append(transaction.put_node_version(Node("second"), valid=(0, None)))
+            raise RuntimeError("rollback")
+
+    committed = lmdb_graph_db.put_node_version(Node("committed"), valid=(0, None))
+
+    assert committed.commit_id > max(version.commit_id for version in rolled_back)
+    assert list(lmdb_graph_db.iter_node_versions("first")) == []
+    assert list(lmdb_graph_db.iter_node_versions("second")) == []
+
+
+def test_rolled_back_temporal_id_reservation_survives_reopen(tmp_path):
+    pytest.importorskip("lmdb")
+    path = tmp_path / "lmdb-reservation"
+    graph = GraphDB(LMDBStore(path=str(path)), JSONSerializer())
+    rolled_back_id = None
+    try:
+        with pytest.raises(RuntimeError):
+            with graph.transaction() as transaction:
+                rolled_back_id = transaction.put_node_version(
+                    Node("rolled-back"), valid=(0, None)
+                ).commit_id
+                raise RuntimeError("rollback")
+    finally:
+        graph.close()
+
+    reopened = GraphDB(LMDBStore(path=str(path)), JSONSerializer())
+    try:
+        committed = reopened.put_node_version(Node("committed"), valid=(0, None))
+        assert committed.commit_id > rolled_back_id
+    finally:
+        reopened.close()
 
 
 def test_temporal_interval_inputs_still_require_non_empty_half_open_ranges(temporal_graph):

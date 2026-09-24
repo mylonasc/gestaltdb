@@ -68,12 +68,12 @@ versions under one commit ID:
    ], metadata={"source": "hr-import"})
 
 Transactional LMDB and transactional PyRex publish the complete batch in one
-backend transaction. LevelDB and default PyRex reserve a commit ID, write the
-descriptor and records, and publish a visibility marker last. Records without a
-valid marker remain invisible. Non-transactional temporal writes currently
-require one externally serialized writer handle. Commit IDs are strictly
-increasing for visible commits; an ID provisionally returned inside a rolled
-back outer transaction is not durable and may be reused.
+backend transaction. All filesystem-backed stores reserve commit IDs through a
+durable sidecar sequence while holding a database-wide writer lock. LevelDB and
+default PyRex then write the descriptor and records and publish a visibility
+marker last. Records without a valid marker remain invisible. Reservations are
+never reused, including when an outer backend transaction rolls back, so visible
+commit IDs may contain gaps.
 
 As-Of Resolution and Traversal
 ------------------------------
