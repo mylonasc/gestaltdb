@@ -314,7 +314,8 @@ def test_incomplete_commit_is_invisible_and_marker_corruption_is_detected(tempor
     marker = temporal_graph.store.metadata.pop(visible_key)
 
     assert temporal_graph.get_temporal_commit(version.commit_id) is None
-    assert temporal_graph.get_node_version(version.version_id) is None
+    with pytest.raises(TemporalCorruptionError, match="checksum"):
+        temporal_graph.get_node_version(version.version_id)
 
     temporal_graph.store.metadata[visible_key] = b"not-the-descriptor-hash"
     with pytest.raises(TemporalCorruptionError, match="marker"):

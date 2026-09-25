@@ -3555,7 +3555,7 @@ class GraphDB:
     def _temporal_instant_index_value(instant: TemporalInstant) -> bytes:
         return instant.encode_sortable().hex().encode("ascii")
 
-    def _temporal_index_state(self) -> int | None:
+    def _load_temporal_index_state(self) -> dict | None:
         payload = self.store.get_metadata(_TEMPORAL_INDEX_STATE_KEY)
         if payload is None:
             return None
@@ -3563,23 +3563,70 @@ class GraphDB:
             value = json.loads(payload.decode("utf-8"))
             if not isinstance(value, dict):
                 raise ValueError
-            if value.get("format_version") in {1, 2, 3}:
+            if value.get("format_version") in {1, 2, 3, 4}:
                 # Later temporal stages added catalogs and epistemic indexes.
                 # Older derived indexes must be rebuilt before querying.
                 return None
-            if value.get("format_version") != 4:
+            if value.get("format_version") != 5:
                 raise ValueError
             indexed = value["indexed_through_commit"]
+            generation = value["active_generation"]
+            checksum = value["visibility_checksum"]
             if isinstance(indexed, bool) or not isinstance(indexed, int) or indexed < 0:
                 raise ValueError
-            return indexed
+            if isinstance(generation, bool) or not isinstance(generation, int) or generation < 1:
+                raise ValueError
+            if (
+                not isinstance(checksum, str)
+                or len(checksum) != 64
+                or any(character not in "0123456789abcdef" for character in checksum)
+            ):
+                raise ValueError
+            return value
         except (KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise TemporalCorruptionError("invalid temporal index state") from exc
 
-    def _persist_temporal_index_state(self, commit_id: int) -> None:
+    def _temporal_index_state(self) -> int | None:
+        state = self._load_temporal_index_state()
+        return None if state is None else state["indexed_through_commit"]
+
+    def _temporal_index_generation(self) -> int:
+        state = self._load_temporal_index_state()
+        return 1 if state is None else state["active_generation"]
+
+    @staticmethod
+    def _temporal_index_name(index_name: str, generation: int) -> str:
+        if generation == 0:
+            return index_name
+        return f"{index_name}:g{generation:016x}"
+
+    def _temporal_visibility_checksum(
+        self, through_commit: int, *, pending_marker=None
+    ) -> str:
+        markers = []
+        for commit_id in range(1, through_commit + 1):
+            marker = (
+                pending_marker[1]
+                if pending_marker is not None and pending_marker[0] == commit_id
+                else self.store.get_metadata(self._temporal_visible_key(commit_id))
+            )
+            if marker is not None:
+                markers.append(commit_id.to_bytes(8, "big") + marker)
+        return hashlib.sha256(b"".join(markers)).hexdigest()
+
+    def _persist_temporal_index_state(
+        self, commit_id: int, generation: int, *, pending_marker=None
+    ) -> None:
         self.store.put_metadata(
             _TEMPORAL_INDEX_STATE_KEY,
-            canonical_json_bytes({"format_version": 4, "indexed_through_commit": commit_id}),
+            canonical_json_bytes({
+                "format_version": 5,
+                "active_generation": generation,
+                "indexed_through_commit": commit_id,
+                "visibility_checksum": self._temporal_visibility_checksum(
+                    commit_id, pending_marker=pending_marker
+                ),
+            }),
         )
 
     def _ensure_temporal_indexes(self, horizon: int) -> None:
@@ -3589,6 +3636,9 @@ class GraphDB:
             return
         if indexed is None or indexed < horizon:
             raise RuntimeError("stale indexes require rebuild before query: temporal")
+        state = self._load_temporal_index_state()
+        if state["visibility_checksum"] != self._temporal_visibility_checksum(indexed):
+            raise TemporalCorruptionError("temporal index generation visibility checksum mismatch")
 
     def _has_visible_temporal_history(self) -> bool:
         last_commit_id, _ = self._temporal_sequence()
@@ -3597,7 +3647,8 @@ class GraphDB:
             for commit_id in range(1, last_commit_id + 1)
         )
 
-    def _temporal_index_entries(self, version):
+    def _temporal_index_entries(self, version, *, generation=None):
+        generation = self._temporal_index_generation() if generation is None else generation
         if isinstance(version, NodeVersion):
             kind = b"n"
         elif isinstance(version, EdgeVersion):
@@ -3698,13 +3749,22 @@ class GraphDB:
             )
             for index_name, parts, _, value in interval_ranges
         )
+        exact = [
+            (self._temporal_index_name(name, generation), parts, value)
+            for name, parts, value in exact
+        ]
+        ranges = [
+            (self._temporal_index_name(name, generation), parts, range_value, value)
+            for name, parts, range_value, value in ranges
+        ]
         return exact, ranges
 
-    def _write_temporal_indexes(self, versions, commit_id: int) -> dict[str, int]:
+    def _write_temporal_indexes(self, versions, commit_id: int, *, generation=None) -> dict[str, int]:
+        generation = self._temporal_index_generation() if generation is None else generation
         exact_entries = []
         range_entries = []
         for version in versions:
-            exact, ranges = self._temporal_index_entries(version)
+            exact, ranges = self._temporal_index_entries(version, generation=generation)
             exact_entries.extend(exact)
             range_entries.extend(ranges)
         if exact_entries:
@@ -3714,12 +3774,11 @@ class GraphDB:
         commit = versions[0] if versions else None
         if commit is not None:
             self.store.put_range_index_entry(
-                _TEMPORAL_SYSTEM_INDEX,
+                self._temporal_index_name(_TEMPORAL_SYSTEM_INDEX, generation),
                 [b"commit"],
                 self._temporal_instant_index_value(commit.system_time),
                 f"{commit_id:016x}".encode("ascii"),
             )
-        self._persist_temporal_index_state(commit_id)
         return {"temporal_exact": len(exact_entries), "temporal_range": len(range_entries) + (1 if commit else 0)}
 
     @contextmanager
@@ -5272,6 +5331,7 @@ class GraphDB:
         self.store.put_metadata(self._temporal_commit_key(commit_id), descriptor)
         for ordinal, (_, envelope) in enumerate(prepared):
             self.store.put_metadata(self._temporal_record_key(commit_id, ordinal), envelope)
+        indexes_publishable = False
         if index_mode == IndexMaintenanceMode.DEFER.value:
             self._mark_indexes_stale("temporal")
         else:
@@ -5283,11 +5343,17 @@ class GraphDB:
                 )
             if prior_visible:
                 self._mark_indexes_stale("temporal")
+            indexes_publishable = not prior_visible
             indexed_versions = [self._decode_temporal_version(envelope) for _, envelope in prepared]
             self._write_temporal_indexes(indexed_versions, commit_id)
-        self.store.put_metadata(
-            self._temporal_visible_key(commit_id), hashlib.sha256(descriptor).digest()
-        )
+        marker = hashlib.sha256(descriptor).digest()
+        if indexes_publishable:
+            self._persist_temporal_index_state(
+                commit_id,
+                self._temporal_index_generation(),
+                pending_marker=(commit_id, marker),
+            )
+        self.store.put_metadata(self._temporal_visible_key(commit_id), marker)
         commit = self.get_temporal_commit(commit_id)
         if commit is None:
             raise TemporalCorruptionError("new temporal commit was not visible after publication")
@@ -5631,8 +5697,10 @@ class GraphDB:
                     self.store.delete_index_entry(index_name, parts, value)
                 for index_name, parts, range_value, value in range_entries:
                     self.store.delete_range_index_entry(index_name, parts, range_value, value)
-            self.store.delete_range_index_entry(
-                _TEMPORAL_SYSTEM_INDEX,
+                self.store.delete_range_index_entry(
+                    self._temporal_index_name(
+                        _TEMPORAL_SYSTEM_INDEX, self._temporal_index_generation()
+                    ),
                 [b"commit"],
                 self._temporal_instant_index_value(system_time),
                 f"{commit_id:016x}".encode("ascii"),
@@ -5685,7 +5753,8 @@ class GraphDB:
         )
         self._ensure_temporal_indexes(horizon)
         locators = list(self.store.iter_index_prefix(
-            _TEMPORAL_VERSION_INDEX, [normalize_version_id(version_id).encode("ascii")]
+            self._temporal_index_name(_TEMPORAL_VERSION_INDEX, self._temporal_index_generation()),
+            [normalize_version_id(version_id).encode("ascii")]
         ))
         version = self._get_temporal_version_at(locators[-1]) if locators else None
         if version is not None and version.commit_id > horizon:
@@ -5701,7 +5770,8 @@ class GraphDB:
         )
         self._ensure_temporal_indexes(horizon)
         locators = list(self.store.iter_index_prefix(
-            _TEMPORAL_VERSION_INDEX, [normalize_version_id(version_id).encode("ascii")]
+            self._temporal_index_name(_TEMPORAL_VERSION_INDEX, self._temporal_index_generation()),
+            [normalize_version_id(version_id).encode("ascii")]
         ))
         version = self._get_temporal_version_at(locators[-1]) if locators else None
         if version is not None and version.commit_id > horizon:
@@ -5717,7 +5787,8 @@ class GraphDB:
         )
         self._ensure_temporal_indexes(horizon)
         locators = list(self.store.iter_index_prefix(
-            _TEMPORAL_VERSION_INDEX, [normalize_version_id(version_id).encode("ascii")]
+            self._temporal_index_name(_TEMPORAL_VERSION_INDEX, self._temporal_index_generation()),
+            [normalize_version_id(version_id).encode("ascii")]
         ))
         version = self._get_temporal_version_at(locators[-1]) if locators else None
         if version is not None and version.commit_id > horizon:
@@ -5732,7 +5803,9 @@ class GraphDB:
             self._ensure_temporal_indexes(horizon)
             end = self._temporal_locator(horizon, (1 << 32) - 1)
             for locator in self.store.iter_range_index(
-                _TEMPORAL_LOGICAL_COMMIT_INDEX,
+                self._temporal_index_name(
+                    _TEMPORAL_LOGICAL_COMMIT_INDEX, self._temporal_index_generation()
+                ),
                 [b"n", logical_id.encode("utf-8")],
                 None,
                 end,
@@ -5757,7 +5830,9 @@ class GraphDB:
             self._ensure_temporal_indexes(horizon)
             end = self._temporal_locator(horizon, (1 << 32) - 1)
             for locator in self.store.iter_range_index(
-                _TEMPORAL_LOGICAL_COMMIT_INDEX,
+                self._temporal_index_name(
+                    _TEMPORAL_LOGICAL_COMMIT_INDEX, self._temporal_index_generation()
+                ),
                 [b"e", logical_id.encode("utf-8")],
                 None,
                 end,
@@ -5784,7 +5859,9 @@ class GraphDB:
             self._ensure_temporal_indexes(horizon)
             end = self._temporal_locator(horizon, (1 << 32) - 1)
             for locator in self.store.iter_range_index(
-                _TEMPORAL_LOGICAL_COMMIT_INDEX,
+                self._temporal_index_name(
+                    _TEMPORAL_LOGICAL_COMMIT_INDEX, self._temporal_index_generation()
+                ),
                 [b"c", claim_id.encode("utf-8")],
                 None,
                 end,
@@ -5821,7 +5898,9 @@ class GraphDB:
         requested = normalize_temporal_instant(system_time)
         self._ensure_temporal_indexes(latest_visible)
         for encoded_commit_id in self.store.iter_range_index(
-            _TEMPORAL_SYSTEM_INDEX,
+            self._temporal_index_name(
+                _TEMPORAL_SYSTEM_INDEX, self._temporal_index_generation()
+            ),
             [b"commit"],
             None,
             self._temporal_instant_index_value(requested),
@@ -5840,9 +5919,10 @@ class GraphDB:
         return 0
 
     def _temporal_interval_locators(self, index_name, parts, instant):
+        generation = self._temporal_index_generation()
         encoded = self._temporal_instant_index_value(instant)
         started = set(self.store.iter_range_index(
-            index_name,
+            self._temporal_index_name(index_name, generation),
             parts,
             None,
             encoded,
@@ -5852,7 +5932,7 @@ class GraphDB:
         if not started:
             return ()
         unexpired = set(self.store.iter_range_index(
-            _TEMPORAL_VALID_END_INDEX,
+            self._temporal_index_name(_TEMPORAL_VALID_END_INDEX, generation),
             [index_name.encode("ascii"), *parts],
             encoded,
             None,
@@ -6143,21 +6223,43 @@ class GraphDB:
     def rebuild_temporal_indexes(self, *, through_commit=None) -> dict[str, int]:
         """Rebuild all derived temporal indexes from visible canonical history."""
         with self._temporal_writer_guard():
-            self._mark_indexes_stale("temporal")
+            prior_state = self._load_temporal_index_state()
+            prior_generation = 0 if prior_state is None else prior_state["active_generation"]
+            generation = max(1, prior_generation + 1)
+            if prior_state is None:
+                self._mark_indexes_stale("temporal")
             latest_horizon = self._temporal_system_horizon()
             horizon = self._temporal_system_horizon(through_commit=through_commit)
             counts = {"temporal_exact": 0, "temporal_range": 0}
-            last_visible = 0
             for commit in self.iter_temporal_commits(through_commit=horizon):
-                written = self._write_temporal_indexes(commit.versions, commit.commit_id)
+                written = self._write_temporal_indexes(
+                    commit.versions, commit.commit_id, generation=generation
+                )
                 counts["temporal_exact"] += written["temporal_exact"]
                 counts["temporal_range"] += written["temporal_range"]
-                last_visible = commit.commit_id
-            if last_visible == 0:
-                self._persist_temporal_index_state(0)
+            self._persist_temporal_index_state(horizon, generation)
             if horizon >= latest_horizon:
                 self._clear_stale_indexes("temporal")
+            if prior_generation != generation:
+                self._delete_temporal_index_generation(prior_generation, latest_horizon)
             return counts
+
+    def _delete_temporal_index_generation(self, generation: int, through_commit: int) -> None:
+        for commit in self.iter_temporal_commits(through_commit=through_commit):
+            for version in commit.versions:
+                exact_entries, range_entries = self._temporal_index_entries(
+                    version, generation=generation
+                )
+                for index_name, parts, value in exact_entries:
+                    self.store.delete_index_entry(index_name, parts, value)
+                for index_name, parts, range_value, value in range_entries:
+                    self.store.delete_range_index_entry(index_name, parts, range_value, value)
+            self.store.delete_range_index_entry(
+                self._temporal_index_name(_TEMPORAL_SYSTEM_INDEX, generation),
+                [b"commit"],
+                self._temporal_instant_index_value(commit.system_time),
+                f"{commit.commit_id:016x}".encode("ascii"),
+            )
 
     def query(self, cypher: str, parameters: Optional[dict[str, object]] = None):
         """Execute a supported Cypher query.

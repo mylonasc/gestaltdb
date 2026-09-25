@@ -217,6 +217,10 @@ Point-in-time candidates are intersected through valid-start and valid-end
 indexes before entity payloads are decoded. This preserves half-open interval
 semantics while avoiding hydration of expired historical versions.
 
+Index rebuilds use copy-on-build generations. The active generation records its
+visible-marker checksum and commit horizon; activation is one metadata update,
+and prior-generation entries are reclaimed only after activation succeeds.
+
 Migrating ``TimeIndexedEdge``
 -----------------------------
 

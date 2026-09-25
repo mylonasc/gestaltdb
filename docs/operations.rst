@@ -135,6 +135,12 @@ Malformed artifacts fail closed. Cleanup is transactional where the backend
 supports graph transactions; LevelDB and default PyRex cleanup is ordered and
 retryable, and physical disk space may require backend compaction.
 
+Temporal index rebuilds populate an isolated generation, authenticate it against
+the visible commit-marker digest, atomically activate it, and then delete entries
+from the previous generation. An interrupted build leaves the prior generation
+active. A visibility checksum mismatch raises ``TemporalCorruptionError``;
+rebuild only after canonical history has been validated or restored.
+
 Hash, envelope, descriptor, marker, or canonical-record corruption raises
 ``TemporalCorruptionError``. Index rebuilds do not repair corrupted canonical
 history: stop writes and restore the complete backend directory from a known

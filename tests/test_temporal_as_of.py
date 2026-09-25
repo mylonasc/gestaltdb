@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from gestaltdb.graphdb import Edge, GraphDB, Node
@@ -21,12 +23,18 @@ class _MetadataStore:
     def put_metadata(self, key, value):
         self.metadata[key] = value
 
+    def delete_metadata(self, key):
+        self.metadata.pop(key, None)
+
     def put_index_entry(self, name, parts, value):
         self.indexes.setdefault((name, tuple(parts)), set()).add(value)
 
     def put_index_entries_bulk(self, entries):
         for name, parts, value in entries:
             self.put_index_entry(name, parts, value)
+
+    def delete_index_entry(self, name, parts, value):
+        self.indexes.get((name, tuple(parts)), set()).discard(value)
 
     def iter_index_prefix(self, name, parts):
         return iter(sorted(self.indexes.get((name, tuple(parts)), set())))
@@ -37,6 +45,9 @@ class _MetadataStore:
     def put_range_index_entries_bulk(self, entries):
         for name, parts, range_value, value in entries:
             self.put_range_index_entry(name, parts, range_value, value)
+
+    def delete_range_index_entry(self, name, parts, range_value, value):
+        self.range_indexes.get((name, tuple(parts)), set()).discard((range_value, value))
 
     def iter_range_index(self, name, parts, start=None, end=None, include_start=True, include_end=True, *, reverse=False, limit=None):
         values = []
@@ -138,6 +149,47 @@ def test_interval_end_index_filters_expired_versions_before_hydration(graph):
     assert version is not None
     assert version.valid.start == TemporalInstant(99)
     assert decoded == 1
+
+
+def test_temporal_index_rebuild_atomically_swaps_and_compacts_generations(graph):
+    graph.put_node_version(Node("alice"), valid=(0, None))
+    first_state = json.loads(graph.store.metadata[b"temporal:indexes:v1:state"])
+    assert first_state["format_version"] == 5
+    assert first_state["active_generation"] == 1
+
+    graph.rebuild_temporal_indexes()
+
+    second_state = json.loads(graph.store.metadata[b"temporal:indexes:v1:state"])
+    assert second_state["active_generation"] == 2
+    old_suffix = ":g0000000000000001"
+    assert all(
+        not values
+        for (name, _), values in graph.store.indexes.items()
+        if name.endswith(old_suffix)
+    )
+    assert all(
+        not values
+        for (name, _), values in graph.store.range_indexes.items()
+        if name.endswith(old_suffix)
+    )
+    assert graph.get_node_as_of("alice", valid_time=0) is not None
+
+
+def test_interrupted_temporal_index_rebuild_keeps_active_generation(graph):
+    graph.put_node_version(Node("alice"), valid=(0, None))
+    state_before = graph.store.metadata[b"temporal:indexes:v1:state"]
+    original = graph._write_temporal_indexes
+
+    def fail_after_write(*args, **kwargs):
+        original(*args, **kwargs)
+        raise RuntimeError("interrupted rebuild")
+
+    graph._write_temporal_indexes = fail_after_write
+    with pytest.raises(RuntimeError, match="interrupted"):
+        graph.rebuild_temporal_indexes()
+
+    assert graph.store.metadata[b"temporal:indexes:v1:state"] == state_before
+    assert graph.get_node_as_of("alice", valid_time=0) is not None
 
 
 def test_typed_temporal_traversal_resolves_corrected_topology_and_retractions(graph):
