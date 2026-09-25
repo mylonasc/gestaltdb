@@ -36,7 +36,6 @@ from .runtime import (
     apply_path_pattern_clause,
 )
 from ...graphdb import Edge, Node
-from .temporal import TEMPORAL_TYPES
 
 
 @dataclass
@@ -50,12 +49,10 @@ class WriteBatch:
 
     def add_node(self, node: Node) -> None:
         """Stage a node put."""
-        _reject_temporal_properties(node.properties)
         self.nodes.append(node)
 
     def add_edge(self, edge: Edge) -> None:
         """Stage an edge put."""
-        _reject_temporal_properties(edge.properties)
         self.edges.append(edge)
 
     def apply(self, context) -> None:
@@ -104,18 +101,6 @@ class WriteBatch:
         for node_id in self.deleted_nodes:
             graph.delete_node(node_id)
             context.node_cache.pop(graph.node_key_to_bytes(node_id), None)
-
-
-def _reject_temporal_properties(value: object) -> None:
-    """Keep query-only temporal values out of serializer-dependent storage."""
-    if isinstance(value, TEMPORAL_TYPES):
-        raise TypeError("Cypher temporal values cannot be persisted as graph properties")
-    if isinstance(value, dict):
-        for item in value.values():
-            _reject_temporal_properties(item)
-    elif isinstance(value, (list, tuple)):
-        for item in value:
-            _reject_temporal_properties(item)
 
 
 def transaction_supported(graph) -> bool:

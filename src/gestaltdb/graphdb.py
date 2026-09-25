@@ -41,8 +41,16 @@ from .rules import (
     normalize_rule_definition,
 )
 from .sampling import SamplingPattern, as_sampling_pattern
-from .serializers import JSONSerializer
-from .temporal import TemporalInstant, TemporalInterval
+from .serializers import JSONSerializer, temporal_tagged_value
+from .temporal import (
+    TemporalDate,
+    TemporalDuration,
+    TemporalInstant,
+    TemporalInterval,
+    TemporalLocalDateTime,
+    TemporalLocalTime,
+    TemporalTime,
+)
 from .versioning import (
     ClaimVersion,
     ClaimVersionWrite,
@@ -269,6 +277,15 @@ def _property_value_to_index_bytes(value) -> bytes:
         b'"drug"'
     """
     def normalize(item):
+        if isinstance(item, (
+            TemporalDate,
+            TemporalDuration,
+            TemporalInstant,
+            TemporalLocalDateTime,
+            TemporalLocalTime,
+            TemporalTime,
+        )):
+            return normalize(temporal_tagged_value(item, canonical_time=True))
         if isinstance(item, bytes):
             return {"__gestaltdb_type__": "bytes", "value": base64.b64encode(item).decode("ascii")}
         if isinstance(item, tuple):
@@ -295,6 +312,24 @@ def _property_value_to_range_index_bytes(value) -> bytes | None:
         return b"n" + bytes(packed).hex().encode("ascii")
     if isinstance(value, str):
         return b"s" + value.encode("utf-8").hex().encode("ascii")
+    temporal_value = None
+    temporal_kind = None
+    if isinstance(value, TemporalDate):
+        temporal_kind, temporal_value = b"d", value.value.toordinal()
+    elif isinstance(value, TemporalLocalTime):
+        temporal_kind, temporal_value = b"l", value.microseconds
+    elif isinstance(value, TemporalTime):
+        temporal_kind, temporal_value = b"t", value.utc_microseconds
+    elif isinstance(value, TemporalInstant):
+        temporal_kind, temporal_value = b"i", value.epoch_microseconds
+    elif isinstance(value, TemporalLocalDateTime):
+        clock = value.value
+        micros = ((clock.hour * 60 + clock.minute) * 60 + clock.second) * 1_000_000 + clock.microsecond
+        temporal_kind, temporal_value = b"c", clock.date().toordinal() * 86_400_000_000 + micros
+    elif isinstance(value, TemporalDuration):
+        temporal_kind, temporal_value = b"u", value.total_microseconds
+    if temporal_value is not None and -(1 << 127) <= temporal_value < (1 << 127):
+        return b"t" + temporal_kind + (temporal_value + (1 << 127)).to_bytes(16, "big")
     return None
 
 def datetime_to_bytes(dt: datetime.datetime, tzinfo = datetime.timezone.utc) -> bytes:

@@ -4,6 +4,104 @@
 import pickle
 import json
 import base64
+from datetime import date, datetime
+
+from .temporal import (
+    TemporalDate,
+    TemporalDuration,
+    TemporalInstant,
+    TemporalLocalDateTime,
+    TemporalLocalTime,
+    TemporalTime,
+)
+
+
+_TYPE_KEY = "__gestaltdb_type__"
+_VALUE_KEY = "value"
+_TEMPORAL_TYPES = (
+    TemporalDate,
+    TemporalDuration,
+    TemporalInstant,
+    TemporalLocalDateTime,
+    TemporalLocalTime,
+    TemporalTime,
+)
+_TAGGED_VALUE_TYPES = {
+    "temporal_date",
+    "temporal_duration",
+    "temporal_instant",
+    "temporal_local_datetime",
+    "temporal_local_time",
+    "temporal_time",
+    "escaped_dict",
+}
+
+
+def temporal_tagged_value(value, *, canonical_time=False):
+    """Return a portable tagged representation for a temporal scalar."""
+    if isinstance(value, TemporalDate):
+        value_type, payload = "temporal_date", value.value.isoformat()
+    elif isinstance(value, TemporalLocalTime):
+        value_type, payload = "temporal_local_time", value.microseconds
+    elif isinstance(value, TemporalTime):
+        value_type = "temporal_time"
+        payload = value.utc_microseconds if canonical_time else {
+            "local_microseconds": value.local_microseconds,
+            "offset_seconds": value.offset_seconds,
+        }
+    elif isinstance(value, TemporalInstant):
+        value_type, payload = "temporal_instant", value.epoch_microseconds
+    elif isinstance(value, TemporalLocalDateTime):
+        value_type, payload = "temporal_local_datetime", value.value.isoformat(timespec="microseconds")
+    elif isinstance(value, TemporalDuration):
+        value_type, payload = "temporal_duration", value.total_microseconds
+    else:
+        raise TypeError("value must be a GestaltDB temporal scalar")
+    return {_TYPE_KEY: value_type, _VALUE_KEY: payload}
+
+
+def _to_storage_compatible(obj):
+    if isinstance(obj, _TEMPORAL_TYPES):
+        return temporal_tagged_value(obj)
+    if isinstance(obj, dict):
+        if set(obj) == {_TYPE_KEY, _VALUE_KEY} and obj[_TYPE_KEY] in _TAGGED_VALUE_TYPES:
+            return {
+                _TYPE_KEY: "escaped_dict",
+                _VALUE_KEY: {key: _to_storage_compatible(value) for key, value in obj.items()},
+            }
+        return {key: _to_storage_compatible(value) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [_to_storage_compatible(value) for value in obj]
+    if isinstance(obj, tuple):
+        return tuple(_to_storage_compatible(value) for value in obj)
+    return obj
+
+
+def _from_storage_compatible(obj):
+    if isinstance(obj, dict):
+        if set(obj) == {_TYPE_KEY, _VALUE_KEY}:
+            value_type = obj[_TYPE_KEY]
+            value = obj[_VALUE_KEY]
+            if value_type == "temporal_date":
+                return TemporalDate(date.fromisoformat(value))
+            if value_type == "temporal_local_time":
+                return TemporalLocalTime(value)
+            if value_type == "temporal_time":
+                return TemporalTime(value["local_microseconds"], value["offset_seconds"])
+            if value_type == "temporal_instant":
+                return TemporalInstant(value)
+            if value_type == "temporal_local_datetime":
+                return TemporalLocalDateTime(datetime.fromisoformat(value))
+            if value_type == "temporal_duration":
+                return TemporalDuration(value)
+            if value_type == "escaped_dict":
+                return {key: _from_storage_compatible(item) for key, item in value.items()}
+        return {key: _from_storage_compatible(value) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [_from_storage_compatible(value) for value in obj]
+    if isinstance(obj, tuple):
+        return tuple(_from_storage_compatible(value) for value in obj)
+    return obj
 
 
 def _missing_dependency_error(package_name, install_name=None, feature_name=None):
@@ -62,7 +160,7 @@ class PickleSerializer(Serializer):
             >>> PickleSerializer().deserialize(PickleSerializer().serialize({"a": 1}))
             {'a': 1}
         """
-        return pickle.dumps(obj)
+        return pickle.dumps(_to_storage_compatible(obj))
     
     def deserialize(self, data: bytes) -> dict:
         """Deserialize pickle bytes.
@@ -71,7 +169,7 @@ class PickleSerializer(Serializer):
             >>> PickleSerializer().deserialize(PickleSerializer().serialize({"a": 1}))
             {'a': 1}
         """
-        return pickle.loads(data)
+        return _from_storage_compatible(pickle.loads(data))
 
 
 class JSONSerializer(Serializer):
@@ -83,7 +181,7 @@ class JSONSerializer(Serializer):
             >>> JSONSerializer().serialize({"a": 1})
             b'{"a": 1}'
         """
-        return json.dumps(obj).encode('utf-8')
+        return json.dumps(_to_storage_compatible(obj)).encode('utf-8')
     
     def deserialize(self, data: bytes) -> dict:
         """Deserialize JSON bytes.
@@ -92,7 +190,7 @@ class JSONSerializer(Serializer):
             >>> JSONSerializer().deserialize(b'{"a": 1}')
             {'a': 1}
         """
-        return json.loads(data.decode('utf-8'))
+        return _from_storage_compatible(json.loads(data.decode('utf-8')))
 
 
 class MessagePackSerializer(Serializer):
@@ -111,7 +209,7 @@ class MessagePackSerializer(Serializer):
             import msgpack
         except ImportError as exc:
             raise _missing_dependency_error("msgpack", feature_name="MessagePackSerializer") from exc
-        return msgpack.packb(obj, use_bin_type=True)
+        return msgpack.packb(_to_storage_compatible(obj), use_bin_type=True)
 
     def deserialize(self, data: bytes) -> dict:
         """Deserialize MessagePack bytes.
@@ -127,7 +225,7 @@ class MessagePackSerializer(Serializer):
             import msgpack
         except ImportError as exc:
             raise _missing_dependency_error("msgpack", feature_name="MessagePackSerializer") from exc
-        return msgpack.unpackb(data, raw=False)
+        return _from_storage_compatible(msgpack.unpackb(data, raw=False))
 
 
 class ProtobufSerializer(Serializer):
@@ -137,8 +235,8 @@ class ProtobufSerializer(Serializer):
     values before encoding so Python dictionaries round-trip without losing them.
     """
 
-    _TYPE_KEY = "__gestaltdb_type__"
-    _VALUE_KEY = "value"
+    _TYPE_KEY = _TYPE_KEY
+    _VALUE_KEY = _VALUE_KEY
 
     def serialize(self, obj: dict) -> bytes:
         """Serialize a JSON-like dictionary with protobuf Struct.
@@ -158,7 +256,7 @@ class ProtobufSerializer(Serializer):
             raise _missing_dependency_error("protobuf", feature_name="ProtobufSerializer") from exc
 
         message = struct_pb2.Struct()
-        json_format.ParseDict(self._to_struct_compatible(obj), message)
+        json_format.ParseDict(self._to_struct_compatible(_to_storage_compatible(obj)), message)
         return message.SerializeToString()
 
     def deserialize(self, data: bytes) -> dict:
@@ -180,7 +278,8 @@ class ProtobufSerializer(Serializer):
 
         message = struct_pb2.Struct()
         message.ParseFromString(data)
-        return self._from_struct_compatible(json_format.MessageToDict(message))
+        decoded = self._from_struct_compatible(json_format.MessageToDict(message))
+        return _from_storage_compatible(decoded)
 
     def _to_struct_compatible(self, obj):
         """Convert Python-only values into protobuf Struct-compatible values.

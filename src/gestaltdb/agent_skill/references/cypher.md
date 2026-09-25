@@ -21,6 +21,7 @@ Use `graph.query(cypher, parameters=None)` for Cypher reads and writes. It retur
 - `SHOW INDEX`/`SHOW INDEXES` returns configured node and relationship property indexes as `entityType`/`properties` records.
 - Registered procedures use generalized `CALL name(...) YIELD field [AS alias] RETURN alias`; only `pg.sample_typed_paths` currently executes and it accepts parameters.
 - Configured exact/range node and typed relationship indexes are reused where predicates permit.
+- `date`, `time`, `localtime`, `datetime`, `localdatetime`, and `duration` values persist recursively in node and relationship properties across every serializer and work with configured exact/range indexes.
 - Bitemporal reads use `FOR VALID_TIME AS OF <datetime expression>` and optional `FOR SYSTEM_TIME AS OF <datetime expression>` immediately after a `MATCH` or `OPTIONAL MATCH` pattern. Qualifiers apply query-wide through chained clauses, paths, unions, and subqueries; system time requires valid time, repeated values must agree, and qualified queries cannot write.
 - `versionId(entity)`, `validFrom(entity)`, `validTo(entity)`, and `systemFrom(entity)` expose matched temporal version metadata. They return null for null or unqualified current entities, and `validTo` returns null for open intervals.
 - Temporal matches use one stable read view and require current temporal indexes; rebuild deferred indexes first.

@@ -1,5 +1,15 @@
+from datetime import date, datetime
+
 import pytest
 
+from gestaltdb import (
+    TemporalDate,
+    TemporalDuration,
+    TemporalInstant,
+    TemporalLocalDateTime,
+    TemporalLocalTime,
+    TemporalTime,
+)
 from gestaltdb.graphdb import Edge, GraphDB, Node
 from gestaltdb.kvstores import LMDBStore
 from gestaltdb.serializers import JSONSerializer, MessagePackSerializer, PickleSerializer, ProtobufSerializer, Serializer
@@ -36,6 +46,32 @@ def test_serializers_round_trip_json_like_dicts(serializer):
             "tags": ["person", "employee"],
             "metadata": {"department": "Engineering"},
         },
+    }
+
+    assert serializer.deserialize(serializer.serialize(payload)) == payload
+
+
+@pytest.mark.parametrize("serializer", serializer_round_trip_cases(), ids=lambda serializer: serializer.__class__.__name__)
+def test_serializers_round_trip_nested_temporal_values(serializer):
+    payload = {
+        "values": [
+            TemporalDate(date(2024, 2, 29)),
+            TemporalLocalTime(3_600_000_001),
+            TemporalTime(43_200_000_000, 3_600),
+            TemporalInstant(-1),
+            TemporalLocalDateTime(datetime(2024, 2, 29, 3, 4, 5, 6)),
+            {"duration": TemporalDuration(-1_000_001)},
+        ]
+    }
+
+    assert serializer.deserialize(serializer.serialize(payload)) == payload
+
+
+@pytest.mark.parametrize("serializer", serializer_round_trip_cases(), ids=lambda serializer: serializer.__class__.__name__)
+def test_serializers_escape_user_dictionaries_that_look_like_temporal_tags(serializer):
+    payload = {
+        "__gestaltdb_type__": "temporal_date",
+        "value": "not-a-storage-tag",
     }
 
     assert serializer.deserialize(serializer.serialize(payload)) == payload

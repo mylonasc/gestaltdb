@@ -129,9 +129,16 @@ def test_temporal_values_survive_aggregates_grouping_case_and_union():
     assert unioned == [{"d": TemporalDate(date(2024, 1, 1))}]
 
 
-def test_temporal_graph_property_writes_are_rejected_recursively():
+def test_temporal_graph_property_writes_are_accepted_recursively():
     graph = FakeCypherGraph()
-    with pytest.raises(TypeError, match="cannot be persisted"):
-        execute(graph, "CREATE (n {when: date('2024-01-01')}) RETURN n")
-    with pytest.raises(TypeError, match="cannot be persisted"):
-        execute(graph, "CREATE (n {values: [duration('PT1S')]}) RETURN n")
+
+    result = execute(
+        graph,
+        "CREATE (n {when: date('2024-01-01'), values: [duration('PT1S')]}) "
+        "RETURN n.when AS when, n.values AS values",
+    )
+
+    assert result.records == [{
+        "when": TemporalDate(date(2024, 1, 1)),
+        "values": [TemporalDuration(1_000_000)],
+    }]

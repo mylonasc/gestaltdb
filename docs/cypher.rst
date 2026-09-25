@@ -348,11 +348,25 @@ dates, times, and datetimes; date arithmetic requires whole days. Aware Python
 ones become local values; Python ``date`` and ``timedelta`` parameters are also
 normalized.
 
-These values currently exist only in query expressions and results. Cypher
-rejects graph property writes containing temporal values, including nested
-lists and maps, until all serializers and property indexes have a stable tagged
-storage encoding. Temporal graph views and historical ``MATCH`` are separate
-from these scalar values.
+These values persist recursively in node and relationship properties, including
+nested lists and maps. Pickle, JSON, MessagePack, and Protobuf use one portable
+tagged representation, and old untagged records remain readable. Configured
+exact and range property indexes support temporal scalars; fixed-offset ``time``
+values are indexed by their UTC-equivalent time so equality matches Cypher
+semantics. Temporal graph views and historical ``MATCH`` remain separate from
+these scalar values. Array-native sampler snapshots do not export arbitrary
+graph properties.
+
+.. code-block:: python
+
+   graph_db.create_node_property_index("observed")
+   graph_db.query(
+       "CREATE (e:Event {id: 'e1', observed: datetime('2025-01-31T12:30:00Z')})"
+   )
+   graph_db.query(
+       "MATCH (e:Event) WHERE e.observed >= datetime('2025-01-01T00:00:00Z') "
+       "RETURN e.id, e.observed"
+   )
 
 Projection and Result Shaping
 -----------------------------

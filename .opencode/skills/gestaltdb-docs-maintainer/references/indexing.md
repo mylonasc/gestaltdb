@@ -42,6 +42,10 @@ For ordered comparisons (`<`, `<=`, `>`, `>=`):
 
 Pass `None` for unbounded ends (e.g. `min_val=10.0, max_val=None` for `>= 10.0`).
 
+Immutable GestaltDB temporal scalars are valid exact and range index values.
+Their type-prefixed encodings preserve same-category chronological order;
+fixed-offset `TemporalTime` values use UTC time for equality and ordering.
+
 ---
 
 ## 3. Index Maintenance & Rebuilding
