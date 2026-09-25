@@ -293,6 +293,7 @@ def test_temporal_benchmark_smoke():
         "--nodes", "20",
         "--edges", "40",
         "--queries", "10",
+        "--interval-versions", "25",
         "--sample-seeds", "5",
         "--fanout", "2",
         "--seed", "7",
@@ -300,7 +301,8 @@ def test_temporal_benchmark_smoke():
     result = temporal.run_benchmark(args)
     if result["status"] == "skipped":
         pytest.skip(result["skip_reason"])
-    assert result["versions_written"] == 60
+    assert result["versions_written"] == 85
+    assert result["interval_candidates_decoded"] == 1
     assert result["query_count"] == 10
     assert result["sampled_edges"] > 0
     assert result["derived_claims"] == 1

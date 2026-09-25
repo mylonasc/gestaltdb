@@ -119,6 +119,27 @@ def test_system_time_horizon_uses_reverse_range_seek(graph):
     assert calls == [{"reverse": True}]
 
 
+def test_interval_end_index_filters_expired_versions_before_hydration(graph):
+    graph.commit_versions([
+        NodeVersionWrite.assertion(Node("history"), (ordinal, ordinal + 1))
+        for ordinal in range(100)
+    ])
+    decoded = 0
+    original = graph._get_temporal_version_at
+
+    def counted(locator):
+        nonlocal decoded
+        decoded += 1
+        return original(locator)
+
+    graph._get_temporal_version_at = counted
+    version = graph.get_node_as_of("history", valid_time=99)
+
+    assert version is not None
+    assert version.valid.start == TemporalInstant(99)
+    assert decoded == 1
+
+
 def test_typed_temporal_traversal_resolves_corrected_topology_and_retractions(graph):
     first = graph.put_edge_version(
         Edge("e1", "alice", "acme", {"type": "WORKS_FOR"}), valid=(0, 100)

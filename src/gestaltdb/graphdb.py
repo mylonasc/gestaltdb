@@ -88,6 +88,8 @@ _TEMPORAL_INDEX_STATE_KEY = b"temporal:indexes:v1:state"
 _TEMPORAL_VERSION_INDEX = "temporal_v1_version"
 _TEMPORAL_LOGICAL_COMMIT_INDEX = "temporal_v1_logical_commit"
 _TEMPORAL_LOGICAL_VALID_INDEX = "temporal_v1_logical_valid"
+_TEMPORAL_VALID_END_INDEX = "temporal_v1_valid_end"
+_TEMPORAL_OPEN_END = b"g" * 16
 _TEMPORAL_SYSTEM_INDEX = "temporal_v1_system_commit"
 _TEMPORAL_EDGE_OUT_INDEX = "temporal_v1_edge_out"
 _TEMPORAL_EDGE_IN_INDEX = "temporal_v1_edge_in"
@@ -3561,11 +3563,11 @@ class GraphDB:
             value = json.loads(payload.decode("utf-8"))
             if not isinstance(value, dict):
                 raise ValueError
-            if value.get("format_version") in {1, 2}:
+            if value.get("format_version") in {1, 2, 3}:
                 # Later temporal stages added catalogs and epistemic indexes.
                 # Older derived indexes must be rebuilt before querying.
                 return None
-            if value.get("format_version") != 3:
+            if value.get("format_version") != 4:
                 raise ValueError
             indexed = value["indexed_through_commit"]
             if isinstance(indexed, bool) or not isinstance(indexed, int) or indexed < 0:
@@ -3577,7 +3579,7 @@ class GraphDB:
     def _persist_temporal_index_state(self, commit_id: int) -> None:
         self.store.put_metadata(
             _TEMPORAL_INDEX_STATE_KEY,
-            canonical_json_bytes({"format_version": 3, "indexed_through_commit": commit_id}),
+            canonical_json_bytes({"format_version": 4, "indexed_through_commit": commit_id}),
         )
 
     def _ensure_temporal_indexes(self, horizon: int) -> None:
@@ -3681,6 +3683,21 @@ class GraphDB:
                     start,
                     locator,
                 ))
+        interval_ranges = ranges[1:]
+        valid_end = (
+            _TEMPORAL_OPEN_END
+            if version.valid.end is None
+            else self._temporal_instant_index_value(version.valid.end)
+        )
+        ranges.extend(
+            (
+                _TEMPORAL_VALID_END_INDEX,
+                [index_name.encode("ascii"), *parts],
+                valid_end,
+                value,
+            )
+            for index_name, parts, _, value in interval_ranges
+        )
         return exact, ranges
 
     def _write_temporal_indexes(self, versions, commit_id: int) -> dict[str, int]:
@@ -5822,6 +5839,28 @@ class GraphDB:
                 return commit_id
         return 0
 
+    def _temporal_interval_locators(self, index_name, parts, instant):
+        encoded = self._temporal_instant_index_value(instant)
+        started = set(self.store.iter_range_index(
+            index_name,
+            parts,
+            None,
+            encoded,
+            True,
+            True,
+        ))
+        if not started:
+            return ()
+        unexpired = set(self.store.iter_range_index(
+            _TEMPORAL_VALID_END_INDEX,
+            [index_name.encode("ascii"), *parts],
+            encoded,
+            None,
+            False,
+            True,
+        ))
+        return tuple(sorted(started.intersection(unexpired)))
+
     def _temporal_entity_as_of(
         self, kind, logical_id, *, valid_time, system_time=None, through_commit=None
     ):
@@ -5832,14 +5871,10 @@ class GraphDB:
         )
         self._ensure_temporal_indexes(horizon)
         kind_bytes = {"node": b"n", "edge": b"e", "claim": b"c"}[kind]
-        upper = self._temporal_instant_index_value(instant)
-        locators = self.store.iter_range_index(
+        locators = self._temporal_interval_locators(
             _TEMPORAL_LOGICAL_VALID_INDEX,
             [kind_bytes, logical_id.encode("utf-8")],
-            None,
-            upper,
-            True,
-            True,
+            instant,
         )
         winner = None
         for locator in locators:
@@ -5954,14 +5989,7 @@ class GraphDB:
             index_name = _TEMPORAL_CLAIM_CATALOG_INDEX
             parts = [b"claims"]
         logical_ids = set()
-        for locator in self.store.iter_range_index(
-            index_name,
-            parts,
-            None,
-            self._temporal_instant_index_value(instant),
-            True,
-            True,
-        ):
+        for locator in self._temporal_interval_locators(index_name, parts, instant):
             candidate = self._get_temporal_version_at(locator)
             if isinstance(candidate, ClaimVersion) and candidate.commit_id <= horizon:
                 logical_ids.add(candidate.logical_id)
@@ -6041,13 +6069,8 @@ class GraphDB:
         )
         self._ensure_temporal_indexes(horizon)
         logical_ids = set()
-        for locator in self.store.iter_range_index(
-            _TEMPORAL_NODE_CATALOG_INDEX,
-            [b"nodes"],
-            None,
-            self._temporal_instant_index_value(instant),
-            True,
-            True,
+        for locator in self._temporal_interval_locators(
+            _TEMPORAL_NODE_CATALOG_INDEX, [b"nodes"], instant
         ):
             candidate = self._get_temporal_version_at(locator)
             if isinstance(candidate, NodeVersion) and candidate.commit_id <= horizon:
@@ -6094,14 +6117,9 @@ class GraphDB:
         else:
             index_name = _TEMPORAL_EDGE_OUT_INDEX if direction == "out" else _TEMPORAL_EDGE_IN_INDEX
             parts = [str(node_id).encode("utf-8"), edge_type.encode("utf-8")]
-        upper = self._temporal_instant_index_value(normalize_temporal_instant(valid_time))
-        locators = self.store.iter_range_index(
-            index_name,
-            parts,
-            None,
-            upper,
-            True,
-            True,
+        instant = normalize_temporal_instant(valid_time)
+        locators = self._temporal_interval_locators(
+            index_name, parts, instant
         )
         logical_ids = set()
         for locator in locators:

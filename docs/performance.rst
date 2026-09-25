@@ -70,13 +70,18 @@ amplification relative to serialized entity payloads.
 
    python -m benchmarks temporal \
       --backend leveldb --serializer json \
-      --nodes 1000 --edges 5000 --queries 1000 \
+      --nodes 1000 --edges 5000 --queries 1000 --interval-versions 1000 \
       --seed 42 --output benchmark_results/temporal-smoke.json
 
 The seed and generated graph are deterministic; elapsed time, traced memory, and
 backend file size are environment-dependent observations. CI smoke tests assert
 workload counts and outcomes, never timing thresholds. Run a backend/serializer
 matrix on deployment hosts before setting service objectives.
+
+``--interval-versions`` adds adjacent closed intervals for one logical entity
+and reports ``interval_candidates_decoded``. The valid-start/valid-end index
+intersection should decode one active interval for the generated point query,
+independent of the requested interval-history size.
 
 Use ``benchmarks/quick.py`` (or ``python -m benchmarks quick``; ``benchmarks.py`` is retained as a compatibility forwarder) for a quick backend comparison on the same append-only
 workload.

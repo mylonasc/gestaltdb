@@ -213,6 +213,10 @@ database predating any current temporal index format is automatically reported
 with the ``temporal`` stale family and can be migrated with
 ``rebuild_deferred_indexes``.
 
+Point-in-time candidates are intersected through valid-start and valid-end
+indexes before entity payloads are decoded. This preserves half-open interval
+semantics while avoiding hydration of expired historical versions.
+
 Migrating ``TimeIndexedEdge``
 -----------------------------
 

@@ -27,8 +27,10 @@ def _elapsed(callable_obj):
 
 def run_benchmark(args: argparse.Namespace) -> dict[str, object]:
     """Run one deterministic generated workload and return its metrics."""
-    if args.nodes < 2 or args.edges < 1 or args.queries < 0:
-        raise ValueError("nodes must be at least 2, edges at least 1, and queries non-negative")
+    if args.nodes < 2 or args.edges < 1 or args.queries < 0 or args.interval_versions < 0:
+        raise ValueError(
+            "nodes must be at least 2, edges at least 1, and queries/interval-versions non-negative"
+        )
     dependency_error = validate_matrix_dependencies(args.backend, "object", args.serializer)
     if dependency_error == "json cannot serialize legacy adjacency bytes written by object ingestion":
         dependency_error = None
@@ -56,6 +58,13 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, object]:
             )
             for index in range(args.edges)
         ]
+        interval_writes = [
+            NodeVersionWrite.assertion(
+                Node("interval-probe", labels=["IntervalProbe"]),
+                (index, index + 1),
+            )
+            for index in range(args.interval_versions)
+        ]
         payload_bytes = sum(
             len(graph.entity_serializer.serialize(write.node, "Node"))
             for write in node_writes
@@ -64,8 +73,25 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, object]:
             for write in edge_writes
         )
         commit, write_seconds = _elapsed(
-            lambda: graph.commit_versions(node_writes + edge_writes)
+            lambda: graph.commit_versions(node_writes + edge_writes + interval_writes)
         )
+
+        interval_candidates_decoded = 0
+        if interval_writes:
+            original_lookup = graph._get_temporal_version_at
+
+            def counted_lookup(locator):
+                nonlocal interval_candidates_decoded
+                interval_candidates_decoded += 1
+                return original_lookup(locator)
+
+            graph._get_temporal_version_at = counted_lookup
+            try:
+                graph.get_node_as_of(
+                    "interval-probe", valid_time=args.interval_versions - 1
+                )
+            finally:
+                graph._get_temporal_version_at = original_lookup
 
         query_latencies = []
         for index in range(args.queries):
@@ -129,6 +155,8 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, object]:
             "query_count": args.queries,
             "query_p50_seconds": p50,
             "query_p95_seconds": p95,
+            "interval_versions": args.interval_versions,
+            "interval_candidates_decoded": interval_candidates_decoded,
             "snapshot_seconds": snapshot_seconds,
             "sample_seconds": sampling_seconds,
             "sampled_edges": int(sampled.edge_indices.size),
@@ -158,6 +186,7 @@ def build_parser(subparser: argparse.ArgumentParser | None = None) -> argparse.A
     parser.add_argument("--nodes", type=int, default=1_000)
     parser.add_argument("--edges", type=int, default=5_000)
     parser.add_argument("--queries", type=int, default=1_000)
+    parser.add_argument("--interval-versions", type=int, default=0)
     parser.add_argument("--sample-seeds", type=int, default=100)
     parser.add_argument("--fanout", type=int, default=10)
     parser.add_argument("--seed", type=int, default=42)
