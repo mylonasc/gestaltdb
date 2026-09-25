@@ -97,6 +97,13 @@ def _range_index_prefix(index_name, key_parts) -> bytes:
     return b"R" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts) + _TYPED_ADJ_SEP
 
 
+def _validate_range_scan_options(reverse: bool, limit: int | None) -> None:
+    if not isinstance(reverse, bool):
+        raise TypeError("reverse must be a boolean")
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
+        raise ValueError("limit must be a positive integer")
+
+
 def _missing_dependency_error(package_name, install_name=None, feature_name=None):
     """Build a consistent optional dependency error.
 
@@ -329,8 +336,8 @@ class KVStore:
         """Delete one sorted range index entry."""
         raise NotImplementedError
 
-    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True):
-        """Yield values whose range index key falls between start and end values."""
+    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None):
+        """Yield bounded range-index values, optionally greatest-first."""
         raise NotImplementedError
 
     def ingest_nodes_columnar(self, node_list, *, native: bool = True):
@@ -711,23 +718,60 @@ class LMDBStore(KVStore):
         with self.env.begin(write=True, db=self.index_db) as txn:
             txn.delete(_range_index_key(index_name, key_parts, range_value, value))
 
-    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True):
+    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None):
         """Yield values whose range index key falls between start and end values."""
+        _validate_range_scan_options(reverse, limit)
         prefix = _range_index_prefix(index_name, key_parts)
         start_key = prefix if start_value is None else prefix + start_value
         with self.env.begin(write=False, db=self.index_db) as txn:
             cursor = txn.cursor()
+            if reverse:
+                end_key = prefix + (b"\xff" if end_value is None else end_value + b"\xff")
+                if cursor.set_range(end_key):
+                    if not cursor.prev():
+                        return
+                elif not cursor.last():
+                    return
+                yielded = 0
+                while True:
+                    key, value = cursor.item()
+                    if not key.startswith(prefix):
+                        break
+                    range_value = key[len(prefix):].split(_TYPED_ADJ_SEP, 1)[0]
+                    if end_value is not None and (
+                        range_value > end_value or (range_value == end_value and not include_end)
+                    ):
+                        if not cursor.prev():
+                            break
+                        continue
+                    if start_value is not None and (
+                        range_value < start_value or (range_value == start_value and not include_start)
+                    ):
+                        break
+                    yield value
+                    yielded += 1
+                    if limit is not None and yielded >= limit:
+                        break
+                    if not cursor.prev():
+                        break
+                return
             if not cursor.set_range(start_key):
                 return
+            yielded = 0
             for key, value in cursor:
                 if not key.startswith(prefix):
                     break
                 range_value = key[len(prefix):].split(_TYPED_ADJ_SEP, 1)[0]
                 if start_value is not None and (range_value < start_value or (range_value == start_value and not include_start)):
+                    if reverse:
+                        break
                     continue
                 if end_value is not None and (range_value > end_value or (range_value == end_value and not include_end)):
                     break
                 yield value
+                yielded += 1
+                if limit is not None and yielded >= limit:
+                    break
 
 
 class LMDBTransactionStore(KVStore):
@@ -957,13 +1001,45 @@ class LMDBTransactionStore(KVStore):
         self._check_active()
         self.txn.delete(_range_index_key(index_name, key_parts, range_value, value), db=self.parent.index_db)
 
-    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True):
+    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None):
         self._check_active()
+        _validate_range_scan_options(reverse, limit)
         prefix = _range_index_prefix(index_name, key_parts)
         start_key = prefix if start_value is None else prefix + start_value
         cursor = self.txn.cursor(db=self.parent.index_db)
+        if reverse:
+            end_key = prefix + (b"\xff" if end_value is None else end_value + b"\xff")
+            if cursor.set_range(end_key):
+                if not cursor.prev():
+                    return
+            elif not cursor.last():
+                return
+            yielded = 0
+            while True:
+                key, value = cursor.item()
+                if not key.startswith(prefix):
+                    break
+                range_value = key[len(prefix):].split(_TYPED_ADJ_SEP, 1)[0]
+                if end_value is not None and (
+                    range_value > end_value or (range_value == end_value and not include_end)
+                ):
+                    if not cursor.prev():
+                        break
+                    continue
+                if start_value is not None and (
+                    range_value < start_value or (range_value == start_value and not include_start)
+                ):
+                    break
+                yield value
+                yielded += 1
+                if limit is not None and yielded >= limit:
+                    break
+                if not cursor.prev():
+                    break
+            return
         if not cursor.set_range(start_key):
             return
+        yielded = 0
         for key, value in cursor:
             if not key.startswith(prefix):
                 break
@@ -973,6 +1049,9 @@ class LMDBTransactionStore(KVStore):
             if end_value is not None and (range_value > end_value or (range_value == end_value and not include_end)):
                 break
             yield value
+            yielded += 1
+            if limit is not None and yielded >= limit:
+                break
 
 
 # =========================================
@@ -1247,20 +1326,35 @@ class LevelDBStore(KVStore):
         """Delete one sorted range index entry."""
         self.db_index.delete(_range_index_key(index_name, key_parts, range_value, value))
 
-    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True):
+    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None):
         """Yield values whose range index key falls between start and end values."""
+        _validate_range_scan_options(reverse, limit)
         prefix = _range_index_prefix(index_name, key_parts)
         start_key = prefix if start_value is None else prefix + start_value
-        with self.db_index.iterator(start=start_key) as it:
+        stop_key = prefix + (b"\xff" if end_value is None else end_value + b"\xff")
+        iterator_options = (
+            {"start": prefix, "stop": stop_key, "include_stop": True, "reverse": True}
+            if reverse
+            else {"start": start_key}
+        )
+        with self.db_index.iterator(**iterator_options) as it:
+            yielded = 0
             for key, value in it:
                 if not key.startswith(prefix):
                     break
                 range_value = key[len(prefix):].split(_TYPED_ADJ_SEP, 1)[0]
                 if start_value is not None and (range_value < start_value or (range_value == start_value and not include_start)):
+                    if reverse:
+                        break
                     continue
                 if end_value is not None and (range_value > end_value or (range_value == end_value and not include_end)):
+                    if reverse:
+                        continue
                     break
                 yield value
+                yielded += 1
+                if limit is not None and yielded >= limit:
+                    break
 
     def close(self):
         """Close all LevelDB sub-databases."""
@@ -1391,6 +1485,29 @@ class PyRexStore(KVStore):
         finally:
             if temp_txn is not None and temp_txn.is_active:
                 temp_txn.rollback()
+
+    def _iter_key_values_reverse_from(self, end_key: bytes):
+        temp_txn = None
+        if hasattr(self.db, "new_iterator"):
+            iterator = self.db.new_iterator()
+        else:
+            temp_txn = self.db.begin_transaction(self.write_options)
+            iterator = temp_txn.new_iterator()
+        try:
+            if hasattr(iterator, "seek_for_prev") and hasattr(iterator, "prev"):
+                iterator.seek_for_prev(end_key)
+                while iterator.valid():
+                    yield iterator.key(), iterator.value()
+                    iterator.prev()
+                iterator.check_status()
+                return
+        finally:
+            if temp_txn is not None and temp_txn.is_active:
+                temp_txn.rollback()
+        values = list(self._iter_key_values_from(b""))
+        for key, value in reversed(values):
+            if key <= end_key:
+                yield key, value
 
     def _write_columnar_batch(self, keys: list[bytes], values: list[bytes]) -> None:
         """Write key/value lists through PyRex's native columnar API."""
@@ -1660,19 +1777,36 @@ class PyRexStore(KVStore):
         """Delete one sorted range index entry."""
         self._delete_raw(_range_index_key(index_name, key_parts, range_value, value))
 
-    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True):
+    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None):
         """Yield values whose range index key falls between start and end values."""
+        _validate_range_scan_options(reverse, limit)
         prefix = _range_index_prefix(index_name, key_parts)
         start_key = prefix if start_value is None else prefix + start_value
-        for key, value in self._iter_key_values_from(start_key):
+        end_key = prefix + (b"\xff" if end_value is None else end_value + b"\xff")
+        entries = (
+            self._iter_key_values_reverse_from(end_key)
+            if reverse
+            else self._iter_key_values_from(start_key)
+        )
+        yielded = 0
+        for key, value in entries:
             if not key.startswith(prefix):
+                if reverse and key > prefix:
+                    continue
                 break
             range_value = key[len(prefix):].split(_TYPED_ADJ_SEP, 1)[0]
             if start_value is not None and (range_value < start_value or (range_value == start_value and not include_start)):
+                if reverse:
+                    break
                 continue
             if end_value is not None and (range_value > end_value or (range_value == end_value and not include_end)):
+                if reverse:
+                    continue
                 break
             yield value
+            yielded += 1
+            if limit is not None and yielded >= limit:
+                break
 
 
 class PyRexTransactionStore(PyRexStore):
@@ -1733,6 +1867,21 @@ class PyRexTransactionStore(PyRexStore):
             yield iterator.key(), iterator.value()
             iterator.next()
         iterator.check_status()
+
+    def _iter_key_values_reverse_from(self, end_key: bytes):
+        self._check_active()
+        iterator = self.txn.new_iterator()
+        if hasattr(iterator, "seek_for_prev") and hasattr(iterator, "prev"):
+            iterator.seek_for_prev(end_key)
+            while iterator.valid():
+                yield iterator.key(), iterator.value()
+                iterator.prev()
+            iterator.check_status()
+            return
+        values = list(self._iter_key_values_from(b""))
+        for key, value in reversed(values):
+            if key <= end_key:
+                yield key, value
 
 class SimpleIndexCounterKVStore:
     """This is to help with lowering storage requirements 

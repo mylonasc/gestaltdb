@@ -40,6 +40,7 @@ def test_kvstore_abstract_methods_raise_not_implemented():
         lambda: store.put_index_entry("idx", [b"k"], b"v"),
         lambda: store.delete_index_entry("idx", [b"k"], b"v"),
         lambda: list(store.iter_index_prefix("idx", [b"k"])),
+        lambda: list(store.iter_range_index("idx", [b"k"], reverse=True, limit=1)),
     ]
 
     for call in calls:
@@ -91,3 +92,23 @@ def test_store_metadata_round_trip(graph_db):
 
     graph_db.store.delete_metadata(b"schema")
     assert graph_db.store.get_metadata(b"schema") is None
+
+
+def test_store_range_index_supports_reverse_bounds_and_limit(graph_db):
+    for range_value, value in [
+        (b"10", b"a"),
+        (b"20", b"b"),
+        (b"20", b"c"),
+        (b"30", b"d"),
+    ]:
+        graph_db.store.put_range_index_entry("scores", [b"all"], range_value, value)
+
+    assert list(graph_db.store.iter_range_index(
+        "scores", [b"all"], None, b"20", True, True, reverse=True, limit=2
+    )) == [b"c", b"b"]
+    assert list(graph_db.store.iter_range_index(
+        "scores", [b"all"], b"10", b"30", False, False, reverse=True
+    )) == [b"c", b"b"]
+
+    with pytest.raises(ValueError, match="positive"):
+        list(graph_db.store.iter_range_index("scores", [b"all"], limit=0))

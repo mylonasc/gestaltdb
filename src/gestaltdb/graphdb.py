@@ -5803,7 +5803,6 @@ class GraphDB:
             return latest_visible
         requested = normalize_temporal_instant(system_time)
         self._ensure_temporal_indexes(latest_visible)
-        horizon = 0
         for encoded_commit_id in self.store.iter_range_index(
             _TEMPORAL_SYSTEM_INDEX,
             [b"commit"],
@@ -5811,6 +5810,7 @@ class GraphDB:
             self._temporal_instant_index_value(requested),
             True,
             True,
+            reverse=True,
         ):
             try:
                 commit_id = int(encoded_commit_id, 16)
@@ -5819,8 +5819,8 @@ class GraphDB:
             if commit_id <= latest_visible and self.get_temporal_commit(
                 commit_id, _validate_supersession=False
             ) is not None:
-                horizon = max(horizon, commit_id)
-        return horizon
+                return commit_id
+        return 0
 
     def _temporal_entity_as_of(
         self, kind, logical_id, *, valid_time, system_time=None, through_commit=None

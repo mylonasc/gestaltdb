@@ -38,7 +38,7 @@ class _MetadataStore:
         for name, parts, range_value, value in entries:
             self.put_range_index_entry(name, parts, range_value, value)
 
-    def iter_range_index(self, name, parts, start=None, end=None, include_start=True, include_end=True):
+    def iter_range_index(self, name, parts, start=None, end=None, include_start=True, include_end=True, *, reverse=False, limit=None):
         values = []
         for range_value, value in sorted(self.range_indexes.get((name, tuple(parts)), set())):
             if start is not None and (range_value < start or (range_value == start and not include_start)):
@@ -46,6 +46,10 @@ class _MetadataStore:
             if end is not None and (range_value > end or (range_value == end and not include_end)):
                 continue
             values.append(value)
+        if reverse:
+            values.reverse()
+        if limit is not None:
+            values = values[:limit]
         return iter(values)
 
     def close(self):
@@ -96,6 +100,23 @@ def test_as_of_uses_half_open_boundaries_and_rejects_conflicting_horizons(graph)
     assert graph.get_node_as_of("n1", valid_time=20) is None
     with pytest.raises(ValueError, match="either system_time or through_commit"):
         graph.get_node_as_of("n1", valid_time=10, system_time=0, through_commit=1)
+
+
+def test_system_time_horizon_uses_reverse_range_seek(graph):
+    versions = [
+        graph.put_node_version(Node(f"n{ordinal}"), valid=(0, None))
+        for ordinal in range(5)
+    ]
+    calls = []
+    original = graph.store.iter_range_index
+
+    def tracking(*args, **kwargs):
+        calls.append(kwargs)
+        return original(*args, **kwargs)
+
+    graph.store.iter_range_index = tracking
+    assert graph._temporal_system_horizon(system_time=versions[-1].system_time) == 5
+    assert calls == [{"reverse": True}]
 
 
 def test_typed_temporal_traversal_resolves_corrected_topology_and_retractions(graph):

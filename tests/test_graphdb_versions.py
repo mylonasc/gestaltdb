@@ -61,7 +61,7 @@ class _MetadataStore:
     def delete_range_index_entry(self, name, parts, range_value, value):
         self.range_indexes.get((name, tuple(parts)), set()).discard((range_value, value))
 
-    def iter_range_index(self, name, parts, start=None, end=None, include_start=True, include_end=True):
+    def iter_range_index(self, name, parts, start=None, end=None, include_start=True, include_end=True, *, reverse=False, limit=None):
         values = []
         for range_value, value in sorted(self.range_indexes.get((name, tuple(parts)), set())):
             if start is not None and (range_value < start or (range_value == start and not include_start)):
@@ -69,6 +69,10 @@ class _MetadataStore:
             if end is not None and (range_value > end or (range_value == end and not include_end)):
                 continue
             values.append(value)
+        if reverse:
+            values.reverse()
+        if limit is not None:
+            values = values[:limit]
         return iter(values)
 
     def close(self):
