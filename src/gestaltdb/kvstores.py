@@ -5,6 +5,15 @@ import struct
 
 
 _TYPED_ADJ_SEP = b"\x1f"
+MAX_PORTABLE_INDEX_KEY_BYTES = 511
+
+
+def _checked_index_key(key: bytes) -> bytes:
+    if len(key) > MAX_PORTABLE_INDEX_KEY_BYTES:
+        raise ValueError(
+            f"encoded index key exceeds the portable {MAX_PORTABLE_INDEX_KEY_BYTES}-byte limit"
+        )
+    return key
 
 
 def _to_bytes(value) -> bytes:
@@ -59,7 +68,7 @@ def _index_key(index_name, key_parts, value=b"") -> bytes:
     parts = [_index_part(index_name)]
     parts.extend(_index_part(part) for part in key_parts)
     parts.append(_index_part(value))
-    return b"I" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts)
+    return _checked_index_key(b"I" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts))
 
 
 def _index_prefix(index_name, key_parts) -> bytes:
@@ -78,7 +87,9 @@ def _index_prefix(index_name, key_parts) -> bytes:
     """
     parts = [_index_part(index_name)]
     parts.extend(_index_part(part) for part in key_parts)
-    return b"I" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts) + _TYPED_ADJ_SEP
+    return _checked_index_key(
+        b"I" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts) + _TYPED_ADJ_SEP
+    )
 
 
 def _range_index_key(index_name, key_parts, range_value: bytes, value=b"") -> bytes:
@@ -87,14 +98,16 @@ def _range_index_key(index_name, key_parts, range_value: bytes, value=b"") -> by
     parts.extend(_index_part(part) for part in key_parts)
     parts.append(range_value)
     parts.append(_index_part(value))
-    return b"R" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts)
+    return _checked_index_key(b"R" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts))
 
 
 def _range_index_prefix(index_name, key_parts) -> bytes:
     """Build the prefix used for sorted range index scans."""
     parts = [_index_part(index_name)]
     parts.extend(_index_part(part) for part in key_parts)
-    return b"R" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts) + _TYPED_ADJ_SEP
+    return _checked_index_key(
+        b"R" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts) + _TYPED_ADJ_SEP
+    )
 
 
 def _validate_range_scan_options(reverse: bool, limit: int | None) -> None:

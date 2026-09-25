@@ -274,9 +274,15 @@ Immutable temporal-version commits use backend metadata rather than current
 node and edge records. LMDB and transaction-capable PyRex publish all records
 and the commit marker in the surrounding backend transaction. LevelDB and
 default PyRex publish a marker last; interrupted, unmarked records remain
-invisible and visible commit IDs remain ordered. Non-transactional temporal
-commits currently require one externally serialized writer handle. See
-:doc:`temporal-versioning`.
+invisible and visible commit IDs remain ordered. Filesystem-backed temporal
+writers are serialized across handles and processes. See :doc:`temporal-versioning`.
+
+All secondary and temporal index encodings enforce a portable 511-byte final-key
+limit, matching the smallest supported backend constraint. Components are
+URL-safe-base64 encoded, so application IDs and indexed property values consume
+roughly four encoded bytes per three input bytes plus namespace separators.
+Oversized keys raise ``ValueError`` consistently before backend I/O; GestaltDB
+does not truncate or hash them, avoiding silent collisions.
 
 Backend Selection Pattern
 -------------------------

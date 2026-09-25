@@ -6,6 +6,7 @@
 - Added durable temporal commit reservations, cross-process writer serialization, orphan-publication recovery, and reverse range-index seeks for bounded system-time horizon lookup.
 - Added valid-start/valid-end candidate intersection and an interval-heavy benchmark metric to avoid decoding expired temporal versions.
 - Added copy-on-build temporal index generations with visible-history checksums, atomic activation, interrupted-build safety, and prior-generation cleanup.
+- Enforced a documented collision-free 511-byte portable limit for all encoded secondary and temporal index keys.
 - Added fail-closed, retryable migration from deprecated `TimeIndexedEdge` records to immutable temporal edge history through `GraphDB.migrate_time_indexed_edges`.
 - Added packaged offline graph visualization: deterministic `VizGraph` IR builders (nodes/edges, Cypher results, sampled subgraphs, sampler batches), self-contained `.html` artifacts with an inline-only CSP, and a prebuilt D3.js + React bundle shipped via `package-data` (no JS toolchain or network needed at runtime).
 - Added an interactive canvas (D3 force layout with pin/zoom/refit/pause, deterministic colorblind-safe legend, selection + property inspector, search, label/type filters, 1-hop focus, Cypher highlight overlay) with client-side SVG/PNG/JSON export.

@@ -87,6 +87,7 @@ Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes 
 - Exact lookup helpers include `nodes_by_property`, `nodes_by_label_property`, `edges_by_property`, and `edges_by_type_property`.
 - Range helpers include `nodes_by_property_range`, `nodes_by_label_property_range`, `edges_by_property_range`, and `edges_by_type_property_range`.
 - Deferred columnar ingestion can mark secondary indexes stale. Run `rebuild_deferred_indexes()` before index-backed queries if using `IndexMaintenanceMode.DEFER`.
+- Encoded secondary/range index keys are limited to 511 bytes across all backends; oversized IDs or indexed values fail before backend I/O and are never truncated.
 
 ## Ingestion Rules
 

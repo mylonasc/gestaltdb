@@ -1,6 +1,13 @@
 import pytest
 
-from gestaltdb.kvstores import KVStore, _pack_long_int, _typed_adjacency_prefix, _unpack_long_int
+from gestaltdb.kvstores import (
+    MAX_PORTABLE_INDEX_KEY_BYTES,
+    KVStore,
+    _index_key,
+    _pack_long_int,
+    _typed_adjacency_prefix,
+    _unpack_long_int,
+)
 
 
 def test_integer_pack_helpers_round_trip():
@@ -9,6 +16,14 @@ def test_integer_pack_helpers_round_trip():
 
 def test_typed_adjacency_prefix_uses_typed_key_layout():
     assert _typed_adjacency_prefix("out", b"drug-1", "rel") == b"out\x1fdrug-1\x1frel\x1f"
+
+
+def test_index_keys_enforce_one_portable_cross_backend_limit():
+    key = _index_key("idx", [b"x" * 350], b"value")
+    assert len(key) <= MAX_PORTABLE_INDEX_KEY_BYTES
+
+    with pytest.raises(ValueError, match="511-byte"):
+        _index_key("idx", [b"x" * 400], b"value")
 
 
 def test_kvstore_abstract_methods_raise_not_implemented():
@@ -112,3 +127,8 @@ def test_store_range_index_supports_reverse_bounds_and_limit(graph_db):
 
     with pytest.raises(ValueError, match="positive"):
         list(graph_db.store.iter_range_index("scores", [b"all"], limit=0))
+
+    with pytest.raises(ValueError, match="portable"):
+        graph_db.store.put_range_index_entry(
+            "scores", [b"x" * 400], b"10", b"value"
+        )
