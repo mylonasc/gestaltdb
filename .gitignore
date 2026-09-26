@@ -22,3 +22,4 @@ graph_lmdb*/
 graph_leveldb*/
 typed_graph_lmdb/
 /data/
+/security-reports/
