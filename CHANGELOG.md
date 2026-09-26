@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.1
+
+- Added automated Trivy vulnerability scanning over the cartesian product of KV backends (LevelDB, LMDB, RocksDB) and serializers (builtin JSON/Pickle, MessagePack, Protobuf); reports are published as ``<backend>-<serializer>`` artifacts and fail on HIGH/CRITICAL findings.
+
 ## 0.10.0
 
 - Made LMDB, LevelDB/Plyvel, RocksDB/PyRex, MessagePack, and Protobuf fully optional, independently composable extras; added ``backends`` and ``serializers`` convenience bundles.
