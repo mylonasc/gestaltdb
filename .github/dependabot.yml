@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Keep GitHub Actions up to date. Workflow `uses:` entries are pinned by
+  # commit SHA (OpenSSF Scorecard Pinned-Dependencies); Dependabot updates
+  # both the SHA and the trailing `# tag` comment — keep the comments.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  # Keep Python dependencies (pyproject.toml / uv.lock) up to date.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
