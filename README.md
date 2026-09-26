@@ -35,6 +35,16 @@ python -m pip install "gestaltdb[all]"
 
 Optional extras include `lmdb`, `leveldb`, `rocksdb`, `arrow`, `polars`, `fast-ingest`, `msgpack`, `protobuf`, `bloom`, `docs`, `dev`, and `all`.
 
+## Dependency Vulnerability Scan
+
+Run the Docker-based Trivy scan for the LevelDB, LMDB, and RocksDB runtime dependency sets:
+
+```sh
+./scripts/scan_backend_vulnerabilities.sh
+```
+
+The script exports locked production dependencies in a `uv` container and writes table and JSON reports to `security-reports/`. Development and documentation dependencies are excluded. Set `FAIL_ON_SEVERITY=HIGH,CRITICAL` to return a nonzero status when policy-level findings are present.
+
 ## Basic Example
 
 ```python
