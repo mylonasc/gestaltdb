@@ -1,6 +1,7 @@
 # GestaltDB
 
 ![Coverage](https://raw.githubusercontent.com/mylonasc/gestaltdb/refs/heads/main/assets/coverage_badge.svg)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mylonasc/gestaltdb/badge)](https://scorecard.dev/viewer/?uri=github.com/mylonasc/gestaltdb)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://mylonasc.github.io/gestaltdb/)
 
 GestaltDB is a pure Python graph database toolkit for attributed graphs. It stores nodes, edges, labels, typed adjacency records, and property indexes on embedded key-value backends.
