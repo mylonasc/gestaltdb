@@ -57,6 +57,10 @@ additive, so no backend/serializer combination extras are needed:
    python -m pip install ".[msgpack,protobuf]"
    python -m pip install ".[all]"
 
+``GraphDB.create`` retains ``backend="pyrex"`` as its compatibility default,
+so parameterless creation requires ``gestaltdb[rocksdb]``. GestaltDB never
+silently substitutes another backend; pass an installed backend explicitly.
+
 Install From GitHub
 -------------------
 

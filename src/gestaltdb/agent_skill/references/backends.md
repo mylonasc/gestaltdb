@@ -4,12 +4,15 @@ Read this when creating a durable database directory, reopening a stored DB, sel
 
 ## Rules
 
-- Use `GraphDB.create(path, backend="leveldb"|"pyrex"|"lmdb", serializer="json"|"pickle")` for manifest-backed directories.
+- Use `GraphDB.create(path, backend="leveldb"|"pyrex"|"lmdb", serializer="json"|"pickle"|"messagepack"|"protobuf")` for manifest-backed directories.
+- Install backend and serializer extras independently, such as `gestaltdb[leveldb,msgpack]` or `gestaltdb[lmdb,protobuf]`; no combination-specific extra is needed.
+- A base install includes Pickle and JSON but no embedded backend. Use `gestaltdb[backends]` and `gestaltdb[serializers]` when all implementations are needed.
+- Parameterless `GraphDB.create(path)` retains the `pyrex` compatibility default and therefore requires `gestaltdb[rocksdb]`; there is no silent backend fallback.
 - Reopen manifest-backed stores with `GraphDB.open(path)` instead of reconstructing the backend manually.
 - Inspect backend and serializer choices with `graph.manifest`.
 - Inspect persisted property index definitions with `graph.index_statistics()` or `graph.indexed_node_properties` and `graph.indexed_edge_properties`.
 - Inspect node and edge properties from retrieved `Node.properties` and `Edge.properties`; GestaltDB does not expose a schema catalog for all property names.
-- For RocksDB-backed workloads, use `backend="pyrex"` or `PyRexStore`; install `pyrex-rocksdb` when `PyRexStore` reports a missing optional dependency.
+- For RocksDB-backed workloads, use `backend="pyrex"` or `PyRexStore`; install `gestaltdb[rocksdb]` when `PyRexStore` reports a missing optional dependency.
 - Close every opened graph handle in `finally`, including reopened handles.
 
 ## Persistence And Inspection Example

@@ -45,6 +45,7 @@ The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storag
 
 ## Core Usage Rules
 
+- Install backend and serializer extras independently, for example `gestaltdb[leveldb,msgpack]`; Pickle and JSON need no serializer extra, while a base install has no embedded backend.
 - Use `GraphDB.create(path, backend="leveldb", serializer="json")` for a self-describing database directory, or construct `GraphDB(store, serializer)` directly.
 - Use `GraphDB.open(path)` to reopen a self-describing database created with `GraphDB.create`.
 - Use `graph.index_statistics()` and `graph.manifest` for inspection; inspect retrieved `Node.properties` and `Edge.properties` for property names/values.

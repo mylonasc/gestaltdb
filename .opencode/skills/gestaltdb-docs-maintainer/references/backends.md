@@ -8,6 +8,11 @@
 
 All GestaltDB storage backends implement the `KVStore` interface from `gestaltdb.kvstores`.
 
+Backends are independently installable extras: `gestaltdb[leveldb]`,
+`gestaltdb[lmdb]`, and `gestaltdb[rocksdb]`. Serializer extras are additive, so
+`gestaltdb[leveldb,msgpack]` installs one backend and one serializer without a
+dedicated combination extra. `gestaltdb[backends]` installs all three backends.
+
 Key design characteristics:
 - Keys and values are raw bytes (`bytes`).
 - Backends expose specialized graph methods such as `put_node`, `get_node`, `put_edge`, `get_edge`, `iter_typed_adjacency`, and `iter_index_prefix`.
@@ -55,9 +60,9 @@ Key design characteristics:
 GestaltDB supports self-describing database directories using `gestaltdb_manifest.json`.
 
 - `GraphDB.create(path, backend=..., serializer=...)`:
-  Creates the store directory, records backend configuration, serializer configuration, and indexed property metadata in `gestaltdb_manifest.json`, and returns an open `GraphDB` instance.
+  Preflights the selected optional dependencies before replacing or creating the store directory, records backend configuration, serializer configuration, and indexed property metadata in `gestaltdb_manifest.json`, and returns an open `GraphDB` instance.
 - `GraphDB.open(path, backend_options=...)`:
-  Reads `gestaltdb_manifest.json`, restores backend, serializer, and property index configurations automatically.
+  Reads `gestaltdb_manifest.json`, preflights its backend and serializer extras, and restores backend, serializer, and property index configurations automatically.
 
 ---
 

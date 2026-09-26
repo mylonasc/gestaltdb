@@ -43,6 +43,9 @@ not install an embedded KV backend. Install all backends and serializers with:
 python -m pip install "gestaltdb[backends,serializers]"
 ```
 
+`GraphDB.create()` keeps RocksDB/PyRex as its compatibility default, so a base
+install must pass an installed backend explicitly and never silently falls back.
+
 Install every optional integration, including ingestion and benchmark clients:
 
 ```sh

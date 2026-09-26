@@ -67,3 +67,16 @@ def test_create_preflights_serializer_before_creating_directory(tmp_path):
         )
 
     assert not path.exists()
+
+
+def test_open_preflights_manifest_dependencies(tmp_path):
+    path = tmp_path / "stored"
+    graph = GraphDB.create(path, backend="leveldb", serializer="messagepack")
+    graph.close()
+
+    with blocked_import("msgpack"):
+        assert_missing_dependency_error(
+            lambda: GraphDB.open(path),
+            "msgpack",
+            "msgpack",
+        )
