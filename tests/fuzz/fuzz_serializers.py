@@ -9,7 +9,12 @@ import sys
 
 import atheris
 
-from gestaltdb.serializers import JSONSerializer, MessagePackSerializer
+try:
+    # ClusterFuzzLite: build.sh stages a copy of serializers.py next to this
+    # target so the fuzzer does not pull in numpy via gestaltdb/__init__.py.
+    from serializers import JSONSerializer, MessagePackSerializer
+except ImportError:  # local development / CI checkouts
+    from gestaltdb.serializers import JSONSerializer, MessagePackSerializer
 
 
 def _roundtrip(serializer, blob: bytes) -> None:
