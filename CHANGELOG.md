@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.2
+
+- Hardened the repository for the OpenSSF Scorecard: least-privilege workflow token permissions, commit-SHA-pinned GitHub Actions, `SECURITY.md` with a private vulnerability reporting process, Dependabot for GitHub Actions and Python dependencies, CodeQL static analysis on push/PR/weekly, Sigstore-signed release distributions with SLSA-style build attestations attached to GitHub releases, `CODEOWNERS`, and ClusterFuzzLite continuous fuzzing of the JSON/MessagePack deserializers.
+
 ## 0.10.1
 
 - Added automated Trivy vulnerability scanning over the cartesian product of KV backends (LevelDB, LMDB, RocksDB) and serializers (builtin JSON/Pickle, MessagePack, Protobuf); reports are published as ``<backend>-<serializer>`` artifacts and fail on HIGH/CRITICAL findings.
