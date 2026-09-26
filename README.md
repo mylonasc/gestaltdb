@@ -27,13 +27,29 @@ Install columnar ingestion dependencies:
 python -m pip install "gestaltdb[arrow,polars]"
 ```
 
-Install all optional backends and serializers:
+Install only the backend and serializer you need. Extras are additive, so any
+backend can be paired with any serializer without combination-specific extras:
+
+```sh
+python -m pip install "gestaltdb[leveldb,msgpack]"
+python -m pip install "gestaltdb[lmdb,protobuf]"
+python -m pip install "gestaltdb[rocksdb]"
+```
+
+Pickle and JSON serialization are built in. A base install intentionally does
+not install an embedded KV backend. Install all backends and serializers with:
+
+```sh
+python -m pip install "gestaltdb[backends,serializers]"
+```
+
+Install every optional integration, including ingestion and benchmark clients:
 
 ```sh
 python -m pip install "gestaltdb[all]"
 ```
 
-Optional extras include `lmdb`, `leveldb`, `rocksdb`, `arrow`, `polars`, `fast-ingest`, `msgpack`, `protobuf`, `bloom`, `docs`, `dev`, and `all`.
+Optional extras include `lmdb`, `leveldb`, `rocksdb`, `backends`, `msgpack`, `protobuf`, `serializers`, `arrow`, `polars`, `fast-ingest`, `bloom`, `docs`, `dev`, and `all`.
 
 ## Basic Example
 

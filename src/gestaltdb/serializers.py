@@ -6,26 +6,26 @@ import json
 import base64
 
 
-def _missing_dependency_error(package_name, install_name=None, feature_name=None):
+def _missing_dependency_error(package_name, *, extra_name, feature_name=None):
     """Build a consistent optional dependency error.
 
     Args:
         package_name: Import package that is missing.
-        install_name: Optional package name to show in install commands.
+        extra_name: GestaltDB extra that installs the package.
         feature_name: Feature that requires the package.
 
     Returns:
         ImportError describing how to install the dependency.
 
     Examples:
-        >>> "msgpack" in str(_missing_dependency_error("msgpack"))
+        >>> "msgpack" in str(_missing_dependency_error("msgpack", extra_name="msgpack"))
         True
     """
-    install_name = install_name or package_name
     feature_name = feature_name or package_name
     return ImportError(
         f"Missing optional dependency '{package_name}' required for {feature_name}. "
-        f"Install it with `python -m pip install {install_name}` or `uv add {install_name}`."
+        f"Install it with `python -m pip install 'gestaltdb[{extra_name}]'` "
+        f"or `uv add 'gestaltdb[{extra_name}]'`."
     )
 
 class Serializer:
@@ -97,6 +97,16 @@ class JSONSerializer(Serializer):
 
 class MessagePackSerializer(Serializer):
     """Uses MessagePack for serialization."""
+
+    @staticmethod
+    def ensure_available():
+        """Import and return MessagePack, or raise installation guidance."""
+        try:
+            import msgpack
+        except ImportError as exc:
+            raise _missing_dependency_error("msgpack", extra_name="msgpack", feature_name="MessagePackSerializer") from exc
+        return msgpack
+
     def serialize(self, obj: dict) -> bytes:
         """Serialize an object with MessagePack.
 
@@ -107,10 +117,7 @@ class MessagePackSerializer(Serializer):
             >>> MessagePackSerializer().deserialize(MessagePackSerializer().serialize({"a": 1}))
             {'a': 1}
         """
-        try:
-            import msgpack
-        except ImportError as exc:
-            raise _missing_dependency_error("msgpack", feature_name="MessagePackSerializer") from exc
+        msgpack = self.ensure_available()
         return msgpack.packb(obj, use_bin_type=True)
 
     def deserialize(self, data: bytes) -> dict:
@@ -123,10 +130,7 @@ class MessagePackSerializer(Serializer):
             >>> MessagePackSerializer().deserialize(MessagePackSerializer().serialize({"a": 1}))
             {'a': 1}
         """
-        try:
-            import msgpack
-        except ImportError as exc:
-            raise _missing_dependency_error("msgpack", feature_name="MessagePackSerializer") from exc
+        msgpack = self.ensure_available()
         return msgpack.unpackb(data, raw=False)
 
 
@@ -140,6 +144,15 @@ class ProtobufSerializer(Serializer):
     _TYPE_KEY = "__gestaltdb_type__"
     _VALUE_KEY = "value"
 
+    @staticmethod
+    def ensure_available():
+        """Import and return protobuf helpers, or raise installation guidance."""
+        try:
+            from google.protobuf import json_format, struct_pb2
+        except ImportError as exc:
+            raise _missing_dependency_error("protobuf", extra_name="protobuf", feature_name="ProtobufSerializer") from exc
+        return json_format, struct_pb2
+
     def serialize(self, obj: dict) -> bytes:
         """Serialize a JSON-like dictionary with protobuf Struct.
 
@@ -152,10 +165,7 @@ class ProtobufSerializer(Serializer):
         Raises:
             ImportError: If the optional ``protobuf`` package is missing.
         """
-        try:
-            from google.protobuf import json_format, struct_pb2
-        except ImportError as exc:
-            raise _missing_dependency_error("protobuf", feature_name="ProtobufSerializer") from exc
+        json_format, struct_pb2 = self.ensure_available()
 
         message = struct_pb2.Struct()
         json_format.ParseDict(self._to_struct_compatible(obj), message)
@@ -173,10 +183,7 @@ class ProtobufSerializer(Serializer):
         Raises:
             ImportError: If the optional ``protobuf`` package is missing.
         """
-        try:
-            from google.protobuf import json_format, struct_pb2
-        except ImportError as exc:
-            raise _missing_dependency_error("protobuf", feature_name="ProtobufSerializer") from exc
+        json_format, struct_pb2 = self.ensure_available()
 
         message = struct_pb2.Struct()
         message.ParseFromString(data)

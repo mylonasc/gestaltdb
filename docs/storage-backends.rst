@@ -4,6 +4,13 @@ Storage Backends
 GestaltDB separates graph logic from storage. ``GraphDB`` receives a key-value
 store instance and a serializer instance.
 
+Backends are optional and independent of serializers. For example, install
+``gestaltdb[leveldb,msgpack]`` to use ``LevelDBStore`` with
+``MessagePackSerializer``, or ``gestaltdb[lmdb,protobuf]`` for LMDB with
+Protobuf. Install ``gestaltdb[backends]`` to make every built-in backend
+available. Missing dependencies are checked before ``GraphDB.create`` modifies
+the target directory and are reported with the required extra name.
+
 Backend Selection Summary
 -------------------------
 
@@ -45,6 +52,8 @@ LMDB Backend
 
 Use ``LMDBStore`` for a mature embedded backend with named sub-databases.
 
+Install it with ``python -m pip install "gestaltdb[lmdb]"``.
+
 .. code-block:: python
 
    from gestaltdb.graphdb import GraphDB
@@ -66,6 +75,8 @@ LevelDB Backend
 ---------------
 
 Use ``LevelDBStore`` when you want LevelDB through ``plyvel``.
+
+Install it with ``python -m pip install "gestaltdb[leveldb]"``.
 
 .. code-block:: python
 
@@ -92,6 +103,8 @@ RocksDB Backend
 Use ``PyRexStore`` for RocksDB through the optional ``pyrex-rocksdb`` package.
 This backend uses one physical RocksDB database with prefixed keys and exposes
 several RocksDB tuning knobs.
+
+Install it with ``python -m pip install "gestaltdb[rocksdb]"``.
 
 .. code-block:: python
 
