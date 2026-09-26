@@ -43,7 +43,11 @@ def test_agent_docs_search_pagination_and_context(capsys):
     output = capsys.readouterr().out
     assert "page 2/" in output
     assert "snippet:" in output
-    assert output.count("[") <= 2
+    # Count result headers (lines starting with "[") rather than raw "["
+    # characters, since snippet bodies may legitimately contain extras such
+    # as `gestaltdb[rocksdb]`.
+    assert output.count("snippet:") == 2
+    assert sum(1 for line in output.splitlines() if line.startswith("[")) == 2
 
 
 def test_agent_docs_install_opencode_skill(tmp_path):

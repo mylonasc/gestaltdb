@@ -67,13 +67,21 @@ with TemporaryDirectory() as tmpdir:
 
 ## Choose a Backend and Serializer
 
+Backend and serializer extras are independent and additive. Install exactly the
+pair you intend to use; no combination-specific extra is needed:
+
+```sh
+python -m pip install "gestaltdb[leveldb,msgpack]"
+python -m pip install "gestaltdb[lmdb,protobuf]"
+```
+
 ```python
 from gestaltdb.graphdb import GraphDB
 from gestaltdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
-from gestaltdb.serializers import JSONSerializer, PickleSerializer
+from gestaltdb.serializers import JSONSerializer, MessagePackSerializer, PickleSerializer
 
 graph_lmdb = GraphDB(LMDBStore(path="graph_lmdb", map_size=2**30), PickleSerializer())
-graph_leveldb = GraphDB(LevelDBStore(path="graph_leveldb"), PickleSerializer())
+graph_leveldb = GraphDB(LevelDBStore(path="graph_leveldb"), MessagePackSerializer())
 graph_rocksdb = GraphDB(PyRexStore(path="graph_rocksdb"), JSONSerializer())
 
 graph_lmdb.close()

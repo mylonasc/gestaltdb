@@ -36,6 +36,11 @@ descriptors live in ``gestaltdb.versioning``. This package root re-exports selec
 enums/containers, temporal values, ``QueryResult``, and sampling helpers for
 convenience.
 
+Embedded backends and binary serializers are optional, independent extras. For
+example, install ``gestaltdb[leveldb,msgpack]`` to combine LevelDB with
+MessagePack or ``gestaltdb[lmdb,protobuf]`` to combine LMDB with Protobuf.
+Pickle and JSON are built in; a base installation does not install a KV backend.
+
 Important usage notes for agents and developers:
 
 * Relationship traversal types come from ``Edge.properties["type"]``.

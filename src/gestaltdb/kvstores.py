@@ -97,18 +97,18 @@ def _range_index_prefix(index_name, key_parts) -> bytes:
     return b"R" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts) + _TYPED_ADJ_SEP
 
 
-def _missing_dependency_error(package_name, install_name=None, feature_name=None):
+def _missing_dependency_error(package_name, *, extra_name, feature_name=None):
     """Build a consistent optional dependency error.
 
     Examples:
-        >>> "lmdb" in str(_missing_dependency_error("lmdb"))
+        >>> "lmdb" in str(_missing_dependency_error("lmdb", extra_name="lmdb"))
         True
     """
-    install_name = install_name or package_name
     feature_name = feature_name or package_name
     return ImportError(
         f"Missing optional dependency '{package_name}' required for {feature_name}. "
-        f"Install it with `python -m pip install {install_name}` or `uv add {install_name}`."
+        f"Install it with `python -m pip install 'gestaltdb[{extra_name}]'` "
+        f"or `uv add 'gestaltdb[{extra_name}]'`."
     )
 
 
@@ -414,6 +414,15 @@ class LMDBStore(KVStore):
 
     supports_transactions = True
 
+    @staticmethod
+    def ensure_available():
+        """Import and return LMDB, or raise installation guidance."""
+        try:
+            import lmdb
+        except ImportError as exc:
+            raise _missing_dependency_error("lmdb", extra_name="lmdb", feature_name="LMDBStore") from exc
+        return lmdb
+
     def __init__(self, path='graph_lmdb', map_size=10_485_760, map_id = True, map_keys = False):
         """
         Creates/opens an LMDB environment with three named sub-databases:
@@ -421,10 +430,7 @@ class LMDBStore(KVStore):
           - b'edges' for edge data
           - b'adj'   for adjacency lists
         """
-        try:
-            import lmdb
-        except ImportError as exc:
-            raise _missing_dependency_error("lmdb", feature_name="LMDBStore") from exc
+        lmdb = self.ensure_available()
 
         max_dbs = 6
         if map_keys:
@@ -988,12 +994,18 @@ class LevelDBStore(KVStore):
         >>> store = LevelDBStore(path="/tmp/example_graph_leveldb")  # doctest: +SKIP
     """
 
-    def __init__(self, path='graph_leveldb'):
-        """Create or open a LevelDB store. We'll store nodes/edges by prefix."""
+    @staticmethod
+    def ensure_available():
+        """Import and return Plyvel, or raise installation guidance."""
         try:
             import plyvel
         except ImportError as exc:
-            raise _missing_dependency_error("plyvel", feature_name="LevelDBStore") from exc
+            raise _missing_dependency_error("plyvel", extra_name="leveldb", feature_name="LevelDBStore") from exc
+        return plyvel
+
+    def __init__(self, path='graph_leveldb'):
+        """Create or open a LevelDB store. We'll store nodes/edges by prefix."""
+        plyvel = self.ensure_available()
         
         self.db_paths = {'nodes' : os.path.join('nodes'), 'edges': os.path.join('edges'), 'adjacency' : os.path.join('adjacency'), 'typed_adjacency': os.path.join('typed_adjacency'), 'index': os.path.join('index'), 'metadata': os.path.join('metadata')}
         if not os.path.exists(path):
@@ -1293,6 +1305,15 @@ class PyRexStore(KVStore):
 
     _SEP = b"\x1f"
 
+    @staticmethod
+    def ensure_available():
+        """Import and return PyRex, or raise installation guidance."""
+        try:
+            import pyrex
+        except ImportError as exc:
+            raise _missing_dependency_error("pyrex", extra_name="rocksdb", feature_name="PyRexStore") from exc
+        return pyrex
+
     def __init__(
         self,
         path="graph_rocksdb",
@@ -1305,10 +1326,7 @@ class PyRexStore(KVStore):
         transaction_db_options=None,
     ):
         """Open a PyRex/RocksDB store with optional tuning settings."""
-        try:
-            import pyrex
-        except ImportError as exc:
-            raise _missing_dependency_error("pyrex", install_name="pyrex-rocksdb", feature_name="PyRexStore") from exc
+        pyrex = self.ensure_available()
 
         options = pyrex.PyOptions()
         options.create_if_missing = True
