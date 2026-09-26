@@ -45,7 +45,7 @@ jobs:
       url: https://pypi.org/p/gestaltdb
     permissions:
       # id-token: trusted publishing to PyPI + Sigstore signing.
-      # contents: attach detached signatures to the GitHub release.
+      # contents: let the Sigstore action upload bundles to the release.
       # attestations: publish SLSA-style build provenance.
       id-token: write
       contents: write
@@ -72,8 +72,6 @@ jobs:
         with:
           inputs: ./dist/*.tar.gz ./dist/*.whl
 
-      - name: Attach signatures to GitHub release
-        if: github.event_name == 'release'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload ${{ github.event.release.tag_name }} ./dist/*.sigstore --clobber
+      # NOTE: gh-action-sigstore-python uploads the .sigstore.json bundles
+      # to the GitHub release itself on release events; no separate upload
+      # step is needed.
