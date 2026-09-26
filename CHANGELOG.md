@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0
+
+- Made LMDB, LevelDB/Plyvel, RocksDB/PyRex, MessagePack, and Protobuf fully optional, independently composable extras; added ``backends`` and ``serializers`` convenience bundles.
+- Raised the MessagePack security floor to ``msgpack>=1.2.1`` and the supported Python floor to 3.10.
+- Added managed-store dependency preflight before filesystem mutation, actionable extra-specific errors, and core/combination installation CI coverage.
+
 ## 0.9.0
 
 - Added packaged offline graph visualization: deterministic `VizGraph` IR builders (nodes/edges, Cypher results, sampled subgraphs, sampler batches), self-contained `.html` artifacts with an inline-only CSP, and a prebuilt D3.js + React bundle shipped via `package-data` (no JS toolchain or network needed at runtime).

@@ -4,27 +4,25 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gestaltdb"
-version = "0.9.0"
+version = "0.10.0"
 description = "A pure Python GraphDB for attributed graphs."
 authors = [
     { name = "Mylonas Charilaos", email = "mylonas.charilaos@gmail.com" },
 ]
 readme = "README.md"
-requires-python = ">=3.9,<3.14"
+requires-python = ">=3.10,<3.14"
 dependencies = [
-    "google>=3.0.0",
     "lark>=1.2",
-    "msgpack>=1.1.2",
     "numpy>=1.23",
-    "plyvel>=1.5.1",
-    "protobuf>=6.33.6",
 ]
 
 [project.optional-dependencies]
 lmdb = ["lmdb"]
-leveldb = ["plyvel"]
-msgpack = ["msgpack"]
-protobuf = ["protobuf"]
+leveldb = ["plyvel>=1.5.1"]
+msgpack = ["msgpack>=1.2.1"]
+protobuf = ["protobuf>=6.33.6"]
+backends = ["lmdb", "plyvel>=1.5.1", "pyrex-rocksdb>=0.4.1"]
+serializers = ["msgpack>=1.2.1", "protobuf>=6.33.6"]
 bloom = ["pybloom-live"]
 coverage = ["coverage", "pytest"]
 docs = ["myst-parser", "sphinx", "sphinx-rtd-theme"]
@@ -33,8 +31,8 @@ arrow = ["pyarrow"]
 polars = ["polars", "pyarrow"]
 fast-ingest = ["pyarrow", "polars", "pyrex-rocksdb>=0.4.1"]
 external-bench = ["arcadedb-embedded; python_version >= '3.10'", "gqlalchemy", "ladybug", "latticedb", "neo4j", "psycopg[binary]"]
-all = ["lmdb", "msgpack", "plyvel", "protobuf", "pybloom-live", "pyrex-rocksdb>=0.4.1", "pyarrow", "polars", "arcadedb-embedded; python_version >= '3.10'", "gqlalchemy", "ladybug", "latticedb", "neo4j", "psycopg[binary]"]
-dev = ["coverage", "lmdb", "msgpack", "myst-parser", "plyvel", "protobuf", "pybloom-live", "pyrex-rocksdb>=0.4.1", "pyarrow", "polars", "pytest", "sphinx", "sphinx-rtd-theme", "arcadedb-embedded; python_version >= '3.10'", "gqlalchemy", "ladybug", "latticedb", "neo4j", "psycopg[binary]"]
+all = ["lmdb", "msgpack>=1.2.1", "plyvel>=1.5.1", "protobuf>=6.33.6", "pybloom-live", "pyrex-rocksdb>=0.4.1", "pyarrow", "polars", "arcadedb-embedded; python_version >= '3.10'", "gqlalchemy", "ladybug", "latticedb", "neo4j", "psycopg[binary]"]
+dev = ["coverage", "lmdb", "msgpack>=1.2.1", "myst-parser", "plyvel>=1.5.1", "protobuf>=6.33.6", "pybloom-live", "pyrex-rocksdb>=0.4.1", "pyarrow", "polars", "pytest", "sphinx", "sphinx-rtd-theme", "arcadedb-embedded; python_version >= '3.10'", "gqlalchemy", "ladybug", "latticedb", "neo4j", "psycopg[binary]"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

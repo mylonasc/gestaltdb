@@ -4,7 +4,7 @@ Installation
 Python Version
 --------------
 
-GestaltDB targets Python 3.9 through 3.13. The LevelDB backend uses ``plyvel``;
+GestaltDB targets Python 3.10 through 3.13. The LevelDB backend uses ``plyvel``;
 at the time of writing, ``plyvel`` wheels are not available for Python 3.14 or
 free-threaded Python builds. Use Python 3.12 or 3.13 for notebooks that need the
 LevelDB backend.
@@ -28,8 +28,9 @@ Install optional features only when you need them:
 
 .. code-block:: sh
 
-    uv add "/path/to/gestaltdb[lmdb,msgpack,protobuf]"
-    uv add "/path/to/gestaltdb[leveldb]"
+    uv add "/path/to/gestaltdb[leveldb,msgpack]"
+    uv add "/path/to/gestaltdb[lmdb,protobuf]"
+    uv add "/path/to/gestaltdb[backends,serializers]"
     uv add "/path/to/gestaltdb[fast-ingest]"
 
 Install With pip
@@ -42,16 +43,23 @@ Install With pip
    python -m pip install --upgrade pip
    python -m pip install .
 
-Install optional backends and serializers:
+The base package includes the Pickle and JSON serializers but no embedded KV
+backend. Install backend and serializer extras independently; extras are
+additive, so no backend/serializer combination extras are needed:
 
 .. code-block:: sh
 
-   python -m pip install ".[lmdb]"
-   python -m pip install ".[leveldb]"
+   python -m pip install ".[leveldb,msgpack]"
+   python -m pip install ".[lmdb,protobuf]"
    python -m pip install ".[rocksdb]"
+   python -m pip install ".[backends,serializers]"
    python -m pip install ".[fast-ingest]"
    python -m pip install ".[msgpack,protobuf]"
    python -m pip install ".[all]"
+
+``GraphDB.create`` retains ``backend="pyrex"`` as its compatibility default,
+so parameterless creation requires ``gestaltdb[rocksdb]``. GestaltDB never
+silently substitutes another backend; pass an installed backend explicitly.
 
 Install From GitHub
 -------------------
@@ -86,6 +94,9 @@ Optional Dependencies
 ``rocksdb``
    RocksDB key-value backend through ``pyrex-rocksdb>=0.4.1``.
 
+``backends``
+   Convenience bundle containing the LMDB, LevelDB, and RocksDB backends.
+
 ``arrow``
    Arrow array support through ``pyarrow`` for columnar ingestion helpers.
 
@@ -101,6 +112,10 @@ Optional Dependencies
 
 ``protobuf``
    Protobuf Struct serializer for JSON-like dictionaries.
+
+``serializers``
+   Convenience bundle containing MessagePack and Protobuf. Pickle and JSON need
+   no extra.
 
 ``bloom``
    Bloom-filter support through ``pybloom-live``.

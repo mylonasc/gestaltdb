@@ -3,6 +3,9 @@ Serializers
 
 Serializers convert ``Node``, ``Edge``, and adjacency dictionaries to bytes for
 storage. Choose the serializer based on portability and payload requirements.
+Serializer extras are independent of backend extras. Multiple extras can be
+installed together, such as ``gestaltdb[leveldb,msgpack]`` or
+``gestaltdb[lmdb,protobuf]``; no combination-specific extra is required.
 
 Pickle Serializer
 -----------------
@@ -47,7 +50,7 @@ Install the optional dependency first:
 
 .. code-block:: sh
 
-   python -m pip install ".[msgpack]"
+   python -m pip install "gestaltdb[msgpack]"
 
 Protobuf Serializer
 -------------------
@@ -67,10 +70,16 @@ Install the optional dependency first:
 
 .. code-block:: sh
 
-   python -m pip install ".[protobuf]"
+   python -m pip install "gestaltdb[protobuf]"
 
 Using a Serializer With GraphDB
 -------------------------------
+
+Install both independently selected components first:
+
+.. code-block:: sh
+
+   python -m pip install "gestaltdb[lmdb,msgpack]"
 
 .. code-block:: python
 
