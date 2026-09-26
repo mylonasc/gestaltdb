@@ -56,13 +56,15 @@ Optional extras include `lmdb`, `leveldb`, `rocksdb`, `backends`, `msgpack`, `pr
 
 ## Dependency Vulnerability Scan
 
-Run the Docker-based Trivy scan for the LevelDB, LMDB, and RocksDB runtime dependency sets:
+Run the Docker-based Trivy scan for the cartesian product of KV backends
+(`leveldb`, `lmdb`, `rocksdb`) and serializers (builtin JSON/Pickle as `json`,
+plus `msgpack` and `protobuf` extras) — 9 locked runtime sets:
 
 ```sh
 ./scripts/scan_backend_vulnerabilities.sh
 ```
 
-The script exports locked production dependencies in a `uv` container and writes table and JSON reports to `security-reports/`. Development and documentation dependencies are excluded. Set `FAIL_ON_SEVERITY=HIGH,CRITICAL` to return a nonzero status when policy-level findings are present.
+The script exports locked production dependencies in a `uv` container and writes table and JSON reports to `security-reports/` as `<backend>-<serializer>.json/txt` (for example `leveldb-msgpack.json`). Development and documentation dependencies are excluded. Set `FAIL_ON_SEVERITY=HIGH,CRITICAL` to return a nonzero status when policy-level findings are present.
 
 ## Basic Example
 
