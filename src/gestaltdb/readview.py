@@ -190,6 +190,186 @@ class ReadViewProvenance:
             raise ProvenanceMismatchError("source visibility digest mismatch")
 
 
+@dataclass(frozen=True)
+class CurrentReadProvenance:
+    """Identity of one verifiable mutable-state backend snapshot."""
+
+    database_id: str
+    snapshot_sequence: int
+    backend_name: str
+    backend_layout_version: int
+    serializer_name: str
+    serializer_format_version: int
+    backend_snapshot_kind: str
+    state_sha256: str
+    snapshot_kind: str = "mutable_backend_snapshot"
+    format_version: int = 1
+
+    @property
+    def token(self) -> str:
+        return hashlib.sha256(canonical_json_bytes(self._payload())).hexdigest()
+
+    def _payload(self) -> dict:
+        return {
+            "format_version": self.format_version,
+            "database_id": self.database_id,
+            "snapshot_sequence": self.snapshot_sequence,
+            "state_sha256": self.state_sha256,
+            "backend": {
+                "name": self.backend_name,
+                "layout_version": self.backend_layout_version,
+                "snapshot_kind": self.snapshot_kind,
+                "backend_snapshot_kind": self.backend_snapshot_kind,
+            },
+            "serializer": {
+                "name": self.serializer_name,
+                "format_version": self.serializer_format_version,
+            },
+        }
+
+    def to_dict(self) -> dict:
+        return {**self._payload(), "token": self.token}
+
+    def to_json(self) -> str:
+        return canonical_json_bytes(self.to_dict()).decode("utf-8")
+
+    @classmethod
+    def from_dict(cls, value: dict) -> "CurrentReadProvenance":
+        if not isinstance(value, dict):
+            raise ProvenanceMismatchError("current-read provenance must be an object")
+        try:
+            backend = value["backend"]
+            serializer = value["serializer"]
+            provenance = cls(
+                format_version=value["format_version"],
+                database_id=value["database_id"],
+                snapshot_sequence=value["snapshot_sequence"],
+                state_sha256=value["state_sha256"],
+                backend_name=backend["name"],
+                backend_layout_version=backend["layout_version"],
+                serializer_name=serializer["name"],
+                serializer_format_version=serializer["format_version"],
+                backend_snapshot_kind=backend["backend_snapshot_kind"],
+                snapshot_kind=backend["snapshot_kind"],
+            )
+            token = value["token"]
+        except (KeyError, TypeError) as exc:
+            raise ProvenanceMismatchError("current-read provenance is incomplete") from exc
+        if not isinstance(token, str) or token != provenance.token:
+            raise ProvenanceMismatchError("current-read provenance token mismatch")
+        if provenance.format_version != 1 or provenance.snapshot_kind != "mutable_backend_snapshot":
+            raise ProvenanceMismatchError("unsupported current-read provenance format")
+        try:
+            database_id = str(uuid.UUID(provenance.database_id))
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise ProvenanceMismatchError("invalid provenance database identity") from exc
+        if database_id != provenance.database_id:
+            raise ProvenanceMismatchError("non-canonical provenance database identity")
+        integer_fields = (
+            provenance.snapshot_sequence,
+            provenance.backend_layout_version,
+            provenance.serializer_format_version,
+        )
+        if any(isinstance(item, bool) or not isinstance(item, int) or item < 0 for item in integer_fields):
+            raise ProvenanceMismatchError("invalid provenance integer field")
+        if not provenance.backend_snapshot_kind:
+            raise ProvenanceMismatchError("missing backend snapshot kind")
+        if (
+            not isinstance(provenance.state_sha256, str)
+            or len(provenance.state_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in provenance.state_sha256)
+        ):
+            raise ProvenanceMismatchError("invalid mutable source state digest")
+        return provenance
+
+    @classmethod
+    def from_json(cls, value: str) -> "CurrentReadProvenance":
+        try:
+            decoded = json.loads(value)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ProvenanceMismatchError("invalid current-read provenance JSON") from exc
+        return cls.from_dict(decoded)
+
+    def verify_view(self, view) -> None:
+        """Verify a newly opened current read view has this exact identity."""
+        actual = getattr(view, "provenance", None)
+        if actual is None or actual != self:
+            raise ProvenanceMismatchError("mutable source snapshot identity mismatch")
+
+    def verify_snapshot_store(self, view) -> None:
+        """Verify a provenance-free view is pinned to the captured sequence."""
+        identity = getattr(view.store, "snapshot_identity", None)
+        if (
+            identity is None
+            or identity.sequence != self.snapshot_sequence
+            or identity.kind != self.backend_snapshot_kind
+        ):
+            raise ProvenanceMismatchError("mutable source snapshot identity mismatch")
+
+    def verify_source(self, graph) -> None:
+        """Verify that the mutable source has not advanced since capture."""
+        cache = getattr(graph, "_verified_current_provenance", None)
+        sequence_reader = getattr(graph.store, "current_snapshot_sequence", None)
+        if cache is not None and sequence_reader is not None:
+            current_sequence = sequence_reader()
+            if current_sequence == self.snapshot_sequence and cache.get(self.token) == self.state_sha256:
+                return
+        with graph.current_read_view(require_verifiable=True) as view:
+            self.verify_view(view)
+        if cache is not None:
+            cache[self.token] = self.state_sha256
+
+
+def parse_read_provenance(value: dict):
+    """Parse temporal or mutable provenance by its explicit snapshot kind."""
+    try:
+        snapshot_kind = value["backend"]["snapshot_kind"]
+    except (KeyError, TypeError) as exc:
+        raise ProvenanceMismatchError("read provenance is incomplete") from exc
+    if snapshot_kind == "commit_visibility":
+        return ReadViewProvenance.from_dict(value)
+    if snapshot_kind == "mutable_backend_snapshot":
+        return CurrentReadProvenance.from_dict(value)
+    raise ProvenanceMismatchError("unsupported provenance snapshot kind")
+
+
+class CurrentGraphReadView:
+    """Graph facade whose current-state reads share one backend snapshot."""
+
+    _MUTATING_METHOD_PREFIXES = (
+        "assert_",
+        "commit_",
+        "correct_",
+        "create_",
+        "delete_",
+        "ingest_",
+        "maintain_",
+        "migrate_",
+        "put_",
+        "reclaim_",
+        "rebuild_",
+        "retract_",
+        "run_",
+        "set_",
+        "transaction",
+        "update_",
+    )
+    _MUTATING_METHODS = {"close", "save_manifest"}
+
+    def __init__(self, graph, provenance: CurrentReadProvenance | None):
+        self._graph = graph
+        self.provenance = provenance
+
+    @property
+    def store(self):
+        return self._graph.store
+
+    def __getattr__(self, name):
+        if name in self._MUTATING_METHODS or name.startswith(self._MUTATING_METHOD_PREFIXES):
+            raise RuntimeError("current read view is read-only")
+        return getattr(self._graph, name)
+
+
 class _MaterializedStore:
     def __init__(self, nodes: dict[bytes, object], edges: dict[bytes, object]):
         self.nodes = nodes

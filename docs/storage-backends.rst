@@ -270,6 +270,39 @@ ingestion is the priority.
 The current ``LevelDBStore`` layout uses multiple physical LevelDB databases, so
 graph-level transactions are intentionally unsupported there.
 
+Mutable Read Snapshots
+----------------------
+
+``GraphDB.current_read_view()`` binds node and edge records, adjacency, indexes,
+and metadata to one read-only backend horizon. LMDB uses one MVCC transaction
+across all named databases and records its transaction ID plus a digest of every
+visible namespace in ``CurrentReadProvenance``. The digest distinguishes
+divergent copies that share a database UUID and transaction number; capturing
+provenance therefore performs a full store scan. Unqualified read-only Cypher
+automatically uses a provenance-free pinned view on capable backends and does
+not pay that hashing cost; pass ``read_snapshot=True`` to require the view or
+``False`` to opt out.
+
+.. code-block:: python
+
+   with graph_db.current_read_view(require_verifiable=True) as view:
+       nodes = view.nodes_by_label("Drug")
+       provenance = view.provenance
+
+Transactional ``PyRexStore`` pins point reads and iterators to one RocksDB
+transaction snapshot. A verifiable provenance record is available only when the
+installed PyRex binding exposes that snapshot's sequence number. Default
+non-transactional PyRex has no snapshot handle. ``LevelDBStore`` deliberately
+raises ``NotImplementedError`` for explicit snapshot requests because its node,
+edge, adjacency, index, and metadata databases cannot be captured at one atomic
+sequence.
+
+High-level non-temporal sampler builds automatically use a verifiable backend
+snapshot where available and persist its source provenance. Use
+``read_snapshot=True`` to require that behavior; unsupported or non-verifiable
+backends fail before output is built. Legacy ordinary reads and builds remain
+available on other backends unless the guarantee is explicitly requested.
+
 Immutable temporal-version commits use backend metadata rather than current
 node and edge records. LMDB and transaction-capable PyRex publish all records
 and the commit marker in the surrounding backend transaction. LevelDB and

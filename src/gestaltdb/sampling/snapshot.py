@@ -308,9 +308,9 @@ class SamplerSnapshot:
         if source_artifacts is not None:
             metadata["source_artifacts"] = cls._normalize_artifact_references(source_artifacts, path)
         if source_provenance is not None:
-            from gestaltdb.readview import ReadViewProvenance
+            from gestaltdb.readview import parse_read_provenance
 
-            metadata["source_provenance"] = ReadViewProvenance.from_dict(source_provenance).to_dict()
+            metadata["source_provenance"] = parse_read_provenance(source_provenance).to_dict()
 
         cls._write(path, metadata, node_ids, node_type_ids, edge_ids, relations, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, out, in_, incident, relation_out, relation_in, positive_triples)
         return cls.load(path)
@@ -878,9 +878,9 @@ class SamplerSnapshot:
         value = self.metadata.get("source_provenance")
         if value is None:
             return
-        from gestaltdb.readview import ReadViewProvenance
+        from gestaltdb.readview import parse_read_provenance
 
-        ReadViewProvenance.from_dict(value).verify_source(graph)
+        parse_read_provenance(value).verify_source(graph)
 
     def external_node_id(self, node_int) -> str:
         return str(self.external_node_ids[int(node_int)])
@@ -906,9 +906,14 @@ class SamplerSnapshot:
     def get_node(self, graph, node_int):
         provenance = self.metadata.get("source_provenance")
         if provenance is not None:
-            from gestaltdb.readview import ReadViewProvenance
+            from gestaltdb.readview import CurrentReadProvenance, parse_read_provenance
 
-            source = ReadViewProvenance.from_dict(provenance)
+            source = parse_read_provenance(provenance)
+            if isinstance(source, CurrentReadProvenance):
+                source.verify_source(graph)
+                with graph.current_read_view(capture_provenance=False) as view:
+                    source.verify_snapshot_store(view)
+                    return view.get_node(self.external_node_id(node_int).encode("utf-8"))
             source.verify_source(graph)
             version = graph.get_node_as_of(
                 self.external_node_id(node_int),
@@ -921,9 +926,14 @@ class SamplerSnapshot:
     def get_edge(self, graph, edge_int):
         provenance = self.metadata.get("source_provenance")
         if provenance is not None:
-            from gestaltdb.readview import ReadViewProvenance
+            from gestaltdb.readview import CurrentReadProvenance, parse_read_provenance
 
-            source = ReadViewProvenance.from_dict(provenance)
+            source = parse_read_provenance(provenance)
+            if isinstance(source, CurrentReadProvenance):
+                source.verify_source(graph)
+                with graph.current_read_view(capture_provenance=False) as view:
+                    source.verify_snapshot_store(view)
+                    return view.get_edge(self.external_edge_id(edge_int).encode("utf-8"))
             source.verify_source(graph)
             if self.temporal:
                 version = graph.get_edge_version(
@@ -1049,9 +1059,9 @@ class SamplerSnapshot:
             ):
                 raise ValueError("invalid temporal snapshot encoding")
         elif "source_provenance" in metadata:
-            from gestaltdb.readview import ReadViewProvenance
+            from gestaltdb.readview import parse_read_provenance
 
-            ReadViewProvenance.from_dict(metadata["source_provenance"])
+            parse_read_provenance(metadata["source_provenance"])
 
     def _validate_v2_arrays(self) -> None:
         node_count = self.num_nodes

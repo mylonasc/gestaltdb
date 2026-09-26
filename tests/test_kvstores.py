@@ -35,6 +35,7 @@ def test_kvstore_abstract_methods_raise_not_implemented():
         lambda: store.delete(b"k"),
         lambda: list(store.range_iter(b"a", b"z")),
         store.close,
+        store.read_snapshot,
         lambda: store.put_metadata(b"k", b"v"),
         lambda: store.get_metadata(b"k"),
         lambda: store.delete_metadata(b"k"),

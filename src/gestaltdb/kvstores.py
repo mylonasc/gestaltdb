@@ -1,11 +1,24 @@
 from typing import Optional, Dict, List, Union
 import base64
+from contextlib import contextmanager
+from dataclasses import dataclass
+import hashlib
 import os
 import struct
 
 
 _TYPED_ADJ_SEP = b"\x1f"
 MAX_PORTABLE_INDEX_KEY_BYTES = 511
+
+
+@dataclass(frozen=True)
+class ReadSnapshotIdentity:
+    """Backend identity for one pinned mutable-state read horizon."""
+
+    backend: str
+    kind: str
+    sequence: int | None
+    verifiable: bool
 
 
 def _checked_index_key(key: bytes) -> bytes:
@@ -176,6 +189,8 @@ class KVStore:
     """Abstract interface for a simple key-value store."""
 
     supports_transactions = False
+    supports_read_snapshots = False
+    supports_verifiable_read_snapshots = False
 
     # The basic K/V methods:
     def put(self, key: bytes, value: bytes):
@@ -201,6 +216,10 @@ class KVStore:
     def transaction(self, **options):
         """Return a transaction-bound store when supported."""
         raise NotImplementedError("transactions are not supported by this KVStore")
+
+    def read_snapshot(self):
+        """Return a context manager yielding a unified read-only store view."""
+        raise NotImplementedError("unified read snapshots are not supported by this KVStore")
 
     def put_metadata(self, key: bytes, value: bytes):
         """Store a metadata key/value pair."""
@@ -433,6 +452,8 @@ class LMDBStore(KVStore):
     """
 
     supports_transactions = True
+    supports_read_snapshots = True
+    supports_verifiable_read_snapshots = True
 
     def __init__(self, path='graph_lmdb', map_size=10_485_760, map_id = True, map_keys = False):
         """
@@ -499,6 +520,19 @@ class LMDBStore(KVStore):
     def transaction(self, write: bool = True, **options):
         """Open a transaction spanning all LMDB named databases."""
         return LMDBTransactionStore(self, write=write, **options)
+
+    def current_snapshot_sequence(self) -> int:
+        """Return the latest committed LMDB transaction ID."""
+        return self.env.info()["last_txnid"]
+
+    @contextmanager
+    def read_snapshot(self):
+        """Pin all named databases to one LMDB MVCC transaction."""
+        snapshot = LMDBReadSnapshotStore(self)
+        try:
+            yield snapshot
+        finally:
+            snapshot.close()
 
     def put_metadata(self, key: bytes, value: bytes):
         """Store a metadata key/value pair."""
@@ -1067,6 +1101,56 @@ class LMDBTransactionStore(KVStore):
                 break
 
 
+class LMDBReadSnapshotStore(LMDBTransactionStore):
+    """Read-only LMDB transaction with a verifiable MVCC identity."""
+
+    supports_transactions = False
+    supports_read_snapshots = False
+    supports_verifiable_read_snapshots = True
+
+    def __init__(self, parent: LMDBStore):
+        super().__init__(parent, write=False)
+        self.snapshot_identity = ReadSnapshotIdentity(
+            backend="lmdb",
+            kind="mvcc_transaction",
+            sequence=self.txn.id(),
+            verifiable=True,
+        )
+
+    def _read_only(self, *args, **kwargs):
+        self._check_active()
+        raise RuntimeError("read snapshot is read-only")
+
+    put = delete = put_metadata = delete_metadata = _read_only
+    put_node = delete_node = put_nodes_bulk = _read_only
+    put_edge = delete_edge = put_edges_bulk = _read_only
+    put_adjacency = put_adjacency_bulk = delete_adjacency = _read_only
+    put_typed_adjacency = put_typed_adjacency_bulk = delete_typed_adjacency = _read_only
+    put_index_entry = put_index_entries_bulk = delete_index_entry = _read_only
+    put_range_index_entry = put_range_index_entries_bulk = delete_range_index_entry = _read_only
+
+    def commit(self):
+        raise RuntimeError("read snapshot cannot be committed")
+
+    def state_sha256(self) -> str:
+        """Digest every mutable namespace visible at this MVCC horizon."""
+        self._check_active()
+        digest = hashlib.sha256()
+        databases = (
+            (b"nodes", self.parent.nodes_db),
+            (b"edges", self.parent.edges_db),
+            (b"adj", self.parent.adj_db),
+            (b"typed_adj", self.parent.typed_adj_db),
+            (b"index", self.parent.index_db),
+            (b"metadata", self.parent.metadata_db),
+        )
+        for namespace, database in databases:
+            cursor = self.txn.cursor(db=database)
+            for key, value in cursor:
+                _update_snapshot_digest(digest, namespace, key, value)
+        return digest.hexdigest()
+
+
 # =========================================
 # LevelDB Implementation
 # =========================================
@@ -1378,6 +1462,12 @@ class LevelDBStore(KVStore):
         self.db_edges.close()
         self.db_nodes.close()
 
+    def read_snapshot(self):
+        raise NotImplementedError(
+            "LevelDBStore cannot provide a unified snapshot across its independent "
+            "node, edge, adjacency, index, and metadata databases"
+        )
+
 
 class PyRexStore(KVStore):
     """RocksDB implementation backed by ``pyrex-rocksdb``.
@@ -1440,9 +1530,12 @@ class PyRexStore(KVStore):
             transaction_db_options = transaction_db_options or pyrex.TransactionDBOptions()
             self.db = pyrex.TransactionDB(path, options, transaction_db_options)
             self.supports_transactions = True
+            self.supports_read_snapshots = True
         else:
             self.db = pyrex.PyRocksDB(path, options)
             self.supports_transactions = False
+            self.supports_read_snapshots = False
+        self.supports_verifiable_read_snapshots = False
         self.write_options = pyrex.WriteOptions()
         self.write_options.disable_wal = disable_wal
 
@@ -1453,6 +1546,47 @@ class PyRexStore(KVStore):
         transaction_options = transaction_options or self._pyrex.TransactionOptions()
         txn = self.db.begin_transaction(self.write_options, transaction_options)
         return PyRexTransactionStore(self, txn)
+
+    def current_snapshot_sequence(self) -> int | None:
+        for name in ("latest_sequence_number", "get_latest_sequence_number"):
+            value = getattr(self.db, name, None)
+            if value is None:
+                continue
+            value = value() if callable(value) else value
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                return value
+        return None
+
+    @contextmanager
+    def read_snapshot(self):
+        """Pin reads to one RocksDB transaction snapshot when available."""
+        if not self.transactional:
+            raise NotImplementedError(
+                "PyRexStore read snapshots require PyRexStore(transactional=True)"
+            )
+        options = self._pyrex.TransactionOptions()
+        option_snapshot = hasattr(options, "set_snapshot")
+        if option_snapshot:
+            options.set_snapshot = True
+        txn = self.db.begin_transaction(self.write_options, options)
+        try:
+            if not option_snapshot:
+                setter = getattr(txn, "set_snapshot", None)
+                if setter is None:
+                    raise NotImplementedError(
+                        "the installed PyRex runtime cannot pin transaction snapshots"
+                    )
+                setter()
+            sequence = _pyrex_snapshot_sequence(txn)
+            snapshot = PyRexReadSnapshotStore(self, txn, sequence=sequence)
+            try:
+                yield snapshot
+            finally:
+                snapshot.close()
+        except Exception:
+            if txn.is_active:
+                txn.rollback()
+            raise
 
     def _key(self, prefix: bytes, key: bytes) -> bytes:
         """Build a prefixed RocksDB key."""
@@ -1895,6 +2029,68 @@ class PyRexTransactionStore(PyRexStore):
         for key, value in reversed(values):
             if key <= end_key:
                 yield key, value
+
+
+def _pyrex_snapshot_sequence(txn) -> int | None:
+    """Return a bound RocksDB snapshot sequence when exposed by PyRex."""
+    for name in (
+        "snapshot_sequence_number",
+        "get_snapshot_sequence_number",
+        "snapshot_sequence",
+        "get_snapshot_sequence",
+    ):
+        value = getattr(txn, name, None)
+        if value is None:
+            continue
+        value = value() if callable(value) else value
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            return value
+    return None
+
+
+def _update_snapshot_digest(digest, namespace: bytes, key: bytes, value: bytes) -> None:
+    for part in (namespace, key, value):
+        digest.update(len(part).to_bytes(8, "big"))
+        digest.update(part)
+
+
+class PyRexReadSnapshotStore(PyRexTransactionStore):
+    """Read-only transaction-bound PyRex store."""
+
+    supports_transactions = False
+    supports_read_snapshots = False
+
+    def __init__(self, parent: PyRexStore, txn, *, sequence: int | None):
+        super().__init__(parent, txn)
+        self.snapshot_identity = ReadSnapshotIdentity(
+            backend="pyrex",
+            kind="rocksdb_transaction_snapshot",
+            sequence=sequence,
+            verifiable=sequence is not None,
+        )
+        self.supports_verifiable_read_snapshots = sequence is not None
+
+    def _read_only(self, *args, **kwargs):
+        self._check_active()
+        raise RuntimeError("read snapshot is read-only")
+
+    put = delete = put_metadata = delete_metadata = _read_only
+    put_node = delete_node = put_nodes_bulk = _read_only
+    put_edge = delete_edge = put_edges_bulk = _read_only
+    put_adjacency = put_adjacency_bulk = delete_adjacency = _read_only
+    put_typed_adjacency = put_typed_adjacency_bulk = delete_typed_adjacency = _read_only
+    put_index_entry = put_index_entries_bulk = delete_index_entry = _read_only
+    put_range_index_entry = put_range_index_entries_bulk = delete_range_index_entry = _read_only
+
+    def commit(self):
+        raise RuntimeError("read snapshot cannot be committed")
+
+    def state_sha256(self) -> str:
+        self._check_active()
+        digest = hashlib.sha256()
+        for key, value in self._iter_key_values_from(b""):
+            _update_snapshot_digest(digest, b"rocksdb", key, value)
+        return digest.hexdigest()
 
 class SimpleIndexCounterKVStore:
     """This is to help with lowering storage requirements 

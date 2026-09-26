@@ -43,6 +43,7 @@ from gestaltdb import TemporalContext, TemporalInstant, TemporalInterval
 from gestaltdb import TemporalDate, TemporalDuration, TemporalLocalDateTime
 from gestaltdb import TemporalLocalTime, TemporalTime
 from gestaltdb import GraphReadView, ReadViewProvenance
+from gestaltdb import CurrentGraphReadView, CurrentReadProvenance
 from gestaltdb import Claim, ClaimObjectKind, ClaimPolarity, ClaimStatus
 from gestaltdb import AccessibilityKind, ModalExpression, ModalOperator
 from gestaltdb import ModalEntailmentResult, ModalEvaluationLimitError
@@ -66,6 +67,7 @@ Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes 
 - Filesystem-backed temporal writers use a durable sidecar sequence and database-wide lock. `list_temporal_orphans()` audits gaps/incomplete publications; `reclaim_temporal_orphans(through_commit=...)` removes only validated unmarked artifacts and never reuses commit IDs.
 - Deprecated `TimeIndexedEdge` records are mutable legacy data, not temporal history. Back up and quiesce the database, run `migrate_time_indexed_edges(delete_legacy=False)`, validate, then rerun with deletion; changed or corrupt legacy input fails closed.
 - `graph.read_view(valid_time=...)` pins temporal reads and point-materialized sampler builds to one contiguous visible commit prefix. Its authenticated `ReadViewProvenance` verifies stable database, backend, serializer, commit, and visibility identity during snapshot hydration.
+- `graph.current_read_view()` pins mutable records, adjacency, metadata, and indexes to one backend snapshot. LMDB provenance includes its transaction sequence plus a full-state digest; transactional PyRex pins reads but provenance depends on runtime sequence support; the multi-database LevelDB layout fails explicit snapshot requests closed.
 - `assert_claim`, `correct_claim`, and `retract_claim` append serializer-neutral sourced claims to temporal history. Deterministic statement IDs identify propositions; claim IDs additionally include polarity, agent, source, and world. `iter_claims_as_of` and `claim_status` provide indexed bitemporal lookup and open-world `supported`/`refuted`/`both`/`unknown` semantics.
 - `create_rule` appends validated safe positive Horn-rule versions. `run_rules(as_of=...)` performs bounded semi-naive evaluation over positive entity claims in a shared world, intersects premise validity, and persists deduplicated conclusions with rule and premise version justifications. Limit failures publish no partial derivations.
 - `maintain_truth(as_of=...)` incrementally reconciles derived claims, retracting a conclusion only after its final independent support disappears. `explain_claim` returns a bounded finite graph of exact historical claim/rule versions; retries after interrupted dependency-index publication are idempotent.
@@ -145,6 +147,8 @@ There are two sampling layers:
 - `SamplerSnapshot` plus `SamplerEngine` is array-native and optimized for ML training. It uses compact integer node, edge, and relation IDs.
 
 `SamplerSnapshot.build(graph, output_path, ...)` and `graph.build_sampler_snapshot(output_path, ...)` persist immutable `.npy` arrays and metadata. `SamplerEngine.load(path, mode="ram"|"memmap", seed=...)` loads the arrays for neighbor, multihop, subgraph, positive-triple, and hard-negative sampling.
+
+High-level non-temporal snapshot builds automatically use authenticated mutable-state snapshots when the backend exposes a verifiable identity. Pass `read_snapshot=True` to require this guarantee or `False` to opt out; unsupported requests fail before building.
 
 `graph.build_sampler_snapshot(output_path, temporal=True, system_time=..., time_bucket="day")` builds format-v2 temporal history from one authenticated read view. It persists edge-version validity and commit/system provenance plus source/relation/start-time indexes. V2 loads authenticate the completion manifest and every array; legacy v1 snapshots remain loadable without temporal guarantees. `SamplerEngine` accepts `TemporalContext` point/window filters, `overlap`/`contained` window policies, and monotonic valid-start causal policies; filters run before fanout and temporal result arrays stay aligned with sampled edges.
 

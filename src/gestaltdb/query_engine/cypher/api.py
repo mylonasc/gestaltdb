@@ -114,7 +114,13 @@ def plan(query: str) -> LogicalPlan:
     return plan_staged_query(canonical)
 
 
-def execute(graph, query: str, parameters: dict[str, object] | None = None) -> QueryResult:
+def execute(
+    graph,
+    query: str,
+    parameters: dict[str, object] | None = None,
+    *,
+    read_snapshot: bool | None = None,
+) -> QueryResult:
     """Execute a supported Cypher query against a ``GraphDB`` instance.
 
     Args:
@@ -130,7 +136,18 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
     from .write import execute_ddl, transaction_supported
 
     canonical = _parse_ast(query)
+    if read_snapshot is True and isinstance(canonical, (CreateConstraint, DropConstraint)):
+        raise ValueError("read_snapshot=True cannot be used with Cypher writes")
     if isinstance(canonical, (CreateConstraint, DropConstraint, ShowConstraints, ShowIndexes)):
+        use_snapshot = read_snapshot is True or (
+            read_snapshot is None
+            and isinstance(canonical, (ShowConstraints, ShowIndexes))
+            and getattr(getattr(graph, "store", None), "supports_read_snapshots", False)
+        )
+        if use_snapshot:
+            with graph.current_read_view(capture_provenance=False) as current_view:
+                columns, records = execute_ddl(current_view, canonical)
+            return QueryResult(columns=columns, records=records)
         columns, records = execute_ddl(graph, canonical)
         return QueryResult(columns=columns, records=records)
     if isinstance(canonical, (SampleTypedPathsCall, EntailsCall)):
@@ -139,6 +156,8 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
         logical_plan = plan_union_query(canonical)
     else:
         logical_plan = plan_staged_query(canonical)
+    if read_snapshot is True and _plan_has_writes(logical_plan):
+        raise ValueError("read_snapshot=True cannot be used with Cypher writes")
     qualifiers = _temporal_qualifiers(canonical)
     if qualifiers:
         from gestaltdb.temporal import TemporalInstant
@@ -172,6 +191,18 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
             records = execute_plan(
                 logical_plan,
                 QueryContext(graph=tx_graph, parameters=parameters or {}),
+            )
+    elif not _plan_has_writes(logical_plan) and (
+        read_snapshot is True
+        or (
+            read_snapshot is None
+            and getattr(getattr(graph, "store", None), "supports_read_snapshots", False)
+        )
+    ):
+        with graph.current_read_view(capture_provenance=False) as current_view:
+            records = execute_plan(
+                logical_plan,
+                QueryContext(graph=current_view, parameters=parameters or {}),
             )
     else:
         records = execute_plan(

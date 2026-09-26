@@ -4,6 +4,7 @@ from __future__ import annotations
 import pickle
 import json
 import hashlib
+import copy
 import os
 import random
 import shutil
@@ -13,7 +14,7 @@ import time
 import uuid
 import base64
 from collections.abc import Mapping
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Union
@@ -676,6 +677,7 @@ class GraphDB:
             self.serializer
         )
         self._typed_adjacency_count_cache: dict[tuple[str, bytes, str], int] = {}
+        self._verified_current_provenance: dict[str, str] = {}
         persisted_node_indexes = self._load_property_index_metadata(_NODE_PROPERTY_INDEXES_METADATA_KEY)
         persisted_edge_indexes = self._load_property_index_metadata(_EDGE_PROPERTY_INDEXES_METADATA_KEY)
         self.indexed_node_properties = set(persisted_node_indexes).union(indexed_node_properties or [])
@@ -744,9 +746,9 @@ class GraphDB:
             graph = cls(
                 store,
                 serializer_cls(),
-                indexed_node_properties=graph_metadata.get("indexed_node_properties") or [],
-                indexed_edge_properties=graph_metadata.get("indexed_edge_properties") or [],
             )
+            graph.indexed_node_properties.update(graph_metadata.get("indexed_node_properties") or [])
+            graph.indexed_edge_properties.update(graph_metadata.get("indexed_edge_properties") or [])
         except Exception:
             store.close()
             raise
@@ -1101,6 +1103,9 @@ class GraphDB:
         Examples:
             >>> graph_db.put_node(Node(node_id="drug-1"))  # doctest: +SKIP
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.put_node(node)
         old_node = self.get_node(node.get_id_bytes)
         if old_node is not None:
             self._delete_node_indexes(old_node)
@@ -1137,6 +1142,9 @@ class GraphDB:
         Examples:
             >>> graph_db.delete_node(b"drug-1")  # doctest: +SKIP
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.delete_node(node_id)
         node_id = self.node_key_to_bytes(node_id)
         incident_edge_ids = []
         for edge_id in self.store.get_edge_keys_generator():
@@ -1230,6 +1238,11 @@ class GraphDB:
         batch_size: int = _INDEX_REBUILD_BATCH_SIZE,
     ) -> dict[str, int]:
         """Rebuild requested node secondary indexes in one node scan."""
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.rebuild_node_indexes(
+                    labels=labels, properties=properties, batch_size=batch_size
+                )
         property_names = sorted(self.indexed_node_properties if properties is None else set(properties))
         entries = []
         range_entries = []
@@ -1292,6 +1305,11 @@ class GraphDB:
             >>> graph_db.create_node_property_index("kind")  # doctest: +SKIP
             10
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                rebuilt = tx.create_node_property_index(property_name)
+            self.indexed_node_properties.add(property_name)
+            return rebuilt
         self.indexed_node_properties.add(property_name)
         rebuilt = self.rebuild_node_property_index(property_name)
         self._persist_property_index_metadata(_NODE_PROPERTY_INDEXES_METADATA_KEY, self.indexed_node_properties)
@@ -1546,6 +1564,9 @@ class GraphDB:
         Examples:
             >>> graph_db.put_edge(Edge(source="drug-1", target="protein-1"))  # doctest: +SKIP
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.put_edge(edge, update_adjacency=update_adjacency)
         # edge_dict = edge.to_dict()
         old_edge = self.get_edge(edge.get_id_bytes)
         if old_edge is not None:
@@ -1683,6 +1704,11 @@ class GraphDB:
         batch_size: int = _INDEX_REBUILD_BATCH_SIZE,
     ) -> dict[str, int]:
         """Rebuild requested edge secondary indexes in one edge scan."""
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.rebuild_edge_indexes(
+                    edge_types=edge_types, properties=properties, batch_size=batch_size
+                )
         property_names = sorted(self.indexed_edge_properties if properties is None else set(properties))
         entries = []
         range_entries = []
@@ -1758,6 +1784,11 @@ class GraphDB:
             >>> graph_db.create_edge_property_index("score")  # doctest: +SKIP
             7
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                rebuilt = tx.create_edge_property_index(property_name)
+            self.indexed_edge_properties.add(property_name)
+            return rebuilt
         self.indexed_edge_properties.add(property_name)
         rebuilt = self.rebuild_edge_property_index(property_name)
         self._persist_property_index_metadata(_EDGE_PROPERTY_INDEXES_METADATA_KEY, self.indexed_edge_properties)
@@ -1981,6 +2012,7 @@ class GraphDB:
         source_db_reference: bool = True,
         source_db_path=None,
         source_db_path_mode: str = "relative",
+        read_snapshot: bool | None = None,
         **kwargs,
     ):
         """Build a read-optimized array sampler snapshot from this graph.
@@ -1991,6 +2023,8 @@ class GraphDB:
             system_time: Optional system-time horizon for a temporal build.
             time_bucket: Temporal candidate-index bucket policy: ``None``,
                 ``"none"``, ``"hour"``, or ``"day"``.
+            read_snapshot: Require or disable a verifiable mutable-state backend
+                snapshot. The default uses one automatically when supported.
             **kwargs: Options forwarded to ``SamplerSnapshot.build``.
 
         Returns:
@@ -2018,7 +2052,68 @@ class GraphDB:
                 )
         if system_time is not None or time_bucket is not None:
             raise ValueError("system_time and time_bucket require temporal=True")
+        use_snapshot = (
+            bool(getattr(self.store, "supports_read_snapshots", False))
+            if read_snapshot is None
+            else read_snapshot
+        )
+        if use_snapshot:
+            if "source_provenance" in kwargs:
+                raise ValueError("source_provenance is captured by read_snapshot")
+            stack = ExitStack()
+            try:
+                view = stack.enter_context(self.current_read_view(require_verifiable=True))
+            except NotImplementedError:
+                stack.close()
+                if read_snapshot is True:
+                    raise
+            else:
+                with stack:
+                    kwargs["source_provenance"] = view.provenance.to_dict()
+                    return SamplerSnapshot.build(view, output_path, **kwargs)
         return SamplerSnapshot.build(self, output_path, **kwargs)
+
+    @contextmanager
+    def current_read_view(
+        self,
+        *,
+        require_verifiable: bool = False,
+        capture_provenance: bool = True,
+    ):
+        """Yield current graph reads pinned to one backend snapshot."""
+        from .readview import CurrentGraphReadView, CurrentReadProvenance
+
+        database_id = self.database_id
+        manifest = self.manifest
+        with self.store.read_snapshot() as snapshot_store:
+            identity = snapshot_store.snapshot_identity
+            provenance = None
+            if capture_provenance and identity.verifiable and identity.sequence is not None:
+                provenance = CurrentReadProvenance(
+                    database_id=database_id,
+                    snapshot_sequence=identity.sequence,
+                    backend_name=manifest["backend"]["name"],
+                    backend_layout_version=manifest["backend"]["layout_version"],
+                    serializer_name=manifest["serializer"]["name"],
+                    serializer_format_version=manifest["serializer"]["format_version"],
+                    backend_snapshot_kind=identity.kind,
+                    state_sha256=snapshot_store.state_sha256(),
+                )
+            if require_verifiable and provenance is None:
+                raise NotImplementedError(
+                    "the configured backend can pin reads but cannot expose a verifiable snapshot identity"
+                )
+            snapshot_graph = copy.copy(self)
+            snapshot_graph.store = snapshot_store
+            snapshot_graph.indexed_node_properties = set(
+                snapshot_graph._load_property_index_metadata(_NODE_PROPERTY_INDEXES_METADATA_KEY)
+            )
+            snapshot_graph.indexed_edge_properties = set(
+                snapshot_graph._load_property_index_metadata(_EDGE_PROPERTY_INDEXES_METADATA_KEY)
+            )
+            snapshot_graph.node_constraints = snapshot_graph._load_node_constraint_metadata()
+            snapshot_graph._typed_adjacency_count_cache = {}
+            yield CurrentGraphReadView(snapshot_graph, provenance)
 
     @contextmanager
     def read_view(self, *, valid_time, system_time=None, through_commit=None):
@@ -2298,6 +2393,9 @@ class GraphDB:
         Examples:
             >>> graph_db.rebuild_typed_adjacency()  # doctest: +SKIP
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.rebuild_typed_adjacency()
         rebuilt = 0
         self._typed_adjacency_count_cache.clear()
         for edge_id in self.store.get_edge_keys_generator():
@@ -2384,6 +2482,9 @@ class GraphDB:
         Examples:
             >>> graph_db.put_nodes([Node(node_id="drug-1", labels=["Drug"])])  # doctest: +SKIP
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.put_nodes(nodes)
         to_store = {}
         index_entries = []
         range_entries = []
@@ -2460,6 +2561,18 @@ class GraphDB:
         Example:
             >>> graph.ingest_polars(nodes, edges, node_property_columns=["kind"], edge_property_columns=["score"])  # doctest: +SKIP
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.ingest_polars(
+                    node_df, edge_df,
+                    ingestion_mode=ingestion_mode, index_mode=index_mode,
+                    node_id=node_id, node_value=node_value, labels=labels,
+                    node_property_columns=node_property_columns,
+                    edge_id=edge_id, source=source, target=target,
+                    edge_type=edge_type, edge_value=edge_value,
+                    edge_property_columns=edge_property_columns,
+                    native=native, chunk_size=chunk_size, progress=progress,
+                )
         mode = self._coerce_columnar_ingestion_mode(ingestion_mode)
         low_level_index_mode = self._low_level_index_mode(index_mode)
         if mode == ColumnarIngestionMode.ENTITY_COLUMNS.value:
@@ -2542,6 +2655,15 @@ class GraphDB:
         Example:
             >>> graph.ingest_arrow(node_ids, edge_ids, sources, targets, edge_types, node_properties={"kind": kinds})  # doctest: +SKIP
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.ingest_arrow(
+                    node_ids, edge_ids, sources, targets, edge_types,
+                    ingestion_mode=ingestion_mode, index_mode=index_mode,
+                    node_values=node_values, edge_values=edge_values, labels=labels,
+                    node_properties=node_properties, edge_properties=edge_properties,
+                    native=native, chunk_size=chunk_size, progress=progress,
+                )
         mode = self._coerce_columnar_ingestion_mode(ingestion_mode)
         low_level_index_mode = self._low_level_index_mode(index_mode)
         if mode == ColumnarIngestionMode.ENTITY_COLUMNS.value:
@@ -2622,6 +2744,12 @@ class GraphDB:
         Returns:
             Number of ingested nodes.
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.ingest_nodes_arrow(
+                    node_ids, node_values, native=native, chunk_size=chunk_size,
+                    append_only=append_only, index_mode=index_mode, progress=progress,
+                )
         self._validate_index_mode(index_mode)
         index_mode = index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode
         node_list = NodeList.from_arrow(node_ids, node_values)
@@ -2657,6 +2785,13 @@ class GraphDB:
         The ``node_value`` column is required and must contain serialized node
         payload bytes compatible with the current ``GraphDB`` serializer.
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.ingest_nodes_polars(
+                    df, node_id=node_id, node_value=node_value, native=native,
+                    chunk_size=chunk_size, append_only=append_only,
+                    index_mode=index_mode, progress=progress,
+                )
         try:
             import polars as pl
         except ImportError as exc:
@@ -3027,6 +3162,9 @@ class GraphDB:
         of both source and target nodes. If either node doesn't exist,
         we skip gracefully.
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.delete_edge(edge_id, edge_key_serializer=edge_key_serializer)
         e = self.get_edge(edge_id)
         if not e:
             return  # Edge not found
@@ -3135,6 +3273,9 @@ class GraphDB:
         Examples:
             >>> graph_db.put_edges_bulk([Edge(source="drug-1", target="protein-1")], check_existing=False)  # doctest: +SKIP
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.put_edges_bulk(edges, check_existing=check_existing)
         # 1) Build a dict[edge_id, bytes] to store all edges in one go
         edge_dict = {}
         typed_adjacency_records = []
@@ -3274,6 +3415,13 @@ class GraphDB:
         Returns:
             Number of ingested edges.
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.ingest_edges_arrow(
+                    edge_ids, sources, targets, edge_types, edge_values,
+                    append_only=append_only, native=native, chunk_size=chunk_size,
+                    index_mode=index_mode, progress=progress,
+                )
         if not append_only:
             raise NotImplementedError("columnar edge ingestion currently requires append_only=True")
         self._validate_index_mode(index_mode)
@@ -3321,6 +3469,14 @@ class GraphDB:
         The ``edge_value`` column is required and must contain serialized edge
         payload bytes compatible with the current ``GraphDB`` serializer.
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.ingest_edges_polars(
+                    df, edge_id=edge_id, source=source, target=target,
+                    edge_type=edge_type, edge_value=edge_value,
+                    append_only=append_only, native=native, chunk_size=chunk_size,
+                    index_mode=index_mode, progress=progress,
+                )
         if not append_only:
             raise NotImplementedError("columnar edge ingestion currently requires append_only=True")
         try:
@@ -6296,7 +6452,13 @@ class GraphDB:
                 f"{commit.commit_id:016x}".encode("ascii"),
             )
 
-    def query(self, cypher: str, parameters: Optional[dict[str, object]] = None):
+    def query(
+        self,
+        cypher: str,
+        parameters: Optional[dict[str, object]] = None,
+        *,
+        read_snapshot: bool | None = None,
+    ):
         """Execute a supported Cypher query.
 
         Read queries run directly; queries with ``CREATE``/``SET``/``REMOVE``
@@ -6307,6 +6469,8 @@ class GraphDB:
             cypher: Query text in the supported GestaltDB Cypher subset.
             parameters: Optional Cypher parameter values keyed without the
                 leading ``$``.
+            read_snapshot: Require or disable a unified mutable-state read
+                snapshot. The default uses one automatically when supported.
 
         Returns:
             ``gestaltdb.QueryResult`` containing projected records.
@@ -6317,7 +6481,7 @@ class GraphDB:
         """
         from .query_engine.cypher import execute
 
-        return execute(self, cypher, parameters=parameters)
+        return execute(self, cypher, parameters=parameters, read_snapshot=read_snapshot)
 
     def visualize(self, cypher=None, *, seeds=None, pattern=None, parameters=None, options=None, rng=None):
         """Build an offline interactive visualization of this graph.
@@ -6356,6 +6520,12 @@ class GraphDB:
             return visualize_sample(self, seeds, pattern, rng=rng, options=options)
         raise ValueError("visualize() requires cypher= or seeds=/pattern=")
 
+    def _implicit_transaction_required(self) -> bool:
+        return bool(
+            getattr(self.store, "supports_transactions", False)
+            and not self._temporal_transaction_bound
+        )
+
     @contextmanager
     def transaction(self, **options):
         """Run graph operations in a backend transaction when supported.
@@ -6383,6 +6553,7 @@ class GraphDB:
                 raise
             else:
                 tx_store.commit()
+                self._typed_adjacency_count_cache.clear()
 
     def close(self):
         """Close the underlying key-value store.

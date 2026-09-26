@@ -393,10 +393,10 @@ Current Limits
 --------------
 
 Read views cover immutable temporal history on every backend. Bitemporal Cypher
-``MATCH`` reads use these views, while unqualified Cypher retains mutable
-current-state behavior. Read views do not make mutable current-state records
-snapshot-safe on backends without a unified read snapshot. Temporal property
-indexes and temporal writes through Cypher are not implemented yet. Temporal
+``MATCH`` reads use these views. Unqualified Cypher automatically uses a unified
+mutable-state read snapshot on capable backends, while explicit snapshot requests
+fail closed elsewhere. Mutable and temporal provenance remain distinct. Temporal
+properties persist through Cypher and configured exact/range indexes. Temporal
 sampler snapshots support point/window traversal, causal paths, node
 availability, and time-aware hard-negative rejection. Claim, rule, and
 explanation Cypher syntax is not implemented. Marker-backed data that fails hash or

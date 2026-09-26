@@ -8,7 +8,8 @@ Read this when creating a durable database directory, reopening a stored DB, sel
 - Reopen manifest-backed stores with `GraphDB.open(path)` instead of reconstructing the backend manually.
 - Inspect backend and serializer choices with `graph.manifest`.
 - `graph.database_id` is the stable persisted source identity; use `graph.read_view(valid_time=...)` when several temporal reads or a point snapshot must share one visible commit.
-- Read-view provenance verifies database/backend/serializer/commit identity. It covers immutable temporal history, not mutable current-state scans or ordinary Cypher.
+- `graph.current_read_view()` pins mutable entities, adjacency, and indexes. LMDB provides verifiable MVCC provenance; transactional PyRex can pin reads; LevelDB and default PyRex reject explicit snapshot requests.
+- Read-only Cypher uses a snapshot automatically where supported. Pass `read_snapshot=True` to require one or `False` to opt out.
 - Inspect persisted property index definitions with `graph.index_statistics()` or `graph.indexed_node_properties` and `graph.indexed_edge_properties`.
 - Inspect node and edge properties from retrieved `Node.properties` and `Edge.properties`; GestaltDB does not expose a schema catalog for all property names.
 - For RocksDB-backed workloads, use `backend="pyrex"` or `PyRexStore`; install `pyrex-rocksdb` when `PyRexStore` reports a missing optional dependency.

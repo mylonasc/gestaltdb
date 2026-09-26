@@ -2,7 +2,7 @@ Cypher Queries
 ==============
 
 GestaltDB exposes an expanding openCypher subset through
-``GraphDB.query(cypher, parameters=None)``. The grammar-based frontend supports
+``GraphDB.query(cypher, parameters=None, read_snapshot=None)``. The grammar-based frontend supports
 comments, Unicode and backtick-escaped names, source-located syntax errors, and
 standard expression precedence. Execution covers indexed node and relationship
 scans, typed relationship expansion, filtering, ordering, chained ``MATCH``
@@ -10,6 +10,12 @@ clauses, writes, and a persisted node-constraint catalog.
 
 Relationship types come from ``edge.properties["type"]``. Node labels are stored
 on ``Node(labels=[...])``.
+
+Read-only queries automatically use one unified mutable-state backend snapshot
+when supported, preventing index scans, entity hydration, and traversal from
+mixing horizons. Pass ``read_snapshot=True`` to require the guarantee or
+``False`` to opt out. LMDB supports verifiable snapshots; transactional PyRex
+supports pinned reads; LevelDB and default PyRex fail explicit requests closed.
 
 Basic Result Shape
 ------------------

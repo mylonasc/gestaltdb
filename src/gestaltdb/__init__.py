@@ -85,7 +85,13 @@ from .modal import (
 )
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .query_engine.cypher import QueryResult
-from .readview import GraphReadView, ProvenanceMismatchError, ReadViewProvenance
+from .readview import (
+    CurrentGraphReadView,
+    CurrentReadProvenance,
+    GraphReadView,
+    ProvenanceMismatchError,
+    ReadViewProvenance,
+)
 from .rules import (
     ClaimExplanation,
     ExplanationEdge,
@@ -129,6 +135,8 @@ __all__ = [
     "NodeList",
     "QueryResult",
     "GraphReadView",
+    "CurrentGraphReadView",
+    "CurrentReadProvenance",
     "ProvenanceMismatchError",
     "ReadViewProvenance",
     "RuleAtom",

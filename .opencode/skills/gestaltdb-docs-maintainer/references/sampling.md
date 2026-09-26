@@ -41,6 +41,7 @@ Engineered for zero-overhead GNN data loaders (PyTorch Geometric, DGL, TensorFlo
 ### Building a Snapshot
 Build arrays directly from an active database handle:
 - `snapshot = graph.build_sampler_snapshot(output_dir)` (or `SamplerSnapshot.build(graph, output_dir)`)
+- High-level non-temporal builds automatically pin a verifiable mutable backend snapshot where supported. Use `read_snapshot=True` to require this or `False` to opt out; direct `SamplerSnapshot.build` remains a lower-level unpinned API.
 - `snapshot = graph.build_sampler_snapshot(output_dir, temporal=True, system_time=known_at, time_bucket="day")` captures temporal history through one authenticated system horizon.
 
 This generates binary `.npy` CSR-style arrays (`row_ptr`, `col_idx`, `relations`, `edge_ids`, `features`, metadata).

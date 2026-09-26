@@ -509,6 +509,13 @@ with TemporaryDirectory() as tmpdir:
 
 Use `SamplerEngine.load(path, mode="memmap")` for large snapshots that should be memory mapped instead of eagerly loaded into RAM.
 
+On LMDB, high-level non-temporal builds automatically pin one mutable MVCC
+horizon and record `CurrentReadProvenance`. Pass `read_snapshot=True` to require
+that guarantee; LevelDB and default non-transactional PyRex reject explicit
+requests because they cannot expose one unified verifiable source snapshot.
+Read-only Cypher accepts the same option, and `graph.current_read_view()` keeps
+several direct graph reads on one horizon.
+
 ## Visualize Graphs
 
 GestaltDB ships offline interactive visualization: the D3.js + React front
