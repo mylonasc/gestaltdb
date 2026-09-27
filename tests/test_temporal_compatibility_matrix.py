@@ -29,7 +29,15 @@ SERIALIZERS = [
     pytest.param("pickle", PickleSerializer),
     pytest.param("json", JSONSerializer),
     pytest.param("messagepack", MessagePackSerializer, marks=pytest.mark.skipif(importlib.util.find_spec("msgpack") is None, reason="msgpack not installed")),
-    pytest.param("protobuf", ProtobufSerializer, marks=pytest.mark.skipif(importlib.util.find_spec("google.protobuf") is None, reason="protobuf not installed")),
+    pytest.param(
+        "protobuf",
+        ProtobufSerializer,
+        marks=pytest.mark.skipif(
+            importlib.util.find_spec("google") is None
+            or importlib.util.find_spec("google.protobuf") is None,
+            reason="protobuf not installed",
+        ),
+    ),
 ]
 
 
