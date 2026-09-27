@@ -61,6 +61,7 @@ Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes 
 - `GraphDB.create(path, backend="pyrex", serializer="json", ...)` creates a self-describing database directory with `gestaltdb_manifest.json`; `GraphDB.open(path)` reopens it.
 - Backends implement the `KVStore` interface. Current backends are `LMDBStore`, `LevelDBStore`, and `PyRexStore`.
 - Serializers convert graph entities to bytes. Current serializers are `PickleSerializer`, `JSONSerializer`, `MessagePackSerializer`, and `ProtobufSerializer`.
+- KV backends and binary serializers are independent optional extras. Combine them additively, for example `gestaltdb[leveldb,msgpack]` or `gestaltdb[lmdb,protobuf]`; Pickle and JSON need no serializer extra.
 - `TemporalInstant`, `TemporalInterval`, and `TemporalContext` define timezone-aware UTC-microsecond instants, half-open `[start, end)` intervals, and point/window matching.
 - Cypher temporal expressions return immutable `TemporalDate`, `TemporalTime`, `TemporalLocalTime`, `TemporalLocalDateTime`, `TemporalInstant`, and `TemporalDuration` values. They persist recursively in node and edge properties across every serializer and participate in configured exact/range property indexes.
 - `put_node_version`, `put_edge_version`, correction/retraction helpers, and `commit_versions` append immutable temporal history. `get_node_as_of`, `get_edge_as_of`, and `iter_edges_as_of` use derived temporal indexes; deferred temporal writes require `rebuild_temporal_indexes()` or `rebuild_deferred_indexes()`. Current graph records, Cypher views, and sampler snapshots remain separate.
@@ -75,6 +76,9 @@ Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes 
 
 ## Backend Guidance
 
+- A base install has no embedded KV backend. Install `lmdb`, `leveldb`, or `rocksdb`, or use the `backends` bundle.
+- Parameterless `GraphDB.create(path)` retains the `pyrex` compatibility default and requires the `rocksdb` extra; never add silent backend fallback.
+- `GraphDB.create/open` preflight selected optional dependencies before opening or replacing storage and report the required extra when one is unavailable.
 - Use `LevelDBStore` for small local graphs, tests, and examples when LevelDB/plyvel is available.
 - Use `LMDBStore` when LMDB's embedded storage model is desirable and `map_size` can be chosen ahead of time.
 - Use `PyRexStore` for RocksDB-backed bulk ingestion and append-heavy workloads, especially with Arrow/Polars columnar ingestion.

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.10.2
+
+- Hardened the repository for the OpenSSF Scorecard: least-privilege workflow token permissions, commit-SHA-pinned GitHub Actions, `SECURITY.md` with a private vulnerability reporting process, Dependabot for GitHub Actions and Python dependencies, CodeQL static analysis on push/PR/weekly, Sigstore-signed release distributions with SLSA-style build attestations attached to GitHub releases, `CODEOWNERS`, and ClusterFuzzLite continuous fuzzing of the JSON/MessagePack deserializers.
+
+## 0.10.1
+
+- Added automated Trivy vulnerability scanning over the cartesian product of KV backends (LevelDB, LMDB, RocksDB) and serializers (builtin JSON/Pickle, MessagePack, Protobuf); reports are published as ``<backend>-<serializer>`` artifacts and fail on HIGH/CRITICAL findings.
+
+## 0.10.0
+
+- Made LMDB, LevelDB/Plyvel, RocksDB/PyRex, MessagePack, and Protobuf fully optional, independently composable extras; added ``backends`` and ``serializers`` convenience bundles.
+- Raised the MessagePack security floor to ``msgpack>=1.2.1`` and the supported Python floor to 3.10.
+- Added managed-store dependency preflight before filesystem mutation, actionable extra-specific errors, and core/combination installation CI coverage.
+
 ## 0.9.0
 
 - Raised the supported Python floor from 3.9 to 3.10 and added CI coverage for Python 3.10 through 3.13.

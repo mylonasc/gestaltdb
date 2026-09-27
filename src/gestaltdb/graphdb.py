@@ -706,6 +706,11 @@ class GraphDB:
         serializer_cls = cls._serializer_class(serializer)
         backend_options = dict(backend_options or {})
 
+        backend_cls.ensure_available()
+        ensure_serializer = getattr(serializer_cls, "ensure_available", None)
+        if ensure_serializer is not None:
+            ensure_serializer()
+
         if path.exists() and any(path.iterdir()):
             if not overwrite:
                 raise ValueError(f"store directory is not empty: {path}. Pass overwrite=True to replace it.")
@@ -737,6 +742,10 @@ class GraphDB:
         serializer_name = manifest.get("serializer", {}).get("name")
         backend_cls = cls._backend_class(backend_name)
         serializer_cls = cls._serializer_class(serializer_name)
+        backend_cls.ensure_available()
+        ensure_serializer = getattr(serializer_cls, "ensure_available", None)
+        if ensure_serializer is not None:
+            ensure_serializer()
         options = dict(manifest.get("backend", {}).get("options") or {})
         options.update(backend_options or {})
 

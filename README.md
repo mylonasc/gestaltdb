@@ -1,6 +1,7 @@
 # GestaltDB
 
 ![Coverage](https://raw.githubusercontent.com/mylonasc/gestaltdb/refs/heads/main/assets/coverage_badge.svg)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mylonasc/gestaltdb/badge)](https://scorecard.dev/viewer/?uri=github.com/mylonasc/gestaltdb)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://mylonasc.github.io/gestaltdb/)
 
 GestaltDB is a pure Python graph database toolkit for attributed graphs. It stores nodes, edges, labels, typed adjacency records, and property indexes on embedded key-value backends.
@@ -27,13 +28,44 @@ Install columnar ingestion dependencies:
 python -m pip install "gestaltdb[arrow,polars]"
 ```
 
-Install all optional backends and serializers:
+Install only the backend and serializer you need. Extras are additive, so any
+backend can be paired with any serializer without combination-specific extras:
+
+```sh
+python -m pip install "gestaltdb[leveldb,msgpack]"
+python -m pip install "gestaltdb[lmdb,protobuf]"
+python -m pip install "gestaltdb[rocksdb]"
+```
+
+Pickle and JSON serialization are built in. A base install intentionally does
+not install an embedded KV backend. Install all backends and serializers with:
+
+```sh
+python -m pip install "gestaltdb[backends,serializers]"
+```
+
+`GraphDB.create()` keeps RocksDB/PyRex as its compatibility default, so a base
+install must pass an installed backend explicitly and never silently falls back.
+
+Install every optional integration, including ingestion and benchmark clients:
 
 ```sh
 python -m pip install "gestaltdb[all]"
 ```
 
-Optional extras include `lmdb`, `leveldb`, `rocksdb`, `arrow`, `polars`, `fast-ingest`, `msgpack`, `protobuf`, `bloom`, `docs`, `dev`, and `all`.
+Optional extras include `lmdb`, `leveldb`, `rocksdb`, `backends`, `msgpack`, `protobuf`, `serializers`, `arrow`, `polars`, `fast-ingest`, `bloom`, `docs`, `dev`, and `all`.
+
+## Dependency Vulnerability Scan
+
+Run the Docker-based Trivy scan for the cartesian product of KV backends
+(`leveldb`, `lmdb`, `rocksdb`) and serializers (builtin JSON/Pickle as `json`,
+plus `msgpack` and `protobuf` extras) — 9 locked runtime sets:
+
+```sh
+./scripts/scan_backend_vulnerabilities.sh
+```
+
+The script exports locked production dependencies in a `uv` container and writes table and JSON reports to `security-reports/` as `<backend>-<serializer>.json/txt` (for example `leveldb-msgpack.json`). Development and documentation dependencies are excluded. Set `FAIL_ON_SEVERITY=HIGH,CRITICAL` to return a nonzero status when policy-level findings are present.
 
 ## Basic Example
 
