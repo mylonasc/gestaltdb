@@ -15,6 +15,9 @@ Available notebooks include:
 - ``09_graph_visualization.ipynb`` for offline interactive visualization:
   ``visualize_*`` entrypoints, Cypher highlighting, typed sampling, caps,
   themes, and sampler-batch inspection.
+- ``10_sherlock_temporal_knowledge_graph.ipynb`` for extracting a temporal,
+  epistemic narrative graph with a local Ollama model and explaining what
+  Sherlock Holmes could know at a selected scene without later-story leakage.
 
 Choose the Correct Kernel
 -------------------------
