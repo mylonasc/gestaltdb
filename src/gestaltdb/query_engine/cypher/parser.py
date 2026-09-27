@@ -19,6 +19,7 @@ from .ast import (
     CreateConstraint,
     DeleteClause,
     DropConstraint,
+    EntailsCall,
     ExistsExpression,
     ForeachClause,
     FunctionCall,
@@ -69,6 +70,7 @@ from .ast import (
     StringPredicate,
     SubqueryClause,
     SubscriptExpression,
+    TemporalQualifier,
     TraversalHop,
     UnaryExpression,
     UnionQuery,
@@ -97,8 +99,10 @@ _GRAMMAR = r"""
  show_indexes: "SHOW"i ("INDEX"i | "INDEXES"i)
 
   match_query: (match_clause | optional_match_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | merge_clause | foreach_clause) (match_clause | optional_match_clause | where_clause | unwind_clause | call_subquery | create_clause | set_clause | remove_clause | delete_clause | merge_clause | foreach_clause | with_section)* return_full
-  match_clause: "MATCH"i shortest_selector? pattern ("," pattern)*
-  optional_match_clause: "OPTIONAL"i "MATCH"i shortest_selector? pattern ("," pattern)*
+  match_clause: "MATCH"i shortest_selector? pattern ("," pattern)* temporal_qualifier*
+  optional_match_clause: "OPTIONAL"i "MATCH"i shortest_selector? pattern ("," pattern)* temporal_qualifier*
+  temporal_qualifier: "FOR"i "VALID_TIME"i "AS"i "OF"i expression -> valid_time_qualifier
+                    | "FOR"i "SYSTEM_TIME"i "AS"i "OF"i expression -> system_time_qualifier
   shortest_selector: QUANTIFIER "SHORTEST"i -> shortest_quantified
                    | "SHORTEST"i INTEGER? -> shortest_k
   create_clause: "CREATE"i pattern ("," pattern)*
@@ -135,9 +139,11 @@ limit_clause: "LIMIT"i pagination_value
 ?pagination_value: INTEGER -> integer
                  | parameter
 
-procedure_call: "CALL"i qualified_name "(" call_arguments ")" "YIELD"i yield_item "RETURN"i symbolic_name limit_clause?
+procedure_call: "CALL"i qualified_name "(" call_arguments ")" "YIELD"i yield_items "RETURN"i procedure_returns limit_clause?
 qualified_name: symbolic_name ("." symbolic_name)*
+yield_items: yield_item ("," yield_item)*
 yield_item: symbolic_name ("AS"i symbolic_name)?
+procedure_returns: symbolic_name ("," symbolic_name)*
 call_arguments: [expression ("," expression)*]
 
   pattern: node_pattern traversal_hop*
@@ -299,6 +305,7 @@ class _MatchPatterns:
     span: SourceSpan
     optional: bool = False
     selector: PathSelector | None = None
+    qualifiers: tuple[TemporalQualifier, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -682,6 +689,7 @@ class _ASTBuilder(Transformer):
             _source_span(meta),
             False,
             selector,
+            tuple(item for item in children if isinstance(item, TemporalQualifier)),
         )
 
     @v_args(meta=True)
@@ -692,7 +700,16 @@ class _ASTBuilder(Transformer):
             _source_span(meta),
             True,
             selector,
+            tuple(item for item in children if isinstance(item, TemporalQualifier)),
         )
+
+    @v_args(meta=True)
+    def valid_time_qualifier(self, meta, children):
+        return TemporalQualifier("valid", children[0], span=_source_span(meta))
+
+    @v_args(meta=True)
+    def system_time_qualifier(self, meta, children):
+        return TemporalQualifier("system", children[0], span=_source_span(meta))
 
     def shortest_quantified(self, children):
         return PathSelector(str(children[0]).lower(), None)
@@ -948,6 +965,12 @@ class _ASTBuilder(Transformer):
     def yield_item(self, children):
         return ("yield", children[0], children[-1])
 
+    def yield_items(self, children):
+        return ("yields", tuple(children))
+
+    def procedure_returns(self, children):
+        return ("returns", tuple(children))
+
     def procedure_call(self, children):
         limit = next(
             (
@@ -959,15 +982,15 @@ class _ASTBuilder(Transformer):
         )
         name = next(item for item in children if isinstance(item, str))
         arguments = next(item[1] for item in children if isinstance(item, tuple) and item and item[0] == "arguments")
-        yielded = next(item for item in children if isinstance(item, tuple) and item and item[0] == "yield")
-        return_name = next(item for item in reversed(children) if isinstance(item, str))
-        return ("procedure", name, arguments, yielded[1], yielded[2], return_name, limit)
+        yielded = next(item[1] for item in children if isinstance(item, tuple) and item and item[0] == "yields")
+        returns = next(item[1] for item in children if isinstance(item, tuple) and item and item[0] == "returns")
+        return ("procedure", name, arguments, yielded, returns, limit)
 
 
 _BUILDER = _ASTBuilder()
 
 
-def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | RelationshipScanQuery | MultiMatchQuery:
+def parse(query: str) -> MatchQuery | SampleTypedPathsCall | EntailsCall | NodeScanQuery | RelationshipScanQuery | MultiMatchQuery:
     """Parse the supported Cypher subset into runtime-compatible AST objects."""
     parsed = _parse_source(query)
 
@@ -998,6 +1021,12 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
             "Query cannot be represented by legacy parse(); use parse_ast()",
             query,
         )
+    if any(getattr(clause, "qualifiers", ()) for clause in canonical.clauses):
+        raise _located_error(
+            CypherSemanticError,
+            "Temporal qualifiers cannot be represented by legacy parse(); use parse_ast()",
+            query,
+        )
     if _canonical_uses_functions(canonical) or _canonical_uses_extended_expressions(canonical):
         raise _located_error(
             CypherSemanticError,
@@ -1008,7 +1037,7 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
     return _build_match_query(parsed, query, analysis)
 
 
-def parse_ast(query: str) -> Query | SampleTypedPathsCall | UnionQuery | CreateConstraint | DropConstraint | ShowConstraints | ShowIndexes:
+def parse_ast(query: str) -> Query | SampleTypedPathsCall | EntailsCall | UnionQuery | CreateConstraint | DropConstraint | ShowConstraints | ShowIndexes:
     """Parse the supported Cypher subset into the canonical clause AST."""
     parsed = _parse_source(query)
     if isinstance(parsed, tuple) and parsed and parsed[0] == "procedure":
@@ -1016,11 +1045,58 @@ def parse_ast(query: str) -> Query | SampleTypedPathsCall | UnionQuery | CreateC
     if isinstance(parsed, (CreateConstraint, DropConstraint, ShowConstraints, ShowIndexes)):
         return parsed
     if isinstance(parsed, tuple) and parsed and parsed[0] == "union":
-        return _build_union_query(parsed, query)
+        canonical = _build_union_query(parsed, query)
+        _validate_temporal_contract(canonical, query)
+        return canonical
 
     canonical = _build_canonical_query(parsed, query)
     analyze_query(canonical)
+    _validate_temporal_contract(canonical, query)
     return canonical
+
+
+def _walk_queries(value):
+    """Yield a canonical query and all nested subquery/FOREACH queries."""
+    queries = value.branches if isinstance(value, UnionQuery) else (value,)
+    for query in queries:
+        yield query
+        for clause in query.clauses:
+            if isinstance(clause, SubqueryClause):
+                yield from _walk_queries(clause.query)
+            elif isinstance(clause, ForeachClause):
+                yield from _walk_queries(Query(clause.body, query.source))
+
+
+def _validate_temporal_contract(value, source: str) -> None:
+    """Validate query-wide qualifier dependencies and read-only semantics."""
+    qualifiers = [
+        qualifier
+        for query in _walk_queries(value)
+        for clause in query.clauses
+        if isinstance(clause, (MatchClause, OptionalMatchClause))
+        for qualifier in clause.qualifiers
+    ]
+    if not qualifiers:
+        return
+    if any(qualifier.kind == "system" for qualifier in qualifiers) and not any(
+        qualifier.kind == "valid" for qualifier in qualifiers
+    ):
+        raise _located_error(
+            CypherSemanticError,
+            "FOR SYSTEM_TIME requires FOR VALID_TIME in the same query",
+            source,
+        )
+    write_types = (CreateClause, SetClause, RemoveClause, DeleteClause, MergeClause, ForeachClause)
+    if any(
+        isinstance(clause, write_types)
+        for query in _walk_queries(value)
+        for clause in query.clauses
+    ):
+        raise _located_error(
+            CypherSemanticError,
+            "Temporal-qualified queries are read-only",
+            source,
+        )
 
 
 def _build_union_query(parsed, query: str) -> UnionQuery:
@@ -1104,9 +1180,9 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
                 raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
             close_projection()
             if item.optional:
-                clauses.append(OptionalMatchClause(item.values, span=item.span, selector=item.selector))
+                clauses.append(OptionalMatchClause(item.values, span=item.span, selector=item.selector, qualifiers=item.qualifiers))
             else:
-                clauses.append(MatchClause(item.values, span=item.span, selector=item.selector))
+                clauses.append(MatchClause(item.values, span=item.span, selector=item.selector, qualifiers=item.qualifiers))
         elif isinstance(item, _ParsedPart) and item.kind == "where":
             # A WHERE following WITH belongs to that WITH stage, so the open
             # projection must be closed first to preserve textual order.
@@ -1226,23 +1302,47 @@ def _parse_source(query: str):
     return parsed
 
 
-def _build_sample_call(parsed, query: str) -> SampleTypedPathsCall:
-    _, name, arguments, yielded, output_name, return_name, limit = parsed
-    if name.lower() != "pg.sample_typed_paths":
+def _build_sample_call(parsed, query: str) -> SampleTypedPathsCall | EntailsCall:
+    _, name, arguments, yields, returns, limit = parsed
+    procedure = name.lower()
+    if procedure not in {"pg.sample_typed_paths", "kg.entails"}:
         raise _located_error(CypherSemanticError, f"Unsupported procedure: {name}", query, name)
-    if yielded.lower() != "path":
+    allowed = {"path"} if procedure == "pg.sample_typed_paths" else {"status", "confidence", "explanation"}
+    yielded_fields = [item[1].lower() for item in yields]
+    if len(set(yielded_fields)) != len(yielded_fields):
+        raise _located_error(CypherSemanticError, f"Procedure {name} yields a field more than once", query)
+    unsupported = next((item[1] for item in yields if item[1].lower() not in allowed), None)
+    if unsupported is not None:
         raise _located_error(
             CypherSemanticError,
-            f"Procedure pg.sample_typed_paths does not yield field: {yielded}",
+            f"Procedure {name} does not yield field: {unsupported}",
             query,
-            yielded,
+            unsupported,
         )
-    if return_name != output_name:
+    aliases = {item[2] for item in yields}
+    if len(aliases) != len(yields):
+        raise _located_error(
+            CypherSemanticError, f"Procedure {name} yields an alias more than once", query
+        )
+    invalid_return = next((item for item in returns if item not in aliases), None)
+    if invalid_return is not None:
         raise _located_error(
             CypherSemanticError,
-            f"RETURN must reference yielded variable: {output_name}",
+            f"RETURN must reference a yielded variable: {invalid_return}",
             query,
-            return_name,
+            invalid_return,
+        )
+    if procedure == "kg.entails":
+        if len(arguments) != 4:
+            raise _located_error(
+                CypherSemanticError,
+                "kg.entails expects agent, proposition, mode, and options",
+                query,
+            )
+        return EntailsCall(
+            agent=arguments[0], proposition=arguments[1], mode=arguments[2], options=arguments[3],
+            yields=tuple((item[1].lower(), item[2]) for item in yields),
+            returns=tuple(returns), limit=limit,
         )
     if len(arguments) != 2:
         raise _located_error(CypherSemanticError, "pg.sample_typed_paths expects seed IDs and a sampling pattern", query)
@@ -1254,9 +1354,9 @@ def _build_sample_call(parsed, query: str) -> SampleTypedPathsCall:
     return SampleTypedPathsCall(
         seed_ids=seed_ids,
         pattern=pattern,
-        returns=(output_name,),
+        returns=tuple(returns),
         limit=limit,
-        output_name=output_name,
+        output_name=yields[0][2],
     )
 
 

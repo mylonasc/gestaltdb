@@ -6,7 +6,7 @@ from types import MappingProxyType
 import pytest
 
 from gestaltdb.graphdb import Edge, GraphDB, Node
-from gestaltdb.kvstores import LevelDBStore
+from gestaltdb.kvstores import LMDBStore, LevelDBStore
 from gestaltdb.serializers import JSONSerializer, MessagePackSerializer, PickleSerializer, ProtobufSerializer, Serializer
 from gestaltdb.temporal import TemporalInstant, TemporalInterval
 from gestaltdb.versioning import (
@@ -17,7 +17,9 @@ from gestaltdb.versioning import (
     TemporalCorruptionError,
     TemporalVersionError,
     VersionOperation,
+    canonical_json_bytes,
 )
+from .conftest import SERIALIZER_PARAMS
 
 
 class _MetadataStore:
@@ -25,12 +27,54 @@ class _MetadataStore:
 
     def __init__(self):
         self.metadata = {}
+        self.indexes = {}
+        self.range_indexes = {}
 
     def get_metadata(self, key):
         return self.metadata.get(key)
 
     def put_metadata(self, key, value):
         self.metadata[key] = value
+
+    def delete_metadata(self, key):
+        self.metadata.pop(key, None)
+
+    def put_index_entry(self, name, parts, value):
+        self.indexes.setdefault((name, tuple(parts)), set()).add(value)
+
+    def put_index_entries_bulk(self, entries):
+        for name, parts, value in entries:
+            self.put_index_entry(name, parts, value)
+
+    def delete_index_entry(self, name, parts, value):
+        self.indexes.get((name, tuple(parts)), set()).discard(value)
+
+    def iter_index_prefix(self, name, parts):
+        return iter(sorted(self.indexes.get((name, tuple(parts)), set())))
+
+    def put_range_index_entry(self, name, parts, range_value, value):
+        self.range_indexes.setdefault((name, tuple(parts)), set()).add((range_value, value))
+
+    def put_range_index_entries_bulk(self, entries):
+        for name, parts, range_value, value in entries:
+            self.put_range_index_entry(name, parts, range_value, value)
+
+    def delete_range_index_entry(self, name, parts, range_value, value):
+        self.range_indexes.get((name, tuple(parts)), set()).discard((range_value, value))
+
+    def iter_range_index(self, name, parts, start=None, end=None, include_start=True, include_end=True, *, reverse=False, limit=None):
+        values = []
+        for range_value, value in sorted(self.range_indexes.get((name, tuple(parts)), set())):
+            if start is not None and (range_value < start or (range_value == start and not include_start)):
+                continue
+            if end is not None and (range_value > end or (range_value == end and not include_end)):
+                continue
+            values.append(value)
+        if reverse:
+            values.reverse()
+        if limit is not None:
+            values = values[:limit]
+        return iter(values)
 
     def close(self):
         pass
@@ -208,7 +252,7 @@ def test_stale_or_missing_sequence_never_overwrites_history(temporal_graph):
     assert temporal_graph.get_node_version(first.version_id).logical_id == "alice"
 
 
-@pytest.mark.parametrize("fail_on_put", [2, 3, 4])
+@pytest.mark.parametrize("fail_on_put", [2, 3, 4, 5])
 def test_marker_last_failures_remain_invisible_and_skip_reserved_commit(fail_on_put):
     store = _FailingMetadataStore(fail_on_put)
     graph = GraphDB(store, JSONSerializer())
@@ -222,13 +266,57 @@ def test_marker_last_failures_remain_invisible_and_skip_reserved_commit(fail_on_
     assert succeeding.commit_id == 2
 
 
+def test_temporal_orphans_can_be_listed_and_reclaimed():
+    store = _FailingMetadataStore(fail_on_put=4)
+    graph = GraphDB(store, JSONSerializer())
+
+    with pytest.raises(RuntimeError, match="injected"):
+        graph.put_node_version(Node("failed"), valid=(0, None))
+    store.fail_on_put = -1
+
+    report = graph.list_temporal_orphans()
+    assert report.allocation_horizon == 1
+    assert [(item.commit_id, item.kind, item.present_record_count) for item in report.artifacts] == [
+        (1, "incomplete_commit", 1)
+    ]
+
+    result = graph.reclaim_temporal_orphans(through_commit=1)
+    assert result.reclaimed_commit_ids == (1,)
+    assert result.indexes_rebuilt
+    assert graph.store.get_metadata(graph._temporal_commit_key(1)) is None
+    assert graph.store.get_metadata(graph._temporal_record_key(1, 0)) is None
+    assert graph._temporal_sequence()[0] == 1
+
+    succeeding = graph.put_node_version(Node("succeeds"), valid=(0, None))
+    assert succeeding.commit_id == 2
+    assert [commit.commit_id for commit in graph.iter_temporal_commits()] == [2]
+
+
+def test_temporal_orphan_listing_distinguishes_empty_reservation_gaps(temporal_graph):
+    temporal_graph.put_node_version(Node("visible"), valid=(0, None))
+    temporal_graph.store.metadata[b"temporal:v1:sequence"] = canonical_json_bytes({
+        "commit_id": 2,
+        "system_time_us": 1,
+    })
+
+    report = temporal_graph.list_temporal_orphans()
+    assert [(item.commit_id, item.kind) for item in report.artifacts] == [
+        (2, "reservation_gap")
+    ]
+    result = temporal_graph.reclaim_temporal_orphans(through_commit=2)
+    assert result.reclaimed_commit_ids == ()
+    assert result.reservation_gap_ids == (2,)
+    assert not result.indexes_rebuilt
+
+
 def test_incomplete_commit_is_invisible_and_marker_corruption_is_detected(temporal_graph):
     version = temporal_graph.put_node_version(Node("alice"), valid=(0, None))
     visible_key = temporal_graph._temporal_visible_key(version.commit_id)
     marker = temporal_graph.store.metadata.pop(visible_key)
 
     assert temporal_graph.get_temporal_commit(version.commit_id) is None
-    assert temporal_graph.get_node_version(version.version_id) is None
+    with pytest.raises(TemporalCorruptionError, match="checksum"):
+        temporal_graph.get_node_version(version.version_id)
 
     temporal_graph.store.metadata[visible_key] = b"not-the-descriptor-hash"
     with pytest.raises(TemporalCorruptionError, match="marker"):
@@ -318,8 +406,7 @@ def test_temporal_versions_persist_across_leveldb_reopen(tmp_path):
 
 @pytest.mark.parametrize(
     "serializer",
-    [JSONSerializer(), PickleSerializer(), MessagePackSerializer(), ProtobufSerializer()],
-    ids=["json", "pickle", "messagepack", "protobuf"],
+    SERIALIZER_PARAMS,
 )
 def test_temporal_versions_round_trip_supported_serializers(serializer):
     graph = GraphDB(_MetadataStore(), serializer)
@@ -336,9 +423,10 @@ def test_temporal_versions_round_trip_supported_serializers(serializer):
 
 
 def test_temporal_versions_participate_in_supported_outer_transactions(lmdb_graph_db):
+    rolled_back = None
     with pytest.raises(RuntimeError):
         with lmdb_graph_db.transaction() as transaction:
-            transaction.put_node_version(Node("rolled-back"), valid=(0, None))
+            rolled_back = transaction.put_node_version(Node("rolled-back"), valid=(0, None))
             raise RuntimeError("rollback")
 
     assert list(lmdb_graph_db.iter_node_versions("rolled-back")) == []
@@ -346,7 +434,46 @@ def test_temporal_versions_participate_in_supported_outer_transactions(lmdb_grap
     with lmdb_graph_db.transaction() as transaction:
         committed = transaction.put_node_version(Node("committed"), valid=(0, None))
 
+    assert committed.commit_id > rolled_back.commit_id
     assert lmdb_graph_db.get_node_version(committed.version_id) is not None
+
+
+def test_all_temporal_ids_from_rolled_back_outer_transaction_are_consumed(lmdb_graph_db):
+    rolled_back = []
+    with pytest.raises(RuntimeError):
+        with lmdb_graph_db.transaction() as transaction:
+            rolled_back.append(transaction.put_node_version(Node("first"), valid=(0, None)))
+            rolled_back.append(transaction.put_node_version(Node("second"), valid=(0, None)))
+            raise RuntimeError("rollback")
+
+    committed = lmdb_graph_db.put_node_version(Node("committed"), valid=(0, None))
+
+    assert committed.commit_id > max(version.commit_id for version in rolled_back)
+    assert list(lmdb_graph_db.iter_node_versions("first")) == []
+    assert list(lmdb_graph_db.iter_node_versions("second")) == []
+
+
+def test_rolled_back_temporal_id_reservation_survives_reopen(tmp_path):
+    pytest.importorskip("lmdb")
+    path = tmp_path / "lmdb-reservation"
+    graph = GraphDB(LMDBStore(path=str(path)), JSONSerializer())
+    rolled_back_id = None
+    try:
+        with pytest.raises(RuntimeError):
+            with graph.transaction() as transaction:
+                rolled_back_id = transaction.put_node_version(
+                    Node("rolled-back"), valid=(0, None)
+                ).commit_id
+                raise RuntimeError("rollback")
+    finally:
+        graph.close()
+
+    reopened = GraphDB(LMDBStore(path=str(path)), JSONSerializer())
+    try:
+        committed = reopened.put_node_version(Node("committed"), valid=(0, None))
+        assert committed.commit_id > rolled_back_id
+    finally:
+        reopened.close()
 
 
 def test_temporal_interval_inputs_still_require_non_empty_half_open_ranges(temporal_graph):

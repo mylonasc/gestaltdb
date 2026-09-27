@@ -17,6 +17,7 @@ from functools import partial
 from typing import Callable
 
 from .ast import PathValue
+from .temporal import construct_temporal, temporal_to_string
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,12 +37,6 @@ class FunctionDef:
 
 AGGREGATE_FUNCTIONS = ("count", "collect", "sum", "avg", "min", "max")
 UNSUPPORTED_FUNCTION_KINDS = {
-    "date": "temporal",
-    "time": "temporal",
-    "localtime": "temporal",
-    "datetime": "temporal",
-    "localdatetime": "temporal",
-    "duration": "temporal",
     "point": "spatial",
 }
 
@@ -108,7 +103,7 @@ def _endpoint(args: list[object], context, *, name: str, attribute: str) -> obje
     endpoint = getattr(value, attribute, None)
     if endpoint is None:
         return None
-    node = context.graph.get_node(context.node_key_to_bytes(endpoint))
+    node = context.get_node(context.node_key_to_bytes(endpoint))
     return node
 
 
@@ -130,6 +125,24 @@ def _properties(args: list[object], context) -> object:
     if isinstance(properties, dict):
         return dict(properties)
     raise TypeError("properties() expects a map, node, or relationship")
+
+
+def _version_metadata(args: list[object], context, *, name: str) -> object:
+    (value,) = args
+    if value is None:
+        return None
+    if not _is_entity(value):
+        raise TypeError(f"{name}() expects a node or relationship")
+    version = context.version_for(value)
+    if version is None:
+        return None
+    if name == "versionId":
+        return version.version_id
+    if name == "validFrom":
+        return version.valid.start
+    if name == "validTo":
+        return version.valid.end
+    return version.system_time
 
 
 def _head(args: list[object], context) -> object:
@@ -235,9 +248,19 @@ def _to_string(args: list[object], context) -> object:
         return None
     if isinstance(value, bool):
         return "true" if value else "false"
+    temporal = temporal_to_string(value)
+    if temporal is not None:
+        return temporal
     if isinstance(value, (int, float, str)):
         return str(value)
-    raise TypeError("toString() expects a boolean, number, or string")
+    raise TypeError("toString() expects a boolean, number, string, or temporal value")
+
+
+def _temporal_constructor(name: str) -> Callable[[list[object], object], object]:
+    def execute(args: list[object], context) -> object:
+        return construct_temporal(name, args[0])
+
+    return execute
 
 
 def _trim(args: list[object], context) -> object:
@@ -446,6 +469,10 @@ FUNCTIONS: dict[str, FunctionDef] = {
     "startnode": _scalar("startnode", (1, 1), _start_node),
     "endnode": _scalar("endnode", (1, 1), _end_node),
     "properties": _scalar("properties", (1, 1), _properties),
+    "versionid": _scalar("versionid", (1, 1), partial(_version_metadata, name="versionId")),
+    "validfrom": _scalar("validfrom", (1, 1), partial(_version_metadata, name="validFrom")),
+    "validto": _scalar("validto", (1, 1), partial(_version_metadata, name="validTo")),
+    "systemfrom": _scalar("systemfrom", (1, 1), partial(_version_metadata, name="systemFrom")),
     "head": _scalar("head", (1, 1), _head),
     "last": _scalar("last", (1, 1), _last),
     "size": _scalar("size", (1, 1), _size),
@@ -485,6 +512,12 @@ FUNCTIONS: dict[str, FunctionDef] = {
     "reverse": _scalar("reverse", (1, 1), _reverse),
     "tail": _scalar("tail", (1, 1), _tail),
     "keys": _scalar("keys", (1, 1), _keys),
+    "date": _scalar("date", (1, 1), _temporal_constructor("date")),
+    "time": _scalar("time", (1, 1), _temporal_constructor("time")),
+    "localtime": _scalar("localtime", (1, 1), _temporal_constructor("localtime")),
+    "datetime": _scalar("datetime", (1, 1), _temporal_constructor("datetime")),
+    "localdatetime": _scalar("localdatetime", (1, 1), _temporal_constructor("localdatetime")),
+    "duration": _scalar("duration", (1, 1), _temporal_constructor("duration")),
     "nodes": _scalar("nodes", (1, 1), partial(_path_elements, name="nodes")),
     "relationships": _scalar("relationships", (1, 1), partial(_path_elements, name="relationships")),
 }

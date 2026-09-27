@@ -104,8 +104,8 @@ def test_graph_entities_compare_by_kind_and_stable_id():
 
 @pytest.mark.parametrize(
     ("expression", "message"),
-    [("date()", "Unsupported temporal function: date"), ("point({x: 1})", "Unsupported spatial function: point")],
+    [("date()", "date expects exactly 1 argument"), ("point({x: 1})", "Unsupported spatial function: point")],
 )
-def test_temporal_and_spatial_stubs_have_typed_errors(expression, message):
+def test_function_errors_are_typed(expression, message):
     with pytest.raises(CypherSemanticError, match=message):
         execute(FakeCypherGraph(), f"UNWIND [0] AS x RETURN {expression} AS value")

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from gestaltdb.graphdb import Edge, GraphDB, Node
 from gestaltdb.kvstores import LevelDBStore
 from gestaltdb.serializers import PickleSerializer
@@ -91,6 +93,7 @@ def test_property_sanitization():
 
 
 def test_from_cypher_result_entities_and_highlight(tmp_path):
+    pytest.importorskip("plyvel")
     graph = GraphDB(LevelDBStore(path=str(tmp_path / "g")), PickleSerializer())
     try:
         graph.put_node(Node(node_id="alice", labels=["Person"], properties={"name": "Alice"}))
@@ -108,6 +111,7 @@ def test_from_cypher_result_entities_and_highlight(tmp_path):
 
 
 def test_from_cypher_result_scalar_only_is_explainable(tmp_path):
+    pytest.importorskip("plyvel")
     graph = GraphDB(LevelDBStore(path=str(tmp_path / "g")), PickleSerializer())
     try:
         graph.put_node(Node(node_id="alice", labels=["Person"], properties={"name": "Alice"}))
@@ -121,6 +125,7 @@ def test_from_cypher_result_scalar_only_is_explainable(tmp_path):
 
 
 def test_from_sampled_subgraph_placeholders_and_highlight(tmp_path):
+    pytest.importorskip("plyvel")
     graph = GraphDB(LevelDBStore(path=str(tmp_path / "g")), PickleSerializer())
     try:
         graph.put_node(Node(node_id="drug-1", properties={"kind": "drug"}))
@@ -139,8 +144,8 @@ def test_from_sampled_subgraph_placeholders_and_highlight(tmp_path):
 
 
 def test_from_sampler_batch_maps_local_to_external(tmp_path):
-    pytest = __import__("pytest")
     pytest.importorskip("numpy")
+    pytest.importorskip("plyvel")
     from gestaltdb.sampling import SamplerEngine
 
     graph = GraphDB(LevelDBStore(path=str(tmp_path / "g")), PickleSerializer())

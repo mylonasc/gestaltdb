@@ -10,6 +10,7 @@ from typing import Protocol
 from .ast import (
     AndExpression,
     ComparisonExpression,
+    EntailsCall,
     NodePattern,
     NodeScanQuery,
     Parameter,
@@ -20,6 +21,7 @@ from .ast import (
     Variable,
 )
 from .expr import _boolean_value, _cypher_equals, evaluate_expression, project_value
+from .temporal import normalize_parameter, temporal_compare_key
 from .plan import Aggregate as LogicalAggregate
 from .plan import (
     CallSubquery,
@@ -55,25 +57,79 @@ class QueryContext:
     node_cache: dict[bytes, object] = field(default_factory=dict)
     edge_cache: dict[bytes, object] = field(default_factory=dict)
     label_cardinalities: dict[str, int] = field(default_factory=dict)
+    read_view: object | None = None
+    entity_versions: dict[int, object] = field(default_factory=dict)
 
     def node_key_to_bytes(self, node_key):
         return self.graph.node_key_to_bytes(node_key)
 
     def get_node(self, node_id: bytes):
         if node_id not in self.node_cache:
-            self.node_cache[node_id] = self.graph.get_node(node_id)
+            if self.read_view is None:
+                self.node_cache[node_id] = self.graph.get_node(node_id)
+            else:
+                logical_id = self.graph.key_to_string(node_id)
+                version = self.read_view.get_node_as_of(logical_id)
+                value = None if version is None else version.node
+                if value is not None:
+                    self.entity_versions[id(value)] = version
+                self.node_cache[node_id] = value
         return self.node_cache[node_id]
 
     def get_edge(self, edge_id: bytes):
         if edge_id not in self.edge_cache:
-            self.edge_cache[edge_id] = self.graph.get_edge(edge_id)
+            if self.read_view is None:
+                self.edge_cache[edge_id] = self.graph.get_edge(edge_id)
+            else:
+                logical_id = self.graph.key_to_string(edge_id)
+                version = self.read_view.get_edge_as_of(logical_id)
+                value = None if version is None else version.edge
+                if value is not None:
+                    self.entity_versions[id(value)] = version
+                self.edge_cache[edge_id] = value
         return self.edge_cache[edge_id]
+
+    def iter_temporal_node_ids(self):
+        for version in self.read_view.iter_nodes_as_of():
+            node = version.node
+            self.entity_versions[id(node)] = version
+            node_id = self.node_key_to_bytes(version.logical_id)
+            self.node_cache[node_id] = node
+            yield node_id
+
+    def iter_temporal_adjacency(self, node_id: bytes, edge_types, direction: str):
+        logical_id = self.graph.key_to_string(node_id)
+        directions = ("out", "in") if direction == "any" else (direction,)
+        types = edge_types or (None,)
+        seen = set()
+        for current_direction in directions:
+            for edge_type in types:
+                kwargs = {"source": logical_id} if current_direction == "out" else {"target": logical_id}
+                for version in self.read_view.iter_edges_as_of(
+                    edge_type=edge_type, direction=current_direction, **kwargs
+                ):
+                    edge = version.edge
+                    edge_id = self.node_key_to_bytes(version.logical_id)
+                    neighbor = edge.target if current_direction == "out" else edge.source
+                    occurrence = (edge_id, self.node_key_to_bytes(neighbor))
+                    if occurrence in seen:
+                        continue
+                    seen.add(occurrence)
+                    self.entity_versions[id(edge)] = version
+                    self.edge_cache[edge_id] = edge
+                    yield {
+                        "edge_id": edge_id,
+                        "neighbor_id": occurrence[1],
+                    }
+
+    def version_for(self, entity):
+        return None if entity is None else self.entity_versions.get(id(entity))
 
     def resolve(self, value):
         if isinstance(value, Parameter):
             if value.name not in self.parameters:
                 raise ValueError(f"Missing Cypher parameter: ${value.name}")
-            return self.parameters[value.name]
+            return normalize_parameter(self.parameters[value.name])
         if isinstance(value, list):
             return [self.resolve(item) for item in value]
         if isinstance(value, tuple):
@@ -345,7 +401,38 @@ def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, obj
 
 
 def _procedure_rows(source: ProcedureSource, context: QueryContext) -> Iterator[BindingRow]:
-    """Seed binding rows from a sampling procedure call."""
+    """Seed binding rows from an allowlisted procedure call."""
+    if isinstance(source.query, EntailsCall):
+        agent = evaluate_expression(source.query.agent, {}, context)
+        proposition = evaluate_expression(source.query.proposition, {}, context)
+        mode = evaluate_expression(source.query.mode, {}, context)
+        options = evaluate_expression(source.query.options, {}, context)
+        if not isinstance(options, dict):
+            raise ValueError("kg.entails options must be a map")
+        allowed_options = {"world", "validTime", "systemTime", "throughCommit", "maxDepth", "maxStates"}
+        unknown = sorted(set(options) - allowed_options)
+        if unknown:
+            raise ValueError(f"kg.entails unsupported option: {unknown[0]}")
+        if "world" not in options or "validTime" not in options:
+            raise ValueError("kg.entails options require world and validTime")
+        result = context.graph.entails(
+            agent,
+            proposition,
+            mode,
+            world=options["world"],
+            valid_time=options["validTime"],
+            system_time=options.get("systemTime"),
+            through_commit=options.get("throughCommit"),
+            max_depth=options.get("maxDepth", 4),
+            max_states=options.get("maxStates", 1_000),
+        )
+        values = {
+            "status": result.status.value,
+            "confidence": result.confidence,
+            "explanation": dict(result.explanation),
+        }
+        bindings = {alias: values[field] for field, alias in source.query.yields}
+        return iter((BindingRow(bindings=bindings),))
     seed_ids = context.resolve(source.query.seed_ids)
     pattern = context.resolve(source.query.pattern)
     if not isinstance(seed_ids, list) or not all(isinstance(seed_id, str) for seed_id in seed_ids):
@@ -714,6 +801,8 @@ def node_scan_ids(parsed: NodeScanQuery, context: QueryContext):
     """Yield node IDs for a label scan, using property indexes when available."""
     if parsed.limit == 0:
         return iter(())
+    if context.read_view is not None:
+        return context.iter_temporal_node_ids()
     label_ids = _node_ids_for_labels(parsed, context)
     range_scan = _node_range_scan(parsed, context)
     if range_scan is not None and parsed.property_name is None:
@@ -978,7 +1067,7 @@ def _indexed_first_hop_rows(row, clause: PathPatternClause, context: QueryContex
     eligible predicate), in which case the caller falls back to adjacency
     expansion.
     """
-    if not clause.hops:
+    if context.read_view is not None or not clause.hops:
         return None
     hop = clause.hops[0]
     source = clause.source
@@ -1491,6 +1580,9 @@ def _is_null_bound(row: BindingRow, variable: str | None) -> bool:
 
 
 def _iter_pattern_adjacency(context: QueryContext, node_id: bytes, hop: PatternHop):
+    if context.read_view is not None:
+        yield from context.iter_temporal_adjacency(node_id, hop.edge_types, hop.direction)
+        return
     if hop.edge_types:
         for edge_type in hop.edge_types:
             yield from context.graph.iter_typed_adjacency(node_id, edge_type, direction=hop.direction)
@@ -1573,7 +1665,7 @@ def _order_match_patterns(patterns, context: QueryContext):
     alter traversal cost and relationship-isomorphism state. Standalone node
     components with distinct variables are commutative Cartesian inputs.
     """
-    if len(patterns) < 2 or any(pattern.hops for pattern in patterns):
+    if context.read_view is not None or len(patterns) < 2 or any(pattern.hops for pattern in patterns):
         return patterns
     variables = [pattern.source.variable for pattern in patterns]
     if any(variable is None for variable in variables) or len(set(variables)) != len(variables):
@@ -1667,12 +1759,16 @@ def _sortable_value(value):
         return (3, tuple(_sortable_value(item) for item in value))
     if isinstance(value, PathValue):
         return (4, cypher_value_key(value))
+    temporal = temporal_compare_key(value)
+    if temporal is not None:
+        order = {"date": 0, "time": 1, "localtime": 2, "datetime": 3, "localdatetime": 4, "duration": 5}
+        return (5, order[temporal[0]], temporal[1])
     if isinstance(value, str):
-        return (5, value)
-    if isinstance(value, bool):
         return (6, value)
-    if isinstance(value, (int, float)):
+    if isinstance(value, bool):
         return (7, value)
+    if isinstance(value, (int, float)):
+        return (8, value)
     if value is None:
         return (9,)
     raise TypeError(f"Cannot order value of type {type(value).__name__}")
@@ -1699,6 +1795,9 @@ def cypher_value_key(value):
         return ("number", value)
     if isinstance(value, str):
         return ("string", value)
+    temporal = temporal_compare_key(value)
+    if temporal is not None:
+        return temporal
     if isinstance(value, (list, tuple)):
         return ("list", tuple(cypher_value_key(item) for item in value))
     if isinstance(value, dict):

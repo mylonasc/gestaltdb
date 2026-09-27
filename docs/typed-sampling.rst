@@ -150,3 +150,116 @@ them from stored edges.
 
    rebuilt = graph_db.rebuild_typed_adjacency()
    print(f"rebuilt {rebuilt} typed adjacency records")
+
+Temporal Sampler Snapshots
+--------------------------
+
+Format-v2 snapshots can preserve the edge history visible at one system-time
+horizon. Each compact edge row has an edge-version ID, half-open valid interval,
+open-end mask, commit ID, and system time. The temporal outgoing and incoming
+CSR indexes are ordered by endpoint, relation, and valid-time start.
+
+.. code-block:: python
+
+   snapshot = graph_db.build_sampler_snapshot(
+       "snapshots/history",
+       temporal=True,
+       system_time="2026-01-01T00:00:00Z",
+       time_bucket="day",
+   )
+
+   assert snapshot.temporal
+   print(snapshot.edge_version_ids)
+   print(snapshot.valid_from_us, snapshot.valid_to_us, snapshot.valid_to_open)
+
+The build captures exactly one authenticated ``GraphReadView``. Corrections and
+retractions are resolved at its system horizon, including splitting a surviving
+version into multiple edge rows when only part of its validity is retracted.
+``temporal_candidates(node, relation, valid_time, direction=...)`` uses the
+start-time ordering to return a candidate superset. ``SamplerEngine`` then
+applies exact half-open validity filtering before fanout and random selection:
+
+.. code-block:: python
+
+   from gestaltdb.sampling import SamplerEngine
+   from gestaltdb.temporal import TemporalContext
+
+   engine = SamplerEngine.load(snapshot.path, mode="memmap", seed=7)
+   sampled = engine.sample_neighbors(
+       [alice_id],
+       fanout=20,
+       direction="out",
+       relations=[works_for_id],
+       temporal=TemporalContext.as_of(cutoff),
+   )
+
+Point selection honors exclusive valid-to boundaries. For finite windows,
+``window_policy="overlap"`` selects edge intervals with a non-empty
+intersection, while ``window_policy="contained"`` requires the complete edge
+interval to lie inside the window (open-ended edges therefore cannot be
+contained). ``sample_multihop`` and ``sample_subgraph`` accept the same options.
+Set ``causal_policy`` to ``"nondecreasing"`` or ``"nonincreasing"`` to compare
+edge valid-start instants hop by hop along each sampled path. Temporal, relation,
+direction, and causal filters all run before fanout selection.
+
+Temporal ``SampledNeighbors`` and ``SampledSubgraphBatch`` values expose
+``edge_version_ids``, ``valid_from_us``, ``valid_to_us``, and
+``valid_to_open`` aligned with their sampled edge arrays. Supplying a temporal
+filter or causal policy to a non-temporal/legacy snapshot raises ``ValueError``.
+PyG dictionaries and DGL graphs retain string ``edge_version_ids`` as Python
+metadata because their edge-feature stores only accept numeric tensors.
+
+Time-Aware Hard Negatives
+-------------------------
+
+Temporal snapshots also contain authenticated positive-triple history and node
+availability indexes. ``is_positive`` can test all known history, one example
+instant, or a query window. Hard-negative sampling applies endpoint type and
+relation constraints first, temporal candidate availability second, and
+positive-history rejection last:
+
+.. code-block:: python
+
+   from gestaltdb.sampling import HardNegativeConfig
+
+   config = HardNegativeConfig(
+       negatives_per_positive=8,
+       temporal_positive_policy="at_positive_time",
+       temporal_candidate_window_days=90,
+       exhaustion_policy="raise",
+   )
+   batch = engine.sample_subgraph(
+       seed_edges,
+       fanouts=[15, 10],
+       negative_config=config,
+       temporal=TemporalContext.as_of(cutoff),
+   )
+
+``temporal_positive_policy`` is ``"any_time"`` (the compatibility default),
+``"at_positive_time"``, or ``"window"``. Window rejection uses
+``temporal_positive_window_policy="overlap"`` or ``"contained"``. A candidate
+window is trailing: candidates and relation neighborhoods must have been
+available during the configured number of days ending at the example time.
+Without a candidate window they must be available at the example time. Future
+candidates are excluded unless ``allow_future_candidates=True``.
+
+``sample_hard_negatives`` accepts aligned ``positive_times_us`` and optionally
+returns deterministic rejection counters with ``return_diagnostics=True``.
+Direct calls on temporal snapshots must supply ``positive_times_us`` or a
+``temporal`` context unless ``allow_future_candidates=True``; this prevents an
+ambiguous default call from drawing nodes that only become available later.
+``SampledSubgraphBatch`` carries ``positive_time_us``, ``negative_time_us``, and
+``negative_diagnostics``. ``exhaustion_policy="raise"`` fails when unique
+negatives are exhausted; ``"repeat"`` deterministically reuses an accepted
+negative while preserving temporal-positive rejection. RAM and memmap engines
+produce the same seeded result.
+
+V2 publication is atomic: arrays and canonical metadata are written in a sibling
+staging directory, checksummed, and followed by ``completion.json`` before the
+directory is renamed into place. Loading in RAM or memmap mode validates the
+completion record, artifact catalog, SHA-256 checksums, dtypes, shapes, aligned
+lengths, CSR bounds, interval invariants, and source-provenance token. Existing
+format-v1 snapshots still load, but have no integrity or temporal guarantees.
+Rebuild v1 snapshots from their source database to migrate to v2; snapshots are
+immutable and have no in-place upgrade path. Unknown format versions and corrupt
+v2 artifacts fail closed.

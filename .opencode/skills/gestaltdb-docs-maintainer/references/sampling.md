@@ -41,8 +41,16 @@ Engineered for zero-overhead GNN data loaders (PyTorch Geometric, DGL, TensorFlo
 ### Building a Snapshot
 Build arrays directly from an active database handle:
 - `snapshot = graph.build_sampler_snapshot(output_dir)` (or `SamplerSnapshot.build(graph, output_dir)`)
+- High-level non-temporal builds automatically pin a verifiable mutable backend snapshot where supported. Use `read_snapshot=True` to require this or `False` to opt out; direct `SamplerSnapshot.build` remains a lower-level unpinned API.
+- `snapshot = graph.build_sampler_snapshot(output_dir, temporal=True, system_time=known_at, time_bucket="day")` captures temporal history through one authenticated system horizon.
 
 This generates binary `.npy` CSR-style arrays (`row_ptr`, `col_idx`, `relations`, `edge_ids`, `features`, metadata).
+
+Format v2 is atomically published with a completion manifest and a SHA-256/dtype/shape record for every array. The loader validates those records, CSR bounds, aligned lengths, interval invariants, and provenance before exposing RAM or memmap arrays. Format-v1 snapshots remain loadable without these guarantees.
+
+Temporal snapshots expose `edge_version_ids`, `valid_from_us`, `valid_to_us`, `valid_to_open`, `edge_system_time_us`, and `edge_commit_ids`, all aligned with compact edge rows. `temporal_out` and `temporal_in` group rows by endpoint/relation and valid start. `SamplerEngine` uses those indexes and then applies exact half-open point/window predicates before random selection. Pass `temporal=TemporalContext.as_of(...)` or `TemporalContext.during(...)`; windows support `window_policy="overlap"` and `"contained"`, and multihop/subgraph calls support `causal_policy="none"`, `"nondecreasing"`, or `"nonincreasing"`. Temporal neighbor and batch results carry aligned edge-version and validity arrays.
+
+Temporal v2 snapshots also authenticate grouped positive-triple interval histories and node-availability intervals. `HardNegativeConfig.temporal_positive_policy` accepts `"any_time"`, `"at_positive_time"`, or `"window"`; window membership supports `temporal_positive_window_policy="overlap"` or `"contained"`. `temporal_candidate_window_days` selects a trailing availability window ending at each example time. Future candidates remain unavailable unless `allow_future_candidates=True`. Exhaustion is deterministic: `exhaustion_policy="raise"` fails or `"repeat"` reuses an accepted negative. Direct temporal sampling requires aligned `positive_times_us` or a `temporal` context unless future candidates are explicitly allowed, and accepts `return_diagnostics=True`; temporal subgraph batches expose `positive_time_us`, `negative_time_us`, and `negative_diagnostics`.
 
 ### Loading into Engine
 - `SamplerEngine.load(snapshot_path, mode="ram", seed=42)`: Eagerly loads all arrays into process RAM.

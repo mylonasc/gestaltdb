@@ -2,7 +2,7 @@ Cypher Queries
 ==============
 
 GestaltDB exposes an expanding openCypher subset through
-``GraphDB.query(cypher, parameters=None)``. The grammar-based frontend supports
+``GraphDB.query(cypher, parameters=None, read_snapshot=None)``. The grammar-based frontend supports
 comments, Unicode and backtick-escaped names, source-located syntax errors, and
 standard expression precedence. Execution covers indexed node and relationship
 scans, typed relationship expansion, filtering, ordering, chained ``MATCH``
@@ -10,6 +10,12 @@ clauses, writes, and a persisted node-constraint catalog.
 
 Relationship types come from ``edge.properties["type"]``. Node labels are stored
 on ``Node(labels=[...])``.
+
+Read-only queries automatically use one unified mutable-state backend snapshot
+when supported, preventing index scans, entity hydration, and traversal from
+mixing horizons. Pass ``read_snapshot=True`` to require the guarantee or
+``False`` to opt out. LMDB supports verifiable snapshots; transactional PyRex
+supports pinned reads; LevelDB and default PyRex fail explicit requests closed.
 
 Basic Result Shape
 ------------------
@@ -103,6 +109,41 @@ inspect path values; bound paths remain usable downstream like any variable.
 .. code-block:: python
 
    graph_db.query('MATCH p = (d:Drug)-[:binds]->(t:Target) RETURN length(p) AS hops')
+
+Bitemporal Matches
+------------------
+
+Append ``FOR VALID_TIME AS OF <expression>`` to ``MATCH`` or ``OPTIONAL
+MATCH`` to query immutable temporal versions instead of mutable current graph
+records. Add ``FOR SYSTEM_TIME AS OF <expression>`` to select what was known at
+a historical system instant; a system-time qualifier requires a valid-time
+qualifier. Both expressions must produce ``datetime`` values and may use
+literals, parameters, and scalar functions, but not row variables or
+aggregates.
+
+.. code-block:: python
+
+   result = graph_db.query(
+       'MATCH (p:Person)-[r:WORKS_FOR]->(c:Company) '
+       'FOR VALID_TIME AS OF datetime($validAt) '
+       'FOR SYSTEM_TIME AS OF datetime($knownAt) '
+       'RETURN c.name, versionId(r), validFrom(r), validTo(r), systemFrom(r)',
+       parameters={"validAt": valid_at, "knownAt": known_at},
+   )
+
+Qualifiers are query-wide. Every chained or optional match, ``UNION`` branch,
+correlated subquery, fixed or variable path, and shortest path uses one valid
+instant and one read view captured at query start. Repeated qualifiers must
+resolve to the same instant. Temporal queries are read-only and reject all
+write clauses. ``versionId``, ``validFrom``, ``validTo``, and ``systemFrom``
+return temporal version metadata, propagate null, and return null for entities
+from unqualified current-graph queries; ``validTo`` is also null for an
+open-ended interval.
+
+Temporal matches use temporal node and endpoint catalogs plus typed temporal
+adjacency. Deferred temporal writes therefore require
+``rebuild_temporal_indexes()`` or ``rebuild_deferred_indexes()`` before they can
+be queried. Queries without qualifiers retain current-graph behavior.
 
 Writes
 ------
@@ -286,6 +327,53 @@ group like any other non-aggregate projection expression.
    graph_db.query('MATCH (n:Drug) RETURN toUpper(n.name) AS name, size(n.synonyms) AS total')
    graph_db.query('MATCH (a)-[r:binds]->(b) RETURN type(r) AS rel, startNode(r).name AS source')
 
+Temporal Values
+---------------
+
+Cypher expressions support immutable, microsecond-precision ``date``, ``time``,
+``localtime``, ``datetime``, ``localdatetime``, and exact ``duration`` values.
+Each constructor takes one strict ISO string or component map. Constructors
+propagate ``null``; they deliberately do not provide a no-argument current-clock
+form, so repeated queries remain deterministic. ``datetime`` requires an
+explicit numeric offset and normalizes to UTC. Named timezones and calendar
+month/year durations are not supported.
+
+.. code-block:: python
+
+   result = graph_db.query(
+       "UNWIND [1] AS x "
+       "RETURN date('2025-01-31') + duration('P2D') AS due, "
+       "datetime('2025-01-31T12:30:00+02:00').hour AS utc_hour"
+   )
+
+Temporal values support component access, same-category comparison,
+``DISTINCT``, grouping, ``ORDER BY``, ``CASE``, collections, parameters, and
+canonical ``toString`` conversion. Exact duration arithmetic is supported for
+dates, times, and datetimes; date arithmetic requires whole days. Aware Python
+``datetime``/``time`` parameters become offset temporal values, while naive
+ones become local values; Python ``date`` and ``timedelta`` parameters are also
+normalized.
+
+These values persist recursively in node and relationship properties, including
+nested lists and maps. Pickle, JSON, MessagePack, and Protobuf use one portable
+tagged representation, and old untagged records remain readable. Configured
+exact and range property indexes support temporal scalars; fixed-offset ``time``
+values are indexed by their UTC-equivalent time so equality matches Cypher
+semantics. Temporal graph views and historical ``MATCH`` remain separate from
+these scalar values. Array-native sampler snapshots do not export arbitrary
+graph properties.
+
+.. code-block:: python
+
+   graph_db.create_node_property_index("observed")
+   graph_db.query(
+       "CREATE (e:Event {id: 'e1', observed: datetime('2025-01-31T12:30:00Z')})"
+   )
+   graph_db.query(
+       "MATCH (e:Event) WHERE e.observed >= datetime('2025-01-01T00:00:00Z') "
+       "RETURN e.id, e.observed"
+   )
+
 Projection and Result Shaping
 -----------------------------
 
@@ -414,8 +502,8 @@ Registered Procedures
 Top-level registered procedure calls use ``CALL qualified.name(...) YIELD``.
 Yielded fields may be aliased, arguments may use parameters, and unknown
 procedure names or fields produce source-located semantic errors. Generalized
-syntax does not enable arbitrary dispatch: ``pg.sample_typed_paths`` is the
-currently registered procedure.
+syntax does not enable arbitrary dispatch. ``pg.sample_typed_paths`` and the
+bounded temporal-epistemic ``kg.entails`` procedure are registered.
 
 .. code-block:: python
 
@@ -427,6 +515,10 @@ currently registered procedure.
            "pattern": [{"edge_type": "binds", "direction": "out", "sample_size": 2}],
        },
    )
+
+``kg.entails`` accepts agent, proposition, modal operator, and options. It can
+yield ``status``, ``confidence``, and ``explanation``. See
+:doc:`modal-epistemic` for its world, temporal, formula, and limit semantics.
 
 Aggregation and Implicit Grouping
 ---------------------------------
@@ -467,4 +559,4 @@ locations. The current Cypher API does not yet support:
 - pattern comprehensions and ``exists()`` with a pattern argument
 - GQL quantified relationships/path patterns; errors suggest legacy ``*min..max`` syntax
 - scalar functions beyond the documented core set
-- procedures other than the registered ``pg.sample_typed_paths`` call
+- procedures other than the registered ``pg.sample_typed_paths`` and ``kg.entails`` calls

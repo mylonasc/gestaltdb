@@ -23,6 +23,34 @@ Temporal Version History
    :members:
    :show-inheritance:
 
+Epistemic Claims
+----------------
+
+.. automodule:: gestaltdb.epistemic
+   :members:
+   :show-inheritance:
+
+Positive Horn Rules
+-------------------
+
+.. automodule:: gestaltdb.rules
+   :members:
+   :show-inheritance:
+
+Modal Evaluation
+----------------
+
+.. automodule:: gestaltdb.modal
+   :members:
+   :show-inheritance:
+
+Consistent Read Views
+---------------------
+
+.. automodule:: gestaltdb.readview
+   :members:
+   :show-inheritance:
+
 Sampling Configuration
 ----------------------
 

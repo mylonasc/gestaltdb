@@ -8,6 +8,7 @@ from gestaltdb import agent_docs
 def test_agent_docs_topics_and_skill_are_available():
     assert "cypher" in agent_docs.TOPICS
     assert "backends" in agent_docs.TOPICS
+    assert "temporal" in agent_docs.TOPICS
     skill = agent_docs.read_skill()
     assert "GestaltDB User Guide For Agents" in skill
     assert "python -m gestaltdb.agent_docs" in skill

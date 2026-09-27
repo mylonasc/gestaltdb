@@ -14,11 +14,16 @@ from typing import TYPE_CHECKING
 from .ast import (
     CreateConstraint,
     DropConstraint,
+    EntailsCall,
     Query,
     SampleTypedPathsCall,
     ShowIndexes,
     ShowConstraints,
     UnionQuery,
+    MatchClause,
+    OptionalMatchClause,
+    SubqueryClause,
+    ForeachClause,
 )
 from .parser import parse as _parse_query
 from .parser import parse_ast as _parse_ast
@@ -65,7 +70,7 @@ class QueryResult:
         return len(self.records)
 
 
-def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | RelationshipScanQuery | MultiMatchQuery:
+def parse(query: str) -> MatchQuery | SampleTypedPathsCall | EntailsCall | NodeScanQuery | RelationshipScanQuery | MultiMatchQuery:
     """Parse the supported Cypher subset.
 
     Args:
@@ -86,7 +91,7 @@ def parse(query: str) -> MatchQuery | SampleTypedPathsCall | NodeScanQuery | Rel
 
 def parse_ast(
     query: str,
-) -> Query | SampleTypedPathsCall | UnionQuery | CreateConstraint | DropConstraint | ShowConstraints | ShowIndexes:
+) -> Query | SampleTypedPathsCall | EntailsCall | UnionQuery | CreateConstraint | DropConstraint | ShowConstraints | ShowIndexes:
     """Parse the supported Cypher subset into its canonical clause AST."""
     return _parse_ast(query)
 
@@ -100,7 +105,7 @@ def plan(query: str) -> LogicalPlan:
     directly and cannot be planned.
     """
     canonical = _parse_ast(query)
-    if isinstance(canonical, SampleTypedPathsCall):
+    if isinstance(canonical, (SampleTypedPathsCall, EntailsCall)):
         return plan_query(canonical)
     if isinstance(canonical, UnionQuery):
         return plan_union_query(canonical)
@@ -109,7 +114,13 @@ def plan(query: str) -> LogicalPlan:
     return plan_staged_query(canonical)
 
 
-def execute(graph, query: str, parameters: dict[str, object] | None = None) -> QueryResult:
+def execute(
+    graph,
+    query: str,
+    parameters: dict[str, object] | None = None,
+    *,
+    read_snapshot: bool | None = None,
+) -> QueryResult:
     """Execute a supported Cypher query against a ``GraphDB`` instance.
 
     Args:
@@ -125,20 +136,73 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
     from .write import execute_ddl, transaction_supported
 
     canonical = _parse_ast(query)
+    if read_snapshot is True and isinstance(canonical, (CreateConstraint, DropConstraint)):
+        raise ValueError("read_snapshot=True cannot be used with Cypher writes")
     if isinstance(canonical, (CreateConstraint, DropConstraint, ShowConstraints, ShowIndexes)):
+        use_snapshot = read_snapshot is True or (
+            read_snapshot is None
+            and isinstance(canonical, (ShowConstraints, ShowIndexes))
+            and getattr(getattr(graph, "store", None), "supports_read_snapshots", False)
+        )
+        if use_snapshot:
+            with graph.current_read_view(capture_provenance=False) as current_view:
+                columns, records = execute_ddl(current_view, canonical)
+            return QueryResult(columns=columns, records=records)
         columns, records = execute_ddl(graph, canonical)
         return QueryResult(columns=columns, records=records)
-    if isinstance(canonical, SampleTypedPathsCall):
+    if isinstance(canonical, (SampleTypedPathsCall, EntailsCall)):
         logical_plan = plan_query(canonical)
     elif isinstance(canonical, UnionQuery):
         logical_plan = plan_union_query(canonical)
     else:
         logical_plan = plan_staged_query(canonical)
-    if _plan_has_writes(logical_plan) and transaction_supported(graph):
+    if read_snapshot is True and _plan_has_writes(logical_plan):
+        raise ValueError("read_snapshot=True cannot be used with Cypher writes")
+    qualifiers = _temporal_qualifiers(canonical)
+    if qualifiers:
+        from gestaltdb.temporal import TemporalInstant
+        from .expr import evaluate_expression
+
+        evaluation_context = QueryContext(graph=graph, parameters=parameters or {})
+        resolved: dict[str, object] = {}
+        for qualifier in qualifiers:
+            value = evaluate_expression(qualifier.expression, {}, evaluation_context)
+            if value is None:
+                raise ValueError("Temporal qualifier expressions cannot be null")
+            if not isinstance(value, TemporalInstant):
+                raise TypeError("Temporal qualifier expressions must resolve to datetime() values")
+            previous = resolved.get(qualifier.kind)
+            if previous is not None and previous != value:
+                raise ValueError(f"Conflicting query-wide {qualifier.kind}-time qualifiers")
+            resolved[qualifier.kind] = value
+        with graph.read_view(
+            valid_time=resolved["valid"], system_time=resolved.get("system")
+        ) as read_view:
+            records = execute_plan(
+                logical_plan,
+                QueryContext(
+                    graph=graph,
+                    parameters=parameters or {},
+                    read_view=read_view,
+                ),
+            )
+    elif _plan_has_writes(logical_plan) and transaction_supported(graph):
         with graph.transaction() as tx_graph:
             records = execute_plan(
                 logical_plan,
                 QueryContext(graph=tx_graph, parameters=parameters or {}),
+            )
+    elif not _plan_has_writes(logical_plan) and (
+        read_snapshot is True
+        or (
+            read_snapshot is None
+            and getattr(getattr(graph, "store", None), "supports_read_snapshots", False)
+        )
+    ):
+        with graph.current_read_view(capture_provenance=False) as current_view:
+            records = execute_plan(
+                logical_plan,
+                QueryContext(graph=current_view, parameters=parameters or {}),
             )
     else:
         records = execute_plan(
@@ -146,6 +210,22 @@ def execute(graph, query: str, parameters: dict[str, object] | None = None) -> Q
             QueryContext(graph=graph, parameters=parameters or {}),
         )
     return QueryResult(columns=logical_plan.columns, records=records)
+
+
+def _temporal_qualifiers(value) -> tuple[object, ...]:
+    if not isinstance(value, (Query, UnionQuery)):
+        return ()
+    qualifiers = []
+    queries = value.branches if isinstance(value, UnionQuery) else (value,)
+    for branch in queries:
+        for clause in branch.clauses:
+            if isinstance(clause, (MatchClause, OptionalMatchClause)):
+                qualifiers.extend(clause.qualifiers)
+            elif isinstance(clause, SubqueryClause):
+                qualifiers.extend(_temporal_qualifiers(clause.query))
+            elif isinstance(clause, ForeachClause):
+                qualifiers.extend(_temporal_qualifiers(Query(clause.body, branch.source)))
+    return tuple(qualifiers)
 
 
 def _plan_has_writes(plan: LogicalPlan) -> bool:

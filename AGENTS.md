@@ -13,6 +13,9 @@ Use this file when you are an agent trying to understand or modify the library w
 - Columnar ingestion containers and enums: `src/gestaltdb/ingestion.py`
 - Canonical temporal values and selection semantics: `src/gestaltdb/temporal.py`
 - Immutable temporal version records and write descriptors: `src/gestaltdb/versioning.py`
+- Epistemic claim values and four-valued status: `src/gestaltdb/epistemic.py`
+- Bounded modal expressions and evaluation: `src/gestaltdb/modal.py`
+- Positive Horn rule values and evaluation results: `src/gestaltdb/rules.py`
 - Cypher engine: `src/gestaltdb/query_engine/cypher/`
 - Legacy Cypher import shims: `src/gestaltdb/cypher.py` and `src/gestaltdb/cypher_*.py`
 - Sampling API: `src/gestaltdb/sampling/`
@@ -37,6 +40,15 @@ from gestaltdb import EdgeList, IndexMaintenanceMode, NodeList, QueryResult
 from gestaltdb import HardNegativeConfig, SamplerEngine, SamplerSnapshot
 from gestaltdb import SamplingHop, SamplingPattern
 from gestaltdb import TemporalContext, TemporalInstant, TemporalInterval
+from gestaltdb import TemporalDate, TemporalDuration, TemporalLocalDateTime
+from gestaltdb import TemporalLocalTime, TemporalTime
+from gestaltdb import GraphReadView, ReadViewProvenance
+from gestaltdb import CurrentGraphReadView, CurrentReadProvenance
+from gestaltdb import Claim, ClaimObjectKind, ClaimPolarity, ClaimStatus
+from gestaltdb import AccessibilityKind, ModalExpression, ModalOperator
+from gestaltdb import ModalEntailmentResult, ModalEvaluationLimitError
+from gestaltdb import ClaimExplanation, RuleEvaluationLimitError, RuleRunResult
+from gestaltdb import RuleVersion, TruthMaintenanceResult
 ```
 
 Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes are available from `import gestaltdb`; import them from their modules unless the API is intentionally changed.
@@ -51,7 +63,16 @@ Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes 
 - Serializers convert graph entities to bytes. Current serializers are `PickleSerializer`, `JSONSerializer`, `MessagePackSerializer`, and `ProtobufSerializer`.
 - KV backends and binary serializers are independent optional extras. Combine them additively, for example `gestaltdb[leveldb,msgpack]` or `gestaltdb[lmdb,protobuf]`; Pickle and JSON need no serializer extra.
 - `TemporalInstant`, `TemporalInterval`, and `TemporalContext` define timezone-aware UTC-microsecond instants, half-open `[start, end)` intervals, and point/window matching.
-- `put_node_version`, `put_edge_version`, correction/retraction helpers, and `commit_versions` append immutable temporal history. They do not update current graph records, Cypher views, or sampler snapshots; TKG-02 history inspection is scan-based.
+- Cypher temporal expressions return immutable `TemporalDate`, `TemporalTime`, `TemporalLocalTime`, `TemporalLocalDateTime`, `TemporalInstant`, and `TemporalDuration` values. They persist recursively in node and edge properties across every serializer and participate in configured exact/range property indexes.
+- `put_node_version`, `put_edge_version`, correction/retraction helpers, and `commit_versions` append immutable temporal history. `get_node_as_of`, `get_edge_as_of`, and `iter_edges_as_of` use derived temporal indexes; deferred temporal writes require `rebuild_temporal_indexes()` or `rebuild_deferred_indexes()`. Current graph records, Cypher views, and sampler snapshots remain separate.
+- Filesystem-backed temporal writers use a durable sidecar sequence and database-wide lock. `list_temporal_orphans()` audits gaps/incomplete publications; `reclaim_temporal_orphans(through_commit=...)` removes only validated unmarked artifacts and never reuses commit IDs.
+- Deprecated `TimeIndexedEdge` records are mutable legacy data, not temporal history. Back up and quiesce the database, run `migrate_time_indexed_edges(delete_legacy=False)`, validate, then rerun with deletion; changed or corrupt legacy input fails closed.
+- `graph.read_view(valid_time=...)` pins temporal reads and point-materialized sampler builds to one contiguous visible commit prefix. Its authenticated `ReadViewProvenance` verifies stable database, backend, serializer, commit, and visibility identity during snapshot hydration.
+- `graph.current_read_view()` pins mutable records, adjacency, metadata, and indexes to one backend snapshot. LMDB provenance includes its transaction sequence plus a full-state digest; transactional PyRex pins reads but provenance depends on runtime sequence support; the multi-database LevelDB layout fails explicit snapshot requests closed.
+- `assert_claim`, `correct_claim`, and `retract_claim` append serializer-neutral sourced claims to temporal history. Deterministic statement IDs identify propositions; claim IDs additionally include polarity, agent, source, and world. `iter_claims_as_of` and `claim_status` provide indexed bitemporal lookup and open-world `supported`/`refuted`/`both`/`unknown` semantics.
+- `create_rule` appends validated safe positive Horn-rule versions. `run_rules(as_of=...)` performs bounded semi-naive evaluation over positive entity claims in a shared world, intersects premise validity, and persists deduplicated conclusions with rule and premise version justifications. Limit failures publish no partial derivations.
+- `maintain_truth(as_of=...)` incrementally reconciles derived claims, retracting a conclusion only after its final independent support disappears. `explain_claim` returns a bounded finite graph of exact historical claim/rule versions; retries after interrupted dependency-index publication are idempotent.
+- `assert_world_accessibility` stores agent-specific temporal links in separate belief, knowledge, and modal frames. `entails` and allowlisted `kg.entails` evaluate finite nested modal formulas under one read view with explicit depth/state bounds and deterministic temporal/derivation evidence.
 
 ## Backend Guidance
 
@@ -72,6 +93,7 @@ Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes 
 - Exact lookup helpers include `nodes_by_property`, `nodes_by_label_property`, `edges_by_property`, and `edges_by_type_property`.
 - Range helpers include `nodes_by_property_range`, `nodes_by_label_property_range`, `edges_by_property_range`, and `edges_by_type_property_range`.
 - Deferred columnar ingestion can mark secondary indexes stale. Run `rebuild_deferred_indexes()` before index-backed queries if using `IndexMaintenanceMode.DEFER`.
+- Encoded secondary/range index keys are limited to 511 bytes across all backends; oversized IDs or indexed values fail before backend I/O and are never truncated.
 
 ## Ingestion Rules
 
@@ -108,6 +130,7 @@ Supported features include:
 - Stable `ORDER BY` with Cypher value ordering, nulls last ascending/first descending, and strict Boolean predicate/coercion rules.
 - `RETURN`, aliases, `RETURN *`, general projection expressions (including `CASE`, subscripts/slices, list comprehensions, `reduce`, map projections), `DISTINCT`, alias-aware `ORDER BY`, and literal or parameterized `SKIP`/`LIMIT`.
 - Chained `MATCH` clauses with clause-local `WHERE`.
+- Query-wide bitemporal `MATCH`/`OPTIONAL MATCH` qualifiers (`FOR VALID_TIME AS OF`, optional `FOR SYSTEM_TIME AS OF`) propagated through paths, `UNION`, and subqueries, with `versionId`/`validFrom`/`validTo`/`systemFrom` metadata functions; qualified queries are read-only.
 - `OPTIONAL MATCH` as a left-outer join with `None`-filled rows, post-optional `WHERE` filtering, and null-safe downstream matching.
 - `UNWIND list AS x` expanding rows per element, usable mid-pipeline or as the opening clause.
 - `UNION [ALL]` over independently planned branches with matching columns; branch modifiers apply within branches, `UNION` deduplicates cumulatively.
@@ -116,7 +139,7 @@ Supported features include:
 - Core aggregates (`count`, `collect`, `sum`, `avg`, `min`, `max`) with implicit grouping, aggregate `DISTINCT`, and documented null/empty-input behavior.
 - Scalar expressions containing aggregate results, such as `count(*) + 1`.
 - Core scalar functions (`coalesce`, `id`/`elementId`, `type`, `labels`, `startNode`/`endNode`, `properties`, `head`/`last`, `size`/`length`, `toBoolean`/`toInteger`/`toFloat`/`toString`, string ops, math ops including `sign`/`exp`/`log`/`sin`/`cos`/`tan`/`pi`/`e`, `rand`/`randomUUID`, `range`, `reverse`, `tail`, `keys`), including property access on computed values such as `startNode(r).name`.
-- Generalized top-level `CALL name(...) YIELD field [AS alias] RETURN alias` parsing with allowlisted execution; `pg.sample_typed_paths` is registered and accepts parameters.
+- Generalized top-level `CALL name(...) YIELD field [AS alias] RETURN alias` parsing with allowlisted execution; `pg.sample_typed_paths` and `kg.entails` are registered and accept parameters.
 
 Unsupported Cypher currently includes mutating clauses beyond `CREATE`/`SET`/`REMOVE`/`DELETE`/`MERGE`/`FOREACH`, pattern comprehensions, `exists()` with patterns, GQL quantified paths (with migration hints), unregistered procedures, and relationship or multi-property constraints.
 
@@ -128,6 +151,12 @@ There are two sampling layers:
 - `SamplerSnapshot` plus `SamplerEngine` is array-native and optimized for ML training. It uses compact integer node, edge, and relation IDs.
 
 `SamplerSnapshot.build(graph, output_path, ...)` and `graph.build_sampler_snapshot(output_path, ...)` persist immutable `.npy` arrays and metadata. `SamplerEngine.load(path, mode="ram"|"memmap", seed=...)` loads the arrays for neighbor, multihop, subgraph, positive-triple, and hard-negative sampling.
+
+High-level non-temporal snapshot builds automatically use authenticated mutable-state snapshots when the backend exposes a verifiable identity. Pass `read_snapshot=True` to require this guarantee or `False` to opt out; unsupported requests fail before building.
+
+`graph.build_sampler_snapshot(output_path, temporal=True, system_time=..., time_bucket="day")` builds format-v2 temporal history from one authenticated read view. It persists edge-version validity and commit/system provenance plus source/relation/start-time indexes. V2 loads authenticate the completion manifest and every array; legacy v1 snapshots remain loadable without temporal guarantees. `SamplerEngine` accepts `TemporalContext` point/window filters, `overlap`/`contained` window policies, and monotonic valid-start causal policies; filters run before fanout and temporal result arrays stay aligned with sampled edges.
+
+Temporal snapshots also index node availability and positive-triple intervals. `HardNegativeConfig` supports `any_time`, `at_positive_time`, and window positive rejection, trailing candidate windows, explicit future-candidate opt-in, and deterministic `raise`/`repeat` exhaustion. Temporal batches return aligned positive/negative example times and rejection diagnostics.
 
 `SampledSubgraphBatch` uses local node IDs in `senders`, `receivers`, `positives`, and `negatives`. Use `node_ids_global` to map local batch rows back to compact global snapshot IDs, and use `snapshot.external_node_id(...)` or `snapshot.global_triple_to_external(...)` to recover external IDs.
 
@@ -142,6 +171,7 @@ There are two sampling layers:
 
 - Run tests: `uv run pytest`
 - Run a focused test: `uv run pytest tests/test_cypher.py -q`
+- Run the deterministic temporal smoke: `uv run python -m benchmarks temporal --nodes 100 --edges 500 --queries 100`
 - Check documentation & API drift: `uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/check_docs.py`
 - Test documentation examples: `uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py test-examples`
 - Build Sphinx docs: `uv run sphinx-build -b html docs docs/_build/html`

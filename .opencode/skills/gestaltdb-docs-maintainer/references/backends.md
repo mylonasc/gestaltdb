@@ -63,6 +63,10 @@ GestaltDB supports self-describing database directories using `gestaltdb_manifes
   Preflights the selected optional dependencies before replacing or creating the store directory, records backend configuration, serializer configuration, and indexed property metadata in `gestaltdb_manifest.json`, and returns an open `GraphDB` instance.
 - `GraphDB.open(path, backend_options=...)`:
   Reads `gestaltdb_manifest.json`, preflights its backend and serializer extras, and restores backend, serializer, and property index configurations automatically.
+- Managed and migrated stores persist an immutable `database_id`; it remains stable when the directory moves and anchors `ReadViewProvenance` verification.
+- `GraphDB.read_view(valid_time=...)` pins immutable temporal reads to one visible commit on every backend.
+- `GraphDB.current_read_view()` pins mutable records and indexes. LMDB provides verifiable MVCC provenance; transactional PyRex pins reads when its runtime supports transaction snapshots; LevelDB and default PyRex reject explicit requests.
+- Read-only Cypher and non-temporal sampler builds use snapshots automatically where truthful. Pass `read_snapshot=True` to require the guarantee or `False` to retain an unpinned legacy read.
 
 ---
 

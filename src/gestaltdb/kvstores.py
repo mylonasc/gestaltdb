@@ -1,10 +1,32 @@
 from typing import Optional, Dict, List, Union
 import base64
+from contextlib import contextmanager
+from dataclasses import dataclass
+import hashlib
 import os
 import struct
 
 
 _TYPED_ADJ_SEP = b"\x1f"
+MAX_PORTABLE_INDEX_KEY_BYTES = 511
+
+
+@dataclass(frozen=True)
+class ReadSnapshotIdentity:
+    """Backend identity for one pinned mutable-state read horizon."""
+
+    backend: str
+    kind: str
+    sequence: int | None
+    verifiable: bool
+
+
+def _checked_index_key(key: bytes) -> bytes:
+    if len(key) > MAX_PORTABLE_INDEX_KEY_BYTES:
+        raise ValueError(
+            f"encoded index key exceeds the portable {MAX_PORTABLE_INDEX_KEY_BYTES}-byte limit"
+        )
+    return key
 
 
 def _to_bytes(value) -> bytes:
@@ -59,7 +81,7 @@ def _index_key(index_name, key_parts, value=b"") -> bytes:
     parts = [_index_part(index_name)]
     parts.extend(_index_part(part) for part in key_parts)
     parts.append(_index_part(value))
-    return b"I" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts)
+    return _checked_index_key(b"I" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts))
 
 
 def _index_prefix(index_name, key_parts) -> bytes:
@@ -78,7 +100,9 @@ def _index_prefix(index_name, key_parts) -> bytes:
     """
     parts = [_index_part(index_name)]
     parts.extend(_index_part(part) for part in key_parts)
-    return b"I" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts) + _TYPED_ADJ_SEP
+    return _checked_index_key(
+        b"I" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts) + _TYPED_ADJ_SEP
+    )
 
 
 def _range_index_key(index_name, key_parts, range_value: bytes, value=b"") -> bytes:
@@ -87,14 +111,23 @@ def _range_index_key(index_name, key_parts, range_value: bytes, value=b"") -> by
     parts.extend(_index_part(part) for part in key_parts)
     parts.append(range_value)
     parts.append(_index_part(value))
-    return b"R" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts)
+    return _checked_index_key(b"R" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts))
 
 
 def _range_index_prefix(index_name, key_parts) -> bytes:
     """Build the prefix used for sorted range index scans."""
     parts = [_index_part(index_name)]
     parts.extend(_index_part(part) for part in key_parts)
-    return b"R" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts) + _TYPED_ADJ_SEP
+    return _checked_index_key(
+        b"R" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts) + _TYPED_ADJ_SEP
+    )
+
+
+def _validate_range_scan_options(reverse: bool, limit: int | None) -> None:
+    if not isinstance(reverse, bool):
+        raise TypeError("reverse must be a boolean")
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
+        raise ValueError("limit must be a positive integer")
 
 
 def _missing_dependency_error(package_name, *, extra_name, feature_name=None):
@@ -156,6 +189,8 @@ class KVStore:
     """Abstract interface for a simple key-value store."""
 
     supports_transactions = False
+    supports_read_snapshots = False
+    supports_verifiable_read_snapshots = False
 
     # The basic K/V methods:
     def put(self, key: bytes, value: bytes):
@@ -181,6 +216,10 @@ class KVStore:
     def transaction(self, **options):
         """Return a transaction-bound store when supported."""
         raise NotImplementedError("transactions are not supported by this KVStore")
+
+    def read_snapshot(self):
+        """Return a context manager yielding a unified read-only store view."""
+        raise NotImplementedError("unified read snapshots are not supported by this KVStore")
 
     def put_metadata(self, key: bytes, value: bytes):
         """Store a metadata key/value pair."""
@@ -329,8 +368,8 @@ class KVStore:
         """Delete one sorted range index entry."""
         raise NotImplementedError
 
-    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True):
-        """Yield values whose range index key falls between start and end values."""
+    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None):
+        """Yield bounded range-index values, optionally greatest-first."""
         raise NotImplementedError
 
     def ingest_nodes_columnar(self, node_list, *, native: bool = True):
@@ -413,6 +452,8 @@ class LMDBStore(KVStore):
     """
 
     supports_transactions = True
+    supports_read_snapshots = True
+    supports_verifiable_read_snapshots = True
 
     @staticmethod
     def ensure_available():
@@ -432,6 +473,7 @@ class LMDBStore(KVStore):
         """
         lmdb = self.ensure_available()
 
+        self.path = path
         max_dbs = 6
         if map_keys:
             max_dbs += 2
@@ -484,6 +526,19 @@ class LMDBStore(KVStore):
     def transaction(self, write: bool = True, **options):
         """Open a transaction spanning all LMDB named databases."""
         return LMDBTransactionStore(self, write=write, **options)
+
+    def current_snapshot_sequence(self) -> int:
+        """Return the latest committed LMDB transaction ID."""
+        return self.env.info()["last_txnid"]
+
+    @contextmanager
+    def read_snapshot(self):
+        """Pin all named databases to one LMDB MVCC transaction."""
+        snapshot = LMDBReadSnapshotStore(self)
+        try:
+            yield snapshot
+        finally:
+            snapshot.close()
 
     def put_metadata(self, key: bytes, value: bytes):
         """Store a metadata key/value pair."""
@@ -716,23 +771,60 @@ class LMDBStore(KVStore):
         with self.env.begin(write=True, db=self.index_db) as txn:
             txn.delete(_range_index_key(index_name, key_parts, range_value, value))
 
-    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True):
+    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None):
         """Yield values whose range index key falls between start and end values."""
+        _validate_range_scan_options(reverse, limit)
         prefix = _range_index_prefix(index_name, key_parts)
         start_key = prefix if start_value is None else prefix + start_value
         with self.env.begin(write=False, db=self.index_db) as txn:
             cursor = txn.cursor()
+            if reverse:
+                end_key = prefix + (b"\xff" if end_value is None else end_value + b"\xff")
+                if cursor.set_range(end_key):
+                    if not cursor.prev():
+                        return
+                elif not cursor.last():
+                    return
+                yielded = 0
+                while True:
+                    key, value = cursor.item()
+                    if not key.startswith(prefix):
+                        break
+                    range_value = key[len(prefix):].split(_TYPED_ADJ_SEP, 1)[0]
+                    if end_value is not None and (
+                        range_value > end_value or (range_value == end_value and not include_end)
+                    ):
+                        if not cursor.prev():
+                            break
+                        continue
+                    if start_value is not None and (
+                        range_value < start_value or (range_value == start_value and not include_start)
+                    ):
+                        break
+                    yield value
+                    yielded += 1
+                    if limit is not None and yielded >= limit:
+                        break
+                    if not cursor.prev():
+                        break
+                return
             if not cursor.set_range(start_key):
                 return
+            yielded = 0
             for key, value in cursor:
                 if not key.startswith(prefix):
                     break
                 range_value = key[len(prefix):].split(_TYPED_ADJ_SEP, 1)[0]
                 if start_value is not None and (range_value < start_value or (range_value == start_value and not include_start)):
+                    if reverse:
+                        break
                     continue
                 if end_value is not None and (range_value > end_value or (range_value == end_value and not include_end)):
                     break
                 yield value
+                yielded += 1
+                if limit is not None and yielded >= limit:
+                    break
 
 
 class LMDBTransactionStore(KVStore):
@@ -962,13 +1054,45 @@ class LMDBTransactionStore(KVStore):
         self._check_active()
         self.txn.delete(_range_index_key(index_name, key_parts, range_value, value), db=self.parent.index_db)
 
-    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True):
+    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None):
         self._check_active()
+        _validate_range_scan_options(reverse, limit)
         prefix = _range_index_prefix(index_name, key_parts)
         start_key = prefix if start_value is None else prefix + start_value
         cursor = self.txn.cursor(db=self.parent.index_db)
+        if reverse:
+            end_key = prefix + (b"\xff" if end_value is None else end_value + b"\xff")
+            if cursor.set_range(end_key):
+                if not cursor.prev():
+                    return
+            elif not cursor.last():
+                return
+            yielded = 0
+            while True:
+                key, value = cursor.item()
+                if not key.startswith(prefix):
+                    break
+                range_value = key[len(prefix):].split(_TYPED_ADJ_SEP, 1)[0]
+                if end_value is not None and (
+                    range_value > end_value or (range_value == end_value and not include_end)
+                ):
+                    if not cursor.prev():
+                        break
+                    continue
+                if start_value is not None and (
+                    range_value < start_value or (range_value == start_value and not include_start)
+                ):
+                    break
+                yield value
+                yielded += 1
+                if limit is not None and yielded >= limit:
+                    break
+                if not cursor.prev():
+                    break
+            return
         if not cursor.set_range(start_key):
             return
+        yielded = 0
         for key, value in cursor:
             if not key.startswith(prefix):
                 break
@@ -978,6 +1102,59 @@ class LMDBTransactionStore(KVStore):
             if end_value is not None and (range_value > end_value or (range_value == end_value and not include_end)):
                 break
             yield value
+            yielded += 1
+            if limit is not None and yielded >= limit:
+                break
+
+
+class LMDBReadSnapshotStore(LMDBTransactionStore):
+    """Read-only LMDB transaction with a verifiable MVCC identity."""
+
+    supports_transactions = False
+    supports_read_snapshots = False
+    supports_verifiable_read_snapshots = True
+
+    def __init__(self, parent: LMDBStore):
+        super().__init__(parent, write=False)
+        self.snapshot_identity = ReadSnapshotIdentity(
+            backend="lmdb",
+            kind="mvcc_transaction",
+            sequence=self.txn.id(),
+            verifiable=True,
+        )
+
+    def _read_only(self, *args, **kwargs):
+        self._check_active()
+        raise RuntimeError("read snapshot is read-only")
+
+    put = delete = put_metadata = delete_metadata = _read_only
+    put_node = delete_node = put_nodes_bulk = _read_only
+    put_edge = delete_edge = put_edges_bulk = _read_only
+    put_adjacency = put_adjacency_bulk = delete_adjacency = _read_only
+    put_typed_adjacency = put_typed_adjacency_bulk = delete_typed_adjacency = _read_only
+    put_index_entry = put_index_entries_bulk = delete_index_entry = _read_only
+    put_range_index_entry = put_range_index_entries_bulk = delete_range_index_entry = _read_only
+
+    def commit(self):
+        raise RuntimeError("read snapshot cannot be committed")
+
+    def state_sha256(self) -> str:
+        """Digest every mutable namespace visible at this MVCC horizon."""
+        self._check_active()
+        digest = hashlib.sha256()
+        databases = (
+            (b"nodes", self.parent.nodes_db),
+            (b"edges", self.parent.edges_db),
+            (b"adj", self.parent.adj_db),
+            (b"typed_adj", self.parent.typed_adj_db),
+            (b"index", self.parent.index_db),
+            (b"metadata", self.parent.metadata_db),
+        )
+        for namespace, database in databases:
+            cursor = self.txn.cursor(db=database)
+            for key, value in cursor:
+                _update_snapshot_digest(digest, namespace, key, value)
+        return digest.hexdigest()
 
 
 # =========================================
@@ -1007,6 +1184,7 @@ class LevelDBStore(KVStore):
         """Create or open a LevelDB store. We'll store nodes/edges by prefix."""
         plyvel = self.ensure_available()
         
+        self.path = path
         self.db_paths = {'nodes' : os.path.join('nodes'), 'edges': os.path.join('edges'), 'adjacency' : os.path.join('adjacency'), 'typed_adjacency': os.path.join('typed_adjacency'), 'index': os.path.join('index'), 'metadata': os.path.join('metadata')}
         if not os.path.exists(path):
             os.makedirs(path, exist_ok=True)
@@ -1257,20 +1435,35 @@ class LevelDBStore(KVStore):
         """Delete one sorted range index entry."""
         self.db_index.delete(_range_index_key(index_name, key_parts, range_value, value))
 
-    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True):
+    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None):
         """Yield values whose range index key falls between start and end values."""
+        _validate_range_scan_options(reverse, limit)
         prefix = _range_index_prefix(index_name, key_parts)
         start_key = prefix if start_value is None else prefix + start_value
-        with self.db_index.iterator(start=start_key) as it:
+        stop_key = prefix + (b"\xff" if end_value is None else end_value + b"\xff")
+        iterator_options = (
+            {"start": prefix, "stop": stop_key, "include_stop": True, "reverse": True}
+            if reverse
+            else {"start": start_key}
+        )
+        with self.db_index.iterator(**iterator_options) as it:
+            yielded = 0
             for key, value in it:
                 if not key.startswith(prefix):
                     break
                 range_value = key[len(prefix):].split(_TYPED_ADJ_SEP, 1)[0]
                 if start_value is not None and (range_value < start_value or (range_value == start_value and not include_start)):
+                    if reverse:
+                        break
                     continue
                 if end_value is not None and (range_value > end_value or (range_value == end_value and not include_end)):
+                    if reverse:
+                        continue
                     break
                 yield value
+                yielded += 1
+                if limit is not None and yielded >= limit:
+                    break
 
     def close(self):
         """Close all LevelDB sub-databases."""
@@ -1280,6 +1473,12 @@ class LevelDBStore(KVStore):
         self.db_adj.close()
         self.db_edges.close()
         self.db_nodes.close()
+
+    def read_snapshot(self):
+        raise NotImplementedError(
+            "LevelDBStore cannot provide a unified snapshot across its independent "
+            "node, edge, adjacency, index, and metadata databases"
+        )
 
 
 class PyRexStore(KVStore):
@@ -1328,6 +1527,7 @@ class PyRexStore(KVStore):
         """Open a PyRex/RocksDB store with optional tuning settings."""
         pyrex = self.ensure_available()
 
+        self.path = path
         options = pyrex.PyOptions()
         options.create_if_missing = True
         if parallelism is not None:
@@ -1348,9 +1548,12 @@ class PyRexStore(KVStore):
             transaction_db_options = transaction_db_options or pyrex.TransactionDBOptions()
             self.db = pyrex.TransactionDB(path, options, transaction_db_options)
             self.supports_transactions = True
+            self.supports_read_snapshots = True
         else:
             self.db = pyrex.PyRocksDB(path, options)
             self.supports_transactions = False
+            self.supports_read_snapshots = False
+        self.supports_verifiable_read_snapshots = False
         self.write_options = pyrex.WriteOptions()
         self.write_options.disable_wal = disable_wal
 
@@ -1361,6 +1564,47 @@ class PyRexStore(KVStore):
         transaction_options = transaction_options or self._pyrex.TransactionOptions()
         txn = self.db.begin_transaction(self.write_options, transaction_options)
         return PyRexTransactionStore(self, txn)
+
+    def current_snapshot_sequence(self) -> int | None:
+        for name in ("latest_sequence_number", "get_latest_sequence_number"):
+            value = getattr(self.db, name, None)
+            if value is None:
+                continue
+            value = value() if callable(value) else value
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                return value
+        return None
+
+    @contextmanager
+    def read_snapshot(self):
+        """Pin reads to one RocksDB transaction snapshot when available."""
+        if not self.transactional:
+            raise NotImplementedError(
+                "PyRexStore read snapshots require PyRexStore(transactional=True)"
+            )
+        options = self._pyrex.TransactionOptions()
+        option_snapshot = hasattr(options, "set_snapshot")
+        if option_snapshot:
+            options.set_snapshot = True
+        txn = self.db.begin_transaction(self.write_options, options)
+        try:
+            if not option_snapshot:
+                setter = getattr(txn, "set_snapshot", None)
+                if setter is None:
+                    raise NotImplementedError(
+                        "the installed PyRex runtime cannot pin transaction snapshots"
+                    )
+                setter()
+            sequence = _pyrex_snapshot_sequence(txn)
+            snapshot = PyRexReadSnapshotStore(self, txn, sequence=sequence)
+            try:
+                yield snapshot
+            finally:
+                snapshot.close()
+        except Exception:
+            if txn.is_active:
+                txn.rollback()
+            raise
 
     def _key(self, prefix: bytes, key: bytes) -> bytes:
         """Build a prefixed RocksDB key."""
@@ -1406,6 +1650,29 @@ class PyRexStore(KVStore):
         finally:
             if temp_txn is not None and temp_txn.is_active:
                 temp_txn.rollback()
+
+    def _iter_key_values_reverse_from(self, end_key: bytes):
+        temp_txn = None
+        if hasattr(self.db, "new_iterator"):
+            iterator = self.db.new_iterator()
+        else:
+            temp_txn = self.db.begin_transaction(self.write_options)
+            iterator = temp_txn.new_iterator()
+        try:
+            if hasattr(iterator, "seek_for_prev") and hasattr(iterator, "prev"):
+                iterator.seek_for_prev(end_key)
+                while iterator.valid():
+                    yield iterator.key(), iterator.value()
+                    iterator.prev()
+                iterator.check_status()
+                return
+        finally:
+            if temp_txn is not None and temp_txn.is_active:
+                temp_txn.rollback()
+        values = list(self._iter_key_values_from(b""))
+        for key, value in reversed(values):
+            if key <= end_key:
+                yield key, value
 
     def _write_columnar_batch(self, keys: list[bytes], values: list[bytes]) -> None:
         """Write key/value lists through PyRex's native columnar API."""
@@ -1675,19 +1942,36 @@ class PyRexStore(KVStore):
         """Delete one sorted range index entry."""
         self._delete_raw(_range_index_key(index_name, key_parts, range_value, value))
 
-    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True):
+    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None):
         """Yield values whose range index key falls between start and end values."""
+        _validate_range_scan_options(reverse, limit)
         prefix = _range_index_prefix(index_name, key_parts)
         start_key = prefix if start_value is None else prefix + start_value
-        for key, value in self._iter_key_values_from(start_key):
+        end_key = prefix + (b"\xff" if end_value is None else end_value + b"\xff")
+        entries = (
+            self._iter_key_values_reverse_from(end_key)
+            if reverse
+            else self._iter_key_values_from(start_key)
+        )
+        yielded = 0
+        for key, value in entries:
             if not key.startswith(prefix):
+                if reverse and key > prefix:
+                    continue
                 break
             range_value = key[len(prefix):].split(_TYPED_ADJ_SEP, 1)[0]
             if start_value is not None and (range_value < start_value or (range_value == start_value and not include_start)):
+                if reverse:
+                    break
                 continue
             if end_value is not None and (range_value > end_value or (range_value == end_value and not include_end)):
+                if reverse:
+                    continue
                 break
             yield value
+            yielded += 1
+            if limit is not None and yielded >= limit:
+                break
 
 
 class PyRexTransactionStore(PyRexStore):
@@ -1748,6 +2032,83 @@ class PyRexTransactionStore(PyRexStore):
             yield iterator.key(), iterator.value()
             iterator.next()
         iterator.check_status()
+
+    def _iter_key_values_reverse_from(self, end_key: bytes):
+        self._check_active()
+        iterator = self.txn.new_iterator()
+        if hasattr(iterator, "seek_for_prev") and hasattr(iterator, "prev"):
+            iterator.seek_for_prev(end_key)
+            while iterator.valid():
+                yield iterator.key(), iterator.value()
+                iterator.prev()
+            iterator.check_status()
+            return
+        values = list(self._iter_key_values_from(b""))
+        for key, value in reversed(values):
+            if key <= end_key:
+                yield key, value
+
+
+def _pyrex_snapshot_sequence(txn) -> int | None:
+    """Return a bound RocksDB snapshot sequence when exposed by PyRex."""
+    for name in (
+        "snapshot_sequence_number",
+        "get_snapshot_sequence_number",
+        "snapshot_sequence",
+        "get_snapshot_sequence",
+    ):
+        value = getattr(txn, name, None)
+        if value is None:
+            continue
+        value = value() if callable(value) else value
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            return value
+    return None
+
+
+def _update_snapshot_digest(digest, namespace: bytes, key: bytes, value: bytes) -> None:
+    for part in (namespace, key, value):
+        digest.update(len(part).to_bytes(8, "big"))
+        digest.update(part)
+
+
+class PyRexReadSnapshotStore(PyRexTransactionStore):
+    """Read-only transaction-bound PyRex store."""
+
+    supports_transactions = False
+    supports_read_snapshots = False
+
+    def __init__(self, parent: PyRexStore, txn, *, sequence: int | None):
+        super().__init__(parent, txn)
+        self.snapshot_identity = ReadSnapshotIdentity(
+            backend="pyrex",
+            kind="rocksdb_transaction_snapshot",
+            sequence=sequence,
+            verifiable=sequence is not None,
+        )
+        self.supports_verifiable_read_snapshots = sequence is not None
+
+    def _read_only(self, *args, **kwargs):
+        self._check_active()
+        raise RuntimeError("read snapshot is read-only")
+
+    put = delete = put_metadata = delete_metadata = _read_only
+    put_node = delete_node = put_nodes_bulk = _read_only
+    put_edge = delete_edge = put_edges_bulk = _read_only
+    put_adjacency = put_adjacency_bulk = delete_adjacency = _read_only
+    put_typed_adjacency = put_typed_adjacency_bulk = delete_typed_adjacency = _read_only
+    put_index_entry = put_index_entries_bulk = delete_index_entry = _read_only
+    put_range_index_entry = put_range_index_entries_bulk = delete_range_index_entry = _read_only
+
+    def commit(self):
+        raise RuntimeError("read snapshot cannot be committed")
+
+    def state_sha256(self) -> str:
+        self._check_active()
+        digest = hashlib.sha256()
+        for key, value in self._iter_key_values_from(b""):
+            _update_snapshot_digest(digest, b"rocksdb", key, value)
+        return digest.hexdigest()
 
 class SimpleIndexCounterKVStore:
     """This is to help with lowering storage requirements 

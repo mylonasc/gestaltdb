@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date as date_type
+from datetime import datetime, time as time_type, timedelta, timezone
 from numbers import Integral
 from typing import Optional, Tuple, Union
 
@@ -245,10 +246,117 @@ def as_temporal_context(
     return TemporalContext.as_of(value)
 
 
+@dataclass(frozen=True, order=True)
+class TemporalDate:
+    """A calendar date without time or timezone."""
+
+    value: date_type
+
+    def __post_init__(self) -> None:
+        if isinstance(self.value, datetime) or not isinstance(self.value, date_type):
+            raise TypeError("TemporalDate requires a date")
+
+
+@dataclass(frozen=True, order=True)
+class TemporalLocalTime:
+    """A timezone-free time represented as microseconds since midnight."""
+
+    microseconds: int
+
+    def __post_init__(self) -> None:
+        value = _coerce_epoch_microseconds(self.microseconds)
+        if not 0 <= value < _MICROSECONDS_PER_DAY:
+            raise ValueError("local time must be within one day")
+        object.__setattr__(self, "microseconds", value)
+
+    @classmethod
+    def from_time(cls, value: time_type) -> "TemporalLocalTime":
+        if not isinstance(value, time_type) or value.tzinfo is not None:
+            raise ValueError("local time requires a timezone-free time")
+        return cls(
+            ((value.hour * 60 + value.minute) * 60 + value.second) * _MICROSECONDS_PER_SECOND
+            + value.microsecond
+        )
+
+
+@dataclass(frozen=True, eq=False)
+class TemporalTime:
+    """A fixed-offset time of day."""
+
+    local_microseconds: int
+    offset_seconds: int
+
+    def __post_init__(self) -> None:
+        local = TemporalLocalTime(self.local_microseconds).microseconds
+        offset = _coerce_epoch_microseconds(self.offset_seconds)
+        if not -86_399 <= offset <= 86_399:
+            raise ValueError("time offset must be less than 24 hours")
+        if offset % 60:
+            raise ValueError("time offset must use whole minutes")
+        object.__setattr__(self, "local_microseconds", local)
+        object.__setattr__(self, "offset_seconds", offset)
+
+    @property
+    def utc_microseconds(self) -> int:
+        return (self.local_microseconds - self.offset_seconds * _MICROSECONDS_PER_SECOND) % _MICROSECONDS_PER_DAY
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, TemporalTime):
+            return NotImplemented
+        return self.utc_microseconds == other.utc_microseconds
+
+    def __hash__(self) -> int:
+        return hash((TemporalTime, self.utc_microseconds))
+
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, TemporalTime):
+            return NotImplemented
+        return self.utc_microseconds < other.utc_microseconds
+
+
+@dataclass(frozen=True, order=True)
+class TemporalLocalDateTime:
+    """A timezone-free local date and time."""
+
+    value: datetime
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.value, datetime) or self.value.tzinfo is not None:
+            raise ValueError("local datetime requires a timezone-free datetime")
+
+
+@dataclass(frozen=True, order=True)
+class TemporalDuration:
+    """An exact signed duration represented as total microseconds."""
+
+    total_microseconds: int
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "total_microseconds", _coerce_epoch_microseconds(self.total_microseconds))
+
+    @classmethod
+    def from_timedelta(cls, value: timedelta) -> "TemporalDuration":
+        if not isinstance(value, timedelta):
+            raise TypeError("TemporalDuration requires a timedelta")
+        return cls(
+            value.days * _MICROSECONDS_PER_DAY
+            + value.seconds * _MICROSECONDS_PER_SECOND
+            + value.microseconds
+        )
+
+    def to_timedelta(self) -> timedelta:
+        return timedelta(microseconds=self.total_microseconds)
+
+
 __all__ = [
     "TemporalContext",
+    "TemporalDate",
+    "TemporalDuration",
     "TemporalInstant",
     "TemporalInterval",
+    "TemporalLocalDateTime",
+    "TemporalLocalTime",
+    "TemporalTime",
     "as_temporal_context",
     "as_temporal_instant",
     "as_temporal_interval",

@@ -43,6 +43,16 @@ class MatchClause:
     patterns: tuple[PathPatternClause, ...]
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
     selector: PathSelector | None = None
+    qualifiers: tuple[TemporalQualifier, ...] = ()
+
+
+@dataclass(frozen=True)
+class TemporalQualifier:
+    """One query-wide valid-time or system-time ``AS OF`` expression."""
+
+    kind: str
+    expression: object
+    span: SourceSpan | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -64,6 +74,7 @@ class OptionalMatchClause:
     patterns: tuple[PathPatternClause, ...]
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
     selector: PathSelector | None = None
+    qualifiers: tuple[TemporalQualifier, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -669,6 +680,19 @@ class SampleTypedPathsCall:
     returns: tuple[str, ...] = ("path",)
     limit: int | Parameter | None = None
     output_name: str = "path"
+
+
+@dataclass(frozen=True)
+class EntailsCall:
+    """Parsed allowlisted ``kg.entails`` procedure call."""
+
+    agent: object
+    proposition: object
+    mode: object
+    options: object
+    yields: tuple[tuple[str, str], ...]
+    returns: tuple[str, ...]
+    limit: int | Parameter | None = None
 
 
 @dataclass(frozen=True)

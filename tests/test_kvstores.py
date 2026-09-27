@@ -1,6 +1,13 @@
 import pytest
 
-from gestaltdb.kvstores import KVStore, _pack_long_int, _typed_adjacency_prefix, _unpack_long_int
+from gestaltdb.kvstores import (
+    MAX_PORTABLE_INDEX_KEY_BYTES,
+    KVStore,
+    _index_key,
+    _pack_long_int,
+    _typed_adjacency_prefix,
+    _unpack_long_int,
+)
 
 
 def test_integer_pack_helpers_round_trip():
@@ -9,6 +16,14 @@ def test_integer_pack_helpers_round_trip():
 
 def test_typed_adjacency_prefix_uses_typed_key_layout():
     assert _typed_adjacency_prefix("out", b"drug-1", "rel") == b"out\x1fdrug-1\x1frel\x1f"
+
+
+def test_index_keys_enforce_one_portable_cross_backend_limit():
+    key = _index_key("idx", [b"x" * 350], b"value")
+    assert len(key) <= MAX_PORTABLE_INDEX_KEY_BYTES
+
+    with pytest.raises(ValueError, match="511-byte"):
+        _index_key("idx", [b"x" * 400], b"value")
 
 
 def test_kvstore_abstract_methods_raise_not_implemented():
@@ -20,6 +35,7 @@ def test_kvstore_abstract_methods_raise_not_implemented():
         lambda: store.delete(b"k"),
         lambda: list(store.range_iter(b"a", b"z")),
         store.close,
+        store.read_snapshot,
         lambda: store.put_metadata(b"k", b"v"),
         lambda: store.get_metadata(b"k"),
         lambda: store.delete_metadata(b"k"),
@@ -40,6 +56,7 @@ def test_kvstore_abstract_methods_raise_not_implemented():
         lambda: store.put_index_entry("idx", [b"k"], b"v"),
         lambda: store.delete_index_entry("idx", [b"k"], b"v"),
         lambda: list(store.iter_index_prefix("idx", [b"k"])),
+        lambda: list(store.iter_range_index("idx", [b"k"], reverse=True, limit=1)),
     ]
 
     for call in calls:
@@ -91,3 +108,28 @@ def test_store_metadata_round_trip(graph_db):
 
     graph_db.store.delete_metadata(b"schema")
     assert graph_db.store.get_metadata(b"schema") is None
+
+
+def test_store_range_index_supports_reverse_bounds_and_limit(graph_db):
+    for range_value, value in [
+        (b"10", b"a"),
+        (b"20", b"b"),
+        (b"20", b"c"),
+        (b"30", b"d"),
+    ]:
+        graph_db.store.put_range_index_entry("scores", [b"all"], range_value, value)
+
+    assert list(graph_db.store.iter_range_index(
+        "scores", [b"all"], None, b"20", True, True, reverse=True, limit=2
+    )) == [b"c", b"b"]
+    assert list(graph_db.store.iter_range_index(
+        "scores", [b"all"], b"10", b"30", False, False, reverse=True
+    )) == [b"c", b"b"]
+
+    with pytest.raises(ValueError, match="positive"):
+        list(graph_db.store.iter_range_index("scores", [b"all"], limit=0))
+
+    with pytest.raises(ValueError, match="portable"):
+        graph_db.store.put_range_index_entry(
+            "scores", [b"x" * 400], b"10", b"value"
+        )

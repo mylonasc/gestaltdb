@@ -67,6 +67,12 @@ GestaltDB includes an embedded Cypher query processor:
 - Predicate contexts require Boolean/null values; `null IN []` is false.
 - `ORDER BY` is stable, uses Cypher's supported value hierarchy, and places null last ascending/first descending.
 - Regular conversion functions reject unsupported value categories while malformed supported strings convert to null.
+- Deterministic temporal constructors `date`, `time`, `localtime`, `datetime`, `localdatetime`, and `duration` accept one strict ISO string or component map. They support components, exact duration arithmetic, comparisons, grouping, and ordering.
+- Temporal values persist recursively in node and relationship properties through portable tagged encodings for every serializer. Configured exact/range property indexes support them; fixed-offset `time` equality is canonicalized by UTC time. Historical graph views remain separate from scalar temporal values.
+- Bitemporal reads append `FOR VALID_TIME AS OF <datetime expression>` and optionally `FOR SYSTEM_TIME AS OF <datetime expression>` to `MATCH` or `OPTIONAL MATCH`. Qualifiers are query-wide across chained matches, paths, `UNION`, and subqueries; repeated qualifiers must agree, system time requires valid time, and qualified queries are read-only.
+- `versionId`, `validFrom`, `validTo`, and `systemFrom` expose matched version metadata. They propagate null and return null for unqualified current entities; `validTo` is null for open-ended validity.
+- Temporal matches use one stable `GraphReadView` and temporal node/endpoint catalogs rather than mutable current indexes. Rebuild deferred temporal indexes before querying.
+- Unqualified read-only queries automatically use a unified mutable backend snapshot when supported. `read_snapshot=True` requires one and fails closed on unsupported stores; `False` opts out.
 
 ### Writes and Constraints
 - `CREATE`, `SET`, `REMOVE`, `DELETE`/`DETACH DELETE`, `MERGE` with `ON CREATE`/`ON MATCH`, and write-only `FOREACH` loops.

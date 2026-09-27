@@ -1,6 +1,6 @@
 ---
 name: gestaltdb-user-guide
-description: Use when writing application code that uses GestaltDB, especially GraphDB creation, explicit imports, Cypher queries, indexing, ingestion, and typed sampling.
+description: Use when writing application code that uses GestaltDB, especially GraphDB creation, explicit imports, Cypher queries, indexing, ingestion, epistemic claims, and typed sampling.
 ---
 
 # GestaltDB User Guide For Agents
@@ -30,6 +30,8 @@ Available topics:
 - `sampling`: typed traversal sampling vs snapshot/engine sampling.
 - `ingestion`: Arrow/Polars ingestion and index maintenance modes.
 - `visualization`: offline `visualize_*` entrypoints, `VizOptions` caps, `GraphDB.visualize`.
+- `epistemic`: sourced bitemporal claims, provenance, contradiction, and four-valued status.
+- `temporal`: version history, legacy migration, recovery, and compatibility limits.
 
 ## Import Rules
 
@@ -41,7 +43,7 @@ from gestaltdb.kvstores import LevelDBStore
 from gestaltdb.serializers import JSONSerializer, PickleSerializer
 ```
 
-The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storage backends, or serializers. The root does export selected ingestion, Cypher result, and sampling helpers such as `IndexMaintenanceMode`, `QueryResult`, `SamplingHop`, and `SamplingPattern`.
+The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storage backends, or serializers. The root does export selected ingestion, epistemic, Cypher result, and sampling helpers such as `ClaimStatus`, `IndexMaintenanceMode`, `QueryResult`, `SamplingHop`, and `SamplingPattern`.
 
 ## Core Usage Rules
 
@@ -55,13 +57,18 @@ The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storag
 - Run `graph.rebuild_deferred_indexes()` before relying on secondary indexes after deferred ingestion.
 - Use `SamplingHop` and `SamplingPattern` for GraphDB typed traversal sampling with external node IDs.
 - Use `SamplerSnapshot` and `SamplerEngine` only when you need compact array-native IDs for ML data loading.
+- Use `assert_claim` for sourced positive/negative propositions and `claim_status` for open-world four-valued evaluation at valid/system time.
+- Use `create_rule` and bounded `run_rules(as_of=...)` for positive Horn inference over entity claims; use `maintain_truth` after premise/rule changes and `explain_claim` for bounded historical derivation graphs.
+- Use `assert_world_accessibility` plus bounded `entails` for temporal `BELIEVES`, `KNOWS`, `POSSIBLE`, and `NECESSARY` evaluation. Belief, knowledge, and generic modal accessibility are separate frames.
+- Treat `TimeIndexedEdge` as deprecated legacy data. Back up and stop writers before `migrate_time_indexed_edges`; validate before deleting legacy records.
 
 ## Cypher Boundaries
 
 `GraphDB.query(cypher, parameters=None)` supports reads and writes, including
 read composition, paths, core expressions and aggregates, mutations, persisted
 node constraints, and `SHOW CONSTRAINTS`/`SHOW INDEXES`. Registered procedures
-use `CALL name(...) YIELD ...`; currently only `pg.sample_typed_paths` executes.
+use `CALL name(...) YIELD ...`; `pg.sample_typed_paths` and bounded
+`kg.entails` execute.
 
 Do not use pattern comprehensions, pattern arguments to `exists()`, GQL
 quantified paths, relationship/multi-property constraints, or unregistered

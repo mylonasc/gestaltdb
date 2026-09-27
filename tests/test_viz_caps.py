@@ -79,6 +79,7 @@ def test_large_fixture_truncates_deterministically():
 
 def test_visualize_sampler_batch_smoke(tmp_path):
     pytest.importorskip("numpy")
+    pytest.importorskip("plyvel")
     from gestaltdb.sampling import SamplerEngine
 
     graph = GraphDB(LevelDBStore(path=str(tmp_path / "g")), PickleSerializer())

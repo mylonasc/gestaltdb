@@ -17,7 +17,9 @@ sampling, and benchmarks.
    quickstart
    storage-backends
    serializers
+   operations
    temporal-versioning
+   modal-epistemic
    typed-sampling
    cypher
    visualization

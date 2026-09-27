@@ -4,6 +4,7 @@ from __future__ import annotations
 import pickle
 import json
 import hashlib
+import copy
 import os
 import random
 import shutil
@@ -12,7 +13,8 @@ import threading
 import time
 import uuid
 import base64
-from contextlib import contextmanager
+from collections.abc import Mapping
+from contextlib import ExitStack, contextmanager
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Union
@@ -25,16 +27,43 @@ import datetime
 import struct
 
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
+from .epistemic import Claim, ClaimObjectKind, ClaimPolarity, ClaimStatus, claim_statement_id
+from .modal import ACCESSIBILITY_PREDICATES, AccessibilityKind, ModalExpression, ModalOperator, evaluate_modal
+from .rules import (
+    ClaimExplanation,
+    ExplanationEdge,
+    ExplanationNode,
+    RuleError,
+    RuleEvaluationLimitError,
+    RuleJustification,
+    RuleRunResult,
+    RuleVersion,
+    TruthMaintenanceResult,
+    normalize_rule_definition,
+)
 from .sampling import SamplingPattern, as_sampling_pattern
-from .serializers import JSONSerializer
-from .temporal import TemporalInstant, TemporalInterval
+from .serializers import JSONSerializer, temporal_tagged_value
+from .temporal import (
+    TemporalDate,
+    TemporalDuration,
+    TemporalInstant,
+    TemporalInterval,
+    TemporalLocalDateTime,
+    TemporalLocalTime,
+    TemporalTime,
+)
 from .versioning import (
+    ClaimVersion,
+    ClaimVersionWrite,
     EdgeVersion,
     EdgeVersionWrite,
     NodeVersion,
     NodeVersionWrite,
     TemporalCommit,
     TemporalCorruptionError,
+    TemporalOrphanArtifact,
+    TemporalOrphanReclaimResult,
+    TemporalOrphanReport,
     TemporalVersionError,
     VersionOperation,
     canonical_json_bytes,
@@ -43,6 +72,7 @@ from .versioning import (
     encode_version_envelope,
     immutable_metadata,
     normalize_logical_id,
+    normalize_temporal_instant,
     normalize_temporal_interval,
     normalize_version_id,
 )
@@ -53,6 +83,7 @@ _EDGE_PROPERTY_INDEXES_METADATA_KEY = b"schema:indexes:edge_properties"
 _NODE_CONSTRAINTS_METADATA_KEY = b"schema:constraints:nodes"
 _STALE_INDEXES_METADATA_KEY = b"schema:indexes:stale"
 _MANIFEST_METADATA_KEY = b"schema:manifest"
+_DATABASE_ID_METADATA_KEY = b"schema:database_identity:v1"
 MANIFEST_FILENAME = "gestaltdb_manifest.json"
 MANIFEST_FORMAT_VERSION = 1
 _VALID_INDEX_MODES = {IndexMaintenanceMode.MAINTAIN.value, IndexMaintenanceMode.DEFER.value}
@@ -62,6 +93,97 @@ _TEMPORAL_SEQUENCE_KEY = _TEMPORAL_PREFIX + b"sequence"
 _TEMPORAL_COMMIT_PREFIX = _TEMPORAL_PREFIX + b"commit:"
 _TEMPORAL_RECORD_PREFIX = _TEMPORAL_PREFIX + b"record:"
 _TEMPORAL_VISIBLE_PREFIX = _TEMPORAL_PREFIX + b"visible:"
+_TEMPORAL_INDEX_STATE_KEY = b"temporal:indexes:v1:state"
+_TEMPORAL_VERSION_INDEX = "temporal_v1_version"
+_TEMPORAL_LOGICAL_COMMIT_INDEX = "temporal_v1_logical_commit"
+_TEMPORAL_LOGICAL_VALID_INDEX = "temporal_v1_logical_valid"
+_TEMPORAL_VALID_END_INDEX = "temporal_v1_valid_end"
+_TEMPORAL_OPEN_END = b"g" * 16
+_TEMPORAL_SYSTEM_INDEX = "temporal_v1_system_commit"
+_TEMPORAL_EDGE_OUT_INDEX = "temporal_v1_edge_out"
+_TEMPORAL_EDGE_IN_INDEX = "temporal_v1_edge_in"
+_TEMPORAL_NODE_CATALOG_INDEX = "temporal_v1_node_catalog"
+_TEMPORAL_EDGE_OUT_CATALOG_INDEX = "temporal_v1_edge_out_catalog"
+_TEMPORAL_EDGE_IN_CATALOG_INDEX = "temporal_v1_edge_in_catalog"
+_TEMPORAL_CLAIM_CATALOG_INDEX = "temporal_v1_claim_catalog"
+_TEMPORAL_CLAIM_STATEMENT_INDEX = "temporal_v1_claim_statement"
+_TEMPORAL_CLAIM_DIMENSION_INDEX = "temporal_v1_claim_dimension"
+_TEMPORAL_SEQUENCE_FILENAME = ".gestaltdb_temporal_sequence"
+_TEMPORAL_WRITER_LOCK_FILENAME = ".gestaltdb_temporal_writer.lock"
+_RULE_CATALOG_KEY = b"rules:catalog:v1"
+_TRUTH_MAINTENANCE_STATE_KEY = b"rules:truth-maintenance:v1"
+_RULE_ENGINE_AGENT = "gestaltdb:rules"
+_DATABASE_ID_LOCK = threading.Lock()
+_TEMPORAL_WRITER_LOCKS_LOCK = threading.Lock()
+_TEMPORAL_WRITER_LOCKS = {}
+_UNSET = object()
+
+
+class _TemporalWriterLock:
+    def __init__(self, path: Path):
+        self.path = path
+        self._lock = threading.RLock()
+        self._depth = 0
+        self._handle = None
+
+    def __enter__(self):
+        self._lock.acquire()
+        try:
+            if self._depth == 0:
+                handle = self.path.open("a+b")
+                try:
+                    if os.name == "posix":
+                        import fcntl
+
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                    elif os.name == "nt":  # pragma: no cover - Windows-only
+                        import msvcrt
+
+                        handle.write(b"\0")
+                        handle.flush()
+                        handle.seek(0)
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+                    else:  # pragma: no cover - unsupported platform
+                        raise RuntimeError("temporal writer locking is unsupported on this platform")
+                except Exception:
+                    handle.close()
+                    raise
+                self._handle = handle
+            self._depth += 1
+            return self
+        except Exception:
+            self._lock.release()
+            raise
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self._depth -= 1
+        try:
+            if self._depth == 0:
+                handle = self._handle
+                self._handle = None
+                if os.name == "posix":
+                    import fcntl
+
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                elif os.name == "nt":  # pragma: no cover - Windows-only
+                    import msvcrt
+
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                handle.close()
+        finally:
+            self._lock.release()
+
+
+def _temporal_writer_lock(path: Path) -> _TemporalWriterLock:
+    canonical = path.resolve()
+    key = str(canonical)
+    with _TEMPORAL_WRITER_LOCKS_LOCK:
+        lock = _TEMPORAL_WRITER_LOCKS.get(key)
+        if lock is None:
+            lock = _TemporalWriterLock(canonical / _TEMPORAL_WRITER_LOCK_FILENAME)
+            _TEMPORAL_WRITER_LOCKS[key] = lock
+        return lock
 
 
 def _utc_now_iso() -> str:
@@ -156,6 +278,15 @@ def _property_value_to_index_bytes(value) -> bytes:
         b'"drug"'
     """
     def normalize(item):
+        if isinstance(item, (
+            TemporalDate,
+            TemporalDuration,
+            TemporalInstant,
+            TemporalLocalDateTime,
+            TemporalLocalTime,
+            TemporalTime,
+        )):
+            return normalize(temporal_tagged_value(item, canonical_time=True))
         if isinstance(item, bytes):
             return {"__gestaltdb_type__": "bytes", "value": base64.b64encode(item).decode("ascii")}
         if isinstance(item, tuple):
@@ -182,6 +313,24 @@ def _property_value_to_range_index_bytes(value) -> bytes | None:
         return b"n" + bytes(packed).hex().encode("ascii")
     if isinstance(value, str):
         return b"s" + value.encode("utf-8").hex().encode("ascii")
+    temporal_value = None
+    temporal_kind = None
+    if isinstance(value, TemporalDate):
+        temporal_kind, temporal_value = b"d", value.value.toordinal()
+    elif isinstance(value, TemporalLocalTime):
+        temporal_kind, temporal_value = b"l", value.microseconds
+    elif isinstance(value, TemporalTime):
+        temporal_kind, temporal_value = b"t", value.utc_microseconds
+    elif isinstance(value, TemporalInstant):
+        temporal_kind, temporal_value = b"i", value.epoch_microseconds
+    elif isinstance(value, TemporalLocalDateTime):
+        clock = value.value
+        micros = ((clock.hour * 60 + clock.minute) * 60 + clock.second) * 1_000_000 + clock.microsecond
+        temporal_kind, temporal_value = b"c", clock.date().toordinal() * 86_400_000_000 + micros
+    elif isinstance(value, TemporalDuration):
+        temporal_kind, temporal_value = b"u", value.total_microseconds
+    if temporal_value is not None and -(1 << 127) <= temporal_value < (1 << 127):
+        return b"t" + temporal_kind + (temporal_value + (1 << 127)).to_bytes(16, "big")
     return None
 
 def datetime_to_bytes(dt: datetime.datetime, tzinfo = datetime.timezone.utc) -> bytes:
@@ -364,7 +513,11 @@ class Edge:
                    properties=data['properties'])
 
 class TimeIndexedEdge(Edge):
-    """Edge whose byte key is prefixed by a timestamp.
+    """Deprecated edge whose byte key is prefixed by a timestamp.
+
+    This legacy current-state layout is not the immutable temporal storage
+    model. Use :meth:`GraphDB.migrate_time_indexed_edges` to append equivalent
+    edge history before adopting temporal reads or snapshots.
 
     Args:
         timestamp_dat: Datetime used as the sortable key prefix.
@@ -442,7 +595,7 @@ class GraphEntityDictSerializer:
     }
 
     _ent_type_decoder = {
-        'Edge' : lambda x : Edge.from_dict(x),
+        'Edge' : lambda x : TimeIndexedEdge.from_dict(x) if 'timestamp_dat' in x else Edge.from_dict(x),
         'Node' : lambda x : Node.from_dict(x),
         'AdjacencyList' : lambda x : x
     }
@@ -511,10 +664,12 @@ class GraphDB:
         """
         self.store = store
         self.serializer = serializer
-        self._store_path: Path | None = None
+        store_path = getattr(store, "path", None)
+        self._store_path: Path | None = None if store_path is None else Path(store_path)
         self._backend_name: str | None = _registry_name_for_instance(store, _backend_registry())
         self._serializer_name: str | None = _registry_name_for_instance(serializer, _serializer_registry())
         self._manifest: dict | None = None
+        self._database_id: str | None = None
         self._temporal_write_lock = threading.RLock()
         self._temporal_transaction_bound = False
         self._temporal_clock = lambda: datetime.datetime.now(datetime.timezone.utc)
@@ -522,6 +677,7 @@ class GraphDB:
             self.serializer
         )
         self._typed_adjacency_count_cache: dict[tuple[str, bytes, str], int] = {}
+        self._verified_current_provenance: dict[str, str] = {}
         persisted_node_indexes = self._load_property_index_metadata(_NODE_PROPERTY_INDEXES_METADATA_KEY)
         persisted_edge_indexes = self._load_property_index_metadata(_EDGE_PROPERTY_INDEXES_METADATA_KEY)
         self.indexed_node_properties = set(persisted_node_indexes).union(indexed_node_properties or [])
@@ -595,20 +751,99 @@ class GraphDB:
 
         graph_metadata = manifest.get("graph", {})
         store = backend_cls(path=str(path), **options)
-        graph = cls(
-            store,
-            serializer_cls(),
-            indexed_node_properties=graph_metadata.get("indexed_node_properties") or [],
-            indexed_edge_properties=graph_metadata.get("indexed_edge_properties") or [],
-        )
+        try:
+            graph = cls(
+                store,
+                serializer_cls(),
+            )
+            graph.indexed_node_properties.update(graph_metadata.get("indexed_node_properties") or [])
+            graph.indexed_edge_properties.update(graph_metadata.get("indexed_edge_properties") or [])
+        except Exception:
+            store.close()
+            raise
         graph._store_path = path
         graph._backend_name = backend_name
         graph._serializer_name = serializer_name
-        graph._manifest = graph._manifest_from_current(created_at=manifest.get("created_at"))
+        try:
+            graph._initialize_database_id(manifest.get("database_id"))
+            graph._manifest = graph._manifest_from_current(created_at=manifest.get("created_at"))
+            if validate_manifest:
+                graph._validate_backend_manifest(manifest)
+            backend_manifest_payload = graph.store.get_metadata(_MANIFEST_METADATA_KEY)
+            backend_manifest = json.loads(backend_manifest_payload.decode("utf-8")) if backend_manifest_payload else {}
+            if manifest.get("database_id") is None or backend_manifest.get("database_id") is None:
+                graph.save_manifest(path)
+            return graph
+        except Exception:
+            graph.close()
+            raise
 
-        if validate_manifest:
-            graph._validate_backend_manifest(manifest)
-        return graph
+    @property
+    def database_id(self) -> str:
+        """Return the stable UUID persisted with this database."""
+        if self._database_id is not None:
+            return self._database_id
+        return self._initialize_database_id(None)
+
+    def _initialize_database_id(self, expected: str | None) -> str:
+        """Persist or reconcile the database UUID under a local filesystem lock."""
+        if expected is not None:
+            try:
+                expected = str(uuid.UUID(expected))
+            except (AttributeError, TypeError, ValueError) as exc:
+                raise ValueError("invalid database identity in root manifest") from exc
+        lock_handle = None
+        with _DATABASE_ID_LOCK:
+            if self._store_path is not None:
+                lock_path = self._store_path / ".gestaltdb_identity.lock"
+                lock_handle = lock_path.open("a+b")
+                if os.name == "posix":
+                    import fcntl
+
+                    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+                elif os.name == "nt":  # pragma: no cover - Windows-only
+                    import msvcrt
+
+                    lock_handle.write(b"\0")
+                    lock_handle.flush()
+                    lock_handle.seek(0)
+                    msvcrt.locking(lock_handle.fileno(), msvcrt.LK_LOCK, 1)
+                else:  # pragma: no cover - unsupported platform
+                    raise RuntimeError("database identity locking is unsupported on this platform")
+            try:
+                return self._initialize_database_id_locked(expected)
+            finally:
+                if lock_handle is not None:
+                    if os.name == "posix":
+                        import fcntl
+
+                        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+                    elif os.name == "nt":  # pragma: no cover - Windows-only
+                        import msvcrt
+
+                        lock_handle.seek(0)
+                        msvcrt.locking(lock_handle.fileno(), msvcrt.LK_UNLCK, 1)
+                    lock_handle.close()
+
+    def _initialize_database_id_locked(self, expected: str | None) -> str:
+        try:
+            payload = self.store.get_metadata(_DATABASE_ID_METADATA_KEY)
+        except NotImplementedError as exc:
+            raise ValueError("the configured store cannot persist a database identity") from exc
+        if payload is None:
+            if expected is None and self._store_path is None:
+                raise ValueError("cannot assign a database identity without a managed store path; call save_manifest(path=...)")
+            candidate = expected or str(uuid.uuid4())
+            self.store.put_metadata(_DATABASE_ID_METADATA_KEY, candidate.encode("ascii"))
+            payload = self.store.get_metadata(_DATABASE_ID_METADATA_KEY)
+        try:
+            value = str(uuid.UUID(payload.decode("ascii")))
+        except (AttributeError, UnicodeDecodeError, ValueError) as exc:
+            raise ValueError("invalid persisted database identity") from exc
+        if expected is not None and value != expected:
+            raise ValueError("persisted database identity does not match root manifest")
+        self._database_id = value
+        return value
 
     @property
     def manifest(self) -> dict:
@@ -624,6 +859,8 @@ class GraphDB:
             self._store_path = Path(path)
         if self._store_path is None:
             raise ValueError("cannot save manifest without a store path; pass graph.save_manifest(path=...)")
+        self._store_path.mkdir(parents=True, exist_ok=True)
+        self._initialize_database_id((self._manifest or {}).get("database_id"))
         if self._backend_name is None:
             self._backend_name = _registry_name_for_instance(self.store, _backend_registry())
         if self._serializer_name is None:
@@ -634,7 +871,6 @@ class GraphDB:
             raise ValueError("cannot infer serializer name for manifest; use an allowlisted serializer")
 
         manifest = self._manifest_from_current(created_at=(self._manifest or {}).get("created_at") if self._manifest else None)
-        self._store_path.mkdir(parents=True, exist_ok=True)
         with (self._store_path / MANIFEST_FILENAME).open("w", encoding="utf-8") as handle:
             json.dump(manifest, handle, indent=2, sort_keys=True)
         try:
@@ -680,6 +916,7 @@ class GraphDB:
             backend_options["transactional"] = True
         return {
             "format_version": MANIFEST_FORMAT_VERSION,
+            "database_id": self.database_id,
             "gestaltdb_version": _gestaltdb_version(),
             "backend": {
                 "name": backend_name,
@@ -714,6 +951,15 @@ class GraphDB:
             raise ValueError("GestaltDB manifest/backend metadata mismatch for backend name")
         if backend_manifest.get("serializer", {}).get("name") != root_manifest.get("serializer", {}).get("name"):
             raise ValueError("GestaltDB manifest/backend metadata mismatch for serializer name")
+        root_database_id = root_manifest.get("database_id")
+        backend_database_id = backend_manifest.get("database_id")
+        if root_database_id is not None and backend_database_id is not None and root_database_id != backend_database_id:
+            raise ValueError("GestaltDB manifest/backend metadata mismatch for database identity")
+        actual_database_id = self.database_id
+        if root_database_id is not None and root_database_id != actual_database_id:
+            raise ValueError("root manifest does not match persisted database identity")
+        if backend_database_id is not None and backend_database_id != actual_database_id:
+            raise ValueError("backend manifest does not match persisted database identity")
 
     def _load_stale_indexes(self) -> set[str]:
         """Load index families known to be stale after deferred bulk ingestion."""
@@ -752,7 +998,10 @@ class GraphDB:
 
     def stale_indexes(self) -> tuple[str, ...]:
         """Return index families requiring rebuild after deferred ingestion."""
-        return tuple(sorted(self._load_stale_indexes()))
+        stale = self._load_stale_indexes()
+        if self._temporal_index_state() is None and self._has_visible_temporal_history():
+            stale.add("temporal")
+        return tuple(sorted(stale))
 
     def _ensure_indexes_current(self, *index_names: str) -> None:
         """Prevent stale secondary indexes from silently returning wrong results."""
@@ -863,6 +1112,9 @@ class GraphDB:
         Examples:
             >>> graph_db.put_node(Node(node_id="drug-1"))  # doctest: +SKIP
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.put_node(node)
         old_node = self.get_node(node.get_id_bytes)
         if old_node is not None:
             self._delete_node_indexes(old_node)
@@ -899,6 +1151,9 @@ class GraphDB:
         Examples:
             >>> graph_db.delete_node(b"drug-1")  # doctest: +SKIP
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.delete_node(node_id)
         node_id = self.node_key_to_bytes(node_id)
         incident_edge_ids = []
         for edge_id in self.store.get_edge_keys_generator():
@@ -992,6 +1247,11 @@ class GraphDB:
         batch_size: int = _INDEX_REBUILD_BATCH_SIZE,
     ) -> dict[str, int]:
         """Rebuild requested node secondary indexes in one node scan."""
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.rebuild_node_indexes(
+                    labels=labels, properties=properties, batch_size=batch_size
+                )
         property_names = sorted(self.indexed_node_properties if properties is None else set(properties))
         entries = []
         range_entries = []
@@ -1054,6 +1314,11 @@ class GraphDB:
             >>> graph_db.create_node_property_index("kind")  # doctest: +SKIP
             10
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                rebuilt = tx.create_node_property_index(property_name)
+            self.indexed_node_properties.add(property_name)
+            return rebuilt
         self.indexed_node_properties.add(property_name)
         rebuilt = self.rebuild_node_property_index(property_name)
         self._persist_property_index_metadata(_NODE_PROPERTY_INDEXES_METADATA_KEY, self.indexed_node_properties)
@@ -1308,6 +1573,9 @@ class GraphDB:
         Examples:
             >>> graph_db.put_edge(Edge(source="drug-1", target="protein-1"))  # doctest: +SKIP
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.put_edge(edge, update_adjacency=update_adjacency)
         # edge_dict = edge.to_dict()
         old_edge = self.get_edge(edge.get_id_bytes)
         if old_edge is not None:
@@ -1445,6 +1713,11 @@ class GraphDB:
         batch_size: int = _INDEX_REBUILD_BATCH_SIZE,
     ) -> dict[str, int]:
         """Rebuild requested edge secondary indexes in one edge scan."""
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.rebuild_edge_indexes(
+                    edge_types=edge_types, properties=properties, batch_size=batch_size
+                )
         property_names = sorted(self.indexed_edge_properties if properties is None else set(properties))
         entries = []
         range_entries = []
@@ -1520,6 +1793,11 @@ class GraphDB:
             >>> graph_db.create_edge_property_index("score")  # doctest: +SKIP
             7
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                rebuilt = tx.create_edge_property_index(property_name)
+            self.indexed_edge_properties.add(property_name)
+            return rebuilt
         self.indexed_edge_properties.add(property_name)
         rebuilt = self.rebuild_edge_property_index(property_name)
         self._persist_property_index_metadata(_EDGE_PROPERTY_INDEXES_METADATA_KEY, self.indexed_edge_properties)
@@ -1713,7 +1991,7 @@ class GraphDB:
         Returns:
             Mapping from rebuilt index family/property to entries written.
         """
-        stale = self._load_stale_indexes()
+        stale = set(self.stale_indexes())
         rebuilt: dict[str, int] = {}
         if stale.intersection({"node_label", "node_property"}):
             rebuilt.update(
@@ -1729,21 +2007,33 @@ class GraphDB:
                     properties=self.indexed_edge_properties if "edge_property" in stale else set(),
                 )
             )
+        if "temporal" in stale:
+            rebuilt.update(self.rebuild_temporal_indexes())
         return rebuilt
 
     def build_sampler_snapshot(
         self,
         output_path,
         *,
+        temporal: bool = False,
+        system_time=None,
+        time_bucket: str | None = None,
         source_db_reference: bool = True,
         source_db_path=None,
         source_db_path_mode: str = "relative",
+        read_snapshot: bool | None = None,
         **kwargs,
     ):
         """Build a read-optimized array sampler snapshot from this graph.
 
         Args:
             output_path: Directory where snapshot arrays and metadata are written.
+            temporal: Build temporal-history arrays from one pinned read view.
+            system_time: Optional system-time horizon for a temporal build.
+            time_bucket: Temporal candidate-index bucket policy: ``None``,
+                ``"none"``, ``"hour"``, or ``"day"``.
+            read_snapshot: Require or disable a verifiable mutable-state backend
+                snapshot. The default uses one automatically when supported.
             **kwargs: Options forwarded to ``SamplerSnapshot.build``.
 
         Returns:
@@ -1753,7 +2043,7 @@ class GraphDB:
 
         if source_db_reference and "source_db" not in kwargs:
             resolved_source_path = Path(source_db_path) if source_db_path is not None else self._store_path
-            if resolved_source_path is not None:
+            if resolved_source_path is not None and (resolved_source_path / MANIFEST_FILENAME).exists():
                 if source_db_path_mode not in {"relative", "absolute", "relative_to_snapshot", "relative_to_project"}:
                     raise ValueError("source_db_path_mode must be 'relative', 'absolute', 'relative_to_snapshot', or 'relative_to_project'")
                 path_type = "relative_to_snapshot" if source_db_path_mode == "relative" else source_db_path_mode
@@ -1763,7 +2053,130 @@ class GraphDB:
                     "backend": self._backend_name,
                     "serializer": self._serializer_name,
                 }
+        if temporal:
+            with self.read_view(valid_time=0, system_time=system_time) as view:
+                return view.build_sampler_snapshot(
+                    output_path, temporal=True, time_bucket=time_bucket,
+                    **kwargs,
+                )
+        if system_time is not None or time_bucket is not None:
+            raise ValueError("system_time and time_bucket require temporal=True")
+        use_snapshot = (
+            bool(getattr(self.store, "supports_read_snapshots", False))
+            if read_snapshot is None
+            else read_snapshot
+        )
+        if use_snapshot:
+            if "source_provenance" in kwargs:
+                raise ValueError("source_provenance is captured by read_snapshot")
+            stack = ExitStack()
+            try:
+                view = stack.enter_context(self.current_read_view(require_verifiable=True))
+            except NotImplementedError:
+                stack.close()
+                if read_snapshot is True:
+                    raise
+            else:
+                with stack:
+                    kwargs["source_provenance"] = view.provenance.to_dict()
+                    return SamplerSnapshot.build(view, output_path, **kwargs)
         return SamplerSnapshot.build(self, output_path, **kwargs)
+
+    @contextmanager
+    def current_read_view(
+        self,
+        *,
+        require_verifiable: bool = False,
+        capture_provenance: bool = True,
+    ):
+        """Yield current graph reads pinned to one backend snapshot."""
+        from .readview import CurrentGraphReadView, CurrentReadProvenance
+
+        database_id = self.database_id
+        manifest = self.manifest
+        with self.store.read_snapshot() as snapshot_store:
+            identity = snapshot_store.snapshot_identity
+            provenance = None
+            if capture_provenance and identity.verifiable and identity.sequence is not None:
+                provenance = CurrentReadProvenance(
+                    database_id=database_id,
+                    snapshot_sequence=identity.sequence,
+                    backend_name=manifest["backend"]["name"],
+                    backend_layout_version=manifest["backend"]["layout_version"],
+                    serializer_name=manifest["serializer"]["name"],
+                    serializer_format_version=manifest["serializer"]["format_version"],
+                    backend_snapshot_kind=identity.kind,
+                    state_sha256=snapshot_store.state_sha256(),
+                )
+            if require_verifiable and provenance is None:
+                raise NotImplementedError(
+                    "the configured backend can pin reads but cannot expose a verifiable snapshot identity"
+                )
+            snapshot_graph = copy.copy(self)
+            snapshot_graph.store = snapshot_store
+            snapshot_graph.indexed_node_properties = set(
+                snapshot_graph._load_property_index_metadata(_NODE_PROPERTY_INDEXES_METADATA_KEY)
+            )
+            snapshot_graph.indexed_edge_properties = set(
+                snapshot_graph._load_property_index_metadata(_EDGE_PROPERTY_INDEXES_METADATA_KEY)
+            )
+            snapshot_graph.node_constraints = snapshot_graph._load_node_constraint_metadata()
+            snapshot_graph._typed_adjacency_count_cache = {}
+            yield CurrentGraphReadView(snapshot_graph, provenance)
+
+    @contextmanager
+    def read_view(self, *, valid_time, system_time=None, through_commit=None):
+        """Yield a temporal read view pinned to one visible commit horizon."""
+        from .readview import GraphReadView, ReadViewProvenance
+
+        instant = normalize_temporal_instant(valid_time)
+        if system_time is not None and through_commit is not None:
+            raise ValueError("provide either system_time or through_commit, not both")
+        allocated, _ = self._temporal_sequence()
+        latest = 0
+        markers = []
+        for commit_id in range(1, allocated + 1):
+            commit_candidate = self.get_temporal_commit(commit_id, _validate_supersession=False)
+            if commit_candidate is None:
+                if self.store.get_metadata(self._temporal_commit_key(commit_id)) is None:
+                    continue
+                break
+            marker_candidate = self.store.get_metadata(self._temporal_visible_key(commit_id))
+            markers.append(commit_id.to_bytes(8, "big") + marker_candidate)
+            latest = commit_id
+        if system_time is not None:
+            through_commit = min(
+                latest, self._temporal_system_horizon(system_time=system_time)
+            )
+        if through_commit is None:
+            horizon = latest
+        else:
+            if isinstance(through_commit, bool) or not isinstance(through_commit, int) or through_commit < 0:
+                raise ValueError("through_commit must be a non-negative integer")
+            if through_commit > latest:
+                raise ValueError("through_commit is newer than the latest visible commit")
+            horizon = through_commit
+        commit = self.get_temporal_commit(horizon) if horizon else None
+        if horizon and commit is None:
+            raise ValueError("through_commit does not identify a visible commit")
+        marker = self.store.get_metadata(self._temporal_visible_key(horizon)) if horizon else None
+        visibility_digest = hashlib.sha256(b"".join(
+            value for value in markers if int.from_bytes(value[:8], "big") <= horizon
+        )).hexdigest()
+        manifest = self.manifest
+        provenance = ReadViewProvenance(
+            database_id=self.database_id,
+            commit_horizon=horizon,
+            commit_system_time_us=None if commit is None else commit.system_time.epoch_microseconds,
+            commit_marker_sha256=None if marker is None else marker.hex(),
+            visibility_sha256=visibility_digest,
+            valid_time_us=instant.epoch_microseconds,
+            backend_name=manifest["backend"]["name"],
+            backend_layout_version=manifest["backend"]["layout_version"],
+            serializer_name=manifest["serializer"]["name"],
+            serializer_format_version=manifest["serializer"]["format_version"],
+        )
+        yield GraphReadView(self, provenance)
 
     def get_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out'):
         """Return typed adjacency records with clean direction semantics.
@@ -1989,6 +2402,9 @@ class GraphDB:
         Examples:
             >>> graph_db.rebuild_typed_adjacency()  # doctest: +SKIP
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.rebuild_typed_adjacency()
         rebuilt = 0
         self._typed_adjacency_count_cache.clear()
         for edge_id in self.store.get_edge_keys_generator():
@@ -2075,6 +2491,9 @@ class GraphDB:
         Examples:
             >>> graph_db.put_nodes([Node(node_id="drug-1", labels=["Drug"])])  # doctest: +SKIP
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.put_nodes(nodes)
         to_store = {}
         index_entries = []
         range_entries = []
@@ -2151,6 +2570,18 @@ class GraphDB:
         Example:
             >>> graph.ingest_polars(nodes, edges, node_property_columns=["kind"], edge_property_columns=["score"])  # doctest: +SKIP
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.ingest_polars(
+                    node_df, edge_df,
+                    ingestion_mode=ingestion_mode, index_mode=index_mode,
+                    node_id=node_id, node_value=node_value, labels=labels,
+                    node_property_columns=node_property_columns,
+                    edge_id=edge_id, source=source, target=target,
+                    edge_type=edge_type, edge_value=edge_value,
+                    edge_property_columns=edge_property_columns,
+                    native=native, chunk_size=chunk_size, progress=progress,
+                )
         mode = self._coerce_columnar_ingestion_mode(ingestion_mode)
         low_level_index_mode = self._low_level_index_mode(index_mode)
         if mode == ColumnarIngestionMode.ENTITY_COLUMNS.value:
@@ -2233,6 +2664,15 @@ class GraphDB:
         Example:
             >>> graph.ingest_arrow(node_ids, edge_ids, sources, targets, edge_types, node_properties={"kind": kinds})  # doctest: +SKIP
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.ingest_arrow(
+                    node_ids, edge_ids, sources, targets, edge_types,
+                    ingestion_mode=ingestion_mode, index_mode=index_mode,
+                    node_values=node_values, edge_values=edge_values, labels=labels,
+                    node_properties=node_properties, edge_properties=edge_properties,
+                    native=native, chunk_size=chunk_size, progress=progress,
+                )
         mode = self._coerce_columnar_ingestion_mode(ingestion_mode)
         low_level_index_mode = self._low_level_index_mode(index_mode)
         if mode == ColumnarIngestionMode.ENTITY_COLUMNS.value:
@@ -2313,6 +2753,12 @@ class GraphDB:
         Returns:
             Number of ingested nodes.
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.ingest_nodes_arrow(
+                    node_ids, node_values, native=native, chunk_size=chunk_size,
+                    append_only=append_only, index_mode=index_mode, progress=progress,
+                )
         self._validate_index_mode(index_mode)
         index_mode = index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode
         node_list = NodeList.from_arrow(node_ids, node_values)
@@ -2348,6 +2794,13 @@ class GraphDB:
         The ``node_value`` column is required and must contain serialized node
         payload bytes compatible with the current ``GraphDB`` serializer.
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.ingest_nodes_polars(
+                    df, node_id=node_id, node_value=node_value, native=native,
+                    chunk_size=chunk_size, append_only=append_only,
+                    index_mode=index_mode, progress=progress,
+                )
         try:
             import polars as pl
         except ImportError as exc:
@@ -2718,6 +3171,9 @@ class GraphDB:
         of both source and target nodes. If either node doesn't exist,
         we skip gracefully.
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.delete_edge(edge_id, edge_key_serializer=edge_key_serializer)
         e = self.get_edge(edge_id)
         if not e:
             return  # Edge not found
@@ -2826,6 +3282,9 @@ class GraphDB:
         Examples:
             >>> graph_db.put_edges_bulk([Edge(source="drug-1", target="protein-1")], check_existing=False)  # doctest: +SKIP
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.put_edges_bulk(edges, check_existing=check_existing)
         # 1) Build a dict[edge_id, bytes] to store all edges in one go
         edge_dict = {}
         typed_adjacency_records = []
@@ -2965,6 +3424,13 @@ class GraphDB:
         Returns:
             Number of ingested edges.
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.ingest_edges_arrow(
+                    edge_ids, sources, targets, edge_types, edge_values,
+                    append_only=append_only, native=native, chunk_size=chunk_size,
+                    index_mode=index_mode, progress=progress,
+                )
         if not append_only:
             raise NotImplementedError("columnar edge ingestion currently requires append_only=True")
         self._validate_index_mode(index_mode)
@@ -3012,6 +3478,14 @@ class GraphDB:
         The ``edge_value`` column is required and must contain serialized edge
         payload bytes compatible with the current ``GraphDB`` serializer.
         """
+        if self._implicit_transaction_required():
+            with self.transaction() as tx:
+                return tx.ingest_edges_polars(
+                    df, edge_id=edge_id, source=source, target=target,
+                    edge_type=edge_type, edge_value=edge_value,
+                    append_only=append_only, native=native, chunk_size=chunk_size,
+                    index_mode=index_mode, progress=progress,
+                )
         if not append_only:
             raise NotImplementedError("columnar edge ingestion currently requires append_only=True")
         try:
@@ -3264,13 +3738,261 @@ class GraphDB:
             + int(ordinal).to_bytes(4, "big", signed=False)
         )
 
-    def _temporal_sequence(self) -> tuple[int, TemporalInstant | None]:
+    @staticmethod
+    def _temporal_locator(commit_id: int, ordinal: int) -> bytes:
+        return f"{commit_id:016x}{ordinal:08x}".encode("ascii")
+
+    @staticmethod
+    def _decode_temporal_locator(locator: bytes) -> tuple[int, int]:
         try:
-            payload = self.store.get_metadata(_TEMPORAL_SEQUENCE_KEY)
-        except NotImplementedError as exc:
-            raise TemporalVersionError("the configured store does not support temporal metadata") from exc
+            if not isinstance(locator, bytes) or len(locator) != 24:
+                raise ValueError
+            return int(locator[:16], 16), int(locator[16:], 16)
+        except (TypeError, ValueError) as exc:
+            raise TemporalCorruptionError("invalid temporal index locator") from exc
+
+    @staticmethod
+    def _temporal_instant_index_value(instant: TemporalInstant) -> bytes:
+        return instant.encode_sortable().hex().encode("ascii")
+
+    def _load_temporal_index_state(self) -> dict | None:
+        payload = self.store.get_metadata(_TEMPORAL_INDEX_STATE_KEY)
         if payload is None:
-            return 0, None
+            return None
+        try:
+            value = json.loads(payload.decode("utf-8"))
+            if not isinstance(value, dict):
+                raise ValueError
+            if value.get("format_version") in {1, 2, 3, 4}:
+                # Later temporal stages added catalogs and epistemic indexes.
+                # Older derived indexes must be rebuilt before querying.
+                return None
+            if value.get("format_version") != 5:
+                raise ValueError
+            indexed = value["indexed_through_commit"]
+            generation = value["active_generation"]
+            checksum = value["visibility_checksum"]
+            if isinstance(indexed, bool) or not isinstance(indexed, int) or indexed < 0:
+                raise ValueError
+            if isinstance(generation, bool) or not isinstance(generation, int) or generation < 1:
+                raise ValueError
+            if (
+                not isinstance(checksum, str)
+                or len(checksum) != 64
+                or any(character not in "0123456789abcdef" for character in checksum)
+            ):
+                raise ValueError
+            return value
+        except (KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise TemporalCorruptionError("invalid temporal index state") from exc
+
+    def _temporal_index_state(self) -> int | None:
+        state = self._load_temporal_index_state()
+        return None if state is None else state["indexed_through_commit"]
+
+    def _temporal_index_generation(self) -> int:
+        state = self._load_temporal_index_state()
+        return 1 if state is None else state["active_generation"]
+
+    @staticmethod
+    def _temporal_index_name(index_name: str, generation: int) -> str:
+        if generation == 0:
+            return index_name
+        return f"{index_name}:g{generation:016x}"
+
+    def _temporal_visibility_checksum(
+        self, through_commit: int, *, pending_marker=None
+    ) -> str:
+        markers = []
+        for commit_id in range(1, through_commit + 1):
+            marker = (
+                pending_marker[1]
+                if pending_marker is not None and pending_marker[0] == commit_id
+                else self.store.get_metadata(self._temporal_visible_key(commit_id))
+            )
+            if marker is not None:
+                markers.append(commit_id.to_bytes(8, "big") + marker)
+        return hashlib.sha256(b"".join(markers)).hexdigest()
+
+    def _persist_temporal_index_state(
+        self, commit_id: int, generation: int, *, pending_marker=None
+    ) -> None:
+        self.store.put_metadata(
+            _TEMPORAL_INDEX_STATE_KEY,
+            canonical_json_bytes({
+                "format_version": 5,
+                "active_generation": generation,
+                "indexed_through_commit": commit_id,
+                "visibility_checksum": self._temporal_visibility_checksum(
+                    commit_id, pending_marker=pending_marker
+                ),
+            }),
+        )
+
+    def _ensure_temporal_indexes(self, horizon: int) -> None:
+        self._ensure_indexes_current("temporal")
+        indexed = self._temporal_index_state()
+        if horizon == 0 and indexed is None:
+            return
+        if indexed is None or indexed < horizon:
+            raise RuntimeError("stale indexes require rebuild before query: temporal")
+        state = self._load_temporal_index_state()
+        if state["visibility_checksum"] != self._temporal_visibility_checksum(indexed):
+            raise TemporalCorruptionError("temporal index generation visibility checksum mismatch")
+
+    def _has_visible_temporal_history(self) -> bool:
+        last_commit_id, _ = self._temporal_sequence()
+        return any(
+            self.store.get_metadata(self._temporal_visible_key(commit_id)) is not None
+            for commit_id in range(1, last_commit_id + 1)
+        )
+
+    def _temporal_index_entries(self, version, *, generation=None):
+        generation = self._temporal_index_generation() if generation is None else generation
+        if isinstance(version, NodeVersion):
+            kind = b"n"
+        elif isinstance(version, EdgeVersion):
+            kind = b"e"
+        else:
+            kind = b"c"
+        locator = self._temporal_locator(version.commit_id, version.commit_ordinal)
+        exact = [(_TEMPORAL_VERSION_INDEX, [version.version_id.encode("ascii")], locator)]
+        ranges = [
+            (_TEMPORAL_LOGICAL_COMMIT_INDEX, [kind, version.logical_id.encode("utf-8")], locator, locator),
+            (
+                _TEMPORAL_LOGICAL_VALID_INDEX,
+                [kind, version.logical_id.encode("utf-8")],
+                self._temporal_instant_index_value(version.valid.start),
+                locator,
+            ),
+        ]
+        if isinstance(version, NodeVersion):
+            ranges.append(
+                (
+                    _TEMPORAL_NODE_CATALOG_INDEX,
+                    [b"nodes"],
+                    self._temporal_instant_index_value(version.valid.start),
+                    locator,
+                )
+            )
+        if isinstance(version, EdgeVersion) and version.edge is not None:
+            ranges.extend([
+                (
+                    _TEMPORAL_EDGE_OUT_CATALOG_INDEX,
+                    [str(version.edge.source).encode("utf-8")],
+                    self._temporal_instant_index_value(version.valid.start),
+                    locator,
+                ),
+                (
+                    _TEMPORAL_EDGE_IN_CATALOG_INDEX,
+                    [str(version.edge.target).encode("utf-8")],
+                    self._temporal_instant_index_value(version.valid.start),
+                    locator,
+                ),
+            ])
+            edge_type = version.edge.properties.get("type")
+            if edge_type is not None:
+                ranges.extend([
+                    (
+                        _TEMPORAL_EDGE_OUT_INDEX,
+                        [str(version.edge.source).encode("utf-8"), str(edge_type).encode("utf-8")],
+                        self._temporal_instant_index_value(version.valid.start),
+                        locator,
+                    ),
+                    (
+                        _TEMPORAL_EDGE_IN_INDEX,
+                        [str(version.edge.target).encode("utf-8"), str(edge_type).encode("utf-8")],
+                        self._temporal_instant_index_value(version.valid.start),
+                        locator,
+                    ),
+                ])
+        if isinstance(version, ClaimVersion) and version.claim is not None:
+            claim = version.claim
+            start = self._temporal_instant_index_value(version.valid.start)
+            ranges.extend([
+                (_TEMPORAL_CLAIM_CATALOG_INDEX, [b"claims"], start, locator),
+                (
+                    _TEMPORAL_CLAIM_STATEMENT_INDEX,
+                    [claim.statement_id.encode("ascii")],
+                    start,
+                    locator,
+                ),
+            ])
+            dimensions = {
+                "subject": claim.subject,
+                "predicate": claim.predicate,
+                "agent": claim.agent,
+                "source": claim.source,
+                "world": claim.world,
+                "polarity": claim.polarity.value,
+                "object_kind": claim.object_kind.value,
+            }
+            for name, value in dimensions.items():
+                ranges.append((
+                    _TEMPORAL_CLAIM_DIMENSION_INDEX,
+                    [name.encode("ascii"), canonical_json_bytes(value)],
+                    start,
+                    locator,
+                ))
+        interval_ranges = ranges[1:]
+        valid_end = (
+            _TEMPORAL_OPEN_END
+            if version.valid.end is None
+            else self._temporal_instant_index_value(version.valid.end)
+        )
+        ranges.extend(
+            (
+                _TEMPORAL_VALID_END_INDEX,
+                [index_name.encode("ascii"), *parts],
+                valid_end,
+                value,
+            )
+            for index_name, parts, _, value in interval_ranges
+        )
+        exact = [
+            (self._temporal_index_name(name, generation), parts, value)
+            for name, parts, value in exact
+        ]
+        ranges = [
+            (self._temporal_index_name(name, generation), parts, range_value, value)
+            for name, parts, range_value, value in ranges
+        ]
+        return exact, ranges
+
+    def _write_temporal_indexes(self, versions, commit_id: int, *, generation=None) -> dict[str, int]:
+        generation = self._temporal_index_generation() if generation is None else generation
+        exact_entries = []
+        range_entries = []
+        for version in versions:
+            exact, ranges = self._temporal_index_entries(version, generation=generation)
+            exact_entries.extend(exact)
+            range_entries.extend(ranges)
+        if exact_entries:
+            self.store.put_index_entries_bulk(exact_entries)
+        if range_entries:
+            self.store.put_range_index_entries_bulk(range_entries)
+        commit = versions[0] if versions else None
+        if commit is not None:
+            self.store.put_range_index_entry(
+                self._temporal_index_name(_TEMPORAL_SYSTEM_INDEX, generation),
+                [b"commit"],
+                self._temporal_instant_index_value(commit.system_time),
+                f"{commit_id:016x}".encode("ascii"),
+            )
+        return {"temporal_exact": len(exact_entries), "temporal_range": len(range_entries) + (1 if commit else 0)}
+
+    @contextmanager
+    def _temporal_writer_guard(self):
+        if self._store_path is None:
+            with self._temporal_write_lock:
+                yield
+            return
+        self.database_id
+        with _temporal_writer_lock(self._store_path):
+            yield
+
+    @staticmethod
+    def _decode_temporal_sequence(payload: bytes) -> tuple[int, TemporalInstant]:
         try:
             decoded = json.loads(payload.decode("utf-8"))
             if not isinstance(decoded, dict):
@@ -3288,6 +4010,59 @@ class GraphDB:
             raise TemporalCorruptionError("invalid temporal commit sequence")
         return commit_id, system_time
 
+    def _temporal_sequence(self) -> tuple[int, TemporalInstant | None]:
+        try:
+            payload = self.store.get_metadata(_TEMPORAL_SEQUENCE_KEY)
+        except NotImplementedError as exc:
+            raise TemporalVersionError("the configured store does not support temporal metadata") from exc
+        stored = (0, None) if payload is None else self._decode_temporal_sequence(payload)
+        if self._store_path is None:
+            return stored
+        sequence_path = self._store_path / _TEMPORAL_SEQUENCE_FILENAME
+        try:
+            sidecar_payload = sequence_path.read_bytes()
+        except FileNotFoundError:
+            return stored
+        sidecar = self._decode_temporal_sequence(sidecar_payload)
+        if sidecar[0] < stored[0]:
+            raise TemporalCorruptionError("durable temporal sequence trails stored sequence")
+        return sidecar
+
+    def _reserve_temporal_sequence(self) -> tuple[int, TemporalInstant]:
+        previous_commit_id, previous_system_time = self._temporal_sequence()
+        commit_id = previous_commit_id + 1
+        if commit_id >= 1 << 64:
+            raise TemporalVersionError("temporal commit ID space is exhausted")
+        system_time = self._next_temporal_system_time(previous_system_time)
+        payload = canonical_json_bytes({
+            "commit_id": commit_id,
+            "system_time_us": system_time.epoch_microseconds,
+        })
+        if self._store_path is None:
+            self.store.put_metadata(_TEMPORAL_SEQUENCE_KEY, payload)
+            return commit_id, system_time
+
+        sequence_path = self._store_path / _TEMPORAL_SEQUENCE_FILENAME
+        temporary_path = self._store_path / f"{_TEMPORAL_SEQUENCE_FILENAME}.{uuid.uuid4().hex}.tmp"
+        try:
+            with temporary_path.open("xb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, sequence_path)
+            if os.name == "posix":
+                directory_fd = os.open(self._store_path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+        finally:
+            try:
+                temporary_path.unlink()
+            except FileNotFoundError:
+                pass
+        return commit_id, system_time
+
     def _next_temporal_system_time(self, previous: TemporalInstant | None) -> TemporalInstant:
         current = self._temporal_clock()
         if isinstance(current, TemporalInstant):
@@ -3298,25 +4073,980 @@ class GraphDB:
             return TemporalInstant(previous.epoch_microseconds + 1)
         return instant
 
+    # ------------------------
+    # Positive Horn Rules
+    # ------------------------
+
+    def _load_rule_catalog(self) -> tuple[RuleVersion, ...]:
+        payload = self.store.get_metadata(_RULE_CATALOG_KEY)
+        if payload is None:
+            return ()
+        try:
+            decoded = json.loads(payload.decode("utf-8"))
+            if not isinstance(decoded, dict) or decoded.get("format_version") != 1:
+                raise TypeError
+            versions = tuple(RuleVersion.from_dict(item) for item in decoded["versions"])
+            if [item.catalog_ordinal for item in versions] != list(range(1, len(versions) + 1)):
+                raise ValueError
+            if len({item.version_id for item in versions}) != len(versions):
+                raise ValueError
+            return versions
+        except (KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuleError("invalid rule catalog") from exc
+
+    def create_rule(self, rule_id, *, when, then, version_id=None) -> RuleVersion:
+        """Validate and append one immutable version of a positive Horn rule."""
+        with self._temporal_write_lock:
+            catalog = self._load_rule_catalog()
+            normalized_version_id = normalize_version_id(version_id)
+            if any(item.version_id == normalized_version_id for item in catalog):
+                raise RuleError(f"rule version ID already exists: {normalized_version_id}")
+            previous_time = catalog[-1].system_time if catalog else None
+            system_time = self._next_temporal_system_time(previous_time)
+            rule = normalize_rule_definition(
+                rule_id,
+                when,
+                then,
+                version_id=normalized_version_id,
+                system_time=system_time,
+                catalog_ordinal=len(catalog) + 1,
+            )
+            self.store.put_metadata(
+                _RULE_CATALOG_KEY,
+                canonical_json_bytes({
+                    "format_version": 1,
+                    "versions": [item.to_dict() for item in (*catalog, rule)],
+                }),
+            )
+            return rule
+
+    def iter_rule_versions(self, rule_id=None, *, system_time=None):
+        """Iterate immutable rule versions in catalog order at a system-time horizon."""
+        if rule_id is not None and (not isinstance(rule_id, str) or not rule_id):
+            raise RuleError("rule_id must be a non-empty string")
+        horizon = None if system_time is None else normalize_temporal_instant(system_time)
+        for rule in self._load_rule_catalog():
+            if horizon is not None and rule.system_time > horizon:
+                continue
+            if rule_id is None or rule.rule_id == rule_id:
+                yield rule
+
+    def get_rule(self, rule_id, *, system_time=None) -> RuleVersion | None:
+        """Return the latest version of a named rule at a system-time horizon."""
+        versions = tuple(self.iter_rule_versions(rule_id, system_time=system_time))
+        return versions[-1] if versions else None
+
+    @staticmethod
+    def _rule_justifications(provenance) -> set[tuple[str, tuple[str, ...]]]:
+        if not isinstance(provenance, Mapping) or provenance.get("derived_by") != "gestaltdb.rules":
+            return set()
+        result = set()
+        values = provenance.get("justifications", ())
+        if not isinstance(values, (tuple, list)):
+            return result
+        for value in values:
+            if not isinstance(value, Mapping):
+                continue
+            try:
+                justification = RuleJustification(
+                    value["rule_version_id"], tuple(value["premise_version_ids"])
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+            result.add((justification.rule_version_id, justification.premise_version_ids))
+        return result
+
+    def run_rules(
+        self,
+        *,
+        as_of,
+        system_time=None,
+        world=None,
+        max_iterations=100,
+        max_derivations=10_000,
+        max_justifications=100_000,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
+    ) -> RuleRunResult:
+        """Evaluate active rules semi-naively and persist a bounded fixpoint.
+
+        Only positive entity-object claims participate. Premises must share a
+        world, and each conclusion receives their half-open validity
+        intersection. No claims are written if any resource bound is exceeded.
+        """
+        limits = {
+            "max_iterations": max_iterations,
+            "max_derivations": max_derivations,
+            "max_justifications": max_justifications,
+        }
+        for name, value in limits.items():
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if world is not None and (not isinstance(world, str) or not world):
+            raise ValueError("world must be a non-empty string or None")
+        mode = index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode
+        if mode not in {item.value for item in IndexMaintenanceMode}:
+            raise ValueError("index_mode must be a valid IndexMaintenanceMode")
+
+        instant = normalize_temporal_instant(as_of)
+        horizon = self._temporal_system_horizon(system_time=system_time)
+        rules_by_id = {}
+        for rule in self.iter_rule_versions(system_time=system_time):
+            rules_by_id[rule.rule_id] = rule
+        rules = tuple(sorted(rules_by_id.values(), key=lambda item: item.rule_id))
+        if not rules:
+            return RuleRunResult(0, 0, 0, None, ())
+
+        facts = []
+        facts_by_predicate = {}
+        existing_derived = {}
+
+        def conclusion_key(subject, predicate, object_value, claim_world):
+            return subject, predicate, object_value, claim_world
+
+        def union_validity(left, right):
+            start = min(left.start, right.start)
+            if left.end is None or right.end is None:
+                end = None
+            else:
+                end = max(left.end, right.end)
+            return TemporalInterval(start, end)
+
+        def add_fact(version_id, claim, valid):
+            fact = {
+                "version_id": version_id,
+                "subject": claim.subject,
+                "predicate": claim.predicate,
+                "object": claim.object,
+                "world": claim.world,
+                "valid": valid,
+            }
+            facts.append(fact)
+            facts_by_predicate.setdefault(claim.predicate, []).append(fact)
+            return fact
+
+        for version in self.iter_claims_as_of(
+            valid_time=instant,
+            polarity=ClaimPolarity.POSITIVE,
+            world=world,
+            through_commit=horizon,
+        ):
+            claim = version.claim
+            if claim is None or claim.object_kind is not ClaimObjectKind.ENTITY:
+                continue
+            fact = add_fact(version.version_id, claim, version.valid)
+            if claim.agent == _RULE_ENGINE_AGENT and claim.provenance.get("derived_by") == "gestaltdb.rules":
+                existing_derived[conclusion_key(
+                    claim.subject, claim.predicate, claim.object, claim.world
+                )] = (version, fact)
+
+        delta_ids = {fact["version_id"] for fact in facts}
+        outputs = {}
+        generated_justifications = set()
+        generated_count = 0
+        iterations = 0
+
+        def unify(term, value, bindings):
+            if not term.startswith("?"):
+                return bindings if term == value else None
+            current = bindings.get(term, _UNSET)
+            if current is not _UNSET:
+                return bindings if current == value else None
+            updated = dict(bindings)
+            updated[term] = value
+            return updated
+
+        while delta_ids:
+            if iterations >= max_iterations:
+                raise RuleEvaluationLimitError(
+                    f"rule evaluation exceeded max_iterations={max_iterations}"
+                )
+            next_delta = {}
+            for rule in rules:
+                rows = [({}, (), None, None, False)]
+                for atom in rule.when:
+                    joined = []
+                    for bindings, premises, valid, row_world, used_delta in rows:
+                        for fact in facts_by_predicate.get(atom.predicate, ()):
+                            if row_world is not None and fact["world"] != row_world:
+                                continue
+                            subject_bindings = unify(atom.subject, fact["subject"], bindings)
+                            if subject_bindings is None:
+                                continue
+                            bound = unify(atom.object, fact["object"], subject_bindings)
+                            if bound is None:
+                                continue
+                            intersection = fact["valid"] if valid is None else valid.intersection(fact["valid"])
+                            if intersection is None:
+                                continue
+                            joined.append((
+                                bound,
+                                (*premises, fact["version_id"]),
+                                intersection,
+                                fact["world"],
+                                used_delta or fact["version_id"] in delta_ids,
+                            ))
+                    rows = joined
+                    if not rows:
+                        break
+                for bindings, premises, valid, row_world, used_delta in rows:
+                    if not used_delta:
+                        continue
+                    subject = bindings.get(rule.then.subject, rule.then.subject)
+                    object_value = bindings.get(rule.then.object, rule.then.object)
+                    key = conclusion_key(subject, rule.then.predicate, object_value, row_world)
+                    justification = (rule.version_id, premises)
+                    marker = (key, justification)
+                    output = outputs.get(key)
+                    if output is None:
+                        existing_entry = existing_derived.get(key)
+                        existing = None if existing_entry is None else existing_entry[0]
+                        version_id = (
+                            existing.version_id if existing is not None else normalize_version_id()
+                        )
+                        output = {
+                            "existing": existing,
+                            "version_id": version_id,
+                            "subject": subject,
+                            "predicate": rule.then.predicate,
+                            "object": object_value,
+                            "world": row_world,
+                            "valid": existing.valid if existing is not None else valid,
+                            "fact": None if existing_entry is None else existing_entry[1],
+                            "justifications": set(),
+                        }
+                        outputs[key] = output
+                        if existing is None:
+                            generated_count += 1
+                            if generated_count > max_derivations:
+                                raise RuleEvaluationLimitError(
+                                    f"rule evaluation exceeded max_derivations={max_derivations}"
+                                )
+                            next_delta[key] = output
+                    merged_valid = union_validity(output["valid"], valid)
+                    if merged_valid != output["valid"]:
+                        output["valid"] = merged_valid
+                        next_delta[key] = output
+                    if marker in generated_justifications:
+                        continue
+                    generated_justifications.add(marker)
+                    if len(generated_justifications) > max_justifications:
+                        raise RuleEvaluationLimitError(
+                            f"rule evaluation exceeded max_justifications={max_justifications}"
+                        )
+                    output["justifications"].add(justification)
+            iterations += 1
+            added_facts = []
+            for output in next_delta.values():
+                fact = output["fact"]
+                if fact is None:
+                    claim = Claim(
+                        output["subject"], output["predicate"], output["object"],
+                        ClaimPolarity.POSITIVE, _RULE_ENGINE_AGENT,
+                        world=output["world"],
+                        provenance={"derived_by": "gestaltdb.rules"},
+                    )
+                    fact = add_fact(output["version_id"], claim, output["valid"])
+                    output["fact"] = fact
+                else:
+                    fact["valid"] = output["valid"]
+                added_facts.append(fact)
+            delta_ids = {fact["version_id"] for fact in added_facts}
+
+        writes = []
+        output_order = sorted(outputs)
+        for key in output_order:
+            output = outputs[key]
+            existing = output["existing"]
+            justifications = set(output["justifications"])
+            if existing is not None:
+                justifications.update(self._rule_justifications(existing.claim.provenance))
+            encoded_justifications = [
+                RuleJustification(rule_version_id, premise_ids).to_dict()
+                for rule_version_id, premise_ids in sorted(justifications)
+            ]
+            if (
+                existing is not None
+                and output["valid"] == existing.valid
+                and justifications == self._rule_justifications(existing.claim.provenance)
+            ):
+                continue
+            claim = Claim(
+                output["subject"],
+                output["predicate"],
+                output["object"],
+                ClaimPolarity.POSITIVE,
+                _RULE_ENGINE_AGENT,
+                world=output["world"],
+                provenance={
+                    "derived_by": "gestaltdb.rules",
+                    "justifications": encoded_justifications,
+                },
+            )
+            if existing is None:
+                writes.append(ClaimVersionWrite.assertion(
+                    claim, output["valid"], version_id=output["version_id"]
+                ))
+            else:
+                writes.append(ClaimVersionWrite.correction(
+                    claim,
+                    supersedes_version_id=existing.version_id,
+                    valid=output["valid"],
+                ))
+
+        if not writes:
+            return RuleRunResult(iterations, 0, len(generated_justifications), None, ())
+        commit = self.commit_versions(
+            writes,
+            metadata={
+                "rule_run": {
+                    "as_of_us": instant.epoch_microseconds,
+                    "input_through_commit": horizon,
+                    "iterations": iterations,
+                }
+            },
+            index_mode=index_mode,
+        )
+        return RuleRunResult(
+            iterations,
+            len(commit.versions),
+            len(generated_justifications),
+            commit.commit_id,
+            commit.versions,
+        )
+
+    def _last_truth_maintenance_instant(self) -> TemporalInstant | None:
+        payload = self.store.get_metadata(_TRUTH_MAINTENANCE_STATE_KEY)
+        state_instant = None
+        state_horizon = -1
+        if payload is not None:
+            try:
+                state = json.loads(payload.decode("utf-8"))
+                if state.get("format_version") == 1:
+                    state_instant = TemporalInstant(state["valid_time_us"])
+                    state_horizon = state["through_commit"]
+                    if isinstance(state_horizon, bool) or not isinstance(state_horizon, int):
+                        raise TypeError
+            except (AttributeError, KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+                state_instant = None
+                state_horizon = -1
+        last_commit_id, _ = self._temporal_sequence()
+        for commit_id in range(last_commit_id, 0, -1):
+            commit = self.get_temporal_commit(commit_id)
+            if commit is None:
+                continue
+            for name in ("truth_maintenance", "rule_run"):
+                value = commit.metadata.get(name)
+                if isinstance(value, Mapping) and isinstance(value.get("as_of_us"), int):
+                    if commit_id > state_horizon:
+                        return TemporalInstant(value["as_of_us"])
+                    return state_instant
+        return state_instant
+
+    def maintain_truth(
+        self,
+        *,
+        as_of=None,
+        system_time=None,
+        world=None,
+        max_iterations=100,
+        max_derivations=10_000,
+        max_justifications=100_000,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
+    ) -> TruthMaintenanceResult:
+        """Incrementally reconcile derived claims with the current rule fixpoint.
+
+        The authoritative base excludes claims emitted by the rule engine, so a
+        cycle cannot preserve itself after its final independent support is
+        removed. If ``as_of`` is omitted, the valid time from the most recent
+        rule run or maintenance pass is resumed.
+        """
+        limits = {
+            "max_iterations": max_iterations,
+            "max_derivations": max_derivations,
+            "max_justifications": max_justifications,
+        }
+        for name, value in limits.items():
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if world is not None and (not isinstance(world, str) or not world):
+            raise ValueError("world must be a non-empty string or None")
+        mode = index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode
+        if mode not in {item.value for item in IndexMaintenanceMode}:
+            raise ValueError("index_mode must be a valid IndexMaintenanceMode")
+        instant = self._last_truth_maintenance_instant() if as_of is None else normalize_temporal_instant(as_of)
+        if instant is None:
+            raise ValueError("as_of is required for the first truth-maintenance pass")
+
+        with self._temporal_write_lock:
+            input_horizon = self._temporal_system_horizon(system_time=system_time)
+            rules_by_id = {}
+            for rule in self.iter_rule_versions(system_time=system_time):
+                rules_by_id[rule.rule_id] = rule
+            rules = tuple(sorted(rules_by_id.values(), key=lambda item: item.rule_id))
+
+            facts = []
+            facts_by_predicate = {}
+            existing = {}
+
+            def conclusion_key(subject, predicate, object_value, claim_world):
+                return subject, predicate, object_value, claim_world
+
+            def add_fact(reference, subject, predicate, object_value, claim_world, valid):
+                fact = {
+                    "ref": reference,
+                    "subject": subject,
+                    "predicate": predicate,
+                    "object": object_value,
+                    "world": claim_world,
+                    "valid": valid,
+                }
+                facts.append(fact)
+                facts_by_predicate.setdefault(predicate, []).append(fact)
+                return fact
+
+            for version in self.iter_claims_as_of(
+                valid_time=instant,
+                polarity=ClaimPolarity.POSITIVE,
+                world=world,
+                through_commit=input_horizon,
+            ):
+                claim = version.claim
+                if claim is None or claim.object_kind is not ClaimObjectKind.ENTITY:
+                    continue
+                key = conclusion_key(claim.subject, claim.predicate, claim.object, claim.world)
+                if claim.agent == _RULE_ENGINE_AGENT and claim.provenance.get("derived_by") == "gestaltdb.rules":
+                    existing[key] = version
+                    continue
+                add_fact(
+                    ("version", version.version_id),
+                    claim.subject,
+                    claim.predicate,
+                    claim.object,
+                    claim.world,
+                    version.valid,
+                )
+
+            def union_validity(left, right):
+                start = min(left.start, right.start)
+                end = None if left.end is None or right.end is None else max(left.end, right.end)
+                return TemporalInterval(start, end)
+
+            def unify(term, value, bindings):
+                if not term.startswith("?"):
+                    return bindings if term == value else None
+                current = bindings.get(term, _UNSET)
+                if current is not _UNSET:
+                    return bindings if current == value else None
+                updated = dict(bindings)
+                updated[term] = value
+                return updated
+
+            outputs = {}
+            delta = {fact["ref"] for fact in facts}
+            iterations = 0
+            support_count = 0
+            while delta:
+                if iterations >= max_iterations:
+                    raise RuleEvaluationLimitError(
+                        f"truth maintenance exceeded max_iterations={max_iterations}"
+                    )
+                next_delta = {}
+                for rule in rules:
+                    rows = [({}, (), None, None, False)]
+                    for atom in rule.when:
+                        joined = []
+                        for bindings, premises, valid, row_world, used_delta in rows:
+                            for fact in facts_by_predicate.get(atom.predicate, ()):
+                                if row_world is not None and fact["world"] != row_world:
+                                    continue
+                                subject_bindings = unify(atom.subject, fact["subject"], bindings)
+                                if subject_bindings is None:
+                                    continue
+                                bound = unify(atom.object, fact["object"], subject_bindings)
+                                if bound is None:
+                                    continue
+                                intersection = fact["valid"] if valid is None else valid.intersection(fact["valid"])
+                                if intersection is None:
+                                    continue
+                                joined.append((
+                                    bound,
+                                    (*premises, fact["ref"]),
+                                    intersection,
+                                    fact["world"],
+                                    used_delta or fact["ref"] in delta,
+                                ))
+                        rows = joined
+                        if not rows:
+                            break
+                    for bindings, premises, valid, row_world, used_delta in rows:
+                        if not used_delta:
+                            continue
+                        subject = bindings.get(rule.then.subject, rule.then.subject)
+                        object_value = bindings.get(rule.then.object, rule.then.object)
+                        key = conclusion_key(subject, rule.then.predicate, object_value, row_world)
+                        output = outputs.get(key)
+                        if output is None:
+                            if len(outputs) >= max_derivations:
+                                raise RuleEvaluationLimitError(
+                                    f"truth maintenance exceeded max_derivations={max_derivations}"
+                                )
+                            output = {
+                                "subject": subject,
+                                "predicate": rule.then.predicate,
+                                "object": object_value,
+                                "world": row_world,
+                                "valid": valid,
+                                "supports": set(),
+                                "fact": None,
+                            }
+                            outputs[key] = output
+                            next_delta[key] = output
+                        merged = union_validity(output["valid"], valid)
+                        if merged != output["valid"]:
+                            output["valid"] = merged
+                            next_delta[key] = output
+                        support = (rule.version_id, premises)
+                        if support not in output["supports"]:
+                            support_count += 1
+                            if support_count > max_justifications:
+                                raise RuleEvaluationLimitError(
+                                    f"truth maintenance exceeded max_justifications={max_justifications}"
+                                )
+                            output["supports"].add(support)
+                iterations += 1
+                added = []
+                for key, output in next_delta.items():
+                    fact = output["fact"]
+                    if fact is None:
+                        fact = add_fact(
+                            ("derived", key),
+                            output["subject"],
+                            output["predicate"],
+                            output["object"],
+                            output["world"],
+                            output["valid"],
+                        )
+                        output["fact"] = fact
+                    else:
+                        fact["valid"] = output["valid"]
+                    added.append(fact)
+                delta = {fact["ref"] for fact in added}
+
+            def semantic_premise(version_id):
+                premise = self.get_claim_version(version_id, through_commit=input_horizon)
+                if (
+                    premise is not None
+                    and premise.claim is not None
+                    and premise.claim.agent == _RULE_ENGINE_AGENT
+                    and premise.claim.provenance.get("derived_by") == "gestaltdb.rules"
+                ):
+                    claim = premise.claim
+                    return ("derived", conclusion_key(
+                        claim.subject, claim.predicate, claim.object, claim.world
+                    ))
+                return ("version", version_id)
+
+            def existing_semantic_supports(version):
+                return {
+                    (rule_id, tuple(semantic_premise(premise) for premise in premises))
+                    for rule_id, premises in self._rule_justifications(version.claim.provenance)
+                }
+
+            changed = set()
+            for key, output in outputs.items():
+                current = existing.get(key)
+                if (
+                    current is None
+                    or current.valid != output["valid"]
+                    or existing_semantic_supports(current) != output["supports"]
+                ):
+                    changed.add(key)
+            propagated = True
+            while propagated:
+                propagated = False
+                for key, output in outputs.items():
+                    if key in changed:
+                        continue
+                    if any(
+                        reference[0] == "derived" and reference[1] in changed
+                        for _, premises in output["supports"]
+                        for reference in premises
+                    ):
+                        changed.add(key)
+                        propagated = True
+
+            result_ids = {}
+            for key in outputs:
+                current = existing.get(key)
+                result_ids[key] = (
+                    normalize_version_id()
+                    if current is None or key in changed
+                    else current.version_id
+                )
+
+            def encoded_supports(output):
+                encoded = []
+                for rule_id, premises in sorted(output["supports"]):
+                    premise_ids = tuple(
+                        reference[1]
+                        if reference[0] == "version"
+                        else result_ids[reference[1]]
+                        for reference in premises
+                    )
+                    encoded.append(RuleJustification(rule_id, premise_ids).to_dict())
+                return encoded
+
+            writes = []
+            operations = []
+            for key in sorted(outputs):
+                if key not in changed:
+                    continue
+                output = outputs[key]
+                claim = Claim(
+                    output["subject"],
+                    output["predicate"],
+                    output["object"],
+                    ClaimPolarity.POSITIVE,
+                    _RULE_ENGINE_AGENT,
+                    world=output["world"],
+                    provenance={
+                        "derived_by": "gestaltdb.rules",
+                        "justifications": encoded_supports(output),
+                    },
+                )
+                current = existing.get(key)
+                if current is None:
+                    writes.append(ClaimVersionWrite.assertion(
+                        claim, output["valid"], version_id=result_ids[key]
+                    ))
+                    operations.append("assert")
+                else:
+                    writes.append(ClaimVersionWrite.correction(
+                        claim,
+                        supersedes_version_id=current.version_id,
+                        valid=output["valid"],
+                        version_id=result_ids[key],
+                    ))
+                    operations.append("correct")
+                    if current.valid.start < output["valid"].start:
+                        writes.append(ClaimVersionWrite.retraction(
+                            current.logical_id,
+                            supersedes_version_id=current.version_id,
+                            valid=TemporalInterval(
+                                current.valid.start, output["valid"].start
+                            ),
+                            reason="derived validity no longer supported",
+                        ))
+                    if output["valid"].end is not None and (
+                        current.valid.end is None
+                        or current.valid.end > output["valid"].end
+                    ):
+                        writes.append(ClaimVersionWrite.retraction(
+                            current.logical_id,
+                            supersedes_version_id=current.version_id,
+                            valid=TemporalInterval(
+                                output["valid"].end, current.valid.end
+                            ),
+                            reason="derived validity no longer supported",
+                        ))
+            for key in sorted(set(existing) - set(outputs)):
+                current = existing[key]
+                writes.append(ClaimVersionWrite.retraction(
+                    current.logical_id,
+                    supersedes_version_id=current.version_id,
+                    valid=current.valid,
+                    reason="final rule support disappeared",
+                ))
+                operations.append("retract")
+
+            commit = None
+            if writes:
+                commit = self.commit_versions(
+                    writes,
+                    metadata={
+                        "truth_maintenance": {
+                            "as_of_us": instant.epoch_microseconds,
+                            "input_through_commit": input_horizon,
+                            "iterations": iterations,
+                        }
+                    },
+                    index_mode=index_mode,
+                )
+
+            premise_dependents = {}
+            rule_dependents = {}
+            derived = {}
+            for key, output in outputs.items():
+                claim = Claim(
+                    output["subject"], output["predicate"], output["object"],
+                    ClaimPolarity.POSITIVE, _RULE_ENGINE_AGENT, world=output["world"],
+                )
+                derived[claim.claim_id] = {
+                    "version_id": result_ids[key],
+                    "support_count": len(output["supports"]),
+                }
+                for justification in encoded_supports(output):
+                    rule_dependents.setdefault(justification["rule_version_id"], set()).add(claim.claim_id)
+                    for premise_id in justification["premise_version_ids"]:
+                        premise_dependents.setdefault(premise_id, set()).add(claim.claim_id)
+            state_horizon = commit.commit_id if commit is not None else input_horizon
+            self.store.put_metadata(_TRUTH_MAINTENANCE_STATE_KEY, canonical_json_bytes({
+                "format_version": 1,
+                "valid_time_us": instant.epoch_microseconds,
+                "through_commit": state_horizon,
+                "derived": derived,
+                "premise_dependents": {
+                    key: sorted(value) for key, value in sorted(premise_dependents.items())
+                },
+                "rule_dependents": {
+                    key: sorted(value) for key, value in sorted(rule_dependents.items())
+                },
+            }))
+            versions = () if commit is None else commit.versions
+            return TruthMaintenanceResult(
+                input_horizon,
+                None if commit is None else commit.commit_id,
+                operations.count("assert"),
+                operations.count("correct"),
+                operations.count("retract"),
+                support_count,
+                versions,
+            )
+
+    def explain_claim(
+        self,
+        claim_id,
+        *,
+        valid_time,
+        system_time=None,
+        max_depth=100,
+        max_nodes=10_000,
+    ) -> ClaimExplanation | None:
+        """Return a finite derivation graph for a visible historical claim."""
+        if isinstance(max_depth, bool) or not isinstance(max_depth, int) or max_depth < 0:
+            raise ValueError("max_depth must be a non-negative integer")
+        if isinstance(max_nodes, bool) or not isinstance(max_nodes, int) or max_nodes < 1:
+            raise ValueError("max_nodes must be a positive integer")
+        instant = normalize_temporal_instant(valid_time)
+        horizon = self._temporal_system_horizon(system_time=system_time)
+        root = self.get_claim_as_of(claim_id, valid_time=instant, through_commit=horizon)
+        if root is None:
+            return None
+        commit = self.get_temporal_commit(horizon)
+        if commit is None:
+            raise TemporalCorruptionError("explanation horizon has no visible commit")
+        rules = {rule.version_id: rule for rule in self.iter_rule_versions()}
+        nodes = {}
+        edges = set()
+        expanded = set()
+        truncated = False
+
+        def add_node(node_id, kind, value):
+            nonlocal truncated
+            if node_id in nodes:
+                return True
+            if len(nodes) >= max_nodes:
+                truncated = True
+                return False
+            nodes[node_id] = ExplanationNode(node_id, kind, value)
+            return True
+
+        def visit(version, depth):
+            nonlocal truncated
+            if not add_node(version.version_id, "claim", version):
+                return
+            if version.version_id in expanded:
+                return
+            expanded.add(version.version_id)
+            supports = self._rule_justifications(version.claim.provenance)
+            if not supports:
+                return
+            if depth >= max_depth:
+                truncated = True
+                return
+            for rule_id, premise_ids in sorted(supports):
+                rule = rules.get(rule_id)
+                if rule is None or not add_node(rule_id, "rule", rule):
+                    truncated = True
+                    continue
+                edges.add(ExplanationEdge(version.version_id, rule_id, "derived_by"))
+                for ordinal, premise_id in enumerate(premise_ids):
+                    premise = self.get_claim_version(premise_id, through_commit=horizon)
+                    if premise is None:
+                        truncated = True
+                        continue
+                    if not add_node(premise_id, "claim", premise):
+                        continue
+                    edges.add(ExplanationEdge(rule_id, premise_id, "premise", ordinal))
+                    visit(premise, depth + 1)
+
+        visit(root, 0)
+        ordered_nodes = tuple(nodes[key] for key in sorted(nodes))
+        ordered_edges = tuple(sorted(
+            edges,
+            key=lambda edge: (
+                edge.source_id,
+                edge.target_id,
+                edge.relationship,
+                -1 if edge.premise_ordinal is None else edge.premise_ordinal,
+            ),
+        ))
+        return ClaimExplanation(
+            root.logical_id,
+            root.version_id,
+            instant,
+            commit.system_time,
+            ordered_nodes,
+            ordered_edges,
+            truncated,
+        )
+
     def put_node_version(
-        self, node: Node, *, valid, version_id=None, metadata=None
+        self, node: Node, *, valid, version_id=None, metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> NodeVersion:
         """Append an immutable node assertion without changing the current graph."""
         commit = self.commit_versions(
             [NodeVersionWrite.assertion(node, valid, version_id=version_id)],
-            metadata=metadata,
+            metadata=metadata, index_mode=index_mode,
         )
         return commit.versions[0]  # type: ignore[return-value]
 
     def put_edge_version(
-        self, edge: Edge, *, valid, version_id=None, metadata=None
+        self, edge: Edge, *, valid, version_id=None, metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> EdgeVersion:
         """Append an immutable edge assertion without changing the current graph."""
         commit = self.commit_versions(
             [EdgeVersionWrite.assertion(edge, valid, version_id=version_id)],
-            metadata=metadata,
+            metadata=metadata, index_mode=index_mode,
         )
         return commit.versions[0]  # type: ignore[return-value]
+
+    def migrate_time_indexed_edges(
+        self,
+        *,
+        delete_legacy: bool = False,
+        metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
+    ) -> tuple[EdgeVersion, ...]:
+        """Append legacy ``TimeIndexedEdge`` records as temporal edge history.
+
+        Records are grouped by logical edge ID and ordered by timestamp. Each
+        record is valid until the next timestamp for that ID; the final record
+        has an open end. Existing equivalent assertions from an earlier run are
+        skipped, making cleanup retryable after a completed or interrupted
+        migration. Changed legacy input after a successful migration is rejected
+        instead of creating overlapping history. When requested, legacy
+        current-state records are deleted only after the temporal commit is
+        visible.
+
+        Returns:
+            Newly appended edge versions in migration order.
+
+        Raises:
+            TemporalVersionError: If timestamps are duplicated or legacy input
+                changed after an earlier migration.
+            TemporalCorruptionError: If a legacy record cannot be decoded or its
+                timestamp-prefixed key does not match its payload.
+        """
+        grouped: dict[str, list[tuple[bytes, TimeIndexedEdge, TemporalInstant]]] = {}
+        for raw_key in self.store.get_edge_keys_generator():
+            try:
+                edge = self.get_edge(raw_key)
+            except Exception as exc:
+                raise TemporalCorruptionError(
+                    f"cannot decode legacy edge record at key {raw_key!r}"
+                ) from exc
+            if not isinstance(edge, TimeIndexedEdge):
+                continue
+            try:
+                instant = normalize_temporal_instant(edge.timestamp_dat)
+                expected_key = edge.get_id_bytes
+            except (TypeError, ValueError, OverflowError, struct.error) as exc:
+                raise TemporalCorruptionError(
+                    f"legacy TimeIndexedEdge '{edge.get_id}' has an invalid timestamp"
+                ) from exc
+            if raw_key != expected_key:
+                raise TemporalCorruptionError(
+                    f"legacy TimeIndexedEdge '{edge.get_id}' key does not match its payload"
+                )
+            grouped.setdefault(edge.get_id, []).append((raw_key, edge, instant))
+
+        existing_migration_versions: dict[str, list[EdgeVersion]] = {}
+        migration_exists = False
+        for commit in self.iter_temporal_commits():
+            if commit.metadata.get("migration") != "TimeIndexedEdge":
+                continue
+            migration_exists = True
+            for version in commit.versions:
+                if isinstance(version, EdgeVersion):
+                    existing_migration_versions.setdefault(version.logical_id, []).append(version)
+
+        unseen_logical_ids = sorted(set(grouped) - set(existing_migration_versions))
+        if migration_exists and unseen_logical_ids:
+            raise TemporalVersionError(
+                "legacy TimeIndexedEdge input contains new logical IDs after migration: "
+                + ", ".join(unseen_logical_ids)
+            )
+
+        writes: list[EdgeVersionWrite] = []
+        migrated_keys: list[bytes] = []
+        for logical_id in sorted(grouped):
+            records = sorted(grouped[logical_id], key=lambda item: (item[2].epoch_microseconds, item[0]))
+            starts = [item[2].epoch_microseconds for item in records]
+            if len(starts) != len(set(starts)):
+                raise TemporalVersionError(
+                    f"legacy TimeIndexedEdge '{logical_id}' has duplicate timestamps"
+                )
+            existing_versions = existing_migration_versions.get(logical_id, [])
+            existing_assertions = [
+                version for version in existing_versions
+                if version.operation is VersionOperation.ASSERT and version.edge is not None
+            ]
+            for index, (raw_key, edge, start) in enumerate(records):
+                end = records[index + 1][2] if index + 1 < len(records) else None
+                plain_edge = Edge(
+                    edge_id=edge.get_id,
+                    source=edge.source,
+                    target=edge.target,
+                    properties=edge.properties,
+                )
+                valid = TemporalInterval(start, end)
+                matching_version = any(
+                    version.operation is VersionOperation.ASSERT
+                    and version.valid.start == start
+                    and version.edge is not None
+                    and version.edge.to_dict() == plain_edge.to_dict()
+                    for version in existing_assertions
+                )
+                if existing_versions and not matching_version:
+                    raise TemporalVersionError(
+                        f"legacy TimeIndexedEdge '{logical_id}' changed after migration"
+                    )
+                if not existing_versions:
+                    writes.append(EdgeVersionWrite.assertion(plain_edge, valid))
+                migrated_keys.append(raw_key)
+
+        versions: tuple[EdgeVersion, ...] = ()
+        if writes:
+            migration_metadata = {
+                "migration": "TimeIndexedEdge",
+                "interval_policy": "successive",
+            }
+            if metadata is not None:
+                migration_metadata["user"] = dict(metadata)
+            commit = self.commit_versions(
+                writes,
+                metadata=migration_metadata,
+                index_mode=index_mode,
+            )
+            versions = tuple(commit.versions)  # type: ignore[assignment]
+
+        if delete_legacy:
+            for raw_key in migrated_keys:
+                self.delete_edge(raw_key)
+        return versions
 
     def correct_node_version(
         self,
@@ -3326,6 +5056,7 @@ class GraphDB:
         valid=None,
         version_id=None,
         metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> NodeVersion:
         """Append a corrected node payload while preserving the superseded version."""
         commit = self.commit_versions([
@@ -3335,7 +5066,7 @@ class GraphDB:
                 valid=valid,
                 version_id=version_id,
             )
-        ], metadata=metadata)
+        ], metadata=metadata, index_mode=index_mode)
         return commit.versions[0]  # type: ignore[return-value]
 
     def correct_edge_version(
@@ -3346,6 +5077,7 @@ class GraphDB:
         valid=None,
         version_id=None,
         metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> EdgeVersion:
         """Append a corrected edge payload while preserving the superseded version."""
         commit = self.commit_versions([
@@ -3355,7 +5087,7 @@ class GraphDB:
                 valid=valid,
                 version_id=version_id,
             )
-        ], metadata=metadata)
+        ], metadata=metadata, index_mode=index_mode)
         return commit.versions[0]  # type: ignore[return-value]
 
     def retract_node_version(
@@ -3368,6 +5100,7 @@ class GraphDB:
         reason=None,
         version_id=None,
         metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> NodeVersion:
         """Append a node retraction over an explicit or inherited interval."""
         commit = self.commit_versions([
@@ -3379,7 +5112,7 @@ class GraphDB:
                 reason=reason,
                 version_id=version_id,
             )
-        ], metadata=metadata)
+        ], metadata=metadata, index_mode=index_mode)
         return commit.versions[0]  # type: ignore[return-value]
 
     def retract_edge_version(
@@ -3392,6 +5125,7 @@ class GraphDB:
         reason=None,
         version_id=None,
         metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> EdgeVersion:
         """Append an edge retraction over an explicit or inherited interval."""
         commit = self.commit_versions([
@@ -3403,35 +5137,243 @@ class GraphDB:
                 reason=reason,
                 version_id=version_id,
             )
-        ], metadata=metadata)
+        ], metadata=metadata, index_mode=index_mode)
         return commit.versions[0]  # type: ignore[return-value]
 
-    def commit_versions(self, writes, *, metadata=None) -> TemporalCommit:
+    def assert_claim(
+        self,
+        *,
+        subject,
+        predicate,
+        object,
+        polarity,
+        agent,
+        source=None,
+        confidence=None,
+        world="default",
+        provenance=None,
+        object_kind=ClaimObjectKind.ENTITY,
+        valid=None,
+        valid_from=None,
+        valid_to=None,
+        version_id=None,
+        metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
+    ) -> ClaimVersion:
+        """Append an immutable sourced assertion or denial."""
+        interval = self._claim_valid_interval(valid, valid_from, valid_to, required=True)
+        claim = Claim(
+            subject=subject,
+            predicate=predicate,
+            object=object,
+            object_kind=object_kind,
+            polarity=polarity,
+            agent=agent,
+            source=source,
+            confidence=confidence,
+            world=world,
+            provenance={} if provenance is None else provenance,
+        )
+        commit = self.commit_versions(
+            [ClaimVersionWrite.assertion(claim, interval, version_id=version_id)],
+            metadata=metadata,
+            index_mode=index_mode,
+        )
+        return commit.versions[0]  # type: ignore[return-value]
+
+    def assert_world_accessibility(
+        self,
+        *,
+        agent,
+        from_world,
+        to_world,
+        kind,
+        valid=None,
+        valid_from=None,
+        valid_to=None,
+        source=None,
+        provenance=None,
+        version_id=None,
+        metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
+    ) -> ClaimVersion:
+        """Append a positive temporal accessibility fact for one agent frame."""
+        try:
+            frame = AccessibilityKind(kind)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("kind must be 'belief', 'knowledge', or 'modal'") from exc
+        return self.assert_claim(
+            subject=from_world,
+            predicate=ACCESSIBILITY_PREDICATES[frame],
+            object=to_world,
+            polarity=ClaimPolarity.POSITIVE,
+            agent=agent,
+            source=source,
+            world=from_world,
+            provenance={} if provenance is None else provenance,
+            valid=valid,
+            valid_from=valid_from,
+            valid_to=valid_to,
+            version_id=version_id,
+            metadata=metadata,
+            index_mode=index_mode,
+        )
+
+    def entails(
+        self,
+        agent,
+        proposition,
+        mode,
+        *,
+        world,
+        valid_time,
+        system_time=None,
+        through_commit=None,
+        max_depth=4,
+        max_states=1_000,
+    ):
+        """Evaluate a bounded modal proposition under one pinned temporal view."""
+        try:
+            operator = ModalOperator(str(mode).upper())
+        except ValueError as exc:
+            raise ValueError("mode must be BELIEVES, KNOWS, POSSIBLE, or NECESSARY") from exc
+        if operator not in {
+            ModalOperator.BELIEVES, ModalOperator.KNOWS,
+            ModalOperator.POSSIBLE, ModalOperator.NECESSARY,
+        }:
+            raise ValueError("mode must be BELIEVES, KNOWS, POSSIBLE, or NECESSARY")
+        expression = ModalExpression.from_value({
+            "operator": operator.value,
+            "agent": agent,
+            "formula": proposition,
+        })
+        with self.read_view(
+            valid_time=valid_time, system_time=system_time, through_commit=through_commit
+        ) as view:
+            return evaluate_modal(
+                view, expression, world=world, max_depth=max_depth, max_states=max_states
+            )
+
+    def correct_claim(
+        self,
+        claim,
+        *,
+        supersedes_version_id,
+        confidence=_UNSET,
+        provenance=_UNSET,
+        valid=None,
+        valid_from=None,
+        valid_to=None,
+        version_id=None,
+        metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
+    ) -> ClaimVersion:
+        """Append corrected confidence/provenance for one claim identity."""
+        target = self._get_temporal_version(normalize_version_id(supersedes_version_id))
+        if not isinstance(target, ClaimVersion) or target.claim is None:
+            raise TemporalVersionError("superseded claim version does not exist")
+        if isinstance(claim, Claim):
+            corrected = claim
+        else:
+            claim_id = normalize_logical_id(claim)
+            if claim_id != target.logical_id:
+                raise TemporalVersionError("superseded claim version has a different claim ID")
+            payload = target.claim.to_dict()
+            if confidence is not _UNSET:
+                payload["confidence"] = confidence
+            if provenance is not _UNSET:
+                payload["provenance"] = provenance
+            corrected = Claim.from_dict(payload)
+        if corrected.claim_id != target.logical_id:
+            raise TemporalVersionError("claim corrections cannot change epistemic identity")
+        interval = self._claim_valid_interval(valid, valid_from, valid_to, required=False)
+        commit = self.commit_versions([
+            ClaimVersionWrite.correction(
+                corrected,
+                supersedes_version_id=supersedes_version_id,
+                valid=interval,
+                version_id=version_id,
+            )
+        ], metadata=metadata, index_mode=index_mode)
+        return commit.versions[0]  # type: ignore[return-value]
+
+    def retract_claim(
+        self,
+        claim_id,
+        *,
+        valid=None,
+        valid_from=None,
+        valid_to=None,
+        supersedes_version_id=None,
+        reason=None,
+        version_id=None,
+        metadata=None,
+        index_mode=IndexMaintenanceMode.MAINTAIN,
+    ) -> ClaimVersion:
+        """Append a bitemporal retraction without deleting claim history."""
+        interval = self._claim_valid_interval(valid, valid_from, valid_to, required=False)
+        commit = self.commit_versions([
+            ClaimVersionWrite.retraction(
+                claim_id,
+                valid=interval,
+                supersedes_version_id=supersedes_version_id,
+                reason=reason,
+                version_id=version_id,
+            )
+        ], metadata=metadata, index_mode=index_mode)
+        return commit.versions[0]  # type: ignore[return-value]
+
+    @staticmethod
+    def _claim_valid_interval(valid, valid_from, valid_to, *, required):
+        if valid is not None and (valid_from is not None or valid_to is not None):
+            raise TemporalVersionError("provide either valid or valid_from/valid_to, not both")
+        if valid is not None:
+            return normalize_temporal_interval(valid)
+        if valid_from is None:
+            if valid_to is not None:
+                raise TemporalVersionError("valid_to requires valid_from")
+            if required:
+                raise TemporalVersionError("claim assertion requires valid or valid_from")
+            return None
+        return TemporalInterval(
+            normalize_temporal_instant(valid_from),
+            None if valid_to is None else normalize_temporal_instant(valid_to),
+        )
+
+    def commit_versions(
+        self, writes, *, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN
+    ) -> TemporalCommit:
         """Append one logical commit containing immutable node/edge versions."""
         writes = tuple(writes)
         if not writes:
             raise TemporalVersionError("temporal commit must contain at least one version")
+        mode = index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode
+        allowed_modes = {item.value for item in IndexMaintenanceMode}
+        if mode not in allowed_modes:
+            raise ValueError(f"index_mode must be one of: {', '.join(sorted(allowed_modes))}")
+        rebuild_after = mode == IndexMaintenanceMode.DEFER_REBUILD.value
+        write_mode = IndexMaintenanceMode.DEFER.value if rebuild_after else mode
         normalized_metadata = json.loads(canonical_json_bytes(dict(metadata or {})).decode("utf-8"))
-        if getattr(self.store, "supports_transactions", False) and not self._temporal_transaction_bound:
-            with self.transaction() as transaction:
-                return transaction._commit_versions_direct(writes, normalized_metadata)
-        with self._temporal_write_lock:
-            return self._commit_versions_direct(writes, normalized_metadata)
+        with self._temporal_writer_guard():
+            if getattr(self.store, "supports_transactions", False) and not self._temporal_transaction_bound:
+                with self.transaction() as transaction:
+                    result = transaction._commit_versions_direct(writes, normalized_metadata, write_mode)
+            else:
+                result = self._commit_versions_direct(writes, normalized_metadata, write_mode)
+        if rebuild_after:
+            self.rebuild_temporal_indexes()
+        return result
 
-    def _commit_versions_direct(self, writes, metadata) -> TemporalCommit:
-        previous_commit_id, previous_system_time = self._temporal_sequence()
-        commit_id = previous_commit_id + 1
-        if commit_id >= 1 << 64:
-            raise TemporalVersionError("temporal commit ID space is exhausted")
-        system_time = self._next_temporal_system_time(previous_system_time)
-
-        prepared = []
+    def _commit_versions_direct(self, writes, metadata, index_mode) -> TemporalCommit:
+        prepared_inputs = []
         batch_version_ids = set()
         for ordinal, write in enumerate(writes):
             if ordinal >= 1 << 32:
                 raise TemporalVersionError("temporal commit contains too many versions")
-            if not isinstance(write, (NodeVersionWrite, EdgeVersionWrite)):
-                raise TypeError("writes must contain NodeVersionWrite or EdgeVersionWrite values")
+            if not isinstance(write, (NodeVersionWrite, EdgeVersionWrite, ClaimVersionWrite)):
+                raise TypeError(
+                    "writes must contain NodeVersionWrite, EdgeVersionWrite, or ClaimVersionWrite values"
+                )
             if not isinstance(write.operation, VersionOperation):
                 raise TemporalVersionError("temporal version operation is invalid")
             valid_input = write.valid
@@ -3452,8 +5394,12 @@ class GraphDB:
                 target = self._get_temporal_version(supersedes_version_id)
                 if target is None:
                     raise TemporalVersionError("superseded temporal version does not exist")
-                expected_node = isinstance(write, NodeVersionWrite)
-                if isinstance(target, NodeVersion) != expected_node or target.logical_id != logical_id:
+                expected_type = {
+                    NodeVersionWrite: NodeVersion,
+                    EdgeVersionWrite: EdgeVersion,
+                    ClaimVersionWrite: ClaimVersion,
+                }[type(write)]
+                if not isinstance(target, expected_type) or target.logical_id != logical_id:
                     raise TemporalVersionError("superseded temporal version has a different kind or logical ID")
             if write.operation is VersionOperation.ASSERT and write.supersedes_version_id is not None:
                 raise TemporalVersionError("assertions cannot supersede another version")
@@ -3476,7 +5422,7 @@ class GraphDB:
                     raise TemporalVersionError("node payload ID does not match logical ID")
                 payload = b"" if entity is None else self.entity_serializer.serialize(entity, "Node")
                 entity_type = "Node"
-            else:
+            elif isinstance(write, EdgeVersionWrite):
                 entity_kind = "edge"
                 entity = write.edge
                 if write.operation is not VersionOperation.RETRACT and not isinstance(entity, Edge):
@@ -3485,6 +5431,15 @@ class GraphDB:
                     raise TemporalVersionError("edge payload ID does not match logical ID")
                 payload = b"" if entity is None else self.entity_serializer.serialize(entity, "Edge")
                 entity_type = "Edge"
+            else:
+                entity_kind = "claim"
+                entity = write.claim
+                if write.operation is not VersionOperation.RETRACT and not isinstance(entity, Claim):
+                    raise TemporalVersionError("claim assertions and corrections require a Claim payload")
+                if entity is not None and entity.claim_id != logical_id:
+                    raise TemporalVersionError("claim payload ID does not match logical ID")
+                payload = b"" if entity is None else canonical_json_bytes(entity.to_dict())
+                entity_type = "Claim"
             if write.operation is VersionOperation.RETRACT and entity is not None:
                 raise TemporalVersionError("retractions cannot contain entity payloads")
             if not isinstance(payload, bytes):
@@ -3492,14 +5447,48 @@ class GraphDB:
             if write.operation is not VersionOperation.RETRACT:
                 if not payload:
                     raise TemporalVersionError("temporal entity payload cannot be empty")
-                try:
-                    decoded_entity = self.entity_serializer.deserialize(payload, entity_type)
-                except Exception as exc:
-                    raise TemporalVersionError("the configured serializer cannot decode its temporal payload") from exc
-                expected_type = Node if entity_type == "Node" else Edge
-                if not isinstance(decoded_entity, expected_type) or decoded_entity.get_id != logical_id:
-                    raise TemporalVersionError("serialized temporal payload changed its logical ID")
+                if entity_type == "Claim":
+                    try:
+                        decoded_entity = Claim.from_dict(json.loads(payload.decode("utf-8")))
+                    except (UnicodeDecodeError, json.JSONDecodeError, TemporalVersionError) as exc:
+                        raise TemporalVersionError("cannot decode temporal claim payload") from exc
+                    if decoded_entity.claim_id != logical_id:
+                        raise TemporalVersionError("serialized temporal payload changed its logical ID")
+                else:
+                    try:
+                        decoded_entity = self.entity_serializer.deserialize(payload, entity_type)
+                    except Exception as exc:
+                        raise TemporalVersionError(
+                            "the configured serializer cannot decode its temporal payload"
+                        ) from exc
+                    expected_type = Node if entity_type == "Node" else Edge
+                    if not isinstance(decoded_entity, expected_type) or decoded_entity.get_id != logical_id:
+                        raise TemporalVersionError("serialized temporal payload changed its logical ID")
 
+            prepared_inputs.append((
+                entity_kind,
+                version_id,
+                logical_id,
+                valid,
+                write.operation,
+                supersedes_version_id,
+                write.reason,
+                payload,
+            ))
+
+        commit_id, system_time = self._reserve_temporal_sequence()
+        previous_commit_id = commit_id - 1
+        prepared = []
+        for ordinal, (
+            entity_kind,
+            version_id,
+            logical_id,
+            valid,
+            operation,
+            supersedes_version_id,
+            reason,
+            payload,
+        ) in enumerate(prepared_inputs):
             header = {
                 "entity_kind": entity_kind,
                 "version_id": version_id,
@@ -3509,12 +5498,11 @@ class GraphDB:
                 "commit_id": commit_id,
                 "commit_ordinal": ordinal,
                 "system_time_us": system_time.epoch_microseconds,
-                "operation": write.operation.value,
+                "operation": operation.value,
                 "supersedes_version_id": supersedes_version_id,
-                "reason": write.reason,
+                "reason": reason,
             }
-            envelope = encode_version_envelope(header, payload)
-            prepared.append((version_id, envelope))
+            prepared.append((version_id, encode_version_envelope(header, payload)))
 
         sequence = canonical_json_bytes({
             "commit_id": commit_id,
@@ -3538,13 +5526,34 @@ class GraphDB:
                 raise TemporalCorruptionError("temporal sequence would overwrite an existing record")
 
         # The sequence reserves the ID. The visibility marker is always written last.
-        self.store.put_metadata(_TEMPORAL_SEQUENCE_KEY, sequence)
+        if self._store_path is not None:
+            self.store.put_metadata(_TEMPORAL_SEQUENCE_KEY, sequence)
         self.store.put_metadata(self._temporal_commit_key(commit_id), descriptor)
         for ordinal, (_, envelope) in enumerate(prepared):
             self.store.put_metadata(self._temporal_record_key(commit_id, ordinal), envelope)
-        self.store.put_metadata(
-            self._temporal_visible_key(commit_id), hashlib.sha256(descriptor).digest()
-        )
+        indexes_publishable = False
+        if index_mode == IndexMaintenanceMode.DEFER.value:
+            self._mark_indexes_stale("temporal")
+        else:
+            prior_visible = False
+            if previous_commit_id > 0 and self._temporal_index_state() is None:
+                prior_visible = any(
+                    self.get_temporal_commit(candidate, _validate_supersession=False) is not None
+                    for candidate in range(1, commit_id)
+                )
+            if prior_visible:
+                self._mark_indexes_stale("temporal")
+            indexes_publishable = not prior_visible
+            indexed_versions = [self._decode_temporal_version(envelope) for _, envelope in prepared]
+            self._write_temporal_indexes(indexed_versions, commit_id)
+        marker = hashlib.sha256(descriptor).digest()
+        if indexes_publishable:
+            self._persist_temporal_index_state(
+                commit_id,
+                self._temporal_index_generation(),
+                pending_marker=(commit_id, marker),
+            )
+        self.store.put_metadata(self._temporal_visible_key(commit_id), marker)
         commit = self.get_temporal_commit(commit_id)
         if commit is None:
             raise TemporalCorruptionError("new temporal commit was not visible after publication")
@@ -3566,7 +5575,9 @@ class GraphDB:
                 return True
         return False
 
-    def get_temporal_commit(self, commit_id: int) -> TemporalCommit | None:
+    def get_temporal_commit(
+        self, commit_id: int, *, _validate_supersession: bool = True
+    ) -> TemporalCommit | None:
         """Return a fully validated visible temporal commit."""
         if isinstance(commit_id, bool) or not isinstance(commit_id, int) or commit_id < 1:
             raise ValueError("commit_id must be a positive integer")
@@ -3629,16 +5640,17 @@ class GraphDB:
             if version.system_time != system_time:
                 raise TemporalCorruptionError("temporal version system time does not match its commit")
             versions.append(version)
-        for version in versions:
-            if version.supersedes_version_id is None:
-                continue
-            target = self._get_temporal_version_through(
-                version.supersedes_version_id, commit_id - 1
-            )
-            if target is None:
-                raise TemporalCorruptionError("temporal version supersedes a missing version")
-            if isinstance(target, NodeVersion) != isinstance(version, NodeVersion) or target.logical_id != version.logical_id:
-                raise TemporalCorruptionError("temporal supersession kind or logical ID mismatch")
+        if _validate_supersession:
+            for version in versions:
+                if version.supersedes_version_id is None:
+                    continue
+                target = self._get_temporal_version_through(
+                    version.supersedes_version_id, commit_id - 1
+                )
+                if target is None:
+                    raise TemporalCorruptionError("temporal version supersedes a missing version")
+                if type(target) is not type(version) or target.logical_id != version.logical_id:
+                    raise TemporalCorruptionError("temporal supersession kind or logical ID mismatch")
         return TemporalCommit(commit_id, system_time, metadata, tuple(versions))
 
     def _decode_temporal_version(self, envelope: bytes):
@@ -3710,14 +5722,23 @@ class GraphDB:
                 entity = self.entity_serializer.deserialize(payload, "Edge")
             except Exception as exc:
                 raise TemporalCorruptionError("cannot decode temporal edge payload") from exc
+        elif header["entity_kind"] == "claim":
+            try:
+                entity = Claim.from_dict(json.loads(payload.decode("utf-8")))
+            except (UnicodeDecodeError, json.JSONDecodeError, TemporalVersionError) as exc:
+                raise TemporalCorruptionError("cannot decode temporal claim payload") from exc
         else:
             raise TemporalCorruptionError("unknown temporal entity kind")
-        if entity is not None and entity.get_id != common["logical_id"]:
-            raise TemporalCorruptionError("temporal payload ID does not match its logical ID")
+        if entity is not None:
+            entity_id = entity.claim_id if isinstance(entity, Claim) else entity.get_id
+            if entity_id != common["logical_id"]:
+                raise TemporalCorruptionError("temporal payload ID does not match its logical ID")
         if header["entity_kind"] == "node":
             return NodeVersion(**common, node=entity)
         if header["entity_kind"] == "edge":
             return EdgeVersion(**common, edge=entity)
+        if header["entity_kind"] == "claim":
+            return ClaimVersion(**common, claim=entity)
         raise TemporalCorruptionError("unknown temporal entity kind")
 
     def iter_temporal_commits(self, *, through_commit=None):
@@ -3729,43 +5750,724 @@ class GraphDB:
             if commit is not None:
                 yield commit
 
+    def _temporal_orphan_details(self, commit_id: int, descriptor_payload: bytes):
+        try:
+            descriptor = json.loads(descriptor_payload.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise TemporalCorruptionError("invalid unpublished temporal commit descriptor") from exc
+        if not isinstance(descriptor, dict):
+            raise TemporalCorruptionError("unpublished temporal commit descriptor must be an object")
+        if descriptor.get("format_version") != 1 or descriptor.get("commit_id") != commit_id:
+            raise TemporalCorruptionError("invalid unpublished temporal commit descriptor")
+        version_ids = descriptor.get("version_ids")
+        record_digests = descriptor.get("record_digests")
+        if (
+            not isinstance(version_ids, list)
+            or not version_ids
+            or not all(isinstance(value, str) for value in version_ids)
+            or len(set(version_ids)) != len(version_ids)
+            or not isinstance(record_digests, list)
+            or len(version_ids) != len(record_digests)
+            or not all(
+                isinstance(value, str)
+                and len(value) == 64
+                and all(character in "0123456789abcdef" for character in value)
+                for value in record_digests
+            )
+        ):
+            raise TemporalCorruptionError("invalid unpublished temporal commit record catalog")
+        try:
+            normalized_version_ids = [normalize_version_id(value) for value in version_ids]
+            system_time_us = descriptor["system_time_us"]
+            if isinstance(system_time_us, bool) or not isinstance(system_time_us, int):
+                raise TypeError
+            system_time = TemporalInstant(system_time_us)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise TemporalCorruptionError("invalid unpublished temporal commit metadata") from exc
+        if normalized_version_ids != version_ids:
+            raise TemporalCorruptionError("unpublished temporal commit contains a non-canonical version ID")
+
+        versions = []
+        for ordinal, (version_id, expected_digest) in enumerate(zip(version_ids, record_digests)):
+            envelope = self.store.get_metadata(self._temporal_record_key(commit_id, ordinal))
+            if envelope is None:
+                continue
+            if hashlib.sha256(envelope).hexdigest() != expected_digest:
+                raise TemporalCorruptionError("unpublished temporal commit record is corrupt")
+            version = self._decode_temporal_version(envelope)
+            if (
+                version.version_id != version_id
+                or version.commit_id != commit_id
+                or version.commit_ordinal != ordinal
+                or version.system_time != system_time
+            ):
+                raise TemporalCorruptionError("unpublished temporal record does not match its descriptor")
+            versions.append(version)
+        return descriptor, system_time, tuple(versions)
+
+    def _list_temporal_orphans_locked(self, through_commit=None) -> TemporalOrphanReport:
+        allocation_horizon, _ = self._temporal_sequence()
+        if through_commit is None:
+            through_commit = allocation_horizon
+        if (
+            isinstance(through_commit, bool)
+            or not isinstance(through_commit, int)
+            or through_commit < 0
+        ):
+            raise ValueError("through_commit must be a non-negative integer")
+        if through_commit > allocation_horizon:
+            raise ValueError("through_commit is newer than the allocation horizon")
+
+        artifacts = []
+        for commit_id in range(1, through_commit + 1):
+            marker = self.store.get_metadata(self._temporal_visible_key(commit_id))
+            descriptor_payload = self.store.get_metadata(self._temporal_commit_key(commit_id))
+            if marker is not None:
+                self.get_temporal_commit(commit_id)
+                continue
+            if descriptor_payload is None:
+                artifacts.append(TemporalOrphanArtifact(
+                    commit_id=commit_id,
+                    kind="reservation_gap",
+                    system_time=None,
+                    expected_record_count=None,
+                    present_record_count=0,
+                ))
+                continue
+            descriptor, system_time, versions = self._temporal_orphan_details(
+                commit_id, descriptor_payload
+            )
+            artifacts.append(TemporalOrphanArtifact(
+                commit_id=commit_id,
+                kind="incomplete_commit",
+                system_time=system_time,
+                expected_record_count=len(descriptor["version_ids"]),
+                present_record_count=len(versions),
+            ))
+        return TemporalOrphanReport(allocation_horizon, through_commit, tuple(artifacts))
+
+    def list_temporal_orphans(self, *, through_commit=None) -> TemporalOrphanReport:
+        """List durable allocation gaps and incomplete unpublished commits."""
+        with self._temporal_writer_guard():
+            return self._list_temporal_orphans_locked(through_commit)
+
+    def reclaim_temporal_orphans(self, *, through_commit: int) -> TemporalOrphanReclaimResult:
+        """Delete validated unpublished artifacts through an explicit commit horizon."""
+        with self._temporal_writer_guard():
+            if getattr(self.store, "supports_transactions", False) and not self._temporal_transaction_bound:
+                with self.transaction() as transaction:
+                    return transaction._reclaim_temporal_orphans_locked(through_commit)
+            return self._reclaim_temporal_orphans_locked(through_commit)
+
+    def _reclaim_temporal_orphans_locked(self, through_commit: int) -> TemporalOrphanReclaimResult:
+        report = self._list_temporal_orphans_locked(through_commit)
+        incomplete = [
+            artifact for artifact in report.artifacts
+            if artifact.kind == "incomplete_commit"
+        ]
+        gaps = tuple(
+            artifact.commit_id for artifact in report.artifacts
+            if artifact.kind == "reservation_gap"
+        )
+        if not incomplete:
+            return TemporalOrphanReclaimResult(
+                report.allocation_horizon,
+                report.through_commit,
+                (),
+                gaps,
+                False,
+            )
+
+        self._mark_indexes_stale("temporal")
+        cleanup = []
+        for artifact in incomplete:
+            descriptor_key = self._temporal_commit_key(artifact.commit_id)
+            descriptor_payload = self.store.get_metadata(descriptor_key)
+            if descriptor_payload is None:
+                raise TemporalCorruptionError("temporal orphan changed during reclamation")
+            descriptor, system_time, versions = self._temporal_orphan_details(
+                artifact.commit_id, descriptor_payload
+            )
+            cleanup.append((artifact.commit_id, descriptor_key, descriptor, system_time, versions))
+
+        for commit_id, _, _, system_time, versions in cleanup:
+            for version in versions:
+                exact_entries, range_entries = self._temporal_index_entries(version)
+                for index_name, parts, value in exact_entries:
+                    self.store.delete_index_entry(index_name, parts, value)
+                for index_name, parts, range_value, value in range_entries:
+                    self.store.delete_range_index_entry(index_name, parts, range_value, value)
+                self.store.delete_range_index_entry(
+                    self._temporal_index_name(
+                        _TEMPORAL_SYSTEM_INDEX, self._temporal_index_generation()
+                    ),
+                [b"commit"],
+                self._temporal_instant_index_value(system_time),
+                f"{commit_id:016x}".encode("ascii"),
+            )
+
+        for commit_id, descriptor_key, descriptor, _, _ in cleanup:
+            for ordinal in range(len(descriptor["version_ids"])):
+                self.store.delete_metadata(self._temporal_record_key(commit_id, ordinal))
+            self.store.delete_metadata(descriptor_key)
+
+        self.rebuild_temporal_indexes()
+        return TemporalOrphanReclaimResult(
+            report.allocation_horizon,
+            report.through_commit,
+            tuple(item[0] for item in cleanup),
+            gaps,
+            True,
+        )
+
     def _get_temporal_version(self, version_id: str):
         last_commit_id, _ = self._temporal_sequence()
         return self._get_temporal_version_through(version_id, last_commit_id)
 
+    def _get_temporal_version_at(self, locator: bytes):
+        commit_id, ordinal = self._decode_temporal_locator(locator)
+        commit = self.get_temporal_commit(commit_id, _validate_supersession=False)
+        if commit is None:
+            return None
+        if ordinal >= len(commit.versions):
+            raise TemporalCorruptionError("temporal index locator ordinal is out of range")
+        return commit.versions[ordinal]
+
     def _get_temporal_version_through(self, version_id: str, through_commit: int):
         version_id = normalize_version_id(version_id)
-        for commit in self.iter_temporal_commits(through_commit=through_commit):
+        for commit_id in range(1, through_commit + 1):
+            commit = self.get_temporal_commit(commit_id, _validate_supersession=False)
+            if commit is None:
+                continue
             for version in commit.versions:
                 if version.version_id == version_id:
                     return version
         return None
 
-    def get_node_version(self, version_id: str) -> NodeVersion | None:
-        """Return a visible node version by UUID, using a history scan in TKG-02."""
-        version = self._get_temporal_version(version_id)
+    def get_node_version(
+        self, version_id: str, *, system_time=None, through_commit=None
+    ) -> NodeVersion | None:
+        """Return a visible node version by UUID using the temporal index."""
+        horizon = self._temporal_system_horizon(
+            system_time=system_time, through_commit=through_commit
+        )
+        self._ensure_temporal_indexes(horizon)
+        locators = list(self.store.iter_index_prefix(
+            self._temporal_index_name(_TEMPORAL_VERSION_INDEX, self._temporal_index_generation()),
+            [normalize_version_id(version_id).encode("ascii")]
+        ))
+        version = self._get_temporal_version_at(locators[-1]) if locators else None
+        if version is not None and version.commit_id > horizon:
+            return None
         return version if isinstance(version, NodeVersion) else None
 
-    def get_edge_version(self, version_id: str) -> EdgeVersion | None:
-        """Return a visible edge version by UUID, using a history scan in TKG-02."""
-        version = self._get_temporal_version(version_id)
+    def get_edge_version(
+        self, version_id: str, *, system_time=None, through_commit=None
+    ) -> EdgeVersion | None:
+        """Return a visible edge version by UUID using the temporal index."""
+        horizon = self._temporal_system_horizon(
+            system_time=system_time, through_commit=through_commit
+        )
+        self._ensure_temporal_indexes(horizon)
+        locators = list(self.store.iter_index_prefix(
+            self._temporal_index_name(_TEMPORAL_VERSION_INDEX, self._temporal_index_generation()),
+            [normalize_version_id(version_id).encode("ascii")]
+        ))
+        version = self._get_temporal_version_at(locators[-1]) if locators else None
+        if version is not None and version.commit_id > horizon:
+            return None
         return version if isinstance(version, EdgeVersion) else None
 
-    def iter_node_versions(self, logical_id=None, *, through_commit=None):
-        """Iterate visible node versions, optionally filtering by logical ID."""
-        for commit in self.iter_temporal_commits(through_commit=through_commit):
+    def get_claim_version(
+        self, version_id: str, *, system_time=None, through_commit=None
+    ) -> ClaimVersion | None:
+        """Return a visible epistemic claim version by UUID."""
+        horizon = self._temporal_system_horizon(
+            system_time=system_time, through_commit=through_commit
+        )
+        self._ensure_temporal_indexes(horizon)
+        locators = list(self.store.iter_index_prefix(
+            self._temporal_index_name(_TEMPORAL_VERSION_INDEX, self._temporal_index_generation()),
+            [normalize_version_id(version_id).encode("ascii")]
+        ))
+        version = self._get_temporal_version_at(locators[-1]) if locators else None
+        if version is not None and version.commit_id > horizon:
+            return None
+        return version if isinstance(version, ClaimVersion) else None
+
+    def iter_node_versions(self, logical_id=None, *, system_time=None, through_commit=None):
+        """Iterate node versions, using the logical-history index when filtered."""
+        if logical_id is not None:
+            logical_id = normalize_logical_id(logical_id)
+            horizon = self._temporal_system_horizon(system_time=system_time, through_commit=through_commit)
+            self._ensure_temporal_indexes(horizon)
+            end = self._temporal_locator(horizon, (1 << 32) - 1)
+            for locator in self.store.iter_range_index(
+                self._temporal_index_name(
+                    _TEMPORAL_LOGICAL_COMMIT_INDEX, self._temporal_index_generation()
+                ),
+                [b"n", logical_id.encode("utf-8")],
+                None,
+                end,
+                True,
+                True,
+            ):
+                version = self._get_temporal_version_at(locator)
+                if isinstance(version, NodeVersion):
+                    yield version
+            return
+        horizon = self._temporal_system_horizon(system_time=system_time, through_commit=through_commit)
+        for commit in self.iter_temporal_commits(through_commit=horizon):
             for version in commit.versions:
-                if isinstance(version, NodeVersion) and (logical_id is None or version.logical_id == logical_id):
+                if isinstance(version, NodeVersion):
                     yield version
 
-    def iter_edge_versions(self, logical_id=None, *, through_commit=None):
-        """Iterate visible edge versions, optionally filtering by logical ID."""
-        for commit in self.iter_temporal_commits(through_commit=through_commit):
+    def iter_edge_versions(self, logical_id=None, *, system_time=None, through_commit=None):
+        """Iterate edge versions, using the logical-history index when filtered."""
+        if logical_id is not None:
+            logical_id = normalize_logical_id(logical_id)
+            horizon = self._temporal_system_horizon(system_time=system_time, through_commit=through_commit)
+            self._ensure_temporal_indexes(horizon)
+            end = self._temporal_locator(horizon, (1 << 32) - 1)
+            for locator in self.store.iter_range_index(
+                self._temporal_index_name(
+                    _TEMPORAL_LOGICAL_COMMIT_INDEX, self._temporal_index_generation()
+                ),
+                [b"e", logical_id.encode("utf-8")],
+                None,
+                end,
+                True,
+                True,
+            ):
+                version = self._get_temporal_version_at(locator)
+                if isinstance(version, EdgeVersion):
+                    yield version
+            return
+        horizon = self._temporal_system_horizon(system_time=system_time, through_commit=through_commit)
+        for commit in self.iter_temporal_commits(through_commit=horizon):
             for version in commit.versions:
-                if isinstance(version, EdgeVersion) and (logical_id is None or version.logical_id == logical_id):
+                if isinstance(version, EdgeVersion):
                     yield version
 
-    def query(self, cypher: str, parameters: Optional[dict[str, object]] = None):
+    def iter_claim_versions(self, claim_id=None, *, system_time=None, through_commit=None):
+        """Iterate claim versions, optionally restricted to one deterministic claim ID."""
+        if claim_id is not None:
+            claim_id = normalize_logical_id(claim_id)
+            horizon = self._temporal_system_horizon(
+                system_time=system_time, through_commit=through_commit
+            )
+            self._ensure_temporal_indexes(horizon)
+            end = self._temporal_locator(horizon, (1 << 32) - 1)
+            for locator in self.store.iter_range_index(
+                self._temporal_index_name(
+                    _TEMPORAL_LOGICAL_COMMIT_INDEX, self._temporal_index_generation()
+                ),
+                [b"c", claim_id.encode("utf-8")],
+                None,
+                end,
+                True,
+                True,
+            ):
+                version = self._get_temporal_version_at(locator)
+                if isinstance(version, ClaimVersion):
+                    yield version
+            return
+        horizon = self._temporal_system_horizon(
+            system_time=system_time, through_commit=through_commit
+        )
+        for commit in self.iter_temporal_commits(through_commit=horizon):
+            for version in commit.versions:
+                if isinstance(version, ClaimVersion):
+                    yield version
+
+    def _temporal_system_horizon(self, *, system_time=None, through_commit=None) -> int:
+        if system_time is not None and through_commit is not None:
+            raise ValueError("provide either system_time or through_commit, not both")
+        last_commit_id, _ = self._temporal_sequence()
+        latest_visible = last_commit_id
+        while latest_visible > 0 and self.get_temporal_commit(
+            latest_visible, _validate_supersession=False
+        ) is None:
+            latest_visible -= 1
+        if through_commit is not None:
+            if isinstance(through_commit, bool) or not isinstance(through_commit, int) or through_commit < 0:
+                raise ValueError("through_commit must be a non-negative integer")
+            return min(latest_visible, through_commit)
+        if system_time is None:
+            return latest_visible
+        requested = normalize_temporal_instant(system_time)
+        self._ensure_temporal_indexes(latest_visible)
+        for encoded_commit_id in self.store.iter_range_index(
+            self._temporal_index_name(
+                _TEMPORAL_SYSTEM_INDEX, self._temporal_index_generation()
+            ),
+            [b"commit"],
+            None,
+            self._temporal_instant_index_value(requested),
+            True,
+            True,
+            reverse=True,
+        ):
+            try:
+                commit_id = int(encoded_commit_id, 16)
+            except (TypeError, ValueError) as exc:
+                raise TemporalCorruptionError("invalid temporal system index value") from exc
+            if commit_id <= latest_visible and self.get_temporal_commit(
+                commit_id, _validate_supersession=False
+            ) is not None:
+                return commit_id
+        return 0
+
+    def _temporal_interval_locators(self, index_name, parts, instant):
+        generation = self._temporal_index_generation()
+        encoded = self._temporal_instant_index_value(instant)
+        started = set(self.store.iter_range_index(
+            self._temporal_index_name(index_name, generation),
+            parts,
+            None,
+            encoded,
+            True,
+            True,
+        ))
+        if not started:
+            return ()
+        unexpired = set(self.store.iter_range_index(
+            self._temporal_index_name(_TEMPORAL_VALID_END_INDEX, generation),
+            [index_name.encode("ascii"), *parts],
+            encoded,
+            None,
+            False,
+            True,
+        ))
+        return tuple(sorted(started.intersection(unexpired)))
+
+    def _temporal_entity_as_of(
+        self, kind, logical_id, *, valid_time, system_time=None, through_commit=None
+    ):
+        logical_id = normalize_logical_id(logical_id)
+        instant = normalize_temporal_instant(valid_time)
+        horizon = self._temporal_system_horizon(
+            system_time=system_time, through_commit=through_commit
+        )
+        self._ensure_temporal_indexes(horizon)
+        kind_bytes = {"node": b"n", "edge": b"e", "claim": b"c"}[kind]
+        locators = self._temporal_interval_locators(
+            _TEMPORAL_LOGICAL_VALID_INDEX,
+            [kind_bytes, logical_id.encode("utf-8")],
+            instant,
+        )
+        winner = None
+        for locator in locators:
+            version = self._get_temporal_version_at(locator)
+            if version is not None and version.commit_id <= horizon and version.valid.contains(instant):
+                if winner is None or (version.commit_id, version.commit_ordinal) > (winner.commit_id, winner.commit_ordinal):
+                    winner = version
+        if winner is None or winner.operation is VersionOperation.RETRACT:
+            return None
+        return winner
+
+    def get_node_as_of(
+        self, logical_id, *, valid_time, system_time=None, through_commit=None
+    ) -> NodeVersion | None:
+        """Resolve a logical node at valid time and an optional system horizon."""
+        return self._temporal_entity_as_of(
+            "node",
+            logical_id,
+            valid_time=valid_time,
+            system_time=system_time,
+            through_commit=through_commit,
+        )
+
+    def get_edge_as_of(
+        self, logical_id, *, valid_time, system_time=None, through_commit=None
+    ) -> EdgeVersion | None:
+        """Resolve a logical edge at valid time and an optional system horizon."""
+        return self._temporal_entity_as_of(
+            "edge",
+            logical_id,
+            valid_time=valid_time,
+            system_time=system_time,
+            through_commit=through_commit,
+        )
+
+    def get_claim_as_of(
+        self, claim_id, *, valid_time, system_time=None, through_commit=None
+    ) -> ClaimVersion | None:
+        """Resolve one claim identity at valid time and an optional system horizon."""
+        return self._temporal_entity_as_of(
+            "claim",
+            claim_id,
+            valid_time=valid_time,
+            system_time=system_time,
+            through_commit=through_commit,
+        )
+
+    def iter_claims_as_of(
+        self,
+        *,
+        valid_time,
+        statement_id=None,
+        subject=None,
+        predicate=None,
+        object=_UNSET,
+        object_kind=None,
+        agent=None,
+        source=_UNSET,
+        world=None,
+        polarity=None,
+        system_time=None,
+        through_commit=None,
+    ):
+        """Iterate visible claims matching indexed epistemic dimensions."""
+        instant = normalize_temporal_instant(valid_time)
+        horizon = self._temporal_system_horizon(
+            system_time=system_time, through_commit=through_commit
+        )
+        self._ensure_temporal_indexes(horizon)
+        if statement_id is not None:
+            digest = statement_id.removeprefix("statement:") if isinstance(statement_id, str) else ""
+            if (
+                not isinstance(statement_id, str)
+                or not statement_id.startswith("statement:")
+                or len(digest) != 64
+                or any(character not in "0123456789abcdef" for character in digest)
+            ):
+                raise ValueError("statement_id must be a deterministic statement ID")
+        effective_object_kind = (
+            ClaimObjectKind.ENTITY if object_kind is None and object is not _UNSET else object_kind
+        )
+        if object is not _UNSET and statement_id is None and subject is not None and predicate is not None:
+            statement_id = claim_statement_id(
+                subject, predicate, object, object_kind=effective_object_kind
+            )
+        dimension_filters = {
+            "subject": subject,
+            "predicate": predicate,
+            "agent": agent,
+            "world": world,
+            "polarity": None if polarity is None else ClaimPolarity(polarity).value,
+            "object_kind": (
+                None
+                if effective_object_kind is None
+                else ClaimObjectKind(effective_object_kind).value
+            ),
+        }
+        if source is not _UNSET:
+            dimension_filters["source"] = source
+        indexed_filter = next(
+            ((name, value) for name, value in dimension_filters.items() if value is not None),
+            None,
+        )
+        if statement_id is not None:
+            index_name = _TEMPORAL_CLAIM_STATEMENT_INDEX
+            parts = [statement_id.encode("ascii")]
+        elif indexed_filter is not None:
+            name, value = indexed_filter
+            index_name = _TEMPORAL_CLAIM_DIMENSION_INDEX
+            parts = [name.encode("ascii"), canonical_json_bytes(value)]
+        else:
+            index_name = _TEMPORAL_CLAIM_CATALOG_INDEX
+            parts = [b"claims"]
+        logical_ids = set()
+        for locator in self._temporal_interval_locators(index_name, parts, instant):
+            candidate = self._get_temporal_version_at(locator)
+            if isinstance(candidate, ClaimVersion) and candidate.commit_id <= horizon:
+                logical_ids.add(candidate.logical_id)
+        for claim_id in sorted(logical_ids):
+            version = self.get_claim_as_of(
+                claim_id, valid_time=instant, through_commit=horizon
+            )
+            if version is None or version.claim is None:
+                continue
+            claim = version.claim
+            if statement_id is not None and claim.statement_id != statement_id:
+                continue
+            if any(
+                value is not None and getattr(claim, name) != value
+                for name, value in dimension_filters.items()
+            ):
+                continue
+            if source is not _UNSET and claim.source != source:
+                continue
+            if object is not _UNSET and claim.object != Claim(
+                subject=claim.subject,
+                predicate=claim.predicate,
+                object=object,
+                object_kind=effective_object_kind,
+                polarity=claim.polarity,
+                agent=claim.agent,
+                source=claim.source,
+                world=claim.world,
+            ).object:
+                continue
+            yield version
+
+    def claim_status(
+        self,
+        subject,
+        predicate,
+        object,
+        *,
+        valid_time,
+        object_kind=ClaimObjectKind.ENTITY,
+        agent=None,
+        source=_UNSET,
+        world=None,
+        system_time=None,
+        through_commit=None,
+    ) -> ClaimStatus:
+        """Return supported/refuted/both/unknown under open-world semantics."""
+        polarities = {
+            version.claim.polarity
+            for version in self.iter_claims_as_of(
+                valid_time=valid_time,
+                statement_id=claim_statement_id(
+                    subject, predicate, object, object_kind=object_kind
+                ),
+                agent=agent,
+                source=source,
+                world=world,
+                system_time=system_time,
+                through_commit=through_commit,
+            )
+        }
+        if polarities == {ClaimPolarity.POSITIVE, ClaimPolarity.NEGATIVE}:
+            return ClaimStatus.BOTH
+        if ClaimPolarity.POSITIVE in polarities:
+            return ClaimStatus.SUPPORTED
+        if ClaimPolarity.NEGATIVE in polarities:
+            return ClaimStatus.REFUTED
+        return ClaimStatus.UNKNOWN
+
+    def iter_nodes_as_of(
+        self, *, valid_time, system_time=None, through_commit=None
+    ):
+        """Iterate node versions visible at one valid and system-time point."""
+        instant = normalize_temporal_instant(valid_time)
+        horizon = self._temporal_system_horizon(
+            system_time=system_time, through_commit=through_commit
+        )
+        self._ensure_temporal_indexes(horizon)
+        logical_ids = set()
+        for locator in self._temporal_interval_locators(
+            _TEMPORAL_NODE_CATALOG_INDEX, [b"nodes"], instant
+        ):
+            candidate = self._get_temporal_version_at(locator)
+            if isinstance(candidate, NodeVersion) and candidate.commit_id <= horizon:
+                logical_ids.add(candidate.logical_id)
+        for logical_id in sorted(logical_ids):
+            version = self.get_node_as_of(
+                logical_id, valid_time=instant, through_commit=horizon
+            )
+            if version is not None:
+                yield version
+
+    def iter_edges_as_of(
+        self,
+        *,
+        edge_type=None,
+        direction="out",
+        source=None,
+        target=None,
+        valid_time,
+        system_time=None,
+        through_commit=None,
+    ):
+        """Iterate endpoint edges visible at valid time and a system horizon."""
+        if direction not in {"out", "in"}:
+            raise ValueError("direction must be 'out' or 'in'")
+        if direction == "out" and (source is None or target is not None):
+            raise ValueError("outgoing traversal requires source and rejects target")
+        if direction == "in" and (target is None or source is not None):
+            raise ValueError("incoming traversal requires target and rejects source")
+        if edge_type is not None and (not isinstance(edge_type, str) or not edge_type):
+            raise ValueError("edge_type must be a non-empty string or None")
+        horizon = self._temporal_system_horizon(
+            system_time=system_time, through_commit=through_commit
+        )
+        self._ensure_temporal_indexes(horizon)
+        node_id = source if direction == "out" else target
+        if edge_type is None:
+            index_name = (
+                _TEMPORAL_EDGE_OUT_CATALOG_INDEX
+                if direction == "out"
+                else _TEMPORAL_EDGE_IN_CATALOG_INDEX
+            )
+            parts = [str(node_id).encode("utf-8")]
+        else:
+            index_name = _TEMPORAL_EDGE_OUT_INDEX if direction == "out" else _TEMPORAL_EDGE_IN_INDEX
+            parts = [str(node_id).encode("utf-8"), edge_type.encode("utf-8")]
+        instant = normalize_temporal_instant(valid_time)
+        locators = self._temporal_interval_locators(
+            index_name, parts, instant
+        )
+        logical_ids = set()
+        for locator in locators:
+            candidate = self._get_temporal_version_at(locator)
+            if candidate is not None and candidate.commit_id <= horizon:
+                logical_ids.add(candidate.logical_id)
+        for logical_id in sorted(logical_ids):
+            version = self.get_edge_as_of(
+                logical_id, valid_time=valid_time, through_commit=horizon
+            )
+            if version is None or (
+                edge_type is not None and version.edge.properties.get("type") != edge_type
+            ):
+                continue
+            if direction == "out" and str(version.edge.source) != str(source):
+                continue
+            if direction == "in" and str(version.edge.target) != str(target):
+                continue
+            yield version
+
+    def rebuild_temporal_indexes(self, *, through_commit=None) -> dict[str, int]:
+        """Rebuild all derived temporal indexes from visible canonical history."""
+        with self._temporal_writer_guard():
+            prior_state = self._load_temporal_index_state()
+            prior_generation = 0 if prior_state is None else prior_state["active_generation"]
+            generation = max(1, prior_generation + 1)
+            if prior_state is None:
+                self._mark_indexes_stale("temporal")
+            latest_horizon = self._temporal_system_horizon()
+            horizon = self._temporal_system_horizon(through_commit=through_commit)
+            counts = {"temporal_exact": 0, "temporal_range": 0}
+            for commit in self.iter_temporal_commits(through_commit=horizon):
+                written = self._write_temporal_indexes(
+                    commit.versions, commit.commit_id, generation=generation
+                )
+                counts["temporal_exact"] += written["temporal_exact"]
+                counts["temporal_range"] += written["temporal_range"]
+            self._persist_temporal_index_state(horizon, generation)
+            if horizon >= latest_horizon:
+                self._clear_stale_indexes("temporal")
+            if prior_generation != generation:
+                self._delete_temporal_index_generation(prior_generation, latest_horizon)
+            return counts
+
+    def _delete_temporal_index_generation(self, generation: int, through_commit: int) -> None:
+        for commit in self.iter_temporal_commits(through_commit=through_commit):
+            for version in commit.versions:
+                exact_entries, range_entries = self._temporal_index_entries(
+                    version, generation=generation
+                )
+                for index_name, parts, value in exact_entries:
+                    self.store.delete_index_entry(index_name, parts, value)
+                for index_name, parts, range_value, value in range_entries:
+                    self.store.delete_range_index_entry(index_name, parts, range_value, value)
+            self.store.delete_range_index_entry(
+                self._temporal_index_name(_TEMPORAL_SYSTEM_INDEX, generation),
+                [b"commit"],
+                self._temporal_instant_index_value(commit.system_time),
+                f"{commit.commit_id:016x}".encode("ascii"),
+            )
+
+    def query(
+        self,
+        cypher: str,
+        parameters: Optional[dict[str, object]] = None,
+        *,
+        read_snapshot: bool | None = None,
+    ):
         """Execute a supported Cypher query.
 
         Read queries run directly; queries with ``CREATE``/``SET``/``REMOVE``
@@ -3776,6 +6478,8 @@ class GraphDB:
             cypher: Query text in the supported GestaltDB Cypher subset.
             parameters: Optional Cypher parameter values keyed without the
                 leading ``$``.
+            read_snapshot: Require or disable a unified mutable-state read
+                snapshot. The default uses one automatically when supported.
 
         Returns:
             ``gestaltdb.QueryResult`` containing projected records.
@@ -3786,7 +6490,7 @@ class GraphDB:
         """
         from .query_engine.cypher import execute
 
-        return execute(self, cypher, parameters=parameters)
+        return execute(self, cypher, parameters=parameters, read_snapshot=read_snapshot)
 
     def visualize(self, cypher=None, *, seeds=None, pattern=None, parameters=None, options=None, rng=None):
         """Build an offline interactive visualization of this graph.
@@ -3825,6 +6529,12 @@ class GraphDB:
             return visualize_sample(self, seeds, pattern, rng=rng, options=options)
         raise ValueError("visualize() requires cypher= or seeds=/pattern=")
 
+    def _implicit_transaction_required(self) -> bool:
+        return bool(
+            getattr(self.store, "supports_transactions", False)
+            and not self._temporal_transaction_bound
+        )
+
     @contextmanager
     def transaction(self, **options):
         """Run graph operations in a backend transaction when supported.
@@ -3832,24 +6542,27 @@ class GraphDB:
         The transaction commits on clean context exit and rolls back if an
         exception leaves the context.
         """
-        tx_store = self.store.transaction(**options)
-        try:
-            tx_graph = GraphDB(tx_store, self.serializer)
-            tx_graph.indexed_node_properties = set(self.indexed_node_properties)
-            tx_graph.indexed_edge_properties = set(self.indexed_edge_properties)
-            tx_graph._store_path = self._store_path
-            tx_graph._backend_name = self._backend_name
-            tx_graph._serializer_name = self._serializer_name
-            tx_graph._manifest = self._manifest
-            tx_graph._temporal_write_lock = self._temporal_write_lock
-            tx_graph._temporal_transaction_bound = True
-            tx_graph._temporal_clock = self._temporal_clock
-            yield tx_graph
-        except Exception:
-            tx_store.rollback()
-            raise
-        else:
-            tx_store.commit()
+        with self._temporal_writer_guard():
+            tx_store = self.store.transaction(**options)
+            try:
+                tx_graph = GraphDB(tx_store, self.serializer)
+                tx_graph.indexed_node_properties = set(self.indexed_node_properties)
+                tx_graph.indexed_edge_properties = set(self.indexed_edge_properties)
+                tx_graph._store_path = self._store_path
+                tx_graph._backend_name = self._backend_name
+                tx_graph._serializer_name = self._serializer_name
+                tx_graph._manifest = self._manifest
+                tx_graph._database_id = self._database_id
+                tx_graph._temporal_write_lock = self._temporal_write_lock
+                tx_graph._temporal_transaction_bound = True
+                tx_graph._temporal_clock = self._temporal_clock
+                yield tx_graph
+            except Exception:
+                tx_store.rollback()
+                raise
+            else:
+                tx_store.commit()
+                self._typed_adjacency_count_cache.clear()
 
     def close(self):
         """Close the underlying key-value store.

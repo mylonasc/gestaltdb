@@ -16,6 +16,7 @@ from . import (
     profiling,
     quick,
     sampler,
+    temporal,
     tuning,
 )
 
@@ -24,6 +25,7 @@ COMMANDS = {
     "matrix": (matrix.build_parser, lambda args: matrix.main(sys.argv[2:]), "Run multi-dimensional backend/cores/sizes matrix"),
     "compaction": (compaction.build_parser, lambda args: compaction.main(sys.argv[2:]), "Benchmark LSM overwrite and compaction pressure"),
     "sampler": (sampler.build_parser, lambda args: sampler.main(sys.argv[2:]), "Benchmark SamplerEngine array sampling vs GraphDB baseline"),
+    "temporal": (temporal.build_parser, temporal.run_benchmark, "Benchmark temporal storage, queries, sampling, and reasoning"),
     "embedded": (embedded.build_parser, lambda args: embedded.main(sys.argv[2:]), "Benchmark embedded graph databases (GestaltDB, LatticeDB, LadybugDB)"),
     "external": (external.build_parser, lambda args: external.main(sys.argv[2:]), "Benchmark external graph databases (Neo4j, Memgraph, ArcadeDB, AGE)"),
     "arcadedb": (arcadedb.build_parser, lambda args: arcadedb.main(sys.argv[2:]), "Benchmark GestaltDB vs embedded ArcadeDB"),
@@ -63,6 +65,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         compaction.main(args_list[1:])
     elif subcmd == "sampler":
         sampler.main(args_list[1:])
+    elif subcmd == "temporal":
+        temporal.main(args_list[1:])
     elif subcmd == "embedded":
         embedded.main(args_list[1:])
     elif subcmd == "external":
