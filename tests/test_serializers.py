@@ -13,16 +13,7 @@ from gestaltdb import (
 from gestaltdb.graphdb import Edge, GraphDB, Node
 from gestaltdb.kvstores import LMDBStore
 from gestaltdb.serializers import JSONSerializer, MessagePackSerializer, PickleSerializer, ProtobufSerializer, Serializer
-from .conftest import blocked_import
-
-
-def serializer_round_trip_cases():
-    return [
-        PickleSerializer(),
-        JSONSerializer(),
-        MessagePackSerializer(),
-        ProtobufSerializer(),
-    ]
+from .conftest import BINARY_SERIALIZER_PARAMS, SERIALIZER_PARAMS, blocked_import
 
 
 def test_base_serializer_methods_are_abstract():
@@ -34,7 +25,7 @@ def test_base_serializer_methods_are_abstract():
         serializer.deserialize(b"{}")
 
 
-@pytest.mark.parametrize("serializer", serializer_round_trip_cases(), ids=lambda serializer: serializer.__class__.__name__)
+@pytest.mark.parametrize("serializer", SERIALIZER_PARAMS)
 def test_serializers_round_trip_json_like_dicts(serializer):
     payload = {
         "id": "alice",
@@ -51,7 +42,7 @@ def test_serializers_round_trip_json_like_dicts(serializer):
     assert serializer.deserialize(serializer.serialize(payload)) == payload
 
 
-@pytest.mark.parametrize("serializer", serializer_round_trip_cases(), ids=lambda serializer: serializer.__class__.__name__)
+@pytest.mark.parametrize("serializer", SERIALIZER_PARAMS)
 def test_serializers_round_trip_nested_temporal_values(serializer):
     payload = {
         "values": [
@@ -67,7 +58,7 @@ def test_serializers_round_trip_nested_temporal_values(serializer):
     assert serializer.deserialize(serializer.serialize(payload)) == payload
 
 
-@pytest.mark.parametrize("serializer", serializer_round_trip_cases(), ids=lambda serializer: serializer.__class__.__name__)
+@pytest.mark.parametrize("serializer", SERIALIZER_PARAMS)
 def test_serializers_escape_user_dictionaries_that_look_like_temporal_tags(serializer):
     payload = {
         "__gestaltdb_type__": "temporal_date",
@@ -77,7 +68,7 @@ def test_serializers_escape_user_dictionaries_that_look_like_temporal_tags(seria
     assert serializer.deserialize(serializer.serialize(payload)) == payload
 
 
-@pytest.mark.parametrize("serializer", [PickleSerializer(), MessagePackSerializer(), ProtobufSerializer()], ids=lambda serializer: serializer.__class__.__name__)
+@pytest.mark.parametrize("serializer", BINARY_SERIALIZER_PARAMS)
 def test_binary_serializers_round_trip_bytes(serializer):
     payload = {
         "edge_ids": [b"edge-1", b"edge-2"],
@@ -88,6 +79,7 @@ def test_binary_serializers_round_trip_bytes(serializer):
 
 
 def test_protobuf_serializer_round_trips_nested_tuples_and_ints():
+    pytest.importorskip("google.protobuf")
     serializer = ProtobufSerializer()
     payload = {"values": (1, b"raw", {"nested": 2}), "flag": True}
 
@@ -103,7 +95,7 @@ def test_optional_serializer_deserialize_reports_missing_dependency():
             ProtobufSerializer().deserialize(b"")
 
 
-@pytest.mark.parametrize("serializer", [MessagePackSerializer(), ProtobufSerializer()], ids=lambda serializer: serializer.__class__.__name__)
+@pytest.mark.parametrize("serializer", SERIALIZER_PARAMS[2:])
 def test_graphdb_round_trip_with_binary_serializers(serializer, tmp_path):
     pytest.importorskip("lmdb")
     graph_db = GraphDB(LMDBStore(path=str(tmp_path / serializer.__class__.__name__)), serializer)

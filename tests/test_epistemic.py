@@ -12,6 +12,7 @@ from gestaltdb.serializers import (
     ProtobufSerializer,
 )
 from gestaltdb.versioning import TemporalVersionError
+from .conftest import SERIALIZER_PARAMS
 from tests.test_temporal_as_of import _MetadataStore
 
 
@@ -188,8 +189,7 @@ def test_deferred_claim_indexes_fail_closed_and_rebuild_deterministically(graph)
 
 @pytest.mark.parametrize(
     "serializer",
-    [PickleSerializer(), JSONSerializer(), MessagePackSerializer(), ProtobufSerializer()],
-    ids=["pickle", "json", "messagepack", "protobuf"],
+    SERIALIZER_PARAMS,
 )
 def test_claim_payload_is_serializer_neutral(serializer):
     graph = GraphDB(_MetadataStore(), serializer)

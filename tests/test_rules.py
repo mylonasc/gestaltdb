@@ -6,6 +6,7 @@ from gestaltdb import RuleEvaluationLimitError
 from gestaltdb.graphdb import GraphDB
 from gestaltdb.rules import RuleError
 from gestaltdb.serializers import JSONSerializer, MessagePackSerializer, PickleSerializer, ProtobufSerializer
+from .conftest import SERIALIZER_PARAMS
 from tests.test_temporal_as_of import _MetadataStore
 
 
@@ -187,8 +188,7 @@ def test_rule_limits_fail_without_persisting_partial_derivations(graph):
 
 @pytest.mark.parametrize(
     "serializer",
-    [PickleSerializer(), JSONSerializer(), MessagePackSerializer(), ProtobufSerializer()],
-    ids=["pickle", "json", "messagepack", "protobuf"],
+    SERIALIZER_PARAMS,
 )
 def test_rules_and_justifications_are_serializer_neutral(serializer):
     graph = GraphDB(_MetadataStore(), serializer)

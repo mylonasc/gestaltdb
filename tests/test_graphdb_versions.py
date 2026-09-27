@@ -19,6 +19,7 @@ from gestaltdb.versioning import (
     VersionOperation,
     canonical_json_bytes,
 )
+from .conftest import SERIALIZER_PARAMS
 
 
 class _MetadataStore:
@@ -405,8 +406,7 @@ def test_temporal_versions_persist_across_leveldb_reopen(tmp_path):
 
 @pytest.mark.parametrize(
     "serializer",
-    [JSONSerializer(), PickleSerializer(), MessagePackSerializer(), ProtobufSerializer()],
-    ids=["json", "pickle", "messagepack", "protobuf"],
+    SERIALIZER_PARAMS,
 )
 def test_temporal_versions_round_trip_supported_serializers(serializer):
     graph = GraphDB(_MetadataStore(), serializer)

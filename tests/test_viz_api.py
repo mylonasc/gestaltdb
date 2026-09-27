@@ -23,6 +23,7 @@ from gestaltdb.viz.api import (
 
 @pytest.fixture
 def small_graph(tmp_path):
+    pytest.importorskip("plyvel")
     graph = GraphDB(LevelDBStore(path=str(tmp_path / "g")), PickleSerializer())
     graph.put_node(Node(node_id="alice", labels=["Person"], properties={"name": "Alice"}))
     graph.put_node(Node(node_id="bob", labels=["Person"], properties={"name": "Bob"}))

@@ -57,6 +57,7 @@ def test_create_preflights_backend_before_overwrite(tmp_path):
 
 
 def test_create_preflights_serializer_before_creating_directory(tmp_path):
+    pytest.importorskip("plyvel")
     path = tmp_path / "new"
 
     with blocked_import("msgpack"):
@@ -70,6 +71,8 @@ def test_create_preflights_serializer_before_creating_directory(tmp_path):
 
 
 def test_open_preflights_manifest_dependencies(tmp_path):
+    pytest.importorskip("plyvel")
+    pytest.importorskip("msgpack")
     path = tmp_path / "stored"
     graph = GraphDB.create(path, backend="leveldb", serializer="messagepack")
     graph.close()

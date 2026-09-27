@@ -6,7 +6,12 @@ import pytest
 
 from gestaltdb.graphdb import Edge, GraphDB, Node
 from gestaltdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
-from gestaltdb.serializers import PickleSerializer
+from gestaltdb.serializers import (
+    JSONSerializer,
+    MessagePackSerializer,
+    PickleSerializer,
+    ProtobufSerializer,
+)
 
 
 @contextmanager
@@ -30,6 +35,26 @@ BACKEND_PARAMS = [
     pytest.param(("leveldb", LevelDBStore), marks=pytest.mark.skipif(importlib.util.find_spec("plyvel") is None, reason="plyvel not installed")),
     pytest.param(("pyrex", PyRexStore), marks=pytest.mark.skipif(importlib.util.find_spec("pyrex") is None, reason="pyrex not installed")),
 ]
+
+_PROTOBUF_AVAILABLE = (
+    importlib.util.find_spec("google") is not None
+    and importlib.util.find_spec("google.protobuf") is not None
+)
+SERIALIZER_PARAMS = [
+    pytest.param(PickleSerializer(), id="pickle"),
+    pytest.param(JSONSerializer(), id="json"),
+    pytest.param(
+        MessagePackSerializer(),
+        id="messagepack",
+        marks=pytest.mark.skipif(importlib.util.find_spec("msgpack") is None, reason="msgpack not installed"),
+    ),
+    pytest.param(
+        ProtobufSerializer(),
+        id="protobuf",
+        marks=pytest.mark.skipif(not _PROTOBUF_AVAILABLE, reason="protobuf not installed"),
+    ),
+]
+BINARY_SERIALIZER_PARAMS = [SERIALIZER_PARAMS[0], SERIALIZER_PARAMS[2], SERIALIZER_PARAMS[3]]
 
 
 @pytest.fixture(params=BACKEND_PARAMS, ids=lambda param: param[0] if isinstance(param, tuple) else str(param))
