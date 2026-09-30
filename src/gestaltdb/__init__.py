@@ -54,19 +54,16 @@ Important usage notes for agents and developers:
   ingestion, and use ``SamplerSnapshot``/``SamplerEngine`` for ML-oriented
   array-native sampling.
 
-GestaltDB also ships offline interactive visualization. The D3.js + React
-front end is prebuilt and packaged, so this needs no JavaScript toolchain:
-
-.. code-block:: python
-
-   from gestaltdb.viz.api import visualize_query
-
-   figure = visualize_query(graph, 'MATCH (a:Person) RETURN a LIMIT 25')
-   figure.save("/tmp/graph.html")  # open offline in any browser
-
-See ``gestaltdb.viz.api`` (``VizOptions``, ``VizFigure``, ``visualize_*``),
-``gestaltdb.viz.ir`` (deterministic payload builders), and
-``GraphDB.visualize``.
+GestaltDB also ships offline interactive visualization. Import ``VizOptions``
+and ``visualize_*`` from ``gestaltdb.viz.api`` for property labels, attribute
+styling, directed exploration, and local saved views. The React + D3 front end
+is prebuilt and packaged: ``VizFigure.save()`` writes self-contained HTML and
+figures display in Jupyter with no JavaScript toolchain or network requirement.
+``as_svg()`` / ``save_svg()`` generate dependency-free static SVG using
+circle/grid layouts or supplied coordinates, rather than capturing iframe
+state. PNG export is available through the browser controls. See
+``GraphDB.visualize``, ``gestaltdb.viz.ir`` (deterministic payload builders), or
+``python -m gestaltdb.agent_docs get visualization --examples``.
 
 GestaltDB also ships a packaged opencode skill and queryable user examples. In
 an application project that uses GestaltDB, run ``python -m gestaltdb.agent_docs

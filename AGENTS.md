@@ -165,7 +165,11 @@ Temporal snapshots also index node availability and positive-triple intervals. `
 - Packaged offline viz lives in `src/gestaltdb/viz/` (Python, stdlib only) plus `web/` (React + D3 + Vite source, build-time only). The prebuilt bundle is committed at `src/gestaltdb/viz/static/` and shipped via `package-data`.
 - Import from `gestaltdb.viz.api` (`VizOptions`, `VizFigure`, `visualize_nodes_edges`, `visualize_query`, `visualize_sample`, `visualize_sampler_batch`) or use `graph.visualize(cypher=...)` / `graph.visualize(seeds=..., pattern=...)`.
 - `VizGraph` IR builders (`gestaltdb.viz.ir`) cover nodes/edges, Cypher results, sampled subgraphs, and sampler batches with deterministic caps (2000 nodes / 5000 edges, 2x absolute ceilings).
+- `VizOptions(node_label_property="name", edge_labels="all")` configures readable node/relationship labels. `VizFigure.as_svg()` / `save_svg()` provide dependency-free static circle/grid layouts or supplied coordinates; static output does not capture the notebook iframe state.
+- Attribute properties configure node size/color and edge width/color in HTML/SVG. Browser export controls support scope/dimensions/transparency/scale; local view-state JSON restores positions, pins, zoom, settings, filters, and simulation membership for the same topology.
 - Rebuild the bundle with `npm run build` in `web/` after front-end changes (`npm ci` first; `npm run check:licenses` gates JS licenses). Python tests never need npm.
+- Browser checks: `npx playwright install chromium`, then `npm test` in `web/` (`VIZ_TEST_PYTHON` selects an installed Python environment); tests open generated artifacts offline.
+- `npm run check:bundle` verifies source-aware build provenance; full runtime notices ship in `viz/static/third-party-notices.txt` and are embedded in HTML.
 
 ## Development Commands
 

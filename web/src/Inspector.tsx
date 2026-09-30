@@ -7,6 +7,7 @@ export interface Selection {
 }
 
 interface Props {
+  showProperties: boolean;
   payload: VizPayload;
   selection: Selection | null;
   focusNodeId: string | null;
@@ -20,7 +21,7 @@ function formatValue(value: unknown): string {
   return json === undefined ? String(value) : json;
 }
 
-export function Inspector({ payload, selection, focusNodeId, onFocus, onClear }: Props) {
+export function Inspector({ payload, selection, focusNodeId, onFocus, onClear, showProperties }: Props) {
   if (selection === null) {
     return (
       <section aria-label="Inspector">
@@ -33,7 +34,7 @@ export function Inspector({ payload, selection, focusNodeId, onFocus, onClear }:
   if (selection.kind === "node") {
     const node = payload.nodes.find((candidate) => candidate.id === selection.id);
     if (!node) return null;
-    const entries = Object.entries(node.properties);
+    const entries = Object.entries({ ...node.properties, ...node.extra });
     return (
       <section aria-label="Inspector">
         <h2>Node inspector</h2>
@@ -45,7 +46,7 @@ export function Inspector({ payload, selection, focusNodeId, onFocus, onClear }:
           <dt>group</dt>
           <dd>{groupKey(node)}</dd>
         </dl>
-        {entries.length === 0 ? (
+        {showProperties && (entries.length === 0 ? (
           <p className="gdviz-muted">No properties stored on this node.</p>
         ) : (
           <dl className="gdviz-props">
@@ -56,7 +57,7 @@ export function Inspector({ payload, selection, focusNodeId, onFocus, onClear }:
               </div>
             ))}
           </dl>
-        )}
+        ))}
         <div className="gdviz-row">
           {focusNodeId === node.id ? (
             <button type="button" onClick={() => onFocus(null)}>
@@ -77,7 +78,7 @@ export function Inspector({ payload, selection, focusNodeId, onFocus, onClear }:
 
   const edge = payload.edges.find((candidate) => candidate.id === selection.id);
   if (!edge) return null;
-  const entries = Object.entries(edge.properties);
+  const entries = Object.entries({ ...edge.properties, ...edge.extra });
   return (
     <section aria-label="Inspector">
       <h2>Edge inspector</h2>
@@ -91,7 +92,7 @@ export function Inspector({ payload, selection, focusNodeId, onFocus, onClear }:
         <dt>target</dt>
         <dd>{edge.target}</dd>
       </dl>
-      {entries.length === 0 ? (
+      {showProperties && (entries.length === 0 ? (
         <p className="gdviz-muted">No properties stored on this edge.</p>
       ) : (
         <dl className="gdviz-props">
@@ -102,7 +103,7 @@ export function Inspector({ payload, selection, focusNodeId, onFocus, onClear }:
             </div>
           ))}
         </dl>
-      )}
+      ))}
       <div className="gdviz-row">
         <button type="button" onClick={onClear}>
           Clear selection

@@ -79,6 +79,14 @@ def test_view_overrides_round_trip_into_payload():
         "linkDistance": 80,
         "showLabels": True,
         "showProperties": True,
+        "nodeLabelProperty": None,
+        "edgeLabelProperty": None,
+        "edgeLabels": "selected",
+        "labelMaxLength": 40,
+        "nodeSizeProperty": None,
+        "nodeColorProperty": None,
+        "edgeWidthProperty": None,
+        "edgeColorProperty": None,
     }
 
 

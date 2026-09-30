@@ -62,7 +62,7 @@ TOPICS: dict[str, Topic] = {
     "visualization": Topic(
         "visualization",
         "Visualization For Library Users",
-        "Offline interactive HTML visualization: visualize_* entrypoints, VizOptions caps, and GraphDB.visualize.",
+        "Offline HTML/Jupyter, property labels and styling, directed exploration, saved views, SVG/PNG exports, and GraphDB.visualize.",
         "references/visualization.md",
     ),
     "epistemic": Topic(

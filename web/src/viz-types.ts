@@ -34,10 +34,30 @@ declare global {
   }
 }
 
-export interface VizViewOptions {
-  theme?: "light" | "dark";
-  charge?: number;
-  linkDistance?: number;
-  showLabels?: boolean;
-  showProperties?: boolean;
+export interface AppearanceOptions {
+  nodeSizeProperty: string | null;
+  nodeColorProperty: string | null;
+  edgeWidthProperty: string | null;
+  edgeColorProperty: string | null;
 }
+
+export interface ViewerSettings extends AppearanceOptions {
+  paused: boolean;
+  theme: "light" | "dark";
+  charge: number;
+  linkDistance: number;
+  showLabels: boolean;
+  showProperties: boolean;
+  nodeLabelProperty: string | null;
+  edgeLabelProperty: string | null;
+  edgeLabels: "off" | "selected" | "all";
+  labelMaxLength: number;
+}
+
+export type VizViewOptions = Partial<ViewerSettings>;
+
+export const DEFAULT_SETTINGS: ViewerSettings = {
+  paused: false, theme: "light", charge: -300, linkDistance: 60, showLabels: true, showProperties: true,
+  nodeLabelProperty: null, edgeLabelProperty: null, edgeLabels: "selected", labelMaxLength: 40,
+  nodeSizeProperty: null, nodeColorProperty: null, edgeWidthProperty: null, edgeColorProperty: null,
+};

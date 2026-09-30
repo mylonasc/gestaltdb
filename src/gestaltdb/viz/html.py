@@ -18,6 +18,23 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 BUNDLE_JS_NAME = "gestaltdb-viz.js"
 BUNDLE_CSS_NAME = "gestaltdb-viz.css"
 MANIFEST_NAME = "viz-manifest.json"
+NOTICES_NAME = "third-party-notices.txt"
+
+
+def _source_is_fresh(manifest: Mapping[str, Any]) -> bool:
+    """Check checkout build inputs; installed wheels have no web/ source tree."""
+    web = STATIC_DIR.parent.parent.parent.parent / "web"
+    if not (web / "package.json").is_file():
+        return True
+    paths = ["package.json", "package-lock.json", "tsconfig.json", "vite.config.ts", "index.html",
+             "scripts/build_inputs.mjs", "scripts/write_manifest.mjs", "scripts/check_licenses.py"]
+    paths.extend(path.relative_to(web).as_posix() for path in (web / "src").rglob("*") if path.is_file())
+    try:
+        hashes = {path: hashlib.sha256((web / path).read_bytes()).hexdigest() for path in sorted(paths)}
+    except OSError:
+        return False
+    digest = hashlib.sha256("".join(f"{path}\0{value}\n" for path, value in hashes.items()).encode()).hexdigest()
+    return hashes == manifest.get("source_files") and digest == manifest.get("source_sha256")
 
 
 def read_manifest() -> dict[str, Any]:
@@ -32,7 +49,7 @@ def read_manifest() -> dict[str, Any]:
 
 
 def is_bundle_fresh() -> bool:
-    """Return whether on-disk bundle bytes match the manifest hashes."""
+    """Verify asset hashes and, in a checkout, frontend source provenance."""
     try:
         manifest = read_manifest()
     except (OSError, ValueError):
@@ -43,6 +60,12 @@ def is_bundle_fresh() -> bool:
         if not expected or not path.is_file():
             return False
         if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            return False
+    if manifest.get("manifest_version") == 2:
+        notices = STATIC_DIR / NOTICES_NAME
+        if not notices.is_file() or hashlib.sha256(notices.read_bytes()).hexdigest() != manifest.get("third_party_notices_sha256"):
+            return False
+        if not _source_is_fresh(manifest):
             return False
     return True
 
@@ -58,7 +81,8 @@ def ensure_bundle_fresh(*, warn: bool = True) -> bool:
     if not fresh and warn:
         warnings.warn(
             "gestaltdb viz bundle does not match viz-manifest.json; "
-            "rebuild web/ with `npm run build` to refresh the committed bundle.",
+            "assets or frontend build inputs changed. Rebuild web/ with "
+            "`npm run build` to refresh the committed bundle.",
             RuntimeWarning,
             stacklevel=3,
         )
@@ -108,18 +132,21 @@ def build_html(
     safe_title = html_module.escape(str(title), quote=True)
     safe_payload = _payload_json(payload)
     safe_overrides = _payload_json(dict(view_overrides or {}))
+    notices_path = STATIC_DIR / NOTICES_NAME
+    safe_notices = _payload_json({"text": notices_path.read_text(encoding="utf-8") if notices_path.is_file() else ""})
     return f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none';" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none';" />
 <title>{safe_title}</title>
 <style>{css}</style>
 </head>
 <body>
 <div id="root"></div>
 <script>window.__GESTALTDB_VIZ__ = {safe_payload};window.__GESTALTDB_VIZ_OPTIONS__ = {safe_overrides};</script>
+<script id="gdviz-notices" type="application/json">{safe_notices}</script>
 <script>{js}</script>
 </body>
 </html>

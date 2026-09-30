@@ -3,7 +3,7 @@
 // Okabe-Ito palette (black removed to keep dark-mode contrast); keys hash
 // with FNV-1a so a label/type always maps to the same swatch.
 
-const PALETTE = [
+export const PALETTE = [
   "#0072B2", // blue
   "#E69F00", // orange
   "#009E73", // bluish green
