@@ -548,9 +548,11 @@ with TemporaryDirectory() as tmpdir:
         figure = visualize_query(
             graph,
             'MATCH (a:Person)-[r:knows]->(b) RETURN a, r, b',
-            options=VizOptions(title="Knows graph", theme="dark"),
+            options=VizOptions(title="Knows graph", theme="dark",
+                               node_label_property="name", edge_labels="all"),
         )
         figure.save(f"{tmpdir}/knows.html")  # open offline in any browser
+        figure.save_svg(f"{tmpdir}/knows.svg", layout="circle")  # no browser needed
         print(repr(figure))
     finally:
         graph.close()
@@ -574,6 +576,18 @@ figure = graph.visualize(
 Caps (defaults 2000 nodes / 5000 edges) truncate deterministically with a
 `TruncationWarning` and an on-canvas banner; payloads beyond twice the caps
 raise `VizCapExceededError` naming the sampling alternative.
+
+`as_svg()` / `save_svg()` use deterministic circle/grid layouts or supplied
+`positions={node_id: (x, y)}` coordinates; they render the Python graph rather
+than the notebook iframe state. Use `edge_labels="all"` for static edge labels.
+Browser SVG/PNG downloads capture the interactive viewport.
+
+The browser also supports all-visible-content exports, transparent backgrounds,
+custom dimensions, PNG scale, and saved view-state JSON. Search includes properties;
+native-label filters include secondary labels, and focus can follow directed
+relationships over 1–5 hops. Attribute mappings such as
+`VizOptions(node_size_property="mass", edge_width_property="score")` work in
+both the browser and Python SVG output.
 
 ## Define Canonical Temporal Values
 

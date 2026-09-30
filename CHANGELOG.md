@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.0
+
+- Improved the packaged offline graph visualization: configurable node/edge property labels, distinct selectable paths for parallel/reciprocal/self-loop relationships, property-driven node size/color and edge width/color, directed multi-hop neighborhood focus, local saved view state, and dependency-free static SVG output via `VizFigure.as_svg()`/`save_svg()`.
+- Fixed PNG export content-policy compatibility and preserved theme/label styling in SVG/PNG exports, with inline export error reporting.
+- Added export scope/background/dimension/scale controls, explicit pin actions, layout reset/visible-only relayout, and responsive/keyboard accessibility improvements.
+- Added offline Playwright browser regressions, source-aware bundle provenance with packaged third-party notices, and a visualization CI workflow.
+- Expanded `notebooks/09_graph_visualization.ipynb` and the packaged visualization agent-docs topic.
+
 ## 0.10.2
 
 - Hardened the repository for the OpenSSF Scorecard: least-privilege workflow token permissions, commit-SHA-pinned GitHub Actions, `SECURITY.md` with a private vulnerability reporting process, Dependabot for GitHub Actions and Python dependencies, CodeQL static analysis on push/PR/weekly, Sigstore-signed release distributions with SLSA-style build attestations attached to GitHub releases, `CODEOWNERS`, and ClusterFuzzLite continuous fuzzing of the JSON/MessagePack deserializers.

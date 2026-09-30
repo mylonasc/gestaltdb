@@ -15,7 +15,14 @@ from typing import Any, Mapping
 
 @dataclass(frozen=True)
 class VizOptions:
-    """Rendering options shared by static files and notebook cells."""
+    """Labels, property styling, caps, and initial notebook-view settings.
+
+    ``node_label_property`` / ``edge_label_property`` choose readable labels
+    with ID/type fallbacks. ``edge_labels`` is ``off``, ``selected`` (also
+    hovered/focused), or ``all``. Size/width properties use bounded numeric
+    scales; color properties use categorical values. These mappings also
+    apply to static SVG, where relationship labels require ``edge_labels='all'``.
+    """
 
     max_nodes: int = 2000
     max_edges: int = 5000
@@ -28,6 +35,14 @@ class VizOptions:
     title: str = "GestaltDB graph"
     show_labels: bool = True
     show_properties: bool = True
+    node_label_property: str | None = None
+    edge_label_property: str | None = None
+    edge_labels: str = "selected"
+    label_max_length: int = 40
+    node_size_property: str | None = None
+    node_color_property: str | None = None
+    edge_width_property: str | None = None
+    edge_color_property: str | None = None
 
     def __post_init__(self) -> None:
         """Validate option ranges eagerly with actionable messages."""
@@ -41,6 +56,15 @@ class VizOptions:
             raise ValueError("height must be positive")
         if self.theme not in ("light", "dark"):
             raise ValueError("theme must be 'light' or 'dark'")
+        if self.edge_labels not in ("off", "selected", "all"):
+            raise ValueError("edge_labels must be 'off', 'selected', or 'all'")
+        if not isinstance(self.label_max_length, int) or self.label_max_length < 1:
+            raise ValueError("label_max_length must be a positive integer")
+        for name in ("node_label_property", "edge_label_property", "node_size_property",
+                     "node_color_property", "edge_width_property", "edge_color_property"):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, str) or not value):
+                raise ValueError(f"{name} must be a nonempty string or None")
 
     def view_overrides(self) -> dict[str, Any]:
         """Return the front-end initial-state overrides for this options set."""
@@ -50,6 +74,14 @@ class VizOptions:
             "linkDistance": self.link_distance,
             "showLabels": self.show_labels,
             "showProperties": self.show_properties,
+            "nodeLabelProperty": self.node_label_property,
+            "edgeLabelProperty": self.edge_label_property,
+            "edgeLabels": self.edge_labels,
+            "labelMaxLength": self.label_max_length,
+            "nodeSizeProperty": self.node_size_property,
+            "nodeColorProperty": self.node_color_property,
+            "edgeWidthProperty": self.edge_width_property,
+            "edgeColorProperty": self.edge_color_property,
         }
 
 
@@ -90,6 +122,26 @@ class VizFigure:
             'frameborder="0" style="border:1px solid #ccc;border-radius:4px;" '
             'title="GestaltDB graph visualization"></iframe>'
         )
+
+    def as_svg(self, *, width: int = 1200, height: int = 800, layout: str = "circle",
+               positions: Mapping[str, tuple[float, float]] | None = None, background: bool = True) -> str:
+        """Return dependency-free SVG using a static layout or supplied coordinates.
+
+        This renders the Python graph, not the current notebook iframe state.
+        Set ``edge_labels='all'`` to include relationship labels in static output.
+        """
+        from .svg import render_svg
+
+        return render_svg(self.viz, self.options, width=width, height=height,
+                          layout=layout, positions=positions, background=background)
+
+    def save_svg(self, path: str | Path, **kwargs: Any) -> Path:
+        """Write :meth:`as_svg` output and return the resolved destination."""
+        document = self.as_svg(**kwargs)
+        resolved = Path(path).expanduser().resolve()
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        resolved.write_text(document, encoding="utf-8")
+        return resolved
 
     def __repr__(self) -> str:
         """Return a one-line summary without rendering the document."""

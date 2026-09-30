@@ -2,11 +2,18 @@
 
 The ``viz`` subpackage converts property graphs, Cypher results, and sampled
 ML subgraphs into a deterministic JSON-serializable intermediate
-representation (IR) that feeds the prebuilt D3.js + React front end
-(``VIZ-02`` onward) and self-contained offline HTML artifacts (``VIZ-03``).
+representation (IR) that feeds the prebuilt React + D3 front end and
+self-contained offline HTML artifacts. ``VizOptions`` configures readable
+node/relationship labels and property-driven node size/color and edge
+width/color. The viewer supports directed exploration, local saved views,
+and SVG/PNG downloads.
 
 The Python side uses only the standard library so library users never need
 a JavaScript toolchain at runtime.
+``VizFigure.as_svg()`` / ``save_svg()`` also render static circle/grid layouts
+or supplied coordinates, independently of notebook iframe state. Retrieve
+runnable installed-library examples with
+``python -m gestaltdb.agent_docs get visualization --examples``.
 """
 
 from .api import (

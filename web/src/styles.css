@@ -2,6 +2,9 @@
   color-scheme: light dark;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
+body { margin: 0; }
+.gdviz { color-scheme: light; }
+.gdviz[data-theme="dark"] { color-scheme: dark; }
 
 .gdviz {
   --gdviz-bg: #ffffff;
@@ -33,6 +36,9 @@
   padding: 0.75rem 1rem 0.5rem;
   border-bottom: 1px solid var(--gdviz-border);
   background: var(--gdviz-panel);
+  max-height: 45vh;
+  overflow-y: auto;
+  flex-shrink: 0;
 }
 
 .gdviz-header h1 {
@@ -62,6 +68,22 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+}
+.gdviz-toolbar input[type="number"] { width: 5rem; }
+.gdviz-controls { margin-top: 0.35rem; }
+.gdviz-controls summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; }
+.gdviz-controls[open] summary { margin-bottom: 0.4rem; }
+.gdviz-status { min-height: 1em; margin: 0.2rem 0; font-size: 0.8rem; }
+.gdviz-canvas .node.pinned circle { stroke-dasharray: 3 2; }
+.gdviz-legend select { max-width: 100%; display: block; }
+button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--gdviz-fg); outline-offset: 2px;
+}
+@media (max-width: 700px) {
+  .gdviz-body { position: relative; }
+  .gdviz-legend { position: absolute; right: 0; top: 0; bottom: 0; width: min(14rem, 65vw); }
+  .gdviz-toolbar { gap: 0.35rem; }
+  .gdviz-header { padding: 0.5rem; }
 }
 
 .gdviz-banner {
@@ -114,7 +136,7 @@
   cursor: grabbing;
 }
 
-.gdviz-canvas .node-label {
+.gdviz-canvas .node-label, .gdviz-canvas .edge-label {
   font-size: 10px;
   fill: var(--gdviz-fg);
   paint-order: stroke;
@@ -122,6 +144,7 @@
   stroke-width: 3px;
   pointer-events: none;
 }
+.gdviz-canvas .edge-hit:focus-visible { stroke: var(--gdviz-fg); stroke-opacity: 0.25; }
 
 .gdviz-legend {
   width: 14rem;

@@ -1,6 +1,6 @@
 ---
 name: gestaltdb-user-guide
-description: Use when writing application code that uses GestaltDB, especially GraphDB creation, explicit imports, Cypher queries, indexing, ingestion, epistemic claims, and typed sampling.
+description: Use when writing application code that uses GestaltDB, especially GraphDB creation, explicit imports, Cypher queries, indexing, ingestion, epistemic claims, typed sampling, and offline visualization.
 ---
 
 # GestaltDB User Guide For Agents
@@ -29,7 +29,7 @@ Available topics:
 - `indexing`: explicit property indexes, range lookups, deferred rebuilds.
 - `sampling`: typed traversal sampling vs snapshot/engine sampling.
 - `ingestion`: Arrow/Polars ingestion and index maintenance modes.
-- `visualization`: offline `visualize_*` entrypoints, `VizOptions` caps, `GraphDB.visualize`.
+- `visualization`: offline HTML/Jupyter, property labels/styling, directed exploration, saved views, SVG/PNG export, and `GraphDB.visualize`.
 - `epistemic`: sourced bitemporal claims, provenance, contradiction, and four-valued status.
 - `temporal`: version history, legacy migration, recovery, and compatibility limits.
 
@@ -57,6 +57,7 @@ The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storag
 - Run `graph.rebuild_deferred_indexes()` before relying on secondary indexes after deferred ingestion.
 - Use `SamplingHop` and `SamplingPattern` for GraphDB typed traversal sampling with external node IDs.
 - Use `SamplerSnapshot` and `SamplerEngine` only when you need compact array-native IDs for ML data loading.
+- Import visualization helpers from `gestaltdb.viz.api`. `VizOptions` configures labels, attribute styling, and caps; `VizFigure.save()` writes offline HTML, while `as_svg()` / `save_svg()` generate dependency-free static SVG. Browser PNG and view-state exports are local; static Python SVG does not capture iframe state.
 - Use `assert_claim` for sourced positive/negative propositions and `claim_status` for open-world four-valued evaluation at valid/system time.
 - Use `create_rule` and bounded `run_rules(as_of=...)` for positive Horn inference over entity claims; use `maintain_truth` after premise/rule changes and `explain_claim` for bounded historical derivation graphs.
 - Use `assert_world_accessibility` plus bounded `entails` for temporal `BELIEVES`, `KNOWS`, `POSSIBLE`, and `NECESSARY` evaluation. Belief, knowledge, and generic modal accessibility are separate frames.

@@ -14,7 +14,14 @@ Available notebooks include:
   compared with LevelDB object batch ingestion.
 - ``09_graph_visualization.ipynb`` for offline interactive visualization:
   ``visualize_*`` entrypoints, Cypher highlighting, typed sampling, caps,
-  themes, and sampler-batch inspection.
+  property labels/styling, selectable multigraph relationships, directed
+  exploration, themes, browser SVG/PNG and saved-view exports, direct Python
+  SVG layouts/coordinates, and sampler-batch inspection. It retrieves the
+  visualization guide shipped with the installed library. The optional
+  saved-coordinate cell skips cleanly until a local view-state file is supplied.
+- ``10_sherlock_temporal_knowledge_graph.ipynb`` for extracting a temporal,
+  epistemic narrative graph with a local Ollama model and explaining what
+  Sherlock Holmes could know at a selected scene without later-story leakage.
 
 Choose the Correct Kernel
 -------------------------

@@ -1,246 +1,145 @@
-import { useEffect, useMemo, useState } from "react";
-import { GraphCanvas } from "./GraphCanvas";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { GraphCanvas, type CanvasHandle } from "./GraphCanvas";
 import { Inspector, type Selection } from "./Inspector";
 import { legendGroups, legendTypes } from "./graph";
 import { computeView } from "./view";
-import { exportJson, exportPng, exportSvg } from "./export";
+import { downloadBlob, exportJson, exportPng, exportSvg, type ExportOptions } from "./export";
+import { ExportControls } from "./ExportControls";
+import { AppearanceControls } from "./AppearanceControls";
+import { ExplorationControls } from "./ExplorationControls";
 import { colorFor } from "./colors";
-import type { VizPayload, VizViewOptions } from "./viz-types";
+import { graphIdentity, parseViewState, type LayoutState, type ViewState } from "./session";
+import { DEFAULT_SETTINGS, type VizPayload, type VizViewOptions, type ViewerSettings } from "./viz-types";
 
-// VIZ-05 shell: search, label/type filters, 1-hop focus, highlight overlay,
-// and the node/edge inspector on top of the VIZ-04 canvas.
 export function App({ payload, initial = {} }: { payload: VizPayload; initial?: VizViewOptions }) {
-  const [paused, setPaused] = useState(false);
-  const [charge, setCharge] = useState(initial.charge ?? -300);
-  const [linkDistance, setLinkDistance] = useState(initial.linkDistance ?? 60);
-  const [showLabels, setShowLabels] = useState(initial.showLabels ?? true);
-  const [theme, setTheme] = useState<"light" | "dark">(initial.theme ?? "light");
-  const showProperties = initial.showProperties ?? true;
+  const [settings, setSettings] = useState<ViewerSettings>({ ...DEFAULT_SETTINGS, ...initial });
+  const canvasRef = useRef<SVGSVGElement>(null);
+  const controllerRef = useRef<CanvasHandle>(null);
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
   const [fitSignal, setFitSignal] = useState(0);
   const [unpinSignal, setUnpinSignal] = useState(0);
   const [selection, setSelection] = useState<Selection | null>(null);
-  const [query, setQuery] = useState("");
-  const [hiddenGroups, setHiddenGroups] = useState<ReadonlySet<string>>(new Set());
-  const [hiddenTypes, setHiddenTypes] = useState<ReadonlySet<string>>(new Set());
-  const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
-  const [highlightOn, setHighlightOn] = useState(
-    () => payload.highlight.nodes.length + payload.highlight.edges.length > 0
-  );
-
+  const [pinnedIds, setPinnedIds] = useState<string[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [restoration, setRestoration] = useState<LayoutState | null>(null);
+  const [filters, setFilters] = useState<ViewState["filters"]>({
+    query: "", hiddenGroups: [], hiddenTypes: [], requiredLabel: "", focusNodeId: null,
+    focusDirection: "both", focusHops: 1, searchProperties: true,
+    highlightOn: payload.highlight.nodes.length + payload.highlight.edges.length > 0,
+  });
+  const [exportOptions, setExportOptions] = useState<ExportOptions>({
+    scope: "viewport", background: "theme", width: 1200, height: 800, scale: 2,
+  });
   const groups = useMemo(() => legendGroups(payload), [payload]);
   const types = useMemo(() => legendTypes(payload), [payload]);
-  const view = useMemo(
-    () =>
-      computeView(payload, {
-        query,
-        hiddenGroups,
-        hiddenTypes,
-        focusNodeId,
-        highlightOn,
-      }),
-    [payload, query, hiddenGroups, hiddenTypes, focusNodeId, highlightOn]
-  );
+  const view = useMemo(() => computeView(payload, {
+    ...filters, hiddenGroups: new Set(filters.hiddenGroups), hiddenTypes: new Set(filters.hiddenTypes),
+  }), [payload, filters]);
+  const hiddenNodes = new Set(view.hiddenNodes), hiddenEdges = new Set(view.hiddenEdges);
 
-  // Esc clears the selection from anywhere in the artifact.
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSelection(null);
-    };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setSelection(null); };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+  useEffect(() => { if (restoration) controllerRef.current?.restore(restoration); }, [restoration]);
 
-  const toggleIn = (set: ReadonlySet<string>, key: string): ReadonlySet<string> => {
-    const next = new Set(set);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    return next;
-  };
+  async function downloadImage(format: "svg" | "png") {
+    if (!canvasRef.current) return;
+    setExporting(true); setError(""); setStatus("");
+    try {
+      if (format === "svg") exportSvg(canvasRef.current, exportOptions);
+      else await exportPng(canvasRef.current, exportOptions);
+      setStatus(`${format.toUpperCase()} export prepared`);
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    finally { setExporting(false); }
+  }
 
-  const canvasElement = (): SVGSVGElement | null => document.querySelector(".gdviz-canvas");
+  function saveView() {
+    if (!controllerRef.current) return;
+    const state: ViewState = { version: 1, kind: "gestaltdb-view", graph: graphIdentity(payload),
+      layout: controllerRef.current.snapshot(), settings, filters, selection };
+    downloadBlob("gestaltdb-view.json", new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }));
+  }
 
-  return (
-    <main className="gdviz" data-theme={theme}>
-      <header className="gdviz-header">
-        <h1>GestaltDB graph</h1>
-        <p className="gdviz-counts">
-          Showing {view.visibleNodeCount} of {payload.nodes.length} nodes, {view.visibleEdgeCount} of{" "}
-          {payload.edges.length} edges
-          {focusNodeId !== null && <> (neighborhood of {focusNodeId})</>}
-        </p>
-        <div className="gdviz-toolbar" role="toolbar" aria-label="Layout controls">
-          <button type="button" onClick={() => setPaused((value) => !value)}>
-            {paused ? "Resume layout" : "Pause layout"}
-          </button>
-          <button type="button" onClick={() => setFitSignal((value) => value + 1)}>
-            Refit view
-          </button>
-          <button type="button" onClick={() => setUnpinSignal((value) => value + 1)}>
-            Unpin all
-          </button>
-          <label>
-            Charge
-            <input
-              type="range"
-              min={-1000}
-              max={-10}
-              step={10}
-              value={charge}
-              onChange={(event) => setCharge(Number(event.target.value))}
-            />
-          </label>
-          <label>
-            Link distance
-            <input
-              type="range"
-              min={10}
-              max={200}
-              step={5}
-              value={linkDistance}
-              onChange={(event) => setLinkDistance(Number(event.target.value))}
-            />
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={showLabels}
-              onChange={(event) => setShowLabels(event.target.checked)}
-            />
-            Labels
-          </label>
-          <button type="button" onClick={() => setTheme((value) => (value === "light" ? "dark" : "light"))}>
-            {theme === "light" ? "Dark theme" : "Light theme"}
-          </button>
-        </div>
-        <div className="gdviz-toolbar" role="toolbar" aria-label="Export controls">
-          <button
-            type="button"
-            onClick={() => {
-              const svg = canvasElement();
-              if (svg) exportSvg(svg);
-            }}
-          >
-            Export SVG
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const svg = canvasElement();
-              if (svg) void exportPng(svg);
-            }}
-          >
-            Export PNG
-          </button>
-          <button type="button" onClick={() => exportJson(payload)}>
-            Download JSON
-          </button>
-        </div>
-        <div className="gdviz-toolbar" role="toolbar" aria-label="Search and highlight controls">
-          <label>
-            Search nodes
-            <input
-              type="search"
-              placeholder="id or label…"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              aria-label="Search nodes by id or label"
-            />
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={highlightOn}
-              onChange={(event) => setHighlightOn(event.target.checked)}
-            />
-            Highlight query matches
-          </label>
-          {focusNodeId !== null && (
-            <button type="button" onClick={() => setFocusNodeId(null)}>
-              Show full graph
-            </button>
-          )}
-        </div>
-      </header>
+  async function loadView(file: File) {
+    setError(""); setStatus("");
+    try {
+      if (file.size > 16 * 1024 * 1024) throw new Error("View-state file exceeds 16 MB");
+      // Validate every field before applying any part of the imported state.
+      const state = parseViewState(JSON.parse(await file.text()), payload);
+      setSettings(state.settings); setFilters(state.filters); setSelection(state.selection);
+      setRestoration(state.layout);
+      setStatus("View state restored");
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+  }
 
-      {payload.truncation.truncated && (
-        <p className="gdviz-banner" role="alert">
-          Showing a capped sample: {payload.truncation.nodes_dropped} nodes and{" "}
-          {payload.truncation.edges_dropped} edges dropped by caps. Narrow the query or sample a
-          subgraph for full detail.
-        </p>
-      )}
-
-      <div className="gdviz-body">
-        <GraphCanvas
-          payload={payload}
-          settings={{ paused, charge, linkDistance, showLabels }}
-          fitSignal={fitSignal}
-          unpinSignal={unpinSignal}
-          selection={selection}
-          onSelect={setSelection}
-          hiddenNodes={view.hiddenNodes}
-          hiddenEdges={view.hiddenEdges}
-          dimNodes={view.dimNodes}
-          dimEdges={view.dimEdges}
-        />
-        <aside className="gdviz-legend" aria-label="Legend and inspector">
-          {showProperties && (
-            <Inspector
-              payload={payload}
-              selection={selection}
-              focusNodeId={focusNodeId}
-              onFocus={setFocusNodeId}
-              onClear={() => setSelection(null)}
-            />
-          )}
-          <section>
-            <h2>Node groups</h2>
-            <ul>
-              {groups.map(([group, count]) => (
-                <li key={group}>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={!hiddenGroups.has(group)}
-                      onChange={() => setHiddenGroups((current) => toggleIn(current, group))}
-                      aria-label={`Toggle node group ${group}`}
-                    />
-                    <span
-                      className="gdviz-swatch"
-                      style={{ backgroundColor: colorFor(group) }}
-                      aria-hidden="true"
-                    />
-                    {group}: {count}
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </section>
-          <section>
-            <h2>Edge types</h2>
-            <ul>
-              {types.map(([etype, count]) => (
-                <li key={etype}>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={!hiddenTypes.has(etype)}
-                      onChange={() => setHiddenTypes((current) => toggleIn(current, etype))}
-                      aria-label={`Toggle edge type ${etype}`}
-                    />
-                    <span
-                      className="gdviz-swatch"
-                      style={{ backgroundColor: colorFor(etype) }}
-                      aria-hidden="true"
-                    />
-                    {etype}: {count}
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </section>
-        </aside>
+  function toggleFilter(key: "hiddenGroups" | "hiddenTypes", value: string) {
+    setFilters(current => ({ ...current, [key]: current[key].includes(value)
+      ? current[key].filter(item => item !== value) : [...current[key], value] }));
+  }
+  const title = document.title || "GestaltDB graph";
+  const selectionKey = selection ? JSON.stringify([selection.kind, selection.id]) : "";
+  return <main className="gdviz" data-theme={settings.theme}>
+    <header className="gdviz-header">
+      <h1>{title}</h1>
+      <p className="gdviz-counts" aria-live="polite">Showing {view.visibleNodeCount} of {payload.nodes.length} nodes, {view.visibleEdgeCount} of {payload.edges.length} edges
+        {filters.focusNodeId !== null && <> (neighborhood of {filters.focusNodeId})</>}</p>
+      <div className="gdviz-toolbar" role="group" aria-label="Layout controls">
+        <button onClick={() => setSettings(current => ({ ...current, paused: !current.paused }))}>{settings.paused ? "Resume layout" : "Pause layout"}</button>
+        <button onClick={() => setFitSignal(value => value + 1)}>Fit visible graph</button>
+        <button onClick={() => setUnpinSignal(value => value + 1)}>Unpin all</button>
+        <button onClick={() => controllerRef.current?.relayout(false)}>Reset layout</button>
+        <button onClick={() => controllerRef.current?.relayout(true)}>Relayout visible graph</button>
+        <label>Charge<input type="range" min={-1000} max={-10} step={10} value={settings.charge} onChange={event => setSettings({ ...settings, charge: Number(event.target.value) })} /></label>
+        <label>Link distance<input type="range" min={10} max={200} step={5} value={settings.linkDistance} onChange={event => setSettings({ ...settings, linkDistance: Number(event.target.value) })} /></label>
+        <label><input type="checkbox" checked={settings.showLabels} onChange={event => setSettings({ ...settings, showLabels: event.target.checked })} />Node labels</label>
+        <label>Edge labels<select aria-label="Edge labels" value={settings.edgeLabels} onChange={event => setSettings({ ...settings, edgeLabels: event.target.value as ViewerSettings["edgeLabels"] })}>
+          <option value="off">Off</option><option value="selected">Selected / hovered</option><option value="all">All</option>
+        </select></label>
+        <button onClick={() => setSettings({ ...settings, theme: settings.theme === "light" ? "dark" : "light" })}>{settings.theme === "light" ? "Dark theme" : "Light theme"}</button>
+        <button aria-expanded={sidebarOpen} aria-controls="gdviz-sidebar" onClick={() => setSidebarOpen(value => !value)}>{sidebarOpen ? "Hide inspector" : "Show inspector"}</button>
       </div>
-    </main>
-  );
+      <ExportControls options={exportOptions} onChange={setExportOptions} exporting={exporting} onExport={format => void downloadImage(format)}
+        onGraph={() => exportJson(payload)} onSaveView={saveView} onLoadView={file => void loadView(file)}
+        hasNotices={Boolean(document.getElementById("gdviz-notices"))}
+        onNotices={() => {
+          const notices = JSON.parse(document.getElementById("gdviz-notices")!.textContent!).text;
+          downloadBlob("gestaltdb-third-party-notices.txt", new Blob([notices], { type: "text/plain;charset=utf-8" }));
+        }} />
+      <AppearanceControls payload={payload} settings={settings} onChange={setSettings} />
+      <ExplorationControls payload={payload} filters={filters} onChange={setFilters} />
+      <p className="gdviz-status" role="status">{exporting ? "Preparing image…" : status}</p>
+      {error && <p role="alert">{error}</p>}
+    </header>
+    {payload.truncation.truncated && <p className="gdviz-banner" role="alert">Showing a capped sample: {payload.truncation.nodes_dropped} nodes and {payload.truncation.edges_dropped} edges dropped by caps. Narrow the query or sample a subgraph for full detail.</p>}
+    {payload.nodes.length === 0 && <p className="gdviz-banner">{String(payload.meta.note ?? "No graph entities to display")}</p>}
+    <div className="gdviz-body">
+      <GraphCanvas canvasRef={canvasRef} controllerRef={controllerRef} onPinsChange={setPinnedIds} payload={payload} settings={settings}
+        fitSignal={fitSignal} unpinSignal={unpinSignal} selection={selection} onSelect={setSelection}
+        hiddenNodes={view.hiddenNodes} hiddenEdges={view.hiddenEdges} dimNodes={view.dimNodes} dimEdges={view.dimEdges} />
+      {sidebarOpen && <aside id="gdviz-sidebar" className="gdviz-legend" aria-label="Legend and inspector">
+        <label>Select visible entity<select aria-label="Select visible entity" value={selectionKey} onChange={event => {
+          if (!event.target.value) setSelection(null);
+          else { const [kind, id] = JSON.parse(event.target.value); setSelection({ kind, id }); }
+        }}>
+          <option value="">Choose a node or edge</option>
+          {selection && ((selection.kind === "node" ? hiddenNodes : hiddenEdges).has(selection.id)) && <option value={selectionKey}>Selected {selection.kind}: {selection.id} (hidden)</option>}
+          <optgroup label="Nodes">{payload.nodes.filter(node => !hiddenNodes.has(node.id)).map(node => <option key={node.id} value={JSON.stringify(["node", node.id])}>Node {node.id}</option>)}</optgroup>
+          <optgroup label="Edges">{payload.edges.filter(edge => !hiddenEdges.has(edge.id)).map(edge => <option key={edge.id} value={JSON.stringify(["edge", edge.id])}>Edge {edge.id} ({edge.type})</option>)}</optgroup>
+        </select></label>
+        {selection?.kind === "node" && <button onClick={() => controllerRef.current?.togglePin(selection.id)}>{pinnedIds.includes(selection.id) ? "Unpin selected node" : "Pin selected node"}</button>}
+        <Inspector showProperties={settings.showProperties} payload={payload} selection={selection} focusNodeId={filters.focusNodeId}
+          onFocus={focusNodeId => setFilters({ ...filters, focusNodeId })} onClear={() => setSelection(null)} />
+        {([ ["Node groups", groups, "hiddenGroups"], ["Edge types", types, "hiddenTypes"] ] as const).map(([heading, entries, key]) => <section key={key}>
+          <h2>{heading}</h2><ul>{entries.map(([value, count]) => <li key={value}><label>
+            <input type="checkbox" checked={!filters[key].includes(value)} onChange={() => toggleFilter(key, value)} aria-label={`Toggle ${key === "hiddenGroups" ? "node group" : "edge type"} ${value}`} />
+            <span className="gdviz-swatch" style={{ backgroundColor: colorFor(value) }} aria-hidden="true" />{value}: {count}
+          </label></li>)}</ul>
+        </section>)}
+      </aside>}
+    </div>
+  </main>;
 }

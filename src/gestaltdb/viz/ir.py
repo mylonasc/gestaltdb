@@ -461,6 +461,7 @@ class VizGraph:
         edge_raws: dict[str, Any] = {}
         highlight_nodes: set[str] = set()
         highlight_edges: set[str] = set()
+        placeholders: set[str] = set()
 
         def _absorb(value: Any, highlight: bool) -> None:
             if value is None:
@@ -474,7 +475,9 @@ class VizGraph:
             parts = _node_like_to_parts(value)
             if parts is not None:
                 node_id = parts[0]
-                node_raws.setdefault(node_id, value)
+                if node_id not in node_raws or node_id in placeholders:
+                    node_raws[node_id] = value
+                    placeholders.discard(node_id)
                 if highlight:
                     highlight_nodes.add(node_id)
                 return
@@ -487,6 +490,7 @@ class VizGraph:
                 for endpoint in (source, target):
                     if endpoint and endpoint not in node_raws:
                         node_raws[endpoint] = {"id": endpoint}
+                        placeholders.add(endpoint)
                         if highlight:
                             highlight_nodes.add(endpoint)
                 return

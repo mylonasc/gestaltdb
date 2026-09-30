@@ -124,6 +124,18 @@ def test_from_cypher_result_scalar_only_is_explainable(tmp_path):
     assert "scalar-only" in viz.meta["note"]
 
 
+def test_cypher_endpoint_placeholders_are_upgraded_regardless_of_column_order():
+    nodes, edges = _nodes_edges()
+    alice = next(node for node in nodes if node.get_id == "alice")
+    bob = next(node for node in nodes if node.get_id == "bob")
+    edge = next(edge for edge in edges if edge.get_id == "e1")
+    first = VizGraph.from_cypher_result([{"r": edge, "a": alice, "b": bob}])
+    second = VizGraph.from_cypher_result([{"a": alice, "b": bob, "r": edge}])
+    assert first.to_json() == second.to_json()
+    assert first.nodes[0].properties["name"] == "Alice"
+    assert first.nodes[0].labels == ("Person",)
+
+
 def test_from_sampled_subgraph_placeholders_and_highlight(tmp_path):
     pytest.importorskip("plyvel")
     graph = GraphDB(LevelDBStore(path=str(tmp_path / "g")), PickleSerializer())
