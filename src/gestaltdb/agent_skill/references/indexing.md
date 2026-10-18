@@ -9,6 +9,11 @@ GestaltDB automatically indexes node labels and relationship types. Property ind
 - Pass `None` for an unbounded range endpoint.
 - Lookup order is not guaranteed; compare ID sets instead of ordered lists.
 - If using deferred ingestion, call `rebuild_deferred_indexes()` before relying on property indexes unless you used `IndexMaintenanceMode.DEFER_REBUILD`.
+- Property index creation also maintains label/property and type/property composite entries; these are not arbitrary multi-property composite indexes.
+- Use `iter_node_ids_by_label_property_range` / `iter_edge_ids_by_type_property_range` when selecting cohort IDs without hydrating entities. ID iterators return bytes; decode before comparing to external strings. Counts iterate indexed IDs rather than promising O(1) lookup.
+- Range bounds are inclusive by default; use `include_start=False` / `include_end=False` for exclusive bounds. Encoded secondary/range keys cannot exceed 511 bytes.
+- Eligible Cypher exact/range predicates use configured candidate indexes; residual expressions are still checked, and not every expression is index-backed.
+- Filtering seed IDs does not restrict subsequent hops. Use `build_sampler_snapshot(node_filter=..., edge_filter=...)` for a property-defined sampled graph, then reuse `SamplerEngine` batches. Build callbacks scan source records, not automatic index pushdown. See the `sampling` topic for policies.
 
 ## Example
 

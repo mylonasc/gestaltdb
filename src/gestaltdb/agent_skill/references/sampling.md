@@ -1,6 +1,8 @@
 # Sampling For Library Users
 
-GestaltDB has two sampling layers.
+GestaltDB has two sampling layers: live typed traversal for application queries,
+and reusable array-native CSR snapshots for high-throughput training batches.
+For property-graph cohort selection, read the `indexing` topic too.
 
 ## GraphDB Traversal Sampling
 
@@ -23,6 +25,34 @@ Use this for application code and external node IDs:
 
 Use `SamplerSnapshot` and `SamplerEngine` for ML training pipelines. These APIs use compact integer IDs internally. Convert back with `snapshot.external_node_id(...)` or `snapshot.global_triple_to_external(...)`.
 
+### Sampling Policy Map
+
+- `sample_nodes` / `sample_edges`: seed draws, node-type/relation filtering, supported degree/weight strategies.
+- `sample_neighbors`: batched uniform/weighted neighbors, direction/relation filters, per-seed offsets.
+- `sample_layers`: independent fanout, direction, relation, replacement, and strategy per layer.
+- `sample_random_walks`: uniform/weighted first-order walks, repeating metapaths, restarts and dead-end policies.
+- `sample_multihop` / `sample_subgraph`: multi-hop topology and edge-seeded batches with positives and negatives.
+- `sample_hard_negatives`: endpoint-type/relation constraints, positive rejection, temporal policies.
+
+### Filter Once, Sample Repeatedly
+
+Pass `node_filter`/`edge_filter` to `graph.build_sampler_snapshot` to define an
+eligible property graph before sampling; for example,
+`edge_filter=lambda e: e.properties.get("confidence", 0) >= 0.9`.
+Callbacks receive decoded objects during a graph scan, not during array sampling
+and not through automatic index pushdown. Mutable-snapshot edges with filtered
+endpoints are omitted. Filtering only seed IDs does not restrict every hop.
+Use `relations`/`direction` and temporal policies at draw time; arbitrary property
+callbacks are not sampler-engine arguments. `node_type_property` defaults to
+`kind`, not native labels; type-filtered seed draws use encoded type IDs.
+
+Load one engine with `mode="ram"` or `mode="memmap"` and reuse it across batches;
+draws need no open KV database. Keep compact IDs in hot paths and convert at
+application boundaries. Memmap avoids eager array loading, not all memory use:
+candidate/result arrays and positive-membership structures allocate memory.
+Builds scan/materialize source data; snapshots do not reflect later graph writes.
+Live reservoir sampling bounds sample storage by fanout but still scans adjacency.
+
 High-level non-temporal builds use authenticated mutable-state snapshots automatically when available. Pass `read_snapshot=True` to require coherent source records plus verifiable provenance; LevelDB, default PyRex, and PyRex runtimes without a sequence identity fail that explicit request closed. Pass `False` only when an unpinned legacy build is acceptable.
 
 Build temporal history through one authenticated source view with `graph.build_sampler_snapshot(path, temporal=True, system_time=known_at, time_bucket="day")`. Temporal format-v2 snapshots align edge-version IDs, validity arrays, open-end masks, and commit/system provenance with compact edge rows. Their endpoint/relation indexes are ordered by valid start. Loading validates the completion manifest, checksums, schemas, intervals, CSR bounds, and provenance in RAM and memmap modes. Legacy format-v1 snapshots remain readable without temporal or integrity guarantees.
@@ -35,6 +65,8 @@ Temporal snapshots index positive-triple and node-availability intervals for lea
 - Use `to_external(snapshot)` on neighbor, layered, and random-walk batches. Walk padding and restart edge/relation IDs become `None`.
 - Temporal history may contain multiple rows for one logical edge ID; external edge lookup then raises an ambiguity error. Use compact edge rows instead.
 - Layer and walk calls accept `temporal` and `window_policy`, but do not impose causal ordering across steps. Seed-node/edge draws cover the full snapshot, not a selected time. Use multihop/subgraph APIs for causal policies.
+
+- `SampledSubgraphBatch.senders`, `receivers`, `positives`, and `negatives` use batch-local IDs; map through `node_ids_global` before resolving against the snapshot. Layer results are neighbor blocks, not framework-native bipartite blocks.
 
 ## `sample_neighbors` Example
 
@@ -62,6 +94,31 @@ with TemporaryDirectory() as tmpdir:
         assert all(record["edge_type"] == "FOLLOWS" for record in result)
     finally:
         graph.close()
+```
+
+## Array-Native Weighted, Layered, and Walk Example
+
+No backend extra is needed when constructing directly from compact arrays:
+
+```python
+from tempfile import TemporaryDirectory
+from gestaltdb.sampling import ExternalNeighborSamplingSpec, SamplerEngine, SamplerSnapshot
+
+with TemporaryDirectory() as tmpdir:
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        f"{tmpdir}/sampler",
+        external_node_ids=["a", "b", "c"],
+        external_edge_ids=["ab", "ac"], external_relation_ids=["R"],
+        src_int=[0, 0], dst_int=[1, 2], rel_int=[0, 0],
+        edge_weights=[1.0, 3.0],
+    )
+    engine = SamplerEngine.load(snapshot.path, mode="memmap", seed=7)
+    sampled = engine.sample_neighbors_external(["a"], 2, relations=["R"], strategy="weighted")
+    assert set(sampled.to_external(engine.snapshot)["neighbor_nodes"]) == {"b", "c"}
+    layers = engine.sample_layers_external(["a"], [ExternalNeighborSamplingSpec(2, relations=["R"])])
+    walks = engine.sample_random_walks_external(["a"], 2, metapath=["R"])
+    assert layers.layers[0].edge_indices.size == 2
+    assert walks.lengths.tolist() == [1]
 ```
 
 ## Example
@@ -93,4 +150,48 @@ with TemporaryDirectory() as tmpdir:
         assert set(subgraph["nodes"]) == {b"drug", b"protein", b"disease"}
     finally:
         graph.close()
+```
+
+## Filtered Property-Graph Snapshot Example
+
+This quiescent LevelDB example selects a protein cohort through an index and
+filters the entire snapshot, not just its starting seeds. For a required
+verifiable mutable source snapshot, use a supported backend such as LMDB with
+`read_snapshot=True`; do not assume LevelDB provides that guarantee.
+
+```python
+from tempfile import TemporaryDirectory
+from gestaltdb.graphdb import Edge, GraphDB, Node
+from gestaltdb.sampling import SamplerEngine
+
+with TemporaryDirectory() as tmpdir:
+    graph = GraphDB.create(f"{tmpdir}/graph", backend="leveldb", serializer="json")
+    try:
+        graph.put_nodes([
+            Node("drug", labels=["Drug"], properties={"approved": True}),
+            Node("high", labels=["Protein"], properties={"score": 0.9}),
+            Node("low", labels=["Protein"], properties={"score": 0.4}),
+        ])
+        graph.put_edges_bulk([
+            Edge("strong", "drug", "high", properties={"type": "binds", "confidence": 0.95}),
+            Edge("excluded", "drug", "low", properties={"type": "binds", "confidence": 0.99}),
+        ])
+        graph.create_node_property_index("score")
+        proteins = {
+            graph.key_to_string(key)
+            for key in graph.iter_node_ids_by_label_property_range("Protein", "score", 0.8, None)
+        }
+        snapshot = graph.build_sampler_snapshot(
+            f"{tmpdir}/sampler",
+            node_filter=lambda n: n.get_id in proteins or (
+                "Drug" in n.labels and n.properties.get("approved") is True
+            ),
+            edge_filter=lambda e: e.properties.get("confidence", 0) >= 0.9,
+            edge_weight_property="confidence",
+        )
+    finally:
+        graph.close()
+    engine = SamplerEngine.load(snapshot.path, mode="memmap", seed=7)
+    sampled = engine.sample_neighbors_external(["drug"], 10, relations=["binds"], strategy="weighted")
+    assert sampled.to_external(engine.snapshot)["neighbor_nodes"].tolist() == ["high"]
 ```

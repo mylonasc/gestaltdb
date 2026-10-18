@@ -1,5 +1,119 @@
-Typed Traversal and Sampling
-============================
+.. _typed-traversal-and-sampling:
+
+High-Performance Graph Sampling
+===================================
+
+Sampling is a first-class GestaltDB workflow, from application-side typed
+traversal to repeated GNN/KG training batches. The live APIs and the array-native
+engine serve different workloads; they are not interchangeable implementations
+of the same operation.
+
+Choose a Sampling Layer
+-----------------------
+
+.. list-table:: Live graph vs reusable snapshot
+   :header-rows: 1
+   :widths: 20 40 40
+
+   * -
+     - Live ``GraphDB``
+     - ``SamplerSnapshot`` + ``SamplerEngine``
+   * - Data
+     - Current KV-backed graph, maintained typed adjacency
+     - Immutable compact NumPy/CSR arrays, built once and reused
+   * - IDs and output
+     - External IDs; traversal records carry byte IDs
+     - Compact integer arrays; ``*_external`` entry points and conversion helpers
+   * - Policies
+     - Uniform reservoir neighbors, typed paths, materialized subgraphs
+     - Node/edge seeds, uniform/weighted neighbors, layers, walks, multihop,
+       positive triples and hard negatives
+   * - Memory
+     - Reservoir sample storage bounded by fanout; eligible adjacency is scanned
+     - RAM or memmap loading; results, candidate buffers, and membership data
+       still use memory
+   * - Property filtering
+     - Indexed seed selection or Cypher; not arbitrary per-hop sampling callbacks
+     - ``node_filter``/``edge_filter`` at build time; relation/direction/time
+       policies over arrays at sampling time
+
+See :doc:`property-filtering` to define eligible nodes and edges **before**
+sampling. Filtering the seeds alone does not restrict every sampled hop. See
+:doc:`performance` for build/load/sampling costs and benchmark commands; no
+fixed speedup or fully out-of-core behavior is promised.
+
+Array-Native API Map
+--------------------
+
+.. list-table:: Sampling policies available in the engine
+   :header-rows: 1
+
+   * - Method
+     - Use
+   * - ``sample_nodes`` / ``sample_edges``
+     - Seed draws with node-type/relation filters; degree/weight strategies where supported
+   * - ``sample_neighbors`` / ``sample_neighbors_external``
+     - Batched uniform or weighted neighbors, direction/relation filters, offsets
+   * - ``sample_layers`` / ``sample_layers_external``
+     - Independent fanout, direction, relations, replacement, strategy per layer
+   * - ``sample_random_walks`` / ``sample_random_walks_external``
+     - Uniform/weighted first-order walks, repeating metapaths, restarts, dead-end policies
+   * - ``sample_multihop``
+     - Multi-hop fanouts, with causal valid-start policies on temporal snapshots
+   * - ``sample_subgraph`` / ``sample_subgraph_external``
+     - Edge-seeded local batches with positives, negatives, and sampled topology
+   * - ``sample_hard_negatives``
+     - Endpoint-type/relation constraints, positive rejection, temporal policies
+
+Quick Start Without a Database
+------------------------------
+
+If an upstream pipeline already has edge arrays, build a snapshot directly.
+This example needs only the base install, not a KV backend extra:
+
+.. code-block:: python
+
+   from tempfile import TemporaryDirectory
+   from gestaltdb.sampling import (
+       ExternalNeighborSamplingSpec, SamplerEngine, SamplerSnapshot,
+   )
+
+   with TemporaryDirectory() as tmpdir:
+       snapshot = SamplerSnapshot.from_edge_arrays(
+           f"{tmpdir}/sampler",
+           external_node_ids=["a", "b", "c"],
+           external_edge_ids=["ab", "ac"], external_relation_ids=["R"],
+           src_int=[0, 0], dst_int=[1, 2], rel_int=[0, 0],
+           edge_weights=[1.0, 3.0],
+       )
+       engine = SamplerEngine.load(snapshot.path, mode="memmap", seed=7)
+       neighbors = engine.sample_neighbors_external(
+           ["a"], fanout=2, relations=["R"], strategy="weighted",
+       )
+       assert set(neighbors.to_external(engine.snapshot)["neighbor_nodes"]) == {"b", "c"}
+       layers = engine.sample_layers_external(
+           ["a"], [ExternalNeighborSamplingSpec(2, relations=["R"])],
+       )
+       walks = engine.sample_random_walks_external(["a"], 2, metapath=["R"])
+
+For a database-backed filtered/weighted snapshot, follow the end-to-end example
+in :doc:`property-filtering`. Load the engine once and reuse it across batches;
+sampling does not require an open database and does not see later graph writes.
+
+Compact, Local, and External IDs
+--------------------------------
+
+``SampledNeighbors`` returns global compact ``neighbor_nodes`` and
+``edge_indices``, with ``offsets`` separating each seed's samples.
+``SampledSubgraphBatch`` instead uses **batch-local** IDs in ``senders``,
+``receivers``, ``positives``, and ``negatives``. Map local rows through
+``node_ids_global`` before resolving them against the snapshot. ``*_external``
+entry points accept application IDs but still return compact result objects.
+Convert neighbor/layer/walk results with ``to_external(engine.snapshot)`` at the
+application boundary, not on every hot-path operation.
+
+Live Typed Traversal
+--------------------
 
 Typed traversal uses ``edge.properties["type"]``. When an edge has a type,
 GestaltDB stores typed adjacency records for efficient directional scans.
@@ -56,7 +170,8 @@ Sample Neighbors
 ----------------
 
 ``sample_neighbors`` uses reservoir sampling, so memory is bounded by
-``sample_size`` instead of by node degree.
+``sample_size`` instead of by node degree. This bounds sample storage, not scan
+time: live reservoir sampling still visits the eligible typed adjacency.
 
 .. code-block:: python
 

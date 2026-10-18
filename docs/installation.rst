@@ -45,7 +45,15 @@ Install With pip
 
 The base package includes the Pickle and JSON serializers but no embedded KV
 backend. Install backend and serializer extras independently; extras are
-additive, so no backend/serializer combination extras are needed:
+additive, so no backend/serializer combination extras are needed.
+
+Array-native sampling from ``SamplerSnapshot.from_edge_arrays`` needs only the
+base package (including NumPy), not a KV backend or a separate sampling extra.
+For the database-backed filtering/sampling examples, install ``gestaltdb[lmdb]``.
+See :doc:`typed-sampling` for a backend-free quickstart and
+:doc:`property-filtering` for building a snapshot from an embedded database.
+
+For a checkout, combine optional extras as follows:
 
 .. code-block:: sh
 

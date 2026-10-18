@@ -19,7 +19,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Cypher engine: `src/gestaltdb/query_engine/cypher/`
 - Legacy Cypher import shims: `src/gestaltdb/cypher.py` and `src/gestaltdb/cypher_*.py`
 - Sampling API: `src/gestaltdb/sampling/`
-- Sphinx docs: `docs/`
+- Sphinx docs: `docs/`; user-facing filtering and sampling guides: `docs/property-filtering.rst`, `docs/typed-sampling.rst`; performance boundaries and benchmark commands: `docs/performance.rst`
 - Tests: `tests/`
 - Modular subsystem guides: `.opencode/skills/gestaltdb-docs-maintainer/references/`
 
@@ -149,6 +149,8 @@ There are two sampling layers:
 
 - `GraphDB` typed traversal sampling uses stored typed adjacency and external node IDs. Use `SamplingHop`, `SamplingPattern`, `sample_neighbors`, `sample_typed_paths`, and `sample_typed_subgraph`.
 - `SamplerSnapshot` plus `SamplerEngine` is array-native and optimized for ML training. It uses compact integer node, edge, and relation IDs.
+
+For repeated property-constrained sampling, select cohorts through explicit indexes, then define the eligible graph with snapshot `node_filter`/`edge_filter`. Filtering seeds alone does not constrain every hop. Build callbacks scan decoded source records (no automatic index pushdown); runtime sampling uses relation/direction/type/temporal policies over arrays. Memmap avoids eager array loading, not all memory use. Keep these two first-class features prominent in README and the docs landing page.
 
 `SamplerSnapshot.build(graph, output_path, ...)` and `graph.build_sampler_snapshot(output_path, ...)` persist immutable `.npy` arrays and metadata. Snapshots may include edge weights for weighted neighbor, edge, and random-walk sampling. `SamplerEngine.load(path, mode="ram"|"memmap", seed=...)` loads the arrays for node/edge seed, neighbor, heterogeneous layer, first-order random walk, multihop, subgraph, positive-triple, and hard-negative sampling.
 

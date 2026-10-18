@@ -2,6 +2,8 @@
 
 These examples are designed for developers and agents who need working patterns quickly. They use explicit imports from submodules because the package root intentionally exports only selected helpers.
 
+**Filtering and sampling workflows:** [Indexed property lookups](#index-and-lookup-properties) · [Live typed sampling](#traverse-and-sample-typed-relationships) · [Filtered, reusable sampler snapshots](#build-and-use-a-sampler-snapshot). The [sampling guide](https://mylonasc.github.io/gestaltdb/typed-sampling.html) covers all policies; the [filtering guide](https://mylonasc.github.io/gestaltdb/property-filtering.html) explains seed selection versus filtering every sampled hop.
+
 ## Create, Query, and Close a Graph
 
 ```python
@@ -474,6 +476,12 @@ with TemporaryDirectory() as tmpdir:
 
 ## Build and Use a Sampler Snapshot
 
+Filter a property graph once, then reuse compact adjacency for weighted neighbors,
+layers, walks, and edge-seeded batches. Unlike filtering only the seed list,
+snapshot filters restrict the graph available to every hop. This example uses
+indexed edge IDs as a build-time membership predicate; construction still scans
+graph records. No concurrent writer is active during selection/build.
+
 ```python
 from tempfile import TemporaryDirectory
 
@@ -493,10 +501,21 @@ with TemporaryDirectory() as tmpdir:
         graph.put_edges_bulk([
             Edge(edge_id="d1-p1", source="drug-1", target="protein-1", properties={"type": "binds", "confidence": 0.9}),
             Edge(edge_id="p1-dis1", source="protein-1", target="disease-1", properties={"type": "associated_with", "confidence": 0.7}),
+            Edge(edge_id="weak", source="drug-1", target="protein-1", properties={"type": "binds", "confidence": 0.2}),
         ])
 
-        snapshot = graph.build_sampler_snapshot(f"{tmpdir}/sampler", edge_weight_property="confidence")
-        engine = SamplerEngine.load(snapshot.path, mode="ram", seed=13)
+        graph.create_edge_property_index("confidence")
+        eligible_edges = {
+            graph.key_to_string(key)
+            for key in graph.iter_edge_ids_by_property_range("confidence", 0.5, None)
+        }
+        snapshot = graph.build_sampler_snapshot(
+            f"{tmpdir}/sampler",
+            edge_filter=lambda edge: edge.get_id in eligible_edges,
+            edge_weight_property="confidence",
+        )
+        assert snapshot.num_edges == 2  # the weak edge never enters any sampled hop
+        engine = SamplerEngine.load(snapshot.path, mode="memmap", seed=13)
 
         sample = engine.sample_neighbors_external(
             ["drug-1"], fanout=10, direction="out", relations=["binds"], strategy="weighted"

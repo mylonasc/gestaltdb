@@ -14,7 +14,7 @@ GestaltDB contains two complementary sampling layers designed for different stag
 | **Storage** | Live key-value store (`KVStore`) | Static immutable `.npy` arrays on disk |
 | **Node/Edge IDs** | External IDs (strings/bytes) | Compact contiguous integers (`0..N-1`) |
 | **Target Use Case** | Ad-hoc subgraphs, interactive Cypher, light feature extraction | High-throughput GNN mini-batching, KG embeddings |
-| **Memory Options** | Key-value cache | RAM mode or lockless OS `memmap` mode |
+| **Memory Options** | KV-backed traversal; reservoir storage bounded by fanout | RAM or `memmap` arrays; buffers/membership structures still use RAM |
 
 ---
 
@@ -25,8 +25,11 @@ Operates directly over the live graph using typed adjacency indexes:
 ### Primitives
 - `graph.neighbors_by_edge_type(node_id, edge_type, direction="out")`
 - `graph.sample_neighbors(node_id, edge_type, sample_size=..., direction="out", rng=...)`
-- `graph.sample_typed_paths(seed_node_ids, pattern, rng=...)`
-- `graph.sample_typed_subgraph(seed_node_ids, pattern, rng=...)`
+- `graph.sample_typed_paths(seed_ids, pattern, rng=...)`
+- `graph.sample_typed_subgraph(seed_ids, pattern, rng=...)`
+
+Live reservoir sampling scans eligible typed adjacency; bounded sample storage
+does not imply degree-independent sampling time.
 
 ### Pattern Configuration
 - `SamplingHop(edge_type="binds", direction="out", sample_size=5)`
@@ -36,7 +39,9 @@ Operates directly over the live graph using typed adjacency indexes:
 
 ## 3. Layer 2: `SamplerSnapshot` & `SamplerEngine`
 
-Engineered for zero-overhead GNN data loaders (PyTorch Geometric, DGL, TensorFlow GNN):
+Designed to amortize snapshot construction over repeated GNN/KG batches, avoiding
+KV reads and entity deserialization during sampling. Array outputs are not
+automatically framework-native message-passing blocks.
 
 ### Building a Snapshot
 Build arrays directly from an active database handle:
@@ -44,7 +49,18 @@ Build arrays directly from an active database handle:
 - High-level non-temporal builds automatically pin a verifiable mutable backend snapshot where supported. Use `read_snapshot=True` to require this or `False` to opt out; direct `SamplerSnapshot.build` remains a lower-level unpinned API.
 - `snapshot = graph.build_sampler_snapshot(output_dir, temporal=True, system_time=known_at, time_bucket="day")` captures temporal history through one authenticated system horizon.
 
-This generates binary `.npy` CSR-style arrays (`row_ptr`, `col_idx`, `relations`, `edge_ids`, `features`, metadata).
+This generates binary `.npy` endpoint, edge, relation, lookup, and CSR adjacency
+arrays plus metadata. Builds scan/materialize source data; they are not a
+streaming out-of-core pipeline.
+
+### Property-Graph Filtering Before Sampling
+
+- Select record/seed cohorts through explicit property indexes and label/type composite exact/range helpers (see `indexing.md`). ID iterators avoid hydration during candidate lookup.
+- Filtering only seeds does not constrain each sampled hop. Use `graph.build_sampler_snapshot(..., node_filter=..., edge_filter=...)` to define the eligible graph, and persist weights with `edge_weight_property`.
+- Mutable-snapshot callbacks receive decoded nodes/edges during a full source scan; excluded endpoints remove incident edges. Callback membership checks are not automatic index pushdown.
+- Runtime arrays accept relation/direction/type/temporal policies, not arbitrary property callbacks. `node_type_property` defaults to `kind`, not labels.
+- Cohorts selected before a build are not automatically pinned to the build horizon. Quiesce writers or evaluate property predicates in a pinned build.
+- See `docs/property-filtering.rst` for the complete workflow and `docs/performance.rst` for benchmark scope and memory trade-offs.
 
 Format v2 is atomically published with a completion manifest and a SHA-256/dtype/shape record for every array. The loader validates those records, CSR bounds, aligned lengths, interval invariants, and provenance before exposing RAM or memmap arrays. Format-v1 snapshots remain loadable without these guarantees.
 
@@ -54,7 +70,7 @@ Temporal v2 snapshots also authenticate grouped positive-triple interval histori
 
 ### Loading into Engine
 - `SamplerEngine.load(snapshot_path, mode="ram", seed=42)`: Eagerly loads all arrays into process RAM.
-- `SamplerEngine.load(snapshot_path, mode="memmap", seed=42)`: Memory-maps arrays via `numpy.memmap`. Ideal for multi-worker PyTorch DataLoader setups and datasets larger than RAM.
+- `SamplerEngine.load(snapshot_path, mode="memmap", seed=42)`: Memory-maps persisted arrays. Candidate/result buffers, positive-membership data, metadata, and page cache still consume memory; benchmark full-process memory and worker behavior.
 
 ### Sampling Primitives
 - `engine.sample_nodes(512, node_types=[type_id])`
@@ -162,7 +178,7 @@ with TemporaryDirectory() as tmpdir:
         engine = SamplerEngine.load(snapshot.path, mode="ram", seed=42)
 
         # Sample 1-hop neighbors
-        drug_idx = snapshot.external_node_ids.tolist().index("drug-1")
+        drug_idx = snapshot.node_int("drug-1")
         sample = engine.sample_neighbors([drug_idx], fanout=5, direction="out")
 
         # Convert sampled compact node IDs back to external IDs

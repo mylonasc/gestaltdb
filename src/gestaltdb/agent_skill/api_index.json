@@ -37,7 +37,12 @@
       "topic": "quickstart"
     },
     {
-      "examples": [],
+      "examples": [
+        {
+          "doc": "sampling",
+          "example": 4
+        }
+      ],
       "line": 2014,
       "name": "build_sampler_snapshot",
       "returns": "A loaded ``SamplerSnapshot`` instance.",
@@ -103,7 +108,11 @@
         },
         {
           "doc": "sampling",
-          "example": 2
+          "example": 3
+        },
+        {
+          "doc": "sampling",
+          "example": 4
         },
         {
           "doc": "temporal",
@@ -282,6 +291,10 @@
         {
           "doc": "ingestion",
           "example": 1
+        },
+        {
+          "doc": "sampling",
+          "example": 4
         }
       ],
       "line": 692,
@@ -314,6 +327,10 @@
         {
           "doc": "ingestion",
           "example": 1
+        },
+        {
+          "doc": "sampling",
+          "example": 4
         }
       ],
       "line": 1304,
@@ -850,7 +867,12 @@
       "topic": "indexing"
     },
     {
-      "examples": [],
+      "examples": [
+        {
+          "doc": "sampling",
+          "example": 4
+        }
+      ],
       "line": 1471,
       "name": "iter_node_ids_by_label_property_range",
       "returns": "",
@@ -926,6 +948,10 @@
         {
           "doc": "sampling",
           "example": 1
+        },
+        {
+          "doc": "sampling",
+          "example": 4
         }
       ],
       "line": 1531,
@@ -1144,7 +1170,11 @@
         },
         {
           "doc": "sampling",
-          "example": 2
+          "example": 3
+        },
+        {
+          "doc": "sampling",
+          "example": 4
         }
       ],
       "line": 3273,
@@ -1205,7 +1235,11 @@
         },
         {
           "doc": "sampling",
-          "example": 2
+          "example": 3
+        },
+        {
+          "doc": "sampling",
+          "example": 4
         }
       ],
       "line": 2485,
@@ -1400,7 +1434,7 @@
       "examples": [
         {
           "doc": "sampling",
-          "example": 2
+          "example": 3
         }
       ],
       "line": 2315,
@@ -1414,7 +1448,7 @@
       "examples": [
         {
           "doc": "sampling",
-          "example": 2
+          "example": 3
         }
       ],
       "line": 2365,

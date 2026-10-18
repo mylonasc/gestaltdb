@@ -70,6 +70,16 @@ def test_timing_seconds():
     assert elapsed >= 0.0
 
 
+def test_sampler_benchmark_cli_smoke(capsys):
+    cli.main([
+        "sampler", "--nodes", "20", "--edges", "100", "--relations", "2",
+        "--batch-nodes", "8", "--fanout", "3", "--iterations", "2", "--seed", "7",
+    ])
+    output = capsys.readouterr().out
+    assert "baseline GraphDB-style sampler:" in output
+    assert "SamplerEngine" in output
+
+
 def test_timing_timed(capsys):
     result, elapsed = timed("test_op", lambda: "ok")
     assert result == "ok"

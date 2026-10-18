@@ -1,6 +1,19 @@
 API Reference
 =============
 
+Filtering and Sampling Entry Points
+----------------------------------------
+
+- **Property-graph filtering:** ``GraphDB`` label/type, exact/range property,
+  ID-iterator, and count helpers. See :doc:`property-filtering` for index setup
+  and cohort-to-snapshot examples, and :doc:`cypher` for query predicates.
+- **Live sampling:** ``GraphDB.sample_neighbors``, ``sample_typed_paths``, and
+  ``sample_typed_subgraph`` with ``SamplingHop`` / ``SamplingPattern``.
+- **Repeated array-native sampling:** ``SamplerSnapshot`` / ``SamplerEngine``
+  for seed, weighted-neighbor, layered, walk, multihop, and negative sampling in
+  RAM or memmap mode. See :doc:`typed-sampling` for the API map and ID rules,
+  and :doc:`performance` for cost boundaries and benchmarks.
+
 Graph Models and Database
 -------------------------
 
