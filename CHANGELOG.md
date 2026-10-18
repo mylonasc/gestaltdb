@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.1
 
 - Fixed JSON bulk edge ingestion by storing legacy adjacency IDs as strings consistently with single-edge writes, normalizing older byte-ID adjacency when touched (#109).
 - Fixed `correct_claim(Claim, ...)` silently ignoring explicit confidence/provenance overrides; both object and ID forms now validate and apply them consistently (#110).
