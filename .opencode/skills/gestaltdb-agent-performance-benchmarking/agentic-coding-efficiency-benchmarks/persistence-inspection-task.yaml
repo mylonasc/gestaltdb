@@ -13,11 +13,16 @@ setup_commands: []
 validation_commands:
   - uv run python agent_benchmark_solutions/persistence_inspection_usage.py
 prompt: |
-  You are working as a user of the GestaltDB library. First read `.opencode/skills/gestaltdb-user-guide/SKILL.md` if it exists. Also use `python -m gestaltdb.agent_docs search "GraphDB.open|index_statistics|manifest|properties" --limit 5` if you need targeted docs. Create a tiny standalone script at `agent_benchmark_solutions/persistence_inspection_usage.py`.
+  You are working as a user of the GestaltDB library. First read `.opencode/skills/gestaltdb-user-guide/SKILL.md` if it exists. Create a tiny standalone script at `agent_benchmark_solutions/persistence_inspection_usage.py`.
+
+  Follow this workflow:
+  1. Run `python -m gestaltdb.agent_docs get backends --examples` and adapt the persistence example; it already demonstrates `GraphDB.create`, `GraphDB.open`, `manifest`, `index_statistics`, and property inspection.
+  2. Create the `agent_benchmark_solutions/` directory if needed and write the complete script immediately. Do not read library source files under `src/`; the docs example has everything you need.
+  3. Validate with `uv run python agent_benchmark_solutions/persistence_inspection_usage.py` and fix any errors by editing the script.
 
   The script must:
   - Use `TemporaryDirectory` for all database files.
-  - Use `GraphDB.create(...)` to create a manifest-backed LevelDB database with serializer `json`.
+  - Use `GraphDB.create(...)` to create a manifest-backed LevelDB database with serializer `json`. Both are available; use them directly without availability checks.
   - Create indexed node property `kind` and indexed edge property `score` before writing data.
   - Add two nodes, `drug` and `protein`, with useful labels and properties, plus one typed `TARGETS` edge with a numeric `score`.
   - Close the first graph handle in a `finally` block.

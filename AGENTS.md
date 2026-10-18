@@ -37,7 +37,7 @@ The package root currently re-exports selected ingestion, Cypher result, and sam
 
 ```python
 from gestaltdb import EdgeList, IndexMaintenanceMode, NodeList, QueryResult
-from gestaltdb import HardNegativeConfig, SamplerEngine, SamplerSnapshot
+from gestaltdb import ExternalNeighborSamplingSpec, HardNegativeConfig, NeighborSamplingSpec, SamplerEngine, SamplerSnapshot
 from gestaltdb import SamplingHop, SamplingPattern
 from gestaltdb import TemporalContext, TemporalInstant, TemporalInterval
 from gestaltdb import TemporalDate, TemporalDuration, TemporalLocalDateTime
@@ -150,7 +150,7 @@ There are two sampling layers:
 - `GraphDB` typed traversal sampling uses stored typed adjacency and external node IDs. Use `SamplingHop`, `SamplingPattern`, `sample_neighbors`, `sample_typed_paths`, and `sample_typed_subgraph`.
 - `SamplerSnapshot` plus `SamplerEngine` is array-native and optimized for ML training. It uses compact integer node, edge, and relation IDs.
 
-`SamplerSnapshot.build(graph, output_path, ...)` and `graph.build_sampler_snapshot(output_path, ...)` persist immutable `.npy` arrays and metadata. `SamplerEngine.load(path, mode="ram"|"memmap", seed=...)` loads the arrays for neighbor, multihop, subgraph, positive-triple, and hard-negative sampling.
+`SamplerSnapshot.build(graph, output_path, ...)` and `graph.build_sampler_snapshot(output_path, ...)` persist immutable `.npy` arrays and metadata. Snapshots may include edge weights for weighted neighbor, edge, and random-walk sampling. `SamplerEngine.load(path, mode="ram"|"memmap", seed=...)` loads the arrays for node/edge seed, neighbor, heterogeneous layer, first-order random walk, multihop, subgraph, positive-triple, and hard-negative sampling.
 
 High-level non-temporal snapshot builds automatically use authenticated mutable-state snapshots when the backend exposes a verifiable identity. Pass `read_snapshot=True` to require this guarantee or `False` to opt out; unsupported requests fail before building.
 
@@ -159,6 +159,8 @@ High-level non-temporal snapshot builds automatically use authenticated mutable-
 Temporal snapshots also index node availability and positive-triple intervals. `HardNegativeConfig` supports `any_time`, `at_positive_time`, and window positive rejection, trailing candidate windows, explicit future-candidate opt-in, and deterministic `raise`/`repeat` exhaustion. Temporal batches return aligned positive/negative example times and rejection diagnostics.
 
 `SampledSubgraphBatch` uses local node IDs in `senders`, `receivers`, `positives`, and `negatives`. Use `node_ids_global` to map local batch rows back to compact global snapshot IDs, and use `snapshot.external_node_id(...)` or `snapshot.global_triple_to_external(...)` to recover external IDs.
+
+Resolve external IDs with `snapshot.node_int(...)`, `snapshot.edge_int(...)`, and `snapshot.relation_int(...)`; plural variants preserve input order. Convenience methods ending in `_external` accept external node, edge, and relation IDs while retaining compact array-native results. Use `to_external(snapshot)` on neighbor, layered, and random-walk batches when external output IDs are needed. Temporal edge IDs can be ambiguous across versions; use compact edge rows in that case.
 
 ## Visualization
 

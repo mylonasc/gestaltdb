@@ -14,6 +14,50 @@ from .negatives import HardNegativeConfig
 from .snapshot import SamplerSnapshot
 
 
+@dataclass(frozen=True)
+class NeighborSamplingSpec:
+    """Sampling policy for one layer of neighborhood expansion."""
+
+    fanout: int
+    direction: str = "out"
+    relations: Sequence[int] | None = None
+    replace: bool = False
+    strategy: str = "uniform"
+
+    def __post_init__(self):
+        _validate_count(self.fanout, "fanout")
+        if self.direction not in {"out", "in", "any"}:
+            raise ValueError("direction must be 'out', 'in', or 'any'")
+        if self.strategy not in {"uniform", "weighted"}:
+            raise ValueError("strategy must be 'uniform' or 'weighted'")
+        if self.relations is not None:
+            relations = _integer_array(self.relations, "relations")
+            object.__setattr__(self, "relations", tuple(int(rel) for rel in relations))
+
+
+@dataclass(frozen=True)
+class ExternalNeighborSamplingSpec:
+    """Sampling policy using external relation IDs for one layer."""
+
+    fanout: int
+    direction: str = "out"
+    relations: Sequence[object] | None = None
+    replace: bool = False
+    strategy: str = "uniform"
+
+    def __post_init__(self):
+        _validate_count(self.fanout, "fanout")
+        if self.direction not in {"out", "in", "any"}:
+            raise ValueError("direction must be 'out', 'in', or 'any'")
+        if self.strategy not in {"uniform", "weighted"}:
+            raise ValueError("strategy must be 'uniform' or 'weighted'")
+        if self.relations is not None:
+            if isinstance(self.relations, (str, bytes)):
+                raise TypeError("relations must be a sequence, not a scalar string")
+            normalized = np.asarray(list(self.relations), dtype=str).tolist()
+            object.__setattr__(self, "relations", tuple(normalized))
+
+
 @dataclass(slots=True)
 class SampledNeighbors:
     """Batched neighbor-sampling result.
@@ -48,14 +92,73 @@ class SampledNeighbors:
     valid_to_us: np.ndarray | None = None
     valid_to_open: np.ndarray | None = None
 
+    def to_external(self, snapshot: SamplerSnapshot) -> dict[str, np.ndarray]:
+        """Convert compact node and edge IDs to external IDs."""
+        return {
+            "input_nodes": _external_id_array(self.input_nodes, snapshot.external_node_ids),
+            "edge_ids": _external_id_array(self.edge_indices, snapshot.external_edge_ids),
+            "neighbor_nodes": _external_id_array(self.neighbor_nodes, snapshot.external_node_ids),
+            "offsets": self.offsets,
+        }
+
+
+@dataclass(slots=True)
+class LayeredSampleBatch:
+    """Neighbor samples with one result block preserved per requested layer."""
+
+    seed_nodes: np.ndarray
+    layers: tuple[SampledNeighbors, ...]
+
+    def to_external(self, snapshot: SamplerSnapshot) -> dict[str, object]:
+        """Convert compact IDs in every layer to external IDs."""
+        return {
+            "seed_nodes": _external_id_array(self.seed_nodes, snapshot.external_node_ids),
+            "layers": tuple(layer.to_external(snapshot) for layer in self.layers),
+        }
+
+
+@dataclass(slots=True)
+class RandomWalkBatch:
+    """Fixed-width random walks over compact snapshot IDs.
+
+    ``node_ids`` has shape ``(walks, walk_length + 1)``. ``edge_indices`` and
+    ``relation_ids`` have shape ``(walks, walk_length)``. Unused positions and
+    restart transitions use ``-1`` edge and relation IDs. ``lengths`` counts
+    populated transitions, including restart transitions.
+    """
+
+    node_ids: np.ndarray
+    edge_indices: np.ndarray
+    relation_ids: np.ndarray
+    lengths: np.ndarray
+
+    def to_numpy(self) -> dict[str, np.ndarray]:
+        """Return the walk arrays without copying them."""
+        return {
+            "node_ids": self.node_ids,
+            "edge_indices": self.edge_indices,
+            "relation_ids": self.relation_ids,
+            "lengths": self.lengths,
+        }
+
+    def to_external(self, snapshot: SamplerSnapshot) -> dict[str, np.ndarray]:
+        """Convert compact walk IDs to external IDs, preserving ``None`` gaps."""
+        return {
+            "node_ids": _external_id_array(self.node_ids, snapshot.external_node_ids),
+            "edge_ids": _external_id_array(self.edge_indices, snapshot.external_edge_ids),
+            "relation_ids": _external_id_array(self.relation_ids, snapshot.external_relation_ids),
+            "lengths": self.lengths,
+        }
+
 
 class SamplerEngine:
     """High-throughput sampler over a static ``SamplerSnapshot``.
 
     The engine samples compact integer arrays instead of materializing GraphDB
     ``Node``/``Edge`` objects. It supports direction-aware traversal,
-    relation-aware traversal, multihop subgraph sampling, exact positive triple
-    checks, and configurable hard-negative generation.
+    relation-aware traversal, heterogeneous layers, first-order random walks,
+    multihop subgraph sampling, exact positive triple checks, and configurable
+    hard-negative generation.
 
     Args:
         snapshot: Loaded sampler snapshot.
@@ -71,6 +174,10 @@ class SamplerEngine:
 
     def __init__(self, snapshot: SamplerSnapshot, *, seed: int | None = None):
         self.snapshot = snapshot
+        if snapshot.edge_weights.size == 0 and snapshot.num_edges:
+            snapshot.edge_weights = np.ones(snapshot.num_edges, dtype=np.float64)
+        else:
+            snapshot.edge_weights = self._validated_weights(snapshot.edge_weights, snapshot.num_edges, "snapshot.edge_weights")
         self.rng = np.random.default_rng(seed)
         self._positive_codes = self._build_positive_codes()
         self._positive_history_groups = self._build_positive_history_groups()
@@ -111,6 +218,7 @@ class SamplerEngine:
         temporal: TemporalContext | None = None,
         window_policy: str = "overlap",
         causal_policy: str = "none",
+        strategy: str = "uniform",
     ) -> SampledNeighbors:
         """Sample neighbors for each input node.
 
@@ -127,6 +235,8 @@ class SamplerEngine:
                 window; ``"contained"`` selects intervals fully inside it.
             causal_policy: Accepted for API consistency. It constrains valid
                 starts across hops in multihop and subgraph sampling.
+            strategy: ``"uniform"`` or ``"weighted"``. Weighted sampling uses
+                the snapshot's edge weights.
 
         Returns:
             ``SampledNeighbors`` with concatenated edge and neighbor arrays.
@@ -148,6 +258,7 @@ class SamplerEngine:
         return self._sample_neighbors(
             nodes, fanout, direction=direction, relations=relations, replace=replace,
             temporal=temporal, window_policy=window_policy, causal_policy=causal_policy,
+            strategy=strategy,
         )
 
     def _sample_neighbors(
@@ -162,14 +273,19 @@ class SamplerEngine:
         window_policy="overlap",
         causal_policy="none",
         causal_starts=None,
+        strategy="uniform",
     ) -> SampledNeighbors:
-        input_nodes = np.asarray(nodes, dtype=np.int64)
+        if strategy not in {"uniform", "weighted"}:
+            raise ValueError("strategy must be 'uniform' or 'weighted'")
+        input_nodes = self._validated_ids(nodes, self.snapshot.num_nodes, "nodes")
         if causal_starts is not None and len(causal_starts) != input_nodes.size:
             raise ValueError("causal_starts must align with input nodes")
         offsets = [0]
         sampled_edges: list[np.ndarray] = []
         sampled_neighbors: list[np.ndarray] = []
-        relation_filter = None if relations is None else set(np.asarray(relations, dtype=np.int64).tolist())
+        relation_filter = None
+        if relations is not None:
+            relation_filter = set(self._validated_ids(relations, self.snapshot.num_relations, "relations").tolist())
 
         for row, node in enumerate(input_nodes.tolist()):
             candidates = self._candidate_edges(node, direction, relation_filter, temporal, window_policy)
@@ -179,16 +295,8 @@ class SamplerEngine:
                     candidates = candidates[starts >= causal_starts[row]]
                 elif causal_policy == "nonincreasing":
                     candidates = candidates[starts <= causal_starts[row]]
-            if fanout == 0 or candidates.size == 0:
-                chosen = np.empty(0, dtype=np.int64)
-            elif replace:
-                positions = self.rng.integers(candidates.size, size=fanout)
-                chosen = candidates[positions]
-            elif candidates.size <= fanout:
-                chosen = candidates
-            else:
-                positions = self.rng.choice(candidates.size, size=fanout, replace=False)
-                chosen = candidates[positions]
+            weights = self.snapshot.edge_weights[candidates] if strategy == "weighted" else None
+            chosen = self._choose_candidates(candidates, fanout, replace=replace, weights=weights)
             sampled_edges.append(chosen.astype(np.int64, copy=False))
             sampled_neighbors.append(self._neighbors_for_edges(node, chosen, direction))
             offsets.append(offsets[-1] + int(chosen.size))
@@ -199,6 +307,270 @@ class SamplerEngine:
         return SampledNeighbors(
             input_nodes, edge_indices, neighbor_nodes, np.asarray(offsets, dtype=np.int64),
             *temporal_arrays,
+        )
+
+    def sample_neighbors_external(
+        self,
+        nodes: Sequence[object],
+        fanout: int,
+        *,
+        direction: str = "out",
+        relations: Sequence[object] | None = None,
+        replace: bool = False,
+        strategy: str = "uniform",
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+        causal_policy: str = "none",
+    ) -> SampledNeighbors:
+        """Sample neighbors using external node and relation IDs as input."""
+        compact_nodes = self.snapshot.node_ints(nodes)
+        compact_relations = None if relations is None else self.snapshot.relation_ints(relations)
+        return self.sample_neighbors(
+            compact_nodes,
+            fanout,
+            direction=direction,
+            relations=compact_relations,
+            replace=replace,
+            strategy=strategy,
+            temporal=temporal,
+            window_policy=window_policy,
+            causal_policy=causal_policy,
+        )
+
+    def sample_nodes(
+        self,
+        count: int,
+        *,
+        node_types: Sequence[int] | np.ndarray | None = None,
+        replace: bool = False,
+        strategy: str = "uniform",
+        weights: Sequence[float] | np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Sample compact node IDs, optionally restricted by node type."""
+        candidates = np.arange(self.snapshot.num_nodes, dtype=np.int64)
+        if node_types is not None:
+            types = self._validated_nonnegative_ids(node_types, "node_types")
+            candidates = candidates[np.isin(self.snapshot.node_type_ids, types)]
+        if strategy == "degree":
+            if weights is not None:
+                raise ValueError("weights cannot be combined with strategy='degree'")
+            weights_array = np.diff(self.snapshot.incident.indptr).astype(np.float64)[candidates]
+        elif strategy == "weighted":
+            if weights is None:
+                raise ValueError("weights are required for strategy='weighted'")
+            all_weights = self._validated_weights(weights, self.snapshot.num_nodes, "weights")
+            weights_array = all_weights[candidates]
+        elif strategy == "uniform":
+            if weights is not None:
+                raise ValueError("weights require strategy='weighted'")
+            weights_array = None
+        else:
+            raise ValueError("strategy must be 'uniform', 'weighted', or 'degree'")
+        return self._choose_candidates(candidates, count, replace=replace, weights=weights_array)
+
+    def sample_edges(
+        self,
+        count: int,
+        *,
+        relations: Sequence[int] | np.ndarray | None = None,
+        replace: bool = False,
+        strategy: str = "uniform",
+        weights: Sequence[float] | np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Sample compact edge IDs, optionally restricted by relation."""
+        candidates = np.arange(self.snapshot.num_edges, dtype=np.int64)
+        if relations is not None:
+            relation_ids = self._validated_ids(relations, self.snapshot.num_relations, "relations")
+            candidates = candidates[np.isin(self.snapshot.rel_int, relation_ids)]
+        if strategy == "weighted":
+            all_weights = self.snapshot.edge_weights if weights is None else self._validated_weights(weights, self.snapshot.num_edges, "weights")
+            candidate_weights = all_weights[candidates]
+        elif strategy == "uniform":
+            if weights is not None:
+                raise ValueError("weights require strategy='weighted'")
+            candidate_weights = None
+        else:
+            raise ValueError("strategy must be 'uniform' or 'weighted'")
+        return self._choose_candidates(candidates, count, replace=replace, weights=candidate_weights)
+
+    def sample_layers(
+        self,
+        seed_nodes: Sequence[int] | np.ndarray,
+        layers: Sequence[NeighborSamplingSpec],
+        *,
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+    ) -> LayeredSampleBatch:
+        """Sample a heterogeneous neighborhood while preserving layer blocks."""
+        seeds = self._validated_ids(seed_nodes, self.snapshot.num_nodes, "seed_nodes")
+        self._validate_sampling_options(
+            fanout=0, direction="out", temporal=temporal,
+            window_policy=window_policy, causal_policy="none",
+        )
+        frontier = seeds
+        sampled_layers: list[SampledNeighbors] = []
+        for layer in layers:
+            if not isinstance(layer, NeighborSamplingSpec):
+                raise TypeError("layers must contain NeighborSamplingSpec values")
+            sampled = self.sample_neighbors(
+                frontier,
+                layer.fanout,
+                direction=layer.direction,
+                relations=layer.relations,
+                replace=layer.replace,
+                strategy=layer.strategy,
+                temporal=temporal,
+                window_policy=window_policy,
+            )
+            sampled_layers.append(sampled)
+            frontier = np.unique(sampled.neighbor_nodes)
+        return LayeredSampleBatch(seed_nodes=seeds, layers=tuple(sampled_layers))
+
+    def sample_layers_external(
+        self,
+        seed_nodes: Sequence[object],
+        layers: Sequence[ExternalNeighborSamplingSpec],
+        *,
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+    ) -> LayeredSampleBatch:
+        """Sample heterogeneous layers using external node and relation IDs."""
+        compact_layers: list[NeighborSamplingSpec] = []
+        for layer in layers:
+            if not isinstance(layer, ExternalNeighborSamplingSpec):
+                raise TypeError("layers must contain ExternalNeighborSamplingSpec values")
+            relations = None if layer.relations is None else self.snapshot.relation_ints(layer.relations)
+            compact_layers.append(
+                NeighborSamplingSpec(
+                    fanout=layer.fanout,
+                    direction=layer.direction,
+                    relations=relations,
+                    replace=layer.replace,
+                    strategy=layer.strategy,
+                )
+            )
+        return self.sample_layers(
+            self.snapshot.node_ints(seed_nodes), compact_layers,
+            temporal=temporal, window_policy=window_policy,
+        )
+
+    def sample_random_walks(
+        self,
+        start_nodes: Sequence[int] | np.ndarray,
+        walk_length: int,
+        *,
+        direction: str = "out",
+        relations: Sequence[int] | np.ndarray | None = None,
+        metapath: Sequence[int] | np.ndarray | None = None,
+        restart_probability: float = 0.0,
+        strategy: str = "uniform",
+        dead_end: str = "terminate",
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+    ) -> RandomWalkBatch:
+        """Sample fixed-width first-order random walks.
+
+        A metapath is repeated cyclically and advances only when an edge is
+        traversed. Random restart and ``dead_end="restart"`` transitions move to
+        the walk's start node and are represented by ``-1`` edge/relation IDs.
+        ``relations`` and ``metapath`` are mutually exclusive.
+        """
+        _validate_count(walk_length, "walk_length")
+        self._validate_sampling_options(
+            fanout=0, direction=direction, temporal=temporal,
+            window_policy=window_policy, causal_policy="none",
+        )
+        if strategy not in {"uniform", "weighted"}:
+            raise ValueError("strategy must be 'uniform' or 'weighted'")
+        if dead_end not in {"terminate", "restart"}:
+            raise ValueError("dead_end must be 'terminate' or 'restart'")
+        if isinstance(restart_probability, (bool, np.bool_)) or not isinstance(restart_probability, (int, float, np.integer, np.floating)):
+            raise ValueError("restart_probability must be a number between 0 and 1")
+        restart_probability = float(restart_probability)
+        if not np.isfinite(restart_probability) or not 0.0 <= restart_probability <= 1.0:
+            raise ValueError("restart_probability must be between 0 and 1")
+        if relations is not None and metapath is not None:
+            raise ValueError("relations and metapath are mutually exclusive")
+
+        starts = self._validated_ids(start_nodes, self.snapshot.num_nodes, "start_nodes")
+        relation_filter = None
+        if relations is not None:
+            relation_filter = set(self._validated_ids(relations, self.snapshot.num_relations, "relations").tolist())
+        metapath_ids = None
+        if metapath is not None:
+            metapath_ids = self._validated_ids(metapath, self.snapshot.num_relations, "metapath")
+            if metapath_ids.size == 0:
+                raise ValueError("metapath must contain at least one relation")
+
+        node_ids = np.full((starts.size, walk_length + 1), -1, dtype=np.int64)
+        edge_indices = np.full((starts.size, walk_length), -1, dtype=np.int64)
+        relation_ids = np.full((starts.size, walk_length), -1, dtype=np.int64)
+        lengths = np.zeros(starts.size, dtype=np.int64)
+        if starts.size:
+            node_ids[:, 0] = starts
+
+        for row, start in enumerate(starts.tolist()):
+            current = int(start)
+            traversed_edges = 0
+            for step in range(walk_length):
+                if restart_probability > 0 and self.rng.random() < restart_probability:
+                    current = int(start)
+                    node_ids[row, step + 1] = current
+                    lengths[row] = step + 1
+                    continue
+
+                step_relations = relation_filter
+                if metapath_ids is not None:
+                    step_relations = {int(metapath_ids[traversed_edges % metapath_ids.size])}
+                candidates = self._candidate_edges(current, direction, step_relations, temporal, window_policy)
+                if candidates.size == 0:
+                    if dead_end == "restart":
+                        current = int(start)
+                        node_ids[row, step + 1] = current
+                        lengths[row] = step + 1
+                        continue
+                    break
+
+                weights = self.snapshot.edge_weights[candidates] if strategy == "weighted" else None
+                chosen = self._choose_candidates(candidates, 1, replace=False, weights=weights)
+                edge = int(chosen[0])
+                current = int(self._neighbors_for_edges(current, chosen, direction)[0])
+                edge_indices[row, step] = edge
+                relation_ids[row, step] = int(self.snapshot.rel_int[edge])
+                node_ids[row, step + 1] = current
+                lengths[row] = step + 1
+                traversed_edges += 1
+
+        return RandomWalkBatch(node_ids, edge_indices, relation_ids, lengths)
+
+    def sample_random_walks_external(
+        self,
+        start_nodes: Sequence[object],
+        walk_length: int,
+        *,
+        direction: str = "out",
+        relations: Sequence[object] | None = None,
+        metapath: Sequence[object] | None = None,
+        restart_probability: float = 0.0,
+        strategy: str = "uniform",
+        dead_end: str = "terminate",
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+    ) -> RandomWalkBatch:
+        """Sample random walks using external node and relation IDs as input."""
+        compact_relations = None if relations is None else self.snapshot.relation_ints(relations)
+        compact_metapath = None if metapath is None else self.snapshot.relation_ints(metapath)
+        return self.sample_random_walks(
+            self.snapshot.node_ints(start_nodes),
+            walk_length,
+            direction=direction,
+            relations=compact_relations,
+            metapath=compact_metapath,
+            restart_probability=restart_probability,
+            strategy=strategy,
+            dead_end=dead_end,
+            temporal=temporal,
+            window_policy=window_policy,
         )
 
     def sample_multihop(
@@ -247,7 +619,9 @@ class SamplerEngine:
         self, seeds, fanouts, *, direction, relations, temporal,
         window_policy, causal_policy, initial_states=None,
     ) -> SampledSubgraphBatch:
-        seed_values = np.asarray(seeds, dtype=np.int64).tolist()
+        seed_values = self._validated_ids(seeds, self.snapshot.num_nodes, "seeds").tolist()
+        if relations is not None:
+            relations = self._validated_ids(relations, self.snapshot.num_relations, "relations")
         nodes = {int(node) for node in seed_values}
         edges: set[int] = set()
         self._validate_sampling_options(
@@ -262,10 +636,10 @@ class SamplerEngine:
                     temporal=temporal, window_policy=window_policy,
                 )
                 edges.update(int(edge) for edge in sampled.edge_indices.tolist())
-                next_frontier = [
+                next_frontier = sorted({
                     int(node) for node in sampled.neighbor_nodes.tolist()
                     if int(node) not in nodes
-                ]
+                })
                 nodes.update(next_frontier)
                 frontier = np.asarray(next_frontier, dtype=np.int64)
                 if frontier.size == 0:
@@ -348,7 +722,7 @@ class SamplerEngine:
                 fanout=fanout, direction=direction, temporal=temporal,
                 window_policy=window_policy, causal_policy=causal_policy,
             )
-        seed_edges = np.asarray(seed_edges, dtype=np.int64)
+        seed_edges = self._validated_ids(seed_edges, self.snapshot.num_edges, "seed_edges")
         if temporal is not None:
             seed_edges = self._filter_temporal_edges(seed_edges, temporal, window_policy)
         seed_nodes = set(self.snapshot.src_int[seed_edges].astype(np.int64).tolist())
@@ -416,6 +790,31 @@ class SamplerEngine:
         """Batched alias for ``sample_subgraph``."""
         return self.sample_subgraph(*args, **kwargs)
 
+    def sample_subgraph_external(
+        self,
+        seed_edges: Sequence[object],
+        fanouts: Sequence[int],
+        *,
+        direction: str = "any",
+        relations: Sequence[object] | None = None,
+        negative_config: HardNegativeConfig | None = None,
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+        causal_policy: str = "none",
+    ) -> SampledSubgraphBatch:
+        """Sample a training subgraph using external seed edge IDs."""
+        compact_relations = None if relations is None else self.snapshot.relation_ints(relations)
+        return self.sample_subgraph(
+            self.snapshot.edge_ints(seed_edges),
+            fanouts,
+            direction=direction,
+            relations=compact_relations,
+            negative_config=negative_config,
+            temporal=temporal,
+            window_policy=window_policy,
+            causal_policy=causal_policy,
+        )
+
     def is_positive(
         self, src: int, rel: int, dst: int, *, temporal: TemporalContext | None = None,
         policy: str = "any_time", window_policy: str = "overlap",
@@ -430,6 +829,9 @@ class SamplerEngine:
         Returns:
             ``True`` if ``(src, rel, dst)`` exists in the snapshot positives.
         """
+        self._validated_ids([src], self.snapshot.num_nodes, "src")
+        self._validated_ids([rel], self.snapshot.num_relations, "rel")
+        self._validated_ids([dst], self.snapshot.num_nodes, "dst")
         if policy not in {"any_time", "at_positive_time", "window"}:
             raise ValueError("policy must be 'any_time', 'at_positive_time', or 'window'")
         if window_policy not in {"overlap", "contained"}:
@@ -504,7 +906,13 @@ class SamplerEngine:
                 the configured retry budget.
         """
         config = config or HardNegativeConfig()
-        positives = np.asarray(positive_triples, dtype=np.int64)
+        raw_positives = np.asarray(positive_triples)
+        if raw_positives.ndim != 2 or raw_positives.shape[1] != 3:
+            raise ValueError("positive_triples must have shape (n, 3)")
+        positives = _integer_array(raw_positives.reshape(-1), "positive_triples").reshape(raw_positives.shape)
+        self._validated_ids(positives[:, 0], self.snapshot.num_nodes, "positive sources")
+        self._validated_ids(positives[:, 1], self.snapshot.num_relations, "positive relations")
+        self._validated_ids(positives[:, 2], self.snapshot.num_nodes, "positive destinations")
         diagnostics = {
             "attempted": 0, "accepted": 0, "rejected_self_loop": 0,
             "rejected_duplicate": 0, "rejected_type": 0,
@@ -513,9 +921,10 @@ class SamplerEngine:
         if positives.size == 0 or config.negatives_per_positive == 0:
             empty = np.empty((positives.shape[0] if positives.ndim else 0, 0, 3), dtype=np.int64)
             return (empty, diagnostics) if return_diagnostics else empty
-        if positives.ndim != 2 or positives.shape[1] != 3:
-            raise ValueError("positive_triples must have shape (n, 3)")
-        context = set(int(node) for node in context_nodes) if context_nodes is not None else set()
+        context = (
+            set(self._validated_ids(list(context_nodes), self.snapshot.num_nodes, "context_nodes").tolist())
+            if context_nodes is not None else set()
+        )
         times = None if positive_times_us is None else np.asarray(positive_times_us, dtype=np.int64)
         if times is not None and times.shape != (positives.shape[0],):
             raise ValueError("positive_times_us must align with positive_triples")
@@ -570,12 +979,15 @@ class SamplerEngine:
                             node, relation, query_time, direction=candidate_direction,
                         ))
             candidates = np.concatenate(ranges) if ranges else np.empty(0, dtype=np.int64)
+            if direction == "any" and candidates.size:
+                _, first_positions = np.unique(candidates, return_index=True)
+                candidates = candidates[np.sort(first_positions)]
             return self._filter_temporal_edges(candidates, temporal, window_policy)
         if relation_filter is not None and direction in {"out", "in"}:
             relation_adj = self.snapshot.relation_out if direction == "out" else self.snapshot.relation_in
             ranges = []
             rel_count = max(1, self.snapshot.num_relations)
-            for rel in relation_filter:
+            for rel in sorted(relation_filter):
                 if rel < 0 or rel >= self.snapshot.num_relations:
                     continue
                 key = int(node) * rel_count + int(rel)
@@ -588,6 +1000,9 @@ class SamplerEngine:
             candidates = self.snapshot.in_.edge_range(node)
         else:
             candidates = self.snapshot.incident.edge_range(node)
+            if candidates.size:
+                _, first_positions = np.unique(candidates, return_index=True)
+                candidates = candidates[np.sort(first_positions)]
         if relation_filter is None or candidates.size == 0:
             return candidates
         mask = np.isin(self.snapshot.rel_int[candidates], np.fromiter(relation_filter, dtype=np.int64))
@@ -613,8 +1028,7 @@ class SamplerEngine:
         return edges[mask]
 
     def _validate_sampling_options(self, *, fanout, direction, temporal, window_policy, causal_policy):
-        if fanout < 0:
-            raise ValueError("fanout must be non-negative")
+        _validate_count(fanout, "fanout")
         if direction not in {"out", "in", "any"}:
             raise ValueError("direction must be 'out', 'in', or 'any'")
         if temporal is not None and not isinstance(temporal, TemporalContext):
@@ -824,6 +1238,48 @@ class SamplerEngine:
         window_end = temporal.interval.end.epoch_microseconds
         return bool(np.any((starts < window_end) & (open_ends | (window_start < ends))))
 
+    def _choose_candidates(self, candidates: np.ndarray, count: int, *, replace: bool, weights: np.ndarray | None) -> np.ndarray:
+        _validate_count(count, "count")
+        if count == 0 or candidates.size == 0:
+            return np.empty(0, dtype=np.int64)
+        probabilities = None
+        if weights is not None:
+            maximum = float(np.max(weights))
+            if maximum <= 0:
+                raise ValueError("sampling weights must contain a positive value in the candidate set")
+            positive = weights > 0
+            candidates = candidates[positive]
+            weights = weights[positive]
+            scaled_weights = weights / float(np.max(weights))
+            probabilities = scaled_weights / float(np.sum(scaled_weights))
+        if not replace and candidates.size <= count:
+            return candidates.astype(np.int64, copy=True)
+        positions = self.rng.choice(candidates.size, size=count, replace=replace, p=probabilities)
+        return candidates[positions].astype(np.int64, copy=False)
+
+    @staticmethod
+    def _validated_ids(values, upper_bound: int, name: str) -> np.ndarray:
+        ids = _integer_array(values, name)
+        if ids.size and (ids.min() < 0 or ids.max() >= upper_bound):
+            raise ValueError(f"{name} contain IDs outside [0, {upper_bound})")
+        return ids
+
+    @staticmethod
+    def _validated_nonnegative_ids(values, name: str) -> np.ndarray:
+        ids = _integer_array(values, name)
+        if ids.size and ids.min() < 0:
+            raise ValueError(f"{name} must contain one-dimensional non-negative IDs")
+        return ids
+
+    @staticmethod
+    def _validated_weights(values, expected_size: int, name: str) -> np.ndarray:
+        weights = np.asarray(values, dtype=np.float64)
+        if weights.ndim != 1 or weights.size != expected_size:
+            raise ValueError(f"{name} length must be {expected_size}")
+        if not np.all(np.isfinite(weights)) or np.any(weights < 0):
+            raise ValueError(f"{name} must be finite and non-negative")
+        return weights
+
     def _batch_from_edges(
         self, nodes: Iterable[int], edges: Iterable[int], *, positives: np.ndarray,
         negatives: np.ndarray, positive_times: np.ndarray | None = None,
@@ -885,3 +1341,30 @@ class SamplerEngine:
                 self.snapshot.positive_history_triples.tolist()
             )
         }
+
+def _integer_array(values, name: str) -> np.ndarray:
+    ids = np.asarray(values)
+    if ids.ndim != 1:
+        raise ValueError(f"{name} must be one-dimensional")
+    if ids.size and (np.issubdtype(ids.dtype, np.bool_) or not np.issubdtype(ids.dtype, np.integer)):
+        raise ValueError(f"{name} must contain integer IDs")
+    return ids.astype(np.int64, copy=False)
+
+
+def _validate_count(value, name: str) -> None:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{name} must be an integer")
+    if value < 0:
+        raise ValueError(f"{name} must be non-negative")
+
+
+def _external_id_array(compact_ids: np.ndarray, external_ids: np.ndarray) -> np.ndarray:
+    compact_ids = np.asarray(compact_ids, dtype=np.int64)
+    result = np.full(compact_ids.shape, None, dtype=object)
+    valid = compact_ids >= 0
+    if np.any(valid):
+        selected = compact_ids[valid]
+        if selected.max() >= external_ids.size:
+            raise ValueError("compact IDs are outside the snapshot ID range")
+        result[valid] = external_ids[selected]
+    return result

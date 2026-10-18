@@ -45,7 +45,7 @@ dev = ["coverage", "lmdb", "msgpack>=1.2.1", "myst-parser", "plyvel>=1.5.1", "pr
 where = ["src"]
 
 [tool.setuptools.package-data]
-gestaltdb = ["agent_skill/**/*.md", "viz/static/*"]
+gestaltdb = ["agent_skill/**/*.md", "agent_skill/api_index.json", "viz/static/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

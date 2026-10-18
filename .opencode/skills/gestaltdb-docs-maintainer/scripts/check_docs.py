@@ -272,6 +272,41 @@ class DocChecker:
                             line=start_line + node.lineno,
                         )
 
+    def check_api_index(self):
+        """Verify the packaged agent-docs API index is fresh relative to graphdb.py."""
+        import importlib.util
+        import json
+
+        generator_path = (
+            self.repo_root
+            / ".opencode"
+            / "skills"
+            / "gestaltdb-docs-maintainer"
+            / "scripts"
+            / "generate_api_index.py"
+        )
+        index_path = self.repo_root / "src" / "gestaltdb" / "agent_skill" / "api_index.json"
+        if not generator_path.exists():
+            self.add_error(str(generator_path), "API index generator script is missing")
+            return
+        if not index_path.exists():
+            self.add_error(str(index_path), "Packaged api_index.json is missing; run generate_api_index.py --write")
+            return
+        spec = importlib.util.spec_from_file_location("generate_api_index", generator_path)
+        if spec is None or spec.loader is None:
+            self.add_error(str(generator_path), "Could not load the API index generator module")
+            return
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        expected = module.build_index()
+        committed = json.loads(index_path.read_text(encoding="utf-8"))
+        if committed != expected:
+            self.add_error(
+                str(index_path),
+                "api_index.json is stale relative to src/gestaltdb/graphdb.py; run "
+                "uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/generate_api_index.py --write",
+            )
+
     def check_docs_rst_exist(self):
         """Verify documented Sphinx rst files exist in docs/."""
         expected_docs = [
@@ -295,6 +330,7 @@ class DocChecker:
         self.check_package_exports()
         self.check_registries()
         self.check_core_methods()
+        self.check_api_index()
         self.check_docs_rst_exist()
 
         md_files = [

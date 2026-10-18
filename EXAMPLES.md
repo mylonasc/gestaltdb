@@ -479,7 +479,7 @@ from tempfile import TemporaryDirectory
 
 from gestaltdb.graphdb import Edge, GraphDB, Node
 from gestaltdb.kvstores import LevelDBStore
-from gestaltdb.sampling import HardNegativeConfig, SamplerEngine
+from gestaltdb.sampling import ExternalNeighborSamplingSpec, HardNegativeConfig, SamplerEngine
 from gestaltdb.serializers import PickleSerializer
 
 with TemporaryDirectory() as tmpdir:
@@ -491,21 +491,31 @@ with TemporaryDirectory() as tmpdir:
             Node(node_id="disease-1", properties={"kind": "disease"}),
         ])
         graph.put_edges_bulk([
-            Edge(edge_id="d1-p1", source="drug-1", target="protein-1", properties={"type": "binds"}),
-            Edge(edge_id="p1-dis1", source="protein-1", target="disease-1", properties={"type": "associated_with"}),
+            Edge(edge_id="d1-p1", source="drug-1", target="protein-1", properties={"type": "binds", "confidence": 0.9}),
+            Edge(edge_id="p1-dis1", source="protein-1", target="disease-1", properties={"type": "associated_with", "confidence": 0.7}),
         ])
 
-        snapshot = graph.build_sampler_snapshot(f"{tmpdir}/sampler")
+        snapshot = graph.build_sampler_snapshot(f"{tmpdir}/sampler", edge_weight_property="confidence")
         engine = SamplerEngine.load(snapshot.path, mode="ram", seed=13)
 
-        drug_id = snapshot.external_node_ids.tolist().index("drug-1")
-        binds_id = snapshot.external_relation_ids.tolist().index("binds")
-        sample = engine.sample_neighbors([drug_id], fanout=10, direction="out", relations=[binds_id])
-        print(snapshot.external_node_ids[sample.neighbor_nodes].tolist())
+        sample = engine.sample_neighbors_external(
+            ["drug-1"], fanout=10, direction="out", relations=["binds"], strategy="weighted"
+        )
+        print(sample.to_external(snapshot)["neighbor_nodes"].tolist())
 
-        seed_edge = snapshot.external_edge_ids.tolist().index("d1-p1")
-        batch = engine.sample_subgraph(
-            [seed_edge],
+        layers = engine.sample_layers_external(
+            ["drug-1"], [ExternalNeighborSamplingSpec(fanout=5, relations=["binds"])]
+        )
+        print(layers.to_external(snapshot)["layers"][0]["neighbor_nodes"].tolist())
+
+        walks = engine.sample_random_walks_external(
+            ["drug-1"], 2, metapath=["binds", "associated_with"]
+        )
+        external_walks = walks.to_external(snapshot)
+        print(external_walks["node_ids"][0, : walks.lengths[0] + 1].tolist())
+
+        batch = engine.sample_subgraph_external(
+            ["d1-p1"],
             fanouts=[10, 5],
             negative_config=HardNegativeConfig(negatives_per_positive=2),
         )
