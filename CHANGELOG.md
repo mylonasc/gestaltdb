@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.1
+
+- Fixed JSON bulk edge ingestion by storing legacy adjacency IDs as strings consistently with single-edge writes, normalizing older byte-ID adjacency when touched (#109).
+- Fixed `correct_claim(Claim, ...)` silently ignoring explicit confidence/provenance overrides; both object and ID forms now validate and apply them consistently (#110).
+- Reject retractions of unknown claim, node, or edge identities before allocating a temporal commit, including batched writes and deferred-index workflows (#111).
+
 ## 0.12.0
 
 - Reconciled the previously unmerged sampling policies with current temporal snapshots: weighted neighbors and edge seeds, node seeds, heterogeneous layers, random/metapath walks, and external-ID lookup/conversion helpers.

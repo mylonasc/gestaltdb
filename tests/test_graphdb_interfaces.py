@@ -6,7 +6,7 @@ import pytest
 from gestaltdb.graphdb import Edge, GraphDB, MANIFEST_FILENAME, Node, TimeIndexedEdge, bytes_to_datetime, datetime_to_bytes
 from gestaltdb.serializers import PickleSerializer
 
-from .conftest import BACKEND_PARAMS
+from .conftest import BACKEND_PARAMS, BINARY_SERIALIZER_PARAMS, SERIALIZER_PARAMS
 
 
 def test_datetime_byte_helpers_round_trip():
@@ -416,12 +416,74 @@ def test_put_edges_bulk(graph_db):
     adj_b = set(graph_db.get_adjacency_list(node_b.get_id_bytes, direction="any"))
     adj_c = set(graph_db.get_adjacency_list(node_c.get_id_bytes, direction="any"))
 
-    assert edge_ab.get_id_bytes in adj_a
-    assert edge_ac.get_id_bytes in adj_a
-    assert edge_ab.get_id_bytes in adj_b
-    assert edge_bc.get_id_bytes in adj_b
-    assert edge_bc.get_id_bytes in adj_c
-    assert edge_ac.get_id_bytes in adj_c
+    assert edge_ab.get_id in adj_a
+    assert edge_ac.get_id in adj_a
+    assert edge_ab.get_id in adj_b
+    assert edge_bc.get_id in adj_b
+    assert edge_bc.get_id in adj_c
+    assert edge_ac.get_id in adj_c
+
+
+@pytest.mark.parametrize("backend", BACKEND_PARAMS, ids=lambda param: param[0])
+@pytest.mark.parametrize("serializer", SERIALIZER_PARAMS)
+@pytest.mark.parametrize("check_existing", [True, False])
+def test_bulk_edges_share_single_edge_adjacency_format(tmp_path, backend, serializer, check_existing):
+    _, store_cls = backend
+    graph = GraphDB(store_cls(path=str(tmp_path / "graph")), serializer)
+    try:
+        for node_id in ["a", "b", "c"]:
+            graph.put_node(Node(node_id))
+        graph.create_edge_property_index("score")
+        graph.put_edge(Edge("single", "a", "b", properties={"type": "R", "score": 1}))
+        graph.put_edges_bulk([
+            Edge("bulk-é", "a", "c", properties={"type": "R", "score": 2}),
+            Edge("loop", "a", "a", properties={"type": "R", "score": 3}),
+        ], check_existing=check_existing)
+
+        adjacency = graph.get_adjacency_list(b"a", return_raw=True)
+        assert set(adjacency["source"]) == {"single", "bulk-é", "loop"}
+        assert adjacency["target"] == ["loop"]
+        assert graph.get_edge("bulk-é".encode("utf-8")).target == "c"
+        assert graph.count_typed_adjacency("a", "R", "out") == 3
+        assert {edge.get_id for edge in graph.edges_by_type("R")} == {"single", "bulk-é", "loop"}
+        assert [edge.get_id for edge in graph.edges_by_property("score", 2)] == ["bulk-é"]
+
+        # Replace an edge's endpoints/type through the bulk path, then delete it.
+        graph.put_edges_bulk([Edge("bulk-é", "b", "a", properties={"type": "S", "score": 4})])
+        assert graph.get_adjacency_list(b"c", direction="any") == []
+        assert set(graph.get_adjacency_list(b"a", return_raw=True)["source"]) == {"single", "loop"}
+        assert list(graph.edges_by_property("score", 2)) == []
+        assert graph.count_typed_adjacency("a", "R", "out") == 2
+        graph.delete_edge(b"bulk-\xc3\xa9")
+        assert graph.get_adjacency_list(b"a", return_raw=True)["target"] == ["loop"]
+        assert list(graph.edges_by_type("S")) == []
+    finally:
+        graph.close()
+
+
+@pytest.mark.parametrize("backend", BACKEND_PARAMS, ids=lambda param: param[0])
+@pytest.mark.parametrize("serializer", BINARY_SERIALIZER_PARAMS)
+def test_bulk_edges_normalize_legacy_byte_adjacency(tmp_path, backend, serializer):
+    _, store_cls = backend
+    path = str(tmp_path / "graph")
+    graph = GraphDB(store_cls(path=path), serializer)
+    try:
+        graph.put_edge(Edge("old", "a", "b"))
+        # Older bulk writes could mix byte IDs with single-write string IDs.
+        graph.put_adjacency_list(b"a", {"source": [b"old", "old"]})
+        graph.put_edges_bulk([Edge("new", "a", "b")])
+        assert graph.get_adjacency_list(b"a", return_raw=True)["source"] == ["new", "old"]
+    finally:
+        graph.close()
+
+    graph = GraphDB(store_cls(path=path), serializer)
+    try:
+        assert graph.get_adjacency_list(b"a", return_raw=True)["source"] == ["new", "old"]
+        graph.put_edge(Edge("single", "a", "b"))
+        graph.delete_edge(b"old")
+        assert set(graph.get_adjacency_list(b"a", direction="any")) == {"new", "single"}
+    finally:
+        graph.close()
 
 
 def test_range_query_nodes_uses_store_range_iter(graph_db):
