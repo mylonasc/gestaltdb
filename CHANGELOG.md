@@ -1,10 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.12.0
 
 - Reconciled the previously unmerged sampling policies with current temporal snapshots: weighted neighbors and edge seeds, node seeds, heterogeneous layers, random/metapath walks, and external-ID lookup/conversion helpers.
 - Authenticated weights and lookup arrays in v2 snapshots while retaining old v1/v2 compatibility; preserved temporal filtering and version-row ambiguity.
 - Added sampling validation and self-loop/frontier fixes, plus generated API cards for packaged agent-doc searches.
+- Refreshed locked optional documentation/benchmark dependencies to PyJWT 2.15.1, multidict 6.9.1, and urllib3 2.8.0, addressing 18 dependency advisories. These packages are not part of the locked base/backend runtime; this lockfile refresh does not impose new transitive minimum versions on pip consumers.
+- Updated the visualization build dependency source-map-js to 1.2.2 to address GHSA-68fv-2mgg-jv7q and regenerated the packaged bundle provenance. The affected source-map parser is build-time-only, not a runtime dependency of the offline viewer.
+- Updated GitHub Actions dependencies used for tests, documentation, visualization, and publishing.
 
 ## 0.11.0
 
