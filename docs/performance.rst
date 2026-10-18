@@ -5,6 +5,91 @@ GestaltDB includes benchmark scripts for ingestion, traversal, sampling, RocksDB
 tuning, and external graph database comparisons. Treat the included results as
 directional examples, not universal claims.
 
+Sampling and Filtering Performance
+----------------------------------
+
+For repeated graph-learning batches, the key optimization is to **filter and
+materialize once, then reuse array-native adjacency**. ``SamplerEngine`` samples
+compact CSR/NumPy data without repeatedly fetching or deserializing ``Node`` and
+``Edge`` records. This is different from calling a live KV-backed traversal for
+every batch. See :doc:`typed-sampling` for the policy matrix and
+:doc:`property-filtering` for a complete cohort-to-snapshot example.
+
+.. list-table:: Where work and memory are spent
+   :header-rows: 1
+   :widths: 25 40 35
+
+   * - Phase
+     - What it does
+     - What to measure
+   * - Indexed cohort lookup
+     - Exact/range candidate iteration; hydrate only when objects are needed
+     - Selectivity, candidate count, index storage and write overhead
+   * - Snapshot construction
+     - Scan source records, apply callbacks, encode IDs, build/persist arrays
+     - Build seconds, peak memory, array/directory bytes; not a per-batch cost
+   * - Snapshot loading
+     - Validate artifacts and initialize arrays/membership structures
+     - Startup time, RAM vs memmap, cold vs warm filesystem cache
+   * - Repeated sampling
+     - Candidate filtering and random selection over arrays; allocate results
+     - Batches/s, sampled edges/s, p50/p95 latency, candidate degree and fanout
+   * - Conversion / training
+     - External-ID conversion or framework tensor/graph adaptation
+     - Report separately rather than attributing it to sampler selection
+
+Performance Boundaries
+~~~~~~~~~~~~~~~~~~~~~~~
+
+- Live ``GraphDB.sample_neighbors`` uses reservoir sampling: sample storage is
+  bounded by fanout, but eligible adjacency is still scanned. It is not
+  degree-independent random access.
+- Indexed seed filtering reduces starting candidates, not every traversed
+  neighborhood. Build-time ``node_filter`` / ``edge_filter`` defines a reduced
+  snapshot for repeated property-constrained traversal. These callbacks scan
+  decoded entities; they are not automatic index pushdown.
+- ``mode="memmap"`` avoids eagerly copying all persisted arrays to RAM, but
+  page cache, candidate/result buffers, metadata, and Python positive-membership
+  structures still consume memory. Loading validates artifacts, so do not assume
+  a zero-I/O startup. Snapshot construction materializes data in memory.
+- Current relation CSR directories scale with **node count × relation count**;
+  highly heterogeneous graphs need memory measurements, not just edge-count
+  estimates. Weighted and temporal policies can inspect candidate arrays before
+  drawing; a small output fanout does not bound all temporary work.
+- Reuse one seeded engine for a sequence of batches. Recreating it per call
+  repeats setup costs and resets its RNG. External-ID conversion also allocates;
+  keep compact IDs in repeated hot-path work.
+- Temporal filtering, causal expansion, weighted draws, and negative rejection
+  have different costs. For negatives, measure rejection/exhaustion behavior
+  and candidate availability, not just requested negative counts.
+
+Reproduce a Sampler Microbenchmark
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+From a repository checkout, the sampler runner compares a **synthetic in-memory
+dictionary/reservoir baseline** with batched array sampling:
+
+.. code-block:: sh
+
+   uv run python -m benchmarks sampler \
+      --nodes 1000 --edges 500000 --relations 8 \
+      --batch-nodes 512 --fanout 15 --iterations 200 --seed 7
+
+This runner needs no embedded backend. It prints sampled-edge throughput and
+workload parameters. It is not a measured LMDB/LevelDB/RocksDB comparison:
+source data is synthetic and in memory, snapshot construction is outside the
+timed sampling loops, and the engine groups seeds by relation. It does not
+benchmark every weighted/layer/walk policy, property selectivity, temporal
+negative policy, or cold-cache memmap behavior. Do not present its speedup as a
+universal backend or end-to-end training speedup.
+
+Use the existing ``quick``/``matrix`` and ``external`` runners below for live
+backend traversal workloads, and the ``temporal`` smoke for temporal outcomes.
+On your deployment graph, time the phases above separately, record graph degree
+and relation distributions, retained-node/edge counts, seed, dtype, fanout,
+replacement, snapshot mode, hardware and dependency versions, and include
+conversion and snapshot amortization when reporting end-to-end training cost.
+
 Practical Recommendations
 -------------------------
 

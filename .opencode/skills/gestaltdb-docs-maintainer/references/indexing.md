@@ -40,7 +40,23 @@ For ordered comparisons (`<`, `<=`, `>`, `>=`):
 - `graph.edges_by_property_range(prop_name, min_val, max_val)`
 - `graph.edges_by_type_property_range(edge_type, prop_name, min_val, max_val)`
 
-Pass `None` for unbounded ends (e.g. `min_val=10.0, max_val=None` for `>= 10.0`).
+Pass `None` for unbounded ends (e.g. `start_value=10.0, end_value=None` for `>= 10.0`).
+
+Range bounds default inclusive. Set `include_start=False` or
+`include_end=False` for exclusive bounds.
+
+### Filtering Cohorts for Repeated Sampling
+
+Use the corresponding `iter_node_ids_by_*` / `iter_edge_ids_by_*` methods when
+only IDs are needed. They return bytes without hydrating entities. Property
+index creation also maintains label/property or type/property composite entries;
+these are not arbitrary multi-property indexes. Eligible Cypher predicates use
+indexed candidate selection plus residual checks, not universal index coverage.
+
+Filtering seed IDs does not constrain later traversal. Build a property-defined
+snapshot with `node_filter`/`edge_filter`, then reuse `SamplerEngine`. The builder
+still scans source records; indexed ID sets passed to callbacks do not push
+those indexes into the builder. See `docs/property-filtering.rst`.
 
 Immutable GestaltDB temporal scalars are valid exact and range index values.
 Their type-prefixed encodings preserve same-category chronological order;

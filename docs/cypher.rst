@@ -11,6 +11,12 @@ clauses, writes, and a persisted node-constraint catalog.
 Relationship types come from ``edge.properties["type"]``. Node labels are stored
 on ``Node(labels=[...])``.
 
+For a task-oriented guide to exact/range indexes, ID-only cohort selection,
+and filtering a graph before repeated sampling, see :doc:`property-filtering`.
+``WHERE`` selects query results; it is not a property callback inside
+``SamplerEngine``. See :doc:`typed-sampling` for live traversal and reusable
+array-native sampling policies.
+
 Read-only queries automatically use one unified mutable-state backend snapshot
 when supported, preventing index scans, entity hydration, and traversal from
 mixing horizons. Pass ``read_snapshot=True`` to require the guarantee or

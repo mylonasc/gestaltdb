@@ -26,8 +26,8 @@ Available topics:
 - `quickstart`: imports, graph lifecycle, node/edge creation, close discipline.
 - `backends`: `GraphDB.create/open`, manifests, LevelDB/PyRex/RocksDB, and inspection.
 - `cypher`: supported Cypher reads, writes, schema commands, procedures, and limitations.
-- `indexing`: explicit property indexes, range lookups, deferred rebuilds.
-- `sampling`: typed traversal sampling vs snapshot/engine sampling.
+- `indexing`: property-graph filtering, exact/range and label/type composite lookups, ID-only cohorts, deferred rebuilds.
+- `sampling`: high-performance CSR snapshots, weighted neighbors, layers, walks, hard negatives, temporal filters, and live typed traversal.
 - `ingestion`: Arrow/Polars ingestion and index maintenance modes.
 - `visualization`: offline HTML/Jupyter, property labels/styling, directed exploration, saved views, SVG/PNG export, and `GraphDB.visualize`.
 - `epistemic`: sourced bitemporal claims, provenance, contradiction, and four-valued status.
@@ -63,7 +63,8 @@ The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storag
 - Create property indexes explicitly before index-backed property lookups.
 - Run `graph.rebuild_deferred_indexes()` before relying on secondary indexes after deferred ingestion.
 - Use `SamplingHop` and `SamplingPattern` for GraphDB typed traversal sampling with external node IDs.
-- Use `SamplerSnapshot` and `SamplerEngine` only when you need compact array-native IDs for ML data loading.
+- Use reusable `SamplerSnapshot`/`SamplerEngine` arrays for repeated ML batches; RAM/memmap sampling avoids repeated KV reads and graph-object deserialization.
+- Filter the sampled property graph with build-time `node_filter`/`edge_filter`; filtering seeds alone does not constrain every hop. Callbacks scan source records, while runtime sampling uses relation/direction/temporal policies.
 - Import visualization helpers from `gestaltdb.viz.api`. `VizOptions` configures labels, attribute styling, and caps; `VizFigure.save()` writes offline HTML, while `as_svg()` / `save_svg()` generate dependency-free static SVG. Browser PNG and view-state exports are local; static Python SVG does not capture iframe state.
 - Use `assert_claim` for sourced positive/negative propositions and `claim_status` for open-world four-valued evaluation at valid/system time.
 - Use `create_rule` and bounded `run_rules(as_of=...)` for positive Horn inference over entity claims; use `maintain_truth` after premise/rule changes and `explain_claim` for bounded historical derivation graphs.

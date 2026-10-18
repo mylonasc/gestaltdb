@@ -173,7 +173,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     batch_relations = rng.integers(args.relations, size=args.batch_nodes, dtype=np.int64)
 
     with tempfile.TemporaryDirectory(prefix="gestaltdb-sampler-bench-") as tmpdir:
-        snapshot = SamplerSnapshot.build(graph, tmpdir)
+        snapshot = SamplerSnapshot.build(graph, Path(tmpdir) / "snapshot")
         engine = SamplerEngine(snapshot, seed=args.seed)
         baseline_seconds, baseline_sampled = time_baseline(
             graph, batch_nodes, batch_relations, fanout=args.fanout, iterations=args.iterations, seed=args.seed

@@ -1,13 +1,37 @@
 GestaltDB Documentation
 =======================
 
-GestaltDB is a pure Python graph database toolkit for attributed graphs. It
-stores nodes, edges, labels, typed adjacency records, and indexes on embedded
-key-value backends such as LMDB, LevelDB, and RocksDB/PyRex.
+GestaltDB combines an embedded property graph with **high-performance graph
+sampling** and **indexed property-graph filtering**. Store attributed nodes and
+edges on LMDB, LevelDB, or RocksDB/PyRex; select cohorts by labels, relationship
+types, properties, and Cypher; then sample live neighborhoods or reusable
+array-native snapshots for ML training.
 
 Start with the quickstart if you want to create a graph and run a query. Use the
 topic pages for backend selection, serializers, Cypher syntax, ingestion,
 sampling, and benchmarks.
+
+Filter, Sample, Train
+-------------------------
+
+- **Filter the property graph:** exact/range indexes, label + property and
+  relationship type + property lookups, ID-only candidate iteration, and Cypher.
+  See :doc:`property-filtering` for a complete filtered-snapshot workflow.
+- **Sample efficiently:** live typed neighbors/paths/subgraphs, or compact CSR
+  snapshots for node/edge seeds, weighted neighbors, heterogeneous layers,
+  random/metapath walks, multihop subgraphs, and hard negatives.
+  See :doc:`typed-sampling` for policies and runnable examples.
+- **Reuse arrays across batches:** RAM or memory-mapped loading avoids repeated
+  KV reads and graph-object deserialization during sampling. Temporal snapshots
+  add point/window filtering and causal multihop policies. See :doc:`performance`
+  for cost boundaries, memory trade-offs, and reproducible benchmarks.
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Filtering and Sampling
+
+   property-filtering
+   typed-sampling
 
 .. toctree::
    :maxdepth: 2
@@ -20,7 +44,6 @@ sampling, and benchmarks.
    operations
    temporal-versioning
    modal-epistemic
-   typed-sampling
    cypher
    visualization
    performance

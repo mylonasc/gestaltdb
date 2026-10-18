@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Featured high-performance sampling and indexed property-graph filtering in the README, docs landing/navigation, dedicated filtering guide, sampling API map, examples, and packaged agent guides; clarified snapshot costs, filtering stages, and performance boundaries.
+- Fixed the sampler benchmark's temporary output path and added a CLI smoke regression so the documented command runs with immutable snapshot output rules.
+
 ## 0.12.1
 
 - Fixed JSON bulk edge ingestion by storing legacy adjacency IDs as strings consistently with single-edge writes, normalizing older byte-ID adjacency when touched (#109).

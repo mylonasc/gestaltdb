@@ -2,7 +2,11 @@
 
 GestaltDB stores attributed nodes, directed edges, native labels, typed
 adjacency records, and secondary indexes on embedded key-value backends. The
-main graph API lives in submodules rather than entirely at the package root:
+library combines indexed property-graph filtering with live typed traversal and
+high-performance array-native sampling for repeated ML batches. Reusable CSR
+snapshots support weighted neighbors, layers, walks, and hard negatives in RAM
+or memmap mode; build-time node/edge filters define the eligible graph. The main
+graph API lives in submodules rather than entirely at the package root:
 
 .. code-block:: python
 
@@ -51,8 +55,11 @@ Important usage notes for agents and developers:
   without changing current graph, Cypher, or sampler views. Bounded truth
   maintenance and historical claim explanations operate on that history.
 * Use ``GraphDB.ingest_arrow`` and ``GraphDB.ingest_polars`` for tabular bulk
-  ingestion, and use ``SamplerSnapshot``/``SamplerEngine`` for ML-oriented
+   ingestion, and use ``SamplerSnapshot``/``SamplerEngine`` for ML-oriented
    array-native seed, weighted-neighbor, layered, and random-walk sampling.
+* Selecting filtered seeds is not filtering every sampled hop. Build a filtered
+  snapshot with ``node_filter``/``edge_filter``; callbacks run during source scans,
+  not as automatic index pushdown or per-draw property callbacks.
 
 GestaltDB also ships offline interactive visualization. Import ``VizOptions``
 and ``visualize_*`` from ``gestaltdb.viz.api`` for property labels, attribute

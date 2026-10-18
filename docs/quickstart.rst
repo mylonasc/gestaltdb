@@ -103,6 +103,30 @@ Use bulk writes when loading many records.
        Edge(edge_id="drug-2-protein-2", source="drug-2", target="protein-2", properties={"type": "binds"}),
    ])
 
+Reusable Array-Native Sampling
+------------------------------
+
+For repeated training batches, build compact CSR arrays once and load an engine
+in RAM or memmap mode. Subsequent draws avoid KV reads and entity deserialization:
+
+.. code-block:: python
+
+   from tempfile import TemporaryDirectory
+   from gestaltdb.sampling import SamplerEngine
+
+   with TemporaryDirectory() as snapshot_dir:
+       snapshot = graph_db.build_sampler_snapshot(f"{snapshot_dir}/sampler")
+       engine = SamplerEngine.load(snapshot.path, mode="memmap", seed=7)
+       sample = engine.sample_neighbors_external(
+           ["drug-1"], fanout=5, relations=["binds"],
+       )
+       assert sample.to_external(engine.snapshot)["neighbor_nodes"].tolist() == ["protein-1"]
+
+To restrict every hop by properties, use build-time ``node_filter`` and
+``edge_filter``; selecting filtered seeds alone is not enough. The full workflow
+is in :doc:`property-filtering`. See :doc:`typed-sampling` for weighted neighbors,
+heterogeneous layers, walks, hard negatives, and temporal policies.
+
 Close the Store
 ---------------
 
@@ -117,5 +141,6 @@ Next Steps
 
 - See :doc:`cypher` for the supported query syntax.
 - See :doc:`storage-backends` for backend selection.
-- See :doc:`typed-sampling` for path and subgraph sampling.
+- See :doc:`property-filtering` for indexed cohorts and filtered snapshots.
+- See :doc:`typed-sampling` for live traversal and array-native ML sampling.
 - See :doc:`performance` for benchmark scripts and caveats.
