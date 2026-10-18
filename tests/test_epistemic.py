@@ -142,6 +142,67 @@ def test_claim_boundaries_corrections_retractions_and_system_time(graph):
     ]
 
 
+@pytest.mark.parametrize("as_object", [False, True], ids=["id", "claim"])
+@pytest.mark.parametrize("overrides", [
+    {},
+    {"confidence": 0.9},
+    {"provenance": {"reviewed": True}},
+    {"confidence": 0.0, "provenance": {}},
+    {"confidence": None, "provenance": {}},
+])
+def test_correct_claim_applies_explicit_metadata_overrides(graph_db, as_object, overrides):
+    asserted = _assert_employment(graph_db, confidence=0.4, provenance={"original": True})
+    original = asserted.claim.to_dict()
+    corrected = graph_db.correct_claim(
+        asserted.claim if as_object else asserted.logical_id,
+        supersedes_version_id=asserted.version_id,
+        **overrides,
+    )
+    expected = dict(original, **overrides)
+    assert corrected.claim.to_dict() == expected
+    assert corrected.valid == asserted.valid
+    assert graph_db.get_claim_as_of(asserted.logical_id, valid_time=50).claim.to_dict() == expected
+    assert graph_db.get_claim_version(asserted.version_id).claim.to_dict() == original
+    assert asserted.claim.to_dict() == original
+
+
+def test_correct_claim_uses_supplied_object_and_rejects_identity_changes(graph):
+    asserted = _assert_employment(graph, confidence=0.4)
+    payload = asserted.claim.to_dict()
+    payload.update(confidence=0.7, provenance={"from_object": True})
+    supplied = Claim.from_dict(payload)
+    corrected = graph.correct_claim(
+        supplied, supersedes_version_id=asserted.version_id, confidence=0.9,
+    )
+    assert corrected.claim.confidence == 0.9
+    assert dict(corrected.claim.provenance) == {"from_object": True}
+    assert supplied.confidence == 0.7
+
+    other = _assert_employment(graph, subject="bob")
+    with pytest.raises(TemporalVersionError, match="identity"):
+        graph.correct_claim(
+            other.claim, supersedes_version_id=corrected.version_id, confidence=0.8,
+        )
+    assert len(list(graph.iter_claim_versions(asserted.logical_id))) == 2
+
+
+@pytest.mark.parametrize("as_object", [False, True], ids=["id", "claim"])
+@pytest.mark.parametrize("overrides", [
+    {"confidence": 1.1}, {"confidence": True}, {"provenance": None},
+])
+def test_correct_claim_validates_overrides_before_writing(graph, as_object, overrides):
+    asserted = _assert_employment(graph)
+    with pytest.raises(TemporalVersionError, match="confidence|provenance"):
+        graph.correct_claim(
+            asserted.claim if as_object else asserted.logical_id,
+            supersedes_version_id=asserted.version_id,
+            **overrides,
+        )
+    assert [version.version_id for version in graph.iter_claim_versions(asserted.logical_id)] == [
+        asserted.version_id,
+    ]
+
+
 def test_claims_support_pre_epoch_and_reject_cross_kind_corrections(graph):
     claim = _assert_employment(graph, valid=(-10, 0))
     node = graph.put_node_version(Node(claim.logical_id), valid=(-10, 0))

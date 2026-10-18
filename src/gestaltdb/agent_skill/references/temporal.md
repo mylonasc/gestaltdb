@@ -6,6 +6,7 @@ Read this topic for immutable graph history, bitemporal reads, legacy
 ## Rules
 
 - Temporal node/edge versions are separate from mutable current-state records.
+- Claim/node/edge retractions require same-kind asserted temporal history or an earlier assertion in the same batch. Unknown IDs fail before allocating a commit; repeated retractions of known IDs remain valid, with no validity-overlap requirement.
 - Valid intervals are half-open `[start, end)`; system horizons are inclusive visible commit prefixes.
 - Use `GraphDB.read_view` to pin graph, claim, Cypher, and temporal snapshot work to one horizon.
 - Deferred temporal writes make indexed reads fail closed until `rebuild_temporal_indexes()` or `rebuild_deferred_indexes()` completes.

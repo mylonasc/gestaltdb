@@ -12,6 +12,8 @@ valid/system time, or distinguishing contradictory evidence from uncertainty.
 - Claims append to temporal history and do not create current-state graph edges or participate in Cypher matching.
 - Use `get_claim_as_of` for one claim identity and `iter_claims_as_of` for indexed statement/source/agent/world/polarity lookup.
 - Use `correct_claim` to revise confidence or provenance and `retract_claim` to withdraw a claim over a valid interval. Both preserve history.
+- `correct_claim` accepts a `Claim` or its ID. Explicit confidence/provenance keywords override the object/superseded values; omitted keywords preserve them. Use `confidence=None` or `provenance={}` to clear a value.
+- `retract_claim` rejects unknown identities, including with an explicit validity interval. Published assertions (or earlier assertions in the same commit batch) establish identity; a retraction-only history does not. Use `iter_claim_versions` to inspect retraction history.
 - `claim_status` returns `ClaimStatus.SUPPORTED`, `REFUTED`, `BOTH`, or `UNKNOWN` under open-world semantics.
 - Pass either `system_time` or `through_commit` for historical knowledge. A `GraphReadView` pins the horizon and supplies a default valid time.
 - Deferred claim writes make the temporal index family stale; rebuild the temporal indexes before indexed reads.

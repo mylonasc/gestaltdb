@@ -3340,9 +3340,9 @@ class GraphDB:
                             ))
             # adjacency accum update
             adjacency_accumulator.setdefault(_source, {'target' : [], 'source' : []})
-            adjacency_accumulator[_source]['source'].append(e.get_id_bytes)
+            adjacency_accumulator[_source]['source'].append(e.get_id)
             adjacency_accumulator.setdefault(_target, {'target' : [], 'source' : []})
-            adjacency_accumulator[_target]['target'].append(e.get_id_bytes)
+            adjacency_accumulator[_target]['target'].append(e.get_id)
             
         # 3) Use the store's put_edges_bulk
         self.store.put_edges_bulk(edge_dict)
@@ -3380,8 +3380,12 @@ class GraphDB:
                 source_edges = set(source_edges).union(new_edges_source_target['source'])
             if 'target' in new_edges_source_target:
                 target_edges = set(target_edges).union(new_edges_source_target['target'])
-            # Here we cast to list because some objects do not support set serialization. 
-            new_adj_value = {'source' : list(source_edges),'target' : list(target_edges)}
+            # Match put_edge's portable string-ID format, including adjacency
+            # written by older bulk writers that used bytes with binary serializers.
+            new_adj_value = {
+                'source': sorted({self.key_to_string(edge_id) for edge_id in source_edges}),
+                'target': sorted({self.key_to_string(edge_id) for edge_id in target_edges}),
+            }
             final_adjacency[node_id] = self.entity_serializer.serialize(new_adj_value,'AdjacencyList')
 
         # 5) One batch write for adjacency
@@ -5102,7 +5106,10 @@ class GraphDB:
         metadata=None,
         index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> NodeVersion:
-        """Append a node retraction over an explicit or inherited interval."""
+        """Append a node retraction over an explicit or inherited interval.
+
+        Raise TemporalVersionError if the node has no asserted temporal history.
+        """
         commit = self.commit_versions([
             NodeVersionWrite.retraction(
                 logical_id,
@@ -5127,7 +5134,10 @@ class GraphDB:
         metadata=None,
         index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> EdgeVersion:
-        """Append an edge retraction over an explicit or inherited interval."""
+        """Append an edge retraction over an explicit or inherited interval.
+
+        Raise TemporalVersionError if the edge has no asserted temporal history.
+        """
         commit = self.commit_versions([
             EdgeVersionWrite.retraction(
                 logical_id,
@@ -5268,22 +5278,27 @@ class GraphDB:
         metadata=None,
         index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> ClaimVersion:
-        """Append corrected confidence/provenance for one claim identity."""
+        """Append corrected confidence/provenance for one claim identity.
+
+        Explicit confidence/provenance keywords override the supplied Claim's
+        values, or the superseded version's values when given a claim ID.
+        Omitted keywords preserve those values; the claim identity cannot change.
+        """
         target = self._get_temporal_version(normalize_version_id(supersedes_version_id))
         if not isinstance(target, ClaimVersion) or target.claim is None:
             raise TemporalVersionError("superseded claim version does not exist")
         if isinstance(claim, Claim):
-            corrected = claim
+            payload = claim.to_dict()
         else:
             claim_id = normalize_logical_id(claim)
             if claim_id != target.logical_id:
                 raise TemporalVersionError("superseded claim version has a different claim ID")
             payload = target.claim.to_dict()
-            if confidence is not _UNSET:
-                payload["confidence"] = confidence
-            if provenance is not _UNSET:
-                payload["provenance"] = provenance
-            corrected = Claim.from_dict(payload)
+        if confidence is not _UNSET:
+            payload["confidence"] = confidence
+        if provenance is not _UNSET:
+            payload["provenance"] = provenance
+        corrected = Claim.from_dict(payload)
         if corrected.claim_id != target.logical_id:
             raise TemporalVersionError("claim corrections cannot change epistemic identity")
         interval = self._claim_valid_interval(valid, valid_from, valid_to, required=False)
@@ -5310,7 +5325,10 @@ class GraphDB:
         metadata=None,
         index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> ClaimVersion:
-        """Append a bitemporal retraction without deleting claim history."""
+        """Append a bitemporal retraction without deleting claim history.
+
+        Raise TemporalVersionError if the claim has no asserted temporal history.
+        """
         interval = self._claim_valid_interval(valid, valid_from, valid_to, required=False)
         commit = self.commit_versions([
             ClaimVersionWrite.retraction(
@@ -5367,6 +5385,8 @@ class GraphDB:
     def _commit_versions_direct(self, writes, metadata, index_mode) -> TemporalCommit:
         prepared_inputs = []
         batch_version_ids = set()
+        known_identities = set()
+        retraction_identities = set()
         for ordinal, write in enumerate(writes):
             if ordinal >= 1 << 32:
                 raise TemporalVersionError("temporal commit contains too many versions")
@@ -5476,6 +5496,15 @@ class GraphDB:
                 payload,
             ))
 
+            identity = (entity_kind, logical_id)
+            if write.operation is not VersionOperation.RETRACT or (
+                target is not None and target.operation is not VersionOperation.RETRACT
+            ):
+                known_identities.add(identity)
+            elif identity not in known_identities:
+                retraction_identities.add(identity)
+
+        self._require_temporal_retraction_identities(retraction_identities)
         commit_id, system_time = self._reserve_temporal_sequence()
         previous_commit_id = commit_id - 1
         prepared = []
@@ -5558,6 +5587,35 @@ class GraphDB:
         if commit is None:
             raise TemporalCorruptionError("new temporal commit was not visible after publication")
         return commit
+
+    def _require_temporal_retraction_identities(self, identities) -> None:
+        """Validate against published history, independently of deferred indexes.
+
+        Called under the temporal writer guard before reserving a commit ID.
+        Scan once for all unresolved identities in the batch; unpublished records
+        and prior retraction-only history cannot establish an identity.
+        """
+        missing = set(identities)
+        if not missing:
+            return
+        last_commit_id, _ = self._temporal_sequence()
+        for commit_id in range(1, last_commit_id + 1):
+            commit = self.get_temporal_commit(commit_id, _validate_supersession=False)
+            if commit is None:
+                continue
+            for version in commit.versions:
+                if version.operation is VersionOperation.RETRACT:
+                    continue
+                kind = "node" if isinstance(version, NodeVersion) else (
+                    "edge" if isinstance(version, EdgeVersion) else "claim"
+                )
+                missing.discard((kind, version.logical_id))
+            if not missing:
+                return
+        kind, logical_id = sorted(missing)[0]
+        raise TemporalVersionError(
+            f"cannot retract nonexistent {kind} identity: {logical_id}"
+        )
 
     def _temporal_version_id_exists(self, version_id: str) -> bool:
         last_commit_id, _ = self._temporal_sequence()

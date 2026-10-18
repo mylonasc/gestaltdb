@@ -67,6 +67,16 @@ versions under one commit ID:
        ),
    ], metadata={"source": "hr-import"})
 
+Retractions require an existing assertion/correction for the same entity kind
+and logical ID in published temporal history, or an earlier assertion in the
+same batch. Unknown identities raise ``TemporalVersionError`` before allocating
+a commit ID or writing any part of the batch. Current-state records alone,
+unpublished assertions, and retraction-only history do not establish temporal
+identity. This validation also works with deferred indexes. Known identities
+may be retracted repeatedly or over disjoint valid intervals; validity overlap
+is not required. Retractions remain observable through the version-history APIs,
+even though as-of entity reads return ``None`` where a retraction wins.
+
 Transactional LMDB and transactional PyRex publish the complete batch in one
 backend transaction. All filesystem-backed stores reserve commit IDs through a
 durable sidecar sequence while holding a database-wide writer lock. LevelDB and
@@ -271,6 +281,10 @@ JSON-compatible literal value.
 only. ``Claim.claim_id`` additionally includes polarity, agent, source, and
 world. Confidence and provenance are not identity fields, so
 ``correct_claim`` can revise them while preserving the sourced claim identity.
+It accepts either a ``Claim`` object or its logical ID. Explicit ``confidence``
+and ``provenance`` keywords override values on the supplied object (or the
+superseded version for an ID); omitted keywords preserve those values.
+``confidence=None`` clears confidence and ``provenance={}`` clears provenance.
 Confidence is optional or a finite number from 0 through 1; it never determines
 polarity. Claim payloads and provenance are canonical JSON and therefore do not
 depend on the graph's configured entity serializer.
