@@ -8,7 +8,7 @@ import os
 import shutil
 import tempfile
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Sequence
 
@@ -49,6 +49,7 @@ class SamplerSnapshot:
         src_int: Source compact node ID for each edge.
         dst_int: Target compact node ID for each edge.
         rel_int: Relation compact ID for each edge.
+        edge_weights: Non-negative sampling weight for each edge.
         out: Source-to-edge CSR adjacency.
         in_: Target-to-edge CSR adjacency.
         incident: Undirected incident edge CSR adjacency.
@@ -71,6 +72,12 @@ class SamplerSnapshot:
         node_valid_from_us: Node availability interval starts.
         node_valid_to_us: Node availability interval ends.
         node_valid_to_open: Node availability open-end masks.
+        node_lookup_order: Compact node IDs sorted by external node ID.
+        edge_lookup_order: Compact edge IDs sorted by external edge ID.
+        relation_lookup_order: Compact relation IDs sorted by external relation ID.
+        node_lookup_ids: External node IDs in sorted lookup order.
+        edge_lookup_ids: External edge IDs in sorted lookup order.
+        relation_lookup_ids: External relation IDs in sorted lookup order.
 
     Examples:
         Build from already compact arrays and sample with ``SamplerEngine``::
@@ -119,6 +126,13 @@ class SamplerSnapshot:
     node_valid_from_us: np.ndarray | None = None
     node_valid_to_us: np.ndarray | None = None
     node_valid_to_open: np.ndarray | None = None
+    edge_weights: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=np.float64))
+    node_lookup_order: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=np.int64))
+    edge_lookup_order: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=np.int64))
+    relation_lookup_order: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=np.int64))
+    node_lookup_ids: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=str))
+    edge_lookup_ids: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=str))
+    relation_lookup_ids: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=str))
 
     @property
     def num_nodes(self) -> int:
@@ -170,6 +184,7 @@ class SamplerSnapshot:
         node_filter: Callable[[object], bool] | None = None,
         edge_filter: Callable[[object], bool] | None = None,
         edge_type_property: str = "type",
+        edge_weight_property: str | None = None,
         node_type_property: str = "kind",
         directed: bool = True,
         include_reverse: bool = True,
@@ -193,6 +208,8 @@ class SamplerSnapshot:
             edge_filter: Optional predicate receiving each edge object. Edges for
                 which the predicate returns ``False`` are omitted.
             edge_type_property: Edge property containing the relation identifier.
+            edge_weight_property: Optional edge property containing a finite,
+                non-negative sampling weight. Missing values default to ``1.0``.
             node_type_property: Node property containing the semantic node type.
             directed: Stored in metadata for consumers; current adjacency arrays
                 preserve directed source/target endpoints and also build an
@@ -245,6 +262,7 @@ class SamplerSnapshot:
         src_values: list[int] = []
         dst_values: list[int] = []
         rel_values: list[str] = []
+        edge_weights: list[float] = []
         for edge_key in graph.store.get_edge_keys_generator():
             edge = graph.get_edge(edge_key)
             if edge is None or (edge_filter is not None and not edge_filter(edge)):
@@ -260,12 +278,15 @@ class SamplerSnapshot:
             src_values.append(node_to_int[src])
             dst_values.append(node_to_int[dst])
             rel_values.append(str(relation))
+            weight = 1.0 if edge_weight_property is None else edge.properties.get(edge_weight_property, 1.0)
+            edge_weights.append(_validate_weight(weight))
 
         relations = sorted(set(rel_values))
         rel_to_int = {relation: idx for idx, relation in enumerate(relations)}
         src_int = np.asarray(src_values, dtype=np.int64)
         dst_int = np.asarray(dst_values, dtype=np.int64)
         rel_int = np.asarray([rel_to_int[relation] for relation in rel_values], dtype=np.int64)
+        edge_weights_array = np.asarray(edge_weights, dtype=np.float64)
         relation_src_type_ids = np.full(len(relations), -1, dtype=np.int64)
         relation_dst_type_ids = np.full(len(relations), -1, dtype=np.int64)
         for relation, rel_idx in rel_to_int.items():
@@ -295,6 +316,7 @@ class SamplerSnapshot:
             "relation_count": len(relations),
             "node_type_count": len(type_values),
             "edge_type_property": edge_type_property,
+            "edge_weight_property": edge_weight_property,
             "node_type_property": node_type_property,
             "directed": directed,
             "include_reverse": include_reverse,
@@ -312,7 +334,7 @@ class SamplerSnapshot:
 
             metadata["source_provenance"] = parse_read_provenance(source_provenance).to_dict()
 
-        cls._write(path, metadata, node_ids, node_type_ids, edge_ids, relations, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, out, in_, incident, relation_out, relation_in, positive_triples)
+        cls._write(path, metadata, node_ids, node_type_ids, edge_ids, relations, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, edge_weights_array, out, in_, incident, relation_out, relation_in, positive_triples)
         return cls.load(path)
 
     @classmethod
@@ -324,6 +346,7 @@ class SamplerSnapshot:
         node_filter: Callable[[object], bool] | None = None,
         edge_filter: Callable[[object], bool] | None = None,
         edge_type_property: str = "type",
+        edge_weight_property: str | None = None,
         node_type_property: str = "kind",
         time_bucket: str | None = "day",
         source_db: dict | None = None,
@@ -428,6 +451,7 @@ class SamplerSnapshot:
         snapshot_metadata = {
             "temporal": True,
             "edge_type_property": edge_type_property,
+            "edge_weight_property": edge_weight_property,
             "node_type_property": node_type_property,
             "directed": metadata_options.pop("directed", True),
             "include_reverse": metadata_options.pop("include_reverse", True),
@@ -454,6 +478,10 @@ class SamplerSnapshot:
             src_int=[node_to_int[str(record[2].source)] for record in records],
             dst_int=[node_to_int[str(record[2].target)] for record in records],
             rel_int=[relation_to_int[record[3]] for record in records],
+            edge_weights=[
+                1.0 if edge_weight_property is None else _validate_weight(record[2].properties.get(edge_weight_property, 1.0))
+                for record in records
+            ],
             edge_version_ids=[record[1] for record in records],
             valid_from_us=[record[4] for record in records],
             valid_to_us=[0 if record[5] is None else record[5] for record in records],
@@ -476,6 +504,7 @@ class SamplerSnapshot:
         src_int,
         dst_int,
         rel_int,
+        edge_weights=None,
         node_type_values: Sequence[object] | None = None,
         node_type_ids=None,
         edge_src_type_values: Sequence[object] | None = None,
@@ -511,6 +540,7 @@ class SamplerSnapshot:
             src_int: Source compact node ID per edge.
             dst_int: Target compact node ID per edge.
             rel_int: Relation compact ID per edge.
+            edge_weights: Optional finite, non-negative sampling weight per edge.
             node_type_values: Optional semantic node type values ordered by
                 compact node ID. Values are encoded to integer IDs.
             node_type_ids: Optional already encoded node type IDs ordered by
@@ -551,10 +581,11 @@ class SamplerSnapshot:
         external_node_ids = np.asarray(external_node_ids, dtype=str)
         external_edge_ids = np.asarray(external_edge_ids, dtype=str)
         external_relation_ids = np.asarray(external_relation_ids, dtype=str)
-        src_int = np.asarray(src_int, dtype=np.int64)
-        dst_int = np.asarray(dst_int, dtype=np.int64)
-        rel_int = np.asarray(rel_int, dtype=np.int64)
+        src_int = _integer_id_array(src_int, "src_int")
+        dst_int = _integer_id_array(dst_int, "dst_int")
+        rel_int = _integer_id_array(rel_int, "rel_int")
         cls._validate_edge_arrays(external_node_ids, external_edge_ids, external_relation_ids, src_int, dst_int, rel_int)
+        edge_weights = _normalize_edge_weights(edge_weights, src_int.size)
 
         type_mapping = None
         if node_type_values is not None:
@@ -562,7 +593,7 @@ class SamplerSnapshot:
         elif node_type_ids is None:
             node_type_ids = np.full(external_node_ids.size, -1, dtype=np.int64)
         else:
-            node_type_ids = np.asarray(node_type_ids, dtype=np.int64)
+            node_type_ids = _integer_id_array(node_type_ids, "node_type_ids")
             if node_type_ids.size != external_node_ids.size:
                 raise ValueError("node_type_ids length must match external_node_ids")
 
@@ -595,6 +626,7 @@ class SamplerSnapshot:
             src_int=src_int,
             dst_int=dst_int,
             rel_int=rel_int,
+            edge_weights=edge_weights,
             relation_src_type_ids=relation_src_type_ids,
             relation_dst_type_ids=relation_dst_type_ids,
             metadata=snapshot_metadata,
@@ -612,6 +644,7 @@ class SamplerSnapshot:
         src_int,
         dst_int,
         rel_int,
+        edge_weights=None,
         relation_src_type_ids=None,
         relation_dst_type_ids=None,
         edge_version_ids=None,
@@ -637,6 +670,7 @@ class SamplerSnapshot:
             src_int: Source compact node ID per edge.
             dst_int: Target compact node ID per edge.
             rel_int: Relation compact ID per edge.
+            edge_weights: Optional finite, non-negative sampling weight per edge.
             relation_src_type_ids: Optional source endpoint type ID per relation.
             relation_dst_type_ids: Optional target endpoint type ID per relation.
             metadata: Optional metadata merged into generated metadata.
@@ -660,15 +694,16 @@ class SamplerSnapshot:
         """
         path = Path(output_path)
         external_node_ids = np.asarray(external_node_ids, dtype=str)
-        node_type_ids = np.asarray(node_type_ids, dtype=np.int64)
+        node_type_ids = _integer_id_array(node_type_ids, "node_type_ids")
         external_edge_ids = np.asarray(external_edge_ids, dtype=str)
         external_relation_ids = np.asarray(external_relation_ids, dtype=str)
-        src_int = np.asarray(src_int, dtype=np.int64)
-        dst_int = np.asarray(dst_int, dtype=np.int64)
-        rel_int = np.asarray(rel_int, dtype=np.int64)
+        src_int = _integer_id_array(src_int, "src_int")
+        dst_int = _integer_id_array(dst_int, "dst_int")
+        rel_int = _integer_id_array(rel_int, "rel_int")
         cls._validate_edge_arrays(external_node_ids, external_edge_ids, external_relation_ids, src_int, dst_int, rel_int)
         if node_type_ids.size != external_node_ids.size:
             raise ValueError("node_type_ids length must match external_node_ids")
+        edge_weights = _normalize_edge_weights(edge_weights, src_int.size)
         edge_indices = np.arange(src_int.size, dtype=np.int64)
 
         relation_count = int(external_relation_ids.size)
@@ -682,8 +717,10 @@ class SamplerSnapshot:
                 relation_src_type_ids[rel_idx] = src_types.pop() if len(src_types) == 1 else -1
                 relation_dst_type_ids[rel_idx] = dst_types.pop() if len(dst_types) == 1 else -1
         else:
-            relation_src_type_ids = np.asarray(relation_src_type_ids, dtype=np.int64)
-            relation_dst_type_ids = np.asarray(relation_dst_type_ids, dtype=np.int64)
+            relation_src_type_ids = _integer_id_array(relation_src_type_ids, "relation_src_type_ids")
+            relation_dst_type_ids = _integer_id_array(relation_dst_type_ids, "relation_dst_type_ids")
+            if relation_src_type_ids.size != relation_count or relation_dst_type_ids.size != relation_count:
+                raise ValueError("sampler snapshot relation type arrays must match external_relation_ids")
 
         out = build_csr(src_int, edge_indices, external_node_ids.size)
         in_ = build_csr(dst_int, edge_indices, external_node_ids.size)
@@ -756,7 +793,7 @@ class SamplerSnapshot:
         cls._write(
             path, snapshot_metadata, external_node_ids, node_type_ids, external_edge_ids,
             external_relation_ids, relation_src_type_ids, relation_dst_type_ids, src_int,
-            dst_int, rel_int, out, in_, incident, relation_out, relation_in,
+            dst_int, rel_int, edge_weights, out, in_, incident, relation_out, relation_in,
             positive_triples, temporal_values=temporal_values,
             node_intervals=node_intervals,
         )
@@ -805,18 +842,68 @@ class SamplerSnapshot:
         def load_array(name: str) -> np.ndarray:
             return np.load(path / f"{name}.npy", mmap_mode=mmap_mode, allow_pickle=False)
 
+        def has_array(name: str) -> bool:
+            if version == SNAPSHOT_FORMAT_VERSION:
+                return name in metadata["artifacts"]
+            return (path / f"{name}.npy").is_file()
+
+        edge_weights = load_array("edge_weights") if has_array("edge_weights") else np.ones(int(metadata["edge_count"]), dtype=np.float64)
+        edge_weights = _normalize_edge_weights(edge_weights, int(metadata["edge_count"]))
+        external_node_ids = load_array("external_node_ids")
+        external_edge_ids = load_array("external_edge_ids")
+        external_relation_ids = load_array("external_relation_ids")
+
+        def load_lookup(entity: str, external_ids: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+            has_ids = has_array(f"{entity}_lookup_ids")
+            has_order = has_array(f"{entity}_lookup_order")
+            if not has_ids and not has_order:
+                order = _build_lookup_order(external_ids, entity, require_unique=False)
+                return external_ids[order], order
+            if not has_ids or not has_order:
+                raise ValueError(f"{entity} lookup requires both ID and order arrays")
+            lookup_ids = load_array(f"{entity}_lookup_ids")
+            order = load_array(f"{entity}_lookup_order")
+            if lookup_ids.ndim != 1 or lookup_ids.size != external_ids.size:
+                raise ValueError(f"{entity}_lookup_ids must contain one entry per external ID")
+            if not np.issubdtype(lookup_ids.dtype, np.str_):
+                raise ValueError(f"{entity}_lookup_ids must contain strings")
+            if order.ndim != 1 or order.size != external_ids.size:
+                raise ValueError(f"{entity}_lookup_order must contain one entry per external ID")
+            if order.size and (np.issubdtype(order.dtype, np.bool_) or not np.issubdtype(order.dtype, np.integer)):
+                raise ValueError(f"{entity}_lookup_order must contain integer compact IDs")
+            if order.size and (order.min() < 0 or order.max() >= external_ids.size):
+                raise ValueError(f"{entity}_lookup_order contains invalid compact IDs")
+            if lookup_ids.size > 1 and np.any(lookup_ids[1:] < lookup_ids[:-1]):
+                raise ValueError(f"{entity}_lookup_ids must be sorted")
+            order = order.astype(np.int64, copy=False)
+            seen = np.zeros(order.size, dtype=bool)
+            chunk_size = 65_536
+            for start in range(0, order.size, chunk_size):
+                indices = order[start : start + chunk_size]
+                if np.unique(indices).size != indices.size or np.any(seen[indices]):
+                    raise ValueError(f"{entity}_lookup_order must be a permutation of compact IDs")
+                seen[indices] = True
+                if np.any(external_ids[indices] != lookup_ids[start : start + chunk_size]):
+                    raise ValueError(f"{entity} lookup arrays do not match external IDs")
+            return lookup_ids, order
+
+        node_lookup_ids, node_lookup_order = load_lookup("node", external_node_ids)
+        edge_lookup_ids, edge_lookup_order = load_lookup("edge", external_edge_ids)
+        relation_lookup_ids, relation_lookup_order = load_lookup("relation", external_relation_ids)
+
         snapshot = cls(
             path=path,
             metadata=metadata,
-            external_node_ids=load_array("external_node_ids"),
+            external_node_ids=external_node_ids,
             node_type_ids=load_array("node_type_ids"),
-            external_edge_ids=load_array("external_edge_ids"),
-            external_relation_ids=load_array("external_relation_ids"),
+            external_edge_ids=external_edge_ids,
+            external_relation_ids=external_relation_ids,
             relation_src_type_ids=load_array("relation_src_type_ids"),
             relation_dst_type_ids=load_array("relation_dst_type_ids"),
             src_int=load_array("src_int"),
             dst_int=load_array("dst_int"),
             rel_int=load_array("rel_int"),
+            edge_weights=edge_weights,
             out=CSRAdjacency(load_array("out_indptr"), load_array("out_edge_indices")),
             in_=CSRAdjacency(load_array("in_indptr"), load_array("in_edge_indices")),
             incident=CSRAdjacency(load_array("incident_indptr"), load_array("incident_edge_indices")),
@@ -844,6 +931,12 @@ class SamplerSnapshot:
             node_valid_from_us=load_array("node_valid_from_us") if temporal_history_indexes else None,
             node_valid_to_us=load_array("node_valid_to_us") if temporal_history_indexes else None,
             node_valid_to_open=load_array("node_valid_to_open") if temporal_history_indexes else None,
+            node_lookup_order=node_lookup_order,
+            edge_lookup_order=edge_lookup_order,
+            relation_lookup_order=relation_lookup_order,
+            node_lookup_ids=node_lookup_ids,
+            edge_lookup_ids=edge_lookup_ids,
+            relation_lookup_ids=relation_lookup_ids,
         )
         if temporal and not temporal_history_indexes:
             snapshot._derive_temporal_history_indexes()
@@ -890,6 +983,33 @@ class SamplerSnapshot:
 
     def external_relation_id(self, rel_int) -> str:
         return str(self.external_relation_ids[int(rel_int)])
+
+    def node_int(self, external_node_id) -> int:
+        """Resolve one external node ID to its compact integer ID."""
+        return int(self.node_ints([external_node_id])[0])
+
+    def node_ints(self, external_node_ids: Sequence[object]) -> np.ndarray:
+        """Resolve external node IDs to compact integer IDs."""
+        lookup_ids, lookup_order = self._lookup_arrays("node")
+        return self._resolve_external_ids(external_node_ids, self.external_node_ids, lookup_ids, lookup_order, "node")
+
+    def edge_int(self, external_edge_id) -> int:
+        """Resolve one external edge ID to its compact integer ID."""
+        return int(self.edge_ints([external_edge_id])[0])
+
+    def edge_ints(self, external_edge_ids: Sequence[object]) -> np.ndarray:
+        """Resolve external edge IDs to compact integer IDs."""
+        lookup_ids, lookup_order = self._lookup_arrays("edge")
+        return self._resolve_external_ids(external_edge_ids, self.external_edge_ids, lookup_ids, lookup_order, "edge")
+
+    def relation_int(self, external_relation_id) -> int:
+        """Resolve one external relation ID to its compact integer ID."""
+        return int(self.relation_ints([external_relation_id])[0])
+
+    def relation_ints(self, external_relation_ids: Sequence[object]) -> np.ndarray:
+        """Resolve external relation IDs to compact integer IDs."""
+        lookup_ids, lookup_order = self._lookup_arrays("relation")
+        return self._resolve_external_ids(external_relation_ids, self.external_relation_ids, lookup_ids, lookup_order, "relation")
 
     def global_triple_to_external(self, triple) -> tuple[str, str, str]:
         src, rel, dst = np.asarray(triple, dtype=np.int64).tolist()
@@ -948,6 +1068,42 @@ class SamplerSnapshot:
                 )
             return None if version is None else version.edge
         return graph.get_edge(self.external_edge_id(edge_int).encode("utf-8"))
+
+    def _lookup_arrays(self, entity: str) -> tuple[np.ndarray, np.ndarray]:
+        external_ids = getattr(self, f"external_{entity}_ids")
+        lookup_ids = getattr(self, f"{entity}_lookup_ids")
+        lookup_order = getattr(self, f"{entity}_lookup_order")
+        if lookup_ids.size != external_ids.size or lookup_order.size != external_ids.size:
+            lookup_order = _build_lookup_order(external_ids, entity, require_unique=False)
+            lookup_ids = external_ids[lookup_order]
+            setattr(self, f"{entity}_lookup_ids", lookup_ids)
+            setattr(self, f"{entity}_lookup_order", lookup_order)
+        return lookup_ids, lookup_order
+
+    @staticmethod
+    def _resolve_external_ids(values, external_ids: np.ndarray, lookup_ids: np.ndarray, lookup_order: np.ndarray, entity: str) -> np.ndarray:
+        if isinstance(values, (str, bytes)):
+            raise TypeError(f"external {entity} IDs must be a sequence, not a scalar string")
+        targets_list = np.asarray(list(values), dtype=str).tolist()
+        if not targets_list:
+            return np.empty(0, dtype=np.int64)
+        targets = np.asarray(targets_list, dtype=str)
+        left = np.searchsorted(lookup_ids, targets, side="left")
+        right = np.searchsorted(lookup_ids, targets, side="right")
+        matched = left < lookup_ids.size
+        matched_values = np.zeros(targets.size, dtype=bool)
+        if np.any(matched):
+            matched_values[matched] = lookup_ids[left[matched]] == targets[matched]
+        missing = [targets_list[idx] for idx in np.flatnonzero(~matched_values).tolist()]
+        if missing:
+            raise KeyError(f"unknown external {entity} IDs: {list(dict.fromkeys(missing))!r}")
+        ambiguous = [targets_list[idx] for idx in np.flatnonzero((right - left) > 1).tolist()]
+        if ambiguous:
+            raise ValueError(f"ambiguous external {entity} IDs: {list(dict.fromkeys(ambiguous))!r}")
+        compact_ids = lookup_order[left].astype(np.int64, copy=False)
+        if np.any(external_ids[compact_ids] != targets):
+            raise ValueError(f"{entity} lookup arrays do not match external IDs")
+        return compact_ids
 
     def _resolve_source_graph_path(self, *, base_path=None) -> Path:
         source_db = self.metadata.get("source_db")
@@ -1009,6 +1165,12 @@ class SamplerSnapshot:
             "incident_edge_indices", "relation_out_indptr", "relation_out_edge_indices",
             "relation_in_indptr", "relation_in_edge_indices", "positive_triples",
         }
+        if metadata.get("sampling_policy_arrays") is True:
+            expected.add("edge_weights")
+            for entity in ("node", "edge", "relation"):
+                expected.update({f"{entity}_lookup_ids", f"{entity}_lookup_order"})
+        elif metadata.get("sampling_policy_arrays") not in {None, False}:
+            raise ValueError("invalid sampling policy array flag")
         if metadata.get("temporal"):
             expected.update({
                 "edge_version_ids", "valid_from_us", "valid_to_us", "valid_to_open",
@@ -1337,21 +1499,31 @@ class SamplerSnapshot:
         return relation_src_type_ids, relation_dst_type_ids
 
     @classmethod
-    def _write(cls, path: Path, metadata: dict, node_ids, node_type_ids, edge_ids, relations, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, out, in_, incident, relation_out, relation_in, positive_triples, *, temporal_values=None, node_intervals=None) -> None:
+    def _write(cls, path: Path, metadata: dict, node_ids, node_type_ids, edge_ids, relations, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, edge_weights, out, in_, incident, relation_out, relation_in, positive_triples, *, temporal_values=None, node_intervals=None) -> None:
         if path.exists():
             raise ValueError(f"snapshot output already exists: {path}")
+        external_node_ids = np.asarray(node_ids, dtype=str)
+        external_edge_ids = np.asarray(edge_ids, dtype=str)
+        external_relation_ids = np.asarray(relations, dtype=str)
+        node_lookup_order = _build_lookup_order(external_node_ids, "node")
+        edge_lookup_order = _build_lookup_order(external_edge_ids, "edge", require_unique=temporal_values is None)
+        relation_lookup_order = _build_lookup_order(external_relation_ids, "relation")
+        node_lookup_ids = external_node_ids[node_lookup_order]
+        edge_lookup_ids = external_edge_ids[edge_lookup_order]
+        relation_lookup_ids = external_relation_ids[relation_lookup_order]
         path.parent.mkdir(parents=True, exist_ok=True)
         staging = Path(tempfile.mkdtemp(prefix=f".{path.name}.", dir=path.parent))
         arrays = {
-            "external_node_ids": np.asarray(node_ids, dtype=str),
+            "external_node_ids": external_node_ids,
             "node_type_ids": node_type_ids,
-            "external_edge_ids": np.asarray(edge_ids, dtype=str),
-            "external_relation_ids": np.asarray(relations, dtype=str),
+            "external_edge_ids": external_edge_ids,
+            "external_relation_ids": external_relation_ids,
             "relation_src_type_ids": relation_src_type_ids,
             "relation_dst_type_ids": relation_dst_type_ids,
             "src_int": src_int,
             "dst_int": dst_int,
             "rel_int": rel_int,
+            "edge_weights": edge_weights,
             "out_indptr": out.indptr,
             "out_edge_indices": out.edge_indices,
             "in_indptr": in_.indptr,
@@ -1363,6 +1535,12 @@ class SamplerSnapshot:
             "relation_in_indptr": relation_in.indptr,
             "relation_in_edge_indices": relation_in.edge_indices,
             "positive_triples": positive_triples,
+            "node_lookup_order": node_lookup_order,
+            "edge_lookup_order": edge_lookup_order,
+            "relation_lookup_order": relation_lookup_order,
+            "node_lookup_ids": node_lookup_ids,
+            "edge_lookup_ids": edge_lookup_ids,
+            "relation_lookup_ids": relation_lookup_ids,
         }
         if temporal_values is not None:
             edge_version_ids, valid_from_us, valid_to_us, valid_to_open, edge_system_time_us, edge_commit_ids = temporal_values
@@ -1421,6 +1599,7 @@ class SamplerSnapshot:
                     "shape": list(array.shape),
                 }
             metadata = dict(metadata)
+            metadata["sampling_policy_arrays"] = True
             if temporal_values is not None:
                 metadata["temporal_history_indexes"] = True
             metadata["format_version"] = SNAPSHOT_FORMAT_VERSION
@@ -1531,3 +1710,44 @@ def _merge_intervals(intervals) -> list[tuple[int, int | None]]:
         else:
             merged.append((start, end))
     return merged
+
+
+def _validate_weight(value) -> float:
+    try:
+        weight = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("edge weights must be numeric") from exc
+    if not np.isfinite(weight) or weight < 0:
+        raise ValueError("edge weights must be finite and non-negative")
+    return weight
+
+
+def _normalize_edge_weights(edge_weights, edge_count: int) -> np.ndarray:
+    if edge_weights is None:
+        return np.ones(edge_count, dtype=np.float64)
+    weights = np.asarray(edge_weights, dtype=np.float64)
+    if weights.ndim != 1 or weights.size != edge_count:
+        raise ValueError("edge_weights length must match the number of edges")
+    if not np.all(np.isfinite(weights)) or np.any(weights < 0):
+        raise ValueError("edge_weights must be finite and non-negative")
+    return weights
+
+
+def _integer_id_array(values, name: str) -> np.ndarray:
+    ids = np.asarray(values)
+    if ids.ndim != 1:
+        raise ValueError(f"{name} must be one-dimensional")
+    if ids.size and (np.issubdtype(ids.dtype, np.bool_) or not np.issubdtype(ids.dtype, np.integer)):
+        raise ValueError(f"{name} must contain integer IDs")
+    return ids.astype(np.int64, copy=False)
+
+
+def _build_lookup_order(external_ids: np.ndarray, entity: str, *, require_unique: bool = True) -> np.ndarray:
+    order = np.argsort(external_ids, kind="stable").astype(np.int64, copy=False)
+    if require_unique and order.size > 1:
+        sorted_ids = external_ids[order]
+        duplicate_positions = np.flatnonzero(sorted_ids[1:] == sorted_ids[:-1])
+        if duplicate_positions.size:
+            duplicate = str(sorted_ids[int(duplicate_positions[0])])
+            raise ValueError(f"external {entity} IDs must be unique; duplicate {duplicate!r}")
+    return order

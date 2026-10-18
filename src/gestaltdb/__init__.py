@@ -52,7 +52,7 @@ Important usage notes for agents and developers:
   maintenance and historical claim explanations operate on that history.
 * Use ``GraphDB.ingest_arrow`` and ``GraphDB.ingest_polars`` for tabular bulk
   ingestion, and use ``SamplerSnapshot``/``SamplerEngine`` for ML-oriented
-  array-native sampling.
+   array-native seed, weighted-neighbor, layered, and random-walk sampling.
 
 GestaltDB also ships offline interactive visualization. Import ``VizOptions``
 and ``visualize_*`` from ``gestaltdb.viz.api`` for property labels, attribute
@@ -75,7 +75,7 @@ See repository ``AGENTS.md`` for contributor guidance, ``EXAMPLES.md`` for
 runnable usage patterns, and ``docs/`` for the Sphinx user guide.
 """
 
-from .sampling import AsyncBatchFeeder, HardNegativeConfig, SampledSubgraphBatch, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
+from .sampling import AsyncBatchFeeder, ExternalNeighborSamplingSpec, HardNegativeConfig, LayeredSampleBatch, NeighborSamplingSpec, RandomWalkBatch, SampledSubgraphBatch, SamplerEngine, SamplerSnapshot, SamplingHop, SamplingPattern
 from .epistemic import Claim, ClaimObjectKind, ClaimPolarity, ClaimStatus, claim_statement_id
 from .modal import (
     AccessibilityKind,
@@ -149,7 +149,11 @@ __all__ = [
     "RuleVersion",
     "TruthMaintenanceResult",
     "AsyncBatchFeeder",
+    "ExternalNeighborSamplingSpec",
     "HardNegativeConfig",
+    "LayeredSampleBatch",
+    "NeighborSamplingSpec",
+    "RandomWalkBatch",
     "SampledSubgraphBatch",
     "SamplerEngine",
     "SamplerSnapshot",

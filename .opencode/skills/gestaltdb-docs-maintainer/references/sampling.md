@@ -57,15 +57,50 @@ Temporal v2 snapshots also authenticate grouped positive-triple interval histori
 - `SamplerEngine.load(snapshot_path, mode="memmap", seed=42)`: Memory-maps arrays via `numpy.memmap`. Ideal for multi-worker PyTorch DataLoader setups and datasets larger than RAM.
 
 ### Sampling Primitives
+- `engine.sample_nodes(512, node_types=[type_id])`
+- `engine.sample_edges(128, relations=[rel_id], strategy="weighted")`
 - `engine.sample_neighbors(seed_nodes, fanout=15, direction="out", relations=[rel_id])`
+- `engine.sample_neighbors(seed_nodes, fanout=15, strategy="weighted")`
+- `engine.sample_layers(seed_nodes, [NeighborSamplingSpec(15, relations=[rel_id]), ...])`
+- `engine.sample_random_walks(seed_nodes, 20, metapath=[rel_a, rel_b])`
 - `engine.sample_multihop(seed_nodes, fanouts=[15, 10], direction="out")`
 - `engine.sample_subgraph(seed_edges, fanouts=[10, 5], negative_config=HardNegativeConfig(...))`
+
+`SamplerSnapshot.from_edge_arrays(..., edge_weights=weights)` persists edge
+weights directly. For graph-backed snapshots, use
+`graph.build_sampler_snapshot(..., edge_weight_property="confidence")`. Missing
+weights default to `1.0`. Weighted sampling excludes zero-weight candidates and
+rejects candidate sets in which every weight is zero.
+
+`sample_random_walks` returns fixed-width compact node, edge, and relation arrays.
+Unused positions are `-1`. Random restarts and dead-end restarts are explicit
+transitions with edge and relation IDs set to `-1`, so consumers can distinguish
+teleports from graph edges. Metapath relations repeat cyclically and advance only
+when an edge is traversed.
 
 ### Mapping IDs Back to External Graph
 `SampledSubgraphBatch` local arrays index nodes locally within the batch (`senders`, `receivers`, `positives`, `negatives`).
 - `batch.node_ids_global`: Maps local batch index to compact global snapshot ID.
 - `snapshot.external_node_id(compact_id)`: Maps compact global snapshot ID to original external string ID.
 - `snapshot.global_triple_to_external(head, rel, tail)`: Recovers full external triple tuple.
+
+### Resolving External IDs
+
+- `snapshot.node_int("drug-1")`, `snapshot.edge_int("edge-1")`, and `snapshot.relation_int("binds")` resolve one external ID.
+- `node_ints`, `edge_ints`, and `relation_ints` resolve batches while preserving input order and report all missing IDs together.
+- `sample_neighbors_external`, `sample_layers_external`, `sample_random_walks_external`, and `sample_subgraph_external` accept external IDs and return the same compact batch types as the hot-path APIs.
+- `SampledNeighbors`, `LayeredSampleBatch`, and `RandomWalkBatch` expose `to_external(snapshot)` helpers. Padding and restart edge/relation IDs become `None` rather than indexing the final external ID accidentally.
+
+Lookup indexes persist sorted external-ID arrays and aligned compact IDs. Both
+arrays can remain memory mapped, so batch resolution uses vectorized binary
+search without a full Python dictionary. Older snapshots derive these indexes
+when loaded and should be rebuilt when repeated large-batch resolution matters.
+
+Temporal history may contain several rows for one external edge ID; external
+edge lookup rejects this ambiguity instead of silently choosing a version.
+Layer and walk calls accept point/window filters but do not impose causal
+ordering. Node/edge seed draws select from the entire snapshot, including all
+history rows; use time-filtered traversal or subgraph APIs for temporal selection.
 
 ---
 

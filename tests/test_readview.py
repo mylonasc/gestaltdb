@@ -356,6 +356,62 @@ def test_temporal_neighbor_sampling_composes_exact_filters(memory_graph, tmp_pat
     assert at_boundary.valid_to_open.tolist() == [False]
 
 
+def test_sampling_policies_preserve_temporal_filters_and_weights(memory_graph, tmp_path):
+    from gestaltdb.sampling import ExternalNeighborSamplingSpec
+
+    memory_graph.commit_versions([
+        NodeVersionWrite.assertion(Node(node_id), (0, None))
+        for node_id in ["a", "b", "c"]
+    ])
+    for edge, valid in [
+        (Edge("old", "a", "b", properties={"type": "R", "weight": 1000}), (0, 10)),
+        (Edge("new", "a", "c", properties={"type": "R", "weight": 2}), (10, None)),
+    ]:
+        memory_graph.put_edge_version(edge, valid=valid)
+    snapshot = memory_graph.build_sampler_snapshot(
+        tmp_path / "weighted-history", temporal=True, edge_weight_property="weight",
+    )
+    point = TemporalContext.as_of(10)
+    for mode in ["ram", "memmap"]:
+        engine = SamplerEngine.load(snapshot.path, mode=mode, seed=7)
+        sampled = engine.sample_neighbors_external(
+            ["a"], 10, relations=["R"], strategy="weighted", temporal=point,
+        )
+        assert sampled.to_external(snapshot)["edge_ids"].tolist() == ["new"]
+        assert sampled.valid_from_us.tolist() == [10]
+        assert engine.snapshot.edge_weights[sampled.edge_indices].tolist() == [2.0]
+        layers = engine.sample_layers_external(
+            ["a"], [ExternalNeighborSamplingSpec(10, relations=["R"], strategy="weighted")],
+            temporal=point,
+        )
+        assert layers.layers[0].edge_indices.tolist() == sampled.edge_indices.tolist()
+        assert layers.layers[0].edge_version_ids.tolist() == sampled.edge_version_ids.tolist()
+        walk = engine.sample_random_walks_external(
+            ["a"], 2, relations=["R"], strategy="weighted", temporal=point,
+        )
+        assert walk.to_external(snapshot)["node_ids"].tolist() == [["a", "c", None]]
+        batch = engine.sample_subgraph_external(["new"], [], temporal=point)
+        assert snapshot.external_edge_ids[batch.edge_ids_global].tolist() == ["new"]
+
+
+def test_temporal_external_edge_ids_are_ambiguous_across_version_rows(memory_graph, tmp_path):
+    _populate_temporal_snapshot_history(memory_graph)
+    snapshot = memory_graph.build_sampler_snapshot(tmp_path / "split-history", temporal=True)
+    assert snapshot.num_edges == 2
+    with pytest.raises(ValueError, match="ambiguous external edge IDs"):
+        snapshot.edge_int("ab")
+    assert snapshot.node_int("a") == 0
+
+
+def test_temporal_incident_self_loop_is_one_candidate(memory_graph, tmp_path):
+    memory_graph.put_edge_version(Edge("loop", "a", "a", properties={"type": "R"}), valid=(0, None))
+    snapshot = memory_graph.build_sampler_snapshot(tmp_path / "loop-history", temporal=True)
+    sampled = SamplerEngine(snapshot).sample_neighbors_external(
+        ["a"], 10, direction="any", temporal=TemporalContext.as_of(0),
+    )
+    assert sampled.edge_indices.tolist() == [0]
+
+
 def test_temporal_window_policies_filter_before_fanout(memory_graph, tmp_path):
     snapshot = _build_runtime_temporal_snapshot(memory_graph, tmp_path / "windows")
     a = snapshot.external_node_ids.tolist().index("a")
@@ -720,7 +776,8 @@ def test_temporal_snapshot_ram_memmap_parity_and_deterministic_rebuild(memory_gr
     assert np.array_equal(mapped.temporal_out.edge_indices, first.temporal_out.edge_indices)
 
 
-def test_pre_tkg09_temporal_v2_snapshot_derives_compatibility_indexes(memory_graph, tmp_path):
+@pytest.mark.parametrize("remove_policy_arrays", [False, True])
+def test_pre_tkg09_temporal_v2_snapshot_derives_compatibility_indexes(memory_graph, tmp_path, remove_policy_arrays):
     snapshot = _build_runtime_temporal_snapshot(memory_graph, tmp_path / "legacy-v2")
     metadata_path = snapshot.path / "metadata.json"
     completion_path = snapshot.path / "completion.json"
@@ -730,6 +787,11 @@ def test_pre_tkg09_temporal_v2_snapshot_derives_compatibility_indexes(memory_gra
         "positive_history_edge_indices", "node_history_indptr",
         "node_valid_from_us", "node_valid_to_us", "node_valid_to_open",
     }
+    if remove_policy_arrays:
+        metadata.pop("sampling_policy_arrays")
+        history_arrays.add("edge_weights")
+        for entity in ("node", "edge", "relation"):
+            history_arrays.update({f"{entity}_lookup_ids", f"{entity}_lookup_order"})
     metadata.pop("temporal_history_indexes")
     for name in history_arrays:
         metadata["artifacts"].pop(name)
@@ -750,6 +812,8 @@ def test_pre_tkg09_temporal_v2_snapshot_derives_compatibility_indexes(memory_gra
 
     assert loaded.positive_history_triples.shape[1] == 3
     assert loaded.node_history_indptr.shape == (loaded.num_nodes + 1,)
+    assert loaded.edge_weights.tolist() == [1.0] * loaded.num_edges
+    assert loaded.node_int("a") == snapshot.node_int("a")
 
 
 def test_empty_temporal_snapshot_is_complete_and_loadable(memory_graph, tmp_path):

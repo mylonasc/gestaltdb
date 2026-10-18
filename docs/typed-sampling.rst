@@ -151,6 +151,71 @@ them from stored edges.
    rebuilt = graph_db.rebuild_typed_adjacency()
    print(f"rebuilt {rebuilt} typed adjacency records")
 
+Array-Native Sampling Policies
+------------------------------
+
+``SamplerSnapshot`` and ``SamplerEngine`` provide seed, weighted-neighbor,
+layered, and first-order random-walk sampling without hydrating graph entities.
+For graph-backed builds, set ``edge_weight_property="confidence"``; for compact
+arrays, pass ``edge_weights`` to ``from_edge_arrays`` or ``from_arrays``.
+Weights must be finite and non-negative. Missing weights default to one;
+weighted selection excludes zero-weight candidates and rejects non-empty
+candidate sets whose weights are all zero. Without replacement, the requested
+count is capped at the number of eligible candidates.
+
+.. code-block:: python
+
+   from tempfile import TemporaryDirectory
+   from gestaltdb.sampling import NeighborSamplingSpec, SamplerEngine, SamplerSnapshot
+
+   with TemporaryDirectory() as tmpdir:
+       snapshot = SamplerSnapshot.from_edge_arrays(
+           f"{tmpdir}/snapshot",
+           external_node_ids=["a", "b", "c"],
+           external_edge_ids=["ab", "ac"],
+           external_relation_ids=["R"],
+           src_int=[0, 0], dst_int=[1, 2], rel_int=[0, 0],
+           edge_weights=[1.0, 3.0],
+       )
+       engine = SamplerEngine(snapshot, seed=7)
+       seeds = engine.sample_nodes(2)
+       edges = engine.sample_edges(1, strategy="weighted")
+       neighbors = engine.sample_neighbors_external(["a"], 1, strategy="weighted")
+       layers = engine.sample_layers([0], [NeighborSamplingSpec(2, strategy="weighted")])
+       walks = engine.sample_random_walks_external(["a"], 3, metapath=["R"])
+       print(neighbors.to_external(snapshot))
+
+``sample_nodes`` supports uniform, degree-based, and caller-weighted selection,
+with an optional node-type filter. ``sample_edges`` supports uniform or weighted
+selection with an optional relation filter. These are filtered draws, not
+balanced per-type/per-relation quotas. Layer specifications independently select
+fanout, direction, relations, replacement, and strategy. ``LayeredSampleBatch``
+preserves each layer's ``SampledNeighbors`` block and deduplicates the next
+frontier; it does not construct framework-native bipartite message-passing blocks.
+
+Walks support direction/relation filters, repeating metapaths, weighted steps,
+random restart, and terminate/restart dead-end policies. Their fixed-width node,
+edge, and relation arrays use ``-1`` for padding; restart transitions also have
+``-1`` edge/relation IDs. Metapath position advances only on graph-edge steps.
+``to_external(snapshot)`` converts these gaps to ``None``.
+
+Resolve external IDs with ``node_int(s)``, ``edge_int(s)``, and
+``relation_int(s)``. Plural methods preserve input order and report missing IDs
+together. Persisted sorted lookup arrays support memmap binary search. Duplicate
+logical edge IDs in temporal history are intentionally ambiguous: use compact
+edge rows rather than ``edge_int``/``sample_subgraph_external`` in that case.
+
+Layer and walk APIs accept ``temporal`` and ``window_policy`` filters, applied
+before selection at every step; these filters do not impose causal ordering
+between steps. Use the existing multihop/subgraph APIs for causal policies.
+Seed-node and seed-edge draws select from the entire snapshot, including all
+history rows in temporal snapshots; they do not perform time-based selection.
+Omitting ``temporal`` on traversal APIs likewise selects from all snapshot rows.
+
+New weights and lookup arrays are authenticated by the v2 artifact catalog.
+Older v2 snapshots without them still load with unit weights and derived
+lookups, without weakening their existing checksum guarantees.
+
 Temporal Sampler Snapshots
 --------------------------
 

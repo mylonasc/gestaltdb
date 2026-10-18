@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Reconciled the previously unmerged sampling policies with current temporal snapshots: weighted neighbors and edge seeds, node seeds, heterogeneous layers, random/metapath walks, and external-ID lookup/conversion helpers.
+- Authenticated weights and lookup arrays in v2 snapshots while retaining old v1/v2 compatibility; preserved temporal filtering and version-row ambiguity.
+- Added sampling validation and self-loop/frontier fixes, plus generated API cards for packaged agent-doc searches.
+
 ## 0.11.0
 
 - Improved the packaged offline graph visualization: configurable node/edge property labels, distinct selectable paths for parallel/reciprocal/self-loop relationships, property-driven node size/color and edge width/color, directed multi-hop neighborhood focus, local saved view state, and dependency-free static SVG output via `VizFigure.as_svg()`/`save_svg()`.
