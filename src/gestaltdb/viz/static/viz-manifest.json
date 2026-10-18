@@ -12,7 +12,7 @@
   "react_dom_version": "18.3.1",
   "source_files": {
     "index.html": "d8d09b9978409b78c0a407a64aacd1bffdd3a5822a86ae1d6c0659196ae7d6f7",
-    "package-lock.json": "1e027fbb26917ec84e47ebef80eafe8bb6b815655a6aa80e516898a152e79064",
+    "package-lock.json": "687e9ea9209914d3144387afb5db9c354f66165a21e4c4d44616492010f6aeed",
     "package.json": "b2692e67c7398ff19254927d745450015fa8f290b9a854a74e52d8b04b7662b2",
     "scripts/build_inputs.mjs": "980988850ab99d59fe8bbfd5a399b0b9169eedf9b3af4a112e951b64f0cd3d5c",
     "scripts/check_licenses.py": "c923c96fdf7482611a6675375400b464283f33c7b52ea4e5514f95590b328c41",
@@ -37,12 +37,12 @@
     "tsconfig.json": "5ef18e1e733ca6998c62ab11be2e7a86e71b0e3f66024c9c0d0ed10c684b876b",
     "vite.config.ts": "6bf30658a534f6c0917b89aac7d711ed6e0081d97b86dfb9dc6921605c9dc16a"
   },
-  "source_sha256": "af1434d9d4cb072fc46e3ce7c42e11c05102339a85d38c85e334e2f8adf5210f",
+  "source_sha256": "e43816aa7cb278bed703aea660b3b986404027cec440b8ea6bb4ee1e39b5941e",
   "toolchain": {
     "node": "v24.11.1",
     "npm": "npm/11.6.2 node/v24.11.1 linux x64 workspaces/false",
     "typescript": "5.6.3",
     "vite": "6.4.3"
   },
-  "built_at": "2026-09-30T22:14:12.281Z"
+  "built_at": "2026-10-18T11:04:18.606Z"
 }
