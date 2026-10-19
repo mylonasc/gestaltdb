@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from contextlib import ExitStack
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import hashlib
 import importlib
 import importlib.metadata
@@ -397,7 +398,7 @@ def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backends", nargs="+", choices=BACKENDS, default=list(BACKENDS))
     parser.add_argument("--workloads", nargs="+", choices=WORKLOADS, default=list(WORKLOADS))
-    parser.add_argument("--sizes", nargs="+", type=int, default=[16, 48])
+    parser.add_argument("--sizes", nargs="+", type=int, default=[8, 16])
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--timeout", type=float, default=30)
     parser.add_argument("--max-input", type=int, default=100_000)
@@ -411,6 +412,23 @@ def build_parser():
     return parser
 
 
+def _save_report(path, report):
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                         prefix=path.name + ".", suffix=".tmp", delete=False) as handle:
+            temporary = Path(handle.name)
+            json.dump(report, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
 def run_benchmark(args):
     if (args.repeats < 1 or not math.isfinite(args.timeout) or args.timeout <= 0
             or not args.sizes or not args.backends or not args.workloads
@@ -418,7 +436,19 @@ def run_benchmark(args):
         raise ValueError("positive repeat/timeout values and sizes between 2 and 10000 required")
     if any(getattr(args, name) < 1 for name in ("max_input", "max_facts", "max_candidates", "max_justifications")):
         raise ValueError("resource counters must be positive")
+    try:
+        revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True,
+                                           cwd=Path(__file__).resolve().parents[1], stderr=subprocess.DEVNULL).strip()
+    except (OSError, subprocess.CalledProcessError):
+        revision = None
     rows = []
+    report = {"schema_version": 1, "python": sys.version, "platform": platform.platform(), "git_revision": revision,
+              "started_utc": datetime.now(timezone.utc).isoformat(), "complete": False,
+              "planned_rows": len(args.backends) * len(args.workloads) * len(args.sizes) * args.repeats,
+              "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+              "machine": platform.machine(), "processor": platform.processor(), "logical_cpus": os.cpu_count(),
+              "command": sys.argv, "footprint": footprint(args.wheel), "rows": rows}
+    _save_report(args.output, report)
     for workload in args.workloads:
         for size in args.sizes:
             for backend in args.backends:
@@ -441,18 +471,9 @@ def run_benchmark(args):
                     except ValueError as exc:
                         value = {"status": "error", "reason": str(exc)}
                     rows.append({**spec, **value, "temp_root": args.temp_root, "worker_wall_s": time.perf_counter() - start})
-    try:
-        revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True,
-                                           cwd=Path(__file__).resolve().parents[1], stderr=subprocess.DEVNULL).strip()
-    except (OSError, subprocess.CalledProcessError):
-        revision = None
-    report = {"schema_version": 1, "python": sys.version, "platform": platform.platform(), "git_revision": revision,
-              "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-              "machine": platform.machine(), "processor": platform.processor(), "logical_cpus": os.cpu_count(),
-              "command": sys.argv, "footprint": footprint(args.wheel), "rows": rows}
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+                    _save_report(args.output, report)
+    report["complete"] = True
+    _save_report(args.output, report)
     print(json.dumps({"rows": len(rows), "statuses": {status: sum(row["status"] == status for row in rows)
                                                      for status in sorted({row["status"] for row in rows})},
                       "output": None if args.output is None else str(args.output)}, sort_keys=True))

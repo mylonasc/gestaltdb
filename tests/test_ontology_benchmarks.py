@@ -113,12 +113,35 @@ def test_fresh_worker_report_has_verified_digests_and_repeat_metadata(tmp_path):
     report = ontology.run_benchmark(args)
     assert report == json.loads(output.read_text())
     assert len(report["rows"]) == 4
+    assert report["complete"] and report["planned_rows"] == 4
     assert all(row["status"] == "ok" and row["closure_facts"] == 12 for row in report["rows"])
     assert len({row["closure_digest"] for row in report["rows"]}) == 1
     assert len(report["harness_sha256"]) == 64
     assert {row["repeat"] for row in report["rows"]} == {0, 1}
     assert report["rows"][0]["metrics"]["common_import_s"] > 0
     assert sorted(path.name for path in tmp_path.iterdir()) == ["results.json"]
+
+
+def test_interruption_retains_an_explicitly_incomplete_checkpoint(tmp_path, monkeypatch):
+    output = tmp_path / "partial.json"
+    original = subprocess.run
+
+    def interrupted(command, **kwargs):
+        if command[0] == sys.executable:
+            raise KeyboardInterrupt
+        return original(command, **kwargs)
+
+    monkeypatch.setattr(ontology.subprocess, "run", interrupted)
+    args = ontology.build_parser().parse_args([
+        "--backends", "native", "--sizes", "4", "--repeats", "1",
+        "--temp-root", str(tmp_path), "--output", str(output),
+    ])
+    with pytest.raises(KeyboardInterrupt):
+        ontology.run_benchmark(args)
+    partial = json.loads(output.read_text())
+    assert not partial["complete"] and partial["planned_rows"] == 4
+    assert partial["rows"] == []
+    assert [path.name for path in tmp_path.iterdir()] == ["partial.json"]
 
 
 def test_wheel_measurement_reports_only_feature_entries(tmp_path):
