@@ -7,9 +7,9 @@ Development status
 ------------------
 
 This is the ONTO-01 interface agreement for epic #131 on ``onto-dev``.
-Only the immutable reasoning contracts exist in this slice. The evaluator,
-ontology compiler, explanations and claims adapter are subsequent work packages;
-the descriptions below specify their required behavior, not shipped features.
+The immutable reasoning contracts and standalone Datalog evaluator now exist.
+Ontology compilation, explanations and the claims adapter are subsequent work
+packages; their descriptions below specify required behavior, not shipped features.
 See ``ONTO-EPIC.md`` in the repository for priorities and dependencies.
 
 Separation of concerns
@@ -35,7 +35,7 @@ its catalog by ID. Its versioned structural digest includes rule IDs, variable
 names and body order: it is not a logical-equivalence digest or ontology revision.
 Nested collections are copied into immutable tuples.
 
-The future evaluator implements ``Evaluator.evaluate(program, facts, *, limits)``.
+``DatalogEngine`` implements ``Evaluator.evaluate(program, facts, *, limits)``.
 Facts are an iterable, consumed under an input bound, not eagerly exhausted.
 ``EvaluationResult`` represents complete closure including input facts, with
 distinct facts in canonical subject/predicate/object order. ONTO-04 will extend
@@ -134,3 +134,54 @@ validity intervals and are never automatically written as claims or current grap
 records. Combining snapshots, worlds or temporal/current data planes requires a
 separate explicit adapter policy. Publication, deletion maintenance and historical
 interval inference are post-v1 work.
+
+Standalone evaluator (ONTO-02)
+------------------------------
+
+The evaluator is stateless across calls and has no database, filesystem, clock,
+ontology-catalog or evidence-source access. A minimal executable example:
+
+.. code-block:: python
+
+   from gestaltdb.reasoning.engine import DatalogEngine
+   from gestaltdb.reasoning.model import (
+       Atom, Fact, Program, ReasoningLimits, Rule, Variable,
+   )
+
+   x, y = Variable("x"), Variable("y")
+   program = Program([
+       Rule("parent-is-ancestor", [Atom(x, "parent", y)], Atom(x, "ancestor", y)),
+   ])
+   result = DatalogEngine().evaluate(
+       program,
+       [Fact("alice", "parent", "bob")],
+       limits=ReasoningLimits(),
+   )
+   assert Fact("alice", "ancestor", "bob") in result.facts
+   assert result.program_digest == program.digest
+
+Evaluation uses synchronous semi-naive rounds: every join variant anchors one
+body atom in the previous round's delta; other atoms use the current full closure.
+Every distinct body atom is a possible anchor. Identical repeated atoms need only
+one anchor, but retain their body positions. Facts from a round are added together
+after all its variants finish, so catalog order does not change round semantics.
+Variants can revisit the same logical binding; conclusion set semantics remove
+duplicates, and all attempted candidate joins still count toward the work bound.
+
+Predicate, predicate/subject and predicate/object indexes restrict candidates.
+Fully bound atoms use exact membership. After the delta anchor, remaining atoms
+are selected by the smallest indexed bucket, with original body order breaking
+ties. Traversal is iterative depth-first; no unbounded intermediate join table
+or recursive Python call chain is constructed. Index bucket order is deterministic
+for a fixed logical input, independent of input ordering or hash seed.
+
+One iteration means an executed delta round with at least one scheduled rule
+variant. An exhausted input, empty program or delta with no relevant variants
+requires no further round. A recursive final round that produces no new facts
+still counts. No proof data is collected yet; ``max_proof_nodes`` is reserved
+for ONTO-04 and has no effect on closure in this slice.
+
+Input iterators and constructing already-materialized program/limit values remain
+caller responsibilities. Exceptions raised by an input iterator propagate;
+invalid yielded values raise ``ReasoningError``. Limit failures do not change the
+program or input collections and do not affect subsequent calls on the same engine.
