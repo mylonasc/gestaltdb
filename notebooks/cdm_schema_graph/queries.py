@@ -51,3 +51,29 @@ MATCH (t:CdmType)
 RETURN t.coarse_namespace AS namespace, count(*) AS types
 ORDER BY types DESC
 """
+
+# Entity-returning variants for visualization. Scalar projections (above) are
+# for tables; graph.visualize needs Node/Edge/Path values in the result rows,
+# otherwise the figure is empty ("scalar-only projection carries no graph
+# topology"). Relationship-first column order lets endpoint placeholders
+# upgrade when the full nodes arrive.
+TRADE_GRAPH = """\
+MATCH (t:CdmType {name: "Trade"})-[r:HAS_PROPERTY]->(dep)
+RETURN r, t, dep
+"""
+
+ASSET_GRAPH = """\
+MATCH (a:CdmType {name: "Asset"})-[r:HAS_PROPERTY]->(child)
+OPTIONAL MATCH (child)-[r2:HAS_PROPERTY]->(grandchild)
+RETURN r, r2, a, child, grandchild
+"""
+
+LEGAL_AGREEMENT_GRAPH = """\
+MATCH (l:CdmType {name: "LegalAgreement"})-[r:HAS_PROPERTY]->(dep)
+RETURN r, l, dep
+"""
+
+NAMESPACE_GRAPH = """\
+MATCH (n:CdmNamespace)-[r:CHILD_NAMESPACE]->(parent)
+RETURN r, n, parent
+"""

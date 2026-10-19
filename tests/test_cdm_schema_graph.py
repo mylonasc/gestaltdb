@@ -268,3 +268,38 @@ def test_pydantic_full_walk_no_dangling_refs():
     assert "ns:cdm-event" in node_ids and "ns:cdm-legaldocumentation" in node_ids
     assert all(n.properties.get("parser_version") == PARSER_VERSION for n in payload.nodes)
     assert all(e.properties.get("parser_version") == PARSER_VERSION for e in payload.edges)
+
+
+def test_viz_graph_queries_return_entities_not_scalars(tmp_path):
+    """graph.visualize needs Node/Edge values; scalar projections render empty.
+
+    Regression test: every ``*_GRAPH`` query in queries.py must produce a
+    non-empty VizGraph on the fixture CDM graph.
+    """
+    pytest = __import__("pytest")
+    pytest.importorskip("plyvel")
+    from gestaltdb.graphdb import GraphDB
+    from gestaltdb.kvstores import LevelDBStore
+    from gestaltdb.serializers import JSONSerializer
+    from gestaltdb.viz.ir import VizGraph
+
+    from cdm_schema_graph import queries as Q
+
+    cache = _fixture_cache(tmp_path)
+    result = CdmSchemaParser(cache_dir=cache).parse_all(directory=cache)
+    payload = build_graph_payload(result)
+    graph = GraphDB(LevelDBStore(path=str(tmp_path / "graph")), JSONSerializer())
+    try:
+        from cdm_schema_graph.graph_builder import load_into_graph
+
+        load_into_graph(graph, payload)
+        for query in (Q.TRADE_GRAPH, Q.ASSET_GRAPH, Q.LEGAL_AGREEMENT_GRAPH,
+                      Q.NAMESPACE_GRAPH):
+            viz = VizGraph.from_cypher_result(graph.query(query))
+            assert len(viz.nodes) > 0, query
+            assert len(viz.edges) > 0, query
+        # The scalar table queries must NOT be used for visualization.
+        scalar = VizGraph.from_cypher_result(graph.query(Q.TRADE_NEIGHBOURHOOD))
+        assert len(scalar.nodes) == 0
+    finally:
+        graph.close()
