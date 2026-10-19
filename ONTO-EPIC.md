@@ -8,11 +8,19 @@ the APIs or features below have already shipped.
 ## Delivery status
 
 - Epic and ONTO-01 through ONTO-11 child issues created; plan pushed to `onto-dev`.
-- ONTO-01 implemented in [PR #143](https://github.com/mylonasc/gestaltdb/pull/143),
-  targeting `onto-dev`; not yet integrated. Its contract tests pass on Python
-  3.10-3.13, focused regressions pass, and documentation checks/build pass.
-- ONTO-02 is the next implementation slice. ONTO-03 and ONTO-04 become parallel
-  workstreams after the kernel interfaces and implementation land.
+- ONTO-01 integrated into `onto-dev` through
+  [PR #143](https://github.com/mylonasc/gestaltdb/pull/143); #132 closed.
+- ONTO-02 integrated into `onto-dev` through
+  [PR #144](https://github.com/mylonasc/gestaltdb/pull/144) after its PR check passed.
+  Stateless indexed delta evaluation and work bounds;
+  39 reasoning tests pass on Python 3.10-3.13. Full suite: 1305 passed, 209 skipped.
+- ONTO-03 implemented in [PR #145](https://github.com/mylonasc/gestaltdb/pull/145),
+  targeting `onto-dev`, with its ONTO-02 prerequisite now integrated. Immutable axioms,
+  canonical revisions and pure compilation with exact axiom origins; 68 combined
+  reasoning/compiler tests pass on Python 3.10-3.13. Full suite: 1334 passed,
+  209 optional-dependency skips. Documentation checks and builds pass.
+- ONTO-04 (bounded proofs/results) is next and depends only on ONTO-02; its work
+  is independent of the ontology compiler. ONTO-05 waits for both 03 and 04.
 
 ## Goal and decisions
 
