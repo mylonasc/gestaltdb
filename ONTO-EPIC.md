@@ -26,8 +26,20 @@ the APIs or features below have already shipped.
   immutable membership/filter lookups. All 90 combined reasoning/compiler tests
   pass on Python 3.10-3.13; full suite: 1356 passed, 209 skips. Documentation
   checks/build and executable examples pass.
-- ONTO-05 (pinned claims adapter) is next; its prerequisites are integrated.
-  ONTO-07 benchmarking can now proceed independently.
+- ONTO-05 integrated into `onto-dev` through
+  [PR #147](https://github.com/mylonasc/gestaltdb/pull/147) after its PR check passed;
+  #136 closed. Verified read-only pinned claim extraction and context-bound
+  results. Full suite: 1394 passed, 211 skips; 128 combined feature cases pass on
+  Python 3.10-3.13 with two unavailable PyRex skips per version.
+- ONTO-06 implemented in [PR #148](https://github.com/mylonasc/gestaltdb/pull/148),
+  targeting `onto-dev`, awaiting CI/integration. Twenty ontology cases agree with
+  independent grounding and the selected-consequence OWL-RL oracle. Explicit
+  oracle run: 43 passed. Full suite with oracle/backends: 1437 passed, 211 skips;
+  171 combined feature cases pass on Python 3.10-3.13 (two PyRex skips per version).
+  A dedicated Python/oracle CI matrix covers relevant epic and main PRs/pushes;
+  the existing general Python workflow only targets `main`.
+- ONTO-07 (benchmarks and measured solver decision) is next. ONTO-08 remains the
+  v1 integration/release gate after both conformance and benchmarking are complete.
 
 ## Goal and decisions
 
