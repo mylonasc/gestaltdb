@@ -46,7 +46,9 @@ class FactSource(Protocol):
 
     Ontology compilation/evaluation never invokes this adapter implicitly.
     Consumers enforce a bound while iterating, before collecting all evidence.
-    The source owns the pinned view lifetime; iteration must not silently repin.
+    The source owns its iteration lifetime and preserves a pinned view while
+    active. It may borrow a caller-managed graph/view without closing either.
+    Iteration must not silently repin.
     """
 
     @property

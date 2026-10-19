@@ -8,9 +8,8 @@ Development status
 
 This is the ONTO-01 interface agreement for epic #131 on ``onto-dev``.
 The immutable reasoning contracts, standalone Datalog evaluator, ontology
-compiler and bounded witness explanations now exist. The claims adapter is a
-subsequent work package; its description below specifies required behavior,
-not a shipped feature.
+compiler, bounded witness explanations and pinned claims adapter now exist on
+the epic branch. They are not yet a main-branch release.
 See ``ONTO-EPIC.md`` in the repository for priorities and dependencies.
 
 Separation of concerns
@@ -116,8 +115,9 @@ Adapter lifecycle and temporal semantics
 -----------------------------------------
 
 ``FactSource`` exposes one immutable ``InputContext`` and an evidence iterator.
-The adapter owns and pins the read-view lifetime; iteration must not repin or
-mix contexts. Each ``Evidence`` carries a ground fact and opaque immutable
+The adapter preserves a caller-provided pinned view during its own iteration
+lifetime; it does not create or close the caller's graph/view. Iteration must not
+repin or mix contexts. Each ``Evidence`` carries a ground fact and opaque immutable
 reference ID. Many references may support one fact. The source adapter and
 consumer must bound evidence consumption before collecting it in memory.
 
@@ -331,3 +331,104 @@ empty, truncated explanation; a fact outside the closure raises ``KeyError``.
 Explaining a known fact when collection was disabled raises ``ReasoningError``.
 The lower-level trace alone does not establish that an unstored fact is entailed;
 use the result wrapper for that distinction.
+
+Pinned temporal claims (ONTO-05)
+--------------------------------
+
+Import ``PinnedClaimSource``, ``ClaimSelection``, ``ClaimMapping`` and
+``ClaimSourceLimits`` from ``gestaltdb.reasoning.adapters.claims``. Only this
+adapter layer depends on GraphDB and temporal/provenance records; the standalone
+core and ontology compiler never import it.
+
+The caller first obtains a temporal ``GraphReadView`` through the existing
+``graph.read_view(valid_time=..., system_time=...)`` context manager. Database
+creation/opening and any identity initialization happen outside extraction.
+The adapter requires an already initialized, verifiable source, and does not
+initialize identity, rebuild stale indexes or write any records or claims.
+
+For example, this helper accepts an existing view and a compiled ontology:
+
+.. code-block:: python
+
+   from gestaltdb.reasoning.adapters.claims import (
+       ClaimMapping, ClaimSelection, ClaimSourceLimits, PinnedClaimSource,
+   )
+   from gestaltdb.reasoning.model import ReasoningLimits
+
+   def reason_over_claims(view, compiled, *, world):
+       with PinnedClaimSource(
+           view,
+           world=world,
+           ontology_revision=compiled.revision_id,
+           selection=ClaimSelection(),  # Explicitly all agents and sources.
+           mapping=ClaimMapping(),      # Preserve all claim predicates.
+           limits=ClaimSourceLimits(max_scanned_claims=10_000),
+       ) as source:
+           return source.evaluate(
+               compiled, limits=ReasoningLimits(), collect_proofs=True,
+           )
+
+``ClaimSelection`` normalizes explicit agent/source collections into immutable
+canonical tuples. ``None`` means all, an empty collection means none, and
+``sources=(None,)`` means only claims with no source. These distinct policies
+have distinct fingerprints. ``include_derived=False`` excludes recognized
+``gestaltdb:rules`` / ``gestaltdb.rules`` and ``gestaltdb:ontology`` /
+``gestaltdb.ontology`` agent/derivation-marker pairs. Opt-in is explicit and
+changes policy/context identity. These metadata conventions do not authenticate
+the original asserting agent or defend against untrusted Python implementations.
+
+Only positive entity-object claims participate, in exactly one selected world
+at the view's valid-time point and commit prefix. A negative assertion does not
+suppress independent positive support. Confidence is not propagated. Half-open
+validity, corrections and retractions use existing claim/as-of semantics.
+The adapter yields exact canonical historical version IDs as evidence; multiple
+versions/sources for one proposition do not multiply logical facts. The core's
+single-witness policy still retains at most one canonical evidence reference.
+
+``ClaimMapping(predicate_aliases=((source, target), ...))`` maps predicates only.
+The empty mapping preserves identifiers exactly; no native node label, edge type,
+``IS_A`` predicate or other local spelling is implicitly assigned ontology meaning.
+For a local membership predicate, explicitly map it to ``TYPE_PREDICATE``.
+Unmapped predicates, subjects and objects remain unchanged. Duplicate alias
+sources are rejected, even if their targets agree. Mapping identity records this
+preserve-unmapped policy and canonical aliases.
+
+``PinnedClaimSource.context`` fingerprints verified source provenance, world,
+ontology revision, source policy and mapping. The adapter captures a validated
+provenance copy and fixed point, never silently advancing to new commits. Later
+appends/corrections may change the live graph but not this view. Mutating or
+rebinding the original view's graph, provenance or default time is rejected.
+Private read-view/identity accesses are confined to this adapter boundary.
+
+Verification checks persisted identity as well as the handle's cached identity,
+backend/serializer identity and the selected commit-visibility digest. It runs
+before and after iteration and after inference. Cheap per-item checks catch view
+rebinding while consuming records. This detects inconsistency with a source view;
+tokens/content digests are not cryptographic attestations of caller-supplied data.
+
+``max_scanned_claims`` counts candidates yielded by the underlying positive,
+entity-object, selected-world query, before agent/source/derived filtering.
+It detects overflow after at most the limit plus one candidate, even when none
+pass policy. ``ReasoningLimits.max_input_facts`` separately bounds yielded
+evidence consumed by the engine, including duplicate logical facts. Backend-internal
+index scans/candidate-ID materialization and commit-prefix verification are outside
+these counters. Neither counter promises a total query-time or RSS ceiling.
+
+Use ``source.evaluate(compiled, ...)`` for a complete result verified after
+inference. A direct, partially consumed ``iter_evidence()`` stream is not an atomic
+authenticated batch and does not itself bind an arbitrary external engine result
+to context. Do not manually concatenate streams from incompatible contexts.
+
+``ClaimReasoningResult`` retains immutable input context, provenance, compiled
+ontology, policy/mapping and the core result. It checks their revision, policy,
+mapping and program consistency; even two ontology IDs with identical generated
+programs remain distinct contexts. ``facts``, membership, ``match`` and ``explain``
+delegate to the core result. ``verify_source(graph)`` can recheck the original
+source identity/prefix later; it does not rerun inference or authenticate a manually
+constructed result. Results remain usable after the source is closed, have no
+database handle, and make no interval-validity or materialization guarantee.
+
+Closing the source invalidates its outstanding and future iteration/evaluation
+without closing the borrowed graph/view. Keep the caller's graph open for the
+duration of extraction/evaluation. Stale temporal indexes fail closed and require
+an explicit caller-managed rebuild outside this read-only workflow.
