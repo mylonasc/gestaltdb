@@ -20,13 +20,14 @@ the APIs or features below have already shipped.
   canonical revisions and pure compilation with exact axiom origins; 68 combined
   reasoning/compiler tests pass on Python 3.10-3.13. Full suite: 1334 passed,
   209 optional-dependency skips. Documentation checks and builds pass.
-- ONTO-04 implemented in [PR #146](https://github.com/mylonasc/gestaltdb/pull/146),
-  targeting `onto-dev`, awaiting integration. Opt-in single-witness DAGs and
+- ONTO-04 integrated into `onto-dev` through
+  [PR #146](https://github.com/mylonasc/gestaltdb/pull/146) after its PR check passed;
+  #135 closed. Opt-in single-witness DAGs and
   immutable membership/filter lookups. All 90 combined reasoning/compiler tests
   pass on Python 3.10-3.13; full suite: 1356 passed, 209 skips. Documentation
   checks/build and executable examples pass.
-- ONTO-05 (pinned claims adapter) is next after ONTO-04 integrates. ONTO-07
-  benchmarking can proceed independently once 03/04 are available.
+- ONTO-05 (pinned claims adapter) is next; its prerequisites are integrated.
+  ONTO-07 benchmarking can now proceed independently.
 
 ## Goal and decisions
 
