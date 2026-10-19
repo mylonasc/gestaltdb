@@ -467,6 +467,13 @@ as an executed differential gate. These packages are test-only and are not added
 to runtime requirements. Run the whole suite with the same ``--with`` options to
 exercise the gate alongside regressions; add installed backend extras as needed.
 
+``.github/workflows/ontology.yml`` runs these feature/reference/oracle gates on
+Python 3.10-3.13 for relevant PRs and pushes to ``onto-dev`` and ``main``. It installs
+the optional oracle and LMDB/LevelDB explicitly, so an absent oracle cannot silently
+turn the differential gate into skips. The existing general test workflow targets
+``main``; this dedicated workflow also covers epic integration before that release.
+The optional PyRex cases may still skip when that backend is not installed.
+
 Static import checks inspect every reasoning-core and ontology module, excluding
 the explicit adapter subtree. They require standard-library or inward relative
 imports and reject dynamic import hooks. An isolated ``python -I -S`` subprocess
