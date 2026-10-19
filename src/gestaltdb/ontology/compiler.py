@@ -1,0 +1,104 @@
+"""Pure compilation from the selected ontology fragment to positive Datalog."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from ..reasoning.model import Atom, Program, Rule, Variable
+from .model import (
+    Domain, EquivalentClasses, EquivalentProperties, InverseOf, Ontology,
+    OntologyError, Range, SubClassOf, SubPropertyOf, Symmetric,
+    Transitive, TYPE_PREDICATE, _identifier,
+)
+
+
+@dataclass(frozen=True, order=True)
+class RuleOrigin:
+    """Exact source axiom for one generated rule, in its containing revision."""
+
+    rule_id: str
+    axiom_id: str
+
+    def __post_init__(self) -> None:
+        _identifier(self.rule_id, "rule_id")
+        _identifier(self.axiom_id, "axiom_id")
+
+
+@dataclass(frozen=True)
+class CompiledOntology:
+    """Immutable execution plan and complete rule-to-axiom origin table."""
+
+    ontology: Ontology
+    program: Program
+    origins: tuple[RuleOrigin, ...]
+
+    def __post_init__(self) -> None:
+        if type(self.ontology) is not Ontology:
+            raise OntologyError("compiled ontology must contain an Ontology")
+        if not isinstance(self.program, Program):
+            raise OntologyError("compiled program must be a Program")
+        if not isinstance(self.origins, (tuple, list)) or not all(
+            isinstance(origin, RuleOrigin) for origin in self.origins
+        ):
+            raise OntologyError("origins must be a tuple or list of RuleOrigin values")
+        origins = tuple(sorted(self.origins))
+        if tuple(origin.rule_id for origin in origins) != tuple(rule.rule_id for rule in self.program.rules):
+            raise OntologyError("origins must identify each program rule exactly once")
+        if {origin.axiom_id for origin in origins} != {axiom.axiom_id for axiom in self.ontology.axioms}:
+            raise OntologyError("origins must cover exactly the source ontology's axioms")
+        object.__setattr__(self, "origins", origins)
+
+    @property
+    def ontology_id(self) -> str:
+        return self.ontology.ontology_id
+
+    @property
+    def revision_id(self) -> str:
+        return self.ontology.revision_id
+
+    @property
+    def profile(self) -> str:
+        return self.ontology.profile
+
+
+def compile_ontology(ontology: Ontology) -> CompiledOntology:
+    """Compile without evaluating facts or modifying any external rule catalog."""
+    if type(ontology) is not Ontology:
+        raise OntologyError("ontology must be an Ontology")
+    rules = []
+    origins = []
+    x, y, z = Variable("x"), Variable("y"), Variable("z")
+    for axiom in ontology.axioms:
+        axiom_id = axiom.axiom_id
+
+        def add(body: list[Atom], head: Atom, direction: str = "forward") -> None:
+            rule_id = f"ontology:{axiom_id}:{direction}"
+            rules.append(Rule(rule_id, body, head))
+            origins.append(RuleOrigin(rule_id, axiom_id))
+
+        if isinstance(axiom, SubClassOf):
+            add([Atom(x, TYPE_PREDICATE, axiom.subclass)], Atom(x, TYPE_PREDICATE, axiom.superclass))
+        elif isinstance(axiom, SubPropertyOf):
+            add([Atom(x, axiom.subproperty, y)], Atom(x, axiom.superproperty, y))
+        elif isinstance(axiom, EquivalentClasses):
+            add([Atom(x, TYPE_PREDICATE, axiom.left)], Atom(x, TYPE_PREDICATE, axiom.right))
+            add([Atom(x, TYPE_PREDICATE, axiom.right)], Atom(x, TYPE_PREDICATE, axiom.left), "reverse")
+        elif isinstance(axiom, EquivalentProperties):
+            add([Atom(x, axiom.left, y)], Atom(x, axiom.right, y))
+            add([Atom(x, axiom.right, y)], Atom(x, axiom.left, y), "reverse")
+        elif isinstance(axiom, Domain):
+            add([Atom(x, axiom.property, y)], Atom(x, TYPE_PREDICATE, axiom.class_id))
+        elif isinstance(axiom, Range):
+            add([Atom(x, axiom.property, y)], Atom(y, TYPE_PREDICATE, axiom.class_id))
+        elif isinstance(axiom, InverseOf):
+            add([Atom(x, axiom.left, y)], Atom(y, axiom.right, x))
+            add([Atom(x, axiom.right, y)], Atom(y, axiom.left, x), "reverse")
+        elif isinstance(axiom, Symmetric):
+            add([Atom(x, axiom.property, y)], Atom(y, axiom.property, x))
+        elif isinstance(axiom, Transitive):
+            add([Atom(x, axiom.property, y), Atom(y, axiom.property, z)], Atom(x, axiom.property, z))
+        else:
+            # Ontology validation is strict; retain a fail-closed guard if the
+            # model's supported set is expanded without compiler support.
+            raise OntologyError(f"unsupported axiom: {type(axiom).__name__}")
+    return CompiledOntology(ontology, Program(rules), origins)

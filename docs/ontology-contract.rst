@@ -7,8 +7,8 @@ Development status
 ------------------
 
 This is the ONTO-01 interface agreement for epic #131 on ``onto-dev``.
-The immutable reasoning contracts and standalone Datalog evaluator now exist.
-Ontology compilation, explanations and the claims adapter are subsequent work
+The immutable reasoning contracts, standalone Datalog evaluator and ontology
+compiler now exist. Explanations and the claims adapter are subsequent work
 packages; their descriptions below specify required behavior, not shipped features.
 See ``ONTO-EPIC.md`` in the repository for priorities and dependencies.
 
@@ -66,7 +66,7 @@ The supported compilation templates are:
 Multiple inheritance and cycles are legal and terminate under set semantics.
 Named equivalence does not merge individuals. Multiple domain or range axioms
 infer every stated class, not a union choice. Stable axiom identities and compiler
-rule origins belong to ONTO-03; immutable revision identity is separate from the
+rule origins are available in ONTO-03; immutable revision identity is separate from the
 kernel's program digest. Hierarchy schema facts themselves are not automatically
 included in instance closure; future schema lookups must state their semantics.
 
@@ -185,3 +185,55 @@ Input iterators and constructing already-materialized program/limit values remai
 caller responsibilities. Exceptions raised by an input iterator propagate;
 invalid yielded values raise ``ReasoningError``. Limit failures do not change the
 program or input collections and do not affect subsequent calls on the same engine.
+
+Immutable ontology compilation (ONTO-03)
+---------------------------------------------
+
+Import ``Ontology`` and the nine supported axiom classes from
+``gestaltdb.ontology.model``. Import ``compile_ontology`` from
+``gestaltdb.ontology.compiler``. Compilation does not invoke an evaluator, access
+a database, install rules or merge entity identities.
+
+.. code-block:: python
+
+   from gestaltdb.ontology.compiler import compile_ontology
+   from gestaltdb.ontology.model import Domain, Ontology, SubClassOf, TYPE_PREDICATE
+   from gestaltdb.reasoning.engine import DatalogEngine
+   from gestaltdb.reasoning.model import Fact, ReasoningLimits
+
+   ontology = Ontology("organization", [
+       Domain("worksFor", "Researcher"),
+       SubClassOf("Researcher", "Person"),
+   ])
+   compiled = compile_ontology(ontology)
+   result = DatalogEngine().evaluate(
+       compiled.program,
+       [Fact("alice", "worksFor", "acme")],
+       limits=ReasoningLimits(),
+   )
+   assert Fact("alice", TYPE_PREDICATE, "Person") in result.facts
+   assert compiled.revision_id == ontology.revision_id
+
+``Ontology`` copies an explicit list/tuple of axioms, rejects unknown shapes
+(including unimplemented subclasses), removes duplicate axioms and sorts them
+canonically. Equivalence/inverse pairs normalize their endpoint order because
+those axiom forms are symmetric. Identifiers otherwise retain their exact string
+identity, including strings beginning with ``?``; the compiler uses typed variables
+internally, so such identifiers cannot become variables.
+
+Each axiom has a versioned SHA-256 content identity. The ontology revision digest
+also includes the ontology ID and profile. Reordering or repeating axioms does not
+change identity; changing ontology ID does change revision identity. Logically
+equivalent but structurally different axiom sets need not have equal revision IDs.
+These identities are content addresses, not persisted catalog versions or signed
+provenance. There is no implicit system time, valid time or network import.
+
+``CompiledOntology`` retains the immutable source ontology, its executable
+``program`` and a canonical ``origins`` tuple. Every generated rule has exactly
+one ``RuleOrigin(rule_id, axiom_id)``, and every source axiom is represented.
+The source ontology's revision scopes that table; callers can resolve exact axiom
+values without a storage lookup. Bidirectional axioms have separate forward and
+reverse rule IDs, including reflexive cases, so provenance is not erased by a
+logical simplification. Compilation currently emits templates directly rather
+than materializing hierarchy closure or collapsing strongly connected components.
+Cycles terminate through the evaluator's set semantics and resource bounds.
