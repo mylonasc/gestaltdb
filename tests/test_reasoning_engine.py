@@ -19,8 +19,9 @@ from gestaltdb.reasoning.model import (
 X, Y, Z = Variable("x"), Variable("y"), Variable("z")
 
 
-def _evaluate(rules=(), facts=(), **limits):
-    return DatalogEngine().evaluate(Program(rules), facts, limits=ReasoningLimits(**limits))
+def _evaluate(rules=(), facts=(), *, collect_proofs=False, **limits):
+    return DatalogEngine().evaluate(Program(rules), facts, limits=ReasoningLimits(**limits),
+                                    collect_proofs=collect_proofs)
 
 
 def _copy(source="p", target="q", rule_id="copy"):
@@ -107,7 +108,8 @@ def test_late_body_delta_can_enable_an_old_prefix():
     assert Fact("a", "out", "c") in result.facts
 
 
-def test_generated_small_programs_match_independent_grounding():
+@pytest.mark.parametrize("collect_proofs", [False, True])
+def test_generated_small_programs_match_independent_grounding(collect_proofs):
     rng = random.Random(20261019)
     terms = [X, Y, Z, "a", "b"]
     for case in range(100):
@@ -121,7 +123,7 @@ def test_generated_small_programs_match_independent_grounding():
             head_terms = ["a", "b"] + [Variable(name) for name in bound]
             rules.append(Rule(str(index), body,
                               Atom(rng.choice(head_terms), rng.choice("pq"), rng.choice(head_terms))))
-        result = _evaluate(rules, inputs)
+        result = _evaluate(rules, inputs, collect_proofs=collect_proofs)
         assert set(result.facts) == _reference(Program(rules), inputs), case
 
 
@@ -231,8 +233,9 @@ from standalone.engine import DatalogEngine
 from standalone.model import Atom, Fact, Program, ReasoningLimits, Rule, Variable
 x = Variable('x')
 p = Program([Rule('r', [Atom(x, 'p', 'b')], Atom(x, 'q', 'b'))])
-r = DatalogEngine().evaluate(p, [Fact('a', 'p', 'b')], limits=ReasoningLimits())
+r = DatalogEngine().evaluate(p, [Fact('a', 'p', 'b')], limits=ReasoningLimits(), collect_proofs=True)
 assert Fact('a', 'q', 'b') in r.facts
+assert len(r.explain(Fact('a', 'q', 'b')).nodes) == 2
 assert not any(name.startswith('gestaltdb') for name in sys.modules)
 """
     subprocess.run([sys.executable, "-I", "-S", "-c", script], check=True, capture_output=True, text=True)
@@ -244,7 +247,7 @@ from gestaltdb.reasoning.engine import DatalogEngine
 from gestaltdb.reasoning.model import *
 x, y = Variable('x'), Variable('y')
 p = Program([Rule('r', [Atom(x, 'p', y)], Atom(y, 'p', x))])
-r = DatalogEngine().evaluate(p, {Fact('a','p','b'), Fact('c','p','b')}, limits=ReasoningLimits())
+r = DatalogEngine().evaluate(p, {Fact('a','p','b'), Fact('c','p','b')}, limits=ReasoningLimits(), collect_proofs=True)
 print(r)
 """
     outputs = [subprocess.check_output([sys.executable, "-c", script], text=True,

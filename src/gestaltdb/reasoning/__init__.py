@@ -3,6 +3,7 @@
 Import values from :mod:`gestaltdb.reasoning.model`, protocols from
 :mod:`gestaltdb.reasoning.protocols`, and ``DatalogEngine`` from
 :mod:`gestaltdb.reasoning.engine`. Evaluation is read-only and does not publish
-claims. Ontology compilation and proofs arrive in later slices. The package-root
+claims. Proof values live in :mod:`gestaltdb.reasoning.proofs`; ontology compilation
+is a separate layer in :mod:`gestaltdb.ontology`. The package-root
 imports are not an independent-installation or minimal-import guarantee.
 """

@@ -10,6 +10,11 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from bisect import bisect_left, bisect_right
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .proofs import Explanation, ProofTrace
 
 
 class ReasoningError(ValueError):
@@ -152,8 +157,9 @@ class ReasoningLimits:
 
     Input counts include duplicates. Candidate rows count cumulative attempted
     fact/partial-binding joins, including failed matches, across evaluation.
-    ``max_facts`` counts distinct input plus derived facts. A proof-storage bound
-    truncates explanations only; inference-counter exhaustion raises instead.
+    ``max_facts`` counts distinct input plus derived facts. Proof budgets count
+    fact-witness records and premise/reference occurrences, respectively. They
+    truncate explanations only; inference-counter exhaustion raises instead.
     """
 
     max_input_facts: int = 100_000
@@ -162,6 +168,7 @@ class ReasoningLimits:
     max_candidate_rows: int = 1_000_000
     max_facts: int = 100_000
     max_proof_nodes: int = 10_000
+    max_proof_edges: int = 20_000
 
     def __post_init__(self) -> None:
         for name in self.__dataclass_fields__:
@@ -176,13 +183,14 @@ class EvaluationResult:
 
     Evaluators must raise on inference-limit failure rather than construct a
     partial result. Iterations count executed delta rounds; empty inputs or a
-    program with no applicable rules may require zero rounds. Proof information
-    will be layered onto this value in ONTO-04, not stored in graph records.
+    program with no applicable rules may require zero rounds. Optional proof
+    information is an immutable witness trace, never stored in graph records.
     """
 
     facts: tuple[Fact, ...]
     iterations: int
     program_digest: str
+    proofs: ProofTrace | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.facts, (tuple, list)):
@@ -193,3 +201,49 @@ class EvaluationResult:
             raise ReasoningError("iterations must be a non-negative integer")
         _text(self.program_digest, "program_digest")
         object.__setattr__(self, "facts", tuple(sorted(set(self.facts))))
+        if self.proofs is not None:
+            from .proofs import ProofTrace
+
+            if not isinstance(self.proofs, ProofTrace):
+                raise ReasoningError("proofs must be a ProofTrace or None")
+            if self.proofs.program.digest != self.program_digest:
+                raise ReasoningError("proof program does not match the result")
+            if any(node.fact not in self or any(premise not in self for premise in node.premises)
+                   for node in self.proofs.nodes):
+                raise ReasoningError("proof facts must belong to the result closure")
+            if not self.proofs.truncated and len(self.proofs.nodes) != len(self.facts):
+                raise ReasoningError("untruncated proofs must cover the result closure")
+
+    def __contains__(self, fact: object) -> bool:
+        if not isinstance(fact, Fact):
+            return False
+        position = bisect_left(self.facts, fact)
+        return position < len(self.facts) and self.facts[position] == fact
+
+    def match(
+        self, *, subject: str | None = None, predicate: str | None = None,
+        object: str | None = None,
+    ) -> tuple[Fact, ...]:
+        """Canonical matches; subject bounds narrow the scan without new indexes."""
+        for name, value in (("subject", subject), ("predicate", predicate), ("object", object)):
+            if value is not None:
+                _text(value, name)
+        start, end = 0, len(self.facts)
+        if subject is not None:
+            start = bisect_left(self.facts, subject, key=lambda fact: fact.subject)
+            end = bisect_right(self.facts, subject, key=lambda fact: fact.subject)
+        return tuple(
+            self.facts[index] for index in range(start, end)
+            if (predicate is None or self.facts[index].predicate == predicate)
+            and (object is None or self.facts[index].object == object)
+        )
+
+    def explain(self, fact: Fact, *, max_nodes: int = 1000) -> Explanation:
+        """One bounded witness; never an all-supports or deletion-maintenance API."""
+        if not isinstance(fact, Fact):
+            raise ReasoningError("explanation root must be a Fact")
+        if fact not in self:
+            raise KeyError(fact)
+        if self.proofs is None:
+            raise ReasoningError("proof collection was disabled for this evaluation")
+        return self.proofs.explain(fact, max_nodes=max_nodes)

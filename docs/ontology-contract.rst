@@ -7,9 +7,10 @@ Development status
 ------------------
 
 This is the ONTO-01 interface agreement for epic #131 on ``onto-dev``.
-The immutable reasoning contracts, standalone Datalog evaluator and ontology
-compiler now exist. Explanations and the claims adapter are subsequent work
-packages; their descriptions below specify required behavior, not shipped features.
+The immutable reasoning contracts, standalone Datalog evaluator, ontology
+compiler and bounded witness explanations now exist. The claims adapter is a
+subsequent work package; its description below specifies required behavior,
+not a shipped feature.
 See ``ONTO-EPIC.md`` in the repository for priorities and dependencies.
 
 Separation of concerns
@@ -35,11 +36,13 @@ its catalog by ID. Its versioned structural digest includes rule IDs, variable
 names and body order: it is not a logical-equivalence digest or ontology revision.
 Nested collections are copied into immutable tuples.
 
-``DatalogEngine`` implements ``Evaluator.evaluate(program, facts, *, limits)``.
-Facts are an iterable, consumed under an input bound, not eagerly exhausted.
+``DatalogEngine`` implements
+``Evaluator.evaluate(program, facts, *, limits, collect_proofs=False)``.
+Inputs are ``Fact`` or ``Evidence`` values in an iterable, consumed under an input
+bound, not eagerly exhausted. Duplicate evidence does not multiply logical facts.
 ``EvaluationResult`` represents complete closure including input facts, with
-distinct facts in canonical subject/predicate/object order. ONTO-04 will extend
-results with proof data without introducing persistence coupling.
+distinct facts in canonical subject/predicate/object order. Optional proof data
+does not introduce persistence coupling.
 
 Ontology compilation
 --------------------
@@ -82,7 +85,8 @@ Limits, proofs and failure
 ``ReasoningLimits`` requires positive integers (not booleans):
 
 * ``max_input_facts``: yielded input values, including duplicates. Consume at most
-  the limit plus one value to detect overflow. Reject non-Fact inputs explicitly.
+  the limit plus one value to detect overflow. Reject values other than Fact or
+  Evidence explicitly. Evidence entries count separately, even for the same fact.
 * ``max_rules``: input program size, checked before evaluation.
 * ``max_iterations``: executed delta rounds. Zero rounds are allowed for inputs
   requiring no rule evaluation; exceeding the bound fails, not truncates.
@@ -90,8 +94,11 @@ Limits, proofs and failure
   joins, including failed unifications, across all rounds. Check while joining,
   not after allocating an unbounded intermediate result.
 * ``max_facts``: distinct asserted plus derived closure facts.
-* ``max_proof_nodes``: stored explanation nodes. Truncate proofs explicitly if
+* ``max_proof_nodes``: stored fact-witness records. Truncate proofs explicitly if
   necessary without claiming incomplete logical closure.
+* ``max_proof_edges``: stored ordered premise occurrences plus input-reference
+  occurrences. This additional bound prevents one long rule body from exceeding
+  the proof-storage budget even when the node count is small.
 
 Inference-counter exhaustion raises ``ReasoningLimitError``. No partial
 successful closure is returned and no publication occurs. Malformed input raises
@@ -178,8 +185,8 @@ for a fixed logical input, independent of input ordering or hash seed.
 One iteration means an executed delta round with at least one scheduled rule
 variant. An exhausted input, empty program or delta with no relevant variants
 requires no further round. A recursive final round that produces no new facts
-still counts. No proof data is collected yet; ``max_proof_nodes`` is reserved
-for ONTO-04 and has no effect on closure in this slice.
+still counts. Proof data is collected only when ``collect_proofs=True``; proof
+budgets never change this closure or iteration semantics.
 
 Input iterators and constructing already-materialized program/limit values remain
 caller responsibilities. Exceptions raised by an input iterator propagate;
@@ -237,3 +244,90 @@ reverse rule IDs, including reflexive cases, so provenance is not erased by a
 logical simplification. Compilation currently emits templates directly rather
 than materializing hierarchy closure or collapsing strongly connected components.
 Cycles terminate through the evaluator's set semantics and resource bounds.
+
+Result lookups and witness explanations (ONTO-04)
+-------------------------------------------------
+
+``fact in result`` performs binary-search membership without a second full fact
+index. ``result.match(subject=..., predicate=..., object=...)`` returns immutable
+canonical matches. A subject filter narrows the scan using binary-search bounds;
+predicate/object-only lookups scan the result and are not index-backed.
+
+Proof collection is disabled by default. Enable it explicitly; proof budgets
+apply only to stored witnesses, independently of inference counters. Exceeding
+an inference bound still raises and returns no partial successful result.
+
+.. code-block:: python
+
+   from gestaltdb.ontology.compiler import compile_ontology
+   from gestaltdb.ontology.model import Domain, Ontology, SubClassOf, TYPE_PREDICATE
+   from gestaltdb.reasoning.engine import DatalogEngine
+   from gestaltdb.reasoning.model import Fact, ReasoningLimits
+   from gestaltdb.reasoning.protocols import Evidence
+
+   ontology = Ontology("organization", [
+       Domain("worksFor", "Researcher"),
+       SubClassOf("Researcher", "Person"),
+   ])
+   compiled = compile_ontology(ontology)
+   result = DatalogEngine().evaluate(
+       compiled.program,
+       [Evidence(Fact("alice", "worksFor", "acme"), "claim-version:1")],
+       limits=ReasoningLimits(max_proof_nodes=100, max_proof_edges=200),
+       collect_proofs=True,
+   )
+   root = Fact("alice", TYPE_PREDICATE, "Person")
+   explanation = result.explain(root, max_nodes=10)
+   assert root in result
+   assert result.match(subject="alice", predicate=TYPE_PREDICATE)
+   assert not explanation.truncated
+   assert len(explanation.nodes) == 3
+   origins = {origin.rule_id: origin.axiom_id for origin in compiled.origins}
+   axioms = {axiom.axiom_id: axiom for axiom in compiled.ontology.axioms}
+   used_axioms = {
+       axioms[origins[node.rule.rule_id]]
+       for node in explanation.nodes if node.rule is not None
+   }
+   assert used_axioms == set(ontology.axioms)
+
+The core never imports the ontology layer. A caller resolves witness rule IDs
+through its compiled ontology's origin table and retains that source revision.
+Named input evidence is an opaque caller-supplied reference, not an authenticated
+claim version; source validation and snapshot context belong to ONTO-05.
+
+``FactWitness`` stores a fact and either an asserted-input witness or its exact
+``Rule`` and ordered premises. Premises retain original body positions even if
+join planning reorders evaluation or a body repeats an atom. Only the first
+deterministically discovered derivation is kept for a new fact. Asserted facts
+are never replaced by cyclic derived support. Synchronous rounds guarantee that
+a derived witness depends on earlier-round facts, producing a finite DAG.
+
+For a named input fact, one lexicographically smallest supplied evidence reference
+is retained, independent of stream order. Alternative sources and derivations are
+intentionally not enumerated; omitting alternatives does not set ``truncated``.
+This is a witness policy, never an all-supports index or deletion-maintenance API.
+An ordinary Fact input can have an input witness without any external reference.
+
+``ProofTrace`` retains its immutable program and canonical, topologically ordered
+witness nodes, breaking ties by fact order. Constructors validate rule membership,
+ground rule applications, unique facts and acyclicity. Rule values are shared with
+the existing program, not copied per derivation. Source/reference strings do not
+create any database access. The trace is bounded by both witness-node count and
+premise/reference count; these remain counters, not a byte-accurate RSS bound.
+
+Input witness selection uses a bounded streaming pool of the smallest facts.
+If input facts fill the node budget, no derived witnesses may fit; increase the
+budget or accept explicit truncation. When edge space runs out, named evidence
+may be omitted and a derived witness may be absent entirely. Later stored
+witnesses may refer to absent earlier witnesses, with explicit truncation.
+Logical closure remains complete regardless of these proof omissions.
+
+``result.proofs.truncated`` conservatively reports any storage omission and is
+propagated to every explanation, even if a particular leaf was fully retained.
+``result.explain(fact, max_nodes=...)`` also bounds the reachable subgraph's
+fact-witness records using an iterative, deduplicated traversal. Query truncation
+does not change the stored trace. A known fact with no stored witness yields an
+empty, truncated explanation; a fact outside the closure raises ``KeyError``.
+Explaining a known fact when collection was disabled raises ``ReasoningError``.
+The lower-level trace alone does not establish that an unstored fact is entailed;
+use the result wrapper for that distinction.
