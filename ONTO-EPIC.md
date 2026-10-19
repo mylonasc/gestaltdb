@@ -31,8 +31,9 @@ the APIs or features below have already shipped.
   #136 closed. Verified read-only pinned claim extraction and context-bound
   results. Full suite: 1394 passed, 211 skips; 128 combined feature cases pass on
   Python 3.10-3.13 with two unavailable PyRex skips per version.
-- ONTO-06 implemented in [PR #148](https://github.com/mylonasc/gestaltdb/pull/148),
-  targeting `onto-dev`, awaiting CI/integration. Twenty ontology cases agree with
+- ONTO-06 integrated into `onto-dev` through
+  [PR #148](https://github.com/mylonasc/gestaltdb/pull/148) after all four dedicated
+  Python CI jobs passed; #137 closed. Twenty ontology cases agree with
   independent grounding and the selected-consequence OWL-RL oracle. Explicit
   oracle run: 43 passed. Full suite with oracle/backends: 1437 passed, 211 skips;
   171 combined feature cases pass on Python 3.10-3.13 (two PyRex skips per version).
