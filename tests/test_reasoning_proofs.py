@@ -282,3 +282,25 @@ def test_named_evidence_is_accepted_without_collecting_proofs():
     result = _run([_rule()], [Evidence(fact, "v1"), Evidence(fact, "v2")], collect_proofs=False)
     assert result.proofs is None
     assert result.facts == (fact, Fact("a", "q", "b"))
+
+
+def test_generated_storage_budgets_preserve_closure_and_bound_every_trace():
+    rng = random.Random(20261020)
+    z = Variable("z")
+    rules = [_rule("p", "q", "1"), _rule("q", "p", "2"),
+             Rule("3", [Atom(X, "p", Y), Atom(Y, "p", z)], Atom(X, "p", z))]
+    for _ in range(50):
+        inputs = [Evidence(Fact(rng.choice("abcd"), "p", rng.choice("abcd")), f"ref:{i}")
+                  for i in range(8)]
+        expected = _run(rules, inputs, collect_proofs=False)
+        limits = dict(max_proof_nodes=rng.randint(1, 12), max_proof_edges=rng.randint(1, 12))
+        result = _run(rules, inputs, **limits)
+        assert result.facts == expected.facts
+        assert result.iterations == expected.iterations
+        assert len(result.proofs.nodes) <= limits["max_proof_nodes"]
+        assert sum(len(node.premises) + len(node.evidence) for node in result.proofs.nodes) <= limits["max_proof_edges"]
+        assert result == _run(rules, list(reversed(inputs)), **limits)
+        for fact in result.facts[:5]:
+            explanation = result.explain(fact, max_nodes=1)
+            assert len(explanation.nodes) <= 1
+            assert not explanation.nodes or explanation.nodes[0].fact == fact
