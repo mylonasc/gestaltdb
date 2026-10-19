@@ -59,14 +59,15 @@ class Evaluator(Protocol):
     """Non-persisting deterministic complete-closure service.
 
     Consume at most ``max_input_facts + 1`` values to detect an oversized input.
-    Every yielded value must be a Fact. Duplicate inputs count toward that bound
-    but not logical multiplicity. No database, clock or source access is implied.
+    Values are Fact or Evidence. Duplicate inputs count toward that bound but
+    not logical multiplicity. No database, clock or source access is implied.
     """
 
     def evaluate(
         self,
         program: Program,
-        facts: Iterable[Fact],
+        facts: Iterable[Fact | Evidence],
         *,
         limits: ReasoningLimits,
+        collect_proofs: bool = False,
     ) -> EvaluationResult: ...

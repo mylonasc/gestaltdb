@@ -15,6 +15,8 @@ from .model import (
     Atom, EvaluationResult, Fact, Program, ReasoningError, ReasoningLimitError,
     ReasoningLimits, Rule, Term, Variable,
 )
+from .proofs import _ProofCollector
+from .protocols import Evidence
 
 
 class _Index:
@@ -94,8 +96,12 @@ def _choose(
 
 def _matches(
     rule: Rule, pivot: int, full: _Index, delta: _Index, budget: _Budget,
-) -> Iterator[dict[Variable, str]]:
+    *, track_premises: bool = False,
+) -> Iterator[tuple[dict[Variable, str], list[Fact | None] | None]]:
     remaining = tuple(index for index in range(len(rule.body)) if index != pivot)
+    # One invocation-local path buffer, not a copy per intermediate binding.
+    # Consumers must snapshot it before requesting another match.
+    premises = [None] * len(rule.body) if track_premises else None
     # Frames retain only the current DFS path; relation buckets are not copied.
     stack = [({}, remaining, pivot, iter(delta.candidates(rule.body[pivot], {})))]
     while stack:
@@ -109,8 +115,10 @@ def _matches(
         updated = _unify(rule.body[position], fact, bindings)
         if updated is None:
             continue
+        if premises is not None:
+            premises[position] = fact
         if not remaining:
-            yield updated
+            yield updated, premises
             continue
         chosen, bucket = _choose(rule, remaining, updated, full)
         if bucket:
@@ -124,17 +132,20 @@ class DatalogEngine:
     """Stateless, deterministic positive-Datalog evaluator.
 
     Only complete closures are returned. Limits apply to each invocation;
-    failure does not poison later runs. This slice has no proof collection:
-    ``max_proof_nodes`` is reserved for ONTO-04 and does not bound inference.
+    failure does not poison later runs. Proof collection is opt-in and bounded
+    independently: truncating a witness trace never truncates logical closure.
     """
 
     def evaluate(
-        self, program: Program, facts: Iterable[Fact], *, limits: ReasoningLimits,
+        self, program: Program, facts: Iterable[Fact | Evidence], *, limits: ReasoningLimits,
+        collect_proofs: bool = False,
     ) -> EvaluationResult:
         if not isinstance(program, Program):
             raise ReasoningError("program must be a Program")
         if not isinstance(limits, ReasoningLimits):
             raise ReasoningError("limits must be ReasoningLimits")
+        if not isinstance(collect_proofs, bool):
+            raise ReasoningError("collect_proofs must be a bool")
         if len(program.rules) > limits.max_rules:
             raise ReasoningLimitError(f"evaluation exceeded max_rules={limits.max_rules}")
         try:
@@ -142,16 +153,23 @@ class DatalogEngine:
         except TypeError as exc:
             raise ReasoningError("facts must be an iterable of Fact values") from exc
         initial: set[Fact] = set()
-        for count, fact in enumerate(iterator, 1):
+        collector = _ProofCollector(program, limits) if collect_proofs else None
+        for count, value in enumerate(iterator, 1):
             if count > limits.max_input_facts:
                 raise ReasoningLimitError(
                     f"evaluation exceeded max_input_facts={limits.max_input_facts}"
                 )
+            fact = value.fact if isinstance(value, Evidence) else value
             if not isinstance(fact, Fact):
-                raise ReasoningError("facts must contain only Fact values")
+                raise ReasoningError("facts must contain only Fact or Evidence values")
             initial.add(fact)
             if len(initial) > limits.max_facts:
                 raise ReasoningLimitError(f"evaluation exceeded max_facts={limits.max_facts}")
+            if collector is not None:
+                collector.input(fact, value.reference_id if isinstance(value, Evidence) else None)
+
+        if collector is not None:
+            collector.start()
 
         full = _Index(sorted(initial))
         delta = full
@@ -182,7 +200,10 @@ class DatalogEngine:
                 )
             added: set[Fact] = set()
             for rule, pivot in active:
-                for bindings in _matches(rule, pivot, full, delta, budget):
+                track = collector is not None and collector.can_record(rule)
+                for bindings, premises in _matches(
+                    rule, pivot, full, delta, budget, track_premises=track,
+                ):
                     # Safe heads ensure every Variable has a binding here.
                     subject = _value(rule.head.subject, bindings)
                     object_value = _value(rule.head.object, bindings)
@@ -194,10 +215,15 @@ class DatalogEngine:
                             f"evaluation exceeded max_facts={limits.max_facts}"
                         )
                     added.add(conclusion)
+                    if collector is not None:
+                        collector.derived(conclusion, rule, premises)
             iterations += 1
             ordered = sorted(added)
             for fact in ordered:
                 full.add(fact)
             delta = _Index(ordered)
 
-        return EvaluationResult(tuple(full.facts), iterations, program.digest)
+        return EvaluationResult(
+            tuple(full.facts), iterations, program.digest,
+            collector.finish() if collector is not None else None,
+        )

@@ -186,7 +186,7 @@ assert not any(name.startswith('gestaltdb') for name in sys.modules)
 def test_reasoning_and_ontology_contract_examples_execute():
     document = Path(__file__).parents[1] / "docs" / "ontology-contract.rst"
     blocks = document.read_text().split(".. code-block:: python\n")[1:]
-    assert len(blocks) == 2
+    assert len(blocks) == 3
     for block in blocks:
         code = []
         for line in block.splitlines():
