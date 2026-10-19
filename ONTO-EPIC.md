@@ -5,6 +5,15 @@ Integration branch: **`onto-dev`**. Implementation PRs target this branch,
 not `main`. This document is the implementation agreement, not a claim that
 the APIs or features below have already shipped.
 
+## Delivery status
+
+- Epic and ONTO-01 through ONTO-11 child issues created; plan pushed to `onto-dev`.
+- ONTO-01 implemented in [PR #143](https://github.com/mylonasc/gestaltdb/pull/143),
+  targeting `onto-dev`; not yet integrated. Its contract tests pass on Python
+  3.10-3.13, focused regressions pass, and documentation checks/build pass.
+- ONTO-02 is the next implementation slice. ONTO-03 and ONTO-04 become parallel
+  workstreams after the kernel interfaces and implementation land.
+
 ## Goal and decisions
 
 Deliver a fast, small, portable ontology reasoner, decoupled from graph storage.
