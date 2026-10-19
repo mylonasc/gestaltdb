@@ -14,13 +14,19 @@ the APIs or features below have already shipped.
   [PR #144](https://github.com/mylonasc/gestaltdb/pull/144) after its PR check passed.
   Stateless indexed delta evaluation and work bounds;
   39 reasoning tests pass on Python 3.10-3.13. Full suite: 1305 passed, 209 skipped.
-- ONTO-03 implemented in [PR #145](https://github.com/mylonasc/gestaltdb/pull/145),
-  targeting `onto-dev`, with its ONTO-02 prerequisite now integrated. Immutable axioms,
+- ONTO-03 integrated into `onto-dev` through
+  [PR #145](https://github.com/mylonasc/gestaltdb/pull/145) after its PR check passed;
+  #134 closed. Immutable axioms,
   canonical revisions and pure compilation with exact axiom origins; 68 combined
   reasoning/compiler tests pass on Python 3.10-3.13. Full suite: 1334 passed,
   209 optional-dependency skips. Documentation checks and builds pass.
-- ONTO-04 (bounded proofs/results) is next and depends only on ONTO-02; its work
-  is independent of the ontology compiler. ONTO-05 waits for both 03 and 04.
+- ONTO-04 implemented in [PR #146](https://github.com/mylonasc/gestaltdb/pull/146),
+  targeting `onto-dev`, awaiting integration. Opt-in single-witness DAGs and
+  immutable membership/filter lookups. All 90 combined reasoning/compiler tests
+  pass on Python 3.10-3.13; full suite: 1356 passed, 209 skips. Documentation
+  checks/build and executable examples pass.
+- ONTO-05 (pinned claims adapter) is next after ONTO-04 integrates. ONTO-07
+  benchmarking can proceed independently once 03/04 are available.
 
 ## Goal and decisions
 
@@ -83,6 +89,9 @@ fragment is **not** complete RDFS, OWL-RL, OWL-EL or OWL-DL.
   closure. Proof truncation is separately visible and does not invalidate closure.
 - Bound inputs, rules, iterations, intermediate work, output facts and proof
   storage. These counters are not an exact process-RSS or wall-clock guarantee.
+- ONTO-04 adds `max_proof_edges` alongside `max_proof_nodes`: premise occurrences
+  and retained evidence references need a separate bound for long rule bodies.
+  Both proof limits truncate only explanations, never successful logical closure.
 
 ## Architecture and import direction
 
@@ -120,6 +129,10 @@ are not v1 prerequisites. Add tests against *implementation* import regressions.
 
 Proofs are finite shared DAGs, not enumerated proof trees. A bounded witness is
 not sufficient for deletion maintenance: no such guarantee is made in v1.
+Collection is opt-in. One deterministic derivation and one canonical named input
+reference per logical fact are retained, not every independent source/support.
+Core proofs expose rules and opaque evidence; callers resolve exact source axioms
+through compiled origin tables without introducing an ontology import in the core.
 
 ## Indexed work packages
 
