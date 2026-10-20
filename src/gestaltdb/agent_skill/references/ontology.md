@@ -44,6 +44,11 @@ bulk-read performance from standalone reasoning benchmarks.
 
 ## Explicit optional boundaries
 
+The experimental `gestaltdb.reasoning.adapters.polars.PolarsDatalogPrototype`
+(`gestaltdb[polars]`) returns a closure-only `PolarsRun` for explicit in-memory
+contexts. It is not the default evaluator: no witnesses, source authentication,
+publication or maintenance; its row-work budgets differ from indexed Python.
+
 - `gestaltdb.ontology.adapters.rdf`: install `gestaltdb[rdf]`; pass an in-memory
   `RDFDocument` and absolute `ontology_id` to `import_rdf`. Imports resolve only
   through an explicit document map. Unsupported logic fails strictly; permissive
