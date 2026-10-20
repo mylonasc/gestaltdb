@@ -1,0 +1,131 @@
+{
+  "complete": true,
+  "git_revision": "7685984bcfefd5ce633c376345703a1cd1dbb82b",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "python": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
+  "rows": [
+    {
+      "backend": "lmdb",
+      "batch_rows": 256,
+      "batches": 8,
+      "capability": {
+        "backend": "LMDBStore",
+        "native_arrow_scan": false,
+        "pinned_snapshot": true,
+        "snapshot_kind": "lmdb-read-transaction"
+      },
+      "limit_hit": "ReasoningLimitError",
+      "metrics": {
+        "batched_s": 3.2997869400060154,
+        "load_s": 9.302686889001052,
+        "pipeline_s": 19.04577835099917,
+        "single_pass_s": 3.1927526779982145
+      },
+      "predicates": 4,
+      "pushdown": "none",
+      "rows": 2000,
+      "rows_per_s_batched": 606.0997380625896,
+      "rows_per_s_single": 626.4187056461749,
+      "rss_peak_bytes": 77148160,
+      "status": "ok",
+      "threads": {
+        "OMP_NUM_THREADS": "1",
+        "POLARS_MAX_THREADS": "1"
+      },
+      "verifications": 5
+    },
+    {
+      "backend": "lmdb",
+      "batch_rows": 256,
+      "batches": 8,
+      "capability": {
+        "backend": "LMDBStore",
+        "native_arrow_scan": false,
+        "pinned_snapshot": true,
+        "snapshot_kind": "lmdb-read-transaction"
+      },
+      "limit_hit": "ReasoningLimitError",
+      "metrics": {
+        "batched_s": 3.2865143980016,
+        "load_s": 9.24591937600053,
+        "pipeline_s": 18.95946972800448,
+        "single_pass_s": 3.2093816380001954
+      },
+      "predicates": 4,
+      "pushdown": "none",
+      "rows": 2000,
+      "rows_per_s_batched": 608.5474632991479,
+      "rows_per_s_single": 623.1730051419576,
+      "rss_peak_bytes": 77832192,
+      "status": "ok",
+      "threads": {
+        "OMP_NUM_THREADS": "1",
+        "POLARS_MAX_THREADS": "1"
+      },
+      "verifications": 5
+    },
+    {
+      "backend": "leveldb",
+      "batch_rows": 256,
+      "batches": 8,
+      "capability": {
+        "backend": "LevelDBStore",
+        "native_arrow_scan": false,
+        "pinned_snapshot": false,
+        "snapshot_kind": "leveldb-none"
+      },
+      "limit_hit": "ReasoningLimitError",
+      "metrics": {
+        "batched_s": 2.670288769004401,
+        "load_s": 7.61091173299792,
+        "pipeline_s": 15.478523769001185,
+        "single_pass_s": 2.5587041249964386
+      },
+      "predicates": 4,
+      "pushdown": "none",
+      "rows": 2000,
+      "rows_per_s_batched": 748.9826655510694,
+      "rows_per_s_single": 781.6456699552098,
+      "rss_peak_bytes": 77832192,
+      "status": "ok",
+      "threads": {
+        "OMP_NUM_THREADS": "1",
+        "POLARS_MAX_THREADS": "1"
+      },
+      "verifications": 5
+    },
+    {
+      "backend": "leveldb",
+      "batch_rows": 256,
+      "batches": 8,
+      "capability": {
+        "backend": "LevelDBStore",
+        "native_arrow_scan": false,
+        "pinned_snapshot": false,
+        "snapshot_kind": "leveldb-none"
+      },
+      "limit_hit": "ReasoningLimitError",
+      "metrics": {
+        "batched_s": 2.661326193003333,
+        "load_s": 7.593699897995975,
+        "pipeline_s": 15.426647630003572,
+        "single_pass_s": 2.5442466439999407
+      },
+      "predicates": 4,
+      "pushdown": "none",
+      "rows": 2000,
+      "rows_per_s_batched": 751.5050222922805,
+      "rows_per_s_single": 786.087309859117,
+      "rss_peak_bytes": 77832192,
+      "status": "ok",
+      "threads": {
+        "OMP_NUM_THREADS": "1",
+        "POLARS_MAX_THREADS": "1"
+      },
+      "verifications": 5
+    }
+  ],
+  "schema_version": 1,
+  "source_sha256": "0446782594154276b6ae137cb958aa99589a3040b37d4bcb812912b604d19193",
+  "working_tree_dirty": false
+}
