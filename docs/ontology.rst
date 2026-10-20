@@ -7,6 +7,27 @@ mandatory solver dependency. It does not change asserted labels, relationships,
 Cypher results or sampler membership. All database interactions are explicit
 adapters; core and compiler depend only inward and on the standard library.
 
+Optional offline RDF import
+---------------------------
+
+Install ``gestaltdb[rdf]`` and import from
+``gestaltdb.ontology.adapters.rdf``. ``import_rdf(RDFDocument(text),
+ontology_id="urn:my-ontology")`` returns an immutable import report; call its
+``compile()`` method before reasoning. Turtle, N-Triples and UTF-8 RDF/XML are
+supported. Named terms retain full IRIs. Class/object-property declarations and
+the selected axiom forms are accepted; ABox statements, restrictions, builtin
+class/datatype semantics and other unsupported logic fail strictly by default.
+
+No URLs or files are loaded. Resolve ``owl:imports`` explicitly with an in-memory
+``imports={iri: RDFDocument(...)}`` map. Cycles are deduplicated. JSON-LD plugins,
+XML DTDs/entities and implicit network import resolution are not supported.
+``RDFImportLimits`` bounds cumulative bytes, triples and documents. These are
+not an operating-system sandbox. ``strict=False`` returns diagnostics and
+``complete=False`` on unsupported logic; compiling that report additionally
+requires ``allow_incomplete=True``. Never represent such output as complete
+OWL/RDFS reasoning. Standard label/comment/version annotations are counted and
+ignored, not converted into logical facts.
+
 Standalone example
 ------------------------
 

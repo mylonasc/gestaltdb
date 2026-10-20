@@ -24,6 +24,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+rdf = ["rdflib>=7.6.0,<8"]
 lmdb = ["lmdb"]
 leveldb = ["plyvel>=1.5.1"]
 msgpack = ["msgpack>=1.2.1"]

@@ -64,3 +64,4 @@ jobs:
           tests/test_ontology_conformance.py
           tests/test_ontology_benchmarks.py
           tests/test_ontology_public.py
+          tests/test_ontology_rdf.py
