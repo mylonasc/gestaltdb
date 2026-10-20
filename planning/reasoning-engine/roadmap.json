@@ -49,6 +49,14 @@
       "benchmark_evidence": "benchmarks/results/reasoning-re05-extraction.json",
       "pr": 193,
       "validation": "1643 passed, 199 skipped with backend/Arrow/Polars/solver extras; Sphinx -W, docs drift, examples, roadmap validator passed. 4 clean-revision extraction rows (LMDB+LevelDB parity, batch accounting, fail-closed budget). PR CI pending."
+    },
+    "RE-04": {
+      "status": "integrated",
+      "integration_commit": "07588ae",
+      "pr": 192,
+      "branch": "feature/re-04-plans",
+      "worktree": "re-04-plans",
+      "validation": "1673 passed, 199 skipped; docs/Sphinx/examples/roadmap validator passed; 144 verified first/reuse rows; Python 3.10-3.13 and fuzz CI passed."
     }
   },
   "source_sha256": {
