@@ -10,6 +10,8 @@ Additive relational IR and structural inspection live in ``.relational``;
 these do not expand the executable binary-entity profile.
 Compact reference batches/dictionaries live in ``.batches`` and optional Arrow
 exchange in ``.adapters.arrow``; neither is imported by this package initializer.
+Bounded extraction requests and capability records live in ``.extraction``;
+the pinned batched claim source in ``.adapters.batched`` borrows caller views.
 """
 
 from .engine import DatalogEngine

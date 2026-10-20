@@ -306,6 +306,17 @@ optional native read path will wait for the published release and validate its
 actual API/version, shared horizon and lifetime guarantees. This does not block
 RE-03 or require pausing its storage-independent implementation.
 
+### Implementation started: RE-05 (#166)
+
+Dedicated worktree `re-05-extraction`, branch `feature/re-05-extraction`, based on
+accepted RE-03 integration `b320c33` (RE-05 depends only on integrated RE-02, so it
+does not stack on unmerged RE-04). Storage-neutral `ExtractionRequest`/`FactBatch`
+contracts, storage-free capability probing and a pinned batched claim source with
+exact version-ID evidence, index pushdown modes and per-batch verification. LevelDB
+snapshot requests fail closed; `native_arrow_scan` is False on every backend until
+a released PyRex API is pinned and audited. See `docs/reasoning-extraction.rst`;
+evidence: `benchmarks/results/reasoning-re05-extraction.json`.
+
 RE-03 local validation: **1632 passed, 199 skipped** with LMDB/LevelDB, Arrow,
 Polars, Clingo and OWL-RL available. Sphinx warnings-as-errors, documentation drift
 and the full roadmap/evidence validator passed. The new prototype is explicitly

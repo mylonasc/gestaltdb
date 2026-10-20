@@ -9,12 +9,14 @@ on:
       - "benchmarks/ontology.py"
       - "benchmarks/reasoning_contracts.py"
       - "benchmarks/reasoning_batches.py"
+      - "benchmarks/reasoning_extraction.py"
       - "planning/reasoning-engine/**"
       - "gestaltdb_reasoning_feature_tracker.xlsx"
       - "EPIC_REASONING_ENGINE.md"
       - "docs/reasoning-execution.rst"
       - "docs/reasoning-batches.rst"
       - "docs/reasoning-polars.rst"
+      - "docs/reasoning-extraction.rst"
       - "benchmarks/ontology-requirements.txt"
       - "benchmarks/cli.py"
       - "docs/ontology-contract.rst"
@@ -29,12 +31,14 @@ on:
       - "benchmarks/ontology.py"
       - "benchmarks/reasoning_contracts.py"
       - "benchmarks/reasoning_batches.py"
+      - "benchmarks/reasoning_extraction.py"
       - "planning/reasoning-engine/**"
       - "gestaltdb_reasoning_feature_tracker.xlsx"
       - "EPIC_REASONING_ENGINE.md"
       - "docs/reasoning-execution.rst"
       - "docs/reasoning-batches.rst"
       - "docs/reasoning-polars.rst"
+      - "docs/reasoning-extraction.rst"
       - "benchmarks/ontology-requirements.txt"
       - "benchmarks/cli.py"
       - "docs/ontology-contract.rst"
@@ -77,6 +81,7 @@ jobs:
           tests/test_reasoning_batches.py
           tests/test_reasoning_arrow.py
           tests/test_reasoning_polars.py
+          tests/test_reasoning_extraction.py
           tests/test_reasoning_execution_baseline.py
           tests/test_reasoning_proofs.py
           tests/test_ontology_compiler.py
