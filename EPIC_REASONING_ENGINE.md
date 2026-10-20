@@ -249,8 +249,25 @@ Polars; docs drift, Sphinx with warnings-as-errors, runnable examples (7 passed,
 1 optional skip) and installed-wheel contract smoke passed. Forty fresh-worker
 benchmark rows passed all frozen budgets on clean source revision `99be3cb`;
 the full report is `benchmarks/results/reasoning-re01-baseline.json`.
-Python 3.10–3.13 PR CI is tracked in #189; no feature is considered integrated
-merely because local validation passed.
+Python 3.10–3.13 and fuzz CI passed; PR #189 merged into the second integration
+branch at `1c69373`. RE-01 is integrated, not released to `main`.
+
+### Implementation started: RE-02 (#163)
+
+Dedicated worktree `re-02-batches`, branch `feature/re-02-batches`, now based on
+accepted integration commit `1c69373`. Implemented canonical context-bound uint64
+symbol dictionaries, immutable compact columns, reference set/delta generations,
+separate exact evidence references and optional strict Arrow C Stream exchange.
+The public boundary and copy/lifetime/limits behavior are documented in
+`docs/reasoning-batches.rst`. Arrow exports share immutable little-endian payloads;
+imports copy/validate/canonicalize. These containers do not implement native joins,
+all-support maintenance, literal semantics or the proposed PyRex raw-KV scan API.
+
+RE-02 local validation: **1581 passed, 227 skipped** with the available optional
+backends and Arrow/Polars. Documentation drift, Sphinx warnings-as-errors, modular
+examples and an isolated no-site-packages batch smoke passed. The measurement
+runner is `python -m benchmarks.reasoning_batches`; executor comparisons and
+optimized joins remain RE-03/RE-06.
 
 Focused existing ontology/reasoning suite on this checkout: **181 passed, 72
 skipped** without optional extras. Repeated with LMDB, LevelDB and RDFLib, plus

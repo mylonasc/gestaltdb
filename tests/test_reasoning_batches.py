@@ -179,3 +179,12 @@ def test_documented_core_example_runs():
     text = (Path(__file__).parents[1] / "docs/reasoning-batches.rst").read_text()
     block = text.split(".. code-block:: python\n\n", 1)[1].split("\n\n``CompactRelation``", 1)[0]
     exec(compile(textwrap.dedent(block), "reasoning-batches.rst", "exec"), {})
+
+
+def test_batch_benchmark_reference_fixture():
+    from benchmarks.reasoning_batches import worker
+
+    result = worker(10, False, False)
+    assert result["rows"] == 10 and result["column_payload_bytes"] == 160
+    assert result["dictionary_symbols"] == 11
+    assert result["execution_kind"] == "reference-build-and-set-operations-not-inference"

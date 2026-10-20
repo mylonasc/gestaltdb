@@ -120,3 +120,18 @@ This is decoded logical-relation exchange, not the proposed PyRex raw-KV Arrow
 scan API. PyRex issue #31 remains optional upstream extraction work. No snapshot,
 transaction, storage ownership or zero-copy KV decoding guarantee is inferred
 from these relation buffers.
+
+Measurement
+-----------
+
+From a source checkout, measure dictionary construction, encoding, reference set
+advancement and optional Arrow/Polars transfer separately::
+
+   uv run --with pyarrow --with polars python -m benchmarks.reasoning_batches --rows 10000 --polars --output /tmp/opencode/reasoning-batches.json
+
+The runner uses three fresh processes, fixed hash/thread settings, exact row/ID
+checks and full-worker RSS. Source digests and dependency versions accompany the
+report. Final column payload size and dictionary UTF-8 bytes exclude staging and
+Python object overhead. Polars consumption measures transfer, not recursive
+inference or a native join speedup. Pass ``--arrow`` without ``--polars`` to measure
+only Arrow exchange, or neither to measure the dependency-light reference path.
