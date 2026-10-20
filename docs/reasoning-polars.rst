@@ -114,22 +114,23 @@ the identical analytical closure and digest. ``native`` retains the historical
 benchmark name for indexed Python, not a compiled extension. Clingo remains a
 benchmark-only dependency without witness/resource-accounting equivalence.
 
-Clean-source ``b8571a2`` results (Python 3.13, three fresh workers per cell):
+Clean-source ``14ade5a`` results (Python 3.13, three fresh workers per cell;
+indexed Python and Polars receive identical independent ``Evidence`` wrappers):
 
 ============================ ============== ============== ==============
 Workload                     Indexed Python Polars         Clingo
 ============================ ============== ============== ==============
-Dense N=128                  535.42ms       54.04ms        54.12ms
-Sparse recursive N=1024      89.22ms        38.90ms        33.62ms
-Hierarchy N=1024             17.56ms        20.91ms        18.07ms
-Duplicate evidence N=1024    16.33ms        17.86ms        25.28ms
+Dense N=128                  534.73ms       46.44ms        54.29ms
+Sparse recursive N=1024      90.37ms        40.40ms        33.03ms
+Hierarchy N=1024             17.66ms        21.27ms        18.22ms
+Duplicate evidence N=1024    16.42ms        21.12ms        25.69ms
 ============================ ============== ============== ==============
 
 These are median pipeline times including ontology compilation, initial fact
 conversion, full prototype conversion/fixpoint/decoding, but excluding separately
 measured package/runtime imports and fixture construction. Small N=16 cases were
 consistently slower with Polars. Peak full-worker RSS in the comparison was about
-127 MiB for Polars versus 54 MiB indexed Python. Four threads did not improve the
+127 MiB for Polars versus 54 MiB indexed Python. Four threads did not materially improve the
 tested N=1024 sparse workloads; the one- and four-thread matrices were rerun
 sequentially on the same shared host (not a dedicated CPU-isolated machine).
 

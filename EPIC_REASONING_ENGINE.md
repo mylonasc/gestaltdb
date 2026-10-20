@@ -288,12 +288,13 @@ plans and preflighted equijoins. `PolarsRun` separates closure/identity/telemetr
 proofs, maintenance and publication are not offered, and row-work accounting is
 not equivalent to indexed Python attempted-unification counters.
 
-Clean-source `b8571a2` produced **126 validated comparison rows** against indexed
+Clean-source `14ade5a` produced **126 validated comparison rows** against indexed
 Python and benchmark-only Clingo, plus one explicit intermediate-limit diagnostic.
 Evidence: `benchmarks/results/reasoning-re03-*.json`; supported boundaries and
 measured tradeoffs: `docs/reasoning-polars.rst`. Dense N=128 median pipeline was
-54.04ms Polars versus 535.42ms indexed Python, but small workloads were slower,
-memory use increased, and four threads did not improve tested sparse workloads.
+46.44ms Polars versus 534.73ms indexed Python, with identical independent evidence
+wrappers. Small workloads were slower, memory use increased, and four threads
+did not materially improve tested sparse workloads.
 The default evaluator is unchanged; RE-06 remains the production backend decision.
 
 PyRex #31 was rechecked on 2026-10-21: still open, no public scan implementation
@@ -305,7 +306,7 @@ optional native read path will wait for the published release and validate its
 actual API/version, shared horizon and lifetime guarantees. This does not block
 RE-03 or require pausing its storage-independent implementation.
 
-RE-03 local validation: **1631 passed, 199 skipped** with LMDB/LevelDB, Arrow,
+RE-03 local validation: **1632 passed, 199 skipped** with LMDB/LevelDB, Arrow,
 Polars, Clingo and OWL-RL available. Sphinx warnings-as-errors, documentation drift
 and the full roadmap/evidence validator passed. The new prototype is explicitly
 closure-only; the source/default evaluator has not been replaced.
