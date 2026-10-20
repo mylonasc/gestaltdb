@@ -67,3 +67,27 @@ jobs:
           tests/test_ontology_public.py
           tests/test_ontology_rdf.py
           tests/test_ontology_integration.py
+      - name: Build the distributable wheel
+        run: python -m pip wheel --no-deps --wheel-dir "${{ runner.temp }}/ontology-wheels" .
+      - name: Smoke installed standalone APIs outside the checkout
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -m venv ontology-wheel-env
+          ontology-wheel-env/bin/python -m pip install ontology-wheels/*.whl
+          ontology-wheel-env/bin/python - <<'PY'
+          import sys
+          import gestaltdb
+          from gestaltdb import agent_docs
+          from gestaltdb.ontology.adapters.rdf import RDFDocument, import_rdf
+          assert "site-packages" in gestaltdb.__file__, gestaltdb.__file__
+          for example in agent_docs.extract_python_examples(agent_docs.read_topic("ontology")):
+              exec(example, {})
+          assert "rdflib" not in sys.modules
+          assert "clingo" not in sys.modules
+          try:
+              import_rdf(RDFDocument(""), ontology_id="urn:smoke")
+          except ImportError as error:
+              assert "gestaltdb[rdf]" in str(error)
+          else:
+              raise AssertionError("base wheel unexpectedly installed RDFLib")
+          PY
