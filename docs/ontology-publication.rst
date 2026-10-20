@@ -54,6 +54,16 @@ Writes use the existing temporal commit visibility/recovery mechanism; see
 :doc:`temporal-versioning` for orphan audit/reclamation. No new storage protocol
 or power-loss durability guarantee is invented here.
 
+On a nontransactional backend, interruption before the visibility marker can
+leave derived temporal indexes ahead of canonical history. Reads/reconciliation
+fail closed rather than returning a partial closure. Quiesce writers, audit with
+``report = graph.list_temporal_orphans()``, explicitly reclaim validated unpublished
+artifacts with ``graph.reclaim_temporal_orphans(through_commit=report.through_commit)``,
+rebuild temporal indexes if still required, then retry reconciliation.
+The adapter rejects unreclaimed incomplete commits even if older-prefix reads
+would otherwise succeed; it never silently repairs indexes. Transactional
+backends avoid this partial index-publication window.
+
 Stale policy is **recompute latest while holding the temporal writer guard**.
 This intentionally serializes writers during extraction and inference. Work
 bounds limit kernel/adapter counts, not lock duration or backend authentication

@@ -153,3 +153,34 @@ def test_writers_cannot_advance_inputs_between_evaluation_and_commit(graph, monk
     second = publish(graph)
     assert first.context != second.context
     assert second.corrected == 2  # fresh base support, not stale receipt reuse
+
+
+def test_interrupted_nontransactional_marker_never_exposes_partial_closure(graph, monkeypatch):
+    from gestaltdb.graphdb import _TEMPORAL_VISIBLE_PREFIX
+    from gestaltdb.versioning import TemporalCorruptionError
+    if graph.store.supports_transactions:
+        pytest.skip("nontransactional publication fault injection")
+    assertion(graph)
+    put = graph.store.put_metadata
+    def interrupted(key, value):
+        if key.startswith(_TEMPORAL_VISIBLE_PREFIX):
+            raise RuntimeError("interrupted before commit marker")
+        return put(key, value)
+    monkeypatch.setattr(graph.store, "put_metadata", interrupted)
+    with pytest.raises(RuntimeError, match="marker"):
+        publish(graph)
+    monkeypatch.setattr(graph.store, "put_metadata", put)
+    # Nontransactional derived index writes can precede the marker. Reads fail
+    # closed until caller-managed recovery; no partial output is exposed.
+    with pytest.raises(TemporalCorruptionError):
+        outputs(graph)
+    with pytest.raises(ReasoningError, match="orphan recovery"):
+        publish(graph)
+    report = graph.list_temporal_orphans()
+    graph.reclaim_temporal_orphans(through_commit=report.through_commit)
+    graph.rebuild_temporal_indexes()
+    assert not outputs(graph)
+    retried = publish(graph)
+    assert retried.asserted == 2
+    assert len(outputs(graph)) == 2
+    assert publish(graph).commit_id is None

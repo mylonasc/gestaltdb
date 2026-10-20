@@ -68,6 +68,8 @@ def reconcile_point(
     # Private lock access is deliberately confined to this persistence adapter.
     # It is shared with every temporal writer, including other GraphDB handles.
     with graph._temporal_writer_guard():
+        if any(item.kind == "incomplete_commit" for item in graph.list_temporal_orphans().artifacts):
+            raise ReasoningError("unreclaimed temporal publication requires explicit orphan recovery")
         with graph.read_view(valid_time=instant) as view:
             with PinnedClaimSource(view, world=source_world, ontology_revision=compiled.revision_id,
                                    selection=selection, mapping=mapping, limits=source_limits) as source:
