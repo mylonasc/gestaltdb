@@ -32,6 +32,10 @@ graph API lives in submodules rather than entirely at the package root:
    finally:
        graph.close()
 
+Standalone ontology compilation lives in ``gestaltdb.ontology`` and bounded
+Datalog/witness values in ``gestaltdb.reasoning``. Database adapters are explicit
+imports from ``gestaltdb.reasoning.adapters``; inference does not mutate graphs.
+
 Import core graph classes from ``gestaltdb.graphdb``, storage backends from
 ``gestaltdb.kvstores``, serializers from ``gestaltdb.serializers``, canonical
 temporal values from ``gestaltdb.temporal``, epistemic claim values from

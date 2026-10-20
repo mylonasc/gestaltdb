@@ -8,6 +8,13 @@ GestaltDB is an embedded property-graph toolkit with **high-performance graph sa
 
 Documentation: https://mylonasc.github.io/gestaltdb/
 
+**Ontology reasoning:** compile immutable class/property axioms into bounded,
+read-only Datalog closure, with optional witness explanations and an explicit
+pinned temporal-claims adapter. No new solver dependency or JVM is required.
+This is the selected `gestalt-core-v1` fragment, not full OWL or automatic query/
+sampling expansion. See [the guide](docs/ontology.rst) and
+[measured solver trade-offs](docs/ontology-benchmarks.rst).
+
 ## Filter, Sample, Train
 
 | Capability | What you can do |

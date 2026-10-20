@@ -121,6 +121,6 @@ def test_core_implementation_imports_only_stdlib_and_inward_contracts():
             if isinstance(node, ast.Import):
                 assert all(alias.name.split(".")[0] in allowed for alias in node.names)
             elif isinstance(node, ast.ImportFrom):
-                assert (node.level == 1 and node.module in {"model", "protocols", "proofs"}) or (
+                assert (node.level == 1 and node.module in {"model", "protocols", "proofs", "engine"}) or (
                     node.level == 0 and node.module.split(".")[0] in allowed
                 ), (path, ast.dump(node))

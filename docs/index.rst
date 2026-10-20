@@ -44,6 +44,8 @@ Filter, Sample, Train
    operations
    temporal-versioning
    modal-epistemic
+   ontology
+   ontology-benchmarks
    cypher
    visualization
    performance
