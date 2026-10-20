@@ -135,3 +135,13 @@ report. Final column payload size and dictionary UTF-8 bytes exclude staging and
 Python object overhead. Polars consumption measures transfer, not recursive
 inference or a native join speedup. Pass ``--arrow`` without ``--polars`` to measure
 only Arrow exchange, or neither to measure the dependency-light reference path.
+
+The committed ``benchmarks/results/reasoning-re02-{core,batch}.json`` reports
+contain three repeats per mode from clean source ``32a22cc`` (Python 3.13).
+Ten thousand binary rows use 160,000 final payload bytes. Median dictionary,
+encoding and reference-advance times were approximately 4.7ms, 13.9ms and 11.3ms.
+Arrow export took 0.09ms with verified immutable payload sharing; copy/validation
+import took 7.4ms; Polars consumption took 0.22ms. Package import separately cost
+about 228ms; full-worker RSS peaked around 54 MiB for core and 96 MiB for the
+Arrow/Polars path. These are small synthetic transfer/reference observations,
+not production-scale bounds, recursive join speedups or million-row evidence.

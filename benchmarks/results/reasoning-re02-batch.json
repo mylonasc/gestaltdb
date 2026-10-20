@@ -1,0 +1,99 @@
+{
+  "complete": true,
+  "git_revision": "32a22cc53d91112041409d9bb35d0340e53e34f7",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "python": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
+  "rows": [
+    {
+      "arrow_payload_shared": true,
+      "column_payload_bytes": 160000,
+      "dictionary_id": "sha256:5bbbb6b32c2ec5c8d85f54d58778287d35f4a65273e66e274746c004e4aa5165",
+      "dictionary_symbols": 10001,
+      "dictionary_utf8_bytes": 48896,
+      "execution_kind": "reference-build-and-set-operations-not-inference",
+      "metrics": {
+        "advance_s": 0.011500321001221891,
+        "arrow_decode_copy_s": 0.007503894004912581,
+        "arrow_export_s": 9.978700109058991e-05,
+        "arrow_import_s": 0.010711998998885974,
+        "dictionary_s": 0.004647910995117854,
+        "encode_s": 0.01391629000136163,
+        "package_import_s": 0.23005559400189668,
+        "polars_consume_s": 0.00032908700086409226,
+        "polars_import_s": 0.0359679920002236
+      },
+      "polars_version": "1.41.2",
+      "pyarrow_version": "24.0.0",
+      "repeat": 0,
+      "rows": 10000,
+      "rss_peak_bytes": 99844096,
+      "status": "ok",
+      "worker_wall_s": 0.3787051059989608
+    },
+    {
+      "arrow_payload_shared": true,
+      "column_payload_bytes": 160000,
+      "dictionary_id": "sha256:5bbbb6b32c2ec5c8d85f54d58778287d35f4a65273e66e274746c004e4aa5165",
+      "dictionary_symbols": 10001,
+      "dictionary_utf8_bytes": 48896,
+      "execution_kind": "reference-build-and-set-operations-not-inference",
+      "metrics": {
+        "advance_s": 0.011255933000938967,
+        "arrow_decode_copy_s": 0.007232859999930952,
+        "arrow_export_s": 9.17389988899231e-05,
+        "arrow_import_s": 0.010184389997448307,
+        "dictionary_s": 0.004726052000478376,
+        "encode_s": 0.013728314996114932,
+        "package_import_s": 0.22804327499761712,
+        "polars_consume_s": 0.00021833999926457182,
+        "polars_import_s": 0.03468398599943612
+      },
+      "polars_version": "1.41.2",
+      "pyarrow_version": "24.0.0",
+      "repeat": 1,
+      "rows": 10000,
+      "rss_peak_bytes": 99311616,
+      "status": "ok",
+      "worker_wall_s": 0.37027270600083284
+    },
+    {
+      "arrow_payload_shared": true,
+      "column_payload_bytes": 160000,
+      "dictionary_id": "sha256:5bbbb6b32c2ec5c8d85f54d58778287d35f4a65273e66e274746c004e4aa5165",
+      "dictionary_symbols": 10001,
+      "dictionary_utf8_bytes": 48896,
+      "execution_kind": "reference-build-and-set-operations-not-inference",
+      "metrics": {
+        "advance_s": 0.011228007002500817,
+        "arrow_decode_copy_s": 0.007389571001112927,
+        "arrow_export_s": 9.08090005395934e-05,
+        "arrow_import_s": 0.010249904000374954,
+        "dictionary_s": 0.004852320002100896,
+        "encode_s": 0.013939814001787454,
+        "package_import_s": 0.2277673179996782,
+        "polars_consume_s": 0.000208985002245754,
+        "polars_import_s": 0.034772931001498364
+      },
+      "polars_version": "1.41.2",
+      "pyarrow_version": "24.0.0",
+      "repeat": 2,
+      "rows": 10000,
+      "rss_peak_bytes": 99741696,
+      "status": "ok",
+      "worker_wall_s": 0.3689328899999964
+    }
+  ],
+  "schema_version": 1,
+  "source_sha256": {
+    "benchmarks/reasoning_batches.py": "ed8bdc9eeaf3468fc23882615e9c11742a02b2e5088bd9049566c6fc8df4b99f",
+    "src/gestaltdb/reasoning/adapters/arrow.py": "544afd8ee99085cb0a81e770172c4fe5bb39f081d972659fc7359a542d41c023",
+    "src/gestaltdb/reasoning/batches.py": "a4fd1401e407568ac5cf3aa0ea89caa0d49ef32e87f95183a3fb32de60c0c03a"
+  },
+  "threads": {
+    "MKL_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "POLARS_MAX_THREADS": "1"
+  },
+  "working_tree_dirty": false
+}

@@ -255,7 +255,8 @@ branch at `1c69373`. RE-01 is integrated, not released to `main`.
 ### Implementation started: RE-02 (#163)
 
 Dedicated worktree `re-02-batches`, branch `feature/re-02-batches`, now based on
-accepted integration commit `1c69373`. Implemented canonical context-bound uint64
+accepted integration commit `1c69373`; [PR #190](https://github.com/mylonasc/gestaltdb/pull/190)
+targets the second integration branch. Implemented canonical context-bound uint64
 symbol dictionaries, immutable compact columns, reference set/delta generations,
 separate exact evidence references and optional strict Arrow C Stream exchange.
 The public boundary and copy/lifetime/limits behavior are documented in
@@ -268,6 +269,12 @@ backends and Arrow/Polars. Documentation drift, Sphinx warnings-as-errors, modul
 examples and an isolated no-site-packages batch smoke passed. The measurement
 runner is `python -m benchmarks.reasoning_batches`; executor comparisons and
 optimized joins remain RE-03/RE-06.
+
+Installed base-wheel batch/extra-isolation smoke passed. Six clean-source
+measurement rows (three core, three Arrow/Polars) at `32a22cc` are committed as
+`benchmarks/results/reasoning-re02-{core,batch}.json`. Ten thousand binary rows
+occupy 160,000 final payload bytes, excluding dictionary and staging memory;
+the Arrow path confirms immutable payload sharing and validated round trips.
 
 Focused existing ontology/reasoning suite on this checkout: **181 passed, 72
 skipped** without optional extras. Repeated with LMDB, LevelDB and RDFLib, plus
