@@ -3,12 +3,15 @@
   "integration_branch": "feature/onto-dev-epic-2",
   "delivery": {
     "RE-01": {
-      "status": "in-progress",
+      "status": "in-review",
+      "pr": 189,
       "branch": "feature/re-01-contracts",
       "worktree": "re-01-contracts",
       "baseline_audit": "planning/reasoning-engine/baseline-review.json",
       "budgets": "planning/reasoning-engine/performance-budgets.json",
-      "contract": "docs/reasoning-execution.rst"
+      "contract": "docs/reasoning-execution.rst",
+      "benchmark_evidence": "benchmarks/results/reasoning-re01-baseline.json",
+      "validation": "1557 passed, 227 skipped; Sphinx -W, docs checks, examples and installed-wheel smoke passed; 40 clean-revision benchmark rows passed. CI pending."
     }
   },
   "source_sha256": {

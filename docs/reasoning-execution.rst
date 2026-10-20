@@ -140,3 +140,11 @@ or zero-copy claim is implied. Source extraction, native operator/copy/spill
 counters, installed-wheel footprint and persistent incremental/publication costs
 remain later phase gates; see :doc:`ontology-benchmarks` for existing claim-extraction
 and solver comparison evidence.
+
+The committed ``benchmarks/results/reasoning-re01-baseline.json`` records 40
+successful rows (clean source ``99be3cb``, Python 3.13). Pipeline P95s for
+closure/witness modes were 4.45/12.39ms interactive, 90.23/177.10ms sparse batch,
+559.84/677.52ms dense output and 6.49/12.69ms for the complete three-state
+rematerialization update workflow. Worker RSS stayed below 57 MiB. These are
+synthetic reference observations on the recorded host, not optimized-engine
+speedups, production-scale guarantees or incremental update latency claims.
