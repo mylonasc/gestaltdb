@@ -1,6 +1,12 @@
 Ontology reasoning
 ========================
 
+The ontology layer compiles immutable named-class/object-property axioms to a
+standalone positive-Datalog program. It uses no database handle and adds no
+mandatory solver dependency. It does not change asserted labels, relationships,
+Cypher results or sampler membership. All database interactions are explicit
+adapters; core and compiler depend only inward and on the standard library.
+
 Optional offline RDF import
 ---------------------------
 
@@ -21,12 +27,6 @@ not an operating-system sandbox. ``strict=False`` returns diagnostics and
 requires ``allow_incomplete=True``. Never represent such output as complete
 OWL/RDFS reasoning. Standard label/comment/version annotations are counted and
 ignored, not converted into logical facts.
-
-The ontology layer compiles immutable named-class/object-property axioms to a
-standalone positive-Datalog program. It uses no database handle and adds no
-mandatory solver dependency. It does not change asserted labels, relationships,
-Cypher results or sampler membership. All database interactions are explicit
-adapters; core and compiler depend only inward and on the standard library.
 
 Standalone example
 ------------------------
