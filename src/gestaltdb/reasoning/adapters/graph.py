@@ -12,6 +12,7 @@ import random
 
 from ...ontology.compiler import CompiledOntology
 from ...ontology.model import TYPE_PREDICATE
+from ...graphdb import _DATABASE_ID_METADATA_KEY
 from ...readview import CurrentGraphReadView, CurrentReadProvenance, ProvenanceMismatchError
 from ..engine import DatalogEngine
 from ..model import EvaluationResult, Fact, ReasoningError, ReasoningLimitError, ReasoningLimits, _text
@@ -115,6 +116,8 @@ class PinnedGraphSource:
         self._provenance = CurrentReadProvenance.from_dict(view.provenance.to_dict())
         self._mapping, self._limits, self._closed = mapping, limits, False
         self._check()
+        if self._store.state_sha256() != self._provenance.state_sha256:
+            raise ProvenanceMismatchError("current snapshot state digest mismatch")
 
     def _check(self):
         if self._closed:
@@ -124,7 +127,8 @@ class PinnedGraphSource:
         self._provenance.verify_view(self._view)
         self._provenance.verify_snapshot_store(self._view)
         # Also probes the backend snapshot's active lifetime.
-        self._store.get_metadata(b"database_id")
+        if self._store.get_metadata(_DATABASE_ID_METADATA_KEY) != self._provenance.database_id.encode("ascii"):
+            raise ProvenanceMismatchError("current snapshot database identity mismatch")
 
     def _evidence(self):
         labels, types, properties = dict(self._mapping.labels), dict(self._mapping.edge_types), dict(self._mapping.node_properties)
