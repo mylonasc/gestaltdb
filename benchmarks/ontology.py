@@ -26,7 +26,8 @@ import time
 import zipfile
 
 
-BACKENDS = ("native", "native-proofs", "clingo", "owlrl", "claims-native", "legacy-lmdb", "polars")
+BACKENDS = ("native", "native-proofs", "clingo", "owlrl", "claims-native", "legacy-lmdb", "polars",
+            "planned", "planned-proofs", "planned-profiled", "planned-profiled-proofs")
 WORKLOADS = ("hierarchy", "recursive", "duplicates", "dense")
 TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 RDFS = "http://www.w3.org/2000/01/rdf-schema#"
@@ -206,6 +207,7 @@ def _run_worker(spec):
         compiled = _timed(metrics, "compile_s", lambda: compile_ontology(workload.ontology))
         metrics.update(load_s=0.0, ground_s=0.0, proof_query_s=None, proofs_truncated=None)
         with ExitStack() as resources:
+            repeat_evaluation = None
             directory = resources.enter_context(tempfile.TemporaryDirectory(prefix="onto-benchmark-", dir=spec["temp_root"]))
             if backend.startswith("native"):
                 engine = _timed(metrics, "init_s", DatalogEngine)
@@ -215,11 +217,43 @@ def _run_worker(spec):
                 limits = ReasoningLimits(max_input_facts=spec["max_input"], max_facts=spec["max_facts"],
                                          max_iterations=1000, max_candidate_rows=spec["max_candidates"],
                                          max_proof_nodes=spec["max_facts"], max_proof_edges=4 * spec["max_facts"])
-                result = _timed(metrics, "execution_s", lambda: engine.evaluate(
+                repeat_evaluation = lambda: engine.evaluate(
                     compiled.program, facts, limits=limits, collect_proofs=backend == "native-proofs",
-                ))
+                )
+                result = _timed(metrics, "execution_s", repeat_evaluation)
                 decoded = _timed(metrics, "decode_s", lambda: {(f.subject, f.predicate, f.object) for f in result.facts})
                 kind = "index_build_and_fixpoint_single_witness" if backend == "native-proofs" else "index_build_and_fixpoint"
+            elif backend.startswith("planned"):
+                from gestaltdb.reasoning.plans import PlannedDatalogEngine, PreparedProgram
+                from gestaltdb.reasoning.protocols import InputContext
+                from gestaltdb.reasoning.relational import CompilationIdentity
+
+                identity = CompilationIdentity(compiled.program.digest,
+                    InputContext("benchmark-in-memory", "default", compiled.revision_id, "all", "identity"),
+                    "external-strings-v1", "positive-binary-entity-v1", "indexed-scc-v1")
+                plan = _timed(metrics, "prepare_s", lambda: PreparedProgram(compiled.program, identity))
+                engine = _timed(metrics, "init_s", PlannedDatalogEngine)
+                facts = _timed(metrics, "conversion_s", lambda: [
+                    Evidence(Fact(*row), f"evidence:{i}") for i, row in enumerate(workload.rows)
+                ])
+                limits = ReasoningLimits(max_input_facts=spec["max_input"], max_facts=spec["max_facts"],
+                                         max_iterations=1000, max_candidate_rows=spec["max_candidates"],
+                                         max_proof_nodes=spec["max_facts"], max_proof_edges=4 * spec["max_facts"])
+
+                def execute_plan():
+                    return engine.evaluate(plan, facts, identity=identity, limits=limits,
+                                           collect_proofs=backend.endswith("proofs"),
+                                           collect_telemetry="profiled" in backend)
+
+                run = _timed(metrics, "execution_s", execute_plan)
+                result = run.result
+                repeat_evaluation = lambda: execute_plan().result
+                metrics.update(planned_candidate_rows=run.candidate_rows,
+                               planned_component_rounds=run.component_rounds,
+                               planned_operator_sites=len(run.operators),
+                               planned_telemetry=run.telemetry_enabled)
+                decoded = _timed(metrics, "decode_s", lambda: {(f.subject, f.predicate, f.object) for f in result.facts})
+                kind = "prepared_indexed_scc_fixpoint_" + ("single_witness" if backend.endswith("proofs") else "closure_only")
             elif backend == "polars":
                 from gestaltdb.reasoning.adapters.polars import PolarsDatalogPrototype
                 from gestaltdb.reasoning.protocols import InputContext
@@ -363,7 +397,11 @@ def _run_worker(spec):
             else:
                 raise ValueError("unknown backend")
             metrics["pipeline_s"] = time.perf_counter() - start
-            if backend == "native-proofs":
+            if spec.get("measure_reuse", False) and repeat_evaluation is not None:
+                repeated = _timed(metrics, "reuse_s", repeat_evaluation)
+                if repeated != result:
+                    raise ValueError("reused plan/evaluator changed result or witness trace")
+            if backend.endswith("proofs"):
                 metrics["proofs_truncated"] = result.proofs.truncated
                 base_rows = set(workload.rows)
                 root = next((fact for fact in reversed(result.facts) if (fact.subject, fact.predicate, fact.object) not in base_rows), None)
@@ -418,7 +456,9 @@ def footprint(wheel=None):
 
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--backends", nargs="+", choices=BACKENDS, default=list(BACKENDS))
+    parser.add_argument("--backends", nargs="+", choices=BACKENDS, default=list(BACKENDS[:7]))
+    parser.add_argument("--measure-reuse", action="store_true",
+                        help="measure a second native/planned invocation, outside first-run pipeline timing")
     parser.add_argument("--workloads", nargs="+", choices=WORKLOADS, default=list(WORKLOADS))
     parser.add_argument("--sizes", nargs="+", type=int, default=[8, 16])
     parser.add_argument("--repeats", type=int, default=3)
@@ -483,6 +523,7 @@ def run_benchmark(args):
                 for repeat in range(args.repeats):
                     spec = {name: getattr(args, name) for name in ("max_input", "max_facts", "max_candidates", "max_justifications", "max_intermediate", "threads", "temp_root")}
                     spec.update(backend=backend, workload=workload, size=size, repeat=repeat)
+                    spec["measure_reuse"] = args.measure_reuse
                     start = time.perf_counter()
                     try:
                         # The parent owns cleanup even if a timed-out worker is killed.
