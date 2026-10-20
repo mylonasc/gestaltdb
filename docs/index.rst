@@ -45,6 +45,7 @@ Filter, Sample, Train
    temporal-versioning
    modal-epistemic
    ontology
+   ontology-graph
    ontology-benchmarks
    ontology-publication
    cypher

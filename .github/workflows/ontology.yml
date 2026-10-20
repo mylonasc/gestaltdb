@@ -61,6 +61,7 @@ jobs:
           tests/test_ontology_compiler.py
           tests/test_reasoning_claims.py
           tests/test_reasoning_publication.py
+          tests/test_reasoning_graph.py
           tests/test_ontology_conformance.py
           tests/test_ontology_benchmarks.py
           tests/test_ontology_public.py

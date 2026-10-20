@@ -98,6 +98,9 @@ not a context-bound atomic evaluation; use the adapter's ``evaluate`` method.
 Limits and deployment
 ---------------------------
 
+For explicit current-property-graph projection and derived-relation neighbor
+sampling, see :doc:`ontology-graph`. This is separate from temporal claims.
+
 Inference bounds fail closed; proof-node/edge bounds only truncate the witness
 trace, explicitly. A trace stores one witness, not all independent supports.
 Counters are not a wall-clock/RSS sandbox for arbitrary Python inputs. Neither
