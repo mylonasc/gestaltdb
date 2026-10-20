@@ -47,6 +47,7 @@ Filter, Sample, Train
    ontology
    ontology-graph
    ontology-benchmarks
+   ontology-publication
    cypher
    visualization
    performance
