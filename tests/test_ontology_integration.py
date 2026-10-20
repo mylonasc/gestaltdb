@@ -40,5 +40,9 @@ def test_import_project_query_sample_publish_and_reconcile(tmp_path):
         # Claims reconciliation leaves mutable graph and prior result untouched.
         assert graph.get_edge(graph.edge_key_to_bytes("ab")) is not None
         assert current.match(predicate="urn:q")
+        graph.assert_claim(subject="a", predicate="urn:p", object="b", agent="input",
+                           polarity="positive", valid=(0, 100))
+        assert reconcile_point(graph, plan, **params).asserted == 2
+        assert reconcile_point(graph, plan, **params).commit_id is None
     finally:
         graph.close()
