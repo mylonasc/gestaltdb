@@ -7,3 +7,17 @@ claims. Proof values live in :mod:`gestaltdb.reasoning.proofs`; ontology compila
 is a separate layer in :mod:`gestaltdb.ontology`. The package-root
 imports are not an independent-installation or minimal-import guarantee.
 """
+
+from .engine import DatalogEngine
+from .model import (
+    Atom, EvaluationResult, Fact, Program, ReasoningError, ReasoningLimitError,
+    ReasoningLimits, Rule, Variable,
+)
+from .proofs import Explanation, FactWitness, ProofTrace
+from .protocols import Evidence, Evaluator, FactSource, InputContext
+
+__all__ = [
+    "DatalogEngine", "Atom", "EvaluationResult", "Fact", "Program", "ReasoningError",
+    "ReasoningLimitError", "ReasoningLimits", "Rule", "Variable", "Explanation",
+    "FactWitness", "ProofTrace", "Evidence", "Evaluator", "FactSource", "InputContext",
+]

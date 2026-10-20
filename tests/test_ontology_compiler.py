@@ -159,7 +159,7 @@ def test_ontology_implementation_imports_only_stdlib_and_inward_values():
                 assert all(alias.name.split(".")[0] in allowed for alias in node.names)
             elif isinstance(node, ast.ImportFrom):
                 assert (node.level == 0 and node.module.split(".")[0] in allowed) or (
-                    node.level == 1 and node.module == "model"
+                    node.level == 1 and node.module in {"model", "compiler"}
                 ) or (node.level == 2 and node.module == "reasoning.model"), (path, ast.dump(node))
 
 

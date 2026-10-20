@@ -4,6 +4,24 @@ These examples are designed for developers and agents who need working patterns 
 
 **Filtering and sampling workflows:** [Indexed property lookups](#index-and-lookup-properties) · [Live typed sampling](#traverse-and-sample-typed-relationships) · [Filtered, reusable sampler snapshots](#build-and-use-a-sampler-snapshot). The [sampling guide](https://mylonasc.github.io/gestaltdb/typed-sampling.html) covers all policies; the [filtering guide](https://mylonasc.github.io/gestaltdb/property-filtering.html) explains seed selection versus filtering every sampled hop.
 
+## Reason Over Named Entities Without a Database
+
+```python
+from gestaltdb.ontology import Domain, Ontology, TYPE_PREDICATE, compile_ontology
+from gestaltdb.reasoning import DatalogEngine, Fact, ReasoningLimits
+
+plan = compile_ontology(Ontology("people", [Domain("worksFor", "Person")]))
+result = DatalogEngine().evaluate(
+    plan.program, [Fact("alice", "worksFor", "acme")],
+    limits=ReasoningLimits(), collect_proofs=True,
+)
+assert Fact("alice", TYPE_PREDICATE, "Person") in result
+```
+
+This selected positive fragment is not full OWL. Inference is read-only and proof
+truncation is distinct from inference failure. See `docs/ontology.rst` for the
+explicit pinned-claims adapter and `docs/ontology-benchmarks.rst` for cost bounds.
+
 ## Create, Query, and Close a Graph
 
 ```python

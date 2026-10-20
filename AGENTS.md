@@ -16,6 +16,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Epistemic claim values and four-valued status: `src/gestaltdb/epistemic.py`
 - Bounded modal expressions and evaluation: `src/gestaltdb/modal.py`
 - Positive Horn rule values and evaluation results: `src/gestaltdb/rules.py`
+- Standalone ontology: `src/gestaltdb/ontology/`; Datalog core: `src/gestaltdb/reasoning/`; explicit database adapters: `reasoning/adapters/`. Core/compiler must never import GraphDB, storage, temporal records or adapters. Guide: `docs/ontology.rst`; measured boundaries: `docs/ontology-benchmarks.rst`.
 - Cypher engine: `src/gestaltdb/query_engine/cypher/`
 - Legacy Cypher import shims: `src/gestaltdb/cypher.py` and `src/gestaltdb/cypher_*.py`
 - Sampling API: `src/gestaltdb/sampling/`
