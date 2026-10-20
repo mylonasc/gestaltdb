@@ -300,6 +300,10 @@ PyRex #31 was rechecked on 2026-10-21: still open, no public scan implementation
 found, PyPI still 0.4.1. The recheck and release/capability prerequisites are
 recorded in #166; raw KV Arrow reads remain optional RE-05 extraction work, not
 an assumed dependency or decoded-fact API in this prototype.
+The user subsequently confirmed that the Arrow-read release is under way. RE-05's
+optional native read path will wait for the published release and validate its
+actual API/version, shared horizon and lifetime guarantees. This does not block
+RE-03 or require pausing its storage-independent implementation.
 
 RE-03 local validation: **1631 passed, 199 skipped** with LMDB/LevelDB, Arrow,
 Polars, Clingo and OWL-RL available. Sphinx warnings-as-errors, documentation drift

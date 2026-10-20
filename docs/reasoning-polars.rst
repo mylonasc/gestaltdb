@@ -66,6 +66,10 @@ scheduling or offer native proof propagation. Telemetry separates input,
 conversion, dispatch planning, per-occurrence expression construction, operator
 execution, join-count preflight, fixpoint and decoding. Nested timings overlap;
 do not sum fixpoint and operator/preflight durations as independent stages.
+``planning_s`` measures Python dispatch construction; ``expression_s`` measures
+Python expression construction. Eager native query planning and kernel execution
+remain combined in ``operator_s``/``preflight_s``; these are not native compiler
+instrumentation or isolated join-kernel timings.
 
 Limits are intentionally different
 ----------------------------------------
