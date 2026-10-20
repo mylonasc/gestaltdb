@@ -281,7 +281,8 @@ branch at `865f3b1`; #163 is closed. No main merge or release occurred.
 ### Implementation started: RE-03 (#164)
 
 Dedicated worktree `re-03-polars`, branch `feature/re-03-polars`, based on accepted
-RE-02 integration `865f3b1`. Explicit `PolarsDatalogPrototype` evaluates the existing
+RE-02 integration `865f3b1`; [PR #191](https://github.com/mylonasc/gestaltdb/pull/191)
+targets the second integration branch. Explicit `PolarsDatalogPrototype` evaluates the existing
 binary positive entity profile via compact IDs, eager native per-occurrence delta
 plans and preflighted equijoins. `PolarsRun` separates closure/identity/telemetry;
 proofs, maintenance and publication are not offered, and row-work accounting is
@@ -304,6 +305,9 @@ RE-03 local validation: **1631 passed, 199 skipped** with LMDB/LevelDB, Arrow,
 Polars, Clingo and OWL-RL available. Sphinx warnings-as-errors, documentation drift
 and the full roadmap/evidence validator passed. The new prototype is explicitly
 closure-only; the source/default evaluator has not been replaced.
+Installed base-wheel missing-extra isolation and optional-wheel fixpoint smokes
+passed outside the checkout; modular examples reported 7 passes and one optional
+PyRex skip. Python 3.10–3.13/fuzz CI is tracked in #191.
 
 Focused existing ontology/reasoning suite on this checkout: **181 passed, 72
 skipped** without optional extras. Repeated with LMDB, LevelDB and RDFLib, plus
