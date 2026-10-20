@@ -18,6 +18,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Positive Horn rule values and evaluation results: `src/gestaltdb/rules.py`
 - Standalone ontology: `src/gestaltdb/ontology/`; Datalog core: `src/gestaltdb/reasoning/`; explicit database adapters: `reasoning/adapters/`. Core/compiler must never import GraphDB, storage, temporal records or adapters. Guide: `docs/ontology.rst`; measured boundaries: `docs/ontology-benchmarks.rst`.
 - Relational IR/structural inspection: `reasoning/relational.py`, `docs/reasoning-execution.rst`. Entity-only n-ary representation is not yet executable; preserve legacy `Program.digest`. Second roadmap: `EPIC_REASONING_ENGINE.md` / #156.
+- Compact batches: `reasoning/batches.py`; optional Arrow exchange: `reasoning/adapters/arrow.py` / `docs/reasoning-batches.rst`. IDs require the exact dictionary/context; immutable batches and reference set operations are not a native executor or all-support provenance.
 - Optional offline RDF: `ontology/adapters/rdf.py` (`rdf` extra). Explicit current-graph projection/fanout: `reasoning/adapters/graph.py` / `docs/ontology-graph.rst`. Point-only separate-world publication: `reasoning/adapters/publication.py` / `docs/ontology-publication.rst`; nontransactional orphan recovery is caller-managed, never silently repaired.
 - Cypher engine: `src/gestaltdb/query_engine/cypher/`
 - Legacy Cypher import shims: `src/gestaltdb/cypher.py` and `src/gestaltdb/cypher_*.py`

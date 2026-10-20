@@ -12,6 +12,7 @@ on:
       - "gestaltdb_reasoning_feature_tracker.xlsx"
       - "EPIC_REASONING_ENGINE.md"
       - "docs/reasoning-execution.rst"
+      - "docs/reasoning-batches.rst"
       - "benchmarks/ontology-requirements.txt"
       - "benchmarks/cli.py"
       - "docs/ontology-contract.rst"
@@ -29,6 +30,7 @@ on:
       - "gestaltdb_reasoning_feature_tracker.xlsx"
       - "EPIC_REASONING_ENGINE.md"
       - "docs/reasoning-execution.rst"
+      - "docs/reasoning-batches.rst"
       - "benchmarks/ontology-requirements.txt"
       - "benchmarks/cli.py"
       - "docs/ontology-contract.rst"
@@ -58,16 +60,18 @@ jobs:
       - name: Install LevelDB build dependency
         run: sudo apt-get update && sudo apt-get install --yes libleveldb-dev
       - name: Install test backends and optional conformance oracle
-        run: python -m pip install -e ".[coverage,lmdb,leveldb]" -r benchmarks/ontology-requirements.txt
+        run: python -m pip install -e ".[coverage,lmdb,leveldb,arrow,polars]" -r benchmarks/ontology-requirements.txt
       - name: Require an importable oracle rather than silently skipping
         run: >-
-          python -c "import owlrl, rdflib, clingo; from importlib.metadata import version; print({'owlrl': version('owlrl'), 'rdflib': version('rdflib'), 'clingo': version('clingo')})"
+          python -c "import owlrl, rdflib, clingo, pyarrow, polars; from importlib.metadata import version; print({name: version(name) for name in ('owlrl', 'rdflib', 'clingo', 'pyarrow', 'polars')})"
       - name: Run standalone, adapter and oracle gates
         run: >-
           python -m pytest -q
           tests/test_reasoning_contracts.py
           tests/test_reasoning_engine.py
           tests/test_reasoning_relational.py
+          tests/test_reasoning_batches.py
+          tests/test_reasoning_arrow.py
           tests/test_reasoning_execution_baseline.py
           tests/test_reasoning_proofs.py
           tests/test_ontology_compiler.py
@@ -93,12 +97,25 @@ jobs:
           from gestaltdb.reasoning import Program
           from gestaltdb.reasoning.protocols import InputContext
           from gestaltdb.reasoning.relational import CompilationIdentity, RelationalProgram, explain_plan
+          from gestaltdb.reasoning.batches import SymbolDictionary, CompactRelation
           from gestaltdb.ontology.adapters.rdf import RDFDocument, import_rdf
           assert "site-packages" in gestaltdb.__file__, gestaltdb.__file__
           program = Program()
           identity = CompilationIdentity(program.digest, InputContext("h", "w", "o", "p", "m"),
                                          "d", "positive-binary-entity-v1", "indexed-python-v1")
           assert explain_plan(program, identity=identity)["relational_digest"] == RelationalProgram.from_program(program).digest
+          from gestaltdb.reasoning.relational import RelationSchema
+          from gestaltdb.reasoning.adapters.arrow import to_arrow
+          dictionary = SymbolDictionary(identity.context, ("a", "b"))
+          batch = CompactRelation.from_rows(RelationSchema("p", ("s", "o")), dictionary, [("a", "b")])
+          assert batch.nbytes == 16
+          assert "pyarrow" not in sys.modules and "polars" not in sys.modules
+          try:
+              to_arrow(batch)
+          except ImportError as error:
+              assert "gestaltdb[arrow]" in str(error)
+          else:
+              raise AssertionError("base wheel unexpectedly installed PyArrow")
           for example in agent_docs.extract_python_examples(agent_docs.read_topic("ontology")):
               exec(example, {})
           assert "rdflib" not in sys.modules
