@@ -168,6 +168,11 @@ and reports ``interval_candidates_decoded``. The valid-start/valid-end index
 intersection should decode one active interval for the generated point query,
 independent of the requested interval-history size.
 
+For the standalone ontology kernel, optional Clingo/OWL-RL comparisons and the
+pinned-claims versus legacy-persistence paths, see :doc:`ontology-benchmarks`.
+That report separates conversion, grounding, verification, extraction and
+publication costs; its synthetic timings are not general graph throughput claims.
+
 Use ``benchmarks/quick.py`` (or ``python -m benchmarks quick``; ``benchmarks.py`` is retained as a compatibility forwarder) for a quick backend comparison on the same append-only
 workload.
 

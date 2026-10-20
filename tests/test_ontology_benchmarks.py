@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 import json
+from pathlib import Path
 import subprocess
 import sys
 import zipfile
@@ -179,3 +180,19 @@ def test_cli_returns_failure_for_invalid_results(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         ontology.main([])
     assert exc.value.code == 1
+
+
+def test_recorded_decision_artifacts_are_complete_and_statuses_are_honest():
+    root = Path(__file__).parents[1] / "benchmarks" / "results"
+    expected = {"small": (144, "ok"), "dense": (24, "ok"), "limits": (2, "limited"), "preflight": (3, "limited")}
+    for name, (count, status) in expected.items():
+        report = json.loads((root / f"ontology-v1-{name}.json").read_text())
+        assert report["complete"] and report["planned_rows"] == len(report["rows"]) == count
+        assert len(report["git_revision"]) == 40 and len(report["harness_sha256"]) == 64
+        for row in report["rows"]:
+            assert row["status"] == status
+            if status == "ok":
+                assert row["closure_digest"] == row["expected_digest"]
+                assert row["closure_facts"] > 0
+            else:
+                assert "closure_digest" not in row

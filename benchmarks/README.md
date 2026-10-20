@@ -26,6 +26,7 @@ benchmarks/
 ├── compaction.py           # LSM overwrite & compaction pressure benchmark
 ├── sampler.py              # SamplerEngine array sampler vs baseline graph traversal
 ├── temporal.py             # Temporal storage/query/sampling/reasoning hardening smoke
+├── ontology.py             # Isolated ontology solvers, staged costs and footprint
 ├── embedded.py             # Embedded graph databases: GestaltDB vs LatticeDB vs LadybugDB
 ├── external.py             # External graph databases: GestaltDB vs Neo4j, Memgraph, ArcadeDB, AGE
 ├── arcadedb.py             # Focused comparison between GestaltDB and ArcadeDB embedded
@@ -71,12 +72,27 @@ python -m benchmarks matrix --backends rocksdb --sizes 10000 100000 --cores 2 4
 python -m benchmarks compaction --configs leveldb rocksdb-p4-bg4-largebuf --keys 100000
 python -m benchmarks sampler --nodes 1000 --edges 500000 --iterations 100
 python -m benchmarks temporal --backend leveldb --serializer json --nodes 1000 --edges 5000
+python -m benchmarks ontology --backends native native-proofs --sizes 8 16 --repeats 3
 python -m benchmarks embedded --engines gestaltdb latticedb --nodes 10000 --edges 50000
 python -m benchmarks external --engines gestaltdb arcadedb --workloads neighbors star_traversal
 python -m benchmarks tuning --nodes 20000 --edges 100000
 python -m benchmarks profiling --cases rocksdb-json-polars --nodes 10000 --edges 50000
 python -m benchmarks plotting benchmark_results/external_graphdbs/external_graphdbs_summary.jsonl
 ```
+
+Ontology comparisons have a pinned **benchmark-only** environment:
+
+```bash
+uv run --with-requirements benchmarks/ontology-requirements.txt python -m benchmarks.ontology --sizes 8 16 --repeats 3 --output /tmp/opencode/ontology.json
+```
+
+Each row runs in a fresh process and verifies its complete closure. The report
+separates imports, compilation, conversion, grounding, extraction, execution,
+decoding, witnesses, RSS and footprint. Checkpoints marked `complete=false` and
+rows marked `limited`, `timeout`, `unavailable` or `error` are not successful
+latencies. Larger persistent-legacy matrices can be expensive: start small.
+See [ontology methodology and decision](../docs/ontology-benchmarks.rst) for
+committed measurements, non-equivalent costs, and the v1 backend decision.
 
 ### 2. Standalone Scripts
 
