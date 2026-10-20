@@ -3,6 +3,9 @@
 Relational execution contracts
 ==============================
 
+For compact dictionary-backed relation containers and optional Arrow exchange,
+see :doc:`reasoning-batches`. These do not add new evaluator semantics.
+
 The additive ``gestaltdb.reasoning.relational`` module defines the
 ``gestaltdb-relational-v1`` structural IR. It is independent of storage and optional
 dependencies. ``RelationSchema`` describes ordered, uniquely named, non-null entity

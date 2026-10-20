@@ -3,7 +3,8 @@
   "integration_branch": "feature/onto-dev-epic-2",
   "delivery": {
     "RE-01": {
-      "status": "in-review",
+      "status": "integrated",
+      "integration_commit": "1c69373",
       "pr": 189,
       "branch": "feature/re-01-contracts",
       "worktree": "re-01-contracts",
@@ -11,7 +12,16 @@
       "budgets": "planning/reasoning-engine/performance-budgets.json",
       "contract": "docs/reasoning-execution.rst",
       "benchmark_evidence": "benchmarks/results/reasoning-re01-baseline.json",
-      "validation": "1557 passed, 227 skipped; Sphinx -W, docs checks, examples and installed-wheel smoke passed; 40 clean-revision benchmark rows passed. CI pending."
+      "validation": "1557 passed, 227 skipped; Sphinx -W, docs checks, examples and installed-wheel smoke passed; 40 clean-revision benchmark rows passed; Python 3.10-3.13 and fuzz CI passed."
+    },
+    "RE-02": {
+      "status": "in-review",
+      "pr": 190,
+      "branch": "feature/re-02-batches",
+      "worktree": "re-02-batches",
+      "contract": "docs/reasoning-batches.rst",
+      "benchmark_evidence": ["benchmarks/results/reasoning-re02-core.json", "benchmarks/results/reasoning-re02-batch.json"],
+      "validation": "1581 passed, 227 skipped; docs drift, Sphinx -W, examples, standalone no-site-packages and base-wheel isolation passed. Six clean-revision batch/exchange measurement rows passed. PR CI pending."
     }
   },
   "source_sha256": {
