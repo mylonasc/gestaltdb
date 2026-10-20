@@ -23,9 +23,11 @@ def _spec(tmp_path, backend="native", workload="hierarchy", **changes):
 @pytest.mark.parametrize("workload", ontology.WORKLOADS)
 @pytest.mark.parametrize("backend", ontology.BACKENDS)
 def test_each_backend_matches_analytical_closure(tmp_path, backend, workload):
-    module = {"clingo": "clingo", "owlrl": "owlrl", "legacy-lmdb": "lmdb", "claims-native": "lmdb"}.get(backend)
+    module = {"clingo": "clingo", "owlrl": "owlrl", "legacy-lmdb": "lmdb", "claims-native": "lmdb", "polars": "polars"}.get(backend)
     if module:
         pytest.importorskip(module)
+    if backend == "polars":
+        pytest.importorskip("pyarrow")
     row = ontology._run_worker(_spec(tmp_path, backend, workload))
     assert row["status"] == "ok", row
     assert row["closure_digest"] == row["expected_digest"]

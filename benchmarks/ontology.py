@@ -26,7 +26,7 @@ import time
 import zipfile
 
 
-BACKENDS = ("native", "native-proofs", "clingo", "owlrl", "claims-native", "legacy-lmdb")
+BACKENDS = ("native", "native-proofs", "clingo", "owlrl", "claims-native", "legacy-lmdb", "polars")
 WORKLOADS = ("hierarchy", "recursive", "duplicates", "dense")
 TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 RDFS = "http://www.w3.org/2000/01/rdf-schema#"
@@ -195,7 +195,7 @@ def _run_worker(spec):
         from gestaltdb.reasoning.model import Fact, ReasoningLimitError, ReasoningLimits
         from gestaltdb.reasoning.protocols import Evidence
 
-        dependencies = {"clingo": ("clingo",), "owlrl": ("rdflib", "owlrl"),
+        dependencies = {"clingo": ("clingo",), "owlrl": ("rdflib", "owlrl"), "polars": ("polars", "pyarrow"),
                         "legacy-lmdb": ("lmdb",), "claims-native": ("lmdb",)}
         _timed(metrics, "backend_import_s", lambda: [importlib.import_module(module) for module in dependencies.get(backend, ())])
         baseline_rss = _peak_rss()
@@ -220,6 +220,23 @@ def _run_worker(spec):
                 ))
                 decoded = _timed(metrics, "decode_s", lambda: {(f.subject, f.predicate, f.object) for f in result.facts})
                 kind = "index_build_and_fixpoint_single_witness" if backend == "native-proofs" else "index_build_and_fixpoint"
+            elif backend == "polars":
+                from gestaltdb.reasoning.adapters.polars import PolarsDatalogPrototype
+                from gestaltdb.reasoning.protocols import InputContext
+
+                engine = _timed(metrics, "init_s", PolarsDatalogPrototype)
+                facts = _timed(metrics, "conversion_s", lambda: [Fact(*row) for row in workload.rows])
+                run = _timed(metrics, "execution_s", lambda: engine.evaluate(
+                    compiled.program, facts,
+                    context=InputContext("benchmark-in-memory", "default", compiled.revision_id, "all", "identity"),
+                    limits=ReasoningLimits(max_input_facts=spec["max_input"], max_facts=spec["max_facts"],
+                                           max_iterations=1000, max_candidate_rows=spec["max_candidates"]),
+                    max_intermediate_rows=spec.get("max_intermediate", 100_000),
+                ))
+                metrics.update({"polars_" + key: value for key, value in run.metrics.items()})
+                result = run.result
+                decoded = _timed(metrics, "decode_s", lambda: {(f.subject, f.predicate, f.object) for f in result.facts})
+                kind = "experimental_columnar_conversion_eager_delta_fixpoint_no_proofs"
             elif backend == "clingo":
                 import clingo
 
@@ -358,7 +375,7 @@ def _run_worker(spec):
                     "closure_facts": len(decoded), "closure_digest": actual_digest, "expected_digest": expected_digest,
                     "rss_peak_bytes": _peak_rss(), "rss_import_high_water_bytes": baseline_rss}
     except ModuleNotFoundError as exc:
-        optional = {"clingo", "owlrl", "rdflib", "lmdb"}
+        optional = {"clingo", "owlrl", "rdflib", "lmdb", "polars", "pyarrow"}
         return {"status": "unavailable" if exc.name in optional else "error", "reason": str(exc), "metrics": metrics}
     except PreflightLimit as exc:
         return {"status": "limited", "limit_stage": "analytical_preflight", "reason": str(exc), "metrics": metrics}
@@ -384,6 +401,7 @@ def footprint(wheel=None):
         "clingo_runtime_chain": _dependency_files(("clingo", "cffi", "pycparser")),
         "owlrl_runtime_chain": _dependency_files(("owlrl", "rdflib", "pyparsing", "isodate")),
         "legacy_backend": _dependency_files(("lmdb",)),
+        "columnar_runtime_chain": _dependency_files(("polars", "polars-runtime-32", "pyarrow")),
     }
     if wheel:
         with zipfile.ZipFile(wheel) as archive:
@@ -405,6 +423,9 @@ def build_parser():
     parser.add_argument("--max-facts", type=int, default=100_000)
     parser.add_argument("--max-candidates", type=int, default=2_000_000)
     parser.add_argument("--max-justifications", type=int, default=100_000)
+    parser.add_argument("--max-intermediate", type=int, default=100_000,
+                        help="Polars prototype pre-materialization row cap, not an RSS guarantee")
+    parser.add_argument("--threads", type=int, default=1, help="native runtime thread-pool cap per fresh worker")
     parser.add_argument("--temp-root", default=tempfile.gettempdir())
     parser.add_argument("--wheel", type=Path)
     parser.add_argument("--output", type=Path)
@@ -434,26 +455,29 @@ def run_benchmark(args):
             or not args.sizes or not args.backends or not args.workloads
             or any(not 2 <= size <= 10_000 for size in args.sizes)):
         raise ValueError("positive repeat/timeout values and sizes between 2 and 10000 required")
-    if any(getattr(args, name) < 1 for name in ("max_input", "max_facts", "max_candidates", "max_justifications")):
+    if any(getattr(args, name) < 1 for name in ("max_input", "max_facts", "max_candidates", "max_justifications", "max_intermediate", "threads")):
         raise ValueError("resource counters must be positive")
     try:
         revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True,
                                            cwd=Path(__file__).resolve().parents[1], stderr=subprocess.DEVNULL).strip()
+        dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], text=True,
+                                            cwd=Path(__file__).resolve().parents[1], stderr=subprocess.DEVNULL).strip())
     except (OSError, subprocess.CalledProcessError):
-        revision = None
+        revision, dirty = None, None
     rows = []
     report = {"schema_version": 1, "python": sys.version, "platform": platform.platform(), "git_revision": revision,
               "started_utc": datetime.now(timezone.utc).isoformat(), "complete": False,
               "planned_rows": len(args.backends) * len(args.workloads) * len(args.sizes) * args.repeats,
               "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               "machine": platform.machine(), "processor": platform.processor(), "logical_cpus": os.cpu_count(),
-              "command": sys.argv, "footprint": footprint(args.wheel), "rows": rows}
+              "command": sys.argv, "footprint": footprint(args.wheel), "rows": rows,
+              "working_tree_dirty": dirty}
     _save_report(args.output, report)
     for workload in args.workloads:
         for size in args.sizes:
             for backend in args.backends:
                 for repeat in range(args.repeats):
-                    spec = {name: getattr(args, name) for name in ("max_input", "max_facts", "max_candidates", "max_justifications", "temp_root")}
+                    spec = {name: getattr(args, name) for name in ("max_input", "max_facts", "max_candidates", "max_justifications", "max_intermediate", "threads", "temp_root")}
                     spec.update(backend=backend, workload=workload, size=size, repeat=repeat)
                     start = time.perf_counter()
                     try:
@@ -462,7 +486,10 @@ def run_benchmark(args):
                             spec["temp_root"] = directory
                             process = subprocess.run([sys.executable, "-m", "benchmarks.ontology", "--worker", json.dumps(spec)],
                                                      capture_output=True, text=True, timeout=args.timeout,
-                                                     env={**os.environ, "PYTHONHASHSEED": "0"})
+                                                      env={**os.environ, "PYTHONHASHSEED": "0",
+                                                           **{key: str(args.threads) for key in (
+                                                               "POLARS_MAX_THREADS", "OMP_NUM_THREADS",
+                                                               "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")}})
                         value = json.loads(process.stdout) if process.returncode == 0 else {
                             "status": "error", "reason": process.stderr[-4000:], "returncode": process.returncode,
                         }
