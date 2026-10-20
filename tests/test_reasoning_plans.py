@@ -190,3 +190,83 @@ def test_telemetry_is_opt_in_and_does_not_change_closure_proofs_or_work_counts()
     assert not plain.operators and not plain.input_statistics and not plain.output_statistics
     assert not plain.explain_plan()["execution"]["telemetry_enabled"]
     assert measured.explain_plan()["execution"]["telemetry_enabled"]
+
+
+def test_empty_profiled_sites_are_zero_and_unprofiled_sites_remain_unknown():
+    plan = prepare([copy("p", "q")])
+    profiled = evaluate(plan).explain_plan()["rules"][0]["body"][0]
+    assert profiled["actual_rows"] == profiled["estimated_rows"] == 0
+    assert profiled["selected_indexes"] == []
+    unprofiled = evaluate(plan, telemetry=False).explain_plan()["rules"][0]["body"][0]
+    assert unprofiled["actual_rows"] is None and unprofiled["estimated_rows"] is None
+
+
+def test_relation_statistics_expose_endpoint_skew_without_guessing_costs():
+    run = evaluate(prepare(), [Fact("hub", "p", str(i)) for i in range(50)])
+    stats = run.input_statistics[0]
+    assert stats.rows == stats.distinct_objects == stats.largest_subject_bucket == 50
+    assert stats.distinct_subjects == stats.largest_object_bucket == 1
+    assert run.candidate_rows == 0
+
+
+def test_documented_prepared_example_runs():
+    from pathlib import Path
+    import textwrap
+
+    text = (Path(__file__).parents[1] / "docs/reasoning-plans.rst").read_text()
+    block = text.split(".. code-block:: python\n\n", 1)[1].split("\n\nPreparation and compatibility", 1)[0]
+    exec(compile(textwrap.dedent(block), "reasoning-plans.rst", "exec"), {})
+
+
+def test_prepared_execution_runs_without_site_packages_or_storage_imports():
+    from pathlib import Path
+    import subprocess
+    import sys
+
+    path = Path(__file__).parents[1] / "src/gestaltdb/reasoning/__init__.py"
+    script = f"""
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('standalone', {str(path)!r})
+module = importlib.util.module_from_spec(spec)
+sys.modules['standalone'] = module
+spec.loader.exec_module(module)
+from standalone import Atom, Fact, Program, Rule, Variable, ReasoningLimits
+from standalone.plans import PlannedDatalogEngine, PreparedProgram
+from standalone.protocols import InputContext
+from standalone.relational import CompilationIdentity
+x, y = Variable('x'), Variable('y')
+program = Program([Rule('r', [Atom(x, 'p', y)], Atom(y, 'q', x))])
+identity = CompilationIdentity(program.digest, InputContext('h','w','o','p','m'),
+                               'external-strings-v1', 'positive-binary-entity-v1', 'indexed-scc-v1')
+run = PlannedDatalogEngine().evaluate(PreparedProgram(program, identity), [Fact('a','p','b')],
+                                     identity=identity, limits=ReasoningLimits(),
+                                     collect_proofs=True, collect_telemetry=True)
+assert Fact('b','q','a') in run.result and not run.result.proofs.truncated
+assert not any(name.startswith(('gestaltdb','numpy','polars','pyarrow')) for name in sys.modules)
+"""
+    subprocess.run([sys.executable, "-I", "-S", "-c", script], check=True, capture_output=True, text=True)
+
+
+def test_reusing_one_plan_across_concurrent_calls_keeps_invocation_state_separate():
+    from concurrent.futures import ThreadPoolExecutor
+
+    plan = prepare([copy("p", "q")])
+    facts = [Evidence(Fact("a", "p", "b"), "v1")]
+    expected = evaluate(plan, facts, proofs=True)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        runs = list(pool.map(lambda _: evaluate(plan, facts, proofs=True), range(8)))
+    assert all(run == expected for run in runs)
+
+
+def test_recorded_plan_evidence_has_verified_closures_and_explicit_profile_modes():
+    from pathlib import Path
+
+    report = json.loads((Path(__file__).parents[1] / "benchmarks/results/reasoning-re04-plans.json").read_text())
+    assert report["complete"] and not report["working_tree_dirty"]
+    assert len(report["rows"]) == report["planned_rows"] == 144
+    for row in report["rows"]:
+        assert row["status"] == "ok" and row["closure_digest"] == row["expected_digest"]
+        assert row["measure_reuse"] and row["metrics"]["reuse_s"] >= 0
+        if row["backend"].startswith("planned"):
+            assert row["metrics"]["planned_telemetry"] == ("profiled" in row["backend"])
+            assert bool(row["metrics"]["planned_operator_sites"]) == ("profiled" in row["backend"])

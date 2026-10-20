@@ -7,6 +7,9 @@ For compact dictionary-backed relation containers and optional Arrow exchange,
 see :doc:`reasoning-batches`. These do not add new evaluator semantics.
 The separate optional closure-only experiment is documented in
 :doc:`reasoning-polars`; it does not replace the default evaluator.
+For opt-in prepared SCC schedules with native witnesses and detailed indexed
+telemetry, see :doc:`reasoning-plans`. The original structural inspection API
+below remains available unchanged.
 
 The additive ``gestaltdb.reasoning.relational`` module defines the
 ``gestaltdb-relational-v1`` structural IR. It is independent of storage and optional

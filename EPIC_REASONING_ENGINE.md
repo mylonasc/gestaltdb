@@ -313,6 +313,27 @@ closure-only; the source/default evaluator has not been replaced.
 Installed base-wheel missing-extra isolation and optional-wheel fixpoint smokes
 passed outside the checkout; modular examples reported 7 passes and one optional
 PyRex skip. Python 3.10–3.13/fuzz CI is tracked in #191.
+PR #191 subsequently passed all checks and merged into the second integration
+branch at `b320c33`; #164 is closed. No main merge/release occurred.
+
+### Implementation started: RE-04 (#165)
+
+Dedicated worktree `re-04-plans`, branch `feature/re-04-plans`, based on accepted
+integration `b320c33`. Implemented immutable positive-predicate SCC plans,
+compiled dispatch/delta sites, exact compatibility checks before source iteration,
+shared indexed matching and ordered bounded witnesses. Detailed body/index bucket,
+actual-attempt and relation-skew telemetry is opt-in. Plan/run `explain_plan()`
+reports exact current-bucket estimates and labels the join strategy heuristic,
+not cost-based optimization. Component-round limits differ explicitly from the
+default evaluator's global rounds; no default-mode or persistent-index change.
+
+Clean-source `cb4351e` produced **144 validated first/reuse evaluation rows** in
+closure/witness modes, with profiling enabled/disabled. Evidence:
+`benchmarks/results/reasoning-re04-plans.json`; contract and observations:
+`docs/reasoning-plans.rst`. Preparation offers reusable architecture and inspection,
+not a demonstrated throughput gain on these small programs. Profiling overhead
+is measured and remains disabled by default. Sort-merge/hash-join/parallel
+strategies are not enabled without later parity and performance evidence.
 
 Focused existing ontology/reasoning suite on this checkout: **181 passed, 72
 skipped** without optional extras. Repeated with LMDB, LevelDB and RDFLib, plus
