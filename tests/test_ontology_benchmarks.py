@@ -48,6 +48,25 @@ def test_duplicate_rows_are_not_duplicate_logical_facts():
     assert len(workload.expected) == 30
 
 
+def test_polars_and_indexed_comparison_use_the_same_evidence_wrappers(tmp_path, monkeypatch):
+    pytest.importorskip("polars")
+    pytest.importorskip("pyarrow")
+    from gestaltdb.reasoning.adapters.polars import PolarsDatalogPrototype
+    from gestaltdb.reasoning.protocols import Evidence
+
+    original = PolarsDatalogPrototype.evaluate
+    seen = []
+
+    def capture(self, program, facts, **kwargs):
+        seen.extend(facts)
+        return original(self, program, facts, **kwargs)
+
+    monkeypatch.setattr(PolarsDatalogPrototype, "evaluate", capture)
+    assert ontology._run_worker(_spec(tmp_path, "polars", "duplicates"))["status"] == "ok"
+    assert len(seen) == 48 and all(isinstance(value, Evidence) for value in seen)
+    assert len({value.reference_id for value in seen}) == 48
+
+
 @pytest.mark.parametrize("workload", ontology.WORKLOADS)
 def test_preflight_guards_output_before_allocating_large_closure(workload):
     with pytest.raises(ontology.PreflightLimit):

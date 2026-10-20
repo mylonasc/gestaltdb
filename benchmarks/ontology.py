@@ -225,7 +225,11 @@ def _run_worker(spec):
                 from gestaltdb.reasoning.protocols import InputContext
 
                 engine = _timed(metrics, "init_s", PolarsDatalogPrototype)
-                facts = _timed(metrics, "conversion_s", lambda: [Fact(*row) for row in workload.rows])
+                # Match the indexed-Python closure input representation exactly;
+                # both consume all independent Evidence wrappers, without proofs.
+                facts = _timed(metrics, "conversion_s", lambda: [
+                    Evidence(Fact(*row), f"evidence:{i}") for i, row in enumerate(workload.rows)
+                ])
                 run = _timed(metrics, "execution_s", lambda: engine.evaluate(
                     compiled.program, facts,
                     context=InputContext("benchmark-in-memory", "default", compiled.revision_id, "all", "identity"),
