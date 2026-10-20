@@ -79,6 +79,19 @@ def test_temporal_views_are_not_current_graph_sources(graph):
             PinnedGraphSource(view, mapping=GraphMapping())
 
 
+def test_forged_current_snapshot_provenance_is_rejected(graph):
+    from dataclasses import replace
+    from gestaltdb.readview import ProvenanceMismatchError
+    with graph.current_read_view(require_verifiable=True) as view:
+        original = view.provenance
+        view.provenance = replace(original, state_sha256="0" * 64)
+        with pytest.raises(ProvenanceMismatchError, match="state digest"):
+            PinnedGraphSource(view, mapping=GraphMapping())
+        view.provenance = replace(original, database_id="00000000-0000-0000-0000-000000000000")
+        with pytest.raises(ProvenanceMismatchError, match="database identity"):
+            PinnedGraphSource(view, mapping=GraphMapping())
+
+
 def test_property_literals_are_not_silently_coerced(graph):
     graph.put_node(Node("bad", properties={"employer": 42}))
     with graph.current_read_view(require_verifiable=True) as view:
