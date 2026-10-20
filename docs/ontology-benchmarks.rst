@@ -8,6 +8,11 @@ full OWL reasoning. The implementation contract is :doc:`ontology-contract`.
 Benchmark adapters are development tools, not additional public execution
 backends. No JVM integration or new runtime dependency is introduced.
 
+For the later optional Polars closure-only prototype and its separately scoped
+RE-03 evidence, see :doc:`reasoning-polars`. The runner now accepts explicit
+``--backends polars`` and ``--threads``; the committed v1 evidence below remains
+historical evidence for its recorded source revision, not a new backend decision.
+
 Reproduction
 ------------
 

@@ -14,6 +14,7 @@ on:
       - "EPIC_REASONING_ENGINE.md"
       - "docs/reasoning-execution.rst"
       - "docs/reasoning-batches.rst"
+      - "docs/reasoning-polars.rst"
       - "benchmarks/ontology-requirements.txt"
       - "benchmarks/cli.py"
       - "docs/ontology-contract.rst"
@@ -33,6 +34,7 @@ on:
       - "EPIC_REASONING_ENGINE.md"
       - "docs/reasoning-execution.rst"
       - "docs/reasoning-batches.rst"
+      - "docs/reasoning-polars.rst"
       - "benchmarks/ontology-requirements.txt"
       - "benchmarks/cli.py"
       - "docs/ontology-contract.rst"
@@ -74,6 +76,7 @@ jobs:
           tests/test_reasoning_relational.py
           tests/test_reasoning_batches.py
           tests/test_reasoning_arrow.py
+          tests/test_reasoning_polars.py
           tests/test_reasoning_execution_baseline.py
           tests/test_reasoning_proofs.py
           tests/test_ontology_compiler.py
@@ -96,7 +99,7 @@ jobs:
           import sys
           import gestaltdb
           from gestaltdb import agent_docs
-          from gestaltdb.reasoning import Program
+          from gestaltdb.reasoning import Program, ReasoningLimits
           from gestaltdb.reasoning.protocols import InputContext
           from gestaltdb.reasoning.relational import CompilationIdentity, RelationalProgram, explain_plan
           from gestaltdb.reasoning.batches import SymbolDictionary, CompactRelation
@@ -108,6 +111,7 @@ jobs:
           assert explain_plan(program, identity=identity)["relational_digest"] == RelationalProgram.from_program(program).digest
           from gestaltdb.reasoning.relational import RelationSchema
           from gestaltdb.reasoning.adapters.arrow import to_arrow
+          from gestaltdb.reasoning.adapters.polars import PolarsDatalogPrototype
           dictionary = SymbolDictionary(identity.context, ("a", "b"))
           batch = CompactRelation.from_rows(RelationSchema("p", ("s", "o")), dictionary, [("a", "b")])
           assert batch.nbytes == 16
@@ -118,6 +122,13 @@ jobs:
               assert "gestaltdb[arrow]" in str(error)
           else:
               raise AssertionError("base wheel unexpectedly installed PyArrow")
+          try:
+              PolarsDatalogPrototype().evaluate(program, [], context=identity.context,
+                                                limits=ReasoningLimits())
+          except ImportError as error:
+              assert "gestaltdb[polars]" in str(error)
+          else:
+              raise AssertionError("base wheel unexpectedly installed Polars")
           for example in agent_docs.extract_python_examples(agent_docs.read_topic("ontology")):
               exec(example, {})
           assert "rdflib" not in sys.modules

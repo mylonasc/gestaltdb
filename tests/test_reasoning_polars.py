@@ -134,3 +134,60 @@ def test_source_failure_and_invalid_input_never_return_partial_closure():
         evaluate(Program(), broken())
     with pytest.raises(ReasoningError):
         evaluate(Program(), ["not-fact"])
+
+
+def test_context_changes_dictionary_and_compilation_identity_without_reusing_state():
+    from dataclasses import replace
+
+    pytest.importorskip("polars")
+    pytest.importorskip("pyarrow")
+    engine = PolarsDatalogPrototype()
+    first = engine.evaluate(Program(), [Fact("a", "p", "b")], context=CONTEXT, limits=ReasoningLimits())
+    second = engine.evaluate(Program(), [], context=replace(CONTEXT, world="other"), limits=ReasoningLimits())
+    assert second.result.facts == () and first.result.facts
+    with pytest.raises(ReasoningError, match="incompatible"):
+        first.identity.require_compatible(second.identity)
+
+
+def test_documented_polars_example_runs():
+    from pathlib import Path
+    import textwrap
+
+    pytest.importorskip("polars")
+    pytest.importorskip("pyarrow")
+    text = (Path(__file__).parents[1] / "docs/reasoning-polars.rst").read_text()
+    block = text.split(".. code-block:: python\n\n", 1)[1].split("\n\n``PolarsRun``", 1)[0]
+    exec(compile(textwrap.dedent(block), "reasoning-polars.rst", "exec"), {})
+
+
+def test_hot_operators_do_not_use_python_row_callbacks():
+    import ast
+    from pathlib import Path
+
+    path = Path(__file__).parents[1] / "src/gestaltdb/reasoning/adapters/polars.py"
+    forbidden = {"map_rows", "map_elements", "map_batches", "to_dicts", "to_dict"}
+    calls = [node.func.attr for node in ast.walk(ast.parse(path.read_text()))
+             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)]
+    assert not set(calls) & forbidden
+    assert calls.count("iter_rows") == 1  # Final external-ID decoding boundary only.
+
+
+def test_committed_prototype_evidence_is_complete_and_does_not_call_limits_speedups():
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).parents[1] / "benchmarks/results"
+    for name, count in (("comparison", 72), ("sparse-1t", 27), ("sparse-4t", 27)):
+        report = json.loads((root / f"reasoning-re03-{name}.json").read_text())
+        assert report["complete"] and not report["working_tree_dirty"]
+        assert len(report["rows"]) == count
+        for row in report["rows"]:
+            assert row["status"] == "ok" and row["closure_digest"] == row["expected_digest"]
+            if row["backend"] == "polars":
+                assert row["metrics"]["polars_peak_intermediate_rows"] <= row["max_intermediate"]
+                assert row["metrics"]["polars_candidate_rows"] <= row["max_candidates"]
+                assert "no_proofs" in row["execution_kind"]
+    limited = json.loads((root / "reasoning-re03-limits.json").read_text())
+    assert limited["complete"] and len(limited["rows"]) == 1
+    assert limited["rows"][0]["status"] == "limited"
+    assert "closure_digest" not in limited["rows"][0]

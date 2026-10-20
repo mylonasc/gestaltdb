@@ -275,6 +275,35 @@ measurement rows (three core, three Arrow/Polars) at `32a22cc` are committed as
 `benchmarks/results/reasoning-re02-{core,batch}.json`. Ten thousand binary rows
 occupy 160,000 final payload bytes, excluding dictionary and staging memory;
 the Arrow path confirms immutable payload sharing and validated round trips.
+PR #190 passed Python 3.10–3.13 and fuzz CI and merged into the second integration
+branch at `865f3b1`; #163 is closed. No main merge or release occurred.
+
+### Implementation started: RE-03 (#164)
+
+Dedicated worktree `re-03-polars`, branch `feature/re-03-polars`, based on accepted
+RE-02 integration `865f3b1`. Explicit `PolarsDatalogPrototype` evaluates the existing
+binary positive entity profile via compact IDs, eager native per-occurrence delta
+plans and preflighted equijoins. `PolarsRun` separates closure/identity/telemetry;
+proofs, maintenance and publication are not offered, and row-work accounting is
+not equivalent to indexed Python attempted-unification counters.
+
+Clean-source `b8571a2` produced **126 validated comparison rows** against indexed
+Python and benchmark-only Clingo, plus one explicit intermediate-limit diagnostic.
+Evidence: `benchmarks/results/reasoning-re03-*.json`; supported boundaries and
+measured tradeoffs: `docs/reasoning-polars.rst`. Dense N=128 median pipeline was
+54.04ms Polars versus 535.42ms indexed Python, but small workloads were slower,
+memory use increased, and four threads did not improve tested sparse workloads.
+The default evaluator is unchanged; RE-06 remains the production backend decision.
+
+PyRex #31 was rechecked on 2026-10-21: still open, no public scan implementation
+found, PyPI still 0.4.1. The recheck and release/capability prerequisites are
+recorded in #166; raw KV Arrow reads remain optional RE-05 extraction work, not
+an assumed dependency or decoded-fact API in this prototype.
+
+RE-03 local validation: **1631 passed, 199 skipped** with LMDB/LevelDB, Arrow,
+Polars, Clingo and OWL-RL available. Sphinx warnings-as-errors, documentation drift
+and the full roadmap/evidence validator passed. The new prototype is explicitly
+closure-only; the source/default evaluator has not been replaced.
 
 Focused existing ontology/reasoning suite on this checkout: **181 passed, 72
 skipped** without optional extras. Repeated with LMDB, LevelDB and RDFLib, plus
