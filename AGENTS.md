@@ -177,6 +177,13 @@ Resolve external IDs with `snapshot.node_int(...)`, `snapshot.edge_int(...)`, an
 - Browser checks: `npx playwright install chromium`, then `npm test` in `web/` (`VIZ_TEST_PYTHON` selects an installed Python environment); tests open generated artifacts offline.
 - `npm run check:bundle` verifies source-aware build provenance; full runtime notices ship in `viz/static/third-party-notices.txt` and are embedded in HTML.
 
+## Development Priorities and Roadmap Tracking
+
+- Difficult features may start with simpler, less-performant, throw-away implementations to facilitate testing.
+- Balance high performance with pragmatism: completing the roadmap takes priority over achieving high performance in the first implementation.
+- Well-motivated architecture work that enables large portions of ambitious roadmaps always takes priority.
+- Use GitHub issues and their dependency relationships to represent roadmap dependencies and track work.
+
 ## Development Commands
 
 - Run tests: `uv run pytest`
