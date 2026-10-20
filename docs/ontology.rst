@@ -38,6 +38,9 @@ are not supported. Domain/range infer memberships rather than validate missing d
 Read-only temporal claims
 --------------------------------
 
+This source adapter never writes claims. The separate explicit, point-only
+publication operation is documented in :doc:`ontology-publication`.
+
 Install an optional backend for this example (``gestaltdb[lmdb]``). The existing
 read view pins one valid-time point and visible commit prefix. The adapter verifies
 its source, policy, mapping and ontology revision before returning a scoped result.

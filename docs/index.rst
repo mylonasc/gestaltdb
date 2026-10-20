@@ -46,6 +46,7 @@ Filter, Sample, Train
    modal-epistemic
    ontology
    ontology-benchmarks
+   ontology-publication
    cypher
    visualization
    performance
