@@ -6,6 +6,8 @@ Import values from :mod:`gestaltdb.reasoning.model`, protocols from
 claims. Proof values live in :mod:`gestaltdb.reasoning.proofs`; ontology compilation
 is a separate layer in :mod:`gestaltdb.ontology`. The package-root
 imports are not an independent-installation or minimal-import guarantee.
+Additive relational IR and structural inspection live in ``.relational``;
+these do not expand the executable binary-entity profile.
 """
 
 from .engine import DatalogEngine

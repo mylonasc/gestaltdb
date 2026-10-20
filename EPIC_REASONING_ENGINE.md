@@ -227,6 +227,31 @@ repository cannot promise an unimplemented upstream native entry point.
 
 ## Review validation
 
+### Implementation started: RE-01 (#162)
+
+Dedicated worktree: `re-01-contracts`; branch: `feature/re-01-contracts`, based on
+integration commit `3e6dc71`; [PR #189](https://github.com/mylonasc/gestaltdb/pull/189)
+targets the second integration branch. Additive entity-only relational IR, exact compilation
+compatibility keys and structural-only `explain_plan` are implemented without
+changing legacy `Fact`/`Program` or their digest namespace. N-ary execution and
+runtime operator telemetry remain RE-07/RE-04, respectively.
+
+Baseline evidence for each GR ID is in `planning/reasoning-engine/baseline-review.json`;
+the roadmap validator checks unique coverage and evidence paths. Frozen budgets
+and a fresh-worker runner (`python -m benchmarks.reasoning_contracts`) cover
+interactive, sparse batch, dense-output and full-rematerialization insert/delete
+reference workloads in closure-only and witness modes. See
+`docs/reasoning-execution.rst` for supported semantics, identity rules and limits.
+This is not a claim of incremental, native, Arrow or Polars execution delivery.
+
+RE-01 local validation: **1557 passed, 227 skipped** with LMDB/LevelDB/RDF/Arrow/
+Polars; docs drift, Sphinx with warnings-as-errors, runnable examples (7 passed,
+1 optional skip) and installed-wheel contract smoke passed. Forty fresh-worker
+benchmark rows passed all frozen budgets on clean source revision `99be3cb`;
+the full report is `benchmarks/results/reasoning-re01-baseline.json`.
+Python 3.10–3.13 PR CI is tracked in #189; no feature is considered integrated
+merely because local validation passed.
+
 Focused existing ontology/reasoning suite on this checkout: **181 passed, 72
 skipped** without optional extras. Repeated with LMDB, LevelDB and RDFLib, plus
 graph interface/Cypher/sampling regression suites: **492 passed, 128 skipped**.

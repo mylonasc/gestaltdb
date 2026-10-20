@@ -78,6 +78,16 @@ def main():
     assert coverage == set(workbook_ids), f"Coverage mismatch: {coverage ^ set(workbook_ids)}"
     assert plan["integration_branch"] == "feature/onto-dev-epic-2"
     assert plan["baseline"] == "c71f0433fc40251b7dcec08b60370e80b40d36d8"
+    audit = json.loads((here / "baseline-review.json").read_text())
+    assert audit["baseline"] == plan["baseline"]
+    audited = []
+    for group in audit["groups"]:
+        assert group["status"] in {"available", "partial", "not-implemented", "deferred"}
+        assert group["note"] and group["evidence"]
+        audited.extend(group["gr"])
+        for evidence in group["evidence"]:
+            assert (root / evidence).is_file(), evidence
+    assert sorted(audited) == workbook_ids, "Audit must cover each GR exactly once"
     markdown = (root / "EPIC_REASONING_ENGINE.md").read_text()
     rows = re.findall(
         r"^\| (RE-\d{2}) \| \[#(\d+)\]\([^)]+\) \| [^|]+ \| ([^|]+) \|$",
@@ -92,7 +102,7 @@ def main():
         ]
         assert actual == expected, (key, actual, expected)
     print("Validated: original source hashes, all 136 GR IDs, 5 sequential epics, "
-          "27 feature issues, Markdown index and acyclic dependency graph.")
+          "27 feature issues, Markdown index, baseline audit and acyclic dependency graph.")
 
 
 if __name__ == "__main__":

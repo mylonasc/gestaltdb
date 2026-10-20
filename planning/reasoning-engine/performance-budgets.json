@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "frozen_before_executor_selection": "2026-10-20",
+  "purpose": "Engineering acceptance budgets on a declared reference machine, not universal library SLOs or claims about incremental/native implementations. Do not relax after selecting a backend without recording a decision in #156.",
+  "repeats": 5,
+  "worker_timeout_s": 15,
+  "modes": ["native", "native-proofs"],
+  "cases": [
+    {"name":"interactive-hierarchy","workload":"hierarchy","size":256,"pipeline_p95_s":0.25,"cold_worker_p95_s":2.0,"rss_peak_bytes":268435456},
+    {"name":"batch-tree","workload":"recursive","size":1024,"pipeline_p95_s":3.0,"cold_worker_p95_s":5.0,"rss_peak_bytes":536870912},
+    {"name":"dense-output","workload":"dense","size":128,"pipeline_p95_s":3.0,"cold_worker_p95_s":5.0,"rss_peak_bytes":536870912},
+    {"name":"update-reference","workload":"update","size":512,"pipeline_p95_s":1.0,"cold_worker_p95_s":3.0,"rss_peak_bytes":268435456}
+  ],
+  "update_contract": "Insert and support-removing delete are complete rematerializations from authoritative input, not incremental propagation or persistent publication. Future executors must validate identical answers and separately label insertion/deletion/maintenance modes.",
+  "measurement_contract": "Fresh processes, PYTHONHASHSEED=0, OMP/Polars threads=1. Include existing package import in cold worker time; pipeline includes compilation, conversion, execution and decode but excludes fixture construction, import and validation. RSS is full worker high-water mark; no subtraction of startup high-water. Report median and nearest-rank p95, phase times, environment and source footprint. Missing metrics/dependencies, timeouts or wrong answers fail, not pass.",
+  "future_required_measurements": ["claims extraction/authentication and publication", "actual join/intermediate counters", "allocation/copy/spill bytes", "thread scaling", "incremental support/retraction P50/P95 and write amplification", "installed wheel/optional runtime footprint"]
+}
