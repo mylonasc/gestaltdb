@@ -39,8 +39,30 @@ the APIs or features below have already shipped.
   171 combined feature cases pass on Python 3.10-3.13 (two PyRex skips per version).
   A dedicated Python/oracle CI matrix covers relevant epic and main PRs/pushes;
   the existing general Python workflow only targets `main`.
-- ONTO-07 (benchmarks and measured solver decision) is next. ONTO-08 remains the
-  v1 integration/release gate after both conformance and benchmarking are complete.
+- ONTO-07 integrated through [PR #149](https://github.com/mylonasc/gestaltdb/pull/149).
+  168 analytically verified successful measurements and five explicit limit
+  diagnostics; native remains the bounded/witness-capable v1 default. Clingo is
+  faster on the larger dense fixtures and the preferred optional accelerator
+  candidate, not a production backend. Recorded evidence hashes describe the
+  measured v1 baseline, not the later optional adapters.
+- ONTO-08 integrated through [PR #150](https://github.com/mylonasc/gestaltdb/pull/150).
+  Public submodule imports, runnable standalone/claims guides, packaged agent docs
+  and installed-wheel smoke tests on Python 3.10-3.13. V1 integration gates are
+  complete on `onto-dev`; no PyPI release or integration into `main` is implied.
+- ONTO-09 integrated through [PR #151](https://github.com/mylonasc/gestaltdb/pull/151).
+  Optional RDFLib extra, bounded offline import resolution, strict supported
+  TBox validation and explicit permissive incompleteness. Full suite: 1495 passed,
+  211 optional skips; Python matrix, backend-extra jobs and security checks passed.
+- ONTO-10 point publication is in [PR #152](https://github.com/mylonasc/gestaltdb/pull/152).
+  Latest-input recomputation under the shared writer guard; managed separate-world
+  output, independent-support/revision reconciliation and visibility-marker fault
+  tests. Nontransactional crash recovery is explicit, never an implicit repair.
+- ONTO-11 current-graph adapters are in [PR #153](https://github.com/mylonasc/gestaltdb/pull/153).
+  Explicit pinned mappings, logical triple filtering and distinct inferred-neighbor
+  fanout. No automatic Cypher rewrite or array-sampler mutation.
+- [onto-techdebt #154](https://github.com/mylonasc/gestaltdb/issues/154) tracks explicit
+  recovery ergonomics, lock-duration optimization, interval/all-support extensions
+  and coordination with #127. These extensions are not silently claimed delivered.
 
 ## Goal and decisions
 
@@ -59,8 +81,8 @@ the new engine or install generated ontology rules in the global rule catalog.
 Leave existing rule APIs unchanged in v1; migrating them to the shared kernel
 requires a later parity-driven change, not an incidental refactor.
 
-The default backend is native Python. ONTO-07 compares it with the existing
-evaluator, RDFLib/OWL-RL and Clingo before the v1 release decision. RDFLib/OWL-RL
+The default backend is native Python. ONTO-07 compared it with the existing
+evaluator, RDFLib/OWL-RL and Clingo for the v1 decision. RDFLib/OWL-RL
 is a useful optional oracle; Clingo is a mature optional Datalog/ASP execution
 candidate, not itself an OWL implementation. Measure whole-pipeline costs,
 including conversions and explanations. Do not assume an external engine is
@@ -79,7 +101,7 @@ V1 supplies immutable ontology revisions, compiled programs, bounded closure,
 read-only results, bounded explanations, and an explicit temporal-claims adapter.
 Standalone callers can reason over ordinary Python facts without opening a DB.
 
-Deferred: property chains, conjunction axioms, disjointness checks, equality and
+Outside v1: property chains, conjunction axioms, disjointness checks, equality and
 `sameAs`, functionality/cardinality, literals/datatypes, anonymous existential
 witnesses, negation, probabilistic rules, RDF import, materialization, incremental
 deletion, current-graph projection, and query/sampling integration. This selected
@@ -224,7 +246,7 @@ untested implementation merely to increase commit frequency.
 - Python 3.10-3.13 compatibility and no new mandatory dependency.
 - Runnable standalone/claims examples and no regressions to existing rule APIs.
 
-Publication is deferred because point-selected evidence does not justify broad
+V1 remains read-only. ONTO-10 adds separate explicit point publication, not broad
 temporal intervals. Future interval closure needs disjoint unions of proof
 intersections, not a min/max envelope. Future deletion maintenance must remove
 self-supporting cycles. Equality needs snapshot-local canonicalization, proofs
