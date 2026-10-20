@@ -35,11 +35,13 @@
       "validation": "1632 passed, 199 skipped with available backend/Arrow/Polars/solver extras; Sphinx -W, docs drift, examples, roadmap validator, installed base/optional-wheel smokes passed. 126 matched-Evidence comparison rows and one limit diagnostic; Python 3.10-3.13 and fuzz CI passed."
     },
     "RE-04": {
-      "status": "in-progress",
+      "status": "in-review",
+      "pr": 192,
       "branch": "feature/re-04-plans",
       "worktree": "re-04-plans",
       "contract": "docs/reasoning-plans.rst",
-      "benchmark_evidence": "benchmarks/results/reasoning-re04-plans.json"
+      "benchmark_evidence": "benchmarks/results/reasoning-re04-plans.json",
+      "validation": "1673 passed, 199 skipped with available backend/Arrow/Polars/solver extras; Sphinx -W, docs drift, examples, roadmap validator passed. 144 verified first/reuse closure/witness/profile rows. PR CI running."
     }
   },
   "source_sha256": {
