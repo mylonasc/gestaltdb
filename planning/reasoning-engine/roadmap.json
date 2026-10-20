@@ -42,11 +42,13 @@
       "validation": "1632 passed, 199 skipped with available backend/Arrow/Polars/solver extras; Sphinx -W, docs drift, examples, roadmap validator, installed base/optional-wheel smokes passed. 126 successful comparison rows with matched Evidence allocations and one explicit limit diagnostic. PR CI pending."
     },
     "RE-05": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-05-extraction",
       "worktree": "re-05-extraction",
       "contract": "docs/reasoning-extraction.rst",
-      "benchmark_evidence": "benchmarks/results/reasoning-re05-extraction.json"
+      "benchmark_evidence": "benchmarks/results/reasoning-re05-extraction.json",
+      "pr": 193,
+      "validation": "1643 passed, 199 skipped with backend/Arrow/Polars/solver extras; Sphinx -W, docs drift, examples, roadmap validator passed. 4 clean-revision extraction rows (LMDB+LevelDB parity, batch accounting, fail-closed budget). PR CI pending."
     }
   },
   "source_sha256": {

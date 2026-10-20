@@ -310,7 +310,8 @@ RE-03 or require pausing its storage-independent implementation.
 
 Dedicated worktree `re-05-extraction`, branch `feature/re-05-extraction`, based on
 accepted RE-03 integration `b320c33` (RE-05 depends only on integrated RE-02, so it
-does not stack on unmerged RE-04). Storage-neutral `ExtractionRequest`/`FactBatch`
+is not stacked on unmerged RE-04); [PR #193](https://github.com/mylonasc/gestaltdb/pull/193)
+targets the second integration branch. Storage-neutral `ExtractionRequest`/`FactBatch`
 contracts, storage-free capability probing and a pinned batched claim source with
 exact version-ID evidence, index pushdown modes and per-batch verification. LevelDB
 snapshot requests fail closed; `native_arrow_scan` is False on every backend until
