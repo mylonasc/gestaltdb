@@ -96,14 +96,17 @@ def _choose(
 
 def _matches(
     rule: Rule, pivot: int, full: _Index, delta: _Index, budget: _Budget,
-    *, track_premises: bool = False,
+    *, track_premises: bool = False, observer=None,
 ) -> Iterator[tuple[dict[Variable, str], list[Fact | None] | None]]:
     remaining = tuple(index for index in range(len(rule.body)) if index != pivot)
     # One invocation-local path buffer, not a copy per intermediate binding.
     # Consumers must snapshot it before requesting another match.
     premises = [None] * len(rule.body) if track_premises else None
     # Frames retain only the current DFS path; relation buckets are not copied.
-    stack = [({}, remaining, pivot, iter(delta.candidates(rule.body[pivot], {})))]
+    first = delta.candidates(rule.body[pivot], {})
+    if observer is not None:
+        observer.lookup(rule, pivot, True, {}, first)
+    stack = [({}, remaining, pivot, iter(first))]
     while stack:
         bindings, remaining, position, candidates = stack[-1]
         try:
@@ -113,6 +116,8 @@ def _matches(
             continue
         budget.candidate()
         updated = _unify(rule.body[position], fact, bindings)
+        if observer is not None:
+            observer.attempt(rule, position, position == pivot, bindings, updated is not None)
         if updated is None:
             continue
         if premises is not None:
@@ -121,6 +126,8 @@ def _matches(
             yield updated, premises
             continue
         chosen, bucket = _choose(rule, remaining, updated, full)
+        if observer is not None:
+            observer.lookup(rule, chosen, False, updated, bucket)
         if bucket:
             stack.append((
                 updated, tuple(index for index in remaining if index != chosen),

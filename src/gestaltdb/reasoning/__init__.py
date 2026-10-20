@@ -10,6 +10,8 @@ Additive relational IR and structural inspection live in ``.relational``;
 these do not expand the executable binary-entity profile.
 Compact reference batches/dictionaries live in ``.batches`` and optional Arrow
 exchange in ``.adapters.arrow``; neither is imported by this package initializer.
+Opt-in reusable SCC schedules and indexed telemetry live in ``.plans``; detailed
+profiling is disabled by default and is separate from the default evaluator.
 """
 
 from .engine import DatalogEngine

@@ -25,13 +25,23 @@
       "validation": "1581 passed, 227 skipped; docs drift, Sphinx -W, examples, standalone no-site-packages and base-wheel isolation passed. Six clean-revision measurement rows, Python 3.10-3.13 and fuzz CI passed."
     },
     "RE-03": {
-      "status": "in-review",
+      "status": "integrated",
+      "integration_commit": "b320c33",
       "pr": 191,
       "branch": "feature/re-03-polars",
       "worktree": "re-03-polars",
       "contract": "docs/reasoning-polars.rst",
       "benchmark_evidence": ["benchmarks/results/reasoning-re03-comparison.json", "benchmarks/results/reasoning-re03-sparse-1t.json", "benchmarks/results/reasoning-re03-sparse-4t.json", "benchmarks/results/reasoning-re03-limits.json"],
-      "validation": "1632 passed, 199 skipped with available backend/Arrow/Polars/solver extras; Sphinx -W, docs drift, examples, roadmap validator, installed base/optional-wheel smokes passed. 126 successful comparison rows with matched Evidence allocations and one explicit limit diagnostic. PR CI pending."
+      "validation": "1632 passed, 199 skipped with available backend/Arrow/Polars/solver extras; Sphinx -W, docs drift, examples, roadmap validator, installed base/optional-wheel smokes passed. 126 matched-Evidence comparison rows and one limit diagnostic; Python 3.10-3.13 and fuzz CI passed."
+    },
+    "RE-04": {
+      "status": "in-review",
+      "pr": 192,
+      "branch": "feature/re-04-plans",
+      "worktree": "re-04-plans",
+      "contract": "docs/reasoning-plans.rst",
+      "benchmark_evidence": "benchmarks/results/reasoning-re04-plans.json",
+      "validation": "1673 passed, 199 skipped with available backend/Arrow/Polars/solver extras; Sphinx -W, docs drift, examples, roadmap validator passed. 144 verified first/reuse closure/witness/profile rows. PR CI running."
     }
   },
   "source_sha256": {
