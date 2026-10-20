@@ -12,6 +12,7 @@ from . import (
     embedded,
     external,
     matrix,
+    ontology,
     plotting,
     profiling,
     quick,
@@ -26,6 +27,7 @@ COMMANDS = {
     "compaction": (compaction.build_parser, lambda args: compaction.main(sys.argv[2:]), "Benchmark LSM overwrite and compaction pressure"),
     "sampler": (sampler.build_parser, lambda args: sampler.main(sys.argv[2:]), "Benchmark SamplerEngine array sampling vs GraphDB baseline"),
     "temporal": (temporal.build_parser, temporal.run_benchmark, "Benchmark temporal storage, queries, sampling, and reasoning"),
+    "ontology": (ontology.build_parser, ontology.run_benchmark, "Compare isolated ontology solvers, memory, and footprint"),
     "embedded": (embedded.build_parser, lambda args: embedded.main(sys.argv[2:]), "Benchmark embedded graph databases (GestaltDB, LatticeDB, LadybugDB)"),
     "external": (external.build_parser, lambda args: external.main(sys.argv[2:]), "Benchmark external graph databases (Neo4j, Memgraph, ArcadeDB, AGE)"),
     "arcadedb": (arcadedb.build_parser, lambda args: arcadedb.main(sys.argv[2:]), "Benchmark GestaltDB vs embedded ArcadeDB"),
@@ -67,6 +69,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         sampler.main(args_list[1:])
     elif subcmd == "temporal":
         temporal.main(args_list[1:])
+    elif subcmd == "ontology":
+        ontology.main(args_list[1:])
     elif subcmd == "embedded":
         embedded.main(args_list[1:])
     elif subcmd == "external":
