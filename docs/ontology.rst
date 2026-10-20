@@ -109,3 +109,5 @@ No JVM integration is supported. Clingo was faster on larger dense synthetic
 closures, but does not provide the same work-counter/witness contract in this v1.
 See :doc:`ontology-benchmarks` for measured trade-offs, startup/footprint caveats
 and reproducible evidence. The development contract is :doc:`ontology-contract`.
+For additive relational IR and structural plan inspection, see
+:doc:`reasoning-execution` (no new execution semantics).
