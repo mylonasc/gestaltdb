@@ -29,7 +29,9 @@ def identity():
 def test_lowering_preserves_occurrences_constants_and_legacy_execution():
     legacy = program()
     before = legacy.digest
+    assert before == "sha256:64523ce1b9654292ee98a3f23b86ba51b4047685e8ac5a57d67fe5a01978cfaa"
     ir = RelationalProgram.from_program(legacy)
+    assert ir.digest == "sha256:3eaf5ea6a414523a2d62e439c0bf3c594e2027ab9f2ec286e08dde5e48e50d51"
     assert ir.rules[0].body == (RelationalAtom("p", (X, Y)),) * 2
     assert ir.rules[0].head == RelationalAtom("q", (Y, X))
     assert ir.schemas == (RelationSchema("p", ("subject", "object")), RelationSchema("q", ("subject", "object")))
@@ -115,3 +117,12 @@ def test_explain_schema_is_structural_and_detached_from_program_and_inputs():
         explain_plan(program(), identity=replace(identity(), executor_version="polars-unimplemented"))
     with pytest.raises(ReasoningError):
         replace(identity(), context="unauthenticated")
+
+
+def test_documented_structural_inspection_example_runs():
+    from pathlib import Path
+    import textwrap
+
+    text = (Path(__file__).parents[1] / "docs/reasoning-execution.rst").read_text()
+    block = text.split(".. code-block:: python\n\n", 1)[1].split("\n\n``explain_plan``", 1)[0]
+    exec(compile(textwrap.dedent(block), "reasoning-execution.rst", "exec"), {})

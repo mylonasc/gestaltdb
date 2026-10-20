@@ -49,7 +49,7 @@ and selected indexes are ``None``, never guessed costs. Dynamic telemetry and
 SCC-aware execution are future work.
 
 Identities and evidence
-----------------------
+----------------------------------------
 
 Legacy ``Program.digest`` retains its existing ``gestaltdb-datalog-v1`` encoding.
 The relational IR uses a separate versioned namespace; lowering does not mutate
@@ -71,3 +71,72 @@ input identities independently. Dictionary generations are not evidence IDs,
 RocksDB sequence numbers are not authenticated application horizons, and a witness
 trace is not an all-support maintenance index. No database extraction, snapshot
 acquisition, publication or cache access occurs during structural inspection.
+
+Capability boundary (RE-01)
+----------------------------------------
+
+The baseline register at ``planning/reasoning-engine/baseline-review.json`` audits
+every GR-001–136 exactly once against ``onto-dev`` commit ``c71f043``. Statuses
+are qualified by evidence and notes; "available" never means the wider workbook
+acceptance criterion is certified beyond the named fragment.
+
+============================= ============================= ==============================
+Operation                     Existing indexed evaluator    New relational contract
+============================= ============================= ==============================
+Constants/repeated variables  Executable, binary entities   Represented at positive arities
+Safe positive recursion       Bounded complete fixpoint     Validated rules, not execution
+Selection/projection/joins    Python indexed joins          Logical atom/head structure
+Union/distinct/difference     Python fact sets              Set-valued schema declaration
+Body delta occurrences        Every occurrence dynamically  Original positions retained
+Join choice                   Smallest current bound bucket Description, no cost estimates
+Witnesses                     Bounded single witness        Existing Evidence stays separate
+Context/dictionary identity   Adapter context checks        Full compilation compatibility key
+Literals/negation/aggregates   Unsupported                   Rejected/not represented
+SCC/parallel/vectorized/spill  Unsupported                   Future executor work
+============================= ============================= ==============================
+
+Reproducible reference budgets
+----------------------------------------
+
+Before choosing an optimized executor, RE-01 freezes engineering budgets in
+``planning/reasoning-engine/performance-budgets.json``. These are reference-machine
+acceptance gates, not universal library latency promises. Each case runs both
+closure-only and bounded-witness modes in five fresh worker processes:
+
+====================== ======= ================= ==================== =============
+Case                   Size    Pipeline P95 cap  Cold worker P95 cap  Worker RSS cap
+====================== ======= ================= ==================== =============
+Interactive hierarchy  256     0.25s             2s                   256 MiB
+Batch tree             1024    3s                5s                   512 MiB
+Dense output           128     3s                5s                   512 MiB
+Update reference       512     1s                3s                   256 MiB
+====================== ======= ================= ==================== =============
+
+Reproduce from the repository::
+
+   uv run python planning/reasoning-engine/check_roadmap.py
+   uv run python -m benchmarks.reasoning_contracts --output /tmp/opencode/reasoning-baseline.json
+
+Use ``--repeats 1`` only for smoke checks; the report identifies insufficient
+acceptance repeats. The harness exits unsuccessfully for missing metrics, wrong
+answers, timeouts or exceeded budgets. CI unit tests check fixtures and budget
+accounting, not host-dependent timing assertions. P95 is nearest-rank; the maximum
+worker RSS must satisfy its cap. Native means the existing Python engine in the
+inherited benchmark nomenclature, not C++ or Rust.
+
+The update case inserts one link, then removes its final support, comparing exact
+analytical answers at each step. It performs **full rematerialization**, not
+incremental propagation, and performs no persistence/publication. Future
+incremental implementations must report their maintenance mode separately.
+The other cases reuse the existing analytical ontology workloads and staged
+worker measurements, rather than introducing another solver/reference oracle.
+
+Pipeline includes compilation, conversion, fixpoint and decoding; imports, fixture
+construction and validation are separate. Cold worker time includes interpreter
+startup/imports. RSS is the full process high-water mark, not a subtraction of
+startup high-water. Reports include source/harness digests, Python/platform,
+dependency/source footprint and explicit thread environment. No cold-cache storage
+or zero-copy claim is implied. Source extraction, native operator/copy/spill
+counters, installed-wheel footprint and persistent incremental/publication costs
+remain later phase gates; see :doc:`ontology-benchmarks` for existing claim-extraction
+and solver comparison evidence.

@@ -2,11 +2,16 @@ name: Ontology conformance
 
 on:
   push:
-    branches: [main, onto-dev]
+    branches: [main, onto-dev, feature/onto-dev-epic-2]
     paths:
       - "src/gestaltdb/**/*.py"
       - "tests/**"
       - "benchmarks/ontology.py"
+      - "benchmarks/reasoning_contracts.py"
+      - "planning/reasoning-engine/**"
+      - "gestaltdb_reasoning_feature_tracker.xlsx"
+      - "EPIC_REASONING_ENGINE.md"
+      - "docs/reasoning-execution.rst"
       - "benchmarks/ontology-requirements.txt"
       - "benchmarks/cli.py"
       - "docs/ontology-contract.rst"
@@ -14,11 +19,16 @@ on:
       - "uv.lock"
       - ".github/workflows/ontology.yml"
   pull_request:
-    branches: [main, onto-dev]
+    branches: [main, onto-dev, feature/onto-dev-epic-2]
     paths:
       - "src/gestaltdb/**/*.py"
       - "tests/**"
       - "benchmarks/ontology.py"
+      - "benchmarks/reasoning_contracts.py"
+      - "planning/reasoning-engine/**"
+      - "gestaltdb_reasoning_feature_tracker.xlsx"
+      - "EPIC_REASONING_ENGINE.md"
+      - "docs/reasoning-execution.rst"
       - "benchmarks/ontology-requirements.txt"
       - "benchmarks/cli.py"
       - "docs/ontology-contract.rst"
@@ -57,6 +67,8 @@ jobs:
           python -m pytest -q
           tests/test_reasoning_contracts.py
           tests/test_reasoning_engine.py
+          tests/test_reasoning_relational.py
+          tests/test_reasoning_execution_baseline.py
           tests/test_reasoning_proofs.py
           tests/test_ontology_compiler.py
           tests/test_reasoning_claims.py
@@ -78,8 +90,15 @@ jobs:
           import sys
           import gestaltdb
           from gestaltdb import agent_docs
+          from gestaltdb.reasoning import Program
+          from gestaltdb.reasoning.protocols import InputContext
+          from gestaltdb.reasoning.relational import CompilationIdentity, RelationalProgram, explain_plan
           from gestaltdb.ontology.adapters.rdf import RDFDocument, import_rdf
           assert "site-packages" in gestaltdb.__file__, gestaltdb.__file__
+          program = Program()
+          identity = CompilationIdentity(program.digest, InputContext("h", "w", "o", "p", "m"),
+                                         "d", "positive-binary-entity-v1", "indexed-python-v1")
+          assert explain_plan(program, identity=identity)["relational_digest"] == RelationalProgram.from_program(program).digest
           for example in agent_docs.extract_python_examples(agent_docs.read_topic("ontology")):
               exec(example, {})
           assert "rdflib" not in sys.modules

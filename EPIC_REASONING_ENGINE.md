@@ -227,6 +227,22 @@ repository cannot promise an unimplemented upstream native entry point.
 
 ## Review validation
 
+### Implementation started: RE-01 (#162)
+
+Dedicated worktree: `re-01-contracts`; branch: `feature/re-01-contracts`, based on
+integration commit `3e6dc71`. Additive entity-only relational IR, exact compilation
+compatibility keys and structural-only `explain_plan` are implemented without
+changing legacy `Fact`/`Program` or their digest namespace. N-ary execution and
+runtime operator telemetry remain RE-07/RE-04, respectively.
+
+Baseline evidence for each GR ID is in `planning/reasoning-engine/baseline-review.json`;
+the roadmap validator checks unique coverage and evidence paths. Frozen budgets
+and a fresh-worker runner (`python -m benchmarks.reasoning_contracts`) cover
+interactive, sparse batch, dense-output and full-rematerialization insert/delete
+reference workloads in closure-only and witness modes. See
+`docs/reasoning-execution.rst` for supported semantics, identity rules and limits.
+This is not a claim of incremental, native, Arrow or Polars execution delivery.
+
 Focused existing ontology/reasoning suite on this checkout: **181 passed, 72
 skipped** without optional extras. Repeated with LMDB, LevelDB and RDFLib, plus
 graph interface/Cypher/sampling regression suites: **492 passed, 128 skipped**.
