@@ -17,6 +17,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Bounded modal expressions and evaluation: `src/gestaltdb/modal.py`
 - Positive Horn rule values and evaluation results: `src/gestaltdb/rules.py`
 - Standalone ontology: `src/gestaltdb/ontology/`; Datalog core: `src/gestaltdb/reasoning/`; explicit database adapters: `reasoning/adapters/`. Core/compiler must never import GraphDB, storage, temporal records or adapters. Guide: `docs/ontology.rst`; measured boundaries: `docs/ontology-benchmarks.rst`.
+- Optional offline RDF: `ontology/adapters/rdf.py` (`rdf` extra). Explicit current-graph projection/fanout: `reasoning/adapters/graph.py` / `docs/ontology-graph.rst`. Point-only separate-world publication: `reasoning/adapters/publication.py` / `docs/ontology-publication.rst`; nontransactional orphan recovery is caller-managed, never silently repaired.
 - Cypher engine: `src/gestaltdb/query_engine/cypher/`
 - Legacy Cypher import shims: `src/gestaltdb/cypher.py` and `src/gestaltdb/cypher_*.py`
 - Sampling API: `src/gestaltdb/sampling/`

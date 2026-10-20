@@ -53,16 +53,26 @@ the APIs or features below have already shipped.
   Optional RDFLib extra, bounded offline import resolution, strict supported
   TBox validation and explicit permissive incompleteness. Full suite: 1495 passed,
   211 optional skips; Python matrix, backend-extra jobs and security checks passed.
-- ONTO-10 point publication is in [PR #152](https://github.com/mylonasc/gestaltdb/pull/152).
+- ONTO-10 point publication integrated through [PR #152](https://github.com/mylonasc/gestaltdb/pull/152).
   Latest-input recomputation under the shared writer guard; managed separate-world
   output, independent-support/revision reconciliation and visibility-marker fault
   tests. Nontransactional crash recovery is explicit, never an implicit repair.
-- ONTO-11 current-graph adapters are in [PR #153](https://github.com/mylonasc/gestaltdb/pull/153).
+- ONTO-11 current-graph adapters integrated through [PR #153](https://github.com/mylonasc/gestaltdb/pull/153).
   Explicit pinned mappings, logical triple filtering and distinct inferred-neighbor
   fanout. No automatic Cypher rewrite or array-sampler mutation.
 - [onto-techdebt #154](https://github.com/mylonasc/gestaltdb/issues/154) tracks explicit
   recovery ergonomics, lock-duration optimization, interval/all-support extensions
   and coordination with #127. These extensions are not silently claimed delivered.
+- All ONTO-01 through ONTO-11 acceptance slices are covered on `onto-dev`.
+  Final composition/packaging audit: [PR #155](https://github.com/mylonasc/gestaltdb/pull/155).
+  Combined suite: **1525 passed, 212 skipped** (optional backends/features and
+  the nontransactional-only crash test on a transactional backend).
+  Fresh Sphinx warnings-as-errors and documentation drift checks pass; modular
+  examples: five passed, three optional skips. Every new guide is executable.
+  Installed development-wheel checks outside the source checkout pass on Python
+  3.10-3.13, both without parser/solver extras and with optional RDF/LMDB adapters.
+  CI builds and smokes the base wheel on every matrix Python. No `main` merge,
+  release tag or package publication is part of this delivery.
 
 ## Goal and decisions
 
@@ -188,6 +198,7 @@ Each row owns a dedicated branch/worktree and a PR targeting `onto-dev`.
 | ONTO-09 | P2 | [#140](https://github.com/mylonasc/gestaltdb/issues/140) | Optional strict/offline RDF import | 08 | `rdf` |
 | ONTO-10 | P2 | [#141](https://github.com/mylonasc/gestaltdb/issues/141) | Explicit publication and support reconciliation | 08 | `publication` |
 | ONTO-11 | P2 | [#142](https://github.com/mylonasc/gestaltdb/issues/142) | Current-graph/query/sampling adapters | 08 | `graph-adapters` |
+| ONTO-TD | Follow-up | [#154](https://github.com/mylonasc/gestaltdb/issues/154) | Recovery ergonomics, lock optimization, interval/all-support and broader sampler extensions | 10, 11 | Future dedicated slices |
 
 Branch naming: `feature/onto-01-contracts`, etc. Numeric dependencies above refer
 to ONTO IDs, not GitHub issue numbers. Acceptance checklists live in child issues.
@@ -213,6 +224,8 @@ flowchart TD
     O08 --> O09["ONTO-09 RDF import - post-v1"]
     O08 --> O10["ONTO-10 Publication - post-v1"]
     O08 --> O11["ONTO-11 Graph adapters - post-v1"]
+    O10 --> TD["onto-techdebt #154 - explicit future extensions"]
+    O11 --> TD
 ```
 
 ## Parallel execution and integration
