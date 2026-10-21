@@ -485,3 +485,12 @@ fanout sampling (`sample_expanded_neighbors` with `ExpandedNeighborhood`
 accounting) and plain seed handoff (`inferred_seeds`) against the existing
 `GraphMapping`/`GraphReasoningResult` adapters. Unknown predicates fail
 closed; no Cypher rewrites, array mutation or multiplicity changes.
+
+### Implementation started: RE-14 (#175)
+
+Dedicated worktree `re-14-generations`, branch `feature/re-14-generations`,
+based on accepted integration `8034231` (RE-E2 fully integrated). Staged
+point generations with identity-bound base fingerprints, compare-and-publish
+under a short writer guard, explicit retry on `GenerationStaleError`, and
+consent-gated orphan audit/reclaim. No silent repair; durability follows the
+existing temporal commit path.
