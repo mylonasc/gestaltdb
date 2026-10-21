@@ -17,6 +17,7 @@ cancellation raises ``ReasoningCancelledError`` without partial results.
 Bounded extraction requests and capability records live in ``.extraction``;
 the pinned batched claim source in ``.adapters.batched`` borrows caller views,
 and ``.adapters.native`` binds audited PyRex Arrow scans as copied raw batches.
+Typed literal values live in ``.terms``; the binary entity profile is unchanged.
 """
 
 from .engine import DatalogEngine
@@ -27,10 +28,14 @@ from .model import (
 )
 from .proofs import Explanation, FactWitness, ProofTrace
 from .protocols import Evidence, Evaluator, FactSource, InputContext
+from .terms import Literal
+from .typed import AggregateRule, Aggregation, Comparison, GenericEngine, GenericProgram, GenericRule, MultiHeadRule, TypedAtom, TypedFact, expand_predicate_variables, normalize_program, predicate_domain
 
 __all__ = [
     "DatalogEngine", "Atom", "EvaluationResult", "Fact", "Program", "ReasoningError",
     "ReasoningLimitError", "ReasoningCancelledError", "ReasoningLimits", "Rule", "Variable", "Explanation",
     "FactWitness", "ProofTrace", "Evidence", "Evaluator", "FactSource", "InputContext",
-    "ExecutorDecision", "ExecutorRequest", "select_executor",
+    "ExecutorDecision", "ExecutorRequest", "select_executor", "Literal",
+    "Comparison", "GenericEngine", "GenericProgram", "GenericRule", "MultiHeadRule", "TypedAtom", "TypedFact",
+    "AggregateRule", "Aggregation", "expand_predicate_variables", "normalize_program", "predicate_domain",
 ]
