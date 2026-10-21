@@ -133,10 +133,12 @@
       "integration_commit": "8034231"
     },
     "RE-14": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-14-generations",
       "worktree": "re-14-generations",
-      "contract": "docs/reasoning-generations.rst"
+      "contract": "docs/reasoning-generations.rst",
+      "pr": 204,
+      "validation": "Focused suites (generations/expansion/contracts) green; docs drift, Sphinx -W, roadmap validator passed. PR CI running."
     }
   },
   "source_sha256": {
