@@ -93,6 +93,12 @@
       "contract": "docs/reasoning-validation.rst",
       "pr": 198,
       "validation": "Focused suites green (validation/parity/contracts); docs drift, Sphinx -W, roadmap validator passed. ~20k facts/100 conflicts in ~70ms warm. PR CI pending."
+    },
+    "RE-10": {
+      "status": "in-progress",
+      "branch": "feature/re-10-negation",
+      "worktree": "re-10-negation",
+      "contract": "docs/reasoning-negation.rst"
     }
   },
   "source_sha256": {
