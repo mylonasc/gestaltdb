@@ -470,3 +470,12 @@ the second integration branch (at `0b9f32d`, `3919287`, `684d7a8` and
 `bf43570` respectively); #166, #169, #170 and #172 are closed. RE-E1 and the
 RE-07/RE-09/RE-10/RE-11 links of RE-E2 are integrated; only RE-12/RE-13 remain
 open in RE-E2.
+
+### Implementation started: RE-13 (#174)
+
+Dedicated worktree `re-13-integration`, branch `feature/re-13-integration`,
+based on accepted integration `48a9d12` (RE-E1 complete, RE-07–RE-12 integrated;
+RE-13 is the final RE-E2 slice). Explicit relation expansion with per-relation
+fanout accounting, sampler seed-list glue without hidden rewrites, and opt-in
+integration examples against #127. No automatic Cypher rewrites, no array
+mutation, no weight/path multiplicity changes.
