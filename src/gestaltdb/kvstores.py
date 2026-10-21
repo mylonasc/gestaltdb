@@ -1622,6 +1622,15 @@ class PyRexStore(KVStore):
         """Return whether this PyRex runtime exposes native columnar writes."""
         return hasattr(self.db, "write_columnar_batch")
 
+    def has_native_arrow_scan(self) -> bool:
+        """Return whether this PyRex runtime exposes native Arrow scans.
+
+        Requires ``scan_arrow`` plus ``create_snapshot`` on the underlying
+        handle. Transactional handles do not expose them in 0.5.0; only the
+        plain non-transactional handle does.
+        """
+        return hasattr(self.db, "scan_arrow") and hasattr(self.db, "create_snapshot")
+
     def _put_raw(self, key: bytes, value: bytes):
         self.db.put(key, value, self.write_options)
 

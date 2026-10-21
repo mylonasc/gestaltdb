@@ -314,8 +314,12 @@ is not stacked on unmerged RE-04); [PR #193](https://github.com/mylonasc/gestalt
 targets the second integration branch. Storage-neutral `ExtractionRequest`/`FactBatch`
 contracts, storage-free capability probing and a pinned batched claim source with
 exact version-ID evidence, index pushdown modes and per-batch verification. LevelDB
-snapshot requests fail closed; `native_arrow_scan` is False on every backend until
-a released PyRex API is pinned and audited. See `docs/reasoning-extraction.rst`;
+snapshot requests fail closed; `native_arrow_scan` was False on every backend until
+the `pyrex-rocksdb 0.5.0` release (PyPI, 2026-10-20) and is now bound through the
+audited `scan_arrow`/`Snapshot` contract on plain handles
+(`reasoning/adapters/native.py`, capability-detected and version-gated; decoded
+fact extraction over native scans stays a separate techdebt item). See
+`docs/reasoning-extraction.rst`;
 evidence: `benchmarks/results/reasoning-re05-extraction.json`.
 
 RE-03 local validation: **1632 passed, 199 skipped** with LMDB/LevelDB, Arrow,

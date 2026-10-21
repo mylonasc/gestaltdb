@@ -170,10 +170,12 @@ class ExtractionCapability:
 
     @classmethod
     def probe(cls, store: object) -> ExtractionCapability:
-        """Describe a store object via class attributes only; never I/O.
+        """Describe a store object via attributes only; never I/O or handles.
 
-        Unknown backends fail closed to an all-False record rather than
-        assuming snapshot or index support.
+        A ``has_native_arrow_scan`` hook is preferred when present so wrapped
+        handles (e.g. transactional vs plain PyRex) report their actual
+        runtime. Unknown backends fail closed to an all-False record rather
+        than assuming snapshot or index support.
         """
         backend = type(store).__name__ if not isinstance(store, type) else store.__name__
         if not isinstance(backend, str) or not backend:
@@ -181,27 +183,41 @@ class ExtractionCapability:
         namespace = backend.lower()
         pinned = bool(getattr(store, "supports_read_snapshots", False))
         verifiable = bool(getattr(store, "supports_verifiable_read_snapshots", False))
+        hook = getattr(store, "has_native_arrow_scan", None)
+        if callable(hook):
+            try:
+                native = bool(hook())
+            except Exception:
+                native = False
+        else:
+            native = bool(hasattr(store, "scan_arrow"))
         if "lmdb" in namespace:
             kind, notes = "lmdb-read-transaction", ("read snapshots pin one LMDB read transaction",)
         elif "leveldb" in namespace or "level" in namespace:
             kind, notes = "leveldb-none", ("multi-database layout exposes no pinned read snapshot; explicit snapshot requests fail closed",)
         elif "pyrex" in namespace or "rocksdb" in namespace:
-            if pinned:
-                kind, notes = "pyrex-transaction-snapshot", ("transactional snapshots only; nontransactional handles cannot pin reads",)
+            if native:
+                kind = "pyrex-native-snapshot"
+                notes = ("native Snapshot/create_snapshot pins one shared horizon on plain handles; "
+                         "transactional handles use transaction snapshots instead",)
+            elif pinned:
+                kind, notes = "pyrex-transaction-snapshot", ("transactional snapshots only; handles without native scans cannot pin reads otherwise",)
             else:
-                kind, notes = "pyrex-none", ("nontransactional handle exposes no pinned read snapshot",)
+                kind, notes = "pyrex-none", ("handle on a runtime without native scans exposes no pinned read snapshot",)
         else:
             kind, notes = "unknown-none", ("unrecognized backend; no snapshot or index support assumed",)
-        if "unknown" in kind:
-            pinned, verifiable = False, False
+        if "unknown" in kind or "leveldb" in kind:
+            pinned, verifiable, native = False, False, False
+        elif native:
+            pinned, verifiable = True, True
         return cls(
             backend=backend,
             snapshot_kind=kind,
-            pinned_snapshot=pinned and "none" not in kind,
-            verifiable_snapshot=verifiable and "none" not in kind,
+            pinned_snapshot=pinned,
+            verifiable_snapshot=verifiable,
             predicate_index=bool(hasattr(store, "iter_index_prefix")),
             multiget=bool(hasattr(store, "get_nodes_bulk") and hasattr(store, "get_edges_bulk")),
-            native_arrow_scan=bool(hasattr(store, "scan_arrow")),
+            native_arrow_scan=native,
             notes=notes,
         )
 
@@ -210,5 +226,6 @@ class ExtractionCapability:
         if not self.pinned_snapshot:
             raise ReasoningError(
                 f"{self.backend} ({self.snapshot_kind}) exposes no pinned read snapshot; "
-                "use an LMDB or transactional-PyRex handle instead of silently reading without one"
+                "use an LMDB, transactional-PyRex or native-scan-capable PyRex handle "
+                "instead of silently reading without one"
             )

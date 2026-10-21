@@ -101,6 +101,50 @@ def run_case(backend, rows, predicates, batch_rows, temp_root):
     return report
 
 
+def run_native_case(rows, batch_rows, temp_root):
+    """Raw Python-iterator vs native Arrow scan on one throwaway PyRex database."""
+    pyrex = __import__("pyrex")
+    from gestaltdb.reasoning.adapters.native import NativeKeyScan
+
+    report: dict = {"backend": "pyrex-native", "rows": rows, "batch_rows": batch_rows}
+    metrics: dict[str, float] = {}
+    with tempfile.TemporaryDirectory(prefix="re05-native-", dir=temp_root) as directory:
+        db = pyrex.PyRocksDB(str(Path(directory) / "db"))
+        try:
+            keys = [f"n:{index:07d}".encode() for index in range(rows)]
+            values = [f"v{index}".encode() for index in range(rows)]
+            begin = time.perf_counter()
+            for key, value in zip(keys, values):
+                db.put(key, value)
+            metrics["load_s"] = time.perf_counter() - begin
+            begin = time.perf_counter()
+            iterator = db.new_iterator()
+            iterator.seek(b"")
+            collected = 0
+            while iterator.valid():
+                collected += 1
+                _ = iterator.key(), iterator.value()
+                iterator.next()
+            iterator.check_status()
+            metrics["python_iter_s"] = time.perf_counter() - begin
+            assert collected == rows
+            begin = time.perf_counter()
+            batches = list(NativeKeyScan(db, batch_rows=batch_rows, max_rows=rows + 1))
+            metrics["native_scan_s"] = time.perf_counter() - begin
+            assert sum(len(b.rows) for b in batches) == rows
+            assert batches[-1].complete
+            report["batches"] = len(batches)
+            report["status"] = "ok"
+        finally:
+            db.close()
+    metrics["pipeline_s"] = metrics["load_s"] + metrics["python_iter_s"] + metrics["native_scan_s"]
+    report["metrics"] = metrics
+    report["rows_per_s_python"] = rows / metrics["python_iter_s"] if metrics["python_iter_s"] > 0 else 0
+    report["rows_per_s_native"] = rows / metrics["native_scan_s"] if metrics["native_scan_s"] > 0 else 0
+    report["rss_peak_bytes"] = _peak_rss()
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rows", type=int, default=2000)
@@ -146,10 +190,27 @@ def main():
             report["rows"].append({**row, "threads": env_threads})
             if args.output is not None:
                 args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    for _ in range(args.repeats):
+        try:
+            pyarrow_spec = __import__("importlib.util", fromlist=["find_spec"]).find_spec("pyarrow")
+            pyrex_spec = __import__("importlib.util", fromlist=["find_spec"]).find_spec("pyrex")
+            if pyarrow_spec is None or pyrex_spec is None:
+                raise ImportError("native scan benchmark requires pyrex and pyarrow")
+            row = run_native_case(args.rows, args.batch_rows, str(args.temp_root))
+        except ImportError as exc:
+            row = {"backend": "pyrex-native", "status": "unavailable", "reason": str(exc)}
+        except Exception as exc:  # noqa: BLE001 - benchmark must record, not raise
+            row = {"backend": "pyrex-native", "status": "error",
+                   "reason": f"{type(exc).__name__}: {exc}"}
+        report["rows"].append({**row, "threads": env_threads})
+        if args.output is not None:
+            args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     report["complete"] = True
     if args.output is not None:
         args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    native = [r for r in report["rows"] if r.get("backend") == "pyrex-native"]
     passed = all(r.get("status") == "ok" for r in report["rows"] if r.get("backend") in backends)
+    passed = passed and all(r.get("status") in ("ok", "unavailable") for r in native)
     print(json.dumps({"passed": passed, "rows": len(report["rows"]),
                       "output": None if args.output is None else str(args.output)}))
     if not passed:

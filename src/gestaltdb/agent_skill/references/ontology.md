@@ -51,7 +51,9 @@ publication or maintenance; its row-work budgets differ from indexed Python.
 `gestaltdb.reasoning.adapters.batched.PinnedBatchedClaimSource` yields bounded
 `ExtractionRequest` batches with exact version-ID evidence under the same pinned
 view, recording pushdown mode and verification counts; LevelDB snapshot requests
-fail closed and no native Arrow scan is assumed.
+fail closed. `gestaltdb.reasoning.adapters.native.NativeKeyScan` consumes audited
+`scan_arrow` streams on plain PyRex handles (`pyrex-rocksdb>=0.5.0`, version-gated)
+as copied raw batches; decoding and visibility mapping stay caller-owned.
 
 - `gestaltdb.ontology.adapters.rdf`: install `gestaltdb[rdf]`; pass an in-memory
   `RDFDocument` and absolute `ontology_id` to `import_rdf`. Imports resolve only

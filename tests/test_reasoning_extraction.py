@@ -78,6 +78,35 @@ def test_capability_probe_is_storage_free_and_fails_closed_on_unknown():
         capability.require_pinned_snapshot()
     assert ExtractionCapability.probe(dict).backend == "dict"
     assert ExtractionCapability.probe(dict).snapshot_kind == "unknown-none"
+
+
+def test_native_hook_prefers_runtime_report_over_class_name():
+    class FakePyRexStore:
+        supports_read_snapshots = False
+        supports_verifiable_read_snapshots = False
+
+        def has_native_arrow_scan(self):
+            return True
+
+        def iter_index_prefix(self, *args):
+            raise AssertionError("probe must not touch storage")
+
+        def get_nodes_bulk(self, *args):
+            raise AssertionError("probe must not touch storage")
+
+        def get_edges_bulk(self, *args):
+            raise AssertionError("probe must not touch storage")
+
+    capability = ExtractionCapability.probe(FakePyRexStore())
+    assert capability.snapshot_kind == "pyrex-native-snapshot"
+    assert capability.pinned_snapshot and capability.native_arrow_scan
+    capability.require_pinned_snapshot()
+
+    class BrokenHook:
+        def has_native_arrow_scan(self):
+            raise RuntimeError("runtime exploded")
+
+    assert not ExtractionCapability.probe(BrokenHook()).native_arrow_scan
     with pytest.raises(ReasoningError):
         ExtractionCapability(backend="", snapshot_kind="x", pinned_snapshot=True,
                              verifiable_snapshot=False, predicate_index=False, multiget=False)
@@ -222,7 +251,7 @@ def test_batched_limits_rebinding_and_evaluation_parity(tmp_path, backend, modul
         graph.close()
 
 
-def test_pyrex_backend_reports_no_native_scan_and_missing_extra_fails_closed(tmp_path):
+def test_pyrex_backend_native_scan_or_missing_extra_fails_closed(tmp_path):
     import importlib.util
 
     from gestaltdb.graphdb import GraphDB
@@ -231,12 +260,20 @@ def test_pyrex_backend_reports_no_native_scan_and_missing_extra_fails_closed(tmp
         with pytest.raises(ImportError, match=r"gestaltdb\[rocksdb\]"):
             GraphDB.create(tmp_path / "pyrex", backend="pyrex", serializer="json")
     else:
+        from gestaltdb.graphdb import Node
         from gestaltdb.kvstores import PyRexStore
+        from gestaltdb.reasoning.adapters.native import NativeKeyScan
         from gestaltdb.serializers import JSONSerializer
 
         graph = GraphDB(PyRexStore(path=str(tmp_path / "pyrex")), JSONSerializer())
         try:
             capability = ExtractionCapability.probe(graph.store)
-            assert not capability.native_arrow_scan
+            assert capability.native_arrow_scan
+            assert capability.snapshot_kind == "pyrex-native-snapshot"
+            assert capability.pinned_snapshot and capability.verifiable_snapshot
+            capability.require_pinned_snapshot()
+            graph.put_node(Node("n1", labels=["P"]))
+            rows = [row for batch in NativeKeyScan(graph.store) for row in batch.rows]
+            assert rows and all(type(k) is bytes and type(v) is bytes for k, v in rows)
         finally:
             graph.close()
