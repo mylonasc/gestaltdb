@@ -70,7 +70,9 @@
     "RE-07": {
       "status": "in-progress",
       "branch": "feature/re-07-literals",
-      "worktree": "re-07-literals"
+      "worktree": "re-07-literals",
+      "benchmark_evidence": "benchmarks/results/reasoning-re07-typed.json",
+      "contract": "docs/reasoning-typed.rst"
     }
   },
   "source_sha256": {

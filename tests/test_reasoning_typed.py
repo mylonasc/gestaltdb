@@ -213,6 +213,19 @@ def test_controlled_predicate_variables_expand_over_an_explicit_domain():
         predicate_domain([template], ["not-a-fact"])
 
 
+def test_committed_typed_evidence_has_verified_parity_and_bounded_cost():
+    import json
+    from pathlib import Path
+
+    report = json.loads((Path(__file__).parents[1] / "benchmarks/results/reasoning-re07-typed.json").read_text())
+    assert report["complete"] and not report["working_tree_dirty"]
+    assert len(report["rows"]) == 9
+    for row in report["rows"]:
+        assert row["status"] == "ok"
+        assert row["metrics"]["generic_s"] < 3 * row["metrics"]["indexed_s"]
+        assert "closure_digest" in row and row["closure_facts"] > 0
+
+
 def test_nary_recursion_and_repeated_atoms_match_independent_grounding():
     facts = [TypedFact("link", ["a", "b", "c"]), TypedFact("link", ["b", "c", "a"]),
              TypedFact("link", ["c", "a", "b"])]
