@@ -85,6 +85,12 @@
       "contract": "docs/ontology-contract.rst",
       "pr": 197,
       "validation": "1861 passed, 49 skipped with all extras incl. RDF; docs drift, Sphinx -W, examples, roadmap validator passed. Ad-hoc chain workload: 0.2ms compile, 3.1ms closure over 774 facts (N=256). PR CI running."
+    },
+    "RE-09": {
+      "status": "in-progress",
+      "branch": "feature/re-09-validation",
+      "worktree": "re-09-validation",
+      "contract": "docs/reasoning-validation.rst"
     }
   },
   "source_sha256": {

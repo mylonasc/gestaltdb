@@ -424,3 +424,15 @@ M2 adds a revision-keyed schema-compilation cache; M3 extends strict offline
 RDF normalization (2-element chains, named left-side collections with
 intersection-superclass expansion, explicit rejections). No claim of complete
 RDFS or OWL RL.
+
+### Implementation started: RE-09 (#170)
+
+Dedicated worktree `re-09-validation`, branch `feature/re-09-validation`,
+based on accepted integration `3919287` (RE-07/RE-08 integrated).
+M1 delivers `reasoning/validation.py`: explicit denials, disjointness,
+irreflexivity and functional-conflict detection over typed closures with
+bounded deterministic reports and cooperative cancellation; equality
+generation stays deferred to RE-11 and the closure stands unchanged
+(paraconsistent evidence, never classical explosion). M2 adds a static
+unsatisfiable-class check plus measured cost evidence. Domain/range
+entailment remains compiler business; SHACL-style full shapes stay out.
