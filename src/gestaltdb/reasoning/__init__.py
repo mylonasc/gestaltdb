@@ -11,7 +11,8 @@ these do not expand the executable binary-entity profile.
 Compact reference batches/dictionaries live in ``.batches`` and optional Arrow
 exchange in ``.adapters.arrow``; neither is imported by this package initializer.
 Bounded extraction requests and capability records live in ``.extraction``;
-the pinned batched claim source in ``.adapters.batched`` borrows caller views.
+the pinned batched claim source in ``.adapters.batched`` borrows caller views,
+and ``.adapters.native`` binds audited PyRex Arrow scans as copied raw batches.
 """
 
 from .engine import DatalogEngine

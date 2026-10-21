@@ -318,9 +318,18 @@ snapshot requests fail closed; `native_arrow_scan` was False on every backend un
 the `pyrex-rocksdb 0.5.0` release (PyPI, 2026-10-20) and is now bound through the
 audited `scan_arrow`/`Snapshot` contract on plain handles
 (`reasoning/adapters/native.py`, capability-detected and version-gated; decoded
-fact extraction over native scans stays a separate techdebt item). See
+fact extraction over native scans stays a separate techdebt item). Audited
+0.5.0 behaviors — shared-snapshot horizons, prefix/range semantics, batch and
+overflow limits, single-consumer enforcement, idempotent release and foreign
+snapshot rejection — are covered by `tests/test_reasoning_native_scan.py`. See
 `docs/reasoning-extraction.rst`;
 evidence: `benchmarks/results/reasoning-re05-extraction.json`.
+
+RE-05 local validation: **1804 passed, 49 skipped** with LMDB/LevelDB, Arrow,
+Polars, Clingo, OWL-RL and PyRex 0.5.0 available. Sphinx warnings-as-errors,
+documentation drift, modular examples and the full roadmap/evidence validator
+passed. The prepared path note above belongs to RE-04; this slice changes no
+evaluator semantics. Python 3.10–3.13/fuzz CI is tracked in #193.
 
 RE-03 local validation: **1632 passed, 199 skipped** with LMDB/LevelDB, Arrow,
 Polars, Clingo and OWL-RL available. Sphinx warnings-as-errors, documentation drift

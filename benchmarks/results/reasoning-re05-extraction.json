@@ -1,6 +1,6 @@
 {
   "complete": true,
-  "git_revision": "7685984bcfefd5ce633c376345703a1cd1dbb82b",
+  "git_revision": "5c26d821c0c8207bd3494222c3eb9ced0f3112f3",
   "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
   "python": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
   "rows": [
@@ -16,17 +16,17 @@
       },
       "limit_hit": "ReasoningLimitError",
       "metrics": {
-        "batched_s": 3.2997869400060154,
-        "load_s": 9.302686889001052,
-        "pipeline_s": 19.04577835099917,
-        "single_pass_s": 3.1927526779982145
+        "batched_s": 3.2417920019943267,
+        "load_s": 9.284120964992326,
+        "pipeline_s": 18.836883866999415,
+        "single_pass_s": 3.132050080006593
       },
       "predicates": 4,
       "pushdown": "none",
       "rows": 2000,
-      "rows_per_s_batched": 606.0997380625896,
-      "rows_per_s_single": 626.4187056461749,
-      "rss_peak_bytes": 77148160,
+      "rows_per_s_batched": 616.9427275931382,
+      "rows_per_s_single": 638.5593936594366,
+      "rss_peak_bytes": 76861440,
       "status": "ok",
       "threads": {
         "OMP_NUM_THREADS": "1",
@@ -46,17 +46,17 @@
       },
       "limit_hit": "ReasoningLimitError",
       "metrics": {
-        "batched_s": 3.2865143980016,
-        "load_s": 9.24591937600053,
-        "pipeline_s": 18.95946972800448,
-        "single_pass_s": 3.2093816380001954
+        "batched_s": 3.2408415079989936,
+        "load_s": 9.330239183007507,
+        "pipeline_s": 18.90858190099243,
+        "single_pass_s": 3.1493011619895697
       },
       "predicates": 4,
       "pushdown": "none",
       "rows": 2000,
-      "rows_per_s_batched": 608.5474632991479,
-      "rows_per_s_single": 623.1730051419576,
-      "rss_peak_bytes": 77832192,
+      "rows_per_s_batched": 617.1236683631803,
+      "rows_per_s_single": 635.0615254390282,
+      "rss_peak_bytes": 78102528,
       "status": "ok",
       "threads": {
         "OMP_NUM_THREADS": "1",
@@ -76,17 +76,17 @@
       },
       "limit_hit": "ReasoningLimitError",
       "metrics": {
-        "batched_s": 2.670288769004401,
-        "load_s": 7.61091173299792,
-        "pipeline_s": 15.478523769001185,
-        "single_pass_s": 2.5587041249964386
+        "batched_s": 2.504488656995818,
+        "load_s": 7.318944122001994,
+        "pipeline_s": 14.728620715002762,
+        "single_pass_s": 2.4352447029959876
       },
       "predicates": 4,
       "pushdown": "none",
       "rows": 2000,
-      "rows_per_s_batched": 748.9826655510694,
-      "rows_per_s_single": 781.6456699552098,
-      "rss_peak_bytes": 77832192,
+      "rows_per_s_batched": 798.5662040885576,
+      "rows_per_s_single": 821.2727031248552,
+      "rss_peak_bytes": 78102528,
       "status": "ok",
       "threads": {
         "OMP_NUM_THREADS": "1",
@@ -106,26 +106,66 @@
       },
       "limit_hit": "ReasoningLimitError",
       "metrics": {
-        "batched_s": 2.661326193003333,
-        "load_s": 7.593699897995975,
-        "pipeline_s": 15.426647630003572,
-        "single_pass_s": 2.5442466439999407
+        "batched_s": 2.519073453004239,
+        "load_s": 7.290332920994842,
+        "pipeline_s": 14.76605199900223,
+        "single_pass_s": 2.442403858003672
       },
       "predicates": 4,
       "pushdown": "none",
       "rows": 2000,
-      "rows_per_s_batched": 751.5050222922805,
-      "rows_per_s_single": 786.087309859117,
-      "rss_peak_bytes": 77832192,
+      "rows_per_s_batched": 793.9427084251181,
+      "rows_per_s_single": 818.865395027145,
+      "rss_peak_bytes": 78102528,
       "status": "ok",
       "threads": {
         "OMP_NUM_THREADS": "1",
         "POLARS_MAX_THREADS": "1"
       },
       "verifications": 5
+    },
+    {
+      "backend": "pyrex-native",
+      "batch_rows": 256,
+      "batches": 8,
+      "metrics": {
+        "load_s": 0.0023934790078783408,
+        "native_scan_s": 0.01286727300612256,
+        "pipeline_s": 0.016087766009150073,
+        "python_iter_s": 0.0008270139951491728
+      },
+      "rows": 2000,
+      "rows_per_s_native": 155433.08975012435,
+      "rows_per_s_python": 2418338.760566258,
+      "rss_peak_bytes": 103424000,
+      "status": "ok",
+      "threads": {
+        "OMP_NUM_THREADS": "1",
+        "POLARS_MAX_THREADS": "1"
+      }
+    },
+    {
+      "backend": "pyrex-native",
+      "batch_rows": 256,
+      "batches": 8,
+      "metrics": {
+        "load_s": 0.0023824420059099793,
+        "native_scan_s": 0.0016073590086307377,
+        "pipeline_s": 0.004805772012332454,
+        "python_iter_s": 0.0008159709977917373
+      },
+      "rows": 2000,
+      "rows_per_s_native": 1244277.0963182282,
+      "rows_per_s_python": 2451067.5078067738,
+      "rss_peak_bytes": 103620608,
+      "status": "ok",
+      "threads": {
+        "OMP_NUM_THREADS": "1",
+        "POLARS_MAX_THREADS": "1"
+      }
     }
   ],
   "schema_version": 1,
-  "source_sha256": "0446782594154276b6ae137cb958aa99589a3040b37d4bcb812912b604d19193",
+  "source_sha256": "c039fac03b85c0b46fb864657d909c79c97cebe70e1099d53bd73131b688118f",
   "working_tree_dirty": false
 }

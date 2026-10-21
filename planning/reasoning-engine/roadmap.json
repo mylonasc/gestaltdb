@@ -48,7 +48,7 @@
       "contract": "docs/reasoning-extraction.rst",
       "benchmark_evidence": "benchmarks/results/reasoning-re05-extraction.json",
       "pr": 193,
-      "validation": "1643 passed, 199 skipped with backend/Arrow/Polars/solver extras; Sphinx -W, docs drift, examples, roadmap validator passed. 4 clean-revision extraction rows (LMDB+LevelDB parity, batch accounting, fail-closed budget). PR CI pending."
+      "validation": "1804 passed, 49 skipped with all extras incl. pyrex 0.5.0; docs drift, Sphinx -W, examples, roadmap validator passed. 6 clean-revision rows (LMDB+LevelDB parity + native scan comparison, fail-closed budget). PR CI pending."
     },
     "RE-04": {
       "status": "integrated",
