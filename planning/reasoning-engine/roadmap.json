@@ -112,10 +112,12 @@
       "validation": "1888 passed, 49 skipped with all extras; docs drift, Sphinx -W, roadmap validator passed. 100k-entity canonicalization ~0.6s. PR CI running."
     },
     "RE-12": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-12-demand",
       "worktree": "re-12-demand",
-      "contract": "docs/reasoning-demand.rst"
+      "contract": "docs/reasoning-demand.rst",
+      "pr": 202,
+      "validation": "Focused suites incl. 40-case oracle parity pass; docs drift, Sphinx -W, roadmap validator passed. Selective 30 vs 99,000 facts (~33ms vs ~912ms). PR CI running."
     }
   },
   "source_sha256": {
