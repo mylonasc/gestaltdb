@@ -106,3 +106,59 @@ def test_cached_plans_evaluate_identically():
     facts = [Fact("a", "p", "b"), Fact("b", "q", "c")]
     assert evaluate(plan, facts) == evaluate(compile_ontology(plan.ontology), facts)
     assert Fact("a", "r", "c") in evaluate(plan, facts)
+
+
+def test_rdf_chain_intersection_union_and_reflexive_rejection():
+    pytest.importorskip("rdflib")
+    from gestaltdb.ontology.adapters.rdf import RDFDocument, import_rdf
+
+    prefix = ('@prefix ex: <urn:ex:> . @prefix owl: <http://www.w3.org/2002/07/owl#> . '
+              '@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> . ')
+    doc = RDFDocument(prefix + """
+        ex:hasUncle owl:propertyChainAxiom ( ex:hasParent ex:hasBrother ) .
+        [ owl:intersectionOf ( ex:A ex:B ) ] rdfs:subClassOf ex:C .
+        [ owl:unionOf ( ex:D ex:E ) ] rdfs:subClassOf ex:F .
+        ex:G rdfs:subClassOf [ owl:intersectionOf ( ex:H ex:I ) ] .
+        """)
+    result = import_rdf(doc, ontology_id="urn:test")
+    assert result.complete
+    plan = result.compile()
+    assert set(result.ontology.axioms) == {
+        PropertyChain("urn:ex:hasParent", "urn:ex:hasBrother", "urn:ex:hasUncle"),
+        IntersectionSubClassOf(("urn:ex:A", "urn:ex:B"), "urn:ex:C"),
+        UnionSubClassOf(("urn:ex:D", "urn:ex:E"), "urn:ex:F"),
+        SubClassOf("urn:ex:G", "urn:ex:H"),
+        SubClassOf("urn:ex:G", "urn:ex:I"),
+    }
+    expected = compile_ontology(Ontology("o", list(result.ontology.axioms)))
+    assert plan.program == expected.program
+    assert evaluate(plan, [Fact("a", "urn:ex:hasParent", "b"),
+                           Fact("b", "urn:ex:hasBrother", "c"),
+                           Fact("x", TYPE_PREDICATE, "urn:ex:A"),
+                           Fact("x", TYPE_PREDICATE, "urn:ex:B"),
+                           Fact("y", TYPE_PREDICATE, "urn:ex:D")]).facts == evaluate(
+        expected, [Fact("a", "urn:ex:hasParent", "b"),
+                   Fact("b", "urn:ex:hasBrother", "c"),
+                   Fact("x", TYPE_PREDICATE, "urn:ex:A"),
+                   Fact("x", TYPE_PREDICATE, "urn:ex:B"),
+                   Fact("y", TYPE_PREDICATE, "urn:ex:D")]).facts
+
+
+@pytest.mark.parametrize("statement,match", [
+    ("ex:p owl:propertyChainAxiom ( ex:q ) .", "exactly two"),
+    ("ex:p owl:propertyChainAxiom ( ex:q ex:r ex:s ) .", "exactly two"),
+    ("ex:A rdfs:subClassOf [ owl:unionOf ( ex:B ex:C ) ] .", "disjunctive superclass"),
+    ("ex:p a owl:ReflexiveProperty .", "unscoped reflexivity"),
+    ("[ owl:intersectionOf ( ex:A ) ] rdfs:subClassOf ex:C .", "at least two"),
+    ("[] owl:intersectionOf ( ex:A ex:B ) .", "unused class collection"),
+])
+def test_rdf_strict_forms_reject_disjunctive_and_malformed_constructs(statement, match):
+    pytest.importorskip("rdflib")
+    from gestaltdb.ontology.adapters.rdf import RDFDocument, import_rdf
+
+    prefix = ('@prefix ex: <urn:ex:> . @prefix owl: <http://www.w3.org/2002/07/owl#> . '
+              '@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> . ')
+    with pytest.raises(OntologyError, match=match):
+        import_rdf(RDFDocument(prefix + statement), ontology_id="urn:test")
+    permissive = import_rdf(RDFDocument(prefix + statement), ontology_id="urn:test", strict=False)
+    assert not permissive.complete
