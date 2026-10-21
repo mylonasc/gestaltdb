@@ -68,11 +68,13 @@
       "validation": "1849 passed, 49 skipped with all extras incl. pyrex 0.5.0; docs drift, Sphinx -W, examples, roadmap validator passed. PR CI pending."
     },
     "RE-07": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-07-literals",
       "worktree": "re-07-literals",
       "benchmark_evidence": "benchmarks/results/reasoning-re07-typed.json",
-      "contract": "docs/reasoning-typed.rst"
+      "contract": "docs/reasoning-typed.rst",
+      "pr": 196,
+      "validation": "1864 passed, 49 skipped with all extras; docs drift, Sphinx -W, roadmap validator passed. 9 clean-revision parity/cost rows. PR CI running."
     }
   },
   "source_sha256": {
