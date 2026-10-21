@@ -11,7 +11,7 @@ variable must occur in a relational body atom.
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import itertools
 from typing import Callable, Iterable
 
@@ -124,25 +124,36 @@ class Comparison:
 
 @dataclass(frozen=True)
 class GenericRule:
-    """Safe positive rule with optional filters; heads stay single and relational."""
+    """Safe positive rule with optional filters; heads stay single and relational.
+
+    ``negated`` holds absence atoms over constant predicates. Negated atoms
+    never bind variables: every variable they mention must already occur in
+    the positive relational body, and head variables must be bound there too.
+    Whether a negated predicate may be queried at all is a program-level
+    closed-world declaration, checked during stratification.
+    """
 
     rule_id: str
     body: tuple[TypedAtom, ...]
     filters: tuple[Comparison, ...]
     head: TypedAtom
+    negated: tuple[TypedAtom, ...] = ()
 
     def __post_init__(self) -> None:
         _text(self.rule_id, "rule_id")
-        for name in ("body", "filters"):
+        for name in ("body", "filters", "negated"):
             value = getattr(self, name)
             if not isinstance(value, (tuple, list)):
                 raise ReasoningError(f"rule {name} must be a tuple or list")
         body = tuple(self.body)
         filters = tuple(self.filters)
+        negated = tuple(self.negated)
         if not body or not all(isinstance(atom, TypedAtom) for atom in body):
             raise ReasoningError("rule body must contain at least one TypedAtom")
         if not all(isinstance(item, Comparison) for item in filters):
             raise ReasoningError("rule filters must contain only Comparison values")
+        if not all(isinstance(atom, TypedAtom) for atom in negated):
+            raise ReasoningError("rule negations must contain only TypedAtom values")
         if not isinstance(self.head, TypedAtom):
             raise ReasoningError("rule head must be a TypedAtom")
         if isinstance(self.head.predicate, Variable):
@@ -155,15 +166,22 @@ class GenericRule:
                 for item in filters:
                     if atom.predicate in item.variables:
                         raise ReasoningError("a predicate variable must not occur in filters")
+        for atom in negated:
+            if isinstance(atom.predicate, Variable):
+                raise ReasoningError("negated predicates must be constant")
         bound = frozenset().union(*(atom.variables for atom in body))
         for item in filters:
             if not item.variables <= bound:
                 raise ReasoningError("filter variables must occur in the relational body")
+        for atom in negated:
+            if not atom.variables <= bound:
+                raise ReasoningError("negated variables must occur in the relational body")
         head_variables = {term for term in self.head.args if isinstance(term, Variable)}
         if not head_variables <= bound:
             raise ReasoningError("unsafe rule: head variables must occur in the body")
         object.__setattr__(self, "body", body)
         object.__setattr__(self, "filters", filters)
+        object.__setattr__(self, "negated", negated)
 
 
 @dataclass(frozen=True)
@@ -376,35 +394,53 @@ class GenericProgram:
 
     Aggregate rules form one terminal stratum: their heads are sinks that no
     rule body may read, and their bodies may not read other aggregate heads.
+
+    ``closed`` declares the complete predicates that negated atoms may query.
+    Stratification assigns every headed predicate a rank: negative edges must
+    point strictly downward, so evaluation completes lower strata before any
+    anti-join reads them. Negative cycles fail at construction.
     """
 
     rules: tuple[GenericRule, ...] = ()
     aggregates: tuple[AggregateRule, ...] = ()
+    closed: tuple[str, ...] = ()
+    strata: tuple[tuple[str, ...], ...] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.rules, (tuple, list)):
             raise ReasoningError("program rules must be a tuple or list")
         if not isinstance(self.aggregates, (tuple, list)):
             raise ReasoningError("program aggregates must be a tuple or list")
+        if not isinstance(self.closed, (tuple, list)):
+            raise ReasoningError("program closed scope must be a tuple or list")
         rules = tuple(self.rules)
         aggregates = tuple(self.aggregates)
+        closed = tuple(self.closed)
         if not all(isinstance(rule, GenericRule) for rule in rules):
             raise ReasoningError("program rules must contain only GenericRule values")
         if not all(isinstance(rule, AggregateRule) for rule in aggregates):
             raise ReasoningError("program aggregates must contain only AggregateRule values")
+        for predicate in closed:
+            _text(predicate, "closed predicate")
         if len({rule.rule_id for rule in (*rules, *aggregates)}) != len(rules) + len(aggregates):
             raise ReasoningError("program rule IDs must be unique")
         for rule in rules:
             for atom in rule.body:
                 if isinstance(atom.predicate, Variable):
                     raise ReasoningError("unexpanded predicate variables; expand first")
+            for atom in rule.negated:
+                if atom.predicate not in closed:
+                    raise ReasoningError(
+                        f"negation over {atom.predicate!r} requires a closed-world declaration")
         heads = {rule.head.predicate for rule in aggregates}
-        if heads & {atom.predicate for rule in rules for atom in rule.body}:
+        if heads & {atom.predicate for rule in rules for atom in (*rule.body, *rule.negated)}:
             raise ReasoningError("aggregate heads must be sink predicates unread by positive rules")
         if heads & {atom.predicate for rule in aggregates for atom in rule.body}:
             raise ReasoningError("aggregates must not read other aggregate heads (non-recursive only)")
         object.__setattr__(self, "rules", tuple(sorted(rules, key=lambda rule: rule.rule_id)))
         object.__setattr__(self, "aggregates", tuple(sorted(aggregates, key=lambda rule: rule.rule_id)))
+        object.__setattr__(self, "closed", tuple(sorted(set(closed))))
+        object.__setattr__(self, "strata", _stratify(rules))
 
     @property
     def digest(self) -> str:
@@ -412,11 +448,12 @@ class GenericProgram:
         import hashlib
         import json
 
-        payload = ["gestaltdb-generic-v2", [
+        payload = ["gestaltdb-generic-v3", list(self.closed), [
             [rule.rule_id,
              [[atom.predicate if isinstance(atom.predicate, str) else ["variable", atom.predicate.name],
                [_encoded_term(term) for term in atom.args]] for atom in rule.body],
              [[item.op, _encoded_term(item.left), _encoded_term(item.right)] for item in rule.filters],
+             [[atom.predicate, [_encoded_term(term) for term in atom.args]] for atom in rule.negated],
              [rule.head.predicate, [_encoded_term(term) for term in rule.head.args]]]
             for rule in self.rules], [
             [rule.rule_id,
@@ -427,6 +464,101 @@ class GenericProgram:
             for rule in self.aggregates]]
         encoded = json.dumps(payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def _stratify(rules: tuple[GenericRule, ...]) -> tuple[tuple[str, ...], ...]:
+    """Order positive predicate components so negative edges point downward.
+
+    Components come from positive dependencies only (iterative Kosaraju, no
+    recursion limit hazard). A negative edge inside one component fails closed
+    immediately; remaining positive and negative dependencies form one
+    must-precede DAG evaluated with deterministic Kahn order. A stalled
+    schedule always contains a negative edge, since the positive subgraph is
+    acyclic by construction.
+    """
+    graph: dict[str, set[str]] = {}
+    negative: dict[str, set[str]] = {}
+    for rule in rules:
+        head = rule.head.predicate
+        graph.setdefault(head, set())
+        negative.setdefault(head, set())
+        for atom in rule.body:
+            graph.setdefault(atom.predicate, set()).add(head)
+        for atom in rule.negated:
+            negative[head].add(atom.predicate)
+            graph.setdefault(atom.predicate, set())
+    visited: set[str] = set()
+    finished: list[str] = []
+    for node in sorted(graph):
+        if node in visited:
+            continue
+        visited.add(node)
+        stack = [(node, iter(sorted(graph[node])))]
+        while stack:
+            current, children = stack[-1]
+            child = next(children, None)
+            if child is None:
+                finished.append(current)
+                stack.pop()
+            elif child not in visited:
+                visited.add(child)
+                stack.append((child, iter(sorted(graph[child]))))
+    visited.clear()
+    components: list[tuple[str, ...]] = []
+    owner: dict[str, int] = {}
+    for node in reversed(finished):
+        if node in visited:
+            continue
+        visited.add(node)
+        members = [node]
+        pending = [node]
+        while pending:
+            current = pending.pop()
+            for parent, children in graph.items():
+                if current in children and parent not in visited:
+                    visited.add(parent)
+                    members.append(parent)
+                    pending.append(parent)
+        for member in members:
+            owner[member] = len(components)
+        components.append(tuple(sorted(members)))
+    for head, targets in negative.items():
+        if owner[head] in {owner[target] for target in targets}:
+            raise ReasoningError(
+                f"negative dependency cycle: {head!r} negatively depends on its own stratum")
+    before: dict[int, set[int]] = {index: set() for index in range(len(components))}
+    for rule in rules:
+        head = owner[rule.head.predicate]
+        for atom in (*rule.body, *rule.negated):
+            before[head].add(owner[atom.predicate])
+    remaining = {index: set(deps) - {index} for index, deps in before.items()}
+    ordered: list[int] = []
+    ready = sorted([index for index, deps in remaining.items() if not deps],
+                   key=lambda index: components[index])
+    while ready:
+        current = ready.pop(0)
+        ordered.append(current)
+        for index, deps in remaining.items():
+            if current in deps:
+                deps.discard(current)
+                if not deps and index not in ordered and index not in ready:
+                    ready.append(index)
+        ready.sort(key=lambda index: components[index])
+    if len(ordered) != len(components):
+        stuck = [components[index] for index in range(len(components)) if index not in ordered]
+        raise ReasoningError(
+            f"negative dependency cycle involving {sorted({name for comp in stuck for name in comp})}")
+    return tuple(components[index] for index in ordered)
+
+
+def _digest_facts(facts) -> str:
+    import hashlib
+    import json
+
+    payload = ["gestaltdb-fact-horizon-v1",
+               sorted([fact.predicate, [_encoded_term(value) for value in fact.values]] for fact in facts)]
+    return "sha256:" + hashlib.sha256(
+        json.dumps(payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 def _sort_key(fact: TypedFact):
@@ -463,6 +595,75 @@ class GenericResult:
 
     def __contains__(self, fact: object) -> bool:
         return isinstance(fact, TypedFact) and fact in set(self.facts)
+
+
+@dataclass(frozen=True)
+class NegationWitness:
+    """One exact absence check: which closed predicate, bound args and scope.
+
+    The witness carries the closed-world scope and the horizon identity of the
+    pinned input fact set — never a fabricated negative fact. ``position`` is
+    the negated body occurrence; ``args`` are the ground values tested.
+    """
+
+    rule_id: str
+    position: int
+    predicate: str
+    args: tuple[str | Literal, ...]
+    scope: tuple[str, ...]
+    horizon: str
+
+    def __post_init__(self) -> None:
+        _text(self.rule_id, "rule_id")
+        if isinstance(self.position, bool) or not isinstance(self.position, int) or self.position < 0:
+            raise ReasoningError("position must be a non-negative integer")
+        _text(self.predicate, "predicate")
+        if not isinstance(self.args, (tuple, list)):
+            raise ReasoningError("args must be a tuple or list")
+        for value in self.args:
+            if not isinstance(value, (str, Literal)) or (isinstance(value, str) and not value):
+                raise ReasoningError("witness args must be entities or literals")
+        object.__setattr__(self, "args", tuple(self.args))
+        if not isinstance(self.scope, (tuple, list)) or not self.scope:
+            raise ReasoningError("scope must be a non-empty tuple of predicates")
+        for predicate in self.scope:
+            _text(predicate, "scope predicate")
+        object.__setattr__(self, "scope", tuple(self.scope))
+        _text(self.horizon, "horizon")
+
+
+@dataclass(frozen=True)
+class StratifiedRun:
+    """Stratified closure plus its component schedule and absence witnesses."""
+
+    result: GenericResult
+    strata: tuple[tuple[str, ...], ...]
+    component_rounds: tuple[int, ...]
+    witnesses: tuple[NegationWitness, ...]
+    truncated: bool
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.result, GenericResult):
+            raise ReasoningError("result must be a GenericResult")
+        if not isinstance(self.strata, (tuple, list)) or not all(
+                isinstance(component, (tuple, list)) and component
+                and all(isinstance(name, str) and name for name in component)
+                for component in self.strata):
+            raise ReasoningError("strata must be non-empty predicate groups")
+        object.__setattr__(self, "strata", tuple(tuple(component) for component in self.strata))
+        if not isinstance(self.component_rounds, (tuple, list)) or not all(
+                isinstance(count, int) and not isinstance(count, bool) and count >= 0
+                for count in self.component_rounds):
+            raise ReasoningError("component_rounds must be non-negative integers")
+        if len(self.component_rounds) != len(self.strata):
+            raise ReasoningError("component_rounds must cover every stratum")
+        object.__setattr__(self, "component_rounds", tuple(self.component_rounds))
+        if not isinstance(self.witnesses, (tuple, list)) or not all(
+                isinstance(item, NegationWitness) for item in self.witnesses):
+            raise ReasoningError("witnesses must contain only NegationWitness values")
+        object.__setattr__(self, "witnesses", tuple(self.witnesses))
+        if not isinstance(self.truncated, bool):
+            raise ReasoningError("truncated must be a bool")
 
 
 class _TypedIndex:
@@ -553,6 +754,9 @@ class GenericEngine:
             raise ReasoningError("limits must be ReasoningLimits")
         if collect_proofs:
             raise ReasoningError("generic evaluation does not collect witnesses")
+        if any(rule.negated for rule in program.rules) or program.closed:
+            raise ReasoningError(
+                "scoped negation requires evaluate_stratified; plain evaluation stays positive")
         check_cancelled(cancel)
         if len(program.rules) > limits.max_rules:
             raise ReasoningLimitError(f"evaluation exceeded max_rules={limits.max_rules}")
@@ -617,6 +821,155 @@ class GenericEngine:
                 full.add(fact)
             iterations += 1
         return GenericResult(tuple(full.facts), iterations, program.digest)
+
+    def evaluate_stratified(
+        self, program: GenericProgram, facts: Iterable[TypedFact | Evidence], *,
+        limits: ReasoningLimits, collect_negation_trace: bool = False,
+        cancel: Callable[[], bool] | None = None,
+    ) -> StratifiedRun:
+        """Fixpoint per positive component in stratum order, then aggregates.
+
+        Negated atoms anti-join against completed lower strata only; the trace
+        records one witness per absence check when requested, bounded by
+        ``max_proof_nodes``. ``iterations`` counts executed component rounds;
+        the aggregate stratum adds one round when aggregates exist, matching
+        ``evaluate`` accounting on positive programs.
+        """
+        if not isinstance(program, GenericProgram):
+            raise ReasoningError("program must be a GenericProgram")
+        if not isinstance(limits, ReasoningLimits):
+            raise ReasoningError("limits must be ReasoningLimits")
+        if not isinstance(collect_negation_trace, bool):
+            raise ReasoningError("collect_negation_trace must be a bool")
+        check_cancelled(cancel)
+        if len(program.rules) > limits.max_rules:
+            raise ReasoningLimitError(f"evaluation exceeded max_rules={limits.max_rules}")
+        try:
+            iterator = iter(facts)
+        except TypeError as exc:
+            raise ReasoningError("facts must be an iterable of TypedFact values") from exc
+        initial: set[TypedFact] = set()
+        for count, value in enumerate(iterator, 1):
+            if count > limits.max_input_facts:
+                raise ReasoningLimitError(f"evaluation exceeded max_input_facts={limits.max_input_facts}")
+            if count % 1024 == 0:
+                check_cancelled(cancel)
+            fact = value.fact if isinstance(value, Evidence) else value
+            if not isinstance(fact, TypedFact):
+                raise ReasoningError("facts must contain only TypedFact values")
+            initial.add(fact)
+            if len(initial) > limits.max_facts:
+                raise ReasoningLimitError(f"evaluation exceeded max_facts={limits.max_facts}")
+        full = _TypedIndex(sorted(initial, key=_sort_key))
+        del initial
+        horizon = _digest_facts(full.facts)
+        scope = tuple(sorted(program.closed))
+        rounds, iterations, truncated = [], 0, False
+        trace: list[NegationWitness] = []
+        budget = _TypedBudget(limits)
+        for component in program.strata:
+            member = [rule for rule in program.rules if rule.head.predicate in component]
+            dispatch: dict[str, list[tuple[GenericRule, int]]] = defaultdict(list)
+            for rule in member:
+                seen: set[TypedAtom] = set()
+                for position, atom in enumerate(rule.body):
+                    if atom not in seen:
+                        dispatch[atom.predicate].append((rule, position))
+                        seen.add(atom)
+            delta = _TypedIndex(sorted(full.facts, key=_sort_key))
+            local_rounds = 0
+            while delta.facts:
+                check_cancelled(cancel)
+                active = [(rule, position) for predicate in sorted(delta.by_predicate)
+                          for rule, position in dispatch.get(predicate, ())
+                          if all(atom.predicate in full.by_predicate for atom in rule.body)]
+                if not active:
+                    break
+                if iterations >= limits.max_iterations:
+                    raise ReasoningLimitError("evaluation exceeded max_iterations (component delta rounds)")
+                added: set[TypedFact] = set()
+                for rule, pivot in active:
+                    for bindings in self._matches_stratified(
+                            rule, pivot, full, delta, budget, scope, horizon,
+                            collect_negation_trace, trace, limits):
+                        if bindings is None:
+                            truncated = True
+                            continue
+                        conclusion = TypedFact(rule.head.predicate, tuple(
+                            bindings[term] if isinstance(term, Variable) else term
+                            for term in rule.head.args))
+                        if conclusion in full.facts or conclusion in added:
+                            continue
+                        if len(full.facts) + len(added) >= limits.max_facts:
+                            raise ReasoningLimitError(f"evaluation exceeded max_facts={limits.max_facts}")
+                        added.add(conclusion)
+                iterations += 1
+                local_rounds += 1
+                ordered = sorted(added, key=_sort_key)
+                for fact in ordered:
+                    full.add(fact)
+                delta = _TypedIndex(ordered)
+            rounds.append(local_rounds)
+        if program.aggregates:
+            for fact in self._evaluate_aggregates(program, full, budget, cancel):
+                if fact in full.facts:
+                    continue
+                if len(full.facts) >= limits.max_facts:
+                    raise ReasoningLimitError(f"evaluation exceeded max_facts={limits.max_facts}")
+                full.add(fact)
+            iterations += 1
+        result = GenericResult(tuple(full.facts), iterations, program.digest)
+        return StratifiedRun(result, program.strata, tuple(rounds), tuple(trace), truncated)
+
+    def _matches_stratified(self, rule, pivot, full, delta, budget, scope, horizon,
+                            collect_trace, trace, limits):
+        remaining = tuple(index for index in range(len(rule.body)) if index != pivot)
+        stack = [(dict(), remaining, pivot, iter(delta.candidates(rule.body[pivot], dict())))]
+        while stack:
+            bindings, remaining, position, candidates = stack[-1]
+            try:
+                fact = next(candidates)
+            except StopIteration:
+                stack.pop()
+                continue
+            budget.candidate()
+            updated = _unify(rule.body[position], fact, bindings)
+            if updated is None or not _ready(rule.filters, updated):
+                continue
+            blocked, witness = self._check_negated(rule, updated, full, scope, horizon)
+            if blocked:
+                if collect_trace:
+                    if len(trace) >= limits.max_proof_nodes:
+                        yield None
+                    else:
+                        trace.append(witness)
+                continue
+            if not remaining:
+                yield updated
+                continue
+            chosen, bucket = remaining[0], full.candidates(rule.body[remaining[0]], updated)
+            for other in remaining[1:]:
+                other_bucket = full.candidates(rule.body[other], updated)
+                if len(other_bucket) < len(bucket):
+                    chosen, bucket = other, other_bucket
+                if not bucket:
+                    break
+            if bucket:
+                stack.append((updated, tuple(index for index in remaining if index != chosen),
+                              chosen, iter(bucket)))
+
+    @staticmethod
+    def _check_negated(rule, bindings, full, scope, horizon):
+        for position, atom in enumerate(rule.negated):
+            ground = tuple(bindings.get(term, term) if isinstance(term, Variable) else term
+                           for term in atom.args)
+            if any(isinstance(value, Variable) for value in ground):
+                raise ReasoningError("negation evaluated with unbound variables")
+            probe = TypedAtom(atom.predicate, [bindings.get(term, term) if isinstance(term, Variable) else term
+                                               for term in atom.args])
+            if full.candidates(probe, bindings):
+                return True, NegationWitness(rule.rule_id, position, atom.predicate, ground, scope, horizon)
+        return False, None
 
     def _evaluate_aggregates(self, program, full, budget, cancel):
         for rule in program.aggregates:

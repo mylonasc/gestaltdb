@@ -94,6 +94,15 @@
       "pr": 198,
       "validation": "Focused suites green (validation/parity/contracts); docs drift, Sphinx -W, roadmap validator passed. ~20k facts/100 conflicts in ~70ms warm. PR CI pending."
     },
+    "RE-10": {
+      "status": "integrated",
+      "integration_commit": "f035847",
+      "branch": "feature/re-10-negation",
+      "worktree": "re-10-negation",
+      "contract": "docs/reasoning-negation.rst",
+      "pr": 199,
+      "validation": "1888 passed, 49 skipped with all extras; docs drift, Sphinx -W, roadmap validator passed; Python 3.10-3.13 and fuzz CI passed."
+    },
     "RE-11": {
       "status": "in-review",
       "branch": "feature/re-11-equality",

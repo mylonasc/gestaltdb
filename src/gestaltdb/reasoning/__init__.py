@@ -33,7 +33,7 @@ from .model import (
 from .proofs import Explanation, FactWitness, ProofTrace
 from .protocols import Evidence, Evaluator, FactSource, InputContext
 from .terms import Literal
-from .typed import AggregateRule, Aggregation, Comparison, GenericEngine, GenericProgram, GenericResult, GenericRule, MultiHeadRule, TypedAtom, TypedFact, expand_predicate_variables, normalize_program, predicate_domain
+from .typed import AggregateRule, Aggregation, Comparison, GenericEngine, GenericProgram, GenericResult, GenericRule, MultiHeadRule, NegationWitness, StratifiedRun, TypedAtom, TypedFact, expand_predicate_variables, normalize_program, predicate_domain
 from .validation import Denial, ValidationReport, ValidationSuite, Violation, find_unsatisfiable, validate
 
 __all__ = [
@@ -45,5 +45,6 @@ __all__ = [
     "InequalityConflict", "SameAs", "canonicalize",
     "Comparison", "GenericEngine", "GenericProgram", "GenericResult", "GenericRule", "MultiHeadRule", "TypedAtom", "TypedFact",
     "AggregateRule", "Aggregation", "expand_predicate_variables", "normalize_program", "predicate_domain",
+    "NegationWitness", "StratifiedRun",
     "Denial", "ValidationReport", "ValidationSuite", "Violation", "find_unsatisfiable", "validate",
 ]
