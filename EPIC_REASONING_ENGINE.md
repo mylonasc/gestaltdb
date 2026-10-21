@@ -306,6 +306,31 @@ optional native read path will wait for the published release and validate its
 actual API/version, shared horizon and lifetime guarantees. This does not block
 RE-03 or require pausing its storage-independent implementation.
 
+### Implementation started: RE-05 (#166)
+
+Dedicated worktree `re-05-extraction`, branch `feature/re-05-extraction`, based on
+accepted RE-03 integration `b320c33` (RE-05 depends only on integrated RE-02, so it
+is not stacked on unmerged RE-04); [PR #193](https://github.com/mylonasc/gestaltdb/pull/193)
+targets the second integration branch. Storage-neutral `ExtractionRequest`/`FactBatch`
+contracts, storage-free capability probing and a pinned batched claim source with
+exact version-ID evidence, index pushdown modes and per-batch verification. LevelDB
+snapshot requests fail closed; `native_arrow_scan` was False on every backend until
+the `pyrex-rocksdb 0.5.0` release (PyPI, 2026-10-20) and is now bound through the
+audited `scan_arrow`/`Snapshot` contract on plain handles
+(`reasoning/adapters/native.py`, capability-detected and version-gated; decoded
+fact extraction over native scans stays a separate techdebt item). Audited
+0.5.0 behaviors — shared-snapshot horizons, prefix/range semantics, batch and
+overflow limits, single-consumer enforcement, idempotent release and foreign
+snapshot rejection — are covered by `tests/test_reasoning_native_scan.py`. See
+`docs/reasoning-extraction.rst`;
+evidence: `benchmarks/results/reasoning-re05-extraction.json`.
+
+RE-05 local validation: **1804 passed, 49 skipped** with LMDB/LevelDB, Arrow,
+Polars, Clingo, OWL-RL and PyRex 0.5.0 available. Sphinx warnings-as-errors,
+documentation drift, modular examples and the full roadmap/evidence validator
+passed. The prepared path note above belongs to RE-04; this slice changes no
+evaluator semantics. Python 3.10–3.13/fuzz CI is tracked in #193.
+
 RE-03 local validation: **1632 passed, 199 skipped** with LMDB/LevelDB, Arrow,
 Polars, Clingo and OWL-RL available. Sphinx warnings-as-errors, documentation drift
 and the full roadmap/evidence validator passed. The new prototype is explicitly

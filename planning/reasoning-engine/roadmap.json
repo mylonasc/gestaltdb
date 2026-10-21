@@ -21,7 +21,10 @@
       "branch": "feature/re-02-batches",
       "worktree": "re-02-batches",
       "contract": "docs/reasoning-batches.rst",
-      "benchmark_evidence": ["benchmarks/results/reasoning-re02-core.json", "benchmarks/results/reasoning-re02-batch.json"],
+      "benchmark_evidence": [
+        "benchmarks/results/reasoning-re02-core.json",
+        "benchmarks/results/reasoning-re02-batch.json"
+      ],
       "validation": "1581 passed, 227 skipped; docs drift, Sphinx -W, examples, standalone no-site-packages and base-wheel isolation passed. Six clean-revision measurement rows, Python 3.10-3.13 and fuzz CI passed."
     },
     "RE-03": {
@@ -31,59 +34,801 @@
       "branch": "feature/re-03-polars",
       "worktree": "re-03-polars",
       "contract": "docs/reasoning-polars.rst",
-      "benchmark_evidence": ["benchmarks/results/reasoning-re03-comparison.json", "benchmarks/results/reasoning-re03-sparse-1t.json", "benchmarks/results/reasoning-re03-sparse-4t.json", "benchmarks/results/reasoning-re03-limits.json"],
+      "benchmark_evidence": [
+        "benchmarks/results/reasoning-re03-comparison.json",
+        "benchmarks/results/reasoning-re03-sparse-1t.json",
+        "benchmarks/results/reasoning-re03-sparse-4t.json",
+        "benchmarks/results/reasoning-re03-limits.json"
+      ],
       "validation": "1632 passed, 199 skipped with available backend/Arrow/Polars/solver extras; Sphinx -W, docs drift, examples, roadmap validator, installed base/optional-wheel smokes passed. 126 matched-Evidence comparison rows and one limit diagnostic; Python 3.10-3.13 and fuzz CI passed."
     },
-    "RE-04": {
+    "RE-05": {
       "status": "in-review",
+      "branch": "feature/re-05-extraction",
+      "worktree": "re-05-extraction",
+      "contract": "docs/reasoning-extraction.rst",
+      "benchmark_evidence": "benchmarks/results/reasoning-re05-extraction.json",
+      "pr": 193,
+      "validation": "1804 passed, 49 skipped with all extras incl. pyrex 0.5.0; docs drift, Sphinx -W, examples, roadmap validator passed. 6 clean-revision rows (LMDB+LevelDB parity + native scan comparison, fail-closed budget). PR CI pending."
+    },
+    "RE-04": {
+      "status": "integrated",
+      "integration_commit": "07588ae",
       "pr": 192,
       "branch": "feature/re-04-plans",
       "worktree": "re-04-plans",
-      "contract": "docs/reasoning-plans.rst",
-      "benchmark_evidence": "benchmarks/results/reasoning-re04-plans.json",
-      "validation": "1673 passed, 199 skipped with available backend/Arrow/Polars/solver extras; Sphinx -W, docs drift, examples, roadmap validator passed. 144 verified first/reuse closure/witness/profile rows. PR CI running."
+      "validation": "1673 passed, 199 skipped; docs/Sphinx/examples/roadmap validator passed; 144 verified first/reuse rows; Python 3.10-3.13 and fuzz CI passed."
     }
   },
   "source_sha256": {
     "source-assessment.md": "e1e50b72fb5b2ecfd629a8847f2be3500c1c51f8f761a26ea00063c328f903eb",
     "gestaltdb_reasoning_feature_tracker.xlsx": "399486f87b04415fafb0e4066f452908c493c4ee6dc1675339a2ced5386e10cb"
   },
-  "baseline_preserve_gr": [1,2,3,4,5,6,18,35,36,37,52,53,54,55,56,57,59,73,74,75,86,98,99,100,101,102,112,126,128,129,130,132,133],
+  "baseline_preserve_gr": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    18,
+    35,
+    36,
+    37,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    59,
+    73,
+    74,
+    75,
+    86,
+    98,
+    99,
+    100,
+    101,
+    102,
+    112,
+    126,
+    128,
+    129,
+    130,
+    132,
+    133
+  ],
   "baseline_note": "Preserve existing capability under its declared fragment, not certification of the workbook's broader/native acceptance wording. GR-057 has closure already but not a native executor; GR-128/129/130 cover v1 only; GR-132 is strict selected offline RDF; GR-133 has closure benchmarks, not incremental update coverage. Other rows may also have partial existing machinery; child issues are extensions, not claims of total absence.",
   "epics": [
-    {"id":"RE-E1","title":"Execution foundation: compact relations, inspectable plans and measured Polars/Arrow acceleration","depends":[],"goal":"Make existing reasoning reusable, inspectable and faster without a rewrite or storage lock-in.","exit":"Parity with baseline and independent reference; repeatable full-pipeline measurements; explicit executor decision, resource limits and optional-dependency isolation."},
-    {"id":"RE-E2","title":"Useful reasoning: richer rules, ontology validation, equality and selective answers","depends":["RE-E1"],"goal":"Deliver practical compliance and ontology use cases through explicit, intuitive APIs.","exit":"Published selected-profile coverage, runnable end-to-end examples, selective query parity and clearly separated open-world/negative/validation semantics."},
-    {"id":"RE-E3","title":"Live reasoning: durable generations and support-safe incremental maintenance","depends":["RE-E2"],"goal":"Maintain derived knowledge under updates without partial visibility or self-supporting cycles.","exit":"Crash/concurrency safety, update-versus-rematerialization parity, exact horizon/ruleset binding and measured crossover/fallback behavior."},
-    {"id":"RE-E4","title":"Temporal reasoning: complete interval closure and history-preserving updates","depends":["RE-E3"],"goal":"Answer when a conclusion holds across full ranges while preserving gaps and evidence history.","exit":"Point/range agreement, support-segment provenance, correction/retraction parity and crash-safe bounded interval publication."},
-    {"id":"RE-E5","title":"Advanced reasoning: gated profile completion, context extensions and scale experiments","depends":["RE-E4"],"goal":"Keep the entire ambitious roadmap visible without presenting research targets as supported profiles.","exit":"Per-extension approved semantics/termination/performance contracts and conformance evidence, or explicit linked defer decisions. Full OWL DL, probabilistic logic and differential dataflow are not prerequisites for earlier phases."}
+    {
+      "id": "RE-E1",
+      "title": "Execution foundation: compact relations, inspectable plans and measured Polars/Arrow acceleration",
+      "depends": [],
+      "goal": "Make existing reasoning reusable, inspectable and faster without a rewrite or storage lock-in.",
+      "exit": "Parity with baseline and independent reference; repeatable full-pipeline measurements; explicit executor decision, resource limits and optional-dependency isolation."
+    },
+    {
+      "id": "RE-E2",
+      "title": "Useful reasoning: richer rules, ontology validation, equality and selective answers",
+      "depends": [
+        "RE-E1"
+      ],
+      "goal": "Deliver practical compliance and ontology use cases through explicit, intuitive APIs.",
+      "exit": "Published selected-profile coverage, runnable end-to-end examples, selective query parity and clearly separated open-world/negative/validation semantics."
+    },
+    {
+      "id": "RE-E3",
+      "title": "Live reasoning: durable generations and support-safe incremental maintenance",
+      "depends": [
+        "RE-E2"
+      ],
+      "goal": "Maintain derived knowledge under updates without partial visibility or self-supporting cycles.",
+      "exit": "Crash/concurrency safety, update-versus-rematerialization parity, exact horizon/ruleset binding and measured crossover/fallback behavior."
+    },
+    {
+      "id": "RE-E4",
+      "title": "Temporal reasoning: complete interval closure and history-preserving updates",
+      "depends": [
+        "RE-E3"
+      ],
+      "goal": "Answer when a conclusion holds across full ranges while preserving gaps and evidence history.",
+      "exit": "Point/range agreement, support-segment provenance, correction/retraction parity and crash-safe bounded interval publication."
+    },
+    {
+      "id": "RE-E5",
+      "title": "Advanced reasoning: gated profile completion, context extensions and scale experiments",
+      "depends": [
+        "RE-E4"
+      ],
+      "goal": "Keep the entire ambitious roadmap visible without presenting research targets as supported profiles.",
+      "exit": "Per-extension approved semantics/termination/performance contracts and conformance evidence, or explicit linked defer decisions. Full OWL DL, probabilistic logic and differential dataflow are not prerequisites for earlier phases."
+    }
   ],
   "features": [
-    {"id":"RE-01","epic":"RE-E1","title":"Baseline reconciliation, versioned relational contracts and performance budgets","depends":[],"gr":[7,15,40,42,43,94,127,128,129,130,131,133,134,135],"acceptance":["Reconcile all 136 workbook rows against onto-dev evidence and freeze semantics/operator capability matrix; preserve existing Fact/Program APIs and v1 digest behavior.","Specify n-ary-ready typed relation IR, context/evidence handles and compilation identities without requiring all future syntax now.","Extend independent fixtures and freeze reproducible interactive/batch/update time and memory budgets before executor selection; include explain-plan schema."]},
-    {"id":"RE-02","epic":"RE-E1","title":"Compact symbol dictionaries, relation batches and safe Arrow boundaries","depends":["RE-01"],"gr":[9,10,11,12,15,16,17,19,26,27,39,115,116,117,125],"acceptance":["Define deterministic snapshot-local IDs, dictionary generation/overflow checks and exact external-ID round trips; keep independent evidence references distinct.","Provide set-valued compact relation lifecycle and versioned optional Arrow schemas with null/type rejection, chunking and ownership/lifetime tests.","Do not change durable key formats implicitly; document copies, footprint and missing-extra errors."]},
-    {"id":"RE-03","epic":"RE-E1","title":"Polars relational and delta-fixpoint performance prototype","depends":["RE-02"],"gr":[19,20,21,24,25,26,27,33,38,39,118,119,122,123,124],"acceptance":["Prototype batched selection/projection/equijoin/semi-join/anti-join/distinct/difference over integer columns with designated delta inputs and no Python per-row callbacks.","Compare full closure, repeated variables and duplicates to indexed Python and independent oracle; anti-join is internal until scoped negation lands.","Measure conversion, plan reconstruction, iterations, thread scaling, peak RSS and intermediate growth; explicitly report unsupported proof/maintenance modes rather than claim parity."]},
-    {"id":"RE-04","epic":"RE-E1","title":"Reusable SCC-aware execution plans, selected indexes and operator telemetry","depends":["RE-01","RE-02"],"gr":[17,20,22,23,31,32,38,39,40,41,42,49,50,123,127,134,135],"acceptance":["Compile positive dependency SCCs, delta occurrences, selected binding indexes and join order with stable provenance body positions; reuse existing indexed-pivot logic.","Expose estimated and actual rows/work in explain_plan with deterministic logical results; record heuristic versus cost-based decisions honestly.","Use optional hash/merge/index strategies only where supported and measured; parallel result parity and plan invalidation tests precede enabling them."]},
-    {"id":"RE-05","epic":"RE-E1","title":"Pinned batched fact extraction and capability-based storage acceleration","depends":["RE-02"],"gr":[17,108,113,114,115,125,135],"acceptance":["Add bounded predicate/binding/world-aware extraction interfaces preserving snapshot authentication and exact evidence IDs; profile extraction separately.","Audit actual PyRex batch scan/MultiGet APIs before promising native paths; optional upstream work gets an explicit issue/contract if needed.","Test supported LMDB/LevelDB/PyRex capabilities and fail closed on unsupported requested snapshots; never open unsynchronized secondary storage handles."]},
-    {"id":"RE-06","epic":"RE-E1","title":"Executor decision, production hardening and conditional native acceleration","depends":["RE-03","RE-04","RE-05"],"gr":[16,21,22,23,33,49,116,117,118,119,121,122,123,124,125,126,131,133,134],"acceptance":["Choose Python/compact/Polars paths using frozen workload budgets and whole-pipeline time/RSS/footprint; retain explicit reference backend.","If justified, scope and implement bounded bespoke C++/Rust kernels behind the same interfaces with differential tests; otherwise record a defer decision, not a fictitious native delivery.","Harden intermediate budgets/cancellation and any spill ownership; document cooperative versus process-level limits, proof-mode capabilities and Python 3.10-3.13 install isolation."]},
-    {"id":"RE-07","epic":"RE-E2","title":"Typed literals, n-ary rules, comparisons and safe aggregate strata","depends":["RE-01","RE-04"],"gr":[7,8,28,29,30,43,45,51,92],"acceptance":["Add explicit finite typed relation/term APIs and datatype value/lexical identity; define bool/integer/float, temporal, null, NaN and invalid literal policies.","Support safe comparisons, controlled predicate variables, normalized multi-head rules and nonrecursive/stratified aggregates with range-restriction checks.","Recursive/lattice aggregation is an explicit later extension unless its termination contract is proven; keep old binary entity APIs compatible."]},
-    {"id":"RE-08","epic":"RE-E2","title":"Property chains, class conjunctions and reusable schema closure","depends":["RE-04"],"gr":[52,53,54,55,56,57,58,59,60,64,132],"acceptance":["Extend selected ontology profile with property chains, directional intersection/union implications and scoped reflexivity; reject disjunctive heads unsupported by Horn logic.","Cache small schema closure with revision identity and retain exact axiom origins; no claim of complete RDFS or OWL RL.","Expand strict offline RDF normalization only for implemented forms and add independent/oracle coverage and readable user examples."]},
-    {"id":"RE-09","epic":"RE-E2","title":"Explicit negative premises and evidence-bearing validation reports","depends":["RE-07","RE-08"],"gr":[58,61,63,71,87,89,91,92,93,94,96],"acceptance":["Add explicit-negative premises separately from absence; detect disjointness, irreflexivity, supported datatype and functional validation conflicts with bounded fact/axiom provenance.","Keep domain/range entailment distinct from shape validation and classical inconsistency distinct from paraconsistent evidence.","Limit satisfiability/SHACL-style statements to the implemented validation subset; equality-generating functionality is deferred to RE-11."]},
-    {"id":"RE-10","epic":"RE-E2","title":"Explicit closed-world scopes and stratified negation","depends":["RE-07","RE-09"],"gr":[25,40,41,44,88,95],"acceptance":["Require predicate/context/horizon closed-world declarations; reject unsafe variables and negative dependency cycles at compilation.","Evaluate exact anti-joins against completed lower strata; absence explanations carry scope and source-horizon identity, not fabricated negative facts.","Provide compliance example and base insert/delete recomputation tests; incremental invalidation is separately integrated in RE-16. Coordinate existing #125."]},
-    {"id":"RE-11","epic":"RE-E2","title":"Snapshot-local equality, inequality and functional identity reasoning","depends":["RE-07","RE-09"],"gr":[13,14,62,63,69,70,90,91],"acceptance":["Add profile-selected sameAs/differentFrom and equality-generating functionality with no implicit physical node merging or unique-name assumption.","Canonicalize joins while preserving external aliases, exact equality evidence and conflicts; removal triggers safe split/rebuild, not insertion-only union-find reuse.","Define which keys/cardinality checks are supported versus deferred RE-23; test literal/entity separation, recursive equality interaction, pinned contexts and support retraction."]},
-    {"id":"RE-12","epic":"RE-E2","title":"Goal-directed queries, demand specialization and safe result caching","depends":["RE-04","RE-08"],"gr":[47,48,127,135],"acceptance":["Expose an explicit bound-goal query API using demand/magic-set specialization with full-closure answer parity for the declared positive fragment.","Measure selective hierarchies/property chains against total materialization, with memo/cache identity pinned to source/rules/profile/dictionary.","Unsupported negation/equality/aggregate combinations fail or use a documented complete strategy; do not infer hybrid optimizer quality without benchmarks."]},
-    {"id":"RE-13","epic":"RE-E2","title":"Explicit query and sampler integration with intuitive reasoning APIs","depends":["RE-08","RE-12"],"gr":[15,108,132,135],"acceptance":["Extend existing logical graph adapters with explicit inferred-query and relation-expansion options; specify distinct endpoints versus paths/edges and fanout accounting.","Design opt-in Cypher and immutable sampler-snapshot integration against #127; no hidden rewrites, array mutation or weight/path multiplicity changes.","Publish tested standalone, claims, compliance and inferred-neighbor examples with missing-extra errors, provenance inspection and existing API compatibility."]},
-    {"id":"RE-14","epic":"RE-E3","title":"Recoverable materialization generations and compare-and-publish","depends":["RE-01","RE-05","RE-06"],"gr":[10,82,120,124,135,136],"acceptance":["Design versioned staged generations and atomic old-or-new visibility bound to input/rule/policy/dictionary identities; no stale closure publication.","Shorten writer-lock duration only through verified compare-and-publish; define retries, concurrent writer behavior, durability/fsync and reader generation retention.","Add explicit audited recovery/garbage-collection consent for interrupted nontransactional writes and fault injection; address #154 without silent index repair."]},
-    {"id":"RE-15","epic":"RE-E3","title":"Bounded maintenance provenance, reverse dependencies and insertion propagation","depends":["RE-04","RE-14"],"gr":[73,74,76,77,78,83,50],"acceptance":["Define finite independent-support identity and indexed premise/rule dependencies separate from bounded witness DAGs; prevent recursive path enumeration.","Implement changed-predicate insertion propagation and counts where valid, with evidence duplicate handling and support/output budgets.","Preserve alternative sources and exact rule/premise versions; incomplete maintenance metadata invalidates the generation or triggers explicit rematerialization."]},
-    {"id":"RE-16","epic":"RE-E3","title":"Recursive support-safe deletion and rule-change invalidation","depends":["RE-15","RE-10","RE-11"],"gr":[74,78,79,80,83,88],"acceptance":["Implement DRed or proven equivalent; counts alone cannot preserve unsupported recursive SCCs. Full rematerialization remains a correct explicit fallback.","Handle final-support loss, duplicate evidence, cycles, equality splits, lower-stratum negation invalidation and changed rules with randomized oracle comparison.","Measure affected-work versus complete rebuild and document crossover; B/F is a conditional alternative, not a mandatory second deletion engine."]},
-    {"id":"RE-17","epic":"RE-E3","title":"Pinned indexed rule catalog and opt-in legacy evaluator migration","depends":["RE-14","RE-15","RE-16"],"gr":[42,73,75,77,83,135],"acceptance":["Bind rule-catalog digest and fact horizon together; introduce indexed version catalog/generation migration without breaking historical rule versions.","Adapt legacy run_rules/maintain_truth only after parity in interval selection, all-support justifications, limits, IDs and publication; do not substitute a witness-only evaluator.","Keep compatibility path available until regression/packaging gates pass and document any deliberate versioned API differences."]},
-    {"id":"RE-18","epic":"RE-E3","title":"Incremental workload gates and live-reasoning user workflows","depends":["RE-16","RE-17"],"gr":[126,128,129,130,131,133,134,136],"acceptance":["Test crashes at every generation boundary, cancellation, cross-handle/process writers, stale plan rejection and orphan recovery on capability-supported backends.","Benchmark small/large inserts, support-removing retractions, rule revision and redundant cycles with P50/P95, RSS, persisted supports and write amplification.","Ship repeatable update/audit examples with explicit incremental versus rebuild diagnostics; no correctness trade for latency."]},
-    {"id":"RE-19","epic":"RE-E4","title":"Storage-neutral interval-set algebra and support-segment contracts","depends":["RE-01","RE-15"],"gr":[98,99,101,103,104,105,106,108],"acceptance":["Define bounded disjoint half-open interval unions, intersection/difference and support-qualified coalescing including unbounded ends and instant precision.","Keep logical truth coalescing distinct from support-history segments; never replace disjoint intervals with a min/max envelope.","Property-test gaps, touching boundaries, corrections and context partitioning; prototype scalar algebra before optional Polars/native interval operators."]},
-    {"id":"RE-20","epic":"RE-E4","title":"Complete time-range closure with temporal proofs and equality scope","depends":["RE-19","RE-08","RE-11"],"gr":[101,104,105,106,107,108],"acceptance":["Evaluate every supported change segment over a pinned system-time horizon, not samples at one as_of instant; union all support intersections with explicit budgets.","Compare range answers against independent change-point point evaluation; retain exact evidence per interval and reject unsupported temporal negation/equality combinations.","Make equality representatives time-scoped or rebuild at change points; do not globally merge entities equal only during one interval."]},
-    {"id":"RE-21","epic":"RE-E4","title":"Temporal delta maintenance and recoverable interval publication","depends":["RE-16","RE-20","RE-14"],"gr":[82,103,104,107,120,124,135,136],"acceptance":["Propagate changed validity ranges with support-aware deletion, safe full-range fallback and point/range update parity.","Publish managed interval generations with no unsupported gap filling and exact source/rule identities; preserve existing single-quantum reconcile_point behavior.","Test interruptions, stale inputs, equality splits and correction/retraction/resurrection; coordinate interval and locking follow-ups in #154."]},
-    {"id":"RE-22","epic":"RE-E4","title":"Temporal conformance, performance gates and historical audit examples","depends":["RE-20","RE-21"],"gr":[75,98,99,100,101,126,128,129,130,131,133,134,135],"acceptance":["Publish supported temporal/profile combinations and independently verify range closure, system-time replay and provenance with disjoint/overlapping supports.","Benchmark interval fragmentation, changes, limits and extraction separately; failure exposes no successful partial interval result or generation.","Provide intuitive when/why workflows and runnable historical compliance examples on supported backend capabilities."]},
-    {"id":"RE-23","epic":"RE-E5","title":"Gated ontology profile expansion and validation coverage","depends":["RE-09","RE-11","RE-22"],"gr":[45,64,65,66,67,68,69,70,71,92,94,96,129,132],"acceptance":["Build construct-by-construct semantics/conformance matrix for remaining RL-compatible Boolean/value/universal restrictions, datatype/key/cardinality and shape checks.","Separate directional Horn rewrites from unsupported disjunctive heads, validation from entailment and satisfiability from class-conflict detection.","Approve each extension before implementation; complete OWL RL is a target only when all normative applicable rules/restrictions are independently covered, otherwise publish named subsets."]},
-    {"id":"RE-24","epic":"RE-E5","title":"Bounded existential and OWL EL classification feasibility","depends":["RE-23"],"gr":[46,66,71,72],"acceptance":["Evaluate consequence-based classification separately from generating witnesses; specify witness identity, termination/chase conditions and strict budgets before implementation.","Retain full OWL DL as explicitly deferred research with no JVM adapter, no dependency on it for earlier phase completion.","Use dedicated experimental profiles and independent oracle/termination tests; reject unsupported anonymous constructions rather than silently approximate them."]},
-    {"id":"RE-25","epic":"RE-E5","title":"Explicit cross-context, temporal-modal and confidence semantics","depends":["RE-22"],"gr":[85,94,97,102,109,110,111],"acceptance":["Specify authorized cross-world/context inheritance and temporal-modal boundaries without changing existing bounded modal API semantics implicitly.","Treat confidence/fuzzy/probabilistic combination as separately selected calculi, not logical truth or accidental multiplication; coordinate #124 and #128.","Retain as design-gated extensions until combination, retraction, convergence and provenance policies have independent tests and a user-value scenario."]},
-    {"id":"RE-26","epic":"RE-E5","title":"Benchmark-gated advanced joins, differential updates and out-of-core scale","depends":["RE-06","RE-18","RE-22"],"gr":[16,23,31,32,34,49,50,80,81,119,121,122,123,134],"acceptance":["Profile before selecting bitmap/CSR/transitive-specialized, multiway joins, adaptive parallel scheduling or external-memory arrangements; preserve common operator API.","Compare optional differential/signed updates and B/F against deployed semi-naive/DRed/rebuild crossover; do not adopt multiple runtimes without measured need.","Spill and worker execution require ownership, cancellation, disk budgets and actual RSS/thread/I/O measurements; no universal constant-memory or zero-copy promises."]},
-    {"id":"RE-27","epic":"RE-E5","title":"Bounded minimal/ranked explanations and checkpoint/restart extensions","depends":["RE-18","RE-22"],"gr":[75,84,85,93,124,136],"acceptance":["Define bounded minimal/top-k proof contracts and export/model-output integration against #126 without confusing a chosen witness with all supports.","Checkpoint only authenticated source/rule/dictionary/profile generations; reject incompatible resumes and safely discard incomplete checkpoints.","Keep ranked probabilistic provenance separate from deterministic explanation guarantees; publish complexity/resource limitations and explicit defer decisions where appropriate."]}
+    {
+      "id": "RE-01",
+      "epic": "RE-E1",
+      "title": "Baseline reconciliation, versioned relational contracts and performance budgets",
+      "depends": [],
+      "gr": [
+        7,
+        15,
+        40,
+        42,
+        43,
+        94,
+        127,
+        128,
+        129,
+        130,
+        131,
+        133,
+        134,
+        135
+      ],
+      "acceptance": [
+        "Reconcile all 136 workbook rows against onto-dev evidence and freeze semantics/operator capability matrix; preserve existing Fact/Program APIs and v1 digest behavior.",
+        "Specify n-ary-ready typed relation IR, context/evidence handles and compilation identities without requiring all future syntax now.",
+        "Extend independent fixtures and freeze reproducible interactive/batch/update time and memory budgets before executor selection; include explain-plan schema."
+      ]
+    },
+    {
+      "id": "RE-02",
+      "epic": "RE-E1",
+      "title": "Compact symbol dictionaries, relation batches and safe Arrow boundaries",
+      "depends": [
+        "RE-01"
+      ],
+      "gr": [
+        9,
+        10,
+        11,
+        12,
+        15,
+        16,
+        17,
+        19,
+        26,
+        27,
+        39,
+        115,
+        116,
+        117,
+        125
+      ],
+      "acceptance": [
+        "Define deterministic snapshot-local IDs, dictionary generation/overflow checks and exact external-ID round trips; keep independent evidence references distinct.",
+        "Provide set-valued compact relation lifecycle and versioned optional Arrow schemas with null/type rejection, chunking and ownership/lifetime tests.",
+        "Do not change durable key formats implicitly; document copies, footprint and missing-extra errors."
+      ]
+    },
+    {
+      "id": "RE-03",
+      "epic": "RE-E1",
+      "title": "Polars relational and delta-fixpoint performance prototype",
+      "depends": [
+        "RE-02"
+      ],
+      "gr": [
+        19,
+        20,
+        21,
+        24,
+        25,
+        26,
+        27,
+        33,
+        38,
+        39,
+        118,
+        119,
+        122,
+        123,
+        124
+      ],
+      "acceptance": [
+        "Prototype batched selection/projection/equijoin/semi-join/anti-join/distinct/difference over integer columns with designated delta inputs and no Python per-row callbacks.",
+        "Compare full closure, repeated variables and duplicates to indexed Python and independent oracle; anti-join is internal until scoped negation lands.",
+        "Measure conversion, plan reconstruction, iterations, thread scaling, peak RSS and intermediate growth; explicitly report unsupported proof/maintenance modes rather than claim parity."
+      ]
+    },
+    {
+      "id": "RE-04",
+      "epic": "RE-E1",
+      "title": "Reusable SCC-aware execution plans, selected indexes and operator telemetry",
+      "depends": [
+        "RE-01",
+        "RE-02"
+      ],
+      "gr": [
+        17,
+        20,
+        22,
+        23,
+        31,
+        32,
+        38,
+        39,
+        40,
+        41,
+        42,
+        49,
+        50,
+        123,
+        127,
+        134,
+        135
+      ],
+      "acceptance": [
+        "Compile positive dependency SCCs, delta occurrences, selected binding indexes and join order with stable provenance body positions; reuse existing indexed-pivot logic.",
+        "Expose estimated and actual rows/work in explain_plan with deterministic logical results; record heuristic versus cost-based decisions honestly.",
+        "Use optional hash/merge/index strategies only where supported and measured; parallel result parity and plan invalidation tests precede enabling them."
+      ]
+    },
+    {
+      "id": "RE-05",
+      "epic": "RE-E1",
+      "title": "Pinned batched fact extraction and capability-based storage acceleration",
+      "depends": [
+        "RE-02"
+      ],
+      "gr": [
+        17,
+        108,
+        113,
+        114,
+        115,
+        125,
+        135
+      ],
+      "acceptance": [
+        "Add bounded predicate/binding/world-aware extraction interfaces preserving snapshot authentication and exact evidence IDs; profile extraction separately.",
+        "Audit actual PyRex batch scan/MultiGet APIs before promising native paths; optional upstream work gets an explicit issue/contract if needed.",
+        "Test supported LMDB/LevelDB/PyRex capabilities and fail closed on unsupported requested snapshots; never open unsynchronized secondary storage handles."
+      ]
+    },
+    {
+      "id": "RE-06",
+      "epic": "RE-E1",
+      "title": "Executor decision, production hardening and conditional native acceleration",
+      "depends": [
+        "RE-03",
+        "RE-04",
+        "RE-05"
+      ],
+      "gr": [
+        16,
+        21,
+        22,
+        23,
+        33,
+        49,
+        116,
+        117,
+        118,
+        119,
+        121,
+        122,
+        123,
+        124,
+        125,
+        126,
+        131,
+        133,
+        134
+      ],
+      "acceptance": [
+        "Choose Python/compact/Polars paths using frozen workload budgets and whole-pipeline time/RSS/footprint; retain explicit reference backend.",
+        "If justified, scope and implement bounded bespoke C++/Rust kernels behind the same interfaces with differential tests; otherwise record a defer decision, not a fictitious native delivery.",
+        "Harden intermediate budgets/cancellation and any spill ownership; document cooperative versus process-level limits, proof-mode capabilities and Python 3.10-3.13 install isolation."
+      ]
+    },
+    {
+      "id": "RE-07",
+      "epic": "RE-E2",
+      "title": "Typed literals, n-ary rules, comparisons and safe aggregate strata",
+      "depends": [
+        "RE-01",
+        "RE-04"
+      ],
+      "gr": [
+        7,
+        8,
+        28,
+        29,
+        30,
+        43,
+        45,
+        51,
+        92
+      ],
+      "acceptance": [
+        "Add explicit finite typed relation/term APIs and datatype value/lexical identity; define bool/integer/float, temporal, null, NaN and invalid literal policies.",
+        "Support safe comparisons, controlled predicate variables, normalized multi-head rules and nonrecursive/stratified aggregates with range-restriction checks.",
+        "Recursive/lattice aggregation is an explicit later extension unless its termination contract is proven; keep old binary entity APIs compatible."
+      ]
+    },
+    {
+      "id": "RE-08",
+      "epic": "RE-E2",
+      "title": "Property chains, class conjunctions and reusable schema closure",
+      "depends": [
+        "RE-04"
+      ],
+      "gr": [
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        64,
+        132
+      ],
+      "acceptance": [
+        "Extend selected ontology profile with property chains, directional intersection/union implications and scoped reflexivity; reject disjunctive heads unsupported by Horn logic.",
+        "Cache small schema closure with revision identity and retain exact axiom origins; no claim of complete RDFS or OWL RL.",
+        "Expand strict offline RDF normalization only for implemented forms and add independent/oracle coverage and readable user examples."
+      ]
+    },
+    {
+      "id": "RE-09",
+      "epic": "RE-E2",
+      "title": "Explicit negative premises and evidence-bearing validation reports",
+      "depends": [
+        "RE-07",
+        "RE-08"
+      ],
+      "gr": [
+        58,
+        61,
+        63,
+        71,
+        87,
+        89,
+        91,
+        92,
+        93,
+        94,
+        96
+      ],
+      "acceptance": [
+        "Add explicit-negative premises separately from absence; detect disjointness, irreflexivity, supported datatype and functional validation conflicts with bounded fact/axiom provenance.",
+        "Keep domain/range entailment distinct from shape validation and classical inconsistency distinct from paraconsistent evidence.",
+        "Limit satisfiability/SHACL-style statements to the implemented validation subset; equality-generating functionality is deferred to RE-11."
+      ]
+    },
+    {
+      "id": "RE-10",
+      "epic": "RE-E2",
+      "title": "Explicit closed-world scopes and stratified negation",
+      "depends": [
+        "RE-07",
+        "RE-09"
+      ],
+      "gr": [
+        25,
+        40,
+        41,
+        44,
+        88,
+        95
+      ],
+      "acceptance": [
+        "Require predicate/context/horizon closed-world declarations; reject unsafe variables and negative dependency cycles at compilation.",
+        "Evaluate exact anti-joins against completed lower strata; absence explanations carry scope and source-horizon identity, not fabricated negative facts.",
+        "Provide compliance example and base insert/delete recomputation tests; incremental invalidation is separately integrated in RE-16. Coordinate existing #125."
+      ]
+    },
+    {
+      "id": "RE-11",
+      "epic": "RE-E2",
+      "title": "Snapshot-local equality, inequality and functional identity reasoning",
+      "depends": [
+        "RE-07",
+        "RE-09"
+      ],
+      "gr": [
+        13,
+        14,
+        62,
+        63,
+        69,
+        70,
+        90,
+        91
+      ],
+      "acceptance": [
+        "Add profile-selected sameAs/differentFrom and equality-generating functionality with no implicit physical node merging or unique-name assumption.",
+        "Canonicalize joins while preserving external aliases, exact equality evidence and conflicts; removal triggers safe split/rebuild, not insertion-only union-find reuse.",
+        "Define which keys/cardinality checks are supported versus deferred RE-23; test literal/entity separation, recursive equality interaction, pinned contexts and support retraction."
+      ]
+    },
+    {
+      "id": "RE-12",
+      "epic": "RE-E2",
+      "title": "Goal-directed queries, demand specialization and safe result caching",
+      "depends": [
+        "RE-04",
+        "RE-08"
+      ],
+      "gr": [
+        47,
+        48,
+        127,
+        135
+      ],
+      "acceptance": [
+        "Expose an explicit bound-goal query API using demand/magic-set specialization with full-closure answer parity for the declared positive fragment.",
+        "Measure selective hierarchies/property chains against total materialization, with memo/cache identity pinned to source/rules/profile/dictionary.",
+        "Unsupported negation/equality/aggregate combinations fail or use a documented complete strategy; do not infer hybrid optimizer quality without benchmarks."
+      ]
+    },
+    {
+      "id": "RE-13",
+      "epic": "RE-E2",
+      "title": "Explicit query and sampler integration with intuitive reasoning APIs",
+      "depends": [
+        "RE-08",
+        "RE-12"
+      ],
+      "gr": [
+        15,
+        108,
+        132,
+        135
+      ],
+      "acceptance": [
+        "Extend existing logical graph adapters with explicit inferred-query and relation-expansion options; specify distinct endpoints versus paths/edges and fanout accounting.",
+        "Design opt-in Cypher and immutable sampler-snapshot integration against #127; no hidden rewrites, array mutation or weight/path multiplicity changes.",
+        "Publish tested standalone, claims, compliance and inferred-neighbor examples with missing-extra errors, provenance inspection and existing API compatibility."
+      ]
+    },
+    {
+      "id": "RE-14",
+      "epic": "RE-E3",
+      "title": "Recoverable materialization generations and compare-and-publish",
+      "depends": [
+        "RE-01",
+        "RE-05",
+        "RE-06"
+      ],
+      "gr": [
+        10,
+        82,
+        120,
+        124,
+        135,
+        136
+      ],
+      "acceptance": [
+        "Design versioned staged generations and atomic old-or-new visibility bound to input/rule/policy/dictionary identities; no stale closure publication.",
+        "Shorten writer-lock duration only through verified compare-and-publish; define retries, concurrent writer behavior, durability/fsync and reader generation retention.",
+        "Add explicit audited recovery/garbage-collection consent for interrupted nontransactional writes and fault injection; address #154 without silent index repair."
+      ]
+    },
+    {
+      "id": "RE-15",
+      "epic": "RE-E3",
+      "title": "Bounded maintenance provenance, reverse dependencies and insertion propagation",
+      "depends": [
+        "RE-04",
+        "RE-14"
+      ],
+      "gr": [
+        73,
+        74,
+        76,
+        77,
+        78,
+        83,
+        50
+      ],
+      "acceptance": [
+        "Define finite independent-support identity and indexed premise/rule dependencies separate from bounded witness DAGs; prevent recursive path enumeration.",
+        "Implement changed-predicate insertion propagation and counts where valid, with evidence duplicate handling and support/output budgets.",
+        "Preserve alternative sources and exact rule/premise versions; incomplete maintenance metadata invalidates the generation or triggers explicit rematerialization."
+      ]
+    },
+    {
+      "id": "RE-16",
+      "epic": "RE-E3",
+      "title": "Recursive support-safe deletion and rule-change invalidation",
+      "depends": [
+        "RE-15",
+        "RE-10",
+        "RE-11"
+      ],
+      "gr": [
+        74,
+        78,
+        79,
+        80,
+        83,
+        88
+      ],
+      "acceptance": [
+        "Implement DRed or proven equivalent; counts alone cannot preserve unsupported recursive SCCs. Full rematerialization remains a correct explicit fallback.",
+        "Handle final-support loss, duplicate evidence, cycles, equality splits, lower-stratum negation invalidation and changed rules with randomized oracle comparison.",
+        "Measure affected-work versus complete rebuild and document crossover; B/F is a conditional alternative, not a mandatory second deletion engine."
+      ]
+    },
+    {
+      "id": "RE-17",
+      "epic": "RE-E3",
+      "title": "Pinned indexed rule catalog and opt-in legacy evaluator migration",
+      "depends": [
+        "RE-14",
+        "RE-15",
+        "RE-16"
+      ],
+      "gr": [
+        42,
+        73,
+        75,
+        77,
+        83,
+        135
+      ],
+      "acceptance": [
+        "Bind rule-catalog digest and fact horizon together; introduce indexed version catalog/generation migration without breaking historical rule versions.",
+        "Adapt legacy run_rules/maintain_truth only after parity in interval selection, all-support justifications, limits, IDs and publication; do not substitute a witness-only evaluator.",
+        "Keep compatibility path available until regression/packaging gates pass and document any deliberate versioned API differences."
+      ]
+    },
+    {
+      "id": "RE-18",
+      "epic": "RE-E3",
+      "title": "Incremental workload gates and live-reasoning user workflows",
+      "depends": [
+        "RE-16",
+        "RE-17"
+      ],
+      "gr": [
+        126,
+        128,
+        129,
+        130,
+        131,
+        133,
+        134,
+        136
+      ],
+      "acceptance": [
+        "Test crashes at every generation boundary, cancellation, cross-handle/process writers, stale plan rejection and orphan recovery on capability-supported backends.",
+        "Benchmark small/large inserts, support-removing retractions, rule revision and redundant cycles with P50/P95, RSS, persisted supports and write amplification.",
+        "Ship repeatable update/audit examples with explicit incremental versus rebuild diagnostics; no correctness trade for latency."
+      ]
+    },
+    {
+      "id": "RE-19",
+      "epic": "RE-E4",
+      "title": "Storage-neutral interval-set algebra and support-segment contracts",
+      "depends": [
+        "RE-01",
+        "RE-15"
+      ],
+      "gr": [
+        98,
+        99,
+        101,
+        103,
+        104,
+        105,
+        106,
+        108
+      ],
+      "acceptance": [
+        "Define bounded disjoint half-open interval unions, intersection/difference and support-qualified coalescing including unbounded ends and instant precision.",
+        "Keep logical truth coalescing distinct from support-history segments; never replace disjoint intervals with a min/max envelope.",
+        "Property-test gaps, touching boundaries, corrections and context partitioning; prototype scalar algebra before optional Polars/native interval operators."
+      ]
+    },
+    {
+      "id": "RE-20",
+      "epic": "RE-E4",
+      "title": "Complete time-range closure with temporal proofs and equality scope",
+      "depends": [
+        "RE-19",
+        "RE-08",
+        "RE-11"
+      ],
+      "gr": [
+        101,
+        104,
+        105,
+        106,
+        107,
+        108
+      ],
+      "acceptance": [
+        "Evaluate every supported change segment over a pinned system-time horizon, not samples at one as_of instant; union all support intersections with explicit budgets.",
+        "Compare range answers against independent change-point point evaluation; retain exact evidence per interval and reject unsupported temporal negation/equality combinations.",
+        "Make equality representatives time-scoped or rebuild at change points; do not globally merge entities equal only during one interval."
+      ]
+    },
+    {
+      "id": "RE-21",
+      "epic": "RE-E4",
+      "title": "Temporal delta maintenance and recoverable interval publication",
+      "depends": [
+        "RE-16",
+        "RE-20",
+        "RE-14"
+      ],
+      "gr": [
+        82,
+        103,
+        104,
+        107,
+        120,
+        124,
+        135,
+        136
+      ],
+      "acceptance": [
+        "Propagate changed validity ranges with support-aware deletion, safe full-range fallback and point/range update parity.",
+        "Publish managed interval generations with no unsupported gap filling and exact source/rule identities; preserve existing single-quantum reconcile_point behavior.",
+        "Test interruptions, stale inputs, equality splits and correction/retraction/resurrection; coordinate interval and locking follow-ups in #154."
+      ]
+    },
+    {
+      "id": "RE-22",
+      "epic": "RE-E4",
+      "title": "Temporal conformance, performance gates and historical audit examples",
+      "depends": [
+        "RE-20",
+        "RE-21"
+      ],
+      "gr": [
+        75,
+        98,
+        99,
+        100,
+        101,
+        126,
+        128,
+        129,
+        130,
+        131,
+        133,
+        134,
+        135
+      ],
+      "acceptance": [
+        "Publish supported temporal/profile combinations and independently verify range closure, system-time replay and provenance with disjoint/overlapping supports.",
+        "Benchmark interval fragmentation, changes, limits and extraction separately; failure exposes no successful partial interval result or generation.",
+        "Provide intuitive when/why workflows and runnable historical compliance examples on supported backend capabilities."
+      ]
+    },
+    {
+      "id": "RE-23",
+      "epic": "RE-E5",
+      "title": "Gated ontology profile expansion and validation coverage",
+      "depends": [
+        "RE-09",
+        "RE-11",
+        "RE-22"
+      ],
+      "gr": [
+        45,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        92,
+        94,
+        96,
+        129,
+        132
+      ],
+      "acceptance": [
+        "Build construct-by-construct semantics/conformance matrix for remaining RL-compatible Boolean/value/universal restrictions, datatype/key/cardinality and shape checks.",
+        "Separate directional Horn rewrites from unsupported disjunctive heads, validation from entailment and satisfiability from class-conflict detection.",
+        "Approve each extension before implementation; complete OWL RL is a target only when all normative applicable rules/restrictions are independently covered, otherwise publish named subsets."
+      ]
+    },
+    {
+      "id": "RE-24",
+      "epic": "RE-E5",
+      "title": "Bounded existential and OWL EL classification feasibility",
+      "depends": [
+        "RE-23"
+      ],
+      "gr": [
+        46,
+        66,
+        71,
+        72
+      ],
+      "acceptance": [
+        "Evaluate consequence-based classification separately from generating witnesses; specify witness identity, termination/chase conditions and strict budgets before implementation.",
+        "Retain full OWL DL as explicitly deferred research with no JVM adapter, no dependency on it for earlier phase completion.",
+        "Use dedicated experimental profiles and independent oracle/termination tests; reject unsupported anonymous constructions rather than silently approximate them."
+      ]
+    },
+    {
+      "id": "RE-25",
+      "epic": "RE-E5",
+      "title": "Explicit cross-context, temporal-modal and confidence semantics",
+      "depends": [
+        "RE-22"
+      ],
+      "gr": [
+        85,
+        94,
+        97,
+        102,
+        109,
+        110,
+        111
+      ],
+      "acceptance": [
+        "Specify authorized cross-world/context inheritance and temporal-modal boundaries without changing existing bounded modal API semantics implicitly.",
+        "Treat confidence/fuzzy/probabilistic combination as separately selected calculi, not logical truth or accidental multiplication; coordinate #124 and #128.",
+        "Retain as design-gated extensions until combination, retraction, convergence and provenance policies have independent tests and a user-value scenario."
+      ]
+    },
+    {
+      "id": "RE-26",
+      "epic": "RE-E5",
+      "title": "Benchmark-gated advanced joins, differential updates and out-of-core scale",
+      "depends": [
+        "RE-06",
+        "RE-18",
+        "RE-22"
+      ],
+      "gr": [
+        16,
+        23,
+        31,
+        32,
+        34,
+        49,
+        50,
+        80,
+        81,
+        119,
+        121,
+        122,
+        123,
+        134
+      ],
+      "acceptance": [
+        "Profile before selecting bitmap/CSR/transitive-specialized, multiway joins, adaptive parallel scheduling or external-memory arrangements; preserve common operator API.",
+        "Compare optional differential/signed updates and B/F against deployed semi-naive/DRed/rebuild crossover; do not adopt multiple runtimes without measured need.",
+        "Spill and worker execution require ownership, cancellation, disk budgets and actual RSS/thread/I/O measurements; no universal constant-memory or zero-copy promises."
+      ]
+    },
+    {
+      "id": "RE-27",
+      "epic": "RE-E5",
+      "title": "Bounded minimal/ranked explanations and checkpoint/restart extensions",
+      "depends": [
+        "RE-18",
+        "RE-22"
+      ],
+      "gr": [
+        75,
+        84,
+        85,
+        93,
+        124,
+        136
+      ],
+      "acceptance": [
+        "Define bounded minimal/top-k proof contracts and export/model-output integration against #126 without confusing a chosen witness with all supports.",
+        "Checkpoint only authenticated source/rule/dictionary/profile generations; reject incompatible resumes and safely discard incomplete checkpoints.",
+        "Keep ranked probabilistic provenance separate from deterministic explanation guarantees; publish complexity/resource limitations and explicit defer decisions where appropriate."
+      ]
+    }
   ]
 }

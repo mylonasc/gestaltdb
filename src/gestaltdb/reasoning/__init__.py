@@ -12,6 +12,9 @@ Compact reference batches/dictionaries live in ``.batches`` and optional Arrow
 exchange in ``.adapters.arrow``; neither is imported by this package initializer.
 Opt-in reusable SCC schedules and indexed telemetry live in ``.plans``; detailed
 profiling is disabled by default and is separate from the default evaluator.
+Bounded extraction requests and capability records live in ``.extraction``;
+the pinned batched claim source in ``.adapters.batched`` borrows caller views,
+and ``.adapters.native`` binds audited PyRex Arrow scans as copied raw batches.
 """
 
 from .engine import DatalogEngine

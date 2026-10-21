@@ -1,0 +1,166 @@
+:orphan:
+
+Pinned batched claim extraction
+===============================
+
+``gestaltdb.reasoning.extraction`` defines storage-neutral bounded extraction
+contracts; ``gestaltdb.reasoning.adapters.batched.PinnedBatchedClaimSource``
+binds them to an explicitly supplied temporal read view. The core module is
+standard-library-only and never touches storage, clocks or network state. The
+adapter borrows the caller's view and graph and never opens secondary handles,
+initializes identity, rebuilds indexes or publishes claims.
+
+Requests, batches and capabilities
+----------------------------------------
+
+.. code-block:: python
+
+   from gestaltdb.reasoning.extraction import ExtractionCapability, ExtractionRequest, batch_evidence
+
+   request = ExtractionRequest(world="default", predicates=["knows"], subject="alice",
+                               batch_rows=256, max_rows=100_000)
+   assert request.predicates == ("knows",)
+   assert not ExtractionCapability.probe(object()).pinned_snapshot
+   try:
+       ExtractionCapability.probe(object()).require_pinned_snapshot()
+   except ValueError as error:
+       assert "no pinned read snapshot" in str(error)
+
+``ExtractionRequest`` carries predicate/binding/world selection plus explicit
+``batch_rows``/``max_rows`` budgets. ``predicates=None`` selects all predicates;
+an empty collection selects none. ``agents``/``sources`` are adapter-enforced
+selection hints. Budgets bound yielded logical rows, not RSS, snapshot history
+or wall time. ``batch_evidence`` splits any evidence stream into immutable
+``FactBatch`` values with zero-based indexes and a ``complete`` flag on the final
+batch only. It consumes at most one extra input to detect overflow or
+termination; source errors propagate and no partial batch is yielded on failure.
+
+``ExtractionCapability.probe`` describes a store object through class attributes
+only — backend name, snapshot kind, pinned/verifiable snapshot support,
+predicate-index and multiget availability, and ``native_arrow_scan``. Probing
+performs no I/O and opens no handles. Unknown backends fail closed to an
+all-False record; ``require_pinned_snapshot`` rejects unsupported snapshot
+requests with the responsible backend and kind named, instead of silently
+reading without a pinned horizon.
+
+Probed capability matrix (``main`` storage backends):
+
+.. list-table:: Probed backend capabilities
+   :header-rows: 1
+
+   * - Backend
+     - Snapshot
+     - Predicate / multiget
+   * - ``LMDBStore``
+     - ``lmdb-read-transaction``
+     - index + bulk getters
+   * - ``LevelDBStore``
+     - ``leveldb-none``
+     - index + bulk getters
+   * - ``PyRexStore(transactional=True)``
+     - ``pyrex-transaction-snapshot``
+     - index + bulk getters
+   * - ``PyRexStore`` (default) + ``pyrex-rocksdb>=0.5.0``
+     - ``pyrex-native-snapshot``
+     - index + bulk getters + ``scan_arrow``
+   * - ``PyRexStore`` (default) + older runtime
+     - ``pyrex-none``
+     - index + bulk getters
+
+LevelDB's multi-database layout exposes no pinned snapshot, so explicit snapshot
+requests fail closed there; use LMDB, transactional PyRex or a native-scan-capable
+PyRex handle when a pinned horizon is required.
+
+Native Arrow scans (``pyrex-rocksdb>=0.5.0``)
+--------------------------------------------------
+
+Release 0.5.0 (PyPI, 2026-10-20) implements the requested ``scan_arrow`` /
+``Snapshot`` contract on plain non-transactional handles, verified by direct
+audit rather than assumed from the proposal:
+
+- ``db.scan_arrow(prefix=, start=, stop=, batch_size=, max_batch_bytes=,
+  read_options=, snapshot=, allow_overflow=)`` streams single-consumer Arrow
+  RecordBatches with fixed ``key: binary / value: binary`` (non-null) columns;
+  empty scans still expose the schema. ``start`` is inclusive, ``stop`` exclusive;
+  ``start > stop`` fails upfront with ``ValueError``. ``max_batch_bytes`` counts
+  payload plus offset overhead; oversized single records raise unless
+  ``allow_overflow=True`` emits them alone.
+- ``db.create_snapshot()`` pins a consistent view shareable across scans
+  (``scan_arrow(snapshot=snap)``); writes after pinning stay invisible to old
+  snapshots while fresh scans see them. Snapshots expose an integer
+  ``sequence_number`` and ``is_valid()``; release is idempotent. Foreign snapshots
+  fail closed with a native error. ``TransactionDB`` (transactional mode) exposes
+  neither entry point in 0.5.0, so native scans require plain handles.
+- Re-exporting a stream raises; readers must be consumed once and scans closed
+  explicitly. Consumed batches are copied out of Arrow buffers, so rows outlive
+  scans, readers, snapshots and database handles.
+
+``gestaltdb.reasoning.adapters.native.NativeKeyScan`` binds this contract:
+single-use bounded iteration over caller-chosen key ranges with exact row
+accounting, snapshot validity checks before/during/after, owned-snapshot release
+on exhaustion, error or close, and ``ReasoningError`` wrapping (native type
+chained) so callers never import PyRex exception types. Detection is
+capability-based — ``PyRexStore.has_native_arrow_scan()`` plus a
+``pyrex-rocksdb>=0.5.0`` version gate — never a version assumption. Decoding raw
+KV pairs into facts, mapping predicates and authenticating graph visibility stay
+explicit caller/adapter work; this primitive removes Python row processing from
+KV extraction, not from payload decoding.
+
+Measured at 2000 small rows, the Python iterator is still faster
+(~2.4M vs ~1.2M rows/s warm); the native path pays per-batch Arrow overhead that
+only amortizes at larger scans. No throughput speedup is claimed at this scale —
+the value is bounded memory, snapshot sharing across scans and no per-row Python
+work. Larger-scale and decoded-extraction measurements remain follow-up work
+(see the roadmap techdebt item), not implied results.
+
+Batched claim source
+----------------------------------------
+
+.. code-block:: python
+
+   from gestaltdb.reasoning.adapters.batched import PinnedBatchedClaimSource
+   from gestaltdb.reasoning.extraction import ExtractionRequest
+
+   # ``view`` is a caller-managed temporal GraphReadView; ``selection`` and
+   # ``mapping`` are the usual explicit claim policy values.
+   request = ExtractionRequest(world="default", batch_rows=256, max_rows=100_000)
+   # with PinnedBatchedClaimSource(view, request=request, ontology_revision=rev,
+   #                               selection=selection, mapping=mapping) as source:
+   #     for batch in source.iter_batches():
+   #         ...  # bounded Evidence tuples with exact version-ID references
+   #     profile = source.profile
+
+The source verifies snapshot authentication before the first batch, re-checks the
+view binding per record, and verifies again after the final batch. Closing the
+source invalidates its iterators, never the caller's view or graph. A single
+predicate — optionally with a subject binding — is pushed to the existing indexed
+claim query; all other selection filters in Python, with the actual pushdown mode
+(``predicate``, ``predicate+subject`` or ``none``) recorded in the profile.
+``source.profile`` reports batches, rows, pre-filter scanned versions,
+verification count and pushdown mode for the most recent completed pass; a new
+pass rebuilds it. Row budgets fail closed mid-stream without partial publication;
+``evaluate`` reuses the default engine over the flattened batches and returns the
+usual context-bound ``ClaimReasoningResult``. Capability access is read-only
+metadata: it never snapshots data by itself.
+
+Measurements
+----------------------------------------
+
+From a source checkout, compare the existing single-pass iterator with bounded
+batched extraction on LMDB and LevelDB, plus the raw Python-iterator vs native
+Arrow scan on a throwaway PyRex database (skipped without ``pyrex``/``pyarrow``)::
+
+   uv run --with lmdb --with plyvel --with 'pyrex-rocksdb==0.5.0' --with pyarrow python -m benchmarks.reasoning_extraction --rows 2000 --repeats 2 --output /tmp/opencode/reasoning-extraction.json
+
+The runner asserts identical evidence sets, exact batch accounting, deterministic
+repeat passes and fail-closed row budgets, then records rows/s, batch/profile
+counters, capability records and full-worker RSS. The committed
+``benchmarks/results/reasoning-re05-extraction.json`` (clean source, Python 3.13,
+two repeats) reports about 629 vs 612 rows/s (single vs batched) on LMDB and
+812 vs 772 rows/s on LevelDB, with eight 256-row batches and five verifications
+per pass; the native scan row shows warm Python-iterator vs native throughput on
+raw KV pairs at the same scale. Batching adds bounded memory and explicit
+verification — not higher throughput. These are small synthetic transfer
+observations, not production-scale, proof-mode or incremental-update claims.
+Persistent generation maintenance and decoded native extraction remain later
+roadmap work.

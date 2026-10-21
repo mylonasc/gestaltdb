@@ -94,6 +94,8 @@ Recognized derived claims are excluded unless deliberately opted in. The source
 does not initialize identity, rebuild indexes or publish results. A point result
 does not justify an unbounded validity interval. Raw evidence iteration alone is
 not a context-bound atomic evaluation; use the adapter's ``evaluate`` method.
+For bounded batched extraction with explicit budgets, capability probing and
+per-batch verification, see :doc:`reasoning-extraction`.
 
 Limits and deployment
 ---------------------------

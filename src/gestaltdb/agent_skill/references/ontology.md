@@ -53,6 +53,12 @@ with exact compilation identities, positive SCC scheduling and bounded native
 witnesses. Detailed index telemetry is optional; iteration limits count component
 rounds rather than the default global rounds. It performs no source authentication
 or publication and does not change the default evaluator.
+`gestaltdb.reasoning.adapters.batched.PinnedBatchedClaimSource` yields bounded
+`ExtractionRequest` batches with exact version-ID evidence under the same pinned
+view, recording pushdown mode and verification counts; LevelDB snapshot requests
+fail closed. `gestaltdb.reasoning.adapters.native.NativeKeyScan` consumes audited
+`scan_arrow` streams on plain PyRex handles (`pyrex-rocksdb>=0.5.0`, version-gated)
+as copied raw batches; decoding and visibility mapping stay caller-owned.
 
 - `gestaltdb.ontology.adapters.rdf`: install `gestaltdb[rdf]`; pass an in-memory
   `RDFDocument` and absolute `ontology_id` to `import_rdf`. Imports resolve only
