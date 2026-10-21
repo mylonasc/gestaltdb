@@ -12,12 +12,12 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 import time
-from typing import Iterable
+from typing import Callable, Iterable
 
 from ..batches import CompactRelation, SymbolDictionary, UINT64_MAX, _positive
 from ..model import (
     EvaluationResult, Fact, Program, ReasoningError, ReasoningLimitError,
-    ReasoningLimits, Variable,
+    ReasoningLimits, Variable, check_cancelled,
 )
 from ..protocols import Evidence, InputContext
 from ..relational import CompilationIdentity, RelationSchema
@@ -132,13 +132,15 @@ class PolarsDatalogPrototype:
 
     def evaluate(self, program: Program, facts: Iterable[Fact | Evidence], *,
                  context: InputContext, limits: ReasoningLimits,
-                 max_intermediate_rows: int = 100_000, collect_proofs: bool = False) -> PolarsRun:
+                 max_intermediate_rows: int = 100_000, collect_proofs: bool = False,
+                 cancel: Callable[[], bool] | None = None) -> PolarsRun:
         if not isinstance(program, Program) or not isinstance(limits, ReasoningLimits):
             raise ReasoningError("Program and ReasoningLimits required")
         if not isinstance(context, InputContext):
             raise ReasoningError("context must be an InputContext")
         if not isinstance(collect_proofs, bool) or collect_proofs:
             raise ReasoningError("Polars prototype does not support witness/proof collection")
+        check_cancelled(cancel)
         _positive(max_intermediate_rows, "max_intermediate_rows")
         if len(program.rules) > limits.max_rules:
             raise ReasoningLimitError("max_rules exceeded")
@@ -152,6 +154,8 @@ class PolarsDatalogPrototype:
         for count, value in enumerate(iterator, 1):
             if count > limits.max_input_facts:
                 raise ReasoningLimitError("max_input_facts exceeded")
+            if count % 1024 == 0:
+                check_cancelled(cancel)
             fact = value.fact if isinstance(value, Evidence) else value
             if not isinstance(fact, Fact):
                 raise ReasoningError("Fact or Evidence required")
@@ -195,6 +199,9 @@ class PolarsDatalogPrototype:
         delta, iterations = full.copy(), 0
         start = time.perf_counter()
         while delta:
+            # Native operators run to completion once launched; cancellation is
+            # honored between rounds, never by interrupting a running kernel.
+            check_cancelled(cancel)
             active = [(rule, pivot, variables) for predicate in sorted(delta)
                       for rule, pivot, variables in dispatch.get(predicate, ())
                       if all(atom.predicate in full for atom in rule.body)]

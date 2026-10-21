@@ -11,7 +11,21 @@ import hashlib
 import json
 from dataclasses import dataclass
 from bisect import bisect_left, bisect_right
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
+
+
+def check_cancelled(cancel: Callable[[], bool] | None) -> None:
+    """Raise ``ReasoningCancelledError`` when a cooperative cancel fires.
+
+    ``None`` disables cancellation. Non-callable tokens fail closed at the
+    first check. Exceptions raised by the token itself propagate unchanged.
+    """
+    if cancel is None:
+        return
+    if not callable(cancel):
+        raise ReasoningError("cancel must be a callable returning a boolean or None")
+    if cancel():
+        raise ReasoningCancelledError("evaluation was cancelled; no partial result is available")
 
 if TYPE_CHECKING:
     from .proofs import Explanation, ProofTrace
@@ -23,6 +37,13 @@ class ReasoningError(ValueError):
 
 class ReasoningLimitError(ReasoningError):
     """An inference bound was exceeded; no complete result is available."""
+
+
+class ReasoningCancelledError(ReasoningError):
+    """Cooperative cancellation was requested; no complete result is available.
+
+    Cancellation never yields a partial closure and never poisons later runs.
+    """
 
 
 def _text(value: object, name: str) -> str:

@@ -330,6 +330,22 @@ Polars, Clingo, OWL-RL and PyRex 0.5.0 available. Sphinx warnings-as-errors,
 documentation drift, modular examples and the full roadmap/evidence validator
 passed. The prepared path note above belongs to RE-04; this slice changes no
 evaluator semantics. Python 3.10–3.13/fuzz CI is tracked in #193.
+RE-05 subsequently passed all checks and merged into the second integration
+branch at `0b9f32d`; #166 is closed. No main merge/release occurred.
+
+### Implementation started: RE-06 (#167)
+
+Dedicated worktree `re-06-executors`, branch `feature/re-06-executors`, based on
+accepted RE-05 integration `0b9f32d` (all of RE-03/RE-04/RE-05 integrated, so the
+executor decision rests on final phase evidence). Deterministic
+`select_executor` keeps `indexed-python-v1` as the reference default, honors
+explicit `indexed-scc-v1`/`polars-prototype-v1` requests, routes proofs to
+indexed engines and fails closed on unknown profiles/preferences. Cooperative
+`cancel` raises `ReasoningCancelledError` without partial results across the
+indexed, planned, Polars and adapter evaluation paths; running native kernels
+are never interrupted, and hard deadlines stay a worker-isolation concern. No
+bespoke C++/Rust kernel and no spill: recorded defer with revisit triggers,
+not missing delivery. See `docs/reasoning-executors.rst`.
 
 RE-03 local validation: **1632 passed, 199 skipped** with LMDB/LevelDB, Arrow,
 Polars, Clingo and OWL-RL available. Sphinx warnings-as-errors, documentation drift

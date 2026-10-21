@@ -9,7 +9,7 @@ anything else filters in Python with the pushdown mode recorded in the profile.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Callable, Iterator
 
 from ...epistemic import Claim, ClaimObjectKind, ClaimPolarity
 from ...ontology.compiler import CompiledOntology
@@ -201,7 +201,7 @@ class PinnedBatchedClaimSource:
 
     def evaluate(
         self, compiled: CompiledOntology, *, limits: ReasoningLimits,
-        collect_proofs: bool = False,
+        collect_proofs: bool = False, cancel: Callable[[], bool] | None = None,
     ) -> ClaimReasoningResult:
         if not isinstance(compiled, CompiledOntology) or compiled.revision_id != self.context.ontology_revision:
             raise ProvenanceMismatchError("compiled ontology does not match the source revision")
@@ -212,7 +212,7 @@ class PinnedBatchedClaimSource:
                 yield from batch.evidence
 
         result = DatalogEngine().evaluate(compiled.program, flattened(), limits=limits,
-                                          collect_proofs=collect_proofs)
+                                          collect_proofs=collect_proofs, cancel=cancel)
         self.verify_source()
         return ClaimReasoningResult(self.context, self._provenance, compiled,
                                     self._selection, self._mapping, result)

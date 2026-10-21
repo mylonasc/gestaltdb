@@ -10,10 +10,10 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from heapq import heappop, heappush
-from typing import Iterable
+from typing import Callable, Iterable
 
 from .engine import _Budget, _Index, _matches, _value
-from .model import EvaluationResult, Fact, Program, ReasoningError, ReasoningLimitError, ReasoningLimits, Variable
+from .model import EvaluationResult, Fact, Program, ReasoningError, ReasoningLimitError, ReasoningLimits, Variable, check_cancelled
 from .proofs import _ProofCollector
 from .protocols import Evidence
 from .relational import CompilationIdentity, _digest
@@ -302,7 +302,8 @@ class PlannedDatalogEngine:
 
     def evaluate(self, plan: PreparedProgram, facts: Iterable[Fact | Evidence], *,
                  identity: CompilationIdentity, limits: ReasoningLimits,
-                 collect_proofs: bool = False, collect_telemetry: bool = False) -> PlannedRun:
+                 collect_proofs: bool = False, collect_telemetry: bool = False,
+                 cancel: Callable[[], bool] | None = None) -> PlannedRun:
         if not isinstance(plan, PreparedProgram) or not isinstance(limits, ReasoningLimits):
             raise ReasoningError("PreparedProgram and ReasoningLimits required")
         plan.identity.require_compatible(identity)
@@ -310,6 +311,7 @@ class PlannedDatalogEngine:
             raise ReasoningError("collect_proofs must be a bool")
         if not isinstance(collect_telemetry, bool):
             raise ReasoningError("collect_telemetry must be a bool")
+        check_cancelled(cancel)
         program = plan.program
         if len(program.rules) > limits.max_rules:
             raise ReasoningLimitError("max_rules exceeded")
@@ -322,6 +324,8 @@ class PlannedDatalogEngine:
         for count, value in enumerate(iterator, 1):
             if count > limits.max_input_facts:
                 raise ReasoningLimitError("max_input_facts exceeded")
+            if count % 1024 == 0:
+                check_cancelled(cancel)
             fact = value.fact if isinstance(value, Evidence) else value
             if not isinstance(fact, Fact):
                 raise ReasoningError("facts must contain Fact or Evidence")
@@ -350,6 +354,7 @@ class PlannedDatalogEngine:
             # seed the first pass; later passes use only this component's delta.
             delta, local_rounds = full, 0
             while delta.facts:
+                check_cancelled(cancel)
                 active = [(rule, position) for predicate in sorted(dispatch.keys() & delta.by_predicate.keys())
                           for rule, position in dispatch.get(predicate, ())
                           if all(atom.predicate in full.by_predicate for atom in rule.body)]

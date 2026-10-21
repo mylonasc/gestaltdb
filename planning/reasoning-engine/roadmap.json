@@ -58,6 +58,12 @@
       "branch": "feature/re-04-plans",
       "worktree": "re-04-plans",
       "validation": "1673 passed, 199 skipped; docs/Sphinx/examples/roadmap validator passed; 144 verified first/reuse rows; Python 3.10-3.13 and fuzz CI passed."
+    },
+    "RE-06": {
+      "status": "in-progress",
+      "branch": "feature/re-06-executors",
+      "worktree": "re-06-executors",
+      "contract": "docs/reasoning-executors.rst"
     }
   },
   "source_sha256": {
