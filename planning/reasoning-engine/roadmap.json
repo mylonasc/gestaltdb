@@ -133,12 +133,21 @@
       "integration_commit": "8034231"
     },
     "RE-14": {
-      "status": "in-review",
+      "status": "integrated",
       "branch": "feature/re-14-generations",
       "worktree": "re-14-generations",
       "contract": "docs/reasoning-generations.rst",
       "pr": 204,
-      "validation": "Focused suites (generations/expansion/contracts) green; docs drift, Sphinx -W, roadmap validator passed. PR CI running."
+      "validation": "Focused suites green; docs drift, Sphinx -W, roadmap validator passed; Python 3.10-3.13 and fuzz CI passed.",
+      "integration_commit": "ea38931"
+    },
+    "RE-15": {
+      "status": "in-review",
+      "branch": "feature/re-15-provenance",
+      "worktree": "re-15-provenance",
+      "contract": "docs/reasoning-maintenance.rst",
+      "pr": 205,
+      "validation": "Focused suites (maintenance/contracts) green; docs drift, Sphinx -W, roadmap validator passed. PR CI running."
     }
   },
   "source_sha256": {

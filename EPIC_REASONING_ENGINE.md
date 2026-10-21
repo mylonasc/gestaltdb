@@ -494,3 +494,13 @@ point generations with identity-bound base fingerprints, compare-and-publish
 under a short writer guard, explicit retry on `GenerationStaleError`, and
 consent-gated orphan audit/reclaim. No silent repair; durability follows the
 existing temporal commit path.
+
+### Implementation started: RE-15 (#176)
+
+Dedicated worktree `re-15-provenance`, branch `feature/re-15-provenance`,
+based on accepted integration `ea38931` (RE-14 integrated; prerequisites
+RE-04/RE-14 satisfied). Finite independent supports with forward/reverse
+dependency index bound to program digest + fact horizon; changed-predicate
+insertion propagation with duplicate handling and support/output/work
+budgets; stale generations fail closed demanding rematerialization. Deletion
+and rule-change invalidation stay in RE-16.
