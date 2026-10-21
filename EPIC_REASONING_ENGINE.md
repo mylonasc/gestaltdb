@@ -436,3 +436,13 @@ generation stays deferred to RE-11 and the closure stands unchanged
 (paraconsistent evidence, never classical explosion). M2 adds a static
 unsatisfiable-class check plus measured cost evidence. Domain/range
 entailment remains compiler business; SHACL-style full shapes stay out.
+
+### Implementation started: RE-10 (#171)
+
+Dedicated worktree `re-10-negation`, branch `feature/re-10-negation`, based on
+accepted integration `684d7a8` (RE-07/RE-09 integrated). Scoped closed-world
+negation on the generic engine: `negated` atoms with program-level `closed`
+declarations, constructor-checked stratification, per-component fixpoints with
+exact anti-joins and scope/horizon-carrying absence witnesses. Incremental
+invalidation stays in RE-16; recomputation is the explicit fallback. Coordinates
+#125.

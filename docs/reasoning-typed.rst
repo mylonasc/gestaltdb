@@ -102,3 +102,6 @@ for positional indexing with no filter work to amortize it; see
 offers no witnesses and no incremental maintenance; those remain with the
 binary engine and its single-witness traces. Recursive and lattice
 aggregation stay explicitly deferred.
+
+Scoped negation lives in :doc:`reasoning-negation`: explicit closed predicate
+sets, stratified anti-joins and scope-carrying absence witnesses.
