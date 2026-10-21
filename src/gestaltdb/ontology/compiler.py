@@ -6,9 +6,9 @@ from dataclasses import dataclass
 
 from ..reasoning.model import Atom, Program, Rule, Variable
 from .model import (
-    Domain, EquivalentClasses, EquivalentProperties, InverseOf, Ontology,
-    OntologyError, Range, SubClassOf, SubPropertyOf, Symmetric,
-    Transitive, TYPE_PREDICATE, _identifier,
+    Domain, EquivalentClasses, EquivalentProperties, IntersectionSubClassOf, InverseOf, Ontology,
+    OntologyError, PropertyChain, Range, Reflexive, SubClassOf, SubPropertyOf, Symmetric,
+    Transitive, UnionSubClassOf, TYPE_PREDICATE, _identifier,
 )
 
 
@@ -97,6 +97,17 @@ def compile_ontology(ontology: Ontology) -> CompiledOntology:
             add([Atom(x, axiom.property, y)], Atom(y, axiom.property, x))
         elif isinstance(axiom, Transitive):
             add([Atom(x, axiom.property, y), Atom(y, axiom.property, z)], Atom(x, axiom.property, z))
+        elif isinstance(axiom, PropertyChain):
+            add([Atom(x, axiom.first, y), Atom(y, axiom.second, z)], Atom(x, axiom.result, z))
+        elif isinstance(axiom, IntersectionSubClassOf):
+            add([Atom(x, TYPE_PREDICATE, member) for member in axiom.members],
+                Atom(x, TYPE_PREDICATE, axiom.superclass))
+        elif isinstance(axiom, UnionSubClassOf):
+            for index, member in enumerate(axiom.members):
+                add([Atom(x, TYPE_PREDICATE, member)],
+                    Atom(x, TYPE_PREDICATE, axiom.superclass), f"union-{index}")
+        elif isinstance(axiom, Reflexive):
+            add([Atom(x, TYPE_PREDICATE, axiom.scope)], Atom(x, axiom.property, x))
         else:
             # Ontology validation is strict; retain a fail-closed guard if the
             # model's supported set is expanded without compiler support.
