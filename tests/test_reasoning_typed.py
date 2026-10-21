@@ -5,15 +5,21 @@ import itertools
 import pytest
 
 from gestaltdb.reasoning.model import ReasoningCancelledError, ReasoningError, ReasoningLimitError, ReasoningLimits
-from gestaltdb.reasoning.terms import Literal
+from gestaltdb.reasoning.terms import Literal, compare
 from gestaltdb.reasoning.typed import (
+    AggregateRule,
+    Aggregation,
     Comparison,
     GenericEngine,
     GenericProgram,
     GenericResult,
     GenericRule,
+    MultiHeadRule,
     TypedAtom,
     TypedFact,
+    expand_predicate_variables,
+    normalize_program,
+    predicate_domain,
 )
 from gestaltdb.reasoning.model import Variable
 
@@ -32,12 +38,13 @@ def test_typed_rule_validation_is_range_restricted_and_predicate_safe():
     assert good.filters[0].variables == frozenset([X])
     with pytest.raises(ReasoningError, match="filter variables"):
         GenericRule("r", [TypedAtom("p", [X])], [Comparison("<", Y, Literal("integer", 1))], TypedAtom("q", [X]))
-    with pytest.raises(ReasoningError):
+    with pytest.raises(ReasoningError, match="head variables"):
         GenericRule("r", [TypedAtom("p", [X])], [], TypedAtom("q", [Y]))
-    with pytest.raises(ReasoningError, match="predicate variables"):
-        GenericRule("r", [TypedAtom("p", [X]), TypedAtom(Variable("w"), [X, Y])], [], TypedAtom("q", [X]))
-    with pytest.raises(ReasoningError, match="constant"):
-        GenericRule("r", [TypedAtom("p", [X])], [], TypedAtom(Variable("w"), [X]))
+    template = GenericRule("t", [TypedAtom(Variable("w"), [X, Y])], [], TypedAtom("q", [X]))
+    with pytest.raises(ReasoningError, match="unexpanded"):
+        GenericProgram([template])
+    with pytest.raises(ReasoningError, match="not also occur as a term"):
+        GenericRule("bad", [TypedAtom(Variable("w"), [X, Variable("w")])], [], TypedAtom("q", [X]))
     with pytest.raises(ReasoningError):
         GenericRule("r", [], [], TypedAtom("q", [X]))
     with pytest.raises(ReasoningError, match="op"):
@@ -85,6 +92,125 @@ def test_witness_rejection_limits_cancellation_and_input_validation():
     with pytest.raises(ReasoningError):
         GenericEngine().evaluate([], [], limits=ReasoningLimits())
     assert evaluate([], []).facts == ()
+
+
+def test_multi_head_normalization_preserves_closure_and_rejects_bad_heads():
+    multi = MultiHeadRule("both", [TypedAtom("p", [X, Y])], [],
+                          [TypedAtom("q", [X, Y]), TypedAtom("r", [Y, X])])
+    singles = multi.normalize()
+    assert [rule.rule_id for rule in singles] == ["both#0", "both#1"]
+    assert all(isinstance(rule, GenericRule) for rule in singles)
+    facts = [TypedFact("p", ["a", "b"])]
+    assert set(evaluate(singles, facts).facts) == set(
+        evaluate(normalize_program([multi]).rules, facts).facts)
+    assert TypedFact("q", ["a", "b"]) in evaluate(normalize_program([multi]).rules, facts)
+    assert TypedFact("r", ["b", "a"]) in evaluate(normalize_program([multi]).rules, facts)
+    mixed = normalize_program([multi, GenericRule("id", [TypedAtom("p", [X])], [], TypedAtom("s", [X]))])
+    assert len(mixed.rules) == 3
+    with pytest.raises(ReasoningError, match="at least one head"):
+        MultiHeadRule("empty", [TypedAtom("p", [X])], [], [])
+    with pytest.raises(ReasoningError, match="repeat"):
+        MultiHeadRule("dup", [TypedAtom("p", [X])], [], [TypedAtom("q", [X]), TypedAtom("q", [X])])
+    with pytest.raises(ReasoningError, match="head variables"):
+        MultiHeadRule("bad", [TypedAtom("p", [X])], [], [TypedAtom("q", [X]), TypedAtom("r", [Z])]).normalize()
+    with pytest.raises(ReasoningError, match="unique"):
+        normalize_program([multi, multi])
+    with pytest.raises(ReasoningError):
+        normalize_program(["not-a-rule"])
+    with pytest.raises(ReasoningError):
+        normalize_program(None)
+
+
+def test_aggregate_stratum_computes_grouped_statistics_once():
+    W, T, U = Variable("w"), Variable("t"), Variable("u")
+    facts = [TypedFact("emp", ["a", Literal("integer", 30)]),
+             TypedFact("emp", ["b", Literal("integer", 12)]),
+             TypedFact("emp", ["c", Literal("integer", 24)])]
+    program = GenericProgram(
+        [],
+        [AggregateRule("stats", [TypedAtom("emp", [X, Y])], [],
+                       [Aggregation("count", X, W), Aggregation("sum", Y, T), Aggregation("min", Y, U)],
+                       TypedAtom("stats", [W, T, U]))],
+    )
+    assert program.digest != GenericProgram([], []).digest
+    result = GenericEngine().evaluate(program, facts, limits=ReasoningLimits())
+    assert TypedFact("stats", [Literal("integer", 3), Literal("integer", 66), Literal("integer", 12)]) in result
+    assert result.iterations == 1
+
+def test_aggregates_are_stratified_single_pass_and_type_strict():
+    T = Variable("t")
+    facts = [TypedFact("sale", ["store-a", Literal("integer", 10)]),
+             TypedFact("sale", ["store-a", Literal("integer", 20)]),
+             TypedFact("sale", ["store-b", Literal("integer", 5)]),
+             TypedFact("sale", ["store-c", Literal("null", None)])]
+    totals = AggregateRule("totals", [TypedAtom("sale", [X, Y])], [X],
+                           [Aggregation("sum", Y, T), Aggregation("max", Y, Z)],
+                           TypedAtom("total", [X, T, Z]))
+    counts = AggregateRule("counts", [TypedAtom("sale", [X, Y])], [X],
+                           [Aggregation("count", Y, T)], TypedAtom("n", [X, T]))
+    result = GenericEngine().evaluate(GenericProgram([], [totals, counts]), facts,
+                                      limits=ReasoningLimits())
+    assert TypedFact("total", ["store-a", Literal("integer", 30), Literal("integer", 20)]) in result
+    assert TypedFact("total", ["store-b", Literal("integer", 5), Literal("integer", 5)]) in result
+    assert TypedFact("n", ["store-a", Literal("integer", 2)]) in result
+    assert TypedFact("n", ["store-c", Literal("integer", 1)]) in result
+    assert not [fact for fact in result.facts if fact.predicate == "total" and fact.values[0] == "store-c"]
+    assert result.iterations == 1
+    assert evaluate([], []).iterations == 0
+    with pytest.raises(ReasoningError, match="sink"):
+        GenericProgram([GenericRule("back", [TypedAtom("total", [X])], [], TypedAtom("loop", [X]))],
+                       [totals])
+    with pytest.raises(ReasoningError, match="non-recursive"):
+        GenericProgram([], [totals, AggregateRule("other", [TypedAtom("total", [X, Y, Z])], [X],
+                                                   [Aggregation("count", X, T)], TypedAtom("other", [X, T]))])
+    with pytest.raises(ReasoningError, match="count/sum/min/max"):
+        AggregateRule("bad", [TypedAtom("sale", [X, Y])], [X],
+                      [Aggregation("bogus", Y, T)], TypedAtom("bad", [X, T]))
+    with pytest.raises(ReasoningError, match="distinct|fresh|source|group|unsafe"):
+        AggregateRule("bad", [TypedAtom("sale", [X, Y])], [Z],
+                      [Aggregation("count", Y, T)], TypedAtom("bad", [X, T]))
+    bad_text = GenericProgram([], [AggregateRule("bad", [TypedAtom("sale", [X, Y])], [X],
+                                                  [Aggregation("sum", Y, T)], TypedAtom("bad", [X, T]))])
+    with pytest.raises(ReasoningError, match="integer/float"):
+        GenericEngine().evaluate(bad_text, [TypedFact("sale", ["s", Literal("text", "x")])],
+                                 limits=ReasoningLimits())
+    with pytest.raises(ReasoningError, match="NaN"):
+        GenericEngine().evaluate(bad_text, [TypedFact("sale", ["s", Literal("float", float("nan"))])],
+                                 limits=ReasoningLimits())
+    with pytest.raises(ReasoningError, match="unique"):
+        GenericProgram([], [totals, totals])
+    with pytest.raises(ReasoningError, match="aggregates must contain"):
+        GenericProgram([], ["not-a-rule"])
+
+
+def test_controlled_predicate_variables_expand_over_an_explicit_domain():
+    P = Variable("rel")
+    template = GenericRule("copy", [TypedAtom(P, [X, Y])], [], TypedAtom("mirror", [X, Y]))
+    facts = [TypedFact("knows", ["a", "b"]), TypedFact("likes", ["b", "c"])]
+    assert predicate_domain([template], facts) == ("knows", "likes", "mirror")
+    expanded = expand_predicate_variables(template, predicate_domain([template], facts))
+    assert [rule.rule_id for rule in expanded] == ["copy[rel=knows]", "copy[rel=likes]", "copy[rel=mirror]"]
+    program = GenericProgram(expanded)
+    result = GenericEngine().evaluate(program, facts, limits=ReasoningLimits())
+    assert TypedFact("mirror", ["a", "b"]) in result
+    assert TypedFact("mirror", ["b", "c"]) in result
+    assert len([fact for fact in result.facts if fact.predicate == "mirror"]) == 2
+    assert expand_predicate_variables(
+        GenericRule("plain", [TypedAtom("p", [X])], [], TypedAtom("q", [X])), ())[0].rule_id == "plain"
+    with pytest.raises(ReasoningError, match="unexpanded"):
+        GenericProgram([template])
+    with pytest.raises(ReasoningError, match="non-empty domain"):
+        expand_predicate_variables(template, [])
+    with pytest.raises(ReasoningError, match="domain predicate"):
+        expand_predicate_variables(template, ["ok", 42])
+    with pytest.raises(ReasoningError, match="not also occur as a term"):
+        GenericRule("bad", [TypedAtom(P, [X, P])], [], TypedAtom("q", [X]))
+    with pytest.raises(ReasoningError, match="iterable"):
+        expand_predicate_variables(template, None)
+    with pytest.raises(ReasoningError):
+        predicate_domain("not-rules", facts)
+    with pytest.raises(ReasoningError):
+        predicate_domain([template], ["not-a-fact"])
 
 
 def test_nary_recursion_and_repeated_atoms_match_independent_grounding():
