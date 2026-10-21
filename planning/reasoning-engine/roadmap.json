@@ -60,12 +60,23 @@
       "validation": "1673 passed, 199 skipped; docs/Sphinx/examples/roadmap validator passed; 144 verified first/reuse rows; Python 3.10-3.13 and fuzz CI passed."
     },
     "RE-06": {
-      "status": "in-review",
+      "status": "integrated",
+      "integration_commit": "79e4369",
+      "pr": 195,
       "branch": "feature/re-06-executors",
       "worktree": "re-06-executors",
       "contract": "docs/reasoning-executors.rst",
-      "pr": 195,
-      "validation": "1849 passed, 49 skipped with all extras incl. pyrex 0.5.0; docs drift, Sphinx -W, examples, roadmap validator passed. PR CI pending."
+      "validation": "1849 passed, 49 skipped with all extras incl. pyrex 0.5.0; docs drift, Sphinx -W, examples, roadmap validator passed; Python 3.10-3.13 and fuzz CI passed."
+    },
+    "RE-07": {
+      "status": "integrated",
+      "integration_commit": "15c2d78",
+      "pr": 196,
+      "branch": "feature/re-07-literals",
+      "worktree": "re-07-literals",
+      "benchmark_evidence": "benchmarks/results/reasoning-re07-typed.json",
+      "contract": "docs/reasoning-typed.rst",
+      "validation": "1864 passed, 49 skipped with all extras; docs drift, Sphinx -W, roadmap validator passed; 9 clean-revision parity/cost rows; Python 3.10-3.13 and fuzz CI passed."
     },
     "RE-08": {
       "status": "in-review",
