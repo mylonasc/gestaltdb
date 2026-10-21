@@ -445,4 +445,14 @@ negation on the generic engine: `negated` atoms with program-level `closed`
 declarations, constructor-checked stratification, per-component fixpoints with
 exact anti-joins and scope/horizon-carrying absence witnesses. Incremental
 invalidation stays in RE-16; recomputation is the explicit fallback. Coordinates
-#125.
+#125. Merged into the second integration branch at `f035847`; #171 is closed.
+
+### Implementation started: RE-11 (#172)
+
+Dedicated worktree `re-11-equality`, branch `feature/re-11-equality`, based on
+accepted integration `684d7a8` with only RE-07/RE-09 prerequisites (both
+integrated). Snapshot-local `SameAs`/`DifferentFrom`, canonical smallest-member
+representatives with alias preservation and link evidence, functional-property
+conflict detection without silent merging, inequality conflicts, explicit
+`rewrite`, scope-bound mappings and safe rebuild-on-removal. Literals never
+merge; no unique-name assumption. Temporal representatives revisit in RE-20.
