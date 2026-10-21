@@ -77,3 +77,32 @@ def test_union_members_compile_to_distinct_origin_bound_rules():
     result = evaluate(plan, [Fact("n", TYPE_PREDICATE, "B")])
     assert Fact("n", TYPE_PREDICATE, "C") in result
     assert Fact("n", TYPE_PREDICATE, "A") not in result
+
+
+def test_schema_cache_reuses_revisions_and_evicts_fifo():
+    from gestaltdb.ontology import CompiledSchemaCache
+
+    with pytest.raises(OntologyError):
+        CompiledSchemaCache(maxsize=0)
+    cache = CompiledSchemaCache(maxsize=2)
+    first = Ontology("o", [SubClassOf("A", "B")])
+    assert cache.compile(first) is cache.compile(Ontology("o", [SubClassOf("A", "B")]))
+    assert len(cache) == 1
+    second = cache.compile(Ontology("o", [SubClassOf("A", "C")]))
+    third = cache.compile(Ontology("o", [SubClassOf("A", "D")]))
+    assert len(cache) == 2
+    assert cache.compile(first) is not second and cache.compile(first).revision_id == first.revision_id
+    assert third.program == cache.compile(Ontology("o", [SubClassOf("A", "D")])).program
+    cache.clear()
+    assert len(cache) == 0
+    with pytest.raises(OntologyError):
+        cache.compile("not-an-ontology")
+
+
+def test_cached_plans_evaluate_identically():
+    from gestaltdb.ontology import CompiledSchemaCache
+
+    plan = CompiledSchemaCache().compile(Ontology("o", [PropertyChain("p", "q", "r")]))
+    facts = [Fact("a", "p", "b"), Fact("b", "q", "c")]
+    assert evaluate(plan, facts) == evaluate(compile_ontology(plan.ontology), facts)
+    assert Fact("a", "r", "c") in evaluate(plan, facts)

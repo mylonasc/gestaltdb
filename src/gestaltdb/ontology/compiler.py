@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
+from threading import Lock
 
 from ..reasoning.model import Atom, Program, Rule, Variable
 from .model import (
@@ -113,3 +115,48 @@ def compile_ontology(ontology: Ontology) -> CompiledOntology:
             # model's supported set is expanded without compiler support.
             raise OntologyError(f"unsupported axiom: {type(axiom).__name__}")
     return CompiledOntology(ontology, Program(rules), origins)
+
+
+class CompiledSchemaCache:
+    """Bounded revision-keyed cache of compiled ontologies; no evaluation.
+
+    Compilation is deterministic, so a revision hit returns the identical
+    object. Eviction is FIFO once ``maxsize`` is exceeded. A lock guards
+    concurrent callers; cached plans remain immutable and safe to share.
+    """
+
+    def __init__(self, maxsize: int = 64) -> None:
+        if isinstance(maxsize, bool) or not isinstance(maxsize, int) or maxsize < 1:
+            raise OntologyError("maxsize must be a positive integer")
+        self._maxsize = maxsize
+        self._entries: OrderedDict[str, CompiledOntology] = OrderedDict()
+        self._lock = Lock()
+
+    @property
+    def maxsize(self) -> int:
+        return self._maxsize
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._entries)
+
+    def compile(self, ontology: Ontology) -> CompiledOntology:
+        """Compile or reuse the plan bound to the ontology's revision."""
+        if type(ontology) is not Ontology:
+            raise OntologyError("ontology must be an Ontology")
+        key = ontology.revision_id
+        with self._lock:
+            hit = self._entries.get(key)
+            if hit is not None and hit.ontology == ontology:
+                self._entries.move_to_end(key)
+                return hit
+            compiled = compile_ontology(ontology)
+            self._entries[key] = compiled
+            while len(self._entries) > self._maxsize:
+                self._entries.popitem(last=False)
+            return compiled
+
+    def clear(self) -> None:
+        """Drop all cached plans; in-flight users keep immutable results."""
+        with self._lock:
+            self._entries.clear()
