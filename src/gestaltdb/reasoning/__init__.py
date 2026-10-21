@@ -24,6 +24,7 @@ exactly one evaluated snapshot. The old binary entity profile is unchanged.
 """
 
 from .engine import DatalogEngine
+from .demand import BoundGoal, DemandAnswer, SpecializationCache, answer, specialize
 from .equality import CanonicalMapping, DifferentFrom, EqualityScope, FunctionalProperty, InequalityConflict, SameAs, canonicalize
 from .executors import ExecutorDecision, ExecutorRequest, select_executor
 from .model import (
@@ -47,4 +48,5 @@ __all__ = [
     "AggregateRule", "Aggregation", "expand_predicate_variables", "normalize_program", "predicate_domain",
     "NegationWitness", "StratifiedRun",
     "Denial", "ValidationReport", "ValidationSuite", "Violation", "find_unsatisfiable", "validate",
+    "BoundGoal", "DemandAnswer", "SpecializationCache", "answer", "specialize",
 ]

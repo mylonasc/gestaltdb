@@ -110,6 +110,12 @@
       "contract": "docs/reasoning-equality.rst",
       "pr": 201,
       "validation": "1888 passed, 49 skipped with all extras; docs drift, Sphinx -W, roadmap validator passed. 100k-entity canonicalization ~0.6s. PR CI running."
+    },
+    "RE-12": {
+      "status": "in-progress",
+      "branch": "feature/re-12-demand",
+      "worktree": "re-12-demand",
+      "contract": "docs/reasoning-demand.rst"
     }
   },
   "source_sha256": {

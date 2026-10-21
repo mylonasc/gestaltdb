@@ -456,3 +456,11 @@ representatives with alias preservation and link evidence, functional-property
 conflict detection without silent merging, inequality conflicts, explicit
 `rewrite`, scope-bound mappings and safe rebuild-on-removal. Literals never
 merge; no unique-name assumption. Temporal representatives revisit in RE-20.
+
+### Implementation started: RE-12 (#173)
+
+Dedicated worktree `re-12-demand`, branch `feature/re-12-demand`, based on
+accepted integration `bf43570` (RE-04 + RE-08 integrated). Goal-directed
+demand evaluation via magic-set specialization over the positive typed
+fragment: bound-goal adornment, identity-bound specialization cache,
+full-closure parity by construction, fail-closed unsupported combinations.
