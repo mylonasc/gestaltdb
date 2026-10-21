@@ -464,3 +464,9 @@ accepted integration `bf43570` (RE-04 + RE-08 integrated). Goal-directed
 demand evaluation via magic-set specialization over the positive typed
 fragment: bound-goal adornment, identity-bound specialization cache,
 full-closure parity by construction, fail-closed unsupported combinations.
+
+RE-05, RE-08, RE-09 and RE-11 subsequently passed all checks and merged into
+the second integration branch (at `0b9f32d`, `3919287`, `684d7a8` and
+`bf43570` respectively); #166, #169, #170 and #172 are closed. RE-E1 and the
+RE-07/RE-09/RE-10/RE-11 links of RE-E2 are integrated; only RE-12/RE-13 remain
+open in RE-E2.
