@@ -436,3 +436,13 @@ generation stays deferred to RE-11 and the closure stands unchanged
 (paraconsistent evidence, never classical explosion). M2 adds a static
 unsatisfiable-class check plus measured cost evidence. Domain/range
 entailment remains compiler business; SHACL-style full shapes stay out.
+
+### Implementation started: RE-11 (#172)
+
+Dedicated worktree `re-11-equality`, branch `feature/re-11-equality`, based on
+accepted integration `684d7a8` with only RE-07/RE-09 prerequisites (both
+integrated). Snapshot-local `SameAs`/`DifferentFrom`, canonical smallest-member
+representatives with alias preservation and link evidence, functional-property
+conflict detection without silent merging, inequality conflicts, explicit
+`rewrite`, scope-bound mappings and safe rebuild-on-removal. Literals never
+merge; no unique-name assumption. Temporal representatives revisit in RE-20.
