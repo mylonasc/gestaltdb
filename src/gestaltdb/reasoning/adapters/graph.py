@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import random
+from typing import Callable
 
 from ...ontology.compiler import CompiledOntology
 from ...ontology.model import TYPE_PREDICATE
@@ -159,11 +160,13 @@ class PinnedGraphSource:
                         yield Evidence(fact, _digest(["edge", record.get_id]))
         self._check()
 
-    def evaluate(self, compiled: CompiledOntology, *, limits: ReasoningLimits, collect_proofs: bool = False):
+    def evaluate(self, compiled: CompiledOntology, *, limits: ReasoningLimits, collect_proofs: bool = False,
+                   cancel: Callable[[], bool] | None = None):
         self._check()
         if not isinstance(compiled, CompiledOntology):
             raise ReasoningError("compiled ontology required")
-        result = DatalogEngine().evaluate(compiled.program, self._evidence(), limits=limits, collect_proofs=collect_proofs)
+        result = DatalogEngine().evaluate(compiled.program, self._evidence(), limits=limits, collect_proofs=collect_proofs,
+                                          cancel=cancel)
         self._check()
         context = InputContext(
             _digest(["current-graph-context-v1", self._provenance.token, compiled.revision_id, self._mapping.mapping_id]),

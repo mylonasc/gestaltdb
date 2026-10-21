@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 import hashlib
 import json
 from types import MappingProxyType
-from typing import Iterator, Mapping
+from typing import Callable, Iterator, Mapping
 
 from ...epistemic import Claim, ClaimObjectKind, ClaimPolarity
 from ...graphdb import GraphDB, _DATABASE_ID_METADATA_KEY
@@ -286,13 +286,13 @@ class PinnedClaimSource:
 
     def evaluate(
         self, compiled: CompiledOntology, *, limits: ReasoningLimits,
-        collect_proofs: bool = False,
+        collect_proofs: bool = False, cancel: Callable[[], bool] | None = None,
     ) -> ClaimReasoningResult:
         if not isinstance(compiled, CompiledOntology) or compiled.revision_id != self.context.ontology_revision:
             raise ProvenanceMismatchError("compiled ontology does not match the source revision")
         self.verify_source()
         result = DatalogEngine().evaluate(compiled.program, self.iter_evidence(), limits=limits,
-                                         collect_proofs=collect_proofs)
+                                         collect_proofs=collect_proofs, cancel=cancel)
         # Iteration verification alone does not cover mutations during inference.
         self.verify_source()
         return ClaimReasoningResult(self.context, self._provenance, compiled, self._selection, self._mapping, result)

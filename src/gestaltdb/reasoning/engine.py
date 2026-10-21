@@ -9,11 +9,11 @@ intermediate join tables. All run state belongs to one ``evaluate`` invocation.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Iterable, Iterator
+from typing import Callable, Iterable, Iterator
 
 from .model import (
     Atom, EvaluationResult, Fact, Program, ReasoningError, ReasoningLimitError,
-    ReasoningLimits, Rule, Term, Variable,
+    ReasoningLimits, Rule, Term, Variable, check_cancelled,
 )
 from .proofs import _ProofCollector
 from .protocols import Evidence
@@ -145,7 +145,7 @@ class DatalogEngine:
 
     def evaluate(
         self, program: Program, facts: Iterable[Fact | Evidence], *, limits: ReasoningLimits,
-        collect_proofs: bool = False,
+        collect_proofs: bool = False, cancel: Callable[[], bool] | None = None,
     ) -> EvaluationResult:
         if not isinstance(program, Program):
             raise ReasoningError("program must be a Program")
@@ -153,6 +153,7 @@ class DatalogEngine:
             raise ReasoningError("limits must be ReasoningLimits")
         if not isinstance(collect_proofs, bool):
             raise ReasoningError("collect_proofs must be a bool")
+        check_cancelled(cancel)
         if len(program.rules) > limits.max_rules:
             raise ReasoningLimitError(f"evaluation exceeded max_rules={limits.max_rules}")
         try:
@@ -166,6 +167,8 @@ class DatalogEngine:
                 raise ReasoningLimitError(
                     f"evaluation exceeded max_input_facts={limits.max_input_facts}"
                 )
+            if count % 1024 == 0:
+                check_cancelled(cancel)
             fact = value.fact if isinstance(value, Evidence) else value
             if not isinstance(fact, Fact):
                 raise ReasoningError("facts must contain only Fact or Evidence values")
@@ -193,6 +196,7 @@ class DatalogEngine:
         iterations = 0
         budget = _Budget(limits)
         while delta.facts:
+            check_cancelled(cancel)
             active = [
                 (rule, position)
                 for predicate in sorted(delta.by_predicate)

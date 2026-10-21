@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Protocol
+from typing import Callable, Iterable, Protocol
 
 from .model import EvaluationResult, Fact, Program, ReasoningError, ReasoningLimits, _text
 
@@ -63,6 +63,9 @@ class Evaluator(Protocol):
     Consume at most ``max_input_facts + 1`` values to detect an oversized input.
     Values are Fact or Evidence. Duplicate inputs count toward that bound but
     not logical multiplicity. No database, clock or source access is implied.
+    ``cancel`` is cooperative: ``None`` disables it; engines check it between
+    bounded work units and raise ``ReasoningCancelledError`` without partial
+    results. Running native kernels are never interrupted mid-call.
     """
 
     def evaluate(
@@ -72,4 +75,5 @@ class Evaluator(Protocol):
         *,
         limits: ReasoningLimits,
         collect_proofs: bool = False,
+        cancel: Callable[[], bool] | None = None,
     ) -> EvaluationResult: ...

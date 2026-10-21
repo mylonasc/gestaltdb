@@ -18,6 +18,7 @@ on:
       - "docs/reasoning-polars.rst"
       - "docs/reasoning-plans.rst"
       - "docs/reasoning-extraction.rst"
+      - "docs/reasoning-executors.rst"
       - "benchmarks/ontology-requirements.txt"
       - "benchmarks/cli.py"
       - "docs/ontology-contract.rst"
@@ -41,6 +42,7 @@ on:
       - "docs/reasoning-polars.rst"
       - "docs/reasoning-plans.rst"
       - "docs/reasoning-extraction.rst"
+      - "docs/reasoning-executors.rst"
       - "benchmarks/ontology-requirements.txt"
       - "benchmarks/cli.py"
       - "docs/ontology-contract.rst"
@@ -86,6 +88,7 @@ jobs:
           tests/test_reasoning_plans.py
           tests/test_reasoning_extraction.py
           tests/test_reasoning_native_scan.py
+          tests/test_reasoning_executors.py
           tests/test_reasoning_execution_baseline.py
           tests/test_reasoning_proofs.py
           tests/test_ontology_compiler.py
