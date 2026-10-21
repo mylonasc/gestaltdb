@@ -73,8 +73,7 @@
       "worktree": "re-08-chains",
       "contract": "docs/ontology-contract.rst",
       "pr": 197,
-      "benchmark_evidence": "benchmarks/results/reasoning-re07-typed.json",
-      "validation": "1861 passed, 49 skipped with all extras incl. RDF; docs drift, Sphinx -W, examples, roadmap validator passed. PR CI running."
+      "validation": "1861 passed, 49 skipped with all extras incl. RDF; docs drift, Sphinx -W, examples, roadmap validator passed. Ad-hoc chain workload: 0.2ms compile, 3.1ms closure over 774 facts (N=256). PR CI running."
     }
   },
   "source_sha256": {
