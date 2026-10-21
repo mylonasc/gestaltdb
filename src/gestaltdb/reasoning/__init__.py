@@ -29,10 +29,12 @@ from .model import (
 from .proofs import Explanation, FactWitness, ProofTrace
 from .protocols import Evidence, Evaluator, FactSource, InputContext
 from .terms import Literal
+from .typed import Comparison, GenericEngine, GenericProgram, GenericRule, TypedAtom, TypedFact
 
 __all__ = [
     "DatalogEngine", "Atom", "EvaluationResult", "Fact", "Program", "ReasoningError",
     "ReasoningLimitError", "ReasoningCancelledError", "ReasoningLimits", "Rule", "Variable", "Explanation",
     "FactWitness", "ProofTrace", "Evidence", "Evaluator", "FactSource", "InputContext",
     "ExecutorDecision", "ExecutorRequest", "select_executor", "Literal",
+    "Comparison", "GenericEngine", "GenericProgram", "GenericRule", "TypedAtom", "TypedFact",
 ]

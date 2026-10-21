@@ -66,6 +66,11 @@
       "contract": "docs/reasoning-executors.rst",
       "pr": 195,
       "validation": "1849 passed, 49 skipped with all extras incl. pyrex 0.5.0; docs drift, Sphinx -W, examples, roadmap validator passed. PR CI pending."
+    },
+    "RE-07": {
+      "status": "in-progress",
+      "branch": "feature/re-07-literals",
+      "worktree": "re-07-literals"
     }
   },
   "source_sha256": {

@@ -346,6 +346,21 @@ indexed, planned, Polars and adapter evaluation paths; running native kernels
 are never interrupted, and hard deadlines stay a worker-isolation concern. No
 bespoke C++/Rust kernel and no spill: recorded defer with revisit triggers,
 not missing delivery. See `docs/reasoning-executors.rst`.
+RE-06 subsequently passed all checks and merged into the second integration
+branch at `79e4369`; #167 is closed, completing phase RE-E1. No main merge or
+release occurred.
+
+### Implementation started: RE-07 (#168)
+
+Dedicated worktree `re-07-literals`, branch `feature/re-07-literals`, based on
+accepted RE-E1 completion `79e4369` (prerequisites RE-01/RE-04 integrated).
+Milestones: M1 strict typed literal vocabulary with lexical/value canonicalization
+(`reasoning/terms.py`); M2 n-ary typed facts, kind-strict comparisons and a generic
+indexed fixpoint engine with independent-oracle parity (`reasoning/typed.py`);
+M3 multi-head normalization; M4 nonrecursive/stratified aggregates; M5 controlled
+predicate variables (defer to techdebt if it threatens slice safety).
+Recursive/lattice aggregation stays explicitly deferred. Old binary entity APIs
+remain compatible; `Literal` never implicitly converts to an entity string.
 
 RE-03 local validation: **1632 passed, 199 skipped** with LMDB/LevelDB, Arrow,
 Polars, Clingo and OWL-RL available. Sphinx warnings-as-errors, documentation drift
