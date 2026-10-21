@@ -95,10 +95,12 @@
       "validation": "Focused suites green (validation/parity/contracts); docs drift, Sphinx -W, roadmap validator passed. ~20k facts/100 conflicts in ~70ms warm. PR CI pending."
     },
     "RE-11": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-11-equality",
       "worktree": "re-11-equality",
-      "contract": "docs/reasoning-equality.rst"
+      "contract": "docs/reasoning-equality.rst",
+      "pr": 201,
+      "validation": "1888 passed, 49 skipped with all extras; docs drift, Sphinx -W, roadmap validator passed. 100k-entity canonicalization ~0.6s. PR CI running."
     }
   },
   "source_sha256": {
