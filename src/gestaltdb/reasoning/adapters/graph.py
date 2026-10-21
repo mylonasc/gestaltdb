@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import random
-from typing import Callable
+from typing import Callable, Iterable
 
 from ...ontology.compiler import CompiledOntology
 from ...ontology.model import TYPE_PREDICATE
@@ -97,6 +97,126 @@ class GraphReasoningResult:
         matches = self.result.match(predicate=predicate, **({"subject": node} if direction == "out" else {"object": node}))
         candidates = sorted({fact.object if direction == "out" else fact.subject for fact in matches})
         return tuple(sorted(random.Random(seed).sample(candidates, min(fanout, len(candidates)))))
+
+
+@dataclass(frozen=True)
+class RelationContribution:
+    """Per-relation fanout accounting for one expanded sample."""
+
+    relation: str
+    candidates: int
+    sampled: tuple[str, ...]
+
+    def __post_init__(self):
+        _text(self.relation, "relation")
+        if isinstance(self.candidates, bool) or not isinstance(self.candidates, int) or self.candidates < 0:
+            raise ReasoningError("candidates must be a non-negative integer")
+        if not isinstance(self.sampled, (tuple, list)) or not all(isinstance(item, str) and item for item in self.sampled):
+            raise ReasoningError("sampled must be endpoint strings")
+        object.__setattr__(self, "sampled", tuple(self.sampled))
+
+
+@dataclass(frozen=True)
+class ExpandedNeighborhood:
+    """Distinct endpoints plus per-relation attribution behind them."""
+
+    endpoints: tuple[str, ...]
+    contributions: tuple[RelationContribution, ...]
+
+    def __post_init__(self):
+        if not isinstance(self.endpoints, (tuple, list)) or not all(
+                isinstance(item, str) and item for item in self.endpoints):
+            raise ReasoningError("endpoints must be non-empty strings")
+        if len(set(self.endpoints)) != len(self.endpoints):
+            raise ReasoningError("endpoints must be distinct")
+        object.__setattr__(self, "endpoints", tuple(self.endpoints))
+        if not isinstance(self.contributions, (tuple, list)) or not all(
+                isinstance(item, RelationContribution) for item in self.contributions):
+            raise ReasoningError("contributions must contain only RelationContribution values")
+        object.__setattr__(self, "contributions", tuple(self.contributions))
+
+
+def expand_edge_types(predicate: str, compiled: CompiledOntology, mapping: GraphMapping) -> tuple[str, ...]:
+    """Concrete mapped edge types whose closure can derive ``predicate``.
+
+    Follows positive rule dependencies backwards from ``predicate`` and keeps
+    only mapped edge types. Unknown predicates fail closed.
+    """
+    _text(predicate, "predicate")
+    if not isinstance(compiled, CompiledOntology):
+        raise ReasoningError("compiled ontology required")
+    if not isinstance(mapping, GraphMapping):
+        raise ReasoningError("explicit GraphMapping required")
+    by_head: dict[str, list] = {}
+    for rule in compiled.program.rules:
+        by_head.setdefault(rule.head.predicate, []).append(rule)
+    reachable = {predicate}
+    queue = [predicate]
+    while queue:
+        current = queue.pop()
+        for rule in by_head.get(current, ()):
+            for atom in rule.body:
+                if atom.predicate not in reachable:
+                    reachable.add(atom.predicate)
+                    queue.append(atom.predicate)
+    types = sorted({graph_type for graph_type, mapped in mapping.edge_types if mapped in reachable})
+    if not types:
+        raise ReasoningError(f"unknown predicate for expansion: {predicate!r}")
+    return tuple(types)
+
+
+def sample_expanded_neighbors(result: GraphReasoningResult, node: str, *, predicate: str,
+                              direction: str, fanout: int, seed: int,
+                              mapping: GraphMapping, compiled: CompiledOntology) -> ExpandedNeighborhood:
+    """Sample distinct endpoints with per-relation fanout accounting.
+
+    The fanout budget is split as evenly as possible across member relations
+    in sorted order (earlier members take the remainder); each member samples
+    uniformly without replacement up to its quota. Endpoints are attributed to
+    the first member that produced them, so totals never exceed ``fanout``.
+    """
+    if not isinstance(result, GraphReasoningResult):
+        raise ReasoningError("a GraphReasoningResult is required")
+    _text(node, "node")
+    if direction not in {"out", "in"}:
+        raise ReasoningError("direction must be out or in")
+    if isinstance(fanout, bool) or not isinstance(fanout, int) or fanout < 0:
+        raise ReasoningError("fanout must be a non-negative integer")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ReasoningError("seed must be an integer")
+    members = expand_edge_types(predicate, compiled, mapping)
+    by_type = dict(mapping.edge_types)
+    quotas = [fanout // len(members) + (1 if index < fanout % len(members) else 0) for index in range(len(members))]
+    rng = random.Random(seed)
+    endpoints: list[str] = []
+    seen: set[str] = set()
+    contributions = []
+    for relation, quota in zip(members, quotas):
+        matches = result.match(predicate=by_type[relation],
+                               **({"subject": node} if direction == "out" else {"object": node}))
+        candidates = sorted({fact.object if direction == "out" else fact.subject for fact in matches})
+        picked = tuple(rng.sample(candidates, min(quota, len(candidates)))) if candidates and quota else ()
+        fresh = tuple(endpoint for endpoint in picked if endpoint not in seen)
+        seen.update(fresh)
+        endpoints.extend(fresh)
+        contributions.append(RelationContribution(relation, len(candidates), fresh))
+    return ExpandedNeighborhood(tuple(endpoints), tuple(contributions))
+
+
+def inferred_seeds(endpoints: Iterable[str]) -> tuple[str, ...]:
+    """Validate and canonicalize inferred endpoints into sampler seed lists.
+
+    Plain data handoff: no snapshot is built or mutated here.
+    """
+    if isinstance(endpoints, str):
+        raise ReasoningError("endpoints must be an iterable of strings")
+    try:
+        items = list(endpoints)
+    except TypeError as exc:
+        raise ReasoningError("endpoints must be iterable") from exc
+    for endpoint in items:
+        _text(endpoint, "endpoint")
+    return tuple(sorted(set(items)))
 
 
 class PinnedGraphSource:

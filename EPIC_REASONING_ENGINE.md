@@ -479,3 +479,9 @@ RE-13 is the final RE-E2 slice). Explicit relation expansion with per-relation
 fanout accounting, sampler seed-list glue without hidden rewrites, and opt-in
 integration examples against #127. No automatic Cypher rewrites, no array
 mutation, no weight/path multiplicity changes.
+
+M1 delivers explicit relation expansion (`expand_edge_types`), per-relation
+fanout sampling (`sample_expanded_neighbors` with `ExpandedNeighborhood`
+accounting) and plain seed handoff (`inferred_seeds`) against the existing
+`GraphMapping`/`GraphReasoningResult` adapters. Unknown predicates fail
+closed; no Cypher rewrites, array mutation or multiplicity changes.
