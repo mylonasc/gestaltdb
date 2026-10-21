@@ -122,6 +122,14 @@
       "contract": "docs/reasoning-demand.rst",
       "pr": 202,
       "validation": "Focused suites incl. 40-case oracle parity pass; docs drift, Sphinx -W, roadmap validator passed. Selective 30 vs 99,000 facts (~33ms vs ~912ms). PR CI running."
+    },
+    "RE-13": {
+      "status": "in-review",
+      "branch": "feature/re-13-integration",
+      "worktree": "re-13-integration",
+      "contract": "docs/reasoning-integration.rst",
+      "pr": 203,
+      "validation": "Focused suites incl. expansion/contracts green; docs drift, Sphinx -W, roadmap validator passed. PR CI running."
     }
   },
   "source_sha256": {
