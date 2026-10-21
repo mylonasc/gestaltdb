@@ -16,6 +16,7 @@ on:
       - "docs/reasoning-execution.rst"
       - "docs/reasoning-batches.rst"
       - "docs/reasoning-polars.rst"
+      - "docs/reasoning-plans.rst"
       - "docs/reasoning-extraction.rst"
       - "benchmarks/ontology-requirements.txt"
       - "benchmarks/cli.py"
@@ -38,6 +39,7 @@ on:
       - "docs/reasoning-execution.rst"
       - "docs/reasoning-batches.rst"
       - "docs/reasoning-polars.rst"
+      - "docs/reasoning-plans.rst"
       - "docs/reasoning-extraction.rst"
       - "benchmarks/ontology-requirements.txt"
       - "benchmarks/cli.py"
@@ -81,6 +83,7 @@ jobs:
           tests/test_reasoning_batches.py
           tests/test_reasoning_arrow.py
           tests/test_reasoning_polars.py
+          tests/test_reasoning_plans.py
           tests/test_reasoning_extraction.py
           tests/test_reasoning_native_scan.py
           tests/test_reasoning_execution_baseline.py
@@ -108,6 +111,7 @@ jobs:
           from gestaltdb.reasoning import Program, ReasoningLimits
           from gestaltdb.reasoning.protocols import InputContext
           from gestaltdb.reasoning.relational import CompilationIdentity, RelationalProgram, explain_plan
+          from gestaltdb.reasoning.plans import PlannedDatalogEngine, PreparedProgram
           from gestaltdb.reasoning.batches import SymbolDictionary, CompactRelation
           from gestaltdb.ontology.adapters.rdf import RDFDocument, import_rdf
           assert "site-packages" in gestaltdb.__file__, gestaltdb.__file__
@@ -115,6 +119,12 @@ jobs:
           identity = CompilationIdentity(program.digest, InputContext("h", "w", "o", "p", "m"),
                                          "d", "positive-binary-entity-v1", "indexed-python-v1")
           assert explain_plan(program, identity=identity)["relational_digest"] == RelationalProgram.from_program(program).digest
+          planned_identity = CompilationIdentity(program.digest, identity.context, "external-strings-v1",
+                                                 "positive-binary-entity-v1", "indexed-scc-v1")
+          prepared = PreparedProgram(program, planned_identity)
+          planned_run = PlannedDatalogEngine().evaluate(prepared, [], identity=planned_identity,
+                                                       limits=ReasoningLimits(), collect_telemetry=True)
+          assert planned_run.result.facts == () and planned_run.telemetry_enabled
           from gestaltdb.reasoning.relational import RelationSchema
           from gestaltdb.reasoning.adapters.arrow import to_arrow
           from gestaltdb.reasoning.adapters.polars import PolarsDatalogPrototype

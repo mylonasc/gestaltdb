@@ -48,6 +48,11 @@ The experimental `gestaltdb.reasoning.adapters.polars.PolarsDatalogPrototype`
 (`gestaltdb[polars]`) returns a closure-only `PolarsRun` for explicit in-memory
 contexts. It is not the default evaluator: no witnesses, source authentication,
 publication or maintenance; its row-work budgets differ from indexed Python.
+`gestaltdb.reasoning.plans` provides opt-in `PreparedProgram`/`PlannedDatalogEngine`
+with exact compilation identities, positive SCC scheduling and bounded native
+witnesses. Detailed index telemetry is optional; iteration limits count component
+rounds rather than the default global rounds. It performs no source authentication
+or publication and does not change the default evaluator.
 `gestaltdb.reasoning.adapters.batched.PinnedBatchedClaimSource` yields bounded
 `ExtractionRequest` batches with exact version-ID evidence under the same pinned
 view, recording pushdown mode and verification counts; LevelDB snapshot requests
