@@ -13,8 +13,9 @@ from urllib.parse import urlsplit
 
 from ..compiler import compile_ontology
 from ..model import (
-    Domain, EquivalentClasses, EquivalentProperties, InverseOf, Ontology,
-    OntologyError, Range, SubClassOf, SubPropertyOf, Symmetric, Transitive,
+    Domain, EquivalentClasses, EquivalentProperties, IntersectionSubClassOf, InverseOf, Ontology,
+    OntologyError, PropertyChain, Range, Reflexive, SubClassOf, SubPropertyOf, Symmetric, Transitive,
+    UnionSubClassOf,
 )
 
 
@@ -76,7 +77,7 @@ def import_rdf(
     imports: Mapping[str, RDFDocument] | None = None,
     strict: bool = True, limits: RDFImportLimits = RDFImportLimits(),
 ) -> RDFImportResult:
-    """Import the nine named axiom forms; unsupported logic fails by default.
+    """Import the thirteen named axiom forms; unsupported logic fails by default.
 
     ``ontology_id`` is an absolute base IRI. ``imports`` is a caller-supplied
     in-memory resolver, not a URL loader. Permissive mode reports incompleteness.
@@ -161,8 +162,59 @@ def import_rdf(
             raise
         except Exception as exc:
             raise OntologyError(f"invalid RDF document at {iri}") from exc
+        def read_list(head, what):
+            members, seen, node = [], set(), head
+            nil = rdflib.URIRef(_RDF + "nil")
+            first, rest = rdflib.URIRef(_RDF + "first"), rdflib.URIRef(_RDF + "rest")
+            while node != nil:
+                if not isinstance(node, rdflib.BNode) or node in seen or len(members) >= 64:
+                    raise OntologyError(f"malformed {what} collection")
+                seen.add(node)
+                heads = list(graph.objects(node, first))
+                tails = list(graph.objects(node, rest))
+                if len(heads) != 1 or len(tails) != 1:
+                    raise OntologyError(f"malformed {what} collection")
+                members.append(heads[0])
+                node = tails[0]
+            return members
+
+        constructs: dict = {}
+        used_constructs: set = set()
+        chain_subjects: set = set()
+        for s, p, o in sorted(graph, key=lambda triple: tuple(str(value) for value in triple)):
+            predicate = str(p)
+            if predicate not in (_OWL + "intersectionOf", _OWL + "unionOf", _OWL + "propertyChainAxiom"):
+                continue
+            try:
+                if predicate in (_OWL + "intersectionOf", _OWL + "unionOf"):
+                    if not isinstance(s, rdflib.BNode):
+                        raise OntologyError("class collection subjects must be blank nodes")
+                    if s in constructs:
+                        raise OntologyError("duplicate collection definition")
+                    members = [named(term) for term in read_list(o, "class collection")]
+                    if len(members) < 2:
+                        raise OntologyError("class collections require at least two members")
+                    constructs[s] = ("intersection" if predicate.endswith("intersectionOf") else "union", members)
+                    continue
+                if s in constructs:
+                    raise OntologyError("duplicate property chain definition")
+                props = [named(term) for term in read_list(o, "property chain")]
+                if len(props) != 2:
+                    raise OntologyError("property chains must combine exactly two properties")
+                subject = named(s)
+                if subject in chain_subjects:
+                    raise OntologyError("duplicate property chain definition")
+                chain_subjects.add(subject)
+                axioms.append(PropertyChain(props[0], props[1], subject))
+            except OntologyError as exc:
+                if strict:
+                    raise
+                unsupported(str(exc))
         for s, p, o in sorted(graph, key=lambda triple: tuple(str(value) for value in triple)):
             predicate, value = str(p), str(o)
+            if predicate in (_RDF + "first", _RDF + "rest",
+                             _OWL + "intersectionOf", _OWL + "unionOf", _OWL + "propertyChainAxiom"):
+                continue
             if predicate in annotation_predicates:
                 counters["annotations"] += 1
                 continue
@@ -177,12 +229,38 @@ def import_rdf(
                     pending.append((value, resolver[value]))
                 continue
             try:
-                if predicate in binary:
+                if predicate in binary and not isinstance(s, rdflib.BNode) and not isinstance(o, rdflib.BNode):
+                    axioms.append(binary[predicate](named(s), named(o)))
+                elif predicate == _RDFS + "subClassOf" and isinstance(s, rdflib.BNode):
+                    construct = constructs.get(s)
+                    if construct is None:
+                        raise OntologyError(f"unsupported blank subject: {s.n3()}")
+                    used_constructs.add(s)
+                    members = construct[1]
+                    if construct[0] == "intersection":
+                        axioms.append(IntersectionSubClassOf(tuple(members), named(o)))
+                    else:
+                        axioms.append(UnionSubClassOf(tuple(members), named(o)))
+                elif predicate == _RDFS + "subClassOf" and isinstance(o, rdflib.BNode):
+                    construct = constructs.get(o)
+                    if construct is None:
+                        raise OntologyError(f"unsupported blank superclass: {o.n3()}")
+                    used_constructs.add(o)
+                    if construct[0] == "intersection":
+                        axioms.extend(SubClassOf(named(s), member) for member in construct[1])
+                    else:
+                        raise OntologyError("disjunctive superclass is not Horn; union belongs on the left")
+                elif predicate in binary:
                     axioms.append(binary[predicate](named(s), named(o)))
                 elif predicate == _RDF + "type" and value in {_OWL + "TransitiveProperty", _OWL + "SymmetricProperty"}:
                     axioms.append((Transitive if value == _OWL + "TransitiveProperty" else Symmetric)(named(s)))
+                elif predicate == _RDF + "type" and value == _OWL + "ReflexiveProperty":
+                    raise OntologyError("unscoped reflexivity is not supported; declare an explicit scoped form")
                 elif predicate == _RDF + "type" and value in declarations:
-                    named(s)
+                    if isinstance(s, rdflib.BNode) and s in constructs:
+                        used_constructs.add(s)
+                    else:
+                        named(s)
                 else:
                     unsupported(f"unsupported RDF statement: {s.n3()} {p.n3()} {o.n3()}")
             except OntologyError as exc:
@@ -190,5 +268,8 @@ def import_rdf(
                     raise
                 # Avoid double counting unsupported()'s permissive branch.
                 unsupported(str(exc))
+        for leftover in sorted(constructs, key=str):
+            if leftover not in used_constructs:
+                unsupported(f"unused class collection: {leftover.n3()}")
     return RDFImportResult(Ontology(ontology_id, axioms), counters["unsupported"], tuple(diagnostics),
                            tuple(sorted(resolved)), counters["annotations"])

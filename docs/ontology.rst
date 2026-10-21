@@ -15,8 +15,13 @@ Install ``gestaltdb[rdf]`` and import from
 ontology_id="urn:my-ontology")`` returns an immutable import report; call its
 ``compile()`` method before reasoning. Turtle, N-Triples and UTF-8 RDF/XML are
 supported. Named terms retain full IRIs. Class/object-property declarations and
-the selected axiom forms are accepted; ABox statements, restrictions, builtin
+the selected axiom forms are accepted, including binary ``owl:propertyChainAxiom``
+lists, left-side ``owl:intersectionOf``/``owl:unionOf`` collections (with
+intersection superclasses expanded to subclass pairs) and named class/property
+forms; ABox statements, restrictions, builtin
 class/datatype semantics and other unsupported logic fail strictly by default.
+Right-side unions, unscoped ``owl:ReflexiveProperty``, longer chains and
+unused collections are rejected or reported incomplete.
 
 No URLs or files are loaded. Resolve ``owl:imports`` explicitly with an in-memory
 ``imports={iri: RDFDocument(...)}`` map. Cycles are deduplicated. JSON-LD plugins,
@@ -51,7 +56,9 @@ Standalone example
 Use ``result.match(subject=..., predicate=..., object=...)`` for immutable result
 lookups. The compiled origin table maps exact witness rules back to source axioms.
 The profile supports subclass/subproperty, named equivalence, domain/range,
-inverse, symmetric and transitive properties. Cycles terminate under set semantics.
+inverse, symmetric and transitive properties, plus binary property chains,
+left-side class conjunction/disjunction and scoped reflexivity. Cycles terminate
+under set semantics.
 It is a selected ``gestalt-core-v1`` fragment, not full RDFS or OWL support.
 Equality, datatype reasoning, disjointness, existential generation and negation
 are not supported. Domain/range infer memberships rather than validate missing data.

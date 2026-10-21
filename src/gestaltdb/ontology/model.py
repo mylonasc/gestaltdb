@@ -117,13 +117,78 @@ class Transitive(_Axiom):
     _property_fields: ClassVar[tuple[str, ...]] = ("property",)
 
 
+@dataclass(frozen=True)
+class PropertyChain(_Axiom):
+    """Typed role composition: ``result(X, Z) :- first(X, Y), second(Y, Z)``."""
+
+    first: str
+    second: str
+    result: str
+    _property_fields: ClassVar[tuple[str, ...]] = ("first", "second", "result")
+
+
+@dataclass(frozen=True)
+class IntersectionSubClassOf(_Axiom):
+    """Named conjunction on the left: members share one Horn-safe implication.
+
+    Members are deduplicated and canonically sorted; the axiom identity does
+    not depend on declaration order or repetition.
+    """
+
+    members: tuple[str, ...]
+    superclass: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.members, (tuple, list)) or not self.members:
+            raise OntologyError("intersection members must be a non-empty tuple or list")
+        for member in self.members:
+            _identifier(member, "member")
+        _identifier(self.superclass, "superclass")
+        object.__setattr__(self, "members", tuple(sorted(set(self.members))))
+
+
+@dataclass(frozen=True)
+class UnionSubClassOf(_Axiom):
+    """Named disjunction on the left: each member implies the superclass.
+
+    Only the left (body) position is supported; unions on the right of an
+    implication are disjunctive heads outside positive Horn logic.
+    """
+
+    members: tuple[str, ...]
+    superclass: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.members, (tuple, list)) or not self.members:
+            raise OntologyError("union members must be a non-empty tuple or list")
+        for member in self.members:
+            _identifier(member, "member")
+        _identifier(self.superclass, "superclass")
+        object.__setattr__(self, "members", tuple(sorted(set(self.members))))
+
+
+@dataclass(frozen=True)
+class Reflexive(_Axiom):
+    """Scoped reflexivity: ``property(X, X)`` for members of ``scope`` only.
+
+    Unscoped (global) reflexivity is not represented: it is unbounded outside
+    a finite evaluated domain.
+    """
+
+    property: str
+    scope: str
+    _property_fields: ClassVar[tuple[str, ...]] = ("property",)
+
+
 Axiom = (
     SubClassOf | SubPropertyOf | EquivalentClasses | EquivalentProperties |
-    Domain | Range | InverseOf | Symmetric | Transitive
+    Domain | Range | InverseOf | Symmetric | Transitive |
+    PropertyChain | IntersectionSubClassOf | UnionSubClassOf | Reflexive
 )
 _SUPPORTED = frozenset({
     SubClassOf, SubPropertyOf, EquivalentClasses, EquivalentProperties,
     Domain, Range, InverseOf, Symmetric, Transitive,
+    PropertyChain, IntersectionSubClassOf, UnionSubClassOf, Reflexive,
 })
 
 

@@ -6,9 +6,9 @@ from dataclasses import dataclass
 
 from ..reasoning.model import Atom, Program, Rule, Variable
 from .model import (
-    Domain, EquivalentClasses, EquivalentProperties, InverseOf, Ontology,
-    OntologyError, Range, SubClassOf, SubPropertyOf, Symmetric,
-    Transitive, TYPE_PREDICATE, _identifier,
+    Domain, EquivalentClasses, EquivalentProperties, IntersectionSubClassOf, InverseOf, Ontology,
+    OntologyError, PropertyChain, Range, Reflexive, SubClassOf, SubPropertyOf, Symmetric,
+    Transitive, UnionSubClassOf, TYPE_PREDICATE, _identifier,
 )
 
 
@@ -97,8 +97,62 @@ def compile_ontology(ontology: Ontology) -> CompiledOntology:
             add([Atom(x, axiom.property, y)], Atom(y, axiom.property, x))
         elif isinstance(axiom, Transitive):
             add([Atom(x, axiom.property, y), Atom(y, axiom.property, z)], Atom(x, axiom.property, z))
+        elif isinstance(axiom, PropertyChain):
+            add([Atom(x, axiom.first, y), Atom(y, axiom.second, z)], Atom(x, axiom.result, z))
+        elif isinstance(axiom, IntersectionSubClassOf):
+            add([Atom(x, TYPE_PREDICATE, member) for member in axiom.members],
+                Atom(x, TYPE_PREDICATE, axiom.superclass))
+        elif isinstance(axiom, UnionSubClassOf):
+            for index, member in enumerate(axiom.members):
+                add([Atom(x, TYPE_PREDICATE, member)],
+                    Atom(x, TYPE_PREDICATE, axiom.superclass), f"union-{index}")
+        elif isinstance(axiom, Reflexive):
+            add([Atom(x, TYPE_PREDICATE, axiom.scope)], Atom(x, axiom.property, x))
         else:
             # Ontology validation is strict; retain a fail-closed guard if the
             # model's supported set is expanded without compiler support.
             raise OntologyError(f"unsupported axiom: {type(axiom).__name__}")
     return CompiledOntology(ontology, Program(rules), origins)
+
+
+class CompiledSchemaCache:
+    """Bounded revision-keyed cache of compiled ontologies; no evaluation.
+
+    Compilation is deterministic, so a revision hit returns the identical
+    object. Eviction is FIFO once ``maxsize`` is exceeded. The cache performs
+    no locking: sharing one instance across threads requires external
+    synchronization, or use one cache per thread. Cached plans are immutable
+    and safe to share once published.
+    """
+
+    def __init__(self, maxsize: int = 64) -> None:
+        if isinstance(maxsize, bool) or not isinstance(maxsize, int) or maxsize < 1:
+            raise OntologyError("maxsize must be a positive integer")
+        self._maxsize = maxsize
+        self._entries: dict[str, CompiledOntology] = {}
+
+    @property
+    def maxsize(self) -> int:
+        return self._maxsize
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def compile(self, ontology: Ontology) -> CompiledOntology:
+        """Compile or reuse the plan bound to the ontology's revision."""
+        if type(ontology) is not Ontology:
+            raise OntologyError("ontology must be an Ontology")
+        key = ontology.revision_id
+        hit = self._entries.get(key)
+        if hit is not None and hit.ontology == ontology:
+            self._entries[key] = self._entries.pop(key)
+            return hit
+        compiled = compile_ontology(ontology)
+        self._entries[key] = compiled
+        while len(self._entries) > self._maxsize:
+            self._entries.pop(next(iter(self._entries)))
+        return compiled
+
+    def clear(self) -> None:
+        """Drop all cached plans; in-flight users keep immutable results."""
+        self._entries.clear()

@@ -64,6 +64,10 @@ The supported compilation templates are:
 * ``InverseOf(P, Q)``: ``P(x, y) -> Q(y, x)`` and the converse.
 * ``Symmetric(P)``: ``P(x, y) -> P(y, x)``.
 * ``Transitive(P)``: ``P(x, y) AND P(y, z) -> P(x, z)``.
+* ``PropertyChain(Q, R, P)``: ``Q(x, y) AND R(y, z) -> P(x, z)``.
+* ``IntersectionSubClassOf((C1, C2), D)``: ``T(x, C1) AND T(x, C2) -> T(x, D)``.
+* ``UnionSubClassOf((C1, C2), D)``: ``T(x, C1) -> T(x, D)`` and ``T(x, C2) -> T(x, D)``.
+* ``Reflexive(P, C)``: ``T(x, C) -> P(x, x)``.
 
 Multiple inheritance and cycles are legal and terminate under set semantics.
 Named equivalence does not merge individuals. Multiple domain or range axioms
@@ -72,11 +76,12 @@ rule origins are available in ONTO-03; immutable revision identity is separate f
 kernel's program digest. Hierarchy schema facts themselves are not automatically
 included in instance closure; future schema lookups must state their semantics.
 
-Unsupported axiom shapes must fail before evaluation. Property chains,
-conjunction, disjointness, equality, functionality, cardinality, datatypes,
-negation and existential generation are deferred. There is no claim of complete
-RDFS/OWL-RL/OWL-EL/OWL-DL support. Domain and range infer types; they do not validate
-required fields. Conflicts never entail arbitrary facts, and missing is not false.
+Unsupported axiom shapes must fail before evaluation. Disjointness, equality,
+functionality, cardinality, datatypes, negation and existential generation are
+deferred, as are union superclasses and unscoped reflexivity. There is no claim
+of complete RDFS/OWL-RL/OWL-EL/OWL-DL support. Domain and range infer types; they
+do not validate required fields. Conflicts never entail arbitrary facts, and
+missing is not false.
 
 Limits, proofs and failure
 --------------------------

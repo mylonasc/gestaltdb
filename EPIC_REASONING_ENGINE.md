@@ -411,3 +411,16 @@ These checks confirm existing baseline behavior and planning consistency, not
 new performance or all-backend guarantees. Previous baseline integration evidence
 is recorded in `ONTO-EPIC.md`. No new executor was implemented or benchmarked
 during this review.
+
+### Implementation started: RE-08 (#169)
+
+Dedicated worktree `re-08-chains`, branch `feature/re-08-chains`, based on
+accepted integration `79e4369` (RE-E1 complete; only RE-04 prerequisite needed).
+Horn-safe schema extensions compiling to the existing binary engine: binary
+`PropertyChain`, left-side `IntersectionSubClassOf`/`UnionSubClassOf` (the
+latter normalized to per-member rules with exact origins) and scoped
+`Reflexive`, with disjunctive heads and unscoped reflexivity rejected.
+M2 adds a revision-keyed schema-compilation cache; M3 extends strict offline
+RDF normalization (2-element chains, named left-side collections with
+intersection-superclass expansion, explicit rejections). No claim of complete
+RDFS or OWL RL.

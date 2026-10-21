@@ -23,9 +23,11 @@ assert not result.explain(person).truncated
 ```
 
 Supported axioms: named subclass/subproperty, named equivalence, domain/range,
-inverse, symmetric and transitive object properties. `gestalt-core-v1` is not
-complete RDFS/OWL-RL. Equality, existential generation, datatypes, negation,
-cardinality, disjointness and automatic query/sampler expansion are not included.
+inverse, symmetric and transitive object properties, plus binary property
+chains, left-side class conjunction/disjunction and scoped reflexivity.
+`gestalt-core-v1` is not complete RDFS/OWL-RL. Equality, existential generation,
+datatypes, negation, cardinality, disjointness and automatic query/sampler
+expansion are not included.
 Missing is not false; domain/range infer types, not required-field constraints.
 
 `Variable("x")` is a rule variable; string `"?x"` remains a constant. Logical
