@@ -63,7 +63,7 @@ instead of erroring, consistent with the non-explosive open-world default.
 A comparison against an entity is therefore never silently true.
 
 Multi-head rules, aggregates and predicate variables
-----------------------------------------
+--------------------------------------------------------
 
 ``MultiHeadRule`` holds a finite non-empty head conjunction and normalizes
 to equivalent single-head rules with deterministic ``rule_id#index`` IDs.
