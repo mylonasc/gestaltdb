@@ -60,10 +60,12 @@
       "validation": "1673 passed, 199 skipped; docs/Sphinx/examples/roadmap validator passed; 144 verified first/reuse rows; Python 3.10-3.13 and fuzz CI passed."
     },
     "RE-06": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-06-executors",
       "worktree": "re-06-executors",
-      "contract": "docs/reasoning-executors.rst"
+      "contract": "docs/reasoning-executors.rst",
+      "pr": 195,
+      "validation": "1849 passed, 49 skipped with all extras incl. pyrex 0.5.0; docs drift, Sphinx -W, examples, roadmap validator passed. PR CI pending."
     }
   },
   "source_sha256": {
