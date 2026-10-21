@@ -68,10 +68,13 @@
       "validation": "1849 passed, 49 skipped with all extras incl. pyrex 0.5.0; docs drift, Sphinx -W, examples, roadmap validator passed. PR CI pending."
     },
     "RE-08": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-08-chains",
       "worktree": "re-08-chains",
-      "contract": "docs/ontology-contract.rst"
+      "contract": "docs/ontology-contract.rst",
+      "pr": 197,
+      "benchmark_evidence": "benchmarks/results/reasoning-re07-typed.json",
+      "validation": "1861 passed, 49 skipped with all extras incl. RDF; docs drift, Sphinx -W, examples, roadmap validator passed. PR CI running."
     }
   },
   "source_sha256": {
