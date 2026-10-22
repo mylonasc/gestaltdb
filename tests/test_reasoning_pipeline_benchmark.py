@@ -7,7 +7,7 @@ import sys
 import pytest
 
 
-def test_pipeline_worker_checks_exact_evidence_and_closure():
+def test_pipeline_worker_checks_exact_evidence_and_closure(tmp_path):
     pytest.importorskip("lmdb")
     from benchmarks.reasoning_pipeline import run_once
 
@@ -19,6 +19,22 @@ def test_pipeline_worker_checks_exact_evidence_and_closure():
     assert report["metrics"]["load_s"] >= 0
     assert report["metrics"]["reasoning_pipeline_s"] >= report["metrics"]["evaluate_s"]
     assert report["backend_options"]["map_size"] >= 64 * 1024 * 1024
+
+
+def test_batched_commits_match_per_claim_load_and_record_progress(tmp_path):
+    pytest.importorskip("lmdb")
+    from benchmarks.reasoning_pipeline import run_once
+
+    progress = tmp_path / "progress.jsonl"
+    batched = run_once(20, "lmdb", 4, commit_batch=7, progress_path=progress)
+    single = run_once(20, "lmdb", 4, commit_batch=1)
+    # Version IDs are fresh per database, so cross-run evidence_digest
+    # equality is not expected; compare logical output instead.
+    assert batched["closure_facts"] == single["closure_facts"] == 60
+    assert batched["scanned"] == single["scanned"] == 20
+    phases = [json.loads(line)["phase"] for line in progress.read_text().splitlines()]
+    assert phases[:2] == ["load_s", "compile_s"]
+    assert set(phases) >= {"load_s", "extract_decode_verify_s", "evaluate_s"}
 
 
 def test_failed_workers_write_an_explicit_incomplete_report(tmp_path, monkeypatch):
