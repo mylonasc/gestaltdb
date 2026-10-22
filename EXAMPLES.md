@@ -663,6 +663,23 @@ with TemporaryDirectory() as tmpdir:
 
 Use `SamplerEngine.load(path, mode="memmap")` for large snapshots that should be memory mapped instead of eagerly loaded into RAM.
 
+Balanced draws are opt-in and split the requested quota across the groups
+present:
+
+```python
+from gestaltdb.sampling import ExternalNeighborSamplingSpec, SamplerEngine
+
+engine = SamplerEngine.load("sampler_snapshot", seed=13)
+balanced_neighbors = engine.sample_neighbors([0], 9, balanced=True)
+balanced_nodes = engine.sample_nodes(30, balanced=True)
+balanced_edges = engine.sample_edges(9, balanced=True)
+layer = ExternalNeighborSamplingSpec(fanout=9, balanced=True)
+```
+
+Groups are compact node types for `sample_nodes` and relation IDs for
+`sample_edges` and `sample_neighbors`. A group smaller than its share returns
+fewer rows unless `replace=True`; quota is not borrowed from other groups.
+
 On LMDB, high-level non-temporal builds automatically pin one mutable MVCC
 horizon and record `CurrentReadProvenance`. Pass `read_snapshot=True` to require
 that guarantee; LevelDB and default non-transactional PyRex reject explicit

@@ -319,8 +319,8 @@ Persist derived weights with ``snapshot.set_edge_weights(weights,
 source="policy:degree")`` — the rewrite is atomic, compact IDs are untouched,
 and ``edge_weight_source`` records provenance. Draws stay ``uniform`` unless a
 call passes ``strategy="weighted"``; with replacement, fanout caps, and
-zero-weight exclusion are unchanged, and per-type/per-relation quotas remain
-out of scope.
+zero-weight exclusion are unchanged, and per-type/per-relation quotas are
+opt-in through ``balanced=True`` (see below).
 
 .. code-block:: python
 
@@ -362,11 +362,38 @@ out of scope.
 
 ``sample_nodes`` supports uniform, degree-based, and caller-weighted selection,
 with an optional node-type filter. ``sample_edges`` supports uniform or weighted
-selection with an optional relation filter. These are filtered draws, not
-balanced per-type/per-relation quotas. Layer specifications independently select
-fanout, direction, relations, replacement, and strategy. ``LayeredSampleBatch``
-preserves each layer's ``SampledNeighbors`` block and deduplicates the next
-frontier; it does not construct framework-native bipartite message-passing blocks.
+selection with an optional relation filter. These are filtered draws by default;
+pass ``balanced=True`` for deterministic equal quotas across node types or
+relation IDs. Layer specifications independently select fanout, direction,
+relations, replacement, strategy, and balanced allocation.
+``LayeredSampleBatch`` preserves each layer's ``SampledNeighbors`` block and
+deduplicates the next frontier; it does not construct framework-native
+bipartite message-passing blocks.
+
+Balanced quotas
+~~~~~~~~~~~~~~~
+
+``sample_nodes(..., balanced=True)`` splits the requested count equally across
+the distinct compact node types present in the candidate set. ``sample_edges``
+and ``sample_neighbors`` do the same across relation IDs, per candidate for
+edges and per input node for neighbors. Groups are visited in sorted compact-ID
+order; when the count does not divide evenly, earlier groups receive one extra
+slot. With ``replace=False``, a group smaller than its share returns fewer rows
+and unused quota is not borrowed from other groups, so the result can be below
+the requested count. With ``replace=True`` every quota is filled, possibly with
+duplicate rows. Balanced weighted draws skip groups with no positive weight; if
+every group has zero weight, the usual all-zero-weight error is raised.
+
+``balanced`` is also available on ``NeighborSamplingSpec`` and
+``ExternalNeighborSamplingSpec`` so layered sampling can request the same
+contract per layer.
+
+.. code-block:: python
+
+   balanced_neighbors = engine.sample_neighbors([0], 9, balanced=True)
+   balanced_nodes = engine.sample_nodes(30, balanced=True)
+   balanced_edges = engine.sample_edges(9, balanced=True)
+   layer = NeighborSamplingSpec(fanout=9, balanced=True)
 
 Relation sub-property hierarchies
 ---------------------------------
