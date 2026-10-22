@@ -11,7 +11,15 @@ import json
 from dataclasses import dataclass
 from collections.abc import Mapping
 
-from .rules import ClaimExplanation, RuleEvaluationLimitError, RuleError, RuleJustification, RuleVersion
+from .rules import (
+    ClaimExplanation,
+    RuleAbsence,
+    RuleEvaluationLimitError,
+    RuleError,
+    RuleJustification,
+    RuleVersion,
+    absence_node_id,
+)
 from .versioning import ClaimVersion, canonical_json_bytes
 
 
@@ -77,6 +85,13 @@ def export_inference(explanation: ClaimExplanation, *, max_edges: int = 100_000,
                 raise RuleError("rule version identity mismatch")
             nodes.append({"id": node.node_id, "kind": "rule", "value": node.value.to_dict()})
             continue
+        if node.kind == "absence":
+            if not isinstance(node.value, RuleAbsence):
+                raise RuleError("absence node requires recorded absence evidence")
+            nodes.append({
+                "id": node.node_id, "kind": "absence", "value": node.value.to_dict(),
+            })
+            continue
         if node.kind != "claim" or not isinstance(node.value, ClaimVersion) or node.value.claim is None:
             raise RuleError("explanation requires exact claim and rule versions")
         version = node.value
@@ -105,19 +120,29 @@ def export_inference(explanation: ClaimExplanation, *, max_edges: int = 100_000,
             continue
         for support in claim.provenance.get("justifications", ()):
             try:
-                normalized = RuleJustification(support["rule_version_id"],
-                                               tuple(support["premise_version_ids"]))
-            except (KeyError, TypeError, ValueError) as exc:
+                normalized = RuleJustification.from_dict(support)
+            except RuleError as exc:
                 raise RuleError("invalid recorded inference justification") from exc
             rule_id = normalized.rule_version_id
             premises = list(normalized.premise_version_ids)
-            if rule_id not in identities or any(item not in identities for item in premises):
+            absent = [item.to_dict() for item in normalized.absences]
+            absence_ids = [absence_node_id(rule_id, item) for item in normalized.absences]
+            if (
+                rule_id not in identities
+                or any(item not in identities for item in premises)
+                or any(item not in identities for item in absence_ids)
+            ):
                 truncated = True
                 continue
-            edge_count += 1 + len(premises)
+            edge_count += 1 + len(premises) + len(absent)
             if edge_count > max_edges:
                 raise RuleEvaluationLimitError("inference export exceeded max_edges")
-            supports.append({"conclusion": node.node_id, "rule": rule_id, "premises": premises})
+            value = {
+                "conclusion": node.node_id, "rule": rule_id, "premises": premises,
+            }
+            if absent:
+                value["absences"] = absent
+            supports.append(value)
     payload = {
         "format_version": 1, "kind": "gestaltdb.inference-audit",
         "claim_id": explanation.claim_id, "root_version_id": explanation.root_version_id,
@@ -125,8 +150,13 @@ def export_inference(explanation: ClaimExplanation, *, max_edges: int = 100_000,
         "system_time_us": explanation.system_time.epoch_microseconds,
         "truncated": truncated, "nodes": nodes,
         "justifications": sorted(supports, key=lambda item: (
-            item["conclusion"], item["rule"], item["premises"])),
-        "semantics": "Recorded historical evidence; model metadata is not logical probability or independent proof verification.",
+            item["conclusion"], item["rule"], item["premises"],
+            json.dumps(item.get("absences", ()), sort_keys=True))),
+        "semantics": (
+            "Recorded historical evidence; absence nodes are closed-world checks at the "
+            "evaluation horizon, not negative claims. Model metadata is not logical "
+            "probability or independent proof verification."
+        ),
     }
     encoded = canonical_json_bytes(payload)
     if len(encoded) > max_bytes:
