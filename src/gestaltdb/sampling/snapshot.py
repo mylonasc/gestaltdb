@@ -1271,6 +1271,42 @@ class SamplerSnapshot:
             "snapshot_id": metadata["snapshot_id"],
         }
 
+    def set_edge_weights(self, weights, *, source: str) -> dict:
+        """Persist caller-derived per-edge sampling weights in place.
+
+        Validates length, finiteness and non-negativity, rewrites the
+        snapshot atomically (staging directory, authenticated load,
+        backup-swap with restore), then refreshes this object. The
+        snapshot identity, compact IDs, adjacency and source version are
+        untouched — weights are a derived view, not new data — while
+        ``edge_weight_source`` records their provenance (for example
+        ``"policy:degree"`` or ``"manual:confidence-v3"``). No live readers
+        may hold this snapshot path across the call.
+        """
+        if self.metadata.get("format_version") != SNAPSHOT_FORMAT_VERSION:
+            raise ValueError("set_edge_weights requires a current-format snapshot; rebuild legacy snapshots first")
+        if self.metadata.get("temporal") is True:
+            raise ValueError("temporal snapshots do not support set_edge_weights; rebuild explicitly")
+        if not isinstance(source, str) or not source:
+            raise ValueError("source must be a non-empty provenance label")
+        edge_weights = _normalize_edge_weights(weights, int(self.src_int.size))
+        metadata = dict(self.metadata)
+        metadata["edge_weight_source"] = source
+        self._replace(
+            self.path, metadata, self.external_node_ids.tolist(), self.node_type_ids,
+            self.external_edge_ids.tolist(), self.external_relation_ids.tolist(),
+            self.relation_src_type_ids, self.relation_dst_type_ids,
+            self.src_int, self.dst_int, self.rel_int, edge_weights, self.out, self.in_,
+            self.incident, self.relation_out, self.relation_in, self.positive_triples)
+        self._refresh_from_disk()
+        return {
+            "edge_weight_source": source,
+            "weight_mean": float(edge_weights.mean()) if edge_weights.size else 1.0,
+            "weight_min": float(edge_weights.min()) if edge_weights.size else 1.0,
+            "weight_max": float(edge_weights.max()) if edge_weights.size else 1.0,
+            "snapshot_id": metadata["snapshot_id"],
+        }
+
     def _refresh_from_disk(self) -> None:
         """Reload persisted state into this object after an in-place rewrite."""
         fresh = type(self).load(self.path)
