@@ -941,15 +941,17 @@ class GenericEngine:
             updated = _unify(rule.body[position], fact, bindings)
             if updated is None or not _ready(rule.filters, updated):
                 continue
-            blocked, witness = self._check_negated(rule, updated, full, scope, horizon)
-            if blocked:
-                if collect_trace:
-                    if len(trace) >= limits.max_proof_nodes:
-                        yield None
-                    else:
-                        trace.append(witness)
-                continue
             if not remaining:
+                # Range restriction guarantees bindings only after the whole
+                # positive body, not after an arbitrary delta pivot.
+                blocked, witness = self._check_negated(rule, updated, full, scope, horizon)
+                if blocked:
+                    if collect_trace:
+                        if len(trace) >= limits.max_proof_nodes:
+                            yield None
+                        else:
+                            trace.append(witness)
+                    continue
                 yield updated
                 continue
             chosen, bucket = remaining[0], full.candidates(rule.body[remaining[0]], updated)
