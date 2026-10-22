@@ -20,6 +20,7 @@ from ...readview import GraphReadView, ProvenanceMismatchError, ReadViewProvenan
 from ...temporal import TemporalInstant
 from ...versioning import ClaimVersion, VersionOperation, normalize_version_id
 from ..engine import DatalogEngine
+from ..extraction import ExtractionRequest
 from ..model import EvaluationResult, Fact, ReasoningError, ReasoningLimitError, ReasoningLimits, _text
 from ..proofs import Explanation
 from ..protocols import Evidence, InputContext
@@ -112,10 +113,21 @@ class ClaimSourceLimits:
             raise ReasoningError("max_scanned_claims must be a positive integer")
 
 
-def _context(provenance, world, revision, selection, mapping) -> InputContext:
+def _context(provenance, world, revision, selection, mapping, extraction_request=None) -> InputContext:
+    payload = ["gestaltdb-claim-context-v1", provenance.token, world, revision,
+               selection.policy_id, mapping.mapping_id]
+    if extraction_request is not None:
+        if not isinstance(extraction_request, ExtractionRequest):
+            raise ReasoningError("extraction_request must be an ExtractionRequest")
+        if (extraction_request.world != world or extraction_request.agents != selection.agents
+                or extraction_request.sources != selection.sources):
+            raise ProvenanceMismatchError("extraction request does not match the effective source policy")
+        scope = [extraction_request.predicates, extraction_request.subject, extraction_request.object]
+        if scope != [None, None, None]:
+            payload[0] = "gestaltdb-claim-context-v2"
+            payload.append(scope)
     return InputContext(
-        _digest(["gestaltdb-claim-context-v1", provenance.token, world, revision,
-                 selection.policy_id, mapping.mapping_id]),
+        _digest(payload),
         world, revision, selection.policy_id, mapping.mapping_id,
     )
 
@@ -141,6 +153,7 @@ class ClaimReasoningResult:
     selection: ClaimSelection
     mapping: ClaimMapping
     result: EvaluationResult
+    extraction_request: ExtractionRequest | None = None
 
     def __post_init__(self) -> None:
         if not (isinstance(self.context, InputContext) and isinstance(self.provenance, ReadViewProvenance)
@@ -149,7 +162,7 @@ class ClaimReasoningResult:
             raise ReasoningError("invalid claim result context or value types")
         provenance = ReadViewProvenance.from_dict(self.provenance.to_dict())
         if self.context != _context(provenance, self.context.world, self.compiled.revision_id,
-                                    self.selection, self.mapping):
+                                    self.selection, self.mapping, self.extraction_request):
             raise ProvenanceMismatchError("result context/policy/ontology revision mismatch")
         if self.result.program_digest != self.compiled.program.digest:
             raise ProvenanceMismatchError("result program does not match the compiled ontology")

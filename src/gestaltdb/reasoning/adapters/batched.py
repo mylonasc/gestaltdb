@@ -8,7 +8,7 @@ anything else filters in Python with the pushdown mode recorded in the profile.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Iterator
 
 from ...epistemic import Claim, ClaimObjectKind, ClaimPolarity
@@ -80,6 +80,7 @@ class PinnedBatchedClaimSource:
             sources=_intersect_policy(request.sources, selection.sources),
             include_derived=selection.include_derived,
         )
+        request = replace(request, agents=selection.agents, sources=selection.sources)
         self._original = view
         self._graph = view._graph
         self._provenance = ReadViewProvenance.from_dict(view.provenance.to_dict())
@@ -89,7 +90,7 @@ class PinnedBatchedClaimSource:
         self._selection, self._mapping, self._limits = selection, mapping, limits
         self._agents = None if selection.agents is None else frozenset(selection.agents)
         self._sources = None if selection.sources is None else frozenset(selection.sources)
-        self._context = _context(self._provenance, request.world, ontology_revision, selection, mapping)
+        self._context = _context(self._provenance, request.world, ontology_revision, selection, mapping, request)
         self._capability = ExtractionCapability.probe(self._graph.store)
         self._closed = False
         self._verifications = 0
@@ -231,7 +232,7 @@ class PinnedBatchedClaimSource:
                                           collect_proofs=collect_proofs, cancel=cancel)
         self.verify_source()
         return ClaimReasoningResult(self.context, self._provenance, compiled,
-                                    self._selection, self._mapping, result)
+                                    self._selection, self._mapping, result, self._request)
 
     def require_pinned_snapshot(self) -> None:
         """Fail closed unless the borrowed store can pin read snapshots."""
