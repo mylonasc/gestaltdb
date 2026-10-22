@@ -206,13 +206,22 @@
       "integration_commit": "cfd35a7"
     },
     "RE-22": {
-      "status": "in-review",
+      "status": "integrated",
       "branch": "feature/re-22-conformance",
       "worktree": "re-22-conformance",
       "contract": "docs/reasoning-conformance.rst",
       "benchmark_evidence": "benchmarks/results/reasoning-re22-temporal.json",
       "pr": 236,
-      "validation": "Focused suites (conformance/ranges/temporal/intervals/contracts) green; docs drift, Sphinx -W, roadmap validator passed. Temporal benchmark frozen (P50/P95, reuse ratios, RSS). PR CI running."
+      "validation": "Focused suites (conformance/ranges/temporal/intervals/contracts) green; docs drift, Sphinx -W, roadmap validator passed; temporal benchmark frozen; Python 3.10-3.13 and fuzz CI passed.",
+      "integration_commit": "1eb4f6e"
+    },
+    "RE-23": {
+      "status": "in-review",
+      "branch": "feature/re-23-profiles",
+      "worktree": "re-23-profiles",
+      "contract": "docs/reasoning-profiles.rst",
+      "pr": 237,
+      "validation": "Focused suites (profiles/contracts incl. digest pin, gates, model coverage, spot checks) green; docs drift, Sphinx -W, roadmap validator passed. PR CI running."
     }
   },
   "source_sha256": {

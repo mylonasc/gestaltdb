@@ -576,3 +576,12 @@ with P50/P95, RSS and reuse ratios
 (`benchmarks/results/reasoning-re22-temporal.json`), when/why workflows and
 runnable historical compliance scenarios (core + backend-gated). RE-E4
 exits here.
+
+### Implementation started: RE-23 (#184)
+
+Dedicated worktree `re-23-profiles`, branch `feature/re-23-profiles`,
+based on accepted integration `1eb4f6e` (RE-22 integrated; prerequisites
+RE-09/RE-11/RE-22 satisfied; first RE-E5 slice). Construct-by-construct
+semantics/conformance matrix with digest pinning, Horn/validation/
+satisfiability separation gates, and named-subset publication with
+per-extension approval. No full-OWL-RL claim.
