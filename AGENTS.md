@@ -16,6 +16,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Epistemic claim values and four-valued status: `src/gestaltdb/epistemic.py`
 - Bounded modal expressions and evaluation: `src/gestaltdb/modal.py`
 - Positive Horn rule values and evaluation results: `src/gestaltdb/rules.py`
+- Model-output/logical audit export: `src/gestaltdb/inference.py`, `docs/inference-audit.rst`. Explicit `model_output` provenance; scores are not logical probabilities; bounded historical evidence export, not independent proof verification.
 - Standalone ontology: `src/gestaltdb/ontology/`; Datalog core: `src/gestaltdb/reasoning/`; explicit database adapters: `reasoning/adapters/`. Core/compiler must never import GraphDB, storage, temporal records or adapters. Guide: `docs/ontology.rst`; measured boundaries: `docs/ontology-benchmarks.rst`.
 - Relational IR/structural inspection: `reasoning/relational.py`, `docs/reasoning-execution.rst`. Entity-only n-ary representation is not yet executable; preserve legacy `Program.digest`. Second roadmap: `EPIC_REASONING_ENGINE.md` / #156.
 - Compact batches: `reasoning/batches.py`; optional Arrow exchange: `reasoning/adapters/arrow.py` / `docs/reasoning-batches.rst`. IDs require the exact dictionary/context; immutable batches and reference set operations are not a native executor or all-support provenance.
