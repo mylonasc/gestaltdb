@@ -152,12 +152,123 @@ def change_segments(facts: Iterable[TemporalFact], *, max_segments: int = 10_000
     return tuple(segments)
 
 
+@dataclass(frozen=True)
+class RangeUpdate:
+    """Validity-change outcome with reuse diagnostics and a rebound closure."""
+
+    closure: TemporalClosure
+    reused_segments: int
+    recomputed_segments: int
+    added: tuple[TypedFact, ...]
+    removed: tuple[TypedFact, ...]
+    work: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.closure, TemporalClosure):
+            raise ReasoningError("closure must be a TemporalClosure")
+        for name in ("reused_segments", "recomputed_segments", "work"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ReasoningError(f"{name} must be a non-negative integer")
+        if not isinstance(self.added, (tuple, list)) or not all(isinstance(f, TypedFact) for f in self.added):
+            raise ReasoningError("added must contain only TypedFact values")
+        if not isinstance(self.removed, (tuple, list)) or not all(isinstance(f, TypedFact) for f in self.removed):
+            raise ReasoningError("removed must contain only TypedFact values")
+        object.__setattr__(self, "added", tuple(sorted(set(self.added), key=_sort_key)))
+        object.__setattr__(self, "removed", tuple(sorted(set(self.removed), key=_sort_key)))
+
+
 def _sample(segment: Interval) -> int:
     if segment.start is not None:
         return segment.start
     if segment.end is not None:
         return segment.end - 1
     return 0
+
+
+def update_range(program: GenericProgram, closure: TemporalClosure, new_base: Iterable[TemporalFact], *,
+                 limits: ReasoningLimits, max_segments: int = 10_000,
+                 max_supports: int = 100_000, incremental: bool = True,
+                 cancel: Callable[[], bool] | None = None) -> RangeUpdate:
+    """Propagate changed validity ranges with segment memoization.
+
+    Segments whose active base set is unchanged reuse the previous
+    derivations verbatim; only changed segments re-evaluate. Removals are
+    support-aware: a derived fact disappears only when its last supporting
+    segment goes, and every removal traces to changed premises. With
+    ``incremental=False`` — or whenever the previous generation is stale —
+    the update falls back to a full ``evaluate_range`` instead of degrading.
+    Point/range parity holds by construction: reused and recomputed segments
+    use the same engine over the same active inputs.
+    """
+    if not isinstance(program, GenericProgram):
+        raise ReasoningError("program must be a GenericProgram")
+    if not isinstance(closure, TemporalClosure):
+        raise ReasoningError("closure must be a TemporalClosure")
+    if not isinstance(limits, ReasoningLimits):
+        raise ReasoningError("limits must be ReasoningLimits")
+    if not isinstance(incremental, bool):
+        raise ReasoningError("incremental must be a bool")
+    _check_supported(program)
+    check_cancelled(cancel)
+    try:
+        items = list(new_base)
+    except TypeError as exc:
+        raise ReasoningError("new_base must be iterable") from exc
+    if not all(isinstance(item, TemporalFact) for item in items):
+        raise ReasoningError("new_base must contain only TemporalFact values")
+    if not incremental:
+        fresh = evaluate_range(program, items, limits=limits, max_segments=max_segments,
+                               max_supports=max_supports, cancel=cancel)
+        old_all = {item.fact for item in closure.base} | {item.fact for item in closure.derivations}
+        new_all = {item.fact for item in fresh.base} | {item.fact for item in fresh.derivations}
+        return RangeUpdate(fresh, 0, len(fresh.segments),
+                           tuple(new_all - old_all), tuple(old_all - new_all), 0)
+    segments = change_segments(items, max_segments=max_segments)
+    old_by_active: dict[frozenset, list[TemporalDerivation]] = {}
+    for derivation in closure.derivations:
+        sample = _sample(derivation.segment)
+        active = frozenset(item.fact for item in closure.base if sample in item.valid)
+        old_by_active.setdefault(active, []).append(derivation)
+    derivations: list[TemporalDerivation] = []
+    seen: set[tuple] = set()
+    work = [0]
+    reused = recomputed = 0
+    for segment in segments:
+        check_cancelled(cancel)
+        point = _sample(segment)
+        active = [item.fact for item in items if point in item.valid]
+        key = frozenset(active)
+        if key in old_by_active:
+            for derivation in old_by_active[key]:
+                entry = (derivation.fact, segment, derivation.rule_id, derivation.premises)
+                if entry not in seen:
+                    seen.add(entry)
+                    derivations.append(TemporalDerivation(*entry))
+            reused += 1
+            continue
+        recomputed += 1
+        result = GenericEngine().evaluate(program, active, limits=limits, cancel=cancel)
+        fresh = set(result.facts) - set(active)
+        if not fresh:
+            continue
+        full = _TypedIndex(sorted(set(result.facts), key=_sort_key))
+        supports: list = []
+        for target in sorted(fresh, key=_sort_key):
+            _find_all_supports(program, full, target, limits=limits, max_supports=max_supports,
+                                work=work, seen=set(), supports=supports, cancel=cancel)
+        for support in supports:
+            entry = (support.fact, segment, support.rule_id, support.premises)
+            if entry not in seen:
+                seen.add(entry)
+                derivations.append(TemporalDerivation(*entry))
+                if len(derivations) > max_supports:
+                    raise ReasoningLimitError("range update exceeded max_supports")
+    fresh_closure = TemporalClosure(segments, tuple(items), tuple(derivations))
+    old_all = {item.fact for item in closure.base} | {item.fact for item in closure.derivations}
+    new_all = {item.fact for item in fresh_closure.base} | {item.fact for item in fresh_closure.derivations}
+    return RangeUpdate(fresh_closure, reused, recomputed,
+                       tuple(new_all - old_all), tuple(old_all - new_all), work[0])
 
 
 def evaluate_range(program: GenericProgram, facts: Iterable[TemporalFact], *,
