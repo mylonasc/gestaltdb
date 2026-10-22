@@ -36,7 +36,7 @@ Negation is available only inside an explicit ``closed`` declaration listing
 the predicates treated as complete for this evaluation. Anything undeclared
 stays open-world: querying its absence raises instead of silently assuming
 empty. The declaration covers one evaluation horizon — the exact pinned input
-fact set, whose digest travels in every absence witness — and never leaks
+fact set, whose digest travels in every blocker witness — and never leaks
 across contexts, snapshots or runs. Swapping horizons requires a fresh,
 explicit ``closed`` binding and re-evaluation.
 
@@ -58,12 +58,15 @@ semantics, and recursive negation is not attempted.
 ``StratifiedRun`` reports the component schedule, per-component rounds and
 ``iterations`` as total executed component delta rounds (the aggregate
 stratum, when present, adds one round, exactly as in plain evaluation).
-With ``collect_negation_trace=True``, every absence check that filters a
-binding yields a ``NegationWitness`` carrying the rule, body position,
-predicate, ground args, closed scope and horizon digest — the absence
-explanation. The trace is bounded by ``max_proof_nodes`` and sets
-``truncated`` instead of failing; absence explanations justify *why not*,
-never *what is false*.
+With ``collect_negation_trace=True``, each blocked binding yields a
+``NegationWitness`` for its first present negated atom, carrying the rule,
+body position, predicate, ground args, closed scope and horizon digest.
+Its explicit ``outcome="present"`` identifies a positive blocking fact,
+not an absent fact or a fabricated denial. Successful absence checks enabling
+conclusions are not recorded. This is a *why-not* diagnostic, not a proof of
+derived conclusions or an absence-dependency index for maintenance.
+The trace is bounded by ``max_proof_nodes`` and sets ``truncated`` instead of
+failing; truncation never changes logical closure.
 
 Limits, cancellation and parity
 ----------------------------------------
@@ -84,5 +87,5 @@ recomputation is the correct explicit fallback.
 
 Coordinated with `#125 <https://github.com/mylonasc/gestaltdb/issues/125>`_
 (the broader negation proposal): this slice delivers the scoped stratified
-core with exact anti-joins and scope-carrying witnesses; that issue remains
+core with exact anti-joins and scope-carrying blocker witnesses; that issue remains
 the umbrella for any wider negation work.

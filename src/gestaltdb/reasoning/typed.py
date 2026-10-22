@@ -599,11 +599,13 @@ class GenericResult:
 
 @dataclass(frozen=True)
 class NegationWitness:
-    """One exact absence check: which closed predicate, bound args and scope.
+    """One exact blocking presence check for a failed negated condition.
 
     The witness carries the closed-world scope and the horizon identity of the
     pinned input fact set — never a fabricated negative fact. ``position`` is
-    the negated body occurrence; ``args`` are the ground values tested.
+    the negated body occurrence; ``args`` identify the present blocking fact.
+    ``outcome`` is always ``present``. Successful absence checks enabling a
+    conclusion are not recorded by this why-not diagnostic.
     """
 
     rule_id: str
@@ -612,6 +614,7 @@ class NegationWitness:
     args: tuple[str | Literal, ...]
     scope: tuple[str, ...]
     horizon: str
+    outcome: str = "present"
 
     def __post_init__(self) -> None:
         _text(self.rule_id, "rule_id")
@@ -630,11 +633,13 @@ class NegationWitness:
             _text(predicate, "scope predicate")
         object.__setattr__(self, "scope", tuple(self.scope))
         _text(self.horizon, "horizon")
+        if self.outcome != "present":
+            raise ReasoningError("negation blocker witness outcome must be present")
 
 
 @dataclass(frozen=True)
 class StratifiedRun:
-    """Stratified closure plus its component schedule and absence witnesses."""
+    """Stratified closure plus its component schedule and blocking witnesses."""
 
     result: GenericResult
     strata: tuple[tuple[str, ...], ...]
@@ -830,7 +835,7 @@ class GenericEngine:
         """Fixpoint per positive component in stratum order, then aggregates.
 
         Negated atoms anti-join against completed lower strata only; the trace
-        records one witness per absence check when requested, bounded by
+        records the first present blocker per failed binding when requested, bounded by
         ``max_proof_nodes``. ``iterations`` counts executed component rounds;
         the aggregate stratum adds one round when aggregates exist, matching
         ``evaluate`` accounting on positive programs.
