@@ -140,6 +140,7 @@ class PinnedBatchedClaimSource:
                 break
             self._check_binding()
             count += 1
+            self._scanned = count
             if count > self._limits.max_scanned_claims:
                 raise ReasoningLimitError(f"claim extraction exceeded max_scanned_claims={self._limits.max_scanned_claims}")
             if not isinstance(version, ClaimVersion) or not isinstance(version.claim, Claim):
@@ -172,7 +173,6 @@ class PinnedBatchedClaimSource:
             derived = marker is not None and claim.provenance.get("derived_by") == marker
             if derived and not self._selection.include_derived:
                 continue
-            self._scanned_yielded = getattr(self, "_scanned_yielded", 0) + 1
             yield Evidence(self._mapping.map(Fact(claim.subject, claim.predicate, claim.object)),
                            version.version_id)
         self.verify_source()
@@ -180,15 +180,15 @@ class PinnedBatchedClaimSource:
     def iter_batches(self) -> Iterator[FactBatch]:
         """Yield bounded batches; each batch is bracketed by verification."""
         self.verify_source()
-        self._pushdown, self._scanned_yielded = "none", 0
-        batches, rows, scanned = 0, 0, 0
+        self._pushdown, self._scanned = "none", 0
+        batches, rows = 0, 0
         for batch in batch_evidence(self._filtered(), self._request):
             batches += 1
             rows += len(batch.evidence)
             self._check_binding()
             yield batch
         self.verify_source()
-        self._profile = ExtractionProfile(batches, rows, self._scanned_yielded,
+        self._profile = ExtractionProfile(batches, rows, self._scanned,
                                           self._verifications, self._pushdown)
 
     @property
