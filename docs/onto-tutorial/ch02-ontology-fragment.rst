@@ -30,32 +30,36 @@ Theory and further reading
 
 - `Description logic <https://en.wikipedia.org/wiki/Description_logic>`_
   studies the decidable fragments of first-order logic behind OWL
-  (``ALC``, ``SHOIN``, ``SROIQ``). Gestalt-core-v1 sits far below them: only
-  the axioms with direct Horn rewrites are admitted, which is why this
+  (``ALC``, ``SHOIN``, ``SROIQ``). Gestalt-core-v1 admits only its selected
+  finite Horn rewrites, which is why this
   fragment needs no tableau reasoner.
 - `Web Ontology Language
   <https://en.wikipedia.org/wiki/Web_Ontology_Language>`_ (`OWL 2 overview
   <https://www.w3.org/TR/owl2-overview/>`_) standardizes the full vocabulary
-  (existentials, cardinality, keys) that gestaltdb deliberately excludes;
-  the RE-23 profile matrix (``reasoning/profiles.py``) records exactly which
-  OWL RL constructs map to Horn rules and which are rejected.
+  (including existentials, cardinality, and keys). The named-entity compiler
+  used here does not support that whole vocabulary. Separate experimental
+  modules do not expand its contract: consult :doc:`../reasoning-profiles`
+  and :doc:`../reasoning-el` rather than assuming full OWL support.
 - `Horn clause <https://en.wikipedia.org/wiki/Horn_clause>`_ — at most one
   positive literal — is the logical shape every compiled rule must have.
-  Anything that cannot be written this way (disjunctive heads, unscoped
-  reflexivity) fails closed at compile time.
+  Disjunctive conclusions are not single-head Horn rules. Unscoped
+  reflexivity is a different restriction: it needs an explicit finite domain
+  of individuals here, not a different logical clause shape.
 
 **Intuition.** Read the picture below in two layers: the bottom row is *data*
 (what someone asserted), the top row is *schema* (what the arrows mean).
 ``domain`` says "anything a ``worksFor`` arrow leaves is a ``Researcher``";
 ``subClassOf`` says "every ``Researcher`` is also a ``Person``". The
-``inferred type`` arrow is the only one nobody stored — the engine pencils
-it in:
+``inferred type`` arrows are computed consequences, not stored labels. Both
+``Researcher`` and ``Person`` memberships follow from the one asserted
+``worksFor`` fact:
 
 .. figure:: figures/subsumption-example.svg
    :width: 100%
    :alt: Data vs schema: worksFor domain and Researcher subClassOf Person infer alice is a Person
 
-   Schema (top) over data (bottom); ``inferred type`` is derived, never stored.
+   Schema and data are visually separate; memberships are computed in this
+   example, not written back. Explicit publication is a separate API.
 
 .. code-block:: python
 
@@ -67,7 +71,27 @@ it in:
        Domain("worksFor", "Researcher"),
        SubClassOf("Researcher", "Person"),
    ]))
+   asserted = Fact("alice", "worksFor", "acme")
    result = DatalogEngine().evaluate(
-       plan.program, [Fact("alice", "worksFor", "acme")],
+       plan.program, [asserted],
        limits=ReasoningLimits(), collect_proofs=True)
-   assert Fact("alice", TYPE_PREDICATE, "Person") in result
+   researcher = Fact("alice", TYPE_PREDICATE, "Researcher")
+   person = Fact("alice", TYPE_PREDICATE, "Person")
+   assert result.facts == tuple(sorted((asserted, researcher, person)))
+   assert not result.explain(person).truncated
+   assert {origin.axiom_id for origin in plan.origins} == {
+       axiom.axiom_id for axiom in plan.ontology.axioms
+   }
+
+Read this as a two-step explanation: the domain rule derives ``Researcher``;
+the subclass rule uses it to derive ``Person``. ``result`` retains the asserted
+fact as well as both conclusions. Its explanation is one bounded witness,
+not a complete inventory of alternative supports for deletion maintenance.
+
+.. note::
+
+   Domain is an implication, not an input-validation constraint. An untyped
+   subject of ``worksFor`` gains ``Researcher`` membership; it is not rejected
+   for lacking that label. Short names in this example are exact local symbols:
+   ``Person`` and ``person`` are different constants, and only ``TYPE_PREDICATE``
+   supplies the full reserved ``rdf:type`` IRI.

@@ -7,7 +7,10 @@ Core and compiler never touch storage. Grounding is explicit:
   contracts with exact version evidence; ``reasoning/adapters/batched.py``
   borrows caller views; LevelDB snapshot requests fail closed.
 * ``reasoning/adapters/native.py`` — audited PyRex Arrow scans, version-gated
-  (``pyrex-rocksdb>=0.5.0``); decoding stays caller-owned (#194).
+  (``pyrex-rocksdb>=0.5.0``). Raw scans return KV batches; the explicit
+  ``iter_decoded_evidence`` path supplies decoded evidence with exact version
+  IDs and visibility checks. Issue #194 still requests larger-scale measurements,
+  not the first implementation of decoding.
 * ``reasoning/adapters/graph.py`` — explicit current-graph projection and
   per-relation fanout (:doc:`../ontology-graph`).
 
@@ -21,5 +24,7 @@ Point-only publication (``reasoning/adapters/publication.py``,
 nontransactional orphan recovery is caller-managed, never silently repaired.
 Maintenance (``reasoning/maintenance.py``, ``catalog.py``) adds staged
 generations, forward/reverse dependency indexes, insertion propagation and
-DRed deletion — live-reasoning slice RE-E3 (#159); reuse and session-resume
-gaps are #249–#253.
+DRed deletion — live-reasoning slice RE-E3 (#159). These modules supply separate
+contracts, not one automatic storage-to-maintenance service. See
+:doc:`../reasoning-generations`, :doc:`../reasoning-maintenance`, and the
+status distinctions in :doc:`ch08-gaps`.

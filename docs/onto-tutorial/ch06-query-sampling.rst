@@ -1,7 +1,7 @@
 Querying and sampling with inferred facts
 ============================================
 
-Inferred facts never rewrite the graph. Consumption is explicit:
+Evaluation alone does not rewrite the graph. Consumption or publication is explicit:
 
 * ``reasoning/adapters/graph.py`` — ``GraphMapping`` + ``expand_edge_types``
   projects inferred predicates to typed traversals with per-relation fanout
@@ -15,8 +15,18 @@ Inferred facts never rewrite the graph. Consumption is explicit:
 
 .. math::
 
-   N_k(s) = \bigcup_{r \in R_{exp}} \text{sample}(\text{adj}_r(s), k_r)
-   \qquad \sum_r k_r \leq K
+   N_K(s) = \operatorname{distinct}\!\left(
+       \bigcup_{r \in R_{exp}} \operatorname{sample}(N_r(s), k_r)\right),
+   \qquad \sum_r k_r = K, \quad |N_K(s)| \leq K
+
+For ``sample_expanded_neighbors``, ``N_r(s)`` is the distinct logical endpoint
+set for an expanded member relation, not a bucket of physical edge IDs. Quotas
+split ``K`` evenly in sorted relation order, with earlier members taking the
+remainder. Overlapping endpoints are attributed to the first member; unused
+quota is not redistributed. Thus fanout 10 is a cap, not a guarantee of ten
+distinct endpoints or uniform sampling over the union. Multiple proof paths
+do not increase an endpoint's weight. Inferred seed handoff leaves the next
+asserted-graph sampling hop unchanged.
 
 Seed filtering alone never constrains every hop — define the eligible graph
 with snapshot ``node_filter`` / ``edge_filter``. See :doc:`../typed-sampling`
@@ -26,11 +36,12 @@ and :doc:`../ontology-graph`. End-to-end pipeline glue is open work (#255,
 Theory and further reading
 ---------------------------
 
-- `SPARQL <https://en.wikipedia.org/wiki/SPARQL>`_ (`SPARQL 1.1 overview
-  <https://www.w3.org/TR/sparql11-overview/>`_) shows the alternative design:
-  entailment regimes baked into the query language itself. GestaltDB goes the
-  other way — plain Cypher over stored facts plus explicit adapters — so that
-  inferred and stored facts never mix silently.
+- `SPARQL <https://en.wikipedia.org/wiki/SPARQL>`_ uses basic graph pattern
+  matching by default. The separate `SPARQL 1.1 Entailment Regimes
+  <https://www.w3.org/TR/sparql11-entailment/>`_ recommendation defines
+  extensions for selected entailment relations. A SPARQL endpoint does not
+  automatically implement OWL inference. GestaltDB exposes Cypher plus explicit
+  reasoning adapters, not a SPARQL endpoint.
 - `Graph query language
   <https://en.wikipedia.org/wiki/Graph_query_language>`_ compares the
   traversal idioms (pattern matching, path queries, fanout control) that both

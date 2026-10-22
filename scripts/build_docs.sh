@@ -8,7 +8,7 @@
 #   1. check_docs.py (API/docs drift gate)
 #   2. sphinx -b html -W docs <output> (warnings are errors, like CI plus -W)
 #   3. verify onto-tutorial pages exist in the output
-#   4. optional --examples: doc_tool.py test-examples (slow; off by default)
+#   4. optional --examples: tutorial cells + modular doc examples
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -18,7 +18,12 @@ RUN_EXAMPLES=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --examples) RUN_EXAMPLES=1; shift ;;
-    --output) OUTPUT="$2"; shift 2 ;;
+    --output)
+      if [[ $# -lt 2 || -z "$2" || "$2" == --* ]]; then
+        echo "--output requires a directory" >&2
+        exit 2
+      fi
+      OUTPUT="$2"; shift 2 ;;
     -h|--help)
       echo "Usage: scripts/build_docs.sh [--examples] [--output DIR]";
       exit 0 ;;
@@ -45,8 +50,11 @@ done
 echo "onto-tutorial pages present."
 
 if [[ "$RUN_EXAMPLES" -eq 1 ]]; then
+  echo "==> tutorial chapter and notebook examples (LMDB)"
+  uv run --extra lmdb pytest tests/test_ontology_tutorial.py -q
   echo "==> doc_tool.py test-examples"
-  uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py test-examples
+  uv run --extra lmdb --extra leveldb --extra polars \
+    python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py test-examples
 fi
 
 echo "OK: docs built at $OUTPUT"

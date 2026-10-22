@@ -9,9 +9,37 @@ This tutorial is (1) a basic ontology-reasoning walkthrough with gestaltdb,
 capabilities underneath — and how gestaltdb supports them efficiently — and
 (3) an explicit map of gaps and pain points, linked to open issues.
 
-Conventions: every chapter states its fragment, shows the math, runs code via
-the :doc:`toolkit <toolkit/index>`, and links back to ``src/gestaltdb`` and the
-epic issues (#156–#161, #248–#256, #194, #200, PropEnh #124–#128).
+Start with chapters 1–2 and notebook 1 for a first inference. Chapters 3–6
+explain the execution and storage boundaries; chapters 7–8 are the performance
+and limitations reference. The :doc:`toolkit <toolkit/index>` regenerates the
+illustrations, and the :doc:`notebooks <notebooks/index>` provide runnable labs.
+
+Setup and version boundary
+--------------------------
+
+Examples target this source checkout, based on ontology integration commit
+``0dba88f``, not the published package on PyPI. On 2026-10-22, remote ``main``
+was ``25daaf9`` and remote ``feature/onto-dev-epic-2`` was ``9400930``; the
+latter contains additional work not imported into this tutorial branch.
+An open roadmap issue is not evidence that its code is absent: chapter 8
+separates available capabilities from outstanding acceptance work.
+
+From the repository root, use a supported Python (3.10–3.13) and ``uv``::
+
+   uv sync --extra lmdb
+   uv run --with jupyterlab --with ipykernel jupyter lab docs/onto-tutorial/notebooks
+   ./scripts/build_docs.sh
+
+The standalone reasoning examples need no embedded backend. The property-graph
+labs use the explicit ``lmdb`` extra, temporary databases, and deterministic
+assertions. Choose the notebook kernel belonging to this environment; installing
+Jupyter elsewhere does not install GestaltDB into that kernel.
+
+Build output starts at ``docs/_build/html/onto-tutorial/index.html``. Building
+Sphinx renders prose and figures; it does not execute notebook cells. Run the
+tutorial's executable checks with::
+
+   uv run pytest tests/test_ontology_tutorial.py -q
 
 .. toctree::
    :maxdepth: 2

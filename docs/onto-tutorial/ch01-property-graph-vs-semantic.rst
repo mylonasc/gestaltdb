@@ -10,7 +10,7 @@ over the whiteboard and copy every arrow as a uniform triple
 ``(subject, predicate, object)``; write class membership as just another
 arrow, ``(alice, rdf:type, Researcher)``. That tracing is the *semantic*
 view. This tutorial's recurring diagram — built with gestaltdb's own viz
-(``gestaltdb.viz.api`` → ``save_svg``) from a real ``Node``/``Edge`` graph in
+(``gestaltdb.viz.api`` → SVG export) from a real ``Node``/``Edge`` graph in
 ``toolkit/landscape.py`` — maps how the two views and their languages relate.
 It grows in three stages; node color is the concept kind, arrow labels are
 the relationships.
@@ -20,17 +20,22 @@ Stage 1 — the property-graph world
 
 .. figure:: figures/landscape-stage1.svg
    :width: 100%
-   :alt: Stage 1: property graph store queried by Cypher, GraphQL, SQL
+   :alt: Stage 1: property graphs, Cypher patterns, GraphQL API resolvers, and SQL graph extensions
 
    Stage 1: the store and its query languages.
 
-``Property Graph DB`` *stores* labeled nodes and typed edges. Three language
-families *query* it: **Cypher** (pattern matching, gestaltdb's language —
-see :doc:`../cypher`), **GraphQL** (client-shaped selection over graph APIs),
-**SQL / SQL-PGQ** (relational engine with graph pattern extensions).
-Intuition: the store is the whiteboard; the languages are different hands
-pointing at it — same drawing, different gestures. Nothing here says what an
-arrow *means*; ``worksFor`` is just a label.
+``Property Graph DB`` *stores* labeled nodes and typed edges. **Cypher**
+expresses graph patterns (GestaltDB's query language; see :doc:`../cypher`).
+**GraphQL** describes a typed API response: application resolvers may read a
+graph, a relational database, or remote services. It is not a native property-
+graph query language. **SQL** queries relations; **SQL/PGQ** adds property-graph
+pattern matching to SQL implementations that support it. GestaltDB supplies
+neither SQL/PGQ nor a GraphQL server. The map compares technologies, not a list
+of supported endpoints.
+
+Intuition: a query language is a way to ask about the whiteboard; an API is a
+way to package answers. Naming an arrow ``worksFor`` does not by itself add
+domain, range, or subclass inference.
 
 Stage 2 — the semantic overlay
 ------------------------------
@@ -41,16 +46,26 @@ Stage 2 — the semantic overlay
 
    Stage 2: projecting the whiteboard onto tracing paper.
 
-Property nodes/edges *project to* **RDF triples** — the W3C lingua franca
-where everything, including class membership, is a triple with IRIs.
-**OWL** *extends* RDF with a vocabulary for saying what arrows mean
+Selected property nodes/edges *project to* binary facts with an explicit
+mapping. **RDF** represents graphs as sets of triples: subjects are IRIs or
+blank nodes, predicates are IRIs, and objects may also be literals. A bare
+``Fact("alice", "worksFor", "acme")`` is a logical triple over local symbols,
+not automatically a standards-compliant RDF serialization. Export would need
+an IRI policy. Parallel edges collapse under set semantics unless their
+identities are modeled separately.
+
+**OWL** provides an ontology language, with an RDF serialization, for saying
+what relationships mean
 (subclasses, domains, inverses, transitivity). A gestaltdb **Ontology**
 *selects from* OWL a small decidable fragment (``PROFILE =
 "gestalt-core-v1"``) and *contains* **Axioms** — see
 :doc:`ch02-ontology-fragment`. Intuition: the tracing paper doesn't replace
 the whiteboard; it is an explicit, lossy-but-uniform copy. The projection is
-caller-owned (``ontology/adapters/rdf.py`` is strict offline import, and
-unsupported OWL is rejected, never approximated).
+caller-owned. ``reasoning/adapters/graph.py`` maps current graph records to
+facts. In contrast, ``ontology/adapters/rdf.py`` imports selected *schema
+axioms* from RDF documents; it is not a general instance-data (ABox) loader.
+Strict import rejects unsupported constructs. Non-strict import explicitly
+marks the report incomplete and requires separate consent before compilation.
 
 Stage 3 — the reasoning layer
 -----------------------------
@@ -62,14 +77,19 @@ Stage 3 — the reasoning layer
    Stage 3: an assistant that fills in the missing arrows.
 
 Axioms *compile to* **Rules** over **Facts**; **Datalog** *defines* that rule
-shape (safe, function-free Horn rules — see :doc:`ch03-datalog-irs`), and
-**Prolog** *extends* it toward full programming (functions, negation as
-failure, search order). ``DatalogEngine`` *evaluates* Datalog programs,
-*infers over* versioned **Claims**, is *grounded* by the graph store via
-explicit extraction, and *feeds* consumers such as ``SamplerSnapshot``.
-**Cypher** *shares_roots* with Datalog — both are declarative pattern
-languages, but Cypher matches stored patterns while Datalog derives new
-facts. Intuition: the engine is an assistant that reads the tracing paper
+shape (safe, function-free Horn rules — see :doc:`ch03-datalog-irs`).
+**Prolog** is a related logic-programming language, typically evaluated by
+goal-directed search with clause order, compound terms, and optional control
+features. It is not simply Datalog with more keywords.
+``DatalogEngine`` evaluates facts or evidence supplied by callers; explicit
+adapters can obtain those from current records or temporal claims. The engine
+does not read a database or construct a ``SamplerSnapshot`` itself. Passing
+inferred endpoints as sampler seeds does not make later hops traverse inferred
+edges.
+
+**Cypher** and Datalog both bind variables by matching relations, but their
+contracts differ: Cypher returns query rows (and can perform writes), whereas
+positive Datalog computes a set-valued closure. Intuition: the engine reads the tracing paper
 plus the rulebook and pencils in every arrow the rules demand (``alice`` is a
 ``Person``), while the whiteboard itself stays untouched.
 
@@ -98,21 +118,30 @@ Theory and further reading
   <https://en.wikipedia.org/wiki/Semantic_Web>`_ article gives the original
   vision (machine-readable web of data) that OWL and the ontology layer come
   from.
-- `GraphQL <https://en.wikipedia.org/wiki/GraphQL>`_ queries by client-shaped
-  selection rather than pattern matching — same graph, different gesture.
+- `GraphQL <https://en.wikipedia.org/wiki/GraphQL>`_ specifies client-shaped
+  API selection; its resolvers choose how and where to fetch the data.
 
 .. code-block:: python
 
    from gestaltdb.graphdb import Edge, GraphDB, Node
-   from gestaltdb.kvstores import LevelDBStore
-   from gestaltdb.serializers import PickleSerializer
+   from tempfile import TemporaryDirectory
 
-   graph = GraphDB(LevelDBStore("/tmp/onto_tut_pg"), PickleSerializer())
-   try:
-       graph.put_node(Node(node_id="alice", labels=["Person"],
-                           properties={"name": "Alice"}))
-       graph.put_edge(Edge(edge_id="e1", source="alice", target="acme",
-                           properties={"type": "worksFor"}))
-       print(graph.query('MATCH (a:Person) RETURN a.name').records)
-   finally:
-       graph.close()
+   with TemporaryDirectory() as directory:
+       graph = GraphDB.create(directory, backend="lmdb", serializer="json")
+       try:
+           graph.put_nodes([
+               Node(node_id="alice", labels=["Researcher"],
+                    properties={"name": "Alice"}),
+               Node(node_id="acme", labels=["Organization"]),
+           ])
+           graph.put_edge(Edge(edge_id="e1", source="alice", target="acme",
+                               properties={"type": "worksFor"}))
+           rows = graph.query(
+               'MATCH (a:Researcher) RETURN a.name AS name').records
+           assert rows == [{"name": "Alice"}]
+           assert not graph.query('MATCH (a:Person) RETURN a').records
+       finally:
+           graph.close()
+
+The second assertion is the important one: without an explicit reasoning step,
+the stored label ``Researcher`` does not imply a stored label ``Person``.

@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from html import escape
 
 
 def subsumption_svg(classes: list[str], edges: list[tuple[str, str]]) -> str:
-    """Render a minimal top-down lattice as dependency-free SVG."""
+    """Render a small class graph in a vertical list (not a lattice solver)."""
     w, h = 480, 120 + 48 * max(1, len(classes))
     y = {c: 60 + 48 * i for i, c in enumerate(classes)}
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}">']
+    parts.append('<defs><marker id="a" viewBox="0 0 10 10" refX="10" refY="5" '
+                 'markerWidth="6" markerHeight="6" orient="auto-start-reverse">'
+                 '<path d="M 0 0 L 10 5 L 0 10 z"/></marker></defs>')
     for a, b in edges:
         parts.append(
             f'<line x1="240" y1="{y[a]}" x2="240" y2="{y[b]}" '
@@ -19,7 +23,7 @@ def subsumption_svg(classes: list[str], edges: list[tuple[str, str]]) -> str:
         parts.append(
             f'<rect x="170" y="{y[c]-14}" width="140" height="28" fill="white" '
             f'stroke="black"/><text x="240" y="{y[c]+5}" text-anchor="middle" '
-            f'font-size="13">{c}</text>'
+            f'font-size="13">{escape(c)}</text>'
         )
     parts.append("</svg>")
     return "".join(parts)
