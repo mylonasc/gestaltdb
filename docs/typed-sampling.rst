@@ -399,9 +399,11 @@ without new parameters:
 
 Expanded names absent from the snapshot fail closed (typo safety), while
 hierarchy-undefined names expand to themselves. Fanout caps apply to the
-union of expanded relations, not per sub-relation. Node sub-types and
-Cypher/planner integration remain open follow-ups on the PropEnh-14
-tracker.
+union of expanded relations, not per sub-relation. Node label sub-types are
+available for opt-in Cypher matching through ``LabelHierarchy`` and
+``GraphDB.query(..., label_hierarchy=...)`` (see :doc:`cypher`). Sampler
+node-type expansion over compact snapshot IDs and ontology-compiler coupling
+remain open follow-ups on the PropEnh-14 tracker.
 
 
 Walks support direction/relation filters, repeating metapaths, weighted steps,

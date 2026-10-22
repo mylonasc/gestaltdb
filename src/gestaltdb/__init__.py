@@ -96,6 +96,7 @@ from .modal import (
     ModalExpression,
     ModalOperator,
 )
+from .hierarchy import LabelHierarchy
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .query_engine.cypher import QueryResult
 from .readview import (
@@ -141,6 +142,7 @@ __all__ = [
     "ExplanationEdge",
     "ExplanationNode",
     "IndexMaintenanceMode",
+    "LabelHierarchy",
     "ModalEntailmentResult",
     "ModalError",
     "ModalEvaluationLimitError",

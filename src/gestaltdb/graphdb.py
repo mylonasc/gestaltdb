@@ -6729,6 +6729,7 @@ class GraphDB:
         parameters: Optional[dict[str, object]] = None,
         *,
         read_snapshot: bool | None = None,
+        label_hierarchy=None,
     ):
         """Execute a supported Cypher query.
 
@@ -6742,6 +6743,10 @@ class GraphDB:
                 leading ``$``.
             read_snapshot: Require or disable a unified mutable-state read
                 snapshot. The default uses one automatically when supported.
+            label_hierarchy: Optional ``LabelHierarchy``. When supplied, a
+                required label also matches nodes carrying any transitive
+                sub-type label, including in label expressions, endpoint
+                filters and indexed lookups. Default matching stays exact.
 
         Returns:
             ``gestaltdb.QueryResult`` containing projected records.
@@ -6752,7 +6757,13 @@ class GraphDB:
         """
         from .query_engine.cypher import execute
 
-        return execute(self, cypher, parameters=parameters, read_snapshot=read_snapshot)
+        return execute(
+            self,
+            cypher,
+            parameters=parameters,
+            read_snapshot=read_snapshot,
+            label_hierarchy=label_hierarchy,
+        )
 
     def visualize(self, cypher=None, *, seeds=None, pattern=None, parameters=None, options=None, rng=None):
         """Build an offline interactive visualization of this graph.
