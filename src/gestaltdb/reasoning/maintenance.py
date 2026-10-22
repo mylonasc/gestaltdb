@@ -22,7 +22,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
-from .model import ReasoningError, ReasoningLimitError, ReasoningLimits, _text, check_cancelled
+from .model import ReasoningError, ReasoningLimitError, ReasoningLimits, Variable, _text, check_cancelled
 from .typed import (
     GenericProgram,
     GenericRule,
@@ -401,14 +401,21 @@ def _find_all_supports(program: GenericProgram, full: _TypedIndex, target: Typed
     for rule in program.rules:
         if rule.head.predicate != target.predicate or len(rule.head.args) != len(target.values):
             continue
-        head_blocked = False
+        bindings, compatible = {}, True
         for term, value in zip(rule.head.args, target.values):
-            if not hasattr(term, "name") and term != value:
-                head_blocked = True
+            if isinstance(term, Variable):
+                if term in bindings and bindings[term] != value:
+                    compatible = False
+                    break
+                bindings[term] = value
+            elif term != value:
+                compatible = False
                 break
-        if head_blocked:
+        if not compatible:
             continue
-        stack = [(dict(), dict(), tuple(range(len(rule.body))))]
+        # The requested conclusion supplies bindings for indexed body probes.
+        # Do not enumerate the entire unbound join once per output fact.
+        stack = [(bindings, dict(), tuple(range(len(rule.body))))]
         while stack:
             check_cancelled(cancel)
             bindings, used, remaining = stack.pop()
