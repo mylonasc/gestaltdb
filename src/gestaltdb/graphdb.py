@@ -15,6 +15,7 @@ import uuid
 import base64
 from collections.abc import Mapping
 from contextlib import ExitStack, contextmanager
+from dataclasses import replace
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Union
@@ -678,11 +679,10 @@ class GraphDB:
         )
         self._typed_adjacency_count_cache: dict[tuple[str, bytes, str], int] = {}
         self._verified_current_provenance: dict[str, str] = {}
-        # Decoded temporal commits are immutable (commit IDs are never
-        # reused), so caching them per handle is sound. The cache only
-        # covers successfully decoded visible commits; invisible IDs are
-        # re-checked every time. It is bounded below in get_temporal_commit.
-        self._temporal_commit_cache: dict[tuple[int, bool], TemporalCommit] = {}
+        # Cache private decoded values, scoped to the exact store object.
+        # Only pinned read snapshots can skip storage revalidation. Mutable
+        # entity payloads are copied at the public read boundary.
+        self._temporal_commit_cache: dict = {}
         persisted_node_indexes = self._load_property_index_metadata(_NODE_PROPERTY_INDEXES_METADATA_KEY)
         persisted_edge_indexes = self._load_property_index_metadata(_EDGE_PROPERTY_INDEXES_METADATA_KEY)
         self.indexed_node_properties = set(persisted_node_indexes).union(indexed_node_properties or [])
@@ -5654,26 +5654,52 @@ class GraphDB:
     def get_temporal_commit(
         self, commit_id: int, *, _validate_supersession: bool = True
     ) -> TemporalCommit | None:
-        """Return a fully validated visible temporal commit.
+        """Return a validated visible commit with detached mutable entities.
 
-        Successfully decoded commits are cached per handle. Commits are
-        immutable and their IDs are never reused, so a cached entry cannot
-        go stale; invisible commit IDs are never cached. The cache is
-        bounded to keep long-lived handles from retaining every commit
-        they have ever touched.
+        Decode reuse is bounded and scoped to the exact store object. Pinned
+        verifiable read snapshots can reuse validated records directly;
+        live/unverifiable stores recheck descriptor, marker and envelopes.
         """
+        commit = self._get_temporal_commit_cached(commit_id, _validate_supersession=_validate_supersession)
+        if commit is None:
+            return None
+        return replace(commit, versions=tuple(self._copy_temporal_payload(v) for v in commit.versions))
+
+    @staticmethod
+    def _copy_temporal_payload(version):
+        if isinstance(version, NodeVersion) and version.node is not None:
+            return replace(version, node=copy.deepcopy(version.node))
+        if isinstance(version, EdgeVersion) and version.edge is not None:
+            return replace(version, edge=copy.deepcopy(version.edge))
+        # Claim and its recursively frozen provenance are immutable values.
+        return version
+
+    def _get_temporal_commit_cached(
+        self, commit_id: int, *, _validate_supersession: bool = True
+    ) -> TemporalCommit | None:
         if isinstance(commit_id, bool) or not isinstance(commit_id, int) or commit_id < 1:
             raise ValueError("commit_id must be a positive integer")
-        cache_key = (commit_id, bool(_validate_supersession))
+        cache_key = (id(self.store), commit_id, bool(_validate_supersession))
         cached = self._temporal_commit_cache.get(cache_key)
-        if cached is not None:
-            return cached
+        identity = getattr(self.store, "snapshot_identity", None)
+        if cached is not None and identity is not None and identity.verifiable and identity.sequence is not None:
+            return cached[3]
         descriptor_payload = self.store.get_metadata(self._temporal_commit_key(commit_id))
         marker = self.store.get_metadata(self._temporal_visible_key(commit_id))
         if marker is None:
+            self._temporal_commit_cache.pop(cache_key, None)
             return None
         if descriptor_payload is None or marker != hashlib.sha256(descriptor_payload).digest():
             raise TemporalCorruptionError("temporal commit marker does not match its descriptor")
+        if cached is not None and cached[1] == descriptor_payload:
+            envelopes = tuple(self.store.get_metadata(self._temporal_record_key(commit_id, ordinal))
+                              for ordinal in range(len(cached[2])))
+            if envelopes != cached[2]:
+                raise TemporalCorruptionError("temporal commit record is missing or corrupt")
+            # Supersession targets can change on mutable stores too. Only
+            # reuse the non-supersession validation result in this path.
+            if not _validate_supersession or not any(v.supersedes_version_id for v in cached[3].versions):
+                return cached[3]
         try:
             descriptor = json.loads(descriptor_payload.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -5717,10 +5743,12 @@ class GraphDB:
         except (KeyError, TypeError, ValueError) as exc:
             raise TemporalCorruptionError("invalid temporal commit metadata") from exc
         versions = []
+        envelopes = []
         for ordinal, (version_id, expected_digest) in enumerate(zip(version_ids, record_digests)):
             envelope = self.store.get_metadata(self._temporal_record_key(commit_id, ordinal))
             if envelope is None or hashlib.sha256(envelope).hexdigest() != expected_digest:
                 raise TemporalCorruptionError("temporal commit record is missing or corrupt")
+            envelopes.append(envelope)
             version = self._decode_temporal_version(envelope)
             if version.version_id != version_id or version.commit_id != commit_id or version.commit_ordinal != ordinal:
                 raise TemporalCorruptionError("temporal commit record does not match its descriptor")
@@ -5744,7 +5772,7 @@ class GraphDB:
             # costs a future re-decode, never correctness.
             for old_key in list(self._temporal_commit_cache)[:128]:
                 del self._temporal_commit_cache[old_key]
-        self._temporal_commit_cache[cache_key] = commit
+        self._temporal_commit_cache[cache_key] = (self.store, descriptor_payload, tuple(envelopes), commit)
         return commit
 
     def _decode_temporal_version(self, envelope: bytes):
@@ -6020,22 +6048,22 @@ class GraphDB:
 
     def _get_temporal_version_at(self, locator: bytes):
         commit_id, ordinal = self._decode_temporal_locator(locator)
-        commit = self.get_temporal_commit(commit_id, _validate_supersession=False)
+        commit = self._get_temporal_commit_cached(commit_id, _validate_supersession=False)
         if commit is None:
             return None
         if ordinal >= len(commit.versions):
             raise TemporalCorruptionError("temporal index locator ordinal is out of range")
-        return commit.versions[ordinal]
+        return self._copy_temporal_payload(commit.versions[ordinal])
 
     def _get_temporal_version_through(self, version_id: str, through_commit: int):
         version_id = normalize_version_id(version_id)
         for commit_id in range(1, through_commit + 1):
-            commit = self.get_temporal_commit(commit_id, _validate_supersession=False)
+            commit = self._get_temporal_commit_cached(commit_id, _validate_supersession=False)
             if commit is None:
                 continue
             for version in commit.versions:
                 if version.version_id == version_id:
-                    return version
+                    return self._copy_temporal_payload(version)
         return None
 
     def get_node_version(

@@ -14,6 +14,17 @@ The explicit version APIs do not update records returned by ``get_node`` or
 separate indexes for exact versions, logical entities, valid starts, system
 times, and typed outgoing/incoming traversal.
 
+Decoded-commit caching is scoped to the exact backend store object and bounded
+to 256 entries (oldest-half eviction). Returned node/edge payloads are detached:
+mutating a fetched entity does not change history or a later read. Verified
+pinned backend read snapshots may reuse validated records directly. Live or
+unverifiable stores recheck the visibility marker, descriptor and record bytes
+before decode reuse, so missing markers and changed records are not masked by
+a warm cache. These live checks still cost a commit-sized record scan; the
+cache avoids repeated decoding, not all backend I/O. Separate snapshot/store
+objects never share cache admission even when their GraphDB wrappers share the
+cache dictionary.
+
 Assertions, Corrections, and Retractions
 ----------------------------------------
 
