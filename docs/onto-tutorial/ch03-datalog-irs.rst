@@ -36,7 +36,7 @@ variables remain to be assigned.
 
 Now suppose the graph also states that Acme is located in Athens. We want to
 derive Alice's work location, under the explicit simplifying assumption that a
-research appointment inherits its organization's location:
+employment relationship inherits its organization's location:
 
 .. math::
 
@@ -107,7 +107,7 @@ input set as ``F``, the rules as ``P``, and the accumulated set after round
 ``Bσ ⊆ I_n`` says that *every* substituted body atom is already known. The
 union retains old facts while adding conclusions. ``C_P(F)`` is the **closure**:
 all assertions plus their consequences in this fragment. For chapter 2, the
-initial set contains ``worksFor(alice, acme)``, the next adds Researcher
+initial set contains ``worksFor(alice, acme)``, the next adds Employee
 membership, the next adds Person membership, and the following adds nothing.
 
 This is a **least fixed point**: the smallest closed set containing the input,
@@ -195,7 +195,7 @@ A naive implementation repeats all joins after every round. **Semi-naive**
 evaluation instead uses the latest additions, called the delta ``Δ``, in at
 least one body occurrence of each newly relevant join. The other occurrences
 may use the accumulated facts. Joining only new facts with new facts would be
-incorrect: a new research appointment must still join an old location fact.
+incorrect: a new employment fact must still join an old location fact.
 Subtracting already-known conclusions gives the next delta.
 
 Not every rule needs to run in one global loop. An engine can form a dependency

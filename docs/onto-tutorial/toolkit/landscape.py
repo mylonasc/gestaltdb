@@ -127,24 +127,60 @@ def build_subsumption() -> tuple[list[Node], list[Edge]]:
     from gestaltdb.reasoning import DatalogEngine, Fact, ReasoningLimits
 
     plan = compile_ontology(Ontology("people", [
-        Domain("worksFor", "Researcher"), SubClassOf("Researcher", "Person"),
+        Domain("worksFor", "Employee"), SubClassOf("Employee", "Person"),
     ]))
     result = DatalogEngine().evaluate(
         plan.program, [Fact("alice", "worksFor", "acme")], limits=ReasoningLimits())
     nodes = [
         Node(node_id=key, labels=[kind], properties={"label": key, "kind": kind, "layer": kind})
         for key, kind in [("alice", "data"), ("acme", "data"),
-                          ("worksFor", "schema"), ("Researcher", "schema"),
+                          ("worksFor", "schema"), ("Employee", "schema"),
                           ("Person", "schema")]
     ]
     relations = [("alice", "acme", "asserted: worksFor"),
-                 ("worksFor", "Researcher", "schema: domain"),
-                 ("Researcher", "Person", "schema: subClassOf")]
+                 ("worksFor", "Employee", "schema: domain"),
+                 ("Employee", "Person", "schema: subClassOf")]
     relations.extend((fact.subject, fact.object, "inferred: rdf:type")
                      for fact in result.match(predicate=TYPE_PREDICATE))
     edges = [Edge(edge_id=f"example-{index}", source=source, target=target,
                   properties={"type": relation})
              for index, (source, target, relation) in enumerate(relations)]
+    return nodes, edges
+
+
+def build_job_refinement() -> tuple[list[Node], list[Edge]]:
+    """Show Employee -> Researcher refinement using actual job-rule evaluation."""
+    from gestaltdb.ontology import Domain, Ontology, SubClassOf, TYPE_PREDICATE, compile_ontology
+    from gestaltdb.reasoning import Atom, DatalogEngine, Fact, Program, ReasoningLimits, Rule, Variable
+
+    compiled = compile_ontology(Ontology("jobs", [
+        Domain("worksFor", "Employee"), SubClassOf("Employee", "Person"),
+        SubClassOf("Researcher", "Employee"),
+    ]))
+    x = Variable("x")
+    rule = Rule("employee-with-research-job", [
+        Atom(x, TYPE_PREDICATE, "Employee"),
+        Atom(x, "hasJobDescription", "researcher"),
+    ], Atom(x, TYPE_PREDICATE, "Researcher"))
+    program = Program([*compiled.program.rules, rule])
+    employment = Fact("alice", "worksFor", "acme")
+    engine = DatalogEngine()
+    before = engine.evaluate(program, [employment], limits=ReasoningLimits())
+    assert Fact("alice", TYPE_PREDICATE, "Researcher") not in before
+    result = engine.evaluate(program, [
+        employment, Fact("alice", "hasJobDescription", "researcher"),
+    ], limits=ReasoningLimits())
+    nodes = [Node(key, properties={"label": key, "kind": kind, "layer": kind})
+             for key, kind in [("alice", "data"), ("acme", "data"),
+                               ("researcher", "data"), ("Employee", "schema"),
+                               ("Person", "schema"), ("Researcher", "schema")]]
+    relations = [("Researcher", "Employee", "schema: subClassOf"),
+                 ("Employee", "Person", "schema: subClassOf")]
+    relations.extend((fact.subject, fact.object,
+                      "inferred: rdf:type" if fact.predicate == TYPE_PREDICATE
+                      else "asserted: " + fact.predicate) for fact in result.facts)
+    edges = [Edge(f"job-{i}", source, target, {"type": relation})
+             for i, (source, target, relation) in enumerate(relations)]
     return nodes, edges
 
 
@@ -278,6 +314,10 @@ def render_all(output_dir: str = "docs/onto-tutorial/figures") -> list[str]:
     nodes, edges = build_reasoning_cycle()
     dest = out / "reasoning-cycle.svg"
     save_tutorial_svg(nodes, edges, dest, title="How a rule engine reaches closure")
+    written.append(str(dest))
+    nodes, edges = build_job_refinement()
+    dest = out / "job-refinement.svg"
+    save_tutorial_svg(nodes, edges, dest, title="A job description refines Employee to Researcher")
     written.append(str(dest))
     return written
 

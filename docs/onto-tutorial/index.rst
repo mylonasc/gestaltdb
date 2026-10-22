@@ -65,17 +65,19 @@ By the end, you should be able to:
 
 .. rubric:: The running example
 
-Alice has a research appointment at Acme Lab. We record a ``worksFor``
-relationship and, in this deliberately small model, declare that subjects of
-that relationship are ``Researcher`` instances. Every ``Researcher`` is a
-``Person``. Can the application answer "Is Alice a person?" without a stored
-``Person`` label? If yes, why—and does that answer change the stored graph?
+Alice works for ACME. We record a ``worksFor`` relationship that explicitly
+means employment—not merely being present at ACME's premises. Its domain is
+``Employee``, and every ``Employee`` is a ``Person``. Can the application infer
+Alice's membership without storing either label? What more would it need to
+classify her as a ``Researcher``?
 
-Those questions carry the tutorial. The domain assumption is intentional:
-``worksFor`` here means a research appointment, **not** every kind of employment.
-A real human-resources model should use a more specific predicate or a different
-domain axiom. Reasoning faithfully propagates a mistaken modeling assumption;
-it cannot repair one for you.
+The second question is just as important as the first. Employment alone does
+not establish a research role. We will add a separate ``hasJobDescription``
+fact, with the simplified categories ``researcher`` and ``not_researcher``,
+and a rule that refines an employee into a researcher only with positive
+research-job evidence. Missing job information remains missing information,
+not a negative classification. These distinctions let us see both what an
+ontology implies and what it must **not** imply.
 
 .. rubric:: How to read this document
 

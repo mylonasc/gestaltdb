@@ -4,7 +4,8 @@ Tutorial notebooks
 Use the environment described in :doc:`../index`. Download or open each lab:
 
 * :download:`nb01_subclass_closure.ipynb` — compile ``SubClassOf`` + ``Domain``,
-  evaluate with ``DatalogEngine``, inspect ``result.explain``.
+  infer Employee/Person membership, then add a job-description rule that
+  separately refines employees into researchers; inspect ``result.explain``.
 * :download:`nb02_property_chains.ipynb` — binary ``PropertyChain`` + transitivity,
   origin table back to axiom IDs.
 * :download:`nb03_graph_projection.ipynb` — project a pinned LMDB property graph

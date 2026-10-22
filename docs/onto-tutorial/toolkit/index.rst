@@ -21,6 +21,8 @@ visualization API. No production-library rendering behavior is changed.
   ``DatalogEngine`` rather than a hand-drawn assertion of what it should infer.
   The same renderer generates ``figures/reasoning-cycle.svg`` as a conceptual
   explanation of the fixpoint, not as an execution trace of a particular plan.
+  ``figures/job-refinement.svg`` adds explicit job-description evidence and
+  computes Researcher membership with the same safe rule taught in chapter 2.
 
 Run from the repository root::
 

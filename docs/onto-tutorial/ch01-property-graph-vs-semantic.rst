@@ -34,7 +34,7 @@ Keep these questions separate:
      - Persist an edge; query it through Cypher.
    * - Domain semantics
      - What follows from the chosen meaning?
-     - The research appointment implies class membership.
+     - Employment implies Employee membership, not a research role.
 
 SQL tables can encode these same relationships using keys and joins. A graph
 database does not create information unavailable to a relational representation,
@@ -48,7 +48,7 @@ Choosing nodes, edges, labels, and properties
 Give something a node when its identity and connections matter: Alice and Acme
 must be recognizable across many statements. Give ``Alice`` a display-name
 property rather than using the spelling as identity; two people can share that
-name. ``Researcher`` can be a label for storage/query purposes. Treating it as
+name. ``Employee`` can be a label for storage/query purposes. Treating it as
 an ontology class requires an explicit mapping, not a suggestive string.
 
 The same choice affects facts about relationships. A physical ``worksFor`` edge
@@ -68,7 +68,7 @@ The technology landscape
 relationship in the ``properties["type"]`` convention. Now lay *tracing paper*
 over the whiteboard and copy every arrow as a uniform triple
 ``(subject, predicate, object)``; write class membership as just another
-arrow, ``(alice, rdf:type, Researcher)``. That tracing is the *semantic*
+arrow, ``(alice, rdf:type, Employee)``. That tracing is the *semantic*
 view. In the following maps, colors and enclosing groups distinguish conceptual
 layers; small badges describe each node's role. Read each arrow as a labeled
 relationship, not as an unconditional data-conversion pipeline. The picture
@@ -195,29 +195,30 @@ Theory and further reading
        graph = GraphDB.create(directory, backend="lmdb", serializer="json")
        try:
            graph.put_nodes([
-               Node(node_id="alice", labels=["Researcher"],
+               Node(node_id="alice", labels=["Employee"],
                     properties={"name": "Alice"}),
                Node(node_id="acme", labels=["Organization"]),
            ])
            graph.put_edge(Edge(edge_id="e1", source="alice", target="acme",
                                properties={"type": "worksFor"}))
            rows = graph.query(
-               'MATCH (a:Researcher) RETURN a.name AS name').records
+               'MATCH (a:Employee) RETURN a.name AS name').records
            assert rows == [{"name": "Alice"}]
            assert not graph.query('MATCH (a:Person) RETURN a').records
        finally:
            graph.close()
 
 The second assertion is the important one: without an explicit reasoning step,
-the stored label ``Researcher`` does not imply a stored label ``Person``.
+the stored label ``Employee`` does not imply a stored label ``Person``.
 The first query returns exactly ``[{"name": "Alice"}]``; the second returns no
 rows. No fact about Alice's identity is missing—we have not yet told a reasoner
-what ``Researcher`` means.
+what ``Employee`` means. Neither label lookup nor employment alone establishes
+that Alice is a researcher.
 
 Check your understanding
 -------------------------
 
-**Question.** If Alice's node has label ``Researcher``, why doesn't a normal
+**Question.** If Alice's node has label ``Employee``, why doesn't a normal
 ``MATCH (a:Person)`` return it? Is this a failure of graph storage?
 
 **Answer.** The query matches a different stored label. Subclass meaning and

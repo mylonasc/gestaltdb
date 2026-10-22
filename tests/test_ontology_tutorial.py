@@ -105,6 +105,22 @@ def test_graph_source_escapes_labels():
     assert "A &amp; B &lt; C" in source and "Unicode · title" in source
 
 
+def test_employment_figure_does_not_invent_a_research_role():
+    landscape = load_helper("landscape")
+    base_nodes, base_edges = landscape.build_subsumption()
+    assert "Researcher" not in {node.get_id for node in base_nodes}
+    inferred = {(edge.source, edge.target) for edge in base_edges
+                if edge.properties["type"].startswith("inferred:")}
+    assert inferred == {("alice", "Employee"), ("alice", "Person")}
+    _, refined_edges = landscape.build_job_refinement()
+    assert any(edge.source == "alice" and edge.target == "researcher"
+               and edge.properties["type"] == "asserted: hasJobDescription"
+               for edge in refined_edges)
+    assert any(edge.source == "alice" and edge.target == "Researcher"
+               and edge.properties["type"].startswith("inferred:")
+               for edge in refined_edges)
+
+
 def test_pdf_preflight_has_actionable_error(tmp_path, monkeypatch):
     script = TUTORIAL.parents[1] / "scripts" / "build_tutorial_pdf.py"
     spec = importlib.util.spec_from_file_location("build_tutorial_pdf", script)

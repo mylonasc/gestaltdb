@@ -47,3 +47,11 @@ each row names the doc file, the epic/issue anchor, and the verification.
 - [x] Rewrite core explanations as motivated prose rather than feature inventories.
 - [x] Keep branch/build/checklist/toolkit material in HTML maintainer pages, outside the reader PDF.
 - [x] Validate the PDF's assembled source excludes maintainer pages and reject missing font glyphs.
+
+## Employment and role-model correction
+
+- [x] Give worksFor an Employee domain; infer Person via the subclass relation.
+- [x] Require separate positive job-description evidence to refine Employee into Researcher.
+- [x] Distinguish explicit not_researcher categories, missing evidence, and logical negation.
+- [x] Explain employment versus co-location and the fuller reified activity/job model.
+- [x] Update worked code, notebooks, illustrations, and the committed reader PDF together.

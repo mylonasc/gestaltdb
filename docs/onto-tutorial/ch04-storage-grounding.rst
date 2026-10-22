@@ -26,7 +26,7 @@ an extracted graph without changing its meaning.
 A complete stored-graph example
 --------------------------------
 
-We now deliberately store Alice **without** a ``Researcher`` or ``Person``
+We now deliberately store Alice **without** an ``Employee`` or ``Person``
 label. The only relevant assertion is the appointment edge. The ontology from
 chapter 2 will supply both memberships. Follow the four steps in order: store,
 map, evaluate, and compare the logical answer with the unchanged stored graph.
@@ -41,8 +41,8 @@ map, evaluate, and compare the logical answer with the unchanged stored graph.
    from gestaltdb.reasoning import Fact, ReasoningLimits
    from gestaltdb.reasoning.adapters.graph import GraphMapping, PinnedGraphSource
 
-   compiled = compile_ontology(Ontology("research-appointments", [
-       Domain("worksFor", "Researcher"), SubClassOf("Researcher", "Person"),
+   compiled = compile_ontology(Ontology("employment", [
+       Domain("worksFor", "Employee"), SubClassOf("Employee", "Person"),
    ]))
    with TemporaryDirectory() as directory:
        graph = GraphDB.create(directory, backend="lmdb", serializer="json")
@@ -56,8 +56,10 @@ map, evaluate, and compare the logical answer with the unchanged stored graph.
                        compiled, limits=ReasoningLimits(), collect_proofs=True)
            person = Fact("alice", TYPE_PREDICATE, "Person")
            assert logical.match(subject="alice", predicate=TYPE_PREDICATE) == tuple(sorted([
-               person, Fact("alice", TYPE_PREDICATE, "Researcher"),
+               person, Fact("alice", TYPE_PREDICATE, "Employee"),
            ]))
+           assert not logical.match(subject="alice", predicate=TYPE_PREDICATE,
+                                    object="Researcher")
            assert not logical.result.explain(person).truncated
            assert graph.get_node(b"alice").labels == ()
            assert not graph.query("MATCH (a:Person) RETURN a").records
@@ -74,7 +76,9 @@ that statement in the closure.
 The two membership assertions succeed, while the label query still returns
 no rows. That is the point of the exercise. An in-memory reasoning result is
 not a hidden write to the database. The immutable result may outlive the read
-view; extraction must finish while the view remains open. Notebook 3 adds a
+view; extraction must finish while the view remains open. No Researcher
+membership follows from employment alone; the additional rule in chapter 2
+would also need a mapped job-description fact. Notebook 3 adds a
 visualization of this caller-owned logical result.
 
 When results should become durable

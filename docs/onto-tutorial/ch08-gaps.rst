@@ -97,8 +97,9 @@ What you should now be able to explain
 ----------------------------------------
 
 Return to the directory question. Alice's appointment is stored data; the
-Researcher-to-Person relationship is a modeling axiom; the rule engine computes
-membership; a pinned adapter binds the input to a source state; and a logical
+Employee-to-Person relationship is a modeling axiom; the rule engine computes
+membership, with Researcher requiring an extra job-description premise;
+a pinned adapter binds the input to a source state; and a logical
 query reads the consequence without silently mutating the stored labels.
 Changing one of those steps changes either the question, the assumptions, or
 the execution guarantee. Being able to distinguish them is more valuable than

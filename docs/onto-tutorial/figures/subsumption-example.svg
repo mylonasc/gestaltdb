@@ -1,61 +1,61 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="611.40" height="587.40" viewBox="0.00 0.00 611.40 587.40" role="img" aria-label="One assertion, two inferred memberships">
+<svg xmlns="http://www.w3.org/2000/svg" width="590.40" height="587.40" viewBox="0.00 0.00 590.40 587.40" role="img" aria-label="One assertion, two inferred memberships">
 <g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(25.2 562.2)">
 <title>tutorial</title>
-<polygon fill="white" stroke="transparent" points="-25.2,25.2 -25.2,-562.2 586.2,-562.2 586.2,25.2 -25.2,25.2" />
-<text text-anchor="middle" x="280.5" y="-515.4" font-family="DejaVu Sans" font-size="22.00">One assertion, two inferred memberships</text>
+<polygon fill="white" stroke="transparent" points="-25.2,25.2 -25.2,-562.2 565.2,-562.2 565.2,25.2 -25.2,25.2" />
+<text text-anchor="middle" x="270" y="-515.4" font-family="DejaVu Sans" font-size="22.00">One assertion, two inferred memberships</text>
 <g id="clust1" class="cluster">
 <title>cluster_schema</title>
-<path fill="white" stroke="#7753a6" stroke-width="1.4" d="M20,-8C20,-8 238,-8 238,-8 244,-8 250,-14 250,-20 250,-20 250,-485 250,-485 250,-491 244,-497 238,-497 238,-497 20,-497 20,-497 14,-497 8,-491 8,-485 8,-485 8,-20 8,-20 8,-14 14,-8 20,-8" />
-<text text-anchor="middle" x="129" y="-478.6" font-family="DejaVu Sans" font-size="18.00">Schema: the rulebook</text>
+<path fill="white" stroke="#7753a6" stroke-width="1.4" d="M20,-8C20,-8 216,-8 216,-8 222,-8 228,-14 228,-20 228,-20 228,-485 228,-485 228,-491 222,-497 216,-497 216,-497 20,-497 20,-497 14,-497 8,-491 8,-485 8,-485 8,-20 8,-20 8,-14 14,-8 20,-8" />
+<text text-anchor="middle" x="118" y="-478.6" font-family="DejaVu Sans" font-size="18.00">Schema: the rulebook</text>
 </g>
 <g id="clust2" class="cluster">
 <title>cluster_data</title>
-<path fill="white" stroke="#4164a5" stroke-width="1.4" d="M276,-181C276,-181 458,-181 458,-181 464,-181 470,-187 470,-193 470,-193 470,-485 470,-485 470,-491 464,-497 458,-497 458,-497 276,-497 276,-497 270,-497 264,-491 264,-485 264,-485 264,-193 264,-193 264,-187 270,-181 276,-181" />
-<text text-anchor="middle" x="367" y="-478.6" font-family="DejaVu Sans" font-size="18.00">Data: the assertion</text>
+<path fill="white" stroke="#4164a5" stroke-width="1.4" d="M255,-181C255,-181 437,-181 437,-181 443,-181 449,-187 449,-193 449,-193 449,-485 449,-485 449,-491 443,-497 437,-497 437,-497 255,-497 255,-497 249,-497 243,-491 243,-485 243,-485 243,-193 243,-193 243,-187 249,-181 255,-181" />
+<text text-anchor="middle" x="346" y="-478.6" font-family="DejaVu Sans" font-size="18.00">Data: the assertion</text>
 </g>
 
 <g id="relation-example-1" class="edge">
-<title>worksFor-&gt;Researcher</title>
-<path fill="none" stroke="#64748b" stroke-width="2.3" d="M92.95,-369.77C84.39,-350.14 77.97,-325.63 85,-304 86.6,-299.09 88.76,-294.24 91.28,-289.56" />
-<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="94.63,-291.1 96.86,-280.21 88.32,-287.33 94.63,-291.1" />
-<polygon fill="white" stroke="transparent" points="85,-312.5 85,-337.5 217,-337.5 217,-312.5 85,-312.5" />
-<text text-anchor="start" x="89" y="-321" font-family="DejaVu Sans" font-size="15.00" fill="#334155">schema: domain</text>
+<title>worksFor-&gt;Employee</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M78.01,-369.89C72.68,-362.5 67.98,-354.41 65,-346 58.77,-328.4 58.43,-321.47 65,-304 66.95,-298.82 69.56,-293.8 72.59,-289.01" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="75.82,-290.8 78.85,-280.09 69.81,-286.57 75.82,-290.8" />
+<polygon fill="white" stroke="transparent" points="65,-312.5 65,-337.5 197,-337.5 197,-312.5 65,-312.5" />
+<text text-anchor="start" x="69" y="-321" font-family="DejaVu Sans" font-size="15.00" fill="#334155">schema: domain</text>
 </g>
 
 <g id="relation-example-2" class="edge">
-<title>Researcher-&gt;Person</title>
-<path fill="none" stroke="#64748b" stroke-width="2.3" d="M131.36,-204.82C133,-179.35 135.2,-145.18 136.96,-117.69" />
-<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="140.64,-117.84 137.64,-107.12 133.3,-117.37 140.64,-117.84" />
-<polygon fill="white" stroke="transparent" points="135,-131 135,-173 227,-173 227,-131 135,-131" />
-<text text-anchor="start" x="149" y="-157" font-family="DejaVu Sans" font-size="15.00" fill="#334155">schema:</text>
-<text text-anchor="start" x="139" y="-140" font-family="DejaVu Sans" font-size="15.00" fill="#334155">subClassOf</text>
-</g>
-
-<g id="relation-example-4" class="edge">
-<title>alice-&gt;Researcher</title>
-<path fill="none" stroke="#19835c" stroke-width="2.3" stroke-dasharray="5,2" d="M315.58,-369.83C287.73,-350.11 252.63,-325.5 221,-304 212.34,-298.12 203.18,-291.98 194.13,-285.98" />
-<polygon fill="#19835c" stroke="#19835c" stroke-width="2.3" points="195.91,-282.75 185.13,-280.02 191.86,-288.88 195.91,-282.75" />
-<polygon fill="white" stroke="transparent" points="281,-304 281,-346 354,-346 354,-304 281,-304" />
-<text text-anchor="start" x="285.5" y="-330" font-family="DejaVu Sans" font-size="15.00" fill="#334155">inferred:</text>
-<text text-anchor="start" x="288" y="-313" font-family="DejaVu Sans" font-size="15.00" fill="#334155">rdf:type</text>
+<title>Employee-&gt;Person</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M118,-204.82C118,-179.35 118,-145.18 118,-117.69" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="121.68,-117.62 118,-107.12 114.33,-117.62 121.68,-117.62" />
+<polygon fill="white" stroke="transparent" points="118,-131 118,-173 210,-173 210,-131 118,-131" />
+<text text-anchor="start" x="132" y="-157" font-family="DejaVu Sans" font-size="15.00" fill="#334155">schema:</text>
+<text text-anchor="start" x="122" y="-140" font-family="DejaVu Sans" font-size="15.00" fill="#334155">subClassOf</text>
 </g>
 
 <g id="relation-example-3" class="edge">
+<title>alice-&gt;Employee</title>
+<path fill="none" stroke="#19835c" stroke-width="2.3" stroke-dasharray="5,2" d="M294.83,-369.92C260.19,-345.15 214.29,-312.34 177.94,-286.35" />
+<polygon fill="#19835c" stroke="#19835c" stroke-width="2.3" points="180.07,-283.36 169.39,-280.24 175.8,-289.34 180.07,-283.36" />
+<polygon fill="white" stroke="transparent" points="259,-304 259,-346 332,-346 332,-304 259,-304" />
+<text text-anchor="start" x="263.5" y="-330" font-family="DejaVu Sans" font-size="15.00" fill="#334155">inferred:</text>
+<text text-anchor="start" x="266" y="-313" font-family="DejaVu Sans" font-size="15.00" fill="#334155">rdf:type</text>
+</g>
+
+<g id="relation-example-4" class="edge">
 <title>alice-&gt;Person</title>
-<path fill="none" stroke="#19835c" stroke-width="2.3" stroke-dasharray="5,2" d="M432.3,-369.78C440.33,-362.82 447.59,-354.89 453,-346 491.18,-283.26 504.68,-240.77 462,-181 409.6,-107.61 305.28,-82.45 229.55,-74.1" />
-<polygon fill="#19835c" stroke="#19835c" stroke-width="2.3" points="229.88,-70.44 219.06,-73.03 229.13,-77.75 229.88,-70.44" />
-<polygon fill="white" stroke="transparent" points="488,-221.5 488,-263.5 561,-263.5 561,-221.5 488,-221.5" />
-<text text-anchor="start" x="492.5" y="-247.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">inferred:</text>
-<text text-anchor="start" x="495" y="-230.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">rdf:type</text>
+<path fill="none" stroke="#19835c" stroke-width="2.3" stroke-dasharray="5,2" d="M411.3,-369.78C419.33,-362.82 426.59,-354.89 432,-346 470.18,-283.26 483.71,-240.75 441,-181 388.42,-107.44 283.78,-82.31 207.81,-74.01" />
+<polygon fill="#19835c" stroke="#19835c" stroke-width="2.3" points="208.11,-70.35 197.29,-72.95 207.37,-77.66 208.11,-70.35" />
+<polygon fill="white" stroke="transparent" points="467,-221.5 467,-263.5 540,-263.5 540,-221.5 467,-221.5" />
+<text text-anchor="start" x="471.5" y="-247.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">inferred:</text>
+<text text-anchor="start" x="474" y="-230.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">rdf:type</text>
 </g>
 
 <g id="relation-example-0" class="edge">
 <title>alice-&gt;acme</title>
-<path fill="none" stroke="#64748b" stroke-width="2.3" d="M367,-369.92C367,-346.62 367,-316.19 367,-291.03" />
-<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="370.68,-290.74 367,-280.24 363.33,-290.74 370.68,-290.74" />
-<polygon fill="white" stroke="transparent" points="367,-304 367,-346 445,-346 445,-304 367,-304" />
-<text text-anchor="start" x="371" y="-330" font-family="DejaVu Sans" font-size="15.00" fill="#334155">asserted:</text>
-<text text-anchor="start" x="372.5" y="-313" font-family="DejaVu Sans" font-size="15.00" fill="#334155">worksFor</text>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M346,-369.92C346,-346.62 346,-316.19 346,-291.03" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="349.68,-290.74 346,-280.24 342.33,-290.74 349.68,-290.74" />
+<polygon fill="white" stroke="transparent" points="346,-304 346,-346 424,-346 424,-304 346,-304" />
+<text text-anchor="start" x="350" y="-330" font-family="DejaVu Sans" font-size="15.00" fill="#334155">asserted:</text>
+<text text-anchor="start" x="351.5" y="-313" font-family="DejaVu Sans" font-size="15.00" fill="#334155">worksFor</text>
 </g>
 
 <g id="concept-worksFor" class="node">
@@ -65,32 +65,32 @@
 <text text-anchor="start" x="51" y="-392.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">worksFor</text>
 </g>
 
-<g id="concept-Researcher" class="node">
-<title>Researcher</title>
-<path fill="#f2ecff" stroke="#7753a6" stroke-width="2.2" d="M213.5,-280C213.5,-280 44.5,-280 44.5,-280 38.5,-280 32.5,-274 32.5,-268 32.5,-268 32.5,-217 32.5,-217 32.5,-211 38.5,-205 44.5,-205 44.5,-205 213.5,-205 213.5,-205 219.5,-205 225.5,-211 225.5,-217 225.5,-217 225.5,-268 225.5,-268 225.5,-274 219.5,-280 213.5,-280" />
-<text text-anchor="start" x="103.5" y="-254.9" font-family="DejaVu Sans" font-size="12.00" fill="#7753a6">SCHEMA</text>
-<text text-anchor="start" x="52" y="-227.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Researcher</text>
+<g id="concept-Employee" class="node">
+<title>Employee</title>
+<path fill="#f2ecff" stroke="#7753a6" stroke-width="2.2" d="M191.5,-280C191.5,-280 44.5,-280 44.5,-280 38.5,-280 32.5,-274 32.5,-268 32.5,-268 32.5,-217 32.5,-217 32.5,-211 38.5,-205 44.5,-205 44.5,-205 191.5,-205 191.5,-205 197.5,-205 203.5,-211 203.5,-217 203.5,-217 203.5,-268 203.5,-268 203.5,-274 197.5,-280 191.5,-280" />
+<text text-anchor="start" x="92.5" y="-254.9" font-family="DejaVu Sans" font-size="12.00" fill="#7753a6">SCHEMA</text>
+<text text-anchor="start" x="52" y="-227.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Employee</text>
 </g>
 
 <g id="concept-Person" class="node">
 <title>Person</title>
-<path fill="#f2ecff" stroke="#7753a6" stroke-width="2.2" d="M207,-107C207,-107 73,-107 73,-107 67,-107 61,-101 61,-95 61,-95 61,-44 61,-44 61,-38 67,-32 73,-32 73,-32 207,-32 207,-32 213,-32 219,-38 219,-44 219,-44 219,-95 219,-95 219,-101 213,-107 207,-107" />
-<text text-anchor="start" x="114" y="-81.9" font-family="DejaVu Sans" font-size="12.00" fill="#7753a6">SCHEMA</text>
-<text text-anchor="start" x="93" y="-54.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Person</text>
+<path fill="#f2ecff" stroke="#7753a6" stroke-width="2.2" d="M185,-107C185,-107 51,-107 51,-107 45,-107 39,-101 39,-95 39,-95 39,-44 39,-44 39,-38 45,-32 51,-32 51,-32 185,-32 185,-32 191,-32 197,-38 197,-44 197,-44 197,-95 197,-95 197,-101 191,-107 185,-107" />
+<text text-anchor="start" x="92" y="-81.9" font-family="DejaVu Sans" font-size="12.00" fill="#7753a6">SCHEMA</text>
+<text text-anchor="start" x="71" y="-54.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Person</text>
 </g>
 
 <g id="concept-alice" class="node">
 <title>alice</title>
-<path fill="#eaf2ff" stroke="#4164a5" stroke-width="2.2" d="M434,-445C434,-445 300,-445 300,-445 294,-445 288,-439 288,-433 288,-433 288,-382 288,-382 288,-376 294,-370 300,-370 300,-370 434,-370 434,-370 440,-370 446,-376 446,-382 446,-382 446,-433 446,-433 446,-439 440,-445 434,-445" />
-<text text-anchor="start" x="351" y="-419.9" font-family="DejaVu Sans" font-size="12.00" fill="#4164a5">DATA</text>
-<text text-anchor="start" x="335" y="-392.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">alice</text>
+<path fill="#eaf2ff" stroke="#4164a5" stroke-width="2.2" d="M413,-445C413,-445 279,-445 279,-445 273,-445 267,-439 267,-433 267,-433 267,-382 267,-382 267,-376 273,-370 279,-370 279,-370 413,-370 413,-370 419,-370 425,-376 425,-382 425,-382 425,-433 425,-433 425,-439 419,-445 413,-445" />
+<text text-anchor="start" x="330" y="-419.9" font-family="DejaVu Sans" font-size="12.00" fill="#4164a5">DATA</text>
+<text text-anchor="start" x="314" y="-392.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">alice</text>
 </g>
 
 <g id="concept-acme" class="node">
 <title>acme</title>
-<path fill="#eaf2ff" stroke="#4164a5" stroke-width="2.2" d="M434,-280C434,-280 300,-280 300,-280 294,-280 288,-274 288,-268 288,-268 288,-217 288,-217 288,-211 294,-205 300,-205 300,-205 434,-205 434,-205 440,-205 446,-211 446,-217 446,-217 446,-268 446,-268 446,-274 440,-280 434,-280" />
-<text text-anchor="start" x="351.5" y="-254.9" font-family="DejaVu Sans" font-size="12.00" fill="#4164a5">DATA</text>
-<text text-anchor="start" x="331" y="-227.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">acme</text>
+<path fill="#eaf2ff" stroke="#4164a5" stroke-width="2.2" d="M413,-280C413,-280 279,-280 279,-280 273,-280 267,-274 267,-268 267,-268 267,-217 267,-217 267,-211 273,-205 279,-205 279,-205 413,-205 413,-205 419,-205 425,-211 425,-217 425,-217 425,-268 425,-268 425,-274 419,-280 413,-280" />
+<text text-anchor="start" x="330.5" y="-254.9" font-family="DejaVu Sans" font-size="12.00" fill="#4164a5">DATA</text>
+<text text-anchor="start" x="310" y="-227.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">acme</text>
 </g>
 </g>
 </svg>

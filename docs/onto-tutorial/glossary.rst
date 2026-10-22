@@ -13,7 +13,7 @@ Relationship / predicate
 
 Class / instance
    ``Researcher`` is a class; Alice is an instance. "Alice is a Researcher" is
-   membership, while "Researcher is a subclass of Person" relates two classes.
+   membership, while "Researcher is a subclass of Employee" relates two classes.
    Those are different statements, not interchangeable edges.
 
 Label / property
@@ -38,8 +38,15 @@ RDF / IRI
 
 Ontology / axiom
    An ontology supplies explicit vocabulary and semantic statements. An axiom
-   is one such statement, for example ``SubClassOf("Researcher", "Person")``.
+   is one such statement, for example ``SubClassOf("Employee", "Person")``.
    This tutorial uses a named, deliberately limited fragment, not all of OWL.
+
+Employment / job description / role refinement
+   ``worksFor`` denotes an employment relationship here, not mere presence at
+   a workplace. ``hasJobDescription`` supplies separate job evidence. Employee
+   membership alone does not imply Researcher; that finer class requires the
+   classification rule's positive job-description premise. The explicit category
+   ``not_researcher`` is not a synonym for missing research evidence.
 
 Assertion / consequence / closure
    An assertion is supplied as input. A consequence follows under the chosen

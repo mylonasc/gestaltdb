@@ -75,7 +75,7 @@ Why deleting an assertion can be difficult
 -------------------------------------------
 
 Suppose Alice's Person membership follows both from the appointment and from
-an independently sourced Researcher assertion. Deleting the appointment must
+an independently sourced Employee assertion. Deleting the appointment must
 not remove the still-supported Person membership. Conversely, a cycle of rules
 must not keep an answer alive forever after its final real support disappears.
 This is the problem of **truth maintenance**: preserving exactly the conclusions
