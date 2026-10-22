@@ -28,8 +28,10 @@ Requests, batches and capabilities
 
 ``ExtractionRequest`` carries predicate/binding/world selection plus explicit
 ``batch_rows``/``max_rows`` budgets. ``predicates=None`` selects all predicates;
-an empty collection selects none. ``agents``/``sources`` are adapter-enforced
-selection hints. Budgets bound yielded logical rows, not RSS, snapshot history
+an empty collection selects none. The claim adapter intersects request
+``agents``/``sources`` with ``ClaimSelection``: neither can broaden the other.
+``None`` is unrestricted, an empty collection selects none, and ``sources=(None,)``
+selects unsourced claims only. Budgets bound yielded logical rows, not RSS, snapshot history
 or wall time. ``batch_evidence`` splits any evidence stream into immutable
 ``FactBatch`` values with zero-based indexes and a ``complete`` flag on the final
 batch only. It consumes at most one extra input to detect overflow or
@@ -140,7 +142,11 @@ claim query; all other selection filters in Python, with the actual pushdown mod
 verification count and pushdown mode for the most recent completed pass; a new
 pass rebuilds it. Row budgets fail closed mid-stream without partial publication;
 ``evaluate`` reuses the default engine over the flattened batches and returns the
-usual context-bound ``ClaimReasoningResult``. Capability access is read-only
+usual context-bound ``ClaimReasoningResult``. Its ``extraction_request`` retains
+the normalized request, including the effective agent/source policy. Logical
+predicate/subject/object restrictions participate in a versioned context identity;
+batch size and row budgets do not. Unrestricted batched contexts remain compatible
+with the equivalent unbatched source. Capability access is read-only
 metadata: it never snapshots data by itself.
 
 Measurements
