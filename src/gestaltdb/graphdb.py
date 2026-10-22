@@ -6758,6 +6758,7 @@ class GraphDB:
         *,
         read_snapshot: bool | None = None,
         label_hierarchy=None,
+        relation_hierarchy=None,
     ):
         """Execute a supported Cypher query.
 
@@ -6775,6 +6776,11 @@ class GraphDB:
                 required label also matches nodes carrying any transitive
                 sub-type label, including in label expressions, endpoint
                 filters and indexed lookups. Default matching stays exact.
+            relation_hierarchy: Optional ``RelationHierarchy``. When supplied,
+                a required relationship type also matches edges carrying any
+                transitive sub-property type, including property maps,
+                variable-length paths, and index-backed lookups. Default
+                matching stays exact.
 
         Returns:
             ``gestaltdb.QueryResult`` containing projected records.
@@ -6791,6 +6797,7 @@ class GraphDB:
             parameters=parameters,
             read_snapshot=read_snapshot,
             label_hierarchy=label_hierarchy,
+            relation_hierarchy=relation_hierarchy,
         )
 
     def visualize(self, cypher=None, *, seeds=None, pattern=None, parameters=None, options=None, rng=None):

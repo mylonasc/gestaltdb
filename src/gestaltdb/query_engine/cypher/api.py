@@ -121,6 +121,7 @@ def execute(
     *,
     read_snapshot: bool | None = None,
     label_hierarchy=None,
+    relation_hierarchy=None,
 ) -> QueryResult:
     """Execute a supported Cypher query against a ``GraphDB`` instance.
 
@@ -134,11 +135,13 @@ def execute(
     Examples:
         >>> execute(graph_db, 'MATCH (n:Drug) RETURN n')  # doctest: +SKIP
     """
-    from gestaltdb.hierarchy import LabelHierarchy
+    from gestaltdb.hierarchy import LabelHierarchy, RelationHierarchy
     from .write import execute_ddl, transaction_supported
 
     if label_hierarchy is not None and not isinstance(label_hierarchy, LabelHierarchy):
         raise TypeError("label_hierarchy must be a LabelHierarchy")
+    if relation_hierarchy is not None and not isinstance(relation_hierarchy, RelationHierarchy):
+        raise TypeError("relation_hierarchy must be a RelationHierarchy")
     canonical = _parse_ast(query)
     if read_snapshot is True and isinstance(canonical, (CreateConstraint, DropConstraint)):
         raise ValueError("read_snapshot=True cannot be used with Cypher writes")
@@ -170,6 +173,7 @@ def execute(
         evaluation_context = QueryContext(
             graph=graph, parameters=parameters or {},
             label_hierarchy=label_hierarchy,
+            relation_hierarchy=relation_hierarchy,
         )
         resolved: dict[str, object] = {}
         for qualifier in qualifiers:
@@ -192,6 +196,7 @@ def execute(
                     parameters=parameters or {},
                     read_view=read_view,
                     label_hierarchy=label_hierarchy,
+                    relation_hierarchy=relation_hierarchy,
                 ),
             )
     elif _plan_has_writes(logical_plan) and transaction_supported(graph):
@@ -199,8 +204,10 @@ def execute(
             records = execute_plan(
                 logical_plan,
                 QueryContext(
-                    graph=tx_graph, parameters=parameters or {},
+                    graph=tx_graph,
+                    parameters=parameters or {},
                     label_hierarchy=label_hierarchy,
+                    relation_hierarchy=relation_hierarchy,
                 ),
             )
     elif not _plan_has_writes(logical_plan) and (
@@ -214,8 +221,10 @@ def execute(
             records = execute_plan(
                 logical_plan,
                 QueryContext(
-                    graph=current_view, parameters=parameters or {},
+                    graph=current_view,
+                    parameters=parameters or {},
                     label_hierarchy=label_hierarchy,
+                    relation_hierarchy=relation_hierarchy,
                 ),
             )
     else:
@@ -225,6 +234,7 @@ def execute(
                 graph=graph,
                 parameters=parameters or {},
                 label_hierarchy=label_hierarchy,
+                relation_hierarchy=relation_hierarchy,
             ),
         )
     return QueryResult(columns=logical_plan.columns, records=records)

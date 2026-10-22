@@ -2,7 +2,7 @@ Cypher Queries
 ==============
 
 GestaltDB exposes an expanding openCypher subset through
-``GraphDB.query(cypher, parameters=None, read_snapshot=None, label_hierarchy=None)``. The grammar-based frontend supports
+``GraphDB.query(cypher, parameters=None, read_snapshot=None, label_hierarchy=None, relation_hierarchy=None)``. The grammar-based frontend supports
 comments, Unicode and backtick-escaped names, source-located syntax errors, and
 standard expression precedence. Execution covers indexed node and relationship
 scans, typed relationship expansion, filtering, ordering, chained ``MATCH``
@@ -90,8 +90,40 @@ Schema construction is immutable and fail-closed: empty names, self-parenting,
 duplicate child entries, scalar parent strings, and cycles raise ``ValueError``.
 Unknown names expand only to themselves. Hierarchy expansion is opt-in per
 query; omitting ``label_hierarchy`` preserves exact-label semantics for existing
-applications. Relation sub-property hierarchies for array-native sampling are a
-separate, snapshot-scoped feature described in :doc:`typed-sampling`.
+applications. Sampler-specific relation expansion is described in
+:doc:`typed-sampling`.
+
+Sub-property Relationship Expansion
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Default relationship matching is exact. Pass a ``RelationHierarchy`` to
+``GraphDB.query`` to make a required parent relationship type also match edges
+whose ``properties["type"]`` is a transitive sub-property. Expansion applies to
+anchored and unanchored traversal, relationship property maps, variable-length
+paths, and exact/range type/property index lookups. ``type(r)`` still returns
+the literal stored type.
+
+.. code-block:: python
+
+   from gestaltdb.hierarchy import RelationHierarchy
+
+   relations = RelationHierarchy({
+       "Ocean_Freight": ["Transport_Edge"],
+       "Air_Freight": ["Transport_Edge"],
+       "Refrigerated_Freight": ["Ocean_Freight"],
+   })
+
+   graph_db.query(
+       'MATCH (a {id: "warehouse"})-[r:Transport_Edge]->(b) RETURN type(r)',
+       relation_hierarchy=relations,
+   )
+   graph_db.query(
+       'MATCH ()-[r:Transport_Edge {weight: 2}]->(b) RETURN b.id',
+       relation_hierarchy=relations,
+   )
+
+The label and relationship hierarchies are independent and opt-in per query;
+omitting them preserves exact matching.
 
 Typed Relationship Traversal
 ----------------------------
