@@ -5,8 +5,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 import resource
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -102,7 +104,13 @@ def main():
         completed = subprocess.run(command, capture_output=True, text=True, timeout=args.timeout, check=True)
         samples.append(json.loads(completed.stdout))
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    summary = {}
+    for metric in samples[0]["metrics"]:
+        values = sorted(sample["metrics"][metric] for sample in samples)
+        summary[metric] = {"p50": statistics.median(values), "p95": values[max(0, math.ceil(.95 * len(values)) - 1)]}
     report = {"schema_version": 1, "git_revision": revision, "python": sys.version, "samples": samples,
+              "working_tree_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], text=True).strip()),
+              "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "summary": summary,
               "complete": all(sample["status"] == "ok" for sample in samples)}
     text = json.dumps(report, indent=2)
     if args.output:
