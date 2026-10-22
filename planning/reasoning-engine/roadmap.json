@@ -253,12 +253,13 @@
       "integration_commit": "59cc1a4"
     },
     "RE-27": {
-      "status": "in-review",
+      "status": "integrated",
       "branch": "feature/re-27-proofs",
       "worktree": "re-27-proofs",
       "contract": "docs/reasoning-proofs.rst",
       "pr": 241,
-      "validation": "Focused suites (explanations/scale/contracts incl. isolation) green; docs drift, Sphinx -W, roadmap validator passed. Export/checkpoint evidence frozen. PR CI running."
+      "validation": "Focused suites (explanations/scale/contracts incl. isolation; 25 passed with restored onto proofs) green; docs drift, Sphinx -W, roadmap validator passed; export/checkpoint evidence frozen; Python 3.10-3.13 and fuzz CI passed.",
+      "integration_commit": "3b14d61"
     }
   },
   "source_sha256": {

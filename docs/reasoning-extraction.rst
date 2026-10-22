@@ -112,8 +112,28 @@ Measured at 2000 small rows, the Python iterator is still faster
 (~2.4M vs ~1.2M rows/s warm); the native path pays per-batch Arrow overhead that
 only amortizes at larger scans. No throughput speedup is claimed at this scale —
 the value is bounded memory, snapshot sharing across scans and no per-row Python
-work. Larger-scale and decoded-extraction measurements remain follow-up work
-(see the roadmap techdebt item), not implied results.
+work. 100K+ row measurements with variable values and warm/cold caches remain
+explicitly open follow-up work with no performance claim attached.
+
+Decoded Evidence handoff
+----------------------------------------
+
+``iter_decoded_evidence`` turns raw batches into evidence without ever leaking
+raw rows into inference: the caller-owned ``decode_row`` maps ``(key, value)``
+bytes to a ``DecodedRow`` (fact triple plus exact version/evidence IDs) or
+``None`` to skip, while ``predicate``/``bindings`` push down filters before
+materialization and every batch carries the caller-authenticated
+``visibility`` token. Corrupt rows fail closed with the error chained and no
+raw bytes in the message; duplicate version IDs fail closed; budgets bound
+the handoff. The ``complete`` flag mirrors the raw batch it was decoded
+from — end-of-scan is always generator exhaustion, since filtered-out tails
+carry no batch. ``iter_locator_keys`` yields keys only for caller
+point-materialization so locator-versus-full-scan tradeoffs can be measured
+per backend (column projection would need upstream support and is documented,
+not assumed). Re-audit note: ``TransactionDB``/column families still expose
+no ``scan_arrow`` in ``pyrex-rocksdb==0.5.0``; the capability matrix above is
+unchanged. The GenerationStore question is settled by the scale decision:
+no bespoke native kernel — recorded defer.
 
 Batched claim source
 ----------------------------------------
