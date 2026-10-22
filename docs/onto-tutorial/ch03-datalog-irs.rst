@@ -32,3 +32,11 @@ Safety + set semantics give termination on finite inputs. Demand evaluation
 (``reasoning/demand.py``, magic-set specialization) answers bound goals without
 full materialization; typed literals live in ``reasoning/terms.py`` /
 ``reasoning/typed.py``.
+
+**Intuition.** Semi-naive evaluation is "apply every rule to every new fact,
+then repeat until a round adds nothing". The *delta* — only facts learned in
+the last round — is what makes it semi-naive instead of re-deriving the world
+each time. SCC plans (``reasoning/plans.py``) group mutually recursive rules
+so each group reaches its own fixpoint before downstream rules fire; demand
+evaluation works backwards from the question ("who is a ``Person``?") and
+only explores rules that could produce an answer.

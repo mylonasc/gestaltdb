@@ -10,6 +10,9 @@ chapter and notebook. Stdlib-first; ``matplotlib`` only for static figures.
   tutorial's 2000/5000 caps and ``edge_labels="all"`` default.
 * ``snippets.py`` — copy-paste cells with ``graph.close()`` discipline.
 * ``equations.md`` — MyST math conventions (``$$`` blocks, operator macros).
+* ``landscape.py`` — the ch01 concept graph as real ``Node``/``Edge`` objects
+  in 3 progressive stages; ``uv run python docs/onto-tutorial/toolkit/landscape.py``
+  regenerates ``figures/landscape-stage{1,2,3}.svg`` via ``save_svg``.
 
 .. toctree::
    :maxdepth: 1

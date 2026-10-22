@@ -1,29 +1,82 @@
 Property graphs vs semantic graphs
 ==================================
 
-``src/gestaltdb/graphdb.py`` stores attributed ``Node`` / ``Edge`` records.
-Labels are native; relationship type is the ``properties["type"]`` convention.
-Semantic identity is *not* native: IRIs, ``rdf:type``, blank nodes and
-entailment live one layer up, in ``src/gestaltdb/ontology/`` and
-``src/gestaltdb/reasoning/``.
+**Intuition first.** Picture a whiteboard: sticky notes for things
+(``alice``, ``acme``), arrows between them labeled ``worksFor``. That is a
+*property graph* — gestaltdb's home turf (``src/gestaltdb/graphdb.py``):
+``Node`` objects carry native labels, ``Edge`` objects carry their
+relationship in the ``properties["type"]`` convention. Now lay *tracing paper*
+over the whiteboard and copy every arrow as a uniform triple
+``(subject, predicate, object)``; write class membership as just another
+arrow, ``(alice, rdf:type, Researcher)``. That tracing is the *semantic*
+view. This tutorial's recurring diagram — built with gestaltdb's own viz
+(``gestaltdb.viz.api`` → ``save_svg``) from a real ``Node``/``Edge`` graph in
+``toolkit/landscape.py`` — maps how the two views and their languages relate.
+It grows in three stages; node color is the concept kind, arrow labels are
+the relationships.
 
-.. math::
+Stage 1 — the property-graph world
+----------------------------------
 
-   G_{prop} = (V, E, \lambda, \pi) \qquad
-   G_{sem} = (T, \models) \;\; \text{with} \;\; T \subseteq S \times P \times O
+.. figure:: figures/landscape-stage1.svg
+   :width: 100%
+   :alt: Stage 1: property graph store queried by Cypher, GraphQL, SQL
 
-A property edge ``Edge(properties={"type": "worksFor"})`` projects to a binary
-fact ``Fact(subject, "worksFor", object)`` (``reasoning/model.py``). Class
-membership projects ``(x, rdf{:}type, C)`` with
-``TYPE_PREDICATE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"``.
-The projection is explicit and caller-owned — see
-:doc:`ontology-graph <../ontology-graph>`. Nothing is silently rewritten.
+   Stage 1: the store and its query languages.
 
-Parallels: LPG systems (Neo4j/Cypher, see :doc:`../cypher`) keep labels and
-types as queryable data; RDF/OWL stores (RDFLib, OWL-RL, Jena) treat triples
-plus entailment regimes as the data model. GestaltDB is an LPG store with an
-*opt-in, offline* semantic overlay: ``ontology/adapters/rdf.py`` imports a
-strict selected fragment and rejects the rest instead of approximating it.
+``Property Graph DB`` *stores* labeled nodes and typed edges. Three language
+families *query* it: **Cypher** (pattern matching, gestaltdb's language —
+see :doc:`../cypher`), **GraphQL** (client-shaped selection over graph APIs),
+**SQL / SQL-PGQ** (relational engine with graph pattern extensions).
+Intuition: the store is the whiteboard; the languages are different hands
+pointing at it — same drawing, different gestures. Nothing here says what an
+arrow *means*; ``worksFor`` is just a label.
+
+Stage 2 — the semantic overlay
+------------------------------
+
+.. figure:: figures/landscape-stage2.svg
+   :width: 100%
+   :alt: Stage 2: RDF triples, OWL, and the gestalt-core-v1 ontology fragment
+
+   Stage 2: projecting the whiteboard onto tracing paper.
+
+Property nodes/edges *project to* **RDF triples** — the W3C lingua franca
+where everything, including class membership, is a triple with IRIs.
+**OWL** *extends* RDF with a vocabulary for saying what arrows mean
+(subclasses, domains, inverses, transitivity). A gestaltdb **Ontology**
+*selects from* OWL a small decidable fragment (``PROFILE =
+"gestalt-core-v1"``) and *contains* **Axioms** — see
+:doc:`ch02-ontology-fragment`. Intuition: the tracing paper doesn't replace
+the whiteboard; it is an explicit, lossy-but-uniform copy. The projection is
+caller-owned (``ontology/adapters/rdf.py`` is strict offline import, and
+unsupported OWL is rejected, never approximated).
+
+Stage 3 — the reasoning layer
+-----------------------------
+
+.. figure:: figures/landscape-stage3.svg
+   :width: 100%
+   :alt: Stage 3: Datalog/Prolog rules compiled from axioms and evaluated by DatalogEngine
+
+   Stage 3: an assistant that fills in the missing arrows.
+
+Axioms *compile to* **Rules** over **Facts**; **Datalog** *defines* that rule
+shape (safe, function-free Horn rules — see :doc:`ch03-datalog-irs`), and
+**Prolog** *extends* it toward full programming (functions, negation as
+failure, search order). ``DatalogEngine`` *evaluates* Datalog programs,
+*infers over* versioned **Claims**, is *grounded* by the graph store via
+explicit extraction, and *feeds* consumers such as ``SamplerSnapshot``.
+**Cypher** *shares_roots* with Datalog — both are declarative pattern
+languages, but Cypher matches stored patterns while Datalog derives new
+facts. Intuition: the engine is an assistant that reads the tracing paper
+plus the rulebook and pencils in every arrow the rules demand (``alice`` is a
+``Person``), while the whiteboard itself stays untouched.
+
+Parallels: LPG systems (Neo4j/Cypher) keep labels and types as queryable
+data; RDF/OWL stores (RDFLib, OWL-RL, Jena) treat triples plus entailment
+regimes as the data model. GestaltDB is an LPG store with an opt-in, offline
+semantic overlay — nothing is silently rewritten.
 
 .. code-block:: python
 

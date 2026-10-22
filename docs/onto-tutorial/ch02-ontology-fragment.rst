@@ -25,6 +25,19 @@ length != 2, ``rdf:type`` as a property, right-side unions. This is *not* full
 RDFS/OWL — see :doc:`ontology <../ontology>` and gated profile work (#184,
 #185).
 
+**Intuition.** Read the picture below in two layers: the bottom row is *data*
+(what someone asserted), the top row is *schema* (what the arrows mean).
+``domain`` says "anything a ``worksFor`` arrow leaves is a ``Researcher``";
+``subClassOf`` says "every ``Researcher`` is also a ``Person``". The
+``inferred type`` arrow is the only one nobody stored — the engine pencils
+it in:
+
+.. figure:: figures/subsumption-example.svg
+   :width: 100%
+   :alt: Data vs schema: worksFor domain and Researcher subClassOf Person infer alice is a Person
+
+   Schema (top) over data (bottom); ``inferred type`` is derived, never stored.
+
 .. code-block:: python
 
    from gestaltdb.ontology import Ontology, SubClassOf, Domain, compile_ontology
