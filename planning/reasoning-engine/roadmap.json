@@ -234,12 +234,22 @@
       "integration_commit": "1c64d3a"
     },
     "RE-25": {
-      "status": "in-review",
+      "status": "integrated",
       "branch": "feature/re-25-scopes",
       "worktree": "re-25-scopes",
       "contract": "docs/reasoning-scopes.rst",
       "pr": 239,
-      "validation": "Focused suites (scopes/contracts incl. gates, modal-surface pin, isolation) green; docs drift, Sphinx -W, roadmap validator passed. #124/#128 coordinated. PR CI running."
+      "validation": "Focused suites (scopes/contracts incl. gates, modal-surface pin, isolation) green; docs drift, Sphinx -W, roadmap validator passed; #124/#128 coordinated; Python 3.10-3.13 and fuzz CI passed.",
+      "integration_commit": "3341b83"
+    },
+    "RE-26": {
+      "status": "in-review",
+      "branch": "feature/re-26-scale",
+      "worktree": "re-26-scale",
+      "contract": "docs/reasoning-scale.rst",
+      "benchmark_evidence": "benchmarks/results/reasoning-re26-joins.json",
+      "pr": 240,
+      "validation": "Focused suites (scale/contracts incl. gates, API pin, crossover) green; docs drift, Sphinx -W, roadmap validator passed. Join/crossover benchmark frozen (P50/P95, work ratios, RSS). PR CI running."
     }
   },
   "source_sha256": {

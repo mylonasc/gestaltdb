@@ -603,3 +603,12 @@ satisfied). Default-deny inheritance allowlists, temporal-modal bounds
 with the modal API unchanged, separately-selected confidence calculi
 with four-policy approval, and design-gate retention with #124/#128
 coordination.
+
+### Implementation started: RE-26 (#187)
+
+Dedicated worktree `re-26-scale`, branch `feature/re-26-scale`, based on
+accepted integration `3341b83` (RE-25 integrated; prerequisites RE-06/18/22
+satisfied). Join-shape/transitive profiler with frozen evidence,
+DRed-vs-rebuild crossover comparison with no-adoption default, spill/worker
+ownership-cancellation-budget gates and a pinned common operator API. No
+second runtime, no constant-memory promises.
