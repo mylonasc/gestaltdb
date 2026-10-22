@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="899.40" height="771.40" viewBox="0.00 0.00 899.40 771.40" role="img" aria-label="How a rule engine reaches closure">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(25.2 746.2)">
+<title>tutorial</title>
+<polygon fill="white" stroke="transparent" points="-25.2,25.2 -25.2,-746.2 874.2,-746.2 874.2,25.2 -25.2,25.2" />
+<text text-anchor="middle" x="424.5" y="-699.4" font-family="DejaVu Sans" font-size="22.00">How a rule engine reaches closure</text>
+<g id="clust1" class="cluster">
+<title>cluster_execution</title>
+<path fill="white" stroke="#26745b" stroke-width="1.4" d="M20,-8C20,-8 829,-8 829,-8 835,-8 841,-14 841,-20 841,-20 841,-669 841,-669 841,-675 835,-681 829,-681 829,-681 20,-681 20,-681 14,-681 8,-675 8,-669 8,-669 8,-20 8,-20 8,-14 14,-8 20,-8" />
+<text text-anchor="middle" x="424.5" y="-662.6" font-family="DejaVu Sans" font-size="18.00">Positive finite rule evaluation</text>
+</g>
+
+<g id="relation-cycle-0" class="edge">
+<title>input-&gt;known</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M492,-553.6C492,-530.72 492,-500.82 492,-474.78" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="495.68,-474.77 492,-464.27 488.33,-474.77 495.68,-474.77" />
+<polygon fill="white" stroke="transparent" points="492,-488 492,-530 576,-530 576,-488 492,-488" />
+<text text-anchor="start" x="498" y="-514" font-family="DejaVu Sans" font-size="15.00" fill="#334155">start with</text>
+<text text-anchor="start" x="496" y="-497" font-family="DejaVu Sans" font-size="15.00" fill="#334155">assertions</text>
+</g>
+
+<g id="relation-cycle-1" class="edge">
+<title>program-&gt;joins</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M160.73,-377.87C159.31,-355.59 158.49,-326.6 161,-301 161.43,-296.62 162.03,-292.1 162.74,-287.58" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="166.38,-288.09 164.54,-277.12 159.13,-286.84 166.38,-288.09" />
+<polygon fill="white" stroke="transparent" points="161,-301 161,-343 282,-343 282,-301 161,-301" />
+<text text-anchor="start" x="165.5" y="-327" font-family="DejaVu Sans" font-size="15.00" fill="#334155">body and head</text>
+<text text-anchor="start" x="190" y="-310" font-family="DejaVu Sans" font-size="15.00" fill="#334155">patterns</text>
+</g>
+
+<g id="relation-cycle-3" class="edge">
+<title>joins-&gt;delta</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M262.31,-201.89C317.58,-179.23 388.91,-149.99 447.43,-126" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="449.13,-129.28 457.45,-121.9 446.34,-122.48 449.13,-129.28" />
+<polygon fill="white" stroke="transparent" points="375,-153 375,-178 508,-178 508,-153 375,-153" />
+<text text-anchor="start" x="379.5" y="-161.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">candidate heads</text>
+</g>
+
+<g id="relation-cycle-4" class="edge">
+<title>delta-&gt;known</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M597.02,-129.15C612.42,-150.06 628.09,-175.8 636,-202 645.63,-233.91 643.46,-244.51 636,-277 628.7,-308.77 625.67,-318.64 604,-343 598.61,-349.06 592.59,-354.8 586.21,-360.2" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="583.82,-357.41 577.96,-366.86 588.44,-363.13 583.82,-357.41" />
+<polygon fill="white" stroke="transparent" points="642,-218.5 642,-260.5 775,-260.5 775,-218.5 642,-218.5" />
+<text text-anchor="start" x="646.5" y="-244.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">add only unseen</text>
+<text text-anchor="start" x="690.5" y="-227.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">facts</text>
+</g>
+
+<g id="relation-cycle-2" class="edge">
+<title>known-&gt;joins</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M388.44,-366.82C373.65,-359.24 358.79,-351.18 345,-343 317.32,-326.57 313.35,-317.96 286,-301 275.83,-294.7 264.96,-288.37 254.11,-282.31" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="255.58,-278.93 244.61,-277.07 252.02,-285.36 255.58,-278.93" />
+<polygon fill="white" stroke="transparent" points="345,-301 345,-343 478,-343 478,-301 345,-301" />
+<text text-anchor="start" x="349.5" y="-327" font-family="DejaVu Sans" font-size="15.00" fill="#334155">nonempty delta:</text>
+<text text-anchor="start" x="387.5" y="-310" font-family="DejaVu Sans" font-size="15.00" fill="#334155">repeat</text>
+</g>
+
+<g id="relation-cycle-5" class="edge">
+<title>known-&gt;answer</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M489.54,-366.95C488.27,-342.32 486.72,-312.34 485.44,-287.75" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="489.11,-287.52 484.9,-277.23 481.77,-287.9 489.11,-287.52" />
+<polygon fill="white" stroke="transparent" points="488,-301 488,-343 596,-343 596,-301 488,-301" />
+<text text-anchor="start" x="492" y="-327" font-family="DejaVu Sans" font-size="15.00" fill="#334155">no new facts:</text>
+<text text-anchor="start" x="525.5" y="-310" font-family="DejaVu Sans" font-size="15.00" fill="#334155">stop</text>
+</g>
+
+<g id="concept-input" class="node">
+<title>input</title>
+<path fill="#e5f5ee" stroke="#26745b" stroke-width="2.2" d="M609.5,-629C609.5,-629 374.5,-629 374.5,-629 368.5,-629 362.5,-623 362.5,-617 362.5,-617 362.5,-566 362.5,-566 362.5,-560 368.5,-554 374.5,-554 374.5,-554 609.5,-554 609.5,-554 615.5,-554 621.5,-560 621.5,-566 621.5,-566 621.5,-617 621.5,-617 621.5,-623 615.5,-629 609.5,-629" />
+<text text-anchor="start" x="474" y="-603.9" font-family="DejaVu Sans" font-size="12.00" fill="#26745b">INPUT</text>
+<text text-anchor="start" x="382" y="-576.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Asserted facts F</text>
+</g>
+
+<g id="concept-program" class="node">
+<title>program</title>
+<path fill="#e5f5ee" stroke="#26745b" stroke-width="2.2" d="M231,-453C231,-453 97,-453 97,-453 91,-453 85,-447 85,-441 85,-441 85,-390 85,-390 85,-384 91,-378 97,-378 97,-378 231,-378 231,-378 237,-378 243,-384 243,-390 243,-390 243,-441 243,-441 243,-447 237,-453 231,-453" />
+<text text-anchor="start" x="134" y="-427.9" font-family="DejaVu Sans" font-size="12.00" fill="#26745b">PROGRAM</text>
+<text text-anchor="start" x="114" y="-400.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Rules P</text>
+</g>
+
+<g id="concept-joins" class="node">
+<title>joins</title>
+<path fill="#e5f5ee" stroke="#26745b" stroke-width="2.2" d="M302,-277C302,-277 44,-277 44,-277 38,-277 32,-271 32,-265 32,-265 32,-214 32,-214 32,-208 38,-202 44,-202 44,-202 302,-202 302,-202 308,-202 314,-208 314,-214 314,-214 314,-265 314,-265 314,-271 308,-277 302,-277" />
+<text text-anchor="start" x="159.5" y="-251.9" font-family="DejaVu Sans" font-size="12.00" fill="#26745b">JOIN</text>
+<text text-anchor="start" x="51" y="-224.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Match rule bodies</text>
+</g>
+
+<g id="concept-delta" class="node">
+<title>delta</title>
+<path fill="#e5f5ee" stroke="#26745b" stroke-width="2.2" d="M642.5,-129C642.5,-129 469.5,-129 469.5,-129 463.5,-129 457.5,-123 457.5,-117 457.5,-117 457.5,-44 457.5,-44 457.5,-38 463.5,-32 469.5,-32 469.5,-32 642.5,-32 642.5,-32 648.5,-32 654.5,-38 654.5,-44 654.5,-44 654.5,-117 654.5,-117 654.5,-123 648.5,-129 642.5,-129" />
+<text text-anchor="start" x="506" y="-103.9" font-family="DejaVu Sans" font-size="12.00" fill="#26745b">SET DIFFERENCE</text>
+<text text-anchor="start" x="494.5" y="-76.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Find new</text>
+<text text-anchor="start" x="477" y="-52.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">conclusions</text>
+</g>
+
+<g id="concept-known" class="node">
+<title>known</title>
+<path fill="#e5f5ee" stroke="#26745b" stroke-width="2.2" d="M627.5,-464C627.5,-464 356.5,-464 356.5,-464 350.5,-464 344.5,-458 344.5,-452 344.5,-452 344.5,-379 344.5,-379 344.5,-373 350.5,-367 356.5,-367 356.5,-367 627.5,-367 627.5,-367 633.5,-367 639.5,-373 639.5,-379 639.5,-379 639.5,-452 639.5,-452 639.5,-458 633.5,-464 627.5,-464" />
+<text text-anchor="start" x="444" y="-438.9" font-family="DejaVu Sans" font-size="12.00" fill="#26745b">CLOSURE STATE</text>
+<text text-anchor="start" x="364" y="-411.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Accumulate known</text>
+<text text-anchor="start" x="459" y="-387.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">facts</text>
+</g>
+
+<g id="concept-answer" class="node">
+<title>answer</title>
+<path fill="#e5f5ee" stroke="#26745b" stroke-width="2.2" d="M608,-277C608,-277 358,-277 358,-277 352,-277 346,-271 346,-265 346,-265 346,-214 346,-214 346,-208 352,-202 358,-202 358,-202 608,-202 608,-202 614,-202 620,-208 620,-214 620,-214 620,-265 620,-265 620,-271 614,-277 608,-277" />
+<text text-anchor="start" x="460" y="-251.9" font-family="DejaVu Sans" font-size="12.00" fill="#26745b">RESULT</text>
+<text text-anchor="start" x="365" y="-224.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Complete closure</text>
+</g>
+</g>
+</svg>

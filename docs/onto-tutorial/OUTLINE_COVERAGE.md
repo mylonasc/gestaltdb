@@ -35,3 +35,15 @@ each row names the doc file, the epic/issue anchor, and the verification.
 - [x] Add a full-resolution overview download and selectable vector text.
 - [x] Add `build_docs.sh --pdf` for a tutorial-only XeLaTeX PDF with vector diagrams.
 - [x] Document optional build dependencies and test flag handling and missing-tool errors.
+
+## Reader and reasoning-engine pass (2026-10-22)
+
+- [x] Begin with an application problem and motivate the graph, storage, vocabulary, and inference layers.
+- [x] Define knowledge graphs and distinguish them from database products and RDF serialization.
+- [x] Teach rule notation, substitutions, joins, safety, recursion, least fixed points, soundness, and completeness.
+- [x] Explain why deltas, plans, compact IRs, demand evaluation, and support maintenance are useful.
+- [x] Compare Soufflé, tabled SWI-Prolog, Clingo, and Jena using official sources and explicit semantic boundaries.
+- [x] Add a continuous stored-data-to-inference example, a glossary, and explained self-checks in every chapter.
+- [x] Rewrite core explanations as motivated prose rather than feature inventories.
+- [x] Keep branch/build/checklist/toolkit material in HTML maintainer pages, outside the reader PDF.
+- [x] Validate the PDF's assembled source excludes maintainer pages and reject missing font glyphs.

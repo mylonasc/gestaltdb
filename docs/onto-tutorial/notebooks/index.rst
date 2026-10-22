@@ -11,7 +11,16 @@ Use the environment described in :doc:`../index`. Download or open each lab:
   to facts, infer membership, and visualize a caller-owned logical graph without
   modifying stored labels.
 
-Notebook outputs are intentionally uncommitted. Tests execute every code cell
-in order with a fresh namespace and fail on exceptions or failed assertions;
-they do not merely syntax-check the JSON. The HTML build offers downloads,
-not a notebook execution service.
+Work through the labs in order if you want hands-on reinforcement. The first
+isolates the meaning of two axioms; the second shows why combining rules is
+more interesting than applying each once; the third connects the same semantics
+to stored data and verifies that inference has not silently changed its labels.
+
+Each lab includes assertions for the expected answers. Read the accompanying
+explanation before executing the cell, predict the result, then vary a premise
+or axiom. If an answer changes, identify the rule body that stopped matching.
+That habit is more useful than rerunning a notebook until it reports success.
+
+Outputs are omitted so that you can produce them in your own environment.
+The HTML documentation offers downloads; the PDF describes the labs but does
+not execute or embed a live notebook session.

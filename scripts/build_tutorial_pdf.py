@@ -16,6 +16,14 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def validate_reader_document(path: Path) -> None:
+    """Keep contributor bookkeeping out of the reader edition."""
+    text = path.read_text(encoding="utf-8")
+    for page in ("maintainer-notes", "OUTLINE_COVERAGE", "toolkit/index"):
+        if f"onto-tutorial/{page}::doc" in text:
+            raise RuntimeError(f"Reader PDF unexpectedly includes maintainer page: {page}")
+
+
 def build(output: Path) -> Path:
     engine = shutil.which("xelatex")
     if engine is None:
@@ -31,6 +39,7 @@ def build(output: Path) -> Path:
                          str(ROOT / "docs"), str(work)])
     if status:
         raise RuntimeError(f"Sphinx LaTeX build failed with exit status {status}")
+    validate_reader_document(work / "onto-tutorial.tex")
     # Three passes resolve TOC, references, and page numbers without latexmk.
     for attempt in range(3):
         process = subprocess.run([engine, "-interaction=nonstopmode", "-halt-on-error",
@@ -42,6 +51,9 @@ def build(output: Path) -> Path:
             raise RuntimeError("XeLaTeX failed. Check installed TeX packages and "
                                f"{work / f'xelatex-pass-{attempt + 1}.log'}\n"
                                + process.stdout[-6000:])
+    if "Missing character:" in process.stdout:
+        raise RuntimeError("The PDF font configuration is missing a character. "
+                           f"See {work / 'xelatex-pass-3.log'} before publishing.")
     result = output / "onto-tutorial.pdf"
     compiled = work / "onto-tutorial.pdf"
     if not compiled.is_file() or not compiled.read_bytes().startswith(b"%PDF-"):

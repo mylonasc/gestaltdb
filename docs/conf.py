@@ -51,14 +51,14 @@ if tags.has("tutorial-pdf"):
     extensions.append("tutorial_pdf")
     latex_engine = "xelatex"
     latex_documents = [
-        ("onto-tutorial/index", "onto-tutorial.tex", "Ontology Reasoning with GestaltDB",
+        ("onto-tutorial/index", "onto-tutorial.tex", "Graph Databases, Knowledge Graphs, and Reasoning with GestaltDB",
          author, "manual"),
     ]
     latex_elements = {
         "papersize": "a4paper",
         "pointsize": "11pt",
         "classoptions": ",oneside",
-        "preamble": r"\setlength{\headheight}{16pt}",
+        "preamble": r"\setlength{\headheight}{30pt}\addtolength{\topmargin}{-14pt}\fvset{fontsize=\small}",
         "fontpkg": r"\setmainfont{DejaVu Serif}\setsansfont{DejaVu Sans}\setmonofont{DejaVu Sans Mono}",
         "sphinxsetup": "verbatimwithframe=false",
     }

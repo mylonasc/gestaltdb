@@ -28,6 +28,7 @@ PALETTE = {
     "reasoning": ("#e5f5ee", "#26745b", "Reasoning & explicit consumption"),
     "schema": ("#f2ecff", "#7753a6", "Schema: the rulebook"),
     "data": ("#eaf2ff", "#4164a5", "Data: the assertion"),
+    "execution": ("#e5f5ee", "#26745b", "Positive finite rule evaluation"),
 }
 
 # Short reading labels keep cross-layer edges from making the canvas too wide.
@@ -147,6 +148,31 @@ def build_subsumption() -> tuple[list[Node], list[Edge]]:
     return nodes, edges
 
 
+def build_reasoning_cycle() -> tuple[list[Node], list[Edge]]:
+    """A conceptual control-flow view, not a trace of one executor's counters."""
+    concepts = [
+        ("input", "Asserted facts F", "input"),
+        ("program", "Rules P", "program"),
+        ("joins", "Match rule bodies", "join"),
+        ("delta", "Find new conclusions", "set difference"),
+        ("known", "Accumulate known facts", "closure state"),
+        ("answer", "Complete closure", "result"),
+    ]
+    nodes = [Node(key, properties={"label": label, "kind": kind, "layer": "execution"})
+             for key, label, kind in concepts]
+    relations = [
+        ("input", "known", "start with assertions"),
+        ("program", "joins", "body and head patterns"),
+        ("known", "joins", "nonempty delta: repeat"),
+        ("joins", "delta", "candidate heads"),
+        ("delta", "known", "add only unseen facts"),
+        ("known", "answer", "no new facts: stop"),
+    ]
+    edges = [Edge(f"cycle-{i}", source, target, {"type": label})
+             for i, (source, target, label) in enumerate(relations)]
+    return nodes, edges
+
+
 def _lines(value: str, width: int) -> str:
     """Escape labels before inserting intentional Graphviz HTML line breaks."""
     return '<BR/>'.join(escape(line) for line in textwrap.wrap(
@@ -235,7 +261,7 @@ def save_tutorial_svg(nodes, edges, destination, *, title):
 
 
 def render_all(output_dir: str = "docs/onto-tutorial/figures") -> list[str]:
-    """Regenerate all four committed SVGs, including evaluated memberships."""
+    """Regenerate all committed SVGs, including evaluated memberships."""
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     written = []
@@ -248,6 +274,10 @@ def render_all(output_dir: str = "docs/onto-tutorial/figures") -> list[str]:
     dest = out / "subsumption-example.svg"
     save_tutorial_svg(nodes, edges, dest,
                       title="One assertion, two inferred memberships")
+    written.append(str(dest))
+    nodes, edges = build_reasoning_cycle()
+    dest = out / "reasoning-cycle.svg"
+    save_tutorial_svg(nodes, edges, dest, title="How a rule engine reaches closure")
     written.append(str(dest))
     return written
 

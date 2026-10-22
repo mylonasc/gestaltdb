@@ -1,68 +1,114 @@
-Gestalt Graph Onto-Tutorial
-===========================
+From Graph Databases to Knowledge Graphs
+========================================
 
-An ontology-reasoning tutorial for advanced coders, grounded in the
-``gestalt-core-v1`` fragment on ``feature/onto-dev-epic-2``.
+Imagine building a research directory from three sources. A personnel system
+lists appointments, a grant system identifies investigators, and a public
+catalog records which laboratories belong to which institutions. Each source
+has useful information, but none answers the product question by itself:
+"Which people are connected to this institution, and why do we believe that?"
 
-This tutorial is (1) a basic ontology-reasoning walkthrough with gestaltdb,
-(2) an introduction to the intermediate representations and foundational
-capabilities underneath — and how gestaltdb supports them efficiently — and
-(3) an explicit map of gaps and pain points, linked to open issues.
+At first, it is tempting to join a few tables and put the result behind an API.
+That may be exactly the right solution. The difficulty grows when the sources
+use different vocabularies, relationships span several hops, records arrive
+at different times, or an answer must include its evidence. One source calls
+Alice a researcher, another asks for people. Acme Lab belongs to a group that
+belongs to a university. A correction to one appointment should change the
+answers that depended on it, without erasing answers supported elsewhere.
 
-Start with chapters 1–2 and notebook 1 for a first inference. Chapters 3–6
-explain the execution and storage boundaries; chapters 7–8 are the performance
-and limitations reference. The :doc:`toolkit <toolkit/index>` regenerates the
-illustrations, and the :doc:`notebooks <notebooks/index>` provide runnable labs.
+These are several different problems, not one problem solved by choosing a
+database brand. A **graph model** makes identities and relationships explicit.
+A **graph database** persists that model and retrieves connected records.
+A **query language** states which records or paths an application wants. None
+of those choices alone tells the system that every researcher is a person.
+For that, we need explicit meaning: a vocabulary and semantic assumptions,
+often expressed by an **ontology**. A **reasoning engine** applies those
+assumptions systematically, so consequences need not be reimplemented in
+every report or endpoint. Together, such choices can support a **knowledge
+graph**—a representation of domain knowledge, not merely a particular storage
+format.
 
-.. rubric:: Setup and version boundary
+The distinction becomes practical immediately. Storing one more label on
+Alice makes one query work, but now the application must keep that label in
+sync when the schema or supporting records change. Repeating the same logic
+inside every query avoids that copy but spreads the policy across the system.
+Computing a reusable logical closure offers another trade-off: share the
+rules and answers, while paying for inference, context binding, and maintenance.
+This tutorial develops those choices instead of treating inference as a
+feature that should always be switched on.
 
-Examples target this source checkout, based on ontology integration commit
-``0dba88f``, not the published package on PyPI. On 2026-10-22, remote ``main``
-was ``25daaf9`` and remote ``feature/onto-dev-epic-2`` was ``9400930``; the
-latter contains additional work not imported into this tutorial branch.
-An open roadmap issue is not evidence that its code is absent: chapter 8
-separates available capabilities from outstanding acceptance work.
+GestaltDB provides a concrete setting in which to learn the distinctions. It
+has an embedded property graph, Cypher queries, an explicit ontology-to-rule
+compiler, standalone reasoning APIs, and separate adapters for stored data
+and result consumption. We will start with one fact about Alice, follow it
+through a complete inference, then ask what changes when data is large,
+historical, contradictory, or used for sampling. The goal is both to use
+GestaltDB and to recognize the same underlying design problems in other
+databases and reasoning engines.
 
-From the repository root, use a supported Python (3.10–3.13) and ``uv``::
+The intended reader is comfortable with Python, dictionaries, SQL-style joins,
+and basic data structures. No previous RDF, OWL, or logic-programming experience
+is assumed. Equations and execution details are included for readers who want
+to understand the implementation costs, but the first pass can focus on the
+worked examples and their explanations.
+
+.. rubric:: What you will learn
+
+By the end, you should be able to:
+
+* distinguish a graph data model, a graph database, and a knowledge graph;
+* choose what to represent as entities, relationships, labels, or properties;
+* explain where RDF, OWL, Cypher, GraphQL, SQL, Datalog, and Prolog fit;
+* read basic rule notation and trace joins and recursion to a fixed point;
+* separate a stored fact, an inferred fact, a proof witness, and a source claim;
+* decide when to compute a closure, query a subset, or build a sampling snapshot;
+* recognize unsupported combinations and the costs that optimizations cannot remove.
+
+.. rubric:: The running example
+
+Alice has a research appointment at Acme Lab. We record a ``worksFor``
+relationship and, in this deliberately small model, declare that subjects of
+that relationship are ``Researcher`` instances. Every ``Researcher`` is a
+``Person``. Can the application answer "Is Alice a person?" without a stored
+``Person`` label? If yes, why—and does that answer change the stored graph?
+
+Those questions carry the tutorial. The domain assumption is intentional:
+``worksFor`` here means a research appointment, **not** every kind of employment.
+A real human-resources model should use a more specific predicate or a different
+domain axiom. Reasoning faithfully propagates a mistaken modeling assumption;
+it cannot repair one for you.
+
+.. rubric:: How to read this document
+
+**First pass: build the mental model.** Read chapters 1–4 in order: graph and
+knowledge-graph concepts, ontology implications, the reasoning engine, then
+the complete database example. Run notebook 1 after chapter 2 if desired,
+and continue to chapter 6 to understand how applications consume the answer.
+You should be able to draw the example and explain each inferred membership
+without reading the library source.
+
+**Second pass: study the trade-offs.** Revisit chapter 3's execution strategies
+and engine comparisons. Chapter 5 adds sources, updates, and time; chapter 7
+explains performance. Chapter 8 helps choose a supported workflow rather than
+promising a universal reasoner. The glossary provides a quick reference, and
+each chapter ends with a self-check and an answer.
+
+.. rubric:: Running the examples
+
+The examples target the source checkout accompanying this tutorial, including
+its ``gestalt-core-v1`` ontology fragment. Do not assume that an older PyPI
+release has the same APIs. Use Python 3.10–3.13. From the repository root::
 
    uv sync --extra lmdb
    uv run --with jupyterlab --with ipykernel jupyter lab docs/onto-tutorial/notebooks
-   ./scripts/build_docs.sh
 
-The standalone reasoning examples need no embedded backend. The property-graph
-labs use the explicit ``lmdb`` extra, temporary databases, and deterministic
-assertions. Choose the notebook kernel belonging to this environment; installing
-Jupyter elsewhere does not install GestaltDB into that kernel.
-
-Build output starts at ``docs/_build/html/onto-tutorial/index.html``. Building
-Sphinx renders prose and figures; it does not execute notebook cells. Run the
-tutorial's executable checks with::
-
-   uv run pytest tests/test_ontology_tutorial.py -q
-
-.. rubric:: PDF export
-
-Build HTML plus a standalone tutorial PDF (not the whole API reference)::
-
-   ./scripts/build_docs.sh --pdf
-
-The PDF is written to ``docs/_build/html/onto-tutorial/onto-tutorial.pdf``.
-With ``--output DIR``, find it at ``DIR/onto-tutorial/onto-tutorial.pdf``;
-LaTeX intermediates and diagnostic logs are alongside it in ``latex/``.
-Math is typeset by XeLaTeX, diagrams remain vector artwork, and the document
-includes a table of contents and clickable external links. Notebook downloads
-remain separate executable labs; notebook outputs are not executed into the PDF.
-
-PDF export needs XeLaTeX and Sphinx's standard LaTeX packages. For example,
-on Debian/Ubuntu install ``texlive-xetex``, ``texlive-latex-extra``,
-``texlive-fonts-recommended``, and ``fonts-dejavu-core``. The build command
-provisions its Python dependencies via ``uv``. HTML-only builds do not require
-TeX, CairoSVG, or Graphviz. PDF conversion uses CairoSVG and its system Cairo
-library; regenerating graph layouts separately requires Graphviz's ``dot``.
+The standalone reasoning examples need no embedded backend. Database examples
+use the explicitly installed LMDB backend and disposable temporary directories.
+Select a Jupyter kernel from this environment. You can also just read the code:
+assertions in the examples state the expected results.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Tutorial
+   :caption: Reading guide
 
    ch01-property-graph-vs-semantic
    ch02-ontology-fragment
@@ -72,6 +118,15 @@ library; regenerating graph layouts separately requires Graphviz's ``dot``.
    ch06-query-sampling
    ch07-performance
    ch08-gaps
-   toolkit/index
+   glossary
    notebooks/index
-   OUTLINE_COVERAGE
+
+.. only:: html
+
+   .. toctree::
+      :maxdepth: 1
+      :caption: For documentation maintainers (not part of the reader PDF)
+
+      maintainer-notes
+      toolkit/index
+      OUTLINE_COVERAGE

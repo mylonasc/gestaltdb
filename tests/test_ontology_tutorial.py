@@ -44,7 +44,7 @@ def test_chapter_code(chapter, tmp_path, monkeypatch):
     text = chapter.read_text()
     blocks = re.findall(r"^\.\. code-block:: python\n\n((?:[ \t]+[^\n]*\n|\n)+)", text, re.MULTILINE)
     assert blocks, "the chapter's Python block must be executable, not silently ignored"
-    if chapter.name.startswith("ch01"):
+    if 'backend="lmdb"' in text:
         pytest.importorskip("lmdb")
     monkeypatch.chdir(tmp_path)
     namespace = {"__name__": "__main__"}
@@ -113,6 +113,27 @@ def test_pdf_preflight_has_actionable_error(tmp_path, monkeypatch):
     monkeypatch.setattr(module.shutil, "which", lambda executable: None)
     with pytest.raises(RuntimeError, match="PDF export needs XeLaTeX"):
         module.build(tmp_path)
+
+
+def test_reader_pdf_rejects_maintainer_material(tmp_path):
+    script = TUTORIAL.parents[1] / "scripts" / "build_tutorial_pdf.py"
+    spec = importlib.util.spec_from_file_location("build_tutorial_pdf", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    document = tmp_path / "reader.tex"
+    document.write_text("A reader-facing introduction to reasoning engines.")
+    module.validate_reader_document(document)
+    for page in ("maintainer-notes", "OUTLINE_COVERAGE", "toolkit/index"):
+        document.write_text(f"onto-tutorial/{page}::doc")
+        with pytest.raises(RuntimeError, match="unexpectedly includes maintainer page"):
+            module.validate_reader_document(document)
+
+
+def test_every_chapter_has_a_question_and_explained_answer():
+    for chapter in TUTORIAL.glob("ch*.rst"):
+        text = chapter.read_text()
+        assert "Check your understanding" in text, chapter.name
+        assert "**Question.**" in text and "**Answer.**" in text, chapter.name
 
 
 def test_build_docs_flag_help_and_validation():

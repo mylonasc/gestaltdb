@@ -19,6 +19,8 @@ visualization API. No production-library rendering behavior is changed.
   Dashed green edges mark computed memberships in the worked example.
   Those inferred membership edges come from
   ``DatalogEngine`` rather than a hand-drawn assertion of what it should infer.
+  The same renderer generates ``figures/reasoning-cycle.svg`` as a conceptual
+  explanation of the fixpoint, not as an execution trace of a particular plan.
 
 Run from the repository root::
 

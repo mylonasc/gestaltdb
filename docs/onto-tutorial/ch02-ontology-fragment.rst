@@ -1,17 +1,37 @@
-The gestalt-core-v1 fragment and its compiler
-==============================================
+An ontology turns vocabulary into implications
+===============================================
 
-``gestaltdb.ontology.model`` defines immutable axioms: ``SubClassOf``,
-``SubPropertyOf``, ``EquivalentClasses/Properties``, ``Domain``, ``Range``,
-``InverseOf``, ``Symmetric``, ``Transitive``, plus ``PropertyChain``,
-``IntersectionSubClassOf`` / ``UnionSubClassOf`` (left-side only) and scoped
-``Reflexive``. ``PROFILE = "gestalt-core-v1"``. Each axiom carries a content
-``axiom_id`` (``sha256`` over ``["gestaltdb-axiom-v1", signature]``).
+Why a schema is more than a set of labels
+-----------------------------------------
 
-``compile_ontology(Ontology(id, axioms))`` (``ontology/compiler.py``) lowers
-each axiom to safe positive Horn rules with ``rule_id =
-ontology:{axiom_id}:{direction}`` and a ``RuleOrigin`` row per rule. The
-``CompiledOntology`` checks that origins cover exactly the source axioms.
+Chapter 1 stored a researcher but could not retrieve it as a person. The missing
+piece is not another index: it is a statement that every researcher is a person.
+An **ontology** makes statements about the modeled vocabulary. Its **axioms**
+are assumptions the reasoner may use, not observations it discovered itself.
+
+Our two axioms are intentionally small:
+
+* ``Domain("worksFor", "Researcher")``: a subject of a research-appointment
+  ``worksFor`` statement belongs to ``Researcher``.
+* ``SubClassOf("Researcher", "Person")``: every instance of ``Researcher``
+  also belongs to ``Person``. It says nothing about whether every person is a
+  researcher; implication is directional.
+
+Schema statements like these are often called the **TBox** (terminological
+knowledge); statements about Alice and Acme are the **ABox** (assertional
+knowledge). These are useful conceptual roles, not necessarily two physical
+databases. An RDF graph can contain both kinds of statement.
+
+Reading the notation
+---------------------
+
+``(alice, worksFor, acme)`` is a triple. ``(x, rdf:type, Researcher)`` is a
+pattern with a variable ``x``. When ``x = alice``, the pattern becomes a ground
+statement: there are no variables left. In formulas, ``rdf:type`` abbreviates
+the full reserved IRI supplied by ``TYPE_PREDICATE`` in Python.
+
+``C ⊑ D`` reads "class C is a subclass of class D." An inference bar reads
+"if the statements above the line hold, conclude the statement below it":
 
 .. math::
 
@@ -20,31 +40,13 @@ ontology:{axiom_id}:{direction}`` and a ``RuleOrigin`` row per rule. The
    \frac{(x, p, y)}{(x, q, y)} \quad (p \sqsubseteq q) \qquad
    \frac{(x, p, y)\;\;(y, p, z)}{(x, p, z)} \quad (\text{Transitive}(p))
 
-Rejected (fail closed): disjunctive heads, unscoped reflexivity, chains of
-length != 2, ``rdf:type`` as a property, right-side unions. This is *not* full
-RDFS/OWL — see :doc:`ontology <../ontology>` and gated profile work (#184,
-#185).
+Read the three cases as membership inheritance, property inclusion, and
+transitivity. In the last case, joining ``x → y`` to ``y → z`` on the shared
+``y`` permits ``x → z`` *only because p is declared transitive*. The mere
+existence of a two-hop path does not make every relationship transitive.
 
-Theory and further reading
----------------------------
-
-- `Description logic <https://en.wikipedia.org/wiki/Description_logic>`_
-  studies the decidable fragments of first-order logic behind OWL
-  (``ALC``, ``SHOIN``, ``SROIQ``). Gestalt-core-v1 admits only its selected
-  finite Horn rewrites, which is why this
-  fragment needs no tableau reasoner.
-- `Web Ontology Language
-  <https://en.wikipedia.org/wiki/Web_Ontology_Language>`_ (`OWL 2 overview
-  <https://www.w3.org/TR/owl2-overview/>`_) standardizes the full vocabulary
-  (including existentials, cardinality, and keys). The named-entity compiler
-  used here does not support that whole vocabulary. Separate experimental
-  modules do not expand its contract: consult :doc:`../reasoning-profiles`
-  and :doc:`../reasoning-el` rather than assuming full OWL support.
-- `Horn clause <https://en.wikipedia.org/wiki/Horn_clause>`_ — at most one
-  positive literal — is the logical shape every compiled rule must have.
-  Disjunctive conclusions are not single-head Horn rules. Unscoped
-  reflexivity is a different restriction: it needs an explicit finite domain
-  of individuals here, not a different logical clause shape.
+From one assertion to two consequences
+--------------------------------------
 
 **Intuition.** Read the picture below in two groups: blue is *data*
 (what someone asserted), purple is *schema* (what the arrows mean).
@@ -79,9 +81,6 @@ Theory and further reading
    person = Fact("alice", TYPE_PREDICATE, "Person")
    assert result.facts == tuple(sorted((asserted, researcher, person)))
    assert not result.explain(person).truncated
-   assert {origin.axiom_id for origin in plan.origins} == {
-       axiom.axiom_id for axiom in plan.ontology.axioms
-   }
 
 Read this as a two-step explanation: the domain rule derives ``Researcher``;
 the subclass rule uses it to derive ``Person``. ``result`` retains the asserted
@@ -95,3 +94,45 @@ not a complete inventory of alternative supports for deletion maintenance.
    for lacking that label. Short names in this example are exact local symbols:
    ``Person`` and ``person`` are different constants, and only ``TYPE_PREDICATE``
    supplies the full reserved ``rdf:type`` IRI.
+
+What compilation contributes
+-----------------------------
+
+The ontology is convenient for expressing domain meaning; the evaluator needs
+executable rules. ``compile_ontology`` is the bridge. It rewrites the two axioms
+into "if worksFor, infer Researcher" and "if Researcher, infer Person," retaining
+an origin mapping from generated rules back to source axioms. That mapping is
+useful when explaining *which modeling assumption* produced an answer.
+
+The selected ``gestalt-core-v1`` fragment includes subclass/subproperty,
+equivalence, domain/range, inverse, symmetric and transitive properties,
+binary property chains, selected left-side class expressions, and scoped
+reflexivity. It is not full RDFS or OWL. Disjunctive conclusions, arbitrary
+anonymous restrictions, longer property chains, and unscoped reflexivity must
+not be inferred from the fact that the engine supports simpler forms. See
+:doc:`ch08-gaps` for boundaries and :doc:`../ontology` for API details.
+
+Theory and further reading
+---------------------------
+
+* `OWL 2 overview <https://www.w3.org/TR/owl2-overview/>`_ introduces the wider
+  ontology language. Supporting some OWL-shaped axioms is not the same as
+  implementing every OWL profile.
+* `Description logic <https://en.wikipedia.org/wiki/Description_logic>`_
+  provides the foundation for much ontology reasoning, including languages
+  with richer class expressions than this tutorial's named-class fragment.
+* `Horn clause <https://en.wikipedia.org/wiki/Horn_clause>`_ explains the
+  single-conclusion rule shape used by this compiler. The next chapter explains
+  how an engine evaluates such rules, rather than treating them as magic.
+
+Check your understanding
+-------------------------
+
+**Question.** If we remove the domain axiom, does ``SubClassOf(Researcher,
+Person)`` alone still imply that Alice is a person from the ``worksFor`` fact?
+What if we instead assert Alice's ``Researcher`` membership directly?
+
+**Answer.** The first inference no longer follows: nothing supplies the
+``Researcher`` premise. The second does follow, because the asserted membership
+is enough to trigger the subclass implication. A rule does not manufacture its
+own missing premise.

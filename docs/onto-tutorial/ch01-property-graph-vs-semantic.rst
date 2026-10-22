@@ -1,5 +1,65 @@
-Property graphs vs semantic graphs
-==================================
+Graph databases, knowledge graphs, and meaning
+==============================================
+
+Why store a graph?
+-------------------
+
+Suppose an application asks "Which people work at organizations connected to
+this research group?" The interesting part is the connections, not one record
+in isolation. A graph makes those connections explicit: entities are nodes,
+relationships are edges, and a path joins several relationships into a route.
+Direction matters: Alice working for Acme does not mean Acme works for Alice.
+
+A graph database stores and queries such structures. That does not make it
+automatically a **knowledge graph**. The latter describes the *representation
+of domain knowledge*: which things identifiers denote, what relationship names
+mean, and how statements can be combined or interpreted. The term has several
+usages; a knowledge graph need not use RDF, a formal ontology, or any inference
+engine. A property graph can represent one, as can RDF stored in a triple store.
+
+Keep these questions separate:
+
+.. list-table:: Three layers, three responsibilities
+   :header-rows: 1
+   :widths: 22 41 37
+
+   * - Layer
+     - Question
+     - In our example
+   * - Graph model
+     - What are the entities and connections?
+     - Alice ``worksFor`` Acme.
+   * - Database
+     - How are they stored and retrieved consistently?
+     - Persist an edge; query it through Cypher.
+   * - Domain semantics
+     - What follows from the chosen meaning?
+     - The research appointment implies class membership.
+
+SQL tables can encode these same relationships using keys and joins. A graph
+database does not create information unavailable to a relational representation,
+nor is every graph query inherently faster. It changes the interface and storage
+choices around relationship-heavy workloads. A reasoning engine adds another
+service: consequences of explicit rules, independent of the storage format.
+
+Choosing nodes, edges, labels, and properties
+---------------------------------------------
+
+Give something a node when its identity and connections matter: Alice and Acme
+must be recognizable across many statements. Give ``Alice`` a display-name
+property rather than using the spelling as identity; two people can share that
+name. ``Researcher`` can be a label for storage/query purposes. Treating it as
+an ontology class requires an explicit mapping, not a suggestive string.
+
+The same choice affects facts about relationships. A physical ``worksFor`` edge
+can have an ID, a source, a start date, and a role. Collapsing it to a logical
+triple loses those distinctions unless they are modeled separately. If two
+employment records have the same endpoints, they are two records but may
+support the same proposition. This distinction will matter for provenance and
+deletion in later chapters.
+
+The technology landscape
+-------------------------
 
 **Intuition first.** Picture a whiteboard: sticky notes for things
 (``alice``, ``acme``), arrows between them labeled ``worksFor``. That is a
@@ -9,11 +69,10 @@ relationship in the ``properties["type"]`` convention. Now lay *tracing paper*
 over the whiteboard and copy every arrow as a uniform triple
 ``(subject, predicate, object)``; write class membership as just another
 arrow, ``(alice, rdf:type, Researcher)``. That tracing is the *semantic*
-view. This tutorial's recurring diagram is modeled as a real GestaltDB
-``Node``/``Edge`` graph in ``toolkit/landscape.py``. Graphviz's layered layout
-places large rounded nodes and routes curved, labeled arrows while reducing
-crossings. Colors and enclosing groups distinguish conceptual layers; small
-badges describe each node's role. It grows in three stages.
+view. In the following maps, colors and enclosing groups distinguish conceptual
+layers; small badges describe each node's role. Read each arrow as a labeled
+relationship, not as an unconditional data-conversion pipeline. The picture
+grows in three stages so it need not be learned all at once.
 
 Stage 1 — the property-graph world
 ----------------------------------
@@ -22,7 +81,7 @@ Stage 1 — the property-graph world
    :width: 100%
    :alt: Stage 1: property graphs, Cypher patterns, GraphQL API resolvers, and SQL graph extensions
 
-   Stage 1: the store and its query languages.
+   Stage 1: graph storage and related language/API families.
 
 ``Property Graph DB`` *stores* labeled nodes and typed edges. **Cypher**
 expresses graph patterns (GestaltDB's query language; see :doc:`../cypher`).
@@ -151,3 +210,17 @@ Theory and further reading
 
 The second assertion is the important one: without an explicit reasoning step,
 the stored label ``Researcher`` does not imply a stored label ``Person``.
+The first query returns exactly ``[{"name": "Alice"}]``; the second returns no
+rows. No fact about Alice's identity is missing—we have not yet told a reasoner
+what ``Researcher`` means.
+
+Check your understanding
+-------------------------
+
+**Question.** If Alice's node has label ``Researcher``, why doesn't a normal
+``MATCH (a:Person)`` return it? Is this a failure of graph storage?
+
+**Answer.** The query matches a different stored label. Subclass meaning and
+the decision to consult inferred membership are separate from label lookup.
+The database is doing the requested lookup correctly. Chapter 2 supplies the
+meaning; chapter 4 connects it to stored records without changing the labels.
