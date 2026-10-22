@@ -234,10 +234,12 @@
       "integration_commit": "1c64d3a"
     },
     "RE-25": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-25-scopes",
       "worktree": "re-25-scopes",
-      "contract": "docs/reasoning-scopes.rst"
+      "contract": "docs/reasoning-scopes.rst",
+      "pr": 239,
+      "validation": "Focused suites (scopes/contracts incl. gates, modal-surface pin, isolation) green; docs drift, Sphinx -W, roadmap validator passed. #124/#128 coordinated. PR CI running."
     }
   },
   "source_sha256": {
