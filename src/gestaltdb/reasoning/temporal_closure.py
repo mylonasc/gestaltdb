@@ -71,6 +71,7 @@ class TemporalClosure:
     segments: tuple[Interval, ...]
     base: tuple[TemporalFact, ...]
     derivations: tuple[TemporalDerivation, ...]
+    program_digest: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.segments, (tuple, list)) or not all(
@@ -87,6 +88,8 @@ class TemporalClosure:
                 isinstance(item, TemporalDerivation) for item in self.derivations):
             raise ReasoningError("derivations must contain only TemporalDerivation values")
         object.__setattr__(self, "derivations", tuple(self.derivations))
+        if self.program_digest is not None:
+            _text(self.program_digest, "program_digest")
 
     def answers(self, fact: TypedFact) -> IntervalSet:
         """Exact validity of ``fact``: base ranges plus derived segments."""
@@ -213,6 +216,8 @@ def verify_closure(program: GenericProgram, closure: TemporalClosure, *,
         raise ReasoningError("limits must be ReasoningLimits")
     _check_supported(program)
     check_cancelled(cancel)
+    if closure.program_digest is not None and closure.program_digest != program.digest:
+        raise ReasoningError("closure program identity drifted; rematerialize explicitly")
     expected_segments = change_segments(closure.base, max_segments=max(1, len(closure.segments)))
     if expected_segments != closure.segments:
         raise ReasoningError("closure segments drifted from base validity; rematerialize explicitly")
@@ -281,7 +286,7 @@ def update_range(program: GenericProgram, closure: TemporalClosure, new_base: It
         raise ReasoningError("new_base must be iterable") from exc
     if not all(isinstance(item, TemporalFact) for item in items):
         raise ReasoningError("new_base must contain only TemporalFact values")
-    if not incremental:
+    if not incremental or closure.program_digest != program.digest:
         fresh = evaluate_range(program, items, limits=limits, max_segments=max_segments,
                                max_supports=max_supports, cancel=cancel)
         old_all = {item.fact for item in closure.base} | {item.fact for item in closure.derivations}
@@ -328,7 +333,7 @@ def update_range(program: GenericProgram, closure: TemporalClosure, new_base: It
                 derivations.append(TemporalDerivation(*entry))
                 if len(derivations) > max_supports:
                     raise ReasoningLimitError("range update exceeded max_supports")
-    fresh_closure = TemporalClosure(segments, tuple(items), tuple(derivations))
+    fresh_closure = TemporalClosure(segments, tuple(items), tuple(derivations), program.digest)
     old_all = {item.fact for item in closure.base} | {item.fact for item in closure.derivations}
     new_all = {item.fact for item in fresh_closure.base} | {item.fact for item in fresh_closure.derivations}
     return RangeUpdate(fresh_closure, reused, recomputed,
@@ -384,7 +389,7 @@ def evaluate_range(program: GenericProgram, facts: Iterable[TemporalFact], *,
                     support.fact, segment, support.rule_id, support.premises))
                 if len(derivations) > max_supports:
                     raise ReasoningLimitError("range evaluation exceeded max_supports")
-    return TemporalClosure(segments, tuple(items), tuple(derivations))
+    return TemporalClosure(segments, tuple(items), tuple(derivations), program.digest)
 
 
 def canonicalize_segments(active_per_segment: Iterable[Iterable[TypedFact]], links=(), *,

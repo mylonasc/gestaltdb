@@ -12,6 +12,11 @@ segment goes, and every removal traces to changed premises. The
 ``evaluate_range`` instead of degrading, with point/range parity holding in
 both modes.
 
+Reusable closures carry ``program_digest``. Changed rule content (even with
+unchanged rule IDs), or legacy closures without a digest, trigger a full rebuild
+with zero reused segments. Manually constructed unbound closures can still be
+verified by fresh evaluation; they are never admitted as reusable caches.
+
 .. code-block:: python
 
    from gestaltdb.reasoning import evaluate_range, update_range
