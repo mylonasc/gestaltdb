@@ -1,5 +1,7 @@
 """Dependency lookups reuse immutable generation-local maps."""
 
+import pickle
+
 import pytest
 
 from gestaltdb.reasoning.maintenance import DependencyIndex, Support
@@ -32,3 +34,13 @@ def test_indexes_do_not_retain_the_mutable_constructor_list():
     items.clear()
     assert len(index.supports_for(conclusion)) == 1
     assert index.derived_from(premise) == (conclusion,)
+
+
+def test_derived_read_only_maps_are_rebuilt_on_pickle_roundtrip():
+    premise, conclusion = TypedFact("p", ["a"]), TypedFact("q", ["a"])
+    index = DependencyIndex("program", "horizon", [Support(conclusion, "r", [premise])])
+    restored = pickle.loads(pickle.dumps(index))
+    assert restored == index and restored.digest == index.digest
+    assert restored.derived_from(premise) == (conclusion,)
+    with pytest.raises(TypeError):
+        restored._supports_by_fact[conclusion] = ()

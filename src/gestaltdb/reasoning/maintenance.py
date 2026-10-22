@@ -120,6 +120,11 @@ class DependencyIndex:
     def supports_for(self, fact: TypedFact) -> tuple[Support, ...]:
         return self._supports_by_fact.get(fact, ())
 
+    def __reduce__(self):
+        # MappingProxyType caches are derived, not persisted state. Rebuild
+        # them from the canonical fields when trusted pickle data is loaded.
+        return (type(self), (self.program_digest, self.horizon, self.supports))
+
     def derived_from(self, premise: TypedFact) -> tuple[TypedFact, ...]:
         return self._derived_by_premise.get(premise, ())
 
