@@ -33,6 +33,45 @@ requires ``allow_incomplete=True``. Never represent such output as complete
 OWL/RDFS reasoning. Standard label/comment/version annotations are counted and
 ignored, not converted into logical facts.
 
+Sampling and Cypher type hierarchies
+------------------------------------
+
+``gestaltdb.ontology.adapters.hierarchy`` builds the standalone
+``LabelHierarchy`` and ``RelationHierarchy`` values used by opt-in Cypher
+matching and sampler expansion from an ontology's direct ``SubClassOf`` and
+``SubPropertyOf`` axioms:
+
+.. code-block:: python
+
+   from gestaltdb.ontology import Ontology, SubClassOf, SubPropertyOf
+   from gestaltdb.ontology.adapters.hierarchy import (
+       label_hierarchy_from_ontology,
+       relation_hierarchy_from_ontology,
+   )
+
+   ontology = Ontology("urn:example:freight", (
+       SubClassOf("Ocean_Freight", "Transport_Edge"),
+       SubClassOf("Refrigerated_Freight", "Ocean_Freight"),
+       SubPropertyOf("Ocean_Freight", "Transport_Edge"),
+   ))
+   labels = label_hierarchy_from_ontology(ontology)
+   relations = relation_hierarchy_from_ontology(ontology)
+   assert labels.closure("Transport_Edge") == (
+       "Transport_Edge", "Ocean_Freight", "Refrigerated_Freight")
+   assert relations.closure("Transport_Edge") == (
+       "Transport_Edge", "Ocean_Freight")
+
+Pass ``labels`` to ``GraphDB.query(..., label_hierarchy=labels)`` and
+``relations`` to ``SamplerSnapshot.expand_relations(...)``.
+
+Only direct subsumption is flattened; the ontology revision is not modified and
+no closure is persisted. Multiple superclasses are preserved, duplicate
+declarations are deduplicated, and cycles or self-parenting fail closed.
+``EquivalentClasses``, ``EquivalentProperties``, intersection and union
+subsumption require a canonicalization policy that a strict hierarchy cannot
+infer, so the adapter raises ``ValueError`` rather than silently dropping those
+semantics. Resolve them explicitly or build the hierarchy directly.
+
 Standalone example
 ------------------------
 
