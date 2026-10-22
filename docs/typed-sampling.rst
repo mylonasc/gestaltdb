@@ -62,6 +62,8 @@ Array-Native API Map
      - Multi-hop fanouts, with causal valid-start policies on temporal snapshots
    * - ``sample_subgraph`` / ``sample_subgraph_external``
      - Edge-seeded local batches with positives, negatives, and sampled topology
+   * - ``sample_induced_subgraph``
+     - Uniform node draws with all eligible induced edges and a fail-closed edge cap
    * - ``sample_hard_negatives``
      - Endpoint-type/relation constraints, positive rejection, temporal policies
 
@@ -595,6 +597,30 @@ Temporal ``SampledNeighbors`` and ``SampledSubgraphBatch`` values expose
 filter or causal policy to a non-temporal/legacy snapshot raises ``ValueError``.
 PyG dictionaries and DGL graphs retain string ``edge_version_ids`` as Python
 metadata because their edge-feature stores only accept numeric tensors.
+
+Bounded Induced Subgraphs
+-------------------------
+
+``sample_induced_subgraph`` draws nodes uniformly without replacement and
+returns every eligible edge induced by that node set. Relation and temporal
+filters apply before the ``max_edges`` cap; exceeding the cap raises instead of
+truncating or silently resampling. Positives and negatives are empty, so the
+batch is a framework-neutral topology block for GraphSAINT-style training.
+
+.. code-block:: python
+
+   batch = engine.sample_induced_subgraph(
+       256,
+       max_edges=50_000,
+       relations=[works_for_id],
+       temporal=TemporalContext.as_of(cutoff),
+   )
+   assert batch.positives.size == 0
+   assert batch.n_nodes == 256
+
+Node selection is uniform over the snapshot; there is no degree correction or
+partition sampling in this method. The cap is a fail-closed memory bound, not a
+statistical normalization.
 
 Time-Aware Hard Negatives
 -------------------------
