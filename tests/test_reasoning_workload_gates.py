@@ -1,7 +1,5 @@
 """RE-18 workload gates: crash boundaries, stale plans, backend-gated recovery, parity."""
 
-import importlib.util
-
 import pytest
 
 from gestaltdb.reasoning.catalog import CatalogEntry, RuleCatalog, pin_generation
@@ -137,12 +135,9 @@ def test_rule_revision_rematerializes_under_new_digest():
     assert set(fresh.facts) >= set(material.facts)
 
 
-BACKEND = next((module for module in ("lmdb", "plyvel", "pyrex")
-                if importlib.util.find_spec(module) is not None), None)
-
-
-@pytest.mark.skipif(BACKEND is None, reason="no capability-supported storage backend installed")
-def test_backend_orphan_audit_and_consent_reclaim(tmp_path):
+@pytest.mark.parametrize("backend", ["lmdb", "plyvel", "pyrex"])
+def test_backend_orphan_audit_and_consent_reclaim(tmp_path, backend):
+    pytest.importorskip(backend)
     from gestaltdb.graphdb import GraphDB
     from gestaltdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
     from gestaltdb.reasoning.adapters.publication import (
@@ -152,12 +147,14 @@ def test_backend_orphan_audit_and_consent_reclaim(tmp_path):
     from gestaltdb.serializers import PickleSerializer
 
     stores = {"lmdb": LMDBStore, "plyvel": LevelDBStore, "pyrex": PyRexStore}
-    graph = GraphDB(stores[BACKEND](path=str(tmp_path / "backend")), PickleSerializer())
+    graph = GraphDB(stores[backend](path=str(tmp_path / "backend")), PickleSerializer())
     try:
         report = audit_publication_orphans(graph)
         assert report.artifacts == ()
         reclaimed = reclaim_publication_orphans(graph, through_commit=0, consent=True)
-        assert reclaimed.removed == ()
+        assert reclaimed.reclaimed_commit_ids == ()
+        assert reclaimed.reservation_gap_ids == ()
+        assert reclaimed.through_commit == 0
         with pytest.raises(ReasoningError, match="consent"):
             reclaim_publication_orphans(graph, through_commit=0, consent=False)
     finally:
