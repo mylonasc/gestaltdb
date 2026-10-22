@@ -1,6 +1,6 @@
 # Draft generation admission contract — #248
 
-Status: design milestone, not an implemented public API. Blocked by #244,
+Status: executable opt-in identity/admission prototype; publisher integration blocked by #244,
 #245 and #246. Target: `feature/onto-dev-epic-2`.
 
 ## Identity and authority
@@ -22,6 +22,10 @@ logical identity. Source versions and logical fact IDs are different keys.
 | Dictionary generation | Explicit recoding or recompilation |
 | Batch size | Reuse logical identity; replan physical execution if necessary |
 | Unsupported backend snapshot | Fail before inference/publication |
+
+Implemented in `reasoning/generation.py` and `reasoning/adapters/generation.py`;
+see `docs/reasoning-generation-identity.rst`. No existing publisher/cache is
+silently migrated to this contract, and legacy digest values remain unchanged.
 
 The database adapter authenticates provenance. The stdlib core verifies exact
 value compatibility only; it must not import GraphDB or acquire storage handles.
