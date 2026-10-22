@@ -309,6 +309,35 @@ weighted selection excludes zero-weight candidates and rejects non-empty
 candidate sets whose weights are all zero. Without replacement, the requested
 count is capped at the number of eligible candidates.
 
+First-class importance-bias policies derive those weights. ``uniform``
+reproduces the ``1.0`` default; ``degree`` upweights hub-incident edges by
+endpoint-degree sum at unit mean; ``recency`` applies exponential decay from
+edge valid-starts over a positive finite half-life on temporal snapshots and
+fails closed on edges starting after the reference time; ``confidence``
+normalizes caller-supplied non-negative scores with positive total mass.
+Persist derived weights with ``snapshot.set_edge_weights(weights,
+source="policy:degree")`` — the rewrite is atomic, compact IDs are untouched,
+and ``edge_weight_source`` records provenance. Draws stay ``uniform`` unless a
+call passes ``strategy="weighted"``; with replacement, fanout caps, and
+zero-weight exclusion are unchanged, and per-type/per-relation quotas remain
+out of scope.
+
+.. code-block:: python
+
+   from gestaltdb.sampling import SamplerSnapshot, derive_edge_weights
+
+   with TemporaryDirectory() as tmpdir:
+       importance = SamplerSnapshot.from_edge_arrays(
+           f"{tmpdir}/snapshot",
+           external_node_ids=["a", "b", "c"],
+           external_edge_ids=["ab", "ac"],
+           external_relation_ids=["R"],
+           src_int=[0, 0], dst_int=[1, 2], rel_int=[0, 0],
+       )
+       weights = derive_edge_weights([0, 0], [1, 2], policy="degree")
+       summary = importance.set_edge_weights(weights, source="policy:degree")
+       assert summary["edge_weight_source"] == "policy:degree"
+
 .. code-block:: python
 
    from tempfile import TemporaryDirectory
