@@ -206,11 +206,13 @@
       "integration_commit": "cfd35a7"
     },
     "RE-22": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-22-conformance",
       "worktree": "re-22-conformance",
       "contract": "docs/reasoning-conformance.rst",
-      "benchmark_evidence": "benchmarks/results/reasoning-re22-temporal.json"
+      "benchmark_evidence": "benchmarks/results/reasoning-re22-temporal.json",
+      "pr": 236,
+      "validation": "Focused suites (conformance/ranges/temporal/intervals/contracts) green; docs drift, Sphinx -W, roadmap validator passed. Temporal benchmark frozen (P50/P95, reuse ratios, RSS). PR CI running."
     }
   },
   "source_sha256": {
