@@ -83,6 +83,10 @@ def test_label_hierarchy_validates_and_expands_transitively():
         schema.expand("Transport_Edge")
     with pytest.raises(ValueError, match="duplicate child label"):
         LabelHierarchy.from_definitions([("C", ["P"]), ("C", ["Q"])])
+    with pytest.raises(ValueError, match="must be a sequence"):
+        LabelHierarchy.from_definitions([("C", 5)])
+    with pytest.raises(ValueError, match="pair"):
+        LabelHierarchy.from_definitions([("C",)])
 
 
 def test_default_label_matching_stays_exact(graph):

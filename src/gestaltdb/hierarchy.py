@@ -99,7 +99,13 @@ class TypeHierarchy:
                 ) from exc
             if child in merged:
                 raise ValueError(f"duplicate child {cls._kind} entry: {child!r}")
-            merged[child] = list(direct) if not isinstance(direct, (str, bytes)) else direct
+            if isinstance(direct, (str, bytes)):
+                merged[child] = direct
+                continue
+            try:
+                merged[child] = list(direct)
+            except TypeError as exc:
+                raise ValueError(f"parents of {child!r} must be a sequence") from exc
         return cls(merged)
 
     def _all_names(self) -> list[str]:
