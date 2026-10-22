@@ -160,10 +160,12 @@
       "integration_commit": "8b2dcce"
     },
     "RE-17": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-17-catalog",
       "worktree": "re-17-catalog",
-      "contract": "docs/reasoning-catalog.rst"
+      "contract": "docs/reasoning-catalog.rst",
+      "pr": 218,
+      "validation": "Focused suites (catalog/deletion/maintenance/contracts) green; docs drift, Sphinx -W, roadmap validator passed. PR CI running."
     }
   },
   "source_sha256": {
