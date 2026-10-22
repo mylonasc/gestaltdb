@@ -216,10 +216,12 @@
       "integration_commit": "1eb4f6e"
     },
     "RE-23": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-23-profiles",
       "worktree": "re-23-profiles",
-      "contract": "docs/reasoning-profiles.rst"
+      "contract": "docs/reasoning-profiles.rst",
+      "pr": 237,
+      "validation": "Focused suites (profiles/contracts incl. digest pin, gates, model coverage, spot checks) green; docs drift, Sphinx -W, roadmap validator passed. PR CI running."
     }
   },
   "source_sha256": {
