@@ -15,6 +15,7 @@ from typing import Callable, Sequence
 import numpy as np
 
 from .adjacency import CSRAdjacency, build_csr
+from .hierarchy import RelationHierarchy
 
 
 SNAPSHOT_FORMAT_VERSION = 2
@@ -1379,6 +1380,24 @@ class SamplerSnapshot:
         """Resolve external relation IDs to compact integer IDs."""
         lookup_ids, lookup_order = self._lookup_arrays("relation")
         return self._resolve_external_ids(external_relation_ids, self.external_relation_ids, lookup_ids, lookup_order, "relation")
+
+    def expand_relations(self, relations: Sequence[str], hierarchy: RelationHierarchy) -> np.ndarray:
+        """Expand parent relation names through a sub-property hierarchy.
+
+        Each name resolves to itself plus all transitive sub-properties,
+        then to compact IDs usable by every engine method. Unknown snapshot
+        relations fail closed; hierarchy-undefined names expand to
+        themselves. Fanout caps in downstream sampling apply to the union,
+        not per expanded relation.
+        """
+        if not isinstance(hierarchy, RelationHierarchy):
+            raise ValueError("hierarchy must be a RelationHierarchy")
+        expanded = hierarchy.expand(relations)
+        known = set(self.external_relation_ids.tolist())
+        unknown = [name for name in expanded if name not in known]
+        if unknown:
+            raise ValueError(f"unknown snapshot relations: {unknown!r}")
+        return self.relation_ints(list(expanded))
 
     def global_triple_to_external(self, triple) -> tuple[str, str, str]:
         src, rel, dst = np.asarray(triple, dtype=np.int64).tolist()

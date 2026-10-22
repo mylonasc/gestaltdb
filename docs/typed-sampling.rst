@@ -368,6 +368,42 @@ fanout, direction, relations, replacement, and strategy. ``LayeredSampleBatch``
 preserves each layer's ``SampledNeighbors`` block and deduplicates the next
 frontier; it does not construct framework-native bipartite message-passing blocks.
 
+Relation sub-property hierarchies
+---------------------------------
+
+Samplers match literal relation IDs. When edge types form a hierarchy
+(``Ocean_Freight`` as a sub-property of ``Transport_Edge``), define it once
+and expand parent names to their transitive sub-properties before sampling:
+
+.. code-block:: python
+
+   from gestaltdb.sampling import RelationHierarchy
+
+   hierarchy = RelationHierarchy({
+       "Ocean_Freight": ["Transport_Edge"],
+       "Rail": ["Transport_Edge"],
+       "Refrigerated_Freight": ["Ocean_Freight"],
+   })
+   assert hierarchy.expand(["Transport_Edge"]) == (
+       "Transport_Edge", "Ocean_Freight", "Refrigerated_Freight", "Rail")
+
+Hierarchies are immutable and validated at construction: empty names,
+self-parenting, duplicate child entries, and parent/child cycles all fail
+closed. Then resolve through the snapshot so every engine method composes
+without new parameters:
+
+.. code-block:: python
+
+   expanded = snapshot.expand_relations(["Transport_Edge"], hierarchy)
+   neighbors = engine.sample_neighbors([0], fanout=10, relations=expanded)
+
+Expanded names absent from the snapshot fail closed (typo safety), while
+hierarchy-undefined names expand to themselves. Fanout caps apply to the
+union of expanded relations, not per sub-relation. Node sub-types and
+Cypher/planner integration remain open follow-ups on the PropEnh-14
+tracker.
+
+
 Walks support direction/relation filters, repeating metapaths, weighted steps,
 random restart, and terminate/restart dead-end policies. Their fixed-width node,
 edge, and relation arrays use ``-1`` for padding; restart transitions also have
