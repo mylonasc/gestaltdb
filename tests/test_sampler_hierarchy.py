@@ -2,6 +2,7 @@
 
 import pytest
 
+from gestaltdb import LabelHierarchy
 from gestaltdb.sampling import RelationHierarchy, SamplerEngine, SamplerSnapshot
 
 
@@ -104,3 +105,58 @@ def test_snapshot_expansion_composes_with_engine_methods(tmp_path):
         snapshot.expand_relations(["Transport_Edge", "Missing"], hierarchy)
     with pytest.raises(ValueError, match="must be a RelationHierarchy"):
         snapshot.expand_relations(["Transport_Edge"], {"Transport_Edge": []})
+
+
+def _typed_snapshot(tmp_path):
+    return SamplerSnapshot.from_edge_arrays(
+        tmp_path / "typed",
+        external_node_ids=["generic", "ocean", "refrigerated", "air", "warehouse"],
+        node_type_values=[
+            "Transport_Node", "Ocean_Node", "Refrigerated_Node",
+            "Air_Node", "Warehouse_Node",
+        ],
+        external_edge_ids=["e1"],
+        external_relation_ids=["r"],
+        src_int=[4],
+        dst_int=[0],
+        rel_int=[0],
+    )
+
+
+def test_node_type_hierarchy_expands_semantic_values_to_compact_ids(tmp_path):
+    snapshot = _typed_snapshot(tmp_path)
+    hierarchy = LabelHierarchy({
+        "Ocean_Node": ["Transport_Node"],
+        "Refrigerated_Node": ["Ocean_Node"],
+        "Air_Node": ["Transport_Node"],
+    })
+    mapping = {
+        value: int(index)
+        for index, value in snapshot.metadata["node_type_values"].items()
+    }
+    expanded = snapshot.expand_node_types(["Transport_Node"], hierarchy)
+    assert set(expanded.tolist()) == {
+        mapping["Transport_Node"], mapping["Ocean_Node"],
+        mapping["Refrigerated_Node"], mapping["Air_Node"],
+    }
+    assert snapshot.expand_node_types(["Warehouse_Node"], hierarchy).tolist() == [
+        mapping["Warehouse_Node"]
+    ]
+
+    engine = SamplerEngine(snapshot, seed=3)
+    sampled = engine.sample_nodes(4, node_types=expanded)
+    assert set(snapshot.node_type_ids[sampled].tolist()) <= set(expanded.tolist())
+
+    with pytest.raises(ValueError, match="unknown snapshot node types"):
+        snapshot.expand_node_types(["Missing"], hierarchy)
+    with pytest.raises(ValueError, match="must be a LabelHierarchy"):
+        snapshot.expand_node_types(["Transport_Node"], RelationHierarchy({}))
+    with pytest.raises(ValueError, match="scalar string"):
+        snapshot.expand_node_types("Transport_Node", hierarchy)
+
+
+def test_node_type_expansion_fails_closed_without_recorded_values(tmp_path):
+    snapshot = _snapshot(tmp_path / "raw")
+    hierarchy = LabelHierarchy({"Ocean_Node": ["Transport_Node"]})
+    with pytest.raises(ValueError, match="no recorded node type values"):
+        snapshot.expand_node_types(["Transport_Node"], hierarchy)

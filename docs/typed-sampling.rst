@@ -402,8 +402,33 @@ hierarchy-undefined names expand to themselves. Fanout caps apply to the
 union of expanded relations, not per sub-relation. Node label sub-types are
 available for opt-in Cypher matching through ``LabelHierarchy`` and
 ``GraphDB.query(..., label_hierarchy=...)`` (see :doc:`cypher`). Sampler
-node-type expansion over compact snapshot IDs and ontology-compiler coupling
-remain open follow-ups on the PropEnh-14 tracker.
+node-type expansion over compact snapshot IDs is described below; coupling
+to the ontology compiler remains open on the PropEnh-14 tracker.
+
+Node type hierarchies
+~~~~~~~~~~~~~~~~~~~~~
+
+Snapshots built with semantic ``node_type_values`` record the index-to-name
+mapping. Expand a parent node type to its transitive sub-types before passing
+compact IDs to APIs that accept ``node_types``:
+
+.. code-block:: python
+
+   from gestaltdb import LabelHierarchy
+
+   node_types = LabelHierarchy({
+       "Ocean_Node": ["Transport_Node"],
+       "Refrigerated_Node": ["Ocean_Node"],
+       "Air_Node": ["Transport_Node"],
+   })
+   expanded = snapshot.expand_node_types(["Transport_Node"], node_types)
+   sampled = engine.sample_nodes(32, node_types=expanded)
+
+Values absent from the snapshot fail closed (typo safety), and snapshots built
+only from raw ``node_type_ids`` cannot be expanded because compact IDs have no
+recorded names. Hierarchy-undefined names expand to themselves. Expansion
+changes which nodes are eligible for selection; returned rows keep their
+original arrays and literal compact type IDs.
 
 
 Walks support direction/relation filters, repeating metapaths, weighted steps,

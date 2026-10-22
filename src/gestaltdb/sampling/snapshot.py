@@ -15,7 +15,7 @@ from typing import Callable, Sequence
 import numpy as np
 
 from .adjacency import CSRAdjacency, build_csr
-from .hierarchy import RelationHierarchy
+from ..hierarchy import LabelHierarchy, RelationHierarchy
 
 
 SNAPSHOT_FORMAT_VERSION = 2
@@ -1398,6 +1398,34 @@ class SamplerSnapshot:
         if unknown:
             raise ValueError(f"unknown snapshot relations: {unknown!r}")
         return self.relation_ints(list(expanded))
+
+    def expand_node_types(
+        self, node_types: Sequence[str], hierarchy: LabelHierarchy
+    ) -> np.ndarray:
+        """Expand semantic node-type names through a sub-type hierarchy.
+
+        Each name resolves to itself plus all transitive sub-types, then to the
+        compact node-type IDs recorded in snapshot metadata. Unknown snapshot
+        types fail closed; hierarchy-undefined names expand to themselves.
+        Snapshots built from raw ``node_type_ids`` without recorded
+        ``node_type_values`` cannot be expanded safely and fail closed.
+        """
+        if not isinstance(hierarchy, LabelHierarchy):
+            raise ValueError("hierarchy must be a LabelHierarchy")
+        expanded = hierarchy.expand(node_types)
+        mapping = {
+            str(value): int(index)
+            for index, value in (self.metadata.get("node_type_values") or {}).items()
+        }
+        if not mapping:
+            raise ValueError(
+                "snapshot has no recorded node type values; build with "
+                "node_type_values to expand a hierarchy"
+            )
+        unknown = [name for name in expanded if name not in mapping]
+        if unknown:
+            raise ValueError(f"unknown snapshot node types: {unknown!r}")
+        return np.asarray(sorted({mapping[name] for name in expanded}), dtype=np.int64)
 
     def global_triple_to_external(self, triple) -> tuple[str, str, str]:
         src, rel, dst = np.asarray(triple, dtype=np.int64).tolist()
