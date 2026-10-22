@@ -1,7 +1,7 @@
 :orphan:
 
 Exact-version assertion ledger prototype
-=======================================
+========================================
 
 Import ``AssertionVersion`` and ``EvidenceLedger`` from
 ``gestaltdb.reasoning.evidence_ledger``. Each version ID binds one immutable
