@@ -169,11 +169,13 @@
       "integration_commit": "cec7e0a"
     },
     "RE-18": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-18-gates",
       "worktree": "re-18-gates",
       "contract": "docs/reasoning-gates.rst",
-      "benchmark_evidence": "benchmarks/results/reasoning-re18-maintenance.json"
+      "benchmark_evidence": "benchmarks/results/reasoning-re18-maintenance.json",
+      "pr": 219,
+      "validation": "Focused suites (gates/catalog/deletion/maintenance/contracts) green; docs drift, Sphinx -W, roadmap validator passed. Maintenance benchmark frozen (P50/P95, RSS, supports, amplification). PR CI running."
     }
   },
   "source_sha256": {
