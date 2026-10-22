@@ -172,6 +172,7 @@ def test_range_publication_roundtrip_on_backend(tmp_path):
     from gestaltdb.graphdb import GraphDB
     from gestaltdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
     from gestaltdb.reasoning.adapters.publication import (
+        GenerationStaleError,
         audit_publication_orphans,
         publish_staged_range,
         reclaim_publication_orphans,
@@ -210,7 +211,15 @@ def test_range_publication_roundtrip_on_backend(tmp_path):
         assert len(published) == 1
         assert published[0].provenance["ontology_revision"] == "rev-1"
         assert published[0].provenance["generation"] == staged.generation
-        republish = publish_staged_range(graph, staged)
+        # The consumed staged object is now stale: the publish moved the
+        # namespace, so only a fresh re-stage can observe the no-op path.
+        with pytest.raises(GenerationStaleError, match="re-stage"):
+            publish_staged_range(graph, staged)
+        restaged_same = stage_range(graph, [("a", "p", "b")], valid_start_us=1_000_000,
+                                    valid_end_us=2_000_000, evidence_id="sha256:" + "ab" * 32,
+                                    source_world="base", target_world="derived", publication_key="rk",
+                                    selection=selection, mapping=mapping, ontology_revision="rev-1")
+        republish = publish_staged_range(graph, restaged_same)
         assert (republish.asserted, republish.unchanged) == (0, 1)
         assert republish.commit_id is None
         shrunk = stage_range(graph, [], valid_start_us=1_000_000, valid_end_us=2_000_000,
@@ -219,7 +228,11 @@ def test_range_publication_roundtrip_on_backend(tmp_path):
                              selection=selection, mapping=mapping, ontology_revision="rev-1")
         removed = publish_staged_range(graph, shrunk)
         assert removed.retracted == 1 and removed.commit_id is not None
-        with pytest.raises(ReasoningError, match="re-stage"):
-            publish_staged_range(graph, staged)
+        # The retraction returned the namespace to the exact empty base the
+        # original stage was computed against, so compare-and-publish matches
+        # and reconciles by re-asserting: staleness is state mismatch, not a
+        # use-once nonce.
+        reconciled = publish_staged_range(graph, staged)
+        assert reconciled.asserted == 1 and reconciled.commit_id is not None
     finally:
         graph.close()
