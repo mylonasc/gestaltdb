@@ -25,6 +25,8 @@ class HardNegativeConfig:
     allow_future_candidates: bool = False
     exhaustion_policy: str = "raise"
     in_batch: bool = False
+    candidate_distribution: str = "uniform"
+    degree_exponent: float = 0.75
 
     def __post_init__(self):
         if self.negatives_per_positive < 0:
@@ -50,3 +52,9 @@ class HardNegativeConfig:
                 raise ValueError("temporal_candidate_window_days must be positive")
         if self.exhaustion_policy not in {"raise", "repeat"}:
             raise ValueError("exhaustion_policy must be 'raise' or 'repeat'")
+        if self.candidate_distribution not in {"uniform", "degree"}:
+            raise ValueError("candidate_distribution must be 'uniform' or 'degree'")
+        if isinstance(self.degree_exponent, bool) or not isinstance(self.degree_exponent, Real):
+            raise TypeError("degree_exponent must be a number")
+        if self.degree_exponent < 0:
+            raise ValueError("degree_exponent must be non-negative")

@@ -1381,9 +1381,8 @@ class SamplerEngine:
                     diagnostics["accepted"] += 1
                     return candidate
                 diagnostics[rejection] += 1
-            fallback = np.arange(self.snapshot.num_nodes, dtype=np.int64)
-            self.rng.shuffle(fallback)
-            for cand in fallback[:config.max_retries].tolist():
+            fallback = self._negative_fallback_candidates(config)
+            for cand in fallback.tolist():
                 candidate = (cand, rel, dst) if corrupt_head else (src, rel, cand)
                 rejection = self._negative_rejection(
                     candidate, src, dst, corrupt_head, config, group_seen,
@@ -1400,6 +1399,36 @@ class SamplerEngine:
             diagnostics["accepted"] += 1
             return sorted(group_seen)[0]
         raise RuntimeError("failed to sample a hard negative that is not a known positive")
+
+    def _negative_fallback_candidates(self, config: HardNegativeConfig) -> np.ndarray:
+        """Return random fallback candidates, optionally degree-weighted."""
+        if self.snapshot.num_nodes == 0:
+            return np.empty(0, dtype=np.int64)
+        if config.candidate_distribution == "uniform":
+            fallback = np.arange(self.snapshot.num_nodes, dtype=np.int64)
+            self.rng.shuffle(fallback)
+            return fallback[:config.max_retries]
+        degrees = np.diff(self.snapshot.incident.indptr).astype(np.float64)
+        with np.errstate(over="ignore", invalid="ignore"):
+            weights = np.power(degrees, config.degree_exponent)
+        if not np.all(np.isfinite(weights)):
+            raise ValueError("degree_exponent produces non-finite candidate weights")
+        total = float(weights.sum())
+        if not np.isfinite(total):
+            raise ValueError("degree_exponent produces non-finite candidate weights")
+        if total <= 0.0:
+            fallback = np.arange(self.snapshot.num_nodes, dtype=np.int64)
+            self.rng.shuffle(fallback)
+            return fallback[:config.max_retries]
+        probabilities = weights / total
+        size = min(config.max_retries, int(np.count_nonzero(probabilities)))
+        draws = self.rng.choice(
+            self.snapshot.num_nodes,
+            size=size,
+            replace=False,
+            p=probabilities,
+        )
+        return draws.astype(np.int64, copy=False)
 
     def _negative_candidates(self, src: int, rel: int, dst: int, context_nodes: set[int], corrupt_head: bool, config: HardNegativeConfig, positive_time: int | None, query_temporal: TemporalContext | None) -> list[int]:
         if config.source == "random" or not context_nodes:
