@@ -15,6 +15,7 @@ from typing import Iterable
 from ...epistemic import Claim
 from ...graphdb import GraphDB
 from ...ontology.compiler import CompiledOntology
+from ...readview import ReadViewProvenance
 from ...temporal import TemporalInstant, TemporalInterval
 from ...versioning import ClaimVersionWrite, normalize_temporal_instant
 from ..model import ReasoningError, ReasoningLimitError, ReasoningLimits, _text
@@ -59,6 +60,7 @@ class StagedPointPublication:
     database_id: str
     desired: tuple[tuple[str, str, str], ...]
     base_fingerprint: str
+    source_provenance: ReadViewProvenance | None = None
 
     def __post_init__(self):
         for name in ("namespace", "publication_key", "source_world", "target_world",
@@ -75,6 +77,13 @@ class StagedPointPublication:
                 raise ReasoningError("desired triples must be (subject, predicate, object)")
             cleaned.append((_text(triple[0], "subject"), _text(triple[1], "predicate"), _text(triple[2], "object")))
         object.__setattr__(self, "desired", tuple(sorted(set(cleaned))))
+        if self.source_provenance is not None:
+            if not isinstance(self.source_provenance, ReadViewProvenance):
+                raise ReasoningError("source provenance must be ReadViewProvenance")
+            provenance = ReadViewProvenance.from_dict(self.source_provenance.to_dict())
+            if provenance.database_id != self.database_id or provenance.valid_time_us != self.valid_point_us:
+                raise ReasoningError("source provenance does not match the staged database/time")
+            object.__setattr__(self, "source_provenance", provenance)
 
 
 def _stage_fingerprint(entries: Iterable[tuple[str, str]]) -> str:
@@ -137,11 +146,12 @@ def stage_point(
     return StagedPointPublication(namespace, publication_key, source_world, target_world,
                                   instant.epoch_microseconds, generation, context.context_id,
                                   compiled.revision_id, selection.policy_id, mapping.mapping_id,
-                                  database_id, desired, _stage_fingerprint(base))
+                                  database_id, desired, _stage_fingerprint(base), view.provenance)
 
 
 def publish_staged(
     graph: GraphDB, staged: StagedPointPublication, *, max_target_claims: int = 100_000,
+    freshness: str = "latest",
 ) -> PublicationResult:
     """Compare the staged base fingerprint and publish exactly once on match.
 
@@ -155,6 +165,10 @@ def publish_staged(
         raise ReasoningError("max_target_claims must be a positive integer")
     if not isinstance(graph, GraphDB):
         raise ReasoningError("GraphDB is required")
+    if freshness not in ("latest", "historical"):
+        raise ReasoningError("freshness must be latest or historical")
+    if staged.source_provenance is None:
+        raise ReasoningError("staged source provenance is required; re-stage explicitly")
     instant = TemporalInstant(staged.valid_point_us)
     interval = (instant, TemporalInstant(instant.epoch_microseconds + 1))
     with graph._temporal_writer_guard():
@@ -163,6 +177,10 @@ def publish_staged(
         with graph.read_view(valid_time=instant) as view:
             if view.provenance.database_id != staged.database_id:
                 raise ReasoningError("staged generation belongs to a different database")
+            staged.source_provenance.verify_source(graph)
+            if freshness == "latest" and (
+                    view.provenance.commit_horizon != staged.source_provenance.commit_horizon):
+                raise GenerationStaleError("source horizon moved since staging; re-stage and retry")
             current = {}
             for version in view.iter_claims_as_of(world=staged.target_world, agent="gestaltdb:ontology",
                                                   source=staged.namespace):
@@ -183,8 +201,11 @@ def publish_staged(
                               source=staged.namespace, world=staged.target_world, provenance={
                                   "engine": "gestaltdb.ontology", "publication_key": staged.publication_key,
                                   "generation": staged.generation, "input_context": staged.input_context_id,
-                                  "ontology_revision": staged.ontology_revision,
-                                  "valid_point_us": staged.valid_point_us,
+                                   "ontology_revision": staged.ontology_revision,
+                                   "valid_point_us": staged.valid_point_us,
+                                   "source_commit_horizon": staged.source_provenance.commit_horizon,
+                                   "source_provenance_token": staged.source_provenance.token,
+                                   "publication_freshness": freshness,
                               })
                 desired[claim.claim_id] = claim
             writes = []
@@ -209,7 +230,9 @@ def publish_staged(
         commit = None
         if writes:
             commit = graph.commit_versions(writes, metadata={"engine": "gestaltdb.ontology", "generation": staged.generation,
-                                                             "input_context": staged.input_context_id})
+                                                             "input_context": staged.input_context_id,
+                                                             "source_commit_horizon": staged.source_provenance.commit_horizon,
+                                                             "publication_freshness": freshness})
         return PublicationResult(context, staged.generation, None if commit is None else commit.commit_id,
                                  asserted, corrected, retracted, unchanged)
 

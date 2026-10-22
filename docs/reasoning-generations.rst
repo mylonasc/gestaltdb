@@ -10,7 +10,19 @@ namespace, ontology revision, policy, mapping, evidence and valid point in
 its generation digest plus a ``base_fingerprint`` of the visible target
 state. Publication compares the fingerprint under the guard and raises
 ``GenerationStaleError`` on any movement — readers only ever observe
-old-or-new generations, never a stale closure.
+old-or-new generations.
+
+Stages retain authenticated source read-view provenance. The default
+``publish_staged(..., freshness="latest")`` also requires the current commit
+horizon to match that source horizon. This first implementation conservatively
+rejects unrelated intervening commits too; re-stage explicitly to retry. It
+does not silently publish conclusions whose source assertions were retracted.
+
+Historical publication requires explicit ``freshness="historical"``. It verifies
+the original pinned source prefix rather than pretending it is current. Both
+modes retain target compare-and-publish checks and record the source horizon,
+provenance token and freshness policy in published claim provenance. Legacy
+manually constructed stages without source provenance must be re-staged.
 
 .. code-block:: python
 
