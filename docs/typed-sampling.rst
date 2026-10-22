@@ -100,6 +100,37 @@ For a database-backed filtered/weighted snapshot, follow the end-to-end example
 in :doc:`property-filtering`. Load the engine once and reuse it across batches;
 sampling does not require an open database and does not see later graph writes.
 
+Deterministic multi-worker sampling
+-----------------------------------
+
+Data-loader workers run in separate processes and cannot share ``Generator``
+objects. Split one parent seed into independent per-worker seeds, then rebuild
+one engine per worker from its integer seed:
+
+.. code-block:: python
+
+   from tempfile import TemporaryDirectory
+
+   from gestaltdb.sampling import SamplerEngine, SamplerSnapshot, split_seed
+
+   with TemporaryDirectory() as tmpdir:
+       probe = SamplerSnapshot.from_edge_arrays(
+           f"{tmpdir}/sampler",
+           external_node_ids=["a", "b", "c"],
+           external_edge_ids=["ab", "ac"], external_relation_ids=["R"],
+           src_int=[0, 0], dst_int=[1, 2], rel_int=[0, 0],
+       )
+       worker_seeds = split_seed(7, num_workers=4)
+       first = SamplerEngine.load(probe.path, seed=worker_seeds[0])
+       second = SamplerEngine.load(probe.path, seed=worker_seeds[0])
+       assert first.seed == second.seed == worker_seeds[0]
+
+Sibling streams are statistically independent while the whole split
+reproduces from ``(seed, num_workers)``. ``seed=None`` still splits
+independently but draws fresh entropy, so pass an explicit seed for
+deterministic training. ``engine.worker_engine(worker_id, num_workers=...)``
+is shorthand for the same construction on an already-loaded engine.
+
 Compact, Local, and External IDs
 --------------------------------
 

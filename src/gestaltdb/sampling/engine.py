@@ -151,6 +151,24 @@ class RandomWalkBatch:
         }
 
 
+def split_seed(seed: int | None, num_workers: int) -> tuple[int, ...]:
+    """Derive one deterministic worker seed per training worker.
+
+    Uses ``SeedSequence.spawn`` so sibling workers hold statistically
+    independent streams while the whole split reproduces from ``(seed,
+    num_workers)``. Workers run in separate processes and cannot share
+    ``Generator`` objects, so each worker rebuilds its engine from its own
+    integer seed (see ``SamplerEngine.worker_engine``). ``seed=None`` draws
+    fresh entropy: workers stay independent but the split does not
+    reproduce — pass an explicit seed for deterministic training.
+    """
+    if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
+        raise ValueError("seed must be an integer or None")
+    if isinstance(num_workers, bool) or not isinstance(num_workers, int) or num_workers < 1:
+        raise ValueError("num_workers must be a positive integer")
+    return tuple(int(child.generate_state(1)[0]) for child in np.random.SeedSequence(seed).spawn(num_workers))
+
+
 class SamplerEngine:
     """High-throughput sampler over a static ``SamplerSnapshot``.
 
@@ -174,6 +192,7 @@ class SamplerEngine:
 
     def __init__(self, snapshot: SamplerSnapshot, *, seed: int | None = None):
         self.snapshot = snapshot
+        self.seed = seed
         if snapshot.edge_weights.size == 0 and snapshot.num_edges:
             snapshot.edge_weights = np.ones(snapshot.num_edges, dtype=np.float64)
         else:
@@ -206,6 +225,22 @@ class SamplerEngine:
         if mode not in {"ram", "memmap"}:
             raise ValueError("mode must be 'ram' or 'memmap'")
         return cls(SamplerSnapshot.load(path, mmap=mode == "memmap"), seed=seed)
+
+    def worker_engine(self, worker_id: int, *, num_workers: int) -> "SamplerEngine":
+        """Build a sibling engine holding this worker's RNG substream.
+
+        The snapshot object is shared, not copied; only the RNG stream is
+        independent and deterministic per ``(seed, worker_id, num_workers)``.
+        Requires the engine to have been constructed with an integer seed
+        (or ``None`` for entropy-derived independence without reproducibility).
+        """
+        if isinstance(worker_id, bool) or not isinstance(worker_id, int):
+            raise ValueError("worker_id must be an integer")
+        if isinstance(num_workers, bool) or not isinstance(num_workers, int) or num_workers < 1:
+            raise ValueError("num_workers must be a positive integer")
+        if not 0 <= worker_id < num_workers:
+            raise ValueError("worker_id must satisfy 0 <= worker_id < num_workers")
+        return type(self)(self.snapshot, seed=split_seed(self.seed, num_workers)[worker_id])
 
     def sample_neighbors(
         self,
