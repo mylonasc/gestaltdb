@@ -23,6 +23,7 @@ class NeighborSamplingSpec:
     relations: Sequence[int] | None = None
     replace: bool = False
     strategy: str = "uniform"
+    balanced: bool = False
 
     def __post_init__(self):
         _validate_count(self.fanout, "fanout")
@@ -30,6 +31,8 @@ class NeighborSamplingSpec:
             raise ValueError("direction must be 'out', 'in', or 'any'")
         if self.strategy not in {"uniform", "weighted"}:
             raise ValueError("strategy must be 'uniform' or 'weighted'")
+        if not isinstance(self.balanced, bool):
+            raise ValueError("balanced must be a boolean")
         if self.relations is not None:
             relations = _integer_array(self.relations, "relations")
             object.__setattr__(self, "relations", tuple(int(rel) for rel in relations))
@@ -44,6 +47,7 @@ class ExternalNeighborSamplingSpec:
     relations: Sequence[object] | None = None
     replace: bool = False
     strategy: str = "uniform"
+    balanced: bool = False
 
     def __post_init__(self):
         _validate_count(self.fanout, "fanout")
@@ -51,6 +55,8 @@ class ExternalNeighborSamplingSpec:
             raise ValueError("direction must be 'out', 'in', or 'any'")
         if self.strategy not in {"uniform", "weighted"}:
             raise ValueError("strategy must be 'uniform' or 'weighted'")
+        if not isinstance(self.balanced, bool):
+            raise ValueError("balanced must be a boolean")
         if self.relations is not None:
             if isinstance(self.relations, (str, bytes)):
                 raise TypeError("relations must be a sequence, not a scalar string")
@@ -254,6 +260,7 @@ class SamplerEngine:
         window_policy: str = "overlap",
         causal_policy: str = "none",
         strategy: str = "uniform",
+        balanced: bool = False,
     ) -> SampledNeighbors:
         """Sample neighbors for each input node.
 
@@ -272,6 +279,11 @@ class SamplerEngine:
                 starts across hops in multihop and subgraph sampling.
             strategy: ``"uniform"`` or ``"weighted"``. Weighted sampling uses
                 the snapshot's edge weights.
+            balanced: When true, split ``fanout`` into deterministic equal
+                shares across the relation IDs present for each input node.
+                Groups smaller than their share return fewer edges when
+                ``replace=False``; unused quota is not borrowed from other
+                relations. Default uniform allocation is unchanged.
 
         Returns:
             ``SampledNeighbors`` with concatenated edge and neighbor arrays.
@@ -293,7 +305,7 @@ class SamplerEngine:
         return self._sample_neighbors(
             nodes, fanout, direction=direction, relations=relations, replace=replace,
             temporal=temporal, window_policy=window_policy, causal_policy=causal_policy,
-            strategy=strategy,
+            strategy=strategy, balanced=balanced,
         )
 
     def _sample_neighbors(
@@ -309,9 +321,12 @@ class SamplerEngine:
         causal_policy="none",
         causal_starts=None,
         strategy="uniform",
+        balanced=False,
     ) -> SampledNeighbors:
         if strategy not in {"uniform", "weighted"}:
             raise ValueError("strategy must be 'uniform' or 'weighted'")
+        if not isinstance(balanced, bool):
+            raise ValueError("balanced must be a boolean")
         input_nodes = self._validated_ids(nodes, self.snapshot.num_nodes, "nodes")
         if causal_starts is not None and len(causal_starts) != input_nodes.size:
             raise ValueError("causal_starts must align with input nodes")
@@ -331,7 +346,16 @@ class SamplerEngine:
                 elif causal_policy == "nonincreasing":
                     candidates = candidates[starts <= causal_starts[row]]
             weights = self.snapshot.edge_weights[candidates] if strategy == "weighted" else None
-            chosen = self._choose_candidates(candidates, fanout, replace=replace, weights=weights)
+            if balanced:
+                chosen = self._choose_balanced(
+                    candidates,
+                    fanout,
+                    replace=replace,
+                    weights=weights,
+                    groups=self.snapshot.rel_int[candidates],
+                )
+            else:
+                chosen = self._choose_candidates(candidates, fanout, replace=replace, weights=weights)
             sampled_edges.append(chosen.astype(np.int64, copy=False))
             sampled_neighbors.append(self._neighbors_for_edges(node, chosen, direction))
             offsets.append(offsets[-1] + int(chosen.size))
@@ -356,6 +380,7 @@ class SamplerEngine:
         temporal: TemporalContext | None = None,
         window_policy: str = "overlap",
         causal_policy: str = "none",
+        balanced: bool = False,
     ) -> SampledNeighbors:
         """Sample neighbors using external node and relation IDs as input."""
         compact_nodes = self.snapshot.node_ints(nodes)
@@ -370,6 +395,7 @@ class SamplerEngine:
             temporal=temporal,
             window_policy=window_policy,
             causal_policy=causal_policy,
+            balanced=balanced,
         )
 
     def sample_nodes(
@@ -380,8 +406,25 @@ class SamplerEngine:
         replace: bool = False,
         strategy: str = "uniform",
         weights: Sequence[float] | np.ndarray | None = None,
+        balanced: bool = False,
     ) -> np.ndarray:
-        """Sample compact node IDs, optionally restricted by node type."""
+        """Sample compact node IDs, optionally restricted by node type.
+
+        Args:
+            count: Maximum number of node IDs to return.
+            node_types: Optional compact node type IDs to restrict candidates.
+            replace: Whether to sample with replacement.
+            strategy: ``"uniform"``, ``"weighted"``, or ``"degree"``.
+            weights: Per-node weights for ``strategy="weighted"``.
+            balanced: When true, split ``count`` into deterministic equal
+                shares across the distinct node type IDs present in the
+                candidate set. Groups smaller than their share return fewer
+                nodes when ``replace=False``; unused quota is not borrowed
+                from other types. Untyped nodes (compact type ``-1``) form
+                their own group when no ``node_types`` filter excludes them.
+        """
+        if not isinstance(balanced, bool):
+            raise ValueError("balanced must be a boolean")
         candidates = np.arange(self.snapshot.num_nodes, dtype=np.int64)
         if node_types is not None:
             types = self._validated_nonnegative_ids(node_types, "node_types")
@@ -401,6 +444,14 @@ class SamplerEngine:
             weights_array = None
         else:
             raise ValueError("strategy must be 'uniform', 'weighted', or 'degree'")
+        if balanced:
+            return self._choose_balanced(
+                candidates,
+                count,
+                replace=replace,
+                weights=weights_array,
+                groups=self.snapshot.node_type_ids[candidates],
+            )
         return self._choose_candidates(candidates, count, replace=replace, weights=weights_array)
 
     def sample_edges(
@@ -411,8 +462,24 @@ class SamplerEngine:
         replace: bool = False,
         strategy: str = "uniform",
         weights: Sequence[float] | np.ndarray | None = None,
+        balanced: bool = False,
     ) -> np.ndarray:
-        """Sample compact edge IDs, optionally restricted by relation."""
+        """Sample compact edge IDs, optionally restricted by relation.
+
+        Args:
+            count: Maximum number of edge IDs to return.
+            relations: Optional compact relation IDs to restrict candidates.
+            replace: Whether to sample with replacement.
+            strategy: ``"uniform"`` or ``"weighted"``.
+            weights: Per-edge weights for ``strategy="weighted"``.
+            balanced: When true, split ``count`` into deterministic equal
+                shares across the distinct relation IDs present in the
+                candidate set. Groups smaller than their share return fewer
+                edges when ``replace=False``; unused quota is not borrowed
+                from other relations.
+        """
+        if not isinstance(balanced, bool):
+            raise ValueError("balanced must be a boolean")
         candidates = np.arange(self.snapshot.num_edges, dtype=np.int64)
         if relations is not None:
             relation_ids = self._validated_ids(relations, self.snapshot.num_relations, "relations")
@@ -426,6 +493,14 @@ class SamplerEngine:
             candidate_weights = None
         else:
             raise ValueError("strategy must be 'uniform' or 'weighted'")
+        if balanced:
+            return self._choose_balanced(
+                candidates,
+                count,
+                replace=replace,
+                weights=candidate_weights,
+                groups=self.snapshot.rel_int[candidates],
+            )
         return self._choose_candidates(candidates, count, replace=replace, weights=candidate_weights)
 
     def sample_layers(
@@ -454,6 +529,7 @@ class SamplerEngine:
                 relations=layer.relations,
                 replace=layer.replace,
                 strategy=layer.strategy,
+                balanced=layer.balanced,
                 temporal=temporal,
                 window_policy=window_policy,
             )
@@ -482,6 +558,7 @@ class SamplerEngine:
                     relations=relations,
                     replace=layer.replace,
                     strategy=layer.strategy,
+                    balanced=layer.balanced,
                 )
             )
         return self.sample_layers(
@@ -1272,6 +1349,51 @@ class SamplerEngine:
         window_start = temporal.interval.start.epoch_microseconds
         window_end = temporal.interval.end.epoch_microseconds
         return bool(np.any((starts < window_end) & (open_ends | (window_start < ends))))
+
+    def _choose_balanced(
+        self,
+        candidates: np.ndarray,
+        count: int,
+        *,
+        replace: bool,
+        weights: np.ndarray | None,
+        groups: np.ndarray,
+    ) -> np.ndarray:
+        """Choose a deterministic equal share from each group.
+
+        Groups are visited in sorted compact-ID order. When the requested
+        ``count`` does not divide evenly, earlier groups receive one extra
+        selection. A group smaller than its share returns all its candidates
+        when ``replace=False``; unused quota is intentionally not redistributed
+        so the quota contract stays explicit and reproducible.
+        """
+        _validate_count(count, "count")
+        if count == 0 or candidates.size == 0:
+            return np.empty(0, dtype=np.int64)
+        if groups.shape != candidates.shape:
+            raise ValueError("balanced groups must align with candidates")
+        unique_groups = np.unique(groups)
+        base, extra = divmod(count, int(unique_groups.size))
+        selections: list[np.ndarray] = []
+        for index, group in enumerate(unique_groups):
+            quota = base + (1 if index < extra else 0)
+            if quota == 0:
+                continue
+            mask = groups == group
+            group_candidates = candidates[mask]
+            group_weights = None if weights is None else weights[mask]
+            if group_weights is not None and float(np.max(group_weights)) <= 0:
+                continue
+            selections.append(
+                self._choose_candidates(
+                    group_candidates, quota, replace=replace, weights=group_weights
+                )
+            )
+        if not selections:
+            return self._choose_candidates(
+                candidates, count, replace=replace, weights=weights
+            )
+        return np.concatenate(selections).astype(np.int64, copy=False)
 
     def _choose_candidates(self, candidates: np.ndarray, count: int, *, replace: bool, weights: np.ndarray | None) -> np.ndarray:
         _validate_count(count, "count")
