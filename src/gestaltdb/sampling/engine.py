@@ -407,6 +407,8 @@ class SamplerEngine:
         strategy: str = "uniform",
         weights: Sequence[float] | np.ndarray | None = None,
         balanced: bool = False,
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
     ) -> np.ndarray:
         """Sample compact node IDs, optionally restricted by node type.
 
@@ -422,13 +424,35 @@ class SamplerEngine:
                 nodes when ``replace=False``; unused quota is not borrowed
                 from other types. Untyped nodes (compact type ``-1``) form
                 their own group when no ``node_types`` filter excludes them.
+            temporal: Optional point or finite-window node availability
+                filter. Requires a temporal format-v2 snapshot.
+            window_policy: ``"overlap"`` keeps nodes whose availability
+                intersects the window; ``"contained"`` keeps nodes whose
+                availability is fully inside it. Ignored for point contexts.
         """
+        self._validate_sampling_options(
+            fanout=0,
+            direction="out",
+            temporal=temporal,
+            window_policy=window_policy,
+            causal_policy="none",
+        )
         if not isinstance(balanced, bool):
             raise ValueError("balanced must be a boolean")
         candidates = np.arange(self.snapshot.num_nodes, dtype=np.int64)
         if node_types is not None:
             types = self._validated_nonnegative_ids(node_types, "node_types")
             candidates = candidates[np.isin(self.snapshot.node_type_ids, types)]
+        if temporal is not None:
+            available = np.fromiter(
+                (
+                    self._node_available(int(node), temporal, window_policy)
+                    for node in candidates
+                ),
+                dtype=bool,
+                count=candidates.size,
+            )
+            candidates = candidates[available]
         if strategy == "degree":
             if weights is not None:
                 raise ValueError("weights cannot be combined with strategy='degree'")
@@ -463,6 +487,8 @@ class SamplerEngine:
         strategy: str = "uniform",
         weights: Sequence[float] | np.ndarray | None = None,
         balanced: bool = False,
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
     ) -> np.ndarray:
         """Sample compact edge IDs, optionally restricted by relation.
 
@@ -477,13 +503,29 @@ class SamplerEngine:
                 candidate set. Groups smaller than their share return fewer
                 edges when ``replace=False``; unused quota is not borrowed
                 from other relations.
+            temporal: Optional point or finite-window edge validity filter.
+                Requires a temporal format-v2 snapshot.
+            window_policy: ``"overlap"`` keeps edge versions whose validity
+                intersects the window; ``"contained"`` keeps versions fully
+                inside it. Ignored for point contexts.
         """
+        self._validate_sampling_options(
+            fanout=0,
+            direction="out",
+            temporal=temporal,
+            window_policy=window_policy,
+            causal_policy="none",
+        )
         if not isinstance(balanced, bool):
             raise ValueError("balanced must be a boolean")
         candidates = np.arange(self.snapshot.num_edges, dtype=np.int64)
         if relations is not None:
             relation_ids = self._validated_ids(relations, self.snapshot.num_relations, "relations")
             candidates = candidates[np.isin(self.snapshot.rel_int, relation_ids)]
+        if temporal is not None:
+            candidates = candidates[
+                self._edge_available_mask(candidates, temporal, window_policy)
+            ]
         if strategy == "weighted":
             all_weights = self.snapshot.edge_weights if weights is None else self._validated_weights(weights, self.snapshot.num_edges, "weights")
             candidate_weights = all_weights[candidates]
@@ -1333,7 +1375,12 @@ class SamplerEngine:
         width = self._candidate_window_us(config)
         return TemporalContext.during(positive_time - width, positive_time + 1)
 
-    def _node_available(self, node: int, temporal: TemporalContext | None) -> bool:
+    def _node_available(
+        self,
+        node: int,
+        temporal: TemporalContext | None,
+        window_policy: str = "overlap",
+    ) -> bool:
         if temporal is None:
             return True
         start = int(self.snapshot.node_history_indptr[node])
@@ -1348,7 +1395,31 @@ class SamplerEngine:
             return bool(np.any((starts <= instant) & (open_ends | (instant < ends))))
         window_start = temporal.interval.start.epoch_microseconds
         window_end = temporal.interval.end.epoch_microseconds
+        if window_policy == "contained":
+            return bool(np.any(
+                (window_start <= starts) & (~open_ends) & (ends <= window_end)
+            ))
         return bool(np.any((starts < window_end) & (open_ends | (window_start < ends))))
+
+    def _edge_available_mask(
+        self,
+        edges: np.ndarray,
+        temporal: TemporalContext | None,
+        window_policy: str,
+    ) -> np.ndarray:
+        if temporal is None:
+            return np.ones(edges.size, dtype=bool)
+        starts = self.snapshot.valid_from_us[edges]
+        ends = self.snapshot.valid_to_us[edges]
+        open_ends = self.snapshot.valid_to_open[edges]
+        if temporal.instant is not None:
+            instant = temporal.instant.epoch_microseconds
+            return (starts <= instant) & (open_ends | (instant < ends))
+        window_start = temporal.interval.start.epoch_microseconds
+        window_end = temporal.interval.end.epoch_microseconds
+        if window_policy == "contained":
+            return (window_start <= starts) & (~open_ends) & (ends <= window_end)
+        return (starts < window_end) & (open_ends | (window_start < ends))
 
     def _choose_balanced(
         self,
