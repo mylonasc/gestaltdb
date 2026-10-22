@@ -39,6 +39,7 @@ from .catalog import CatalogEntry, PinnedGeneration, RuleCatalog, catalog_legacy
 from .intervals import Interval, IntervalError, IntervalSet, SupportSegment, coalesce_segments
 from .el import EL_PROFILE, ELClassification, ELDerivation, check_proof, classify, holds_in_all_models, normalize_axiom
 from .profiles import ConstructEntry, MATRIX, NAMED_SUBSETS, approval_checklist, check_construct, matrix_digest, subset_constructs
+from .scopes import CalculusPolicy, CalculusRegistry, CalculusSpec, InheritanceGrant, InheritancePolicy, ModalBoundary, ModalScope, approval_gates as scope_approval_gates
 from .temporal_closure import TemporalClosure, TemporalDerivation, TemporalFact, RangeUpdate, ClosureVerification, canonicalize_segments, change_segments, evaluate_range, update_range, verify_closure
 from .maintenance import DependencyIndex, Materialization, PropagationResult, RetractionResult, Support, build_index, propagate_insertions, rematerialize, retract_facts
 from .validation import Denial, ValidationReport, ValidationSuite, Violation, find_unsatisfiable, validate
@@ -66,4 +67,7 @@ __all__ = [
     "approval_checklist", "check_construct", "matrix_digest", "subset_constructs",
     "EL_PROFILE", "ELClassification", "ELDerivation",
     "check_proof", "classify", "holds_in_all_models", "normalize_axiom",
+    "CalculusPolicy", "CalculusRegistry", "CalculusSpec",
+    "InheritanceGrant", "InheritancePolicy", "ModalBoundary", "ModalScope",
+    "scope_approval_gates",
 ]
