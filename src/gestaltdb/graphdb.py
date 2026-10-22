@@ -5623,6 +5623,19 @@ class GraphDB:
         )
 
     def _temporal_version_id_exists(self, version_id: str) -> bool:
+        version_id = normalize_version_id(version_id)
+        if self._temporal_index_state() is not None:
+            # Indexes are current, so the version index answers in O(1).
+            # It is written for every commit in MAINTAIN mode and covers
+            # all visible history once the index state exists.
+            for _ in self.store.iter_index_prefix(
+                self._temporal_index_name(_TEMPORAL_VERSION_INDEX, self._temporal_index_generation()),
+                [version_id.encode("ascii")],
+            ):
+                return True
+            return False
+        # Stale or absent indexes (e.g. DEFER bulk loads): fall back to a
+        # descriptor scan. Slower, but correct in every index mode.
         last_commit_id, _ = self._temporal_sequence()
         for commit_id in range(1, last_commit_id + 1):
             descriptor_payload = self.store.get_metadata(self._temporal_commit_key(commit_id))
