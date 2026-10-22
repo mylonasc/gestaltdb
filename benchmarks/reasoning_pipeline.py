@@ -39,7 +39,7 @@ def run_once(rows: int, backend: str, batch_rows: int, commit_batch: int = 2000,
                 handle.write(json.dumps({"phase": phase, "s": seconds}) + "\n")
     metrics = {}
     backend_options = {"map_size": max(64 * 1024 * 1024, rows * 32_768)} if backend == "lmdb" else {}
-    with tempfile.TemporaryDirectory(prefix="reasoning-pipeline-", dir="/tmp/opencode") as directory:
+    with tempfile.TemporaryDirectory(prefix="reasoning-pipeline-") as directory:
         graph = GraphDB.create(Path(directory) / "db", backend=backend, serializer="json",
                                backend_options=backend_options)
         try:
