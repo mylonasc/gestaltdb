@@ -492,9 +492,12 @@ edge rows rather than ``edge_int``/``sample_subgraph_external`` in that case.
 Layer and walk APIs accept ``temporal`` and ``window_policy`` filters, applied
 before selection at every step; these filters do not impose causal ordering
 between steps. Use the existing multihop/subgraph APIs for causal policies.
-Seed-node and seed-edge draws select from the entire snapshot, including all
-history rows in temporal snapshots; they do not perform time-based selection.
-Omitting ``temporal`` on traversal APIs likewise selects from all snapshot rows.
+Seed-node and seed-edge draws also accept ``temporal`` and ``window_policy``:
+node draws filter node availability, while edge draws filter edge-version
+validity. ``"overlap"`` keeps intervals intersecting the window;
+``"contained"`` keeps intervals fully inside it and therefore excludes
+open-ended intervals. Omitting ``temporal`` on traversal APIs still selects
+from all snapshot rows.
 
 New weights and lookup arrays are authenticated by the v2 artifact catalog.
 Older v2 snapshots without them still load with unit weights and derived
@@ -550,6 +553,20 @@ contained). ``sample_multihop`` and ``sample_subgraph`` accept the same options.
 Set ``causal_policy`` to ``"nondecreasing"`` or ``"nonincreasing"`` to compare
 edge valid-start instants hop by hop along each sampled path. Temporal, relation,
 direction, and causal filters all run before fanout selection.
+
+Seed draws use the same temporal contract before selection:
+
+.. code-block:: python
+
+   seed_nodes = engine.sample_nodes(
+       32, temporal=TemporalContext.as_of(cutoff)
+   )
+   seed_edges = engine.sample_edges(
+       32, temporal=TemporalContext.during(window_start, window_end)
+   )
+
+Node seeds filter on node availability history; edge seeds filter on
+edge-version validity rows. Both accept ``"overlap"`` and ``"contained"``.
 
 Temporal ``SampledNeighbors`` and ``SampledSubgraphBatch`` values expose
 ``edge_version_ids``, ``valid_from_us``, ``valid_to_us``, and
