@@ -546,3 +546,12 @@ half-open interval unions with linear-sweep intersection/difference,
 support-qualified coalescing with truth/segment distinction and no
 envelopes, seeded 300-case oracle parity, measured 5k-interval evidence.
 Scalar prototype only; Polars/native operators stay deferred.
+
+### Implementation started: RE-20 (#181)
+
+Dedicated worktree `re-20-temporal`, branch `feature/re-20-temporal`,
+based on accepted integration `ebd652d` (RE-19 integrated; prerequisites
+RE-08/RE-11/RE-19 satisfied). Change-segment range evaluation with
+per-interval evidence and budgets, change-point point-parity, temporal
+negation/equality fail-closed contracts, and per-segment equality rebuilds
+with no global merges. Measured 29-segment/935-derivation evidence.

@@ -37,6 +37,7 @@ from .terms import Literal
 from .typed import AggregateRule, Aggregation, Comparison, GenericEngine, GenericProgram, GenericResult, GenericRule, MultiHeadRule, NegationWitness, StratifiedRun, TypedAtom, TypedFact, expand_predicate_variables, normalize_program, predicate_domain
 from .catalog import CatalogEntry, PinnedGeneration, RuleCatalog, catalog_legacy_parity_gates, migrate_dict, pin_generation
 from .intervals import Interval, IntervalError, IntervalSet, SupportSegment, coalesce_segments
+from .temporal_closure import TemporalClosure, TemporalDerivation, TemporalFact, canonicalize_segments, change_segments, evaluate_range
 from .maintenance import DependencyIndex, Materialization, PropagationResult, RetractionResult, Support, build_index, propagate_insertions, rematerialize, retract_facts
 from .validation import Denial, ValidationReport, ValidationSuite, Violation, find_unsatisfiable, validate
 
@@ -57,4 +58,6 @@ __all__ = [
     "CatalogEntry", "PinnedGeneration", "RuleCatalog",
     "catalog_legacy_parity_gates", "migrate_dict", "pin_generation",
     "Interval", "IntervalError", "IntervalSet", "SupportSegment", "coalesce_segments",
+    "TemporalClosure", "TemporalDerivation", "TemporalFact",
+    "canonicalize_segments", "change_segments", "evaluate_range",
 ]
