@@ -475,6 +475,27 @@ print(subgraph["nodes"].keys(), subgraph["edges"].keys(), paths)
 
 Typed traversal depends on `Edge(properties={"type": "..."})`. If a database was populated before typed adjacency existed, run `graph.rebuild_typed_adjacency()`.
 
+Live traversal can expand a parent relation through an explicit hierarchy. The
+per-hop `sample_size` remains the total fanout across the expanded union:
+
+```python
+from gestaltdb.sampling import RelationHierarchy
+
+transport = RelationHierarchy({
+    "Ocean_Freight": ["Transport_Edge"],
+    "Air_Freight": ["Transport_Edge"],
+})
+one_hop = graph.sample_neighbors(
+    "warehouse", "Transport_Edge", sample_size=5,
+    relation_hierarchy=transport,
+)
+paths = graph.sample_typed_paths(
+    ["warehouse"],
+    [{"edge_type": "Transport_Edge", "sample_size": 5}],
+    relation_hierarchy=transport,
+)
+```
+
 ## Ingest Arrow Columns
 
 ```python
