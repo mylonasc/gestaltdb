@@ -389,7 +389,24 @@ and expand parent names to their transitive sub-properties before sampling:
 
 Hierarchies are immutable and validated at construction: empty names,
 self-parenting, duplicate child entries, and parent/child cycles all fail
-closed. Then resolve through the snapshot so every engine method composes
+closed. Live typed traversal accepts the hierarchy per call, applying it to
+every hop while keeping the requested fanout as the total across expanded
+relations:
+
+.. code-block:: python
+
+   paths = graph.sample_typed_paths(
+       ["warehouse"],
+       [{"edge_type": "Transport_Edge", "sample_size": 10}],
+       relation_hierarchy=hierarchy,
+   )
+   neighbors = graph.sample_neighbors(
+       "warehouse", "Transport_Edge", sample_size=10,
+       relation_hierarchy=hierarchy,
+   )
+
+Without ``relation_hierarchy``, live traversal keeps literal relation matching.
+Then resolve through the snapshot so every array-native engine method composes
 without new parameters:
 
 .. code-block:: python

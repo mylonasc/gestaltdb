@@ -45,7 +45,7 @@ from .rules import (
     normalize_rule_definition,
     stratify_rules,
 )
-from .sampling import SamplingPattern, as_sampling_pattern
+from .sampling import RelationHierarchy, SamplingPattern, as_sampling_pattern
 from .serializers import JSONSerializer, temporal_tagged_value
 from .temporal import (
     TemporalDate,
@@ -2291,15 +2291,21 @@ class GraphDB:
         """
         return [record['edge_id'] for record in self.get_typed_adjacency(node_id, edge_type, direction)]
 
-    def sample_neighbors(self, node_id, edge_type: str, direction: str = 'out', sample_size: int = 10, rng=None):
+    def sample_neighbors(self, node_id, edge_type: str, direction: str = 'out', sample_size: int = 10, rng=None, *, relation_hierarchy=None):
         """Sample typed neighbors using reservoir sampling.
 
         Args:
             node_id: Node ID as string or bytes.
-            edge_type: Edge type to traverse.
+            edge_type: Edge type to traverse. With ``relation_hierarchy``, this
+                is the requested parent type.
             direction: ``"out"``, ``"in"``, or ``"any"``.
             sample_size: Maximum number of records to return.
             rng: Optional random number generator with ``randrange``.
+            relation_hierarchy: Optional ``RelationHierarchy``. When supplied,
+                ``edge_type`` expands to itself plus all transitive
+                sub-properties and the reservoir is drawn from their union, so
+                ``sample_size`` remains the total fanout. Default traversal
+                stays literal.
 
         Returns:
             List of typed adjacency records.
@@ -2308,19 +2314,26 @@ class GraphDB:
             >>> graph_db.sample_neighbors("drug-1", "drug-to-protein", sample_size=2)  # doctest: +SKIP
         """
         rng = rng or random
+        if relation_hierarchy is None:
+            edge_types = (edge_type,)
+        else:
+            if not isinstance(relation_hierarchy, RelationHierarchy):
+                raise ValueError("relation_hierarchy must be a RelationHierarchy")
+            edge_types = relation_hierarchy.closure(edge_type)
         sample = []
         seen = 0
-        for record in self.iter_typed_adjacency(node_id, edge_type, direction):
-            seen += 1
-            if len(sample) < sample_size:
-                sample.append(record)
-                continue
-            replacement_idx = rng.randrange(seen)
-            if replacement_idx < sample_size:
-                sample[replacement_idx] = record
+        for current_type in edge_types:
+            for record in self.iter_typed_adjacency(node_id, current_type, direction):
+                seen += 1
+                if len(sample) < sample_size:
+                    sample.append(record)
+                    continue
+                replacement_idx = rng.randrange(seen)
+                if replacement_idx < sample_size:
+                    sample[replacement_idx] = record
         return sample
 
-    def sample_typed_paths(self, seed_ids, pattern: Union[SamplingPattern, list[dict]], rng=None):
+    def sample_typed_paths(self, seed_ids, pattern: Union[SamplingPattern, list[dict]], rng=None, *, relation_hierarchy=None):
         """Sample paths that follow an ordered typed edge pattern.
 
         Args:
@@ -2328,6 +2341,9 @@ class GraphDB:
             pattern: ``SamplingPattern`` or list of dictionaries such as
                 ``{"edge_type": "drug-to-protein", "direction": "out", "sample_size": 2}``.
             rng: Optional random number generator with ``randrange``.
+            relation_hierarchy: Optional ``RelationHierarchy`` applied to every
+                hop. Each hop's ``edge_type`` expands to its transitive
+                sub-properties, with ``sample_size`` shared across the union.
 
         Returns:
             List of dictionaries with ``seed`` and sampled ``path`` records.
@@ -2338,6 +2354,10 @@ class GraphDB:
             >>> graph_db.sample_typed_paths(["drug-1"], pattern)  # doctest: +SKIP
         """
         rng = rng or random
+        if relation_hierarchy is not None and not isinstance(
+            relation_hierarchy, RelationHierarchy
+        ):
+            raise ValueError("relation_hierarchy must be a RelationHierarchy")
         pattern = as_sampling_pattern(pattern)
         paths = []
 
@@ -2356,6 +2376,7 @@ class GraphDB:
                         direction=direction,
                         sample_size=sample_size,
                         rng=rng,
+                        relation_hierarchy=relation_hierarchy,
                     )
                     for record in sampled_records:
                         next_frontier.append({
@@ -2370,13 +2391,15 @@ class GraphDB:
                 paths.append({'seed': partial['seed'], 'path': partial['path']})
         return paths
 
-    def sample_typed_subgraph(self, seed_ids, pattern: Union[SamplingPattern, list[dict]], rng=None):
+    def sample_typed_subgraph(self, seed_ids, pattern: Union[SamplingPattern, list[dict]], rng=None, *, relation_hierarchy=None):
         """Sample and materialize a typed subgraph around seed nodes.
 
         Args:
             seed_ids: Starting node IDs as strings or bytes.
             pattern: ``SamplingPattern`` or list of dictionary hop configs.
             rng: Optional random number generator with ``randrange``.
+            relation_hierarchy: Optional ``RelationHierarchy`` applied to every
+                hop before sampling.
 
         Returns:
             Dictionary with ``nodes``, ``edges``, and ``paths`` entries.
@@ -2385,7 +2408,12 @@ class GraphDB:
             >>> pattern = [{"edge_type": "drug-to-protein", "direction": "out", "sample_size": 2}]
             >>> graph_db.sample_typed_subgraph(["drug-1"], pattern)  # doctest: +SKIP
         """
-        paths = self.sample_typed_paths(seed_ids, pattern, rng=rng)
+        paths = self.sample_typed_paths(
+            seed_ids,
+            pattern,
+            rng=rng,
+            relation_hierarchy=relation_hierarchy,
+        )
         node_ids = {self.node_key_to_bytes(seed_id) for seed_id in seed_ids}
         edge_ids = set()
         for sampled_path in paths:
