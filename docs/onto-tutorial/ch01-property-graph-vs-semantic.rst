@@ -9,11 +9,11 @@ relationship in the ``properties["type"]`` convention. Now lay *tracing paper*
 over the whiteboard and copy every arrow as a uniform triple
 ``(subject, predicate, object)``; write class membership as just another
 arrow, ``(alice, rdf:type, Researcher)``. That tracing is the *semantic*
-view. This tutorial's recurring diagram — built with gestaltdb's own viz
-(``gestaltdb.viz.api`` → SVG export) from a real ``Node``/``Edge`` graph in
-``toolkit/landscape.py`` — maps how the two views and their languages relate.
-It grows in three stages; node color is the concept kind, arrow labels are
-the relationships.
+view. This tutorial's recurring diagram is modeled as a real GestaltDB
+``Node``/``Edge`` graph in ``toolkit/landscape.py``. Graphviz's layered layout
+places large rounded nodes and routes curved, labeled arrows while reducing
+crossings. Colors and enclosing groups distinguish conceptual layers; small
+badges describe each node's role. It grows in three stages.
 
 Stage 1 — the property-graph world
 ----------------------------------
@@ -75,6 +75,12 @@ Stage 3 — the reasoning layer
    :alt: Stage 3: Datalog/Prolog rules compiled from axioms and evaluated by DatalogEngine
 
    Stage 3: an assistant that fills in the missing arrows.
+
+.. only:: html
+
+   :download:`Open the full-resolution overview <figures/landscape-stage3.svg>`
+   to zoom into individual relationships. The complete map is an overview;
+   stages 1–2 above provide less crowded views of the foundational layers.
 
 Axioms *compile to* **Rules** over **Facts**; **Datalog** *defines* that rule
 shape (safe, function-free Horn rules — see :doc:`ch03-datalog-irs`).

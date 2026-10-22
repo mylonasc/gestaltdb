@@ -14,8 +14,7 @@ explain the execution and storage boundaries; chapters 7–8 are the performance
 and limitations reference. The :doc:`toolkit <toolkit/index>` regenerates the
 illustrations, and the :doc:`notebooks <notebooks/index>` provide runnable labs.
 
-Setup and version boundary
---------------------------
+.. rubric:: Setup and version boundary
 
 Examples target this source checkout, based on ontology integration commit
 ``0dba88f``, not the published package on PyPI. On 2026-10-22, remote ``main``
@@ -40,6 +39,26 @@ Sphinx renders prose and figures; it does not execute notebook cells. Run the
 tutorial's executable checks with::
 
    uv run pytest tests/test_ontology_tutorial.py -q
+
+.. rubric:: PDF export
+
+Build HTML plus a standalone tutorial PDF (not the whole API reference)::
+
+   ./scripts/build_docs.sh --pdf
+
+The PDF is written to ``docs/_build/html/onto-tutorial/onto-tutorial.pdf``.
+With ``--output DIR``, find it at ``DIR/onto-tutorial/onto-tutorial.pdf``;
+LaTeX intermediates and diagnostic logs are alongside it in ``latex/``.
+Math is typeset by XeLaTeX, diagrams remain vector artwork, and the document
+includes a table of contents and clickable external links. Notebook downloads
+remain separate executable labs; notebook outputs are not executed into the PDF.
+
+PDF export needs XeLaTeX and Sphinx's standard LaTeX packages. For example,
+on Debian/Ubuntu install ``texlive-xetex``, ``texlive-latex-extra``,
+``texlive-fonts-recommended``, and ``fonts-dejavu-core``. The build command
+provisions its Python dependencies via ``uv``. HTML-only builds do not require
+TeX, CairoSVG, or Graphviz. PDF conversion uses CairoSVG and its system Cairo
+library; regenerating graph layouts separately requires Graphviz's ``dot``.
 
 .. toctree::
    :maxdepth: 2

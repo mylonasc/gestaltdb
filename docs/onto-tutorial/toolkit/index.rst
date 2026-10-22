@@ -1,9 +1,10 @@
 Tutorial toolkit
 ================
 
-``toolkit/`` contains the tutorial's illustration helpers. They use the standard
-library and GestaltDB's packaged visualization API, with no Matplotlib, browser,
-Graphviz, or embedded backend required for SVG generation.
+``toolkit/`` contains the tutorial's illustration helpers. The landscape uses
+GestaltDB graph objects plus the build-time Graphviz ``dot`` executable, not a
+browser or an embedded database. Other helpers retain the packaged GestaltDB
+visualization API. No production-library rendering behavior is changed.
 
 * ``figures.py`` — a minimal vertical class-graph SVG helper and ``save_svg``.
 * ``viz_helpers.py`` — thin wrappers over ``gestaltdb.viz.api`` with the
@@ -12,18 +13,25 @@ Graphviz, or embedded backend required for SVG generation.
 * ``landscape.py`` — the ch01 concept graph as real ``Node``/``Edge`` objects
   in 3 progressive stages; ``uv run python docs/onto-tutorial/toolkit/landscape.py``
   regenerates ``figures/landscape-stage{1,2,3}.svg`` and the worked subsumption
-  figure from GestaltDB SVG geometry. A presentation-only pass enlarges text
-  and removes the white text stroke for converters without ``paint-order``
-  support. The latter figure's inferred membership edges come from
+  figure using Graphviz's hierarchical ranking, crossing reduction, cluster
+  placement, and spline routing. Rounded filled nodes have large bold names,
+  category badges, and padded interiors; relationship labels wrap independently.
+  Dashed green edges mark computed memberships in the worked example.
+  Those inferred membership edges come from
   ``DatalogEngine`` rather than a hand-drawn assertion of what it should infer.
 
 Run from the repository root::
 
+   # Install Graphviz first (e.g. apt install graphviz on Debian/Ubuntu).
    uv run python docs/onto-tutorial/toolkit/landscape.py
 
-Static SVGs use supplied coordinates; they do not capture an interactive
-notebook's browser state. The test suite regenerates them in a temporary
-directory and compares them with the committed files.
+No node coordinates are hand-maintained. Committed SVGs keep HTML/PDF builds
+independent of Graphviz; only regeneration needs ``dot`` and the DejaVu fonts.
+Graphviz versions can change placement without changing the graph. Tests check
+graph content, large text, spline paths, and repeatability on the installed
+version rather than requiring one version's exact coordinates everywhere.
+SVG text remains selectable. These static figures do not capture an interactive
+notebook's browser state. See :doc:`../index` for ``build_docs.sh --pdf``.
 
 .. toctree::
    :maxdepth: 1

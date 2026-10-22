@@ -1,1 +1,94 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="900" viewBox="0 0 1500 900" role="img" aria-label="Onto-tutorial landscape — stage 1"><title>Onto-tutorial landscape — stage 1</title><rect width="100%" height="100%" fill="#ffffff" /><defs><marker id="arrow-0" viewBox="0 -5 10 10" refX="10" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,-5L10,0L0,5" fill="#0072B2" /></marker><marker id="arrow-1" viewBox="0 -5 10 10" refX="10" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,-5L10,0L0,5" fill="#E69F00" /></marker><marker id="arrow-2" viewBox="0 -5 10 10" refX="10" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,-5L10,0L0,5" fill="#009E73" /></marker><marker id="arrow-3" viewBox="0 -5 10 10" refX="10" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,-5L10,0L0,5" fill="#CC79A7" /></marker><marker id="arrow-4" viewBox="0 -5 10 10" refX="10" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,-5L10,0L0,5" fill="#56B4E9" /></marker><marker id="arrow-5" viewBox="0 -5 10 10" refX="10" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,-5L10,0L0,5" fill="#D55E00" /></marker><marker id="arrow-6" viewBox="0 -5 10 10" refX="10" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,-5L10,0L0,5" fill="#F0E442" /></marker><marker id="arrow-7" viewBox="0 -5 10 10" refX="10" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,-5L10,0L0,5" fill="#999999" /></marker></defs><g transform="translate(-17.5 0.0) scale(1)"><path d="M 895.074761742738 645.2614793977851 Q 750.0 552.9411764705882 607.4562227204583 462.2315000199708" fill="none" stroke="#CC79A7" stroke-width="1.2" marker-end="url(#arrow-3)"><title>e-cypher-q (queries)</title></path><path d="M 603.5008986407886 451.48519614085757 Q 667.6470588235294 374.5098039215686 729.8726658072768 299.8390755410718" fill="none" stroke="#999999" stroke-width="1.2" marker-end="url(#arrow-7)"><title>e-stores-e (stores)</title></path><path d="M 603.5008986407886 462.24029405522083 Q 667.6470588235294 539.2156862745098 729.8726658072768 613.8864146550067" fill="none" stroke="#999999" stroke-width="1.2" marker-end="url(#arrow-7)"><title>e-stores-n (stores)</title></path><path d="M 599.0196078431372 793.0 Q 599.0196078431372 628.4313725490196 599.0196078431372 466.86274509803917" fill="none" stroke="#D55E00" stroke-width="1.2" marker-end="url(#arrow-5)"><title>e-graphql-q (may_use_via_resolvers)</title></path><path d="M 896.4587964665996 105.3437039975838 Q 750.0 278.43137254901956 605.479030257799 449.22888224434803" fill="none" stroke="#999999" stroke-width="1.2" marker-end="url(#arrow-7)"><title>e-sql-q (graph_patterns_via_PGQ)</title></path><circle cx="900.9803921568628" cy="649.0196078431372" r="7" fill="#CC79A7" stroke="#1a1a1a" stroke-width="1.2"><title>cypher</title></circle><circle cx="599.0196078431372" cy="456.86274509803917" r="7" fill="#F0E442" stroke="#1a1a1a" stroke-width="1.2"><title>graphdb</title></circle><circle cx="599.0196078431372" cy="800.0" r="7" fill="#CC79A7" stroke="#1a1a1a" stroke-width="1.2"><title>graphql</title></circle><circle cx="736.2745098039215" cy="292.156862745098" r="7" fill="#D55E00" stroke="#1a1a1a" stroke-width="1.2"><title>pedge</title></circle><circle cx="736.2745098039215" cy="621.5686274509804" r="7" fill="#D55E00" stroke="#1a1a1a" stroke-width="1.2"><title>pnode</title></circle><circle cx="900.9803921568628" cy="100.0" r="7" fill="#CC79A7" stroke="#1a1a1a" stroke-width="1.2"><title>sql</title></circle><text x="750.632746115799" y="549.3438330897332" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="13">queries</text><text x="667.1669205237811" y="371.0859698812667" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="13">stores</text><text x="667.1669205237811" y="534.6395203148118" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="13">stores</text><text x="599.0196078431372" y="625.1813725490197" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="13">may_use_via_resolvers</text><text x="750.4844566810997" y="273.85883283499277" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="13">graph_patterns_via_PGQ</text><text x="900.9803921568628" y="673.0196078431372" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="16">Cypher</text><text x="599.0196078431372" y="480.86274509803917" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="16">Property Graph DB</text><text x="599.0196078431372" y="824.0" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="16">GraphQL</text><text x="736.2745098039215" y="316.156862745098" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="16">Typed Edge</text><text x="736.2745098039215" y="645.5686274509804" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="16">Labeled Node</text><text x="900.9803921568628" y="124.0" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="16">SQL / SQL-PGQ</text></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="730.40" height="545.40" viewBox="0.00 0.00 730.40 545.40" role="img" aria-label="1 · Property graphs and languages">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(25.2 520.2)">
+<title>tutorial</title>
+<polygon fill="white" stroke="transparent" points="-25.2,25.2 -25.2,-520.2 705.2,-520.2 705.2,25.2 -25.2,25.2" />
+<text text-anchor="middle" x="340" y="-473.4" font-family="DejaVu Sans" font-size="22.00">1 · Property graphs and languages</text>
+<g id="clust1" class="cluster">
+<title>cluster_property</title>
+<path fill="white" stroke="#4164a5" stroke-width="1.4" d="M20,-8C20,-8 660,-8 660,-8 666,-8 672,-14 672,-20 672,-20 672,-443 672,-443 672,-449 666,-455 660,-455 660,-455 20,-455 20,-455 14,-455 8,-449 8,-443 8,-443 8,-20 8,-20 8,-14 14,-8 20,-8" />
+<text text-anchor="middle" x="340" y="-436.6" font-family="DejaVu Sans" font-size="18.00">Property graphs &amp; application languages</text>
+</g>
+
+<g id="relation-e-stores-n" class="edge">
+<title>graphdb-&gt;pnode</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M337.87,-179.66C315.68,-159.78 288.15,-135.13 264.88,-114.28" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="267.11,-111.35 256.84,-107.08 262.21,-116.82 267.11,-111.35" />
+<polygon fill="white" stroke="transparent" points="307,-131 307,-156 361,-156 361,-131 307,-131" />
+<text text-anchor="start" x="311" y="-139.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">stores</text>
+</g>
+
+<g id="relation-e-stores-e" class="edge">
+<title>graphdb-&gt;pedge</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M398.94,-179.66C409.31,-160.48 422.1,-136.84 433.12,-116.48" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="436.44,-118.06 438.21,-107.08 429.98,-114.56 436.44,-118.06" />
+<polygon fill="white" stroke="transparent" points="423,-131 423,-156 477,-156 477,-131 423,-131" />
+<text text-anchor="start" x="427" y="-139.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">stores</text>
+</g>
+
+<g id="relation-e-cypher-q" class="edge">
+<title>cypher-&gt;graphdb</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M539.82,-327.84C525.83,-311.67 508.17,-293.16 490,-279 481.76,-272.58 472.74,-266.45 463.52,-260.73" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="465.14,-257.42 454.25,-255.15 461.35,-263.71 465.14,-257.42" />
+<polygon fill="white" stroke="transparent" points="516,-279 516,-304 580,-304 580,-279 516,-279" />
+<text text-anchor="start" x="520" y="-287.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">queries</text>
+</g>
+
+<g id="relation-e-graphql-q" class="edge">
+<title>graphql-&gt;graphdb</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M379,-327.66C379,-308.83 379,-285.7 379,-265.59" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="382.68,-265.58 379,-255.08 375.33,-265.58 382.68,-265.58" />
+<polygon fill="white" stroke="transparent" points="379,-279 379,-304 482,-304 482,-279 379,-279" />
+<text text-anchor="start" x="383.5" y="-287.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">via resolvers</text>
+</g>
+
+<g id="relation-e-sql-q" class="edge">
+<title>sql-&gt;graphdb</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M194.67,-327.97C214.96,-312.1 239.61,-293.8 263,-279 273.09,-272.61 283.94,-266.29 294.79,-260.29" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="296.86,-263.35 304.32,-255.1 293.34,-256.9 296.86,-263.35" />
+<polygon fill="white" stroke="transparent" points="263,-279 263,-304 371,-304 371,-279 263,-279" />
+<text text-anchor="start" x="267" y="-287.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">PGQ patterns</text>
+</g>
+
+<g id="concept-graphdb" class="node">
+<title>graphdb</title>
+<path fill="#eaf2ff" stroke="#4164a5" stroke-width="2.2" d="M514,-255C514,-255 244,-255 244,-255 238,-255 232,-249 232,-243 232,-243 232,-192 232,-192 232,-186 238,-180 244,-180 244,-180 514,-180 514,-180 520,-180 526,-186 526,-192 526,-192 526,-243 526,-243 526,-249 520,-255 514,-255" />
+<text text-anchor="start" x="358.5" y="-229.9" font-family="DejaVu Sans" font-size="12.00" fill="#4164a5">STORE</text>
+<text text-anchor="start" x="251" y="-202.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Property Graph DB</text>
+</g>
+
+<g id="concept-pnode" class="node">
+<title>pnode</title>
+<path fill="#eaf2ff" stroke="#4164a5" stroke-width="2.2" d="M316.5,-107C316.5,-107 115.5,-107 115.5,-107 109.5,-107 103.5,-101 103.5,-95 103.5,-95 103.5,-44 103.5,-44 103.5,-38 109.5,-32 115.5,-32 115.5,-32 316.5,-32 316.5,-32 322.5,-32 328.5,-38 328.5,-44 328.5,-44 328.5,-95 328.5,-95 328.5,-101 322.5,-107 316.5,-107" />
+<text text-anchor="start" x="200.5" y="-81.9" font-family="DejaVu Sans" font-size="12.00" fill="#4164a5">DATA</text>
+<text text-anchor="start" x="123" y="-54.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Labeled Node</text>
+</g>
+
+<g id="concept-pedge" class="node">
+<title>pedge</title>
+<path fill="#eaf2ff" stroke="#4164a5" stroke-width="2.2" d="M543.5,-107C543.5,-107 372.5,-107 372.5,-107 366.5,-107 360.5,-101 360.5,-95 360.5,-95 360.5,-44 360.5,-44 360.5,-38 366.5,-32 372.5,-32 372.5,-32 543.5,-32 543.5,-32 549.5,-32 555.5,-38 555.5,-44 555.5,-44 555.5,-95 555.5,-95 555.5,-101 549.5,-107 543.5,-107" />
+<text text-anchor="start" x="442.5" y="-81.9" font-family="DejaVu Sans" font-size="12.00" fill="#4164a5">DATA</text>
+<text text-anchor="start" x="380" y="-54.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Typed Edge</text>
+</g>
+
+<g id="concept-cypher" class="node">
+<title>cypher</title>
+<path fill="#eaf2ff" stroke="#4164a5" stroke-width="2.2" d="M636,-403C636,-403 502,-403 502,-403 496,-403 490,-397 490,-391 490,-391 490,-340 490,-340 490,-334 496,-328 502,-328 502,-328 636,-328 636,-328 642,-328 648,-334 648,-340 648,-340 648,-391 648,-391 648,-397 642,-403 636,-403" />
+<text text-anchor="start" x="536" y="-377.9" font-family="DejaVu Sans" font-size="12.00" fill="#4164a5">LANGUAGE</text>
+<text text-anchor="start" x="521" y="-350.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Cypher</text>
+</g>
+
+<g id="concept-graphql" class="node">
+<title>graphql</title>
+<path fill="#eaf2ff" stroke="#4164a5" stroke-width="2.2" d="M446,-403C446,-403 312,-403 312,-403 306,-403 300,-397 300,-391 300,-391 300,-340 300,-340 300,-334 306,-328 312,-328 312,-328 446,-328 446,-328 452,-328 458,-334 458,-340 458,-340 458,-391 458,-391 458,-397 452,-403 446,-403" />
+<text text-anchor="start" x="345.5" y="-377.9" font-family="DejaVu Sans" font-size="12.00" fill="#4164a5">LANGUAGE</text>
+<text text-anchor="start" x="320" y="-350.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">GraphQL</text>
+</g>
+
+<g id="concept-sql" class="node">
+<title>sql</title>
+<path fill="#eaf2ff" stroke="#4164a5" stroke-width="2.2" d="M256,-403C256,-403 44,-403 44,-403 38,-403 32,-397 32,-391 32,-391 32,-340 32,-340 32,-334 38,-328 44,-328 44,-328 256,-328 256,-328 262,-328 268,-334 268,-340 268,-340 268,-391 268,-391 268,-397 262,-403 256,-403" />
+<text text-anchor="start" x="116.5" y="-377.9" font-family="DejaVu Sans" font-size="12.00" fill="#4164a5">LANGUAGE</text>
+<text text-anchor="start" x="51" y="-350.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">SQL / SQL-PGQ</text>
+</g>
+</g>
+</svg>

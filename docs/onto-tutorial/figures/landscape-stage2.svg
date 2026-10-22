@@ -1,1 +1,171 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="900" viewBox="0 0 1500 900" role="img" aria-label="Onto-tutorial landscape — stage 2"><title>Onto-tutorial landscape — stage 2</title><rect width="100%" height="100%" fill="#ffffff" /><defs><marker id="arrow-0" viewBox="0 -5 10 10" refX="10" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,-5L10,0L0,5" fill="#0072B2" /></marker><marker id="arrow-1" viewBox="0 -5 10 10" refX="10" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,-5L10,0L0,5" fill="#E69F00" /></marker><marker id="arrow-2" viewBox="0 -5 10 10" refX="10" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,-5L10,0L0,5" fill="#009E73" /></marker><marker id="arrow-3" viewBox="0 -5 10 10" refX="10" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,-5L10,0L0,5" fill="#CC79A7" /></marker><marker id="arrow-4" viewBox="0 -5 10 10" refX="10" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,-5L10,0L0,5" fill="#56B4E9" /></marker><marker id="arrow-5" viewBox="0 -5 10 10" refX="10" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,-5L10,0L0,5" fill="#D55E00" /></marker><marker id="arrow-6" viewBox="0 -5 10 10" refX="10" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,-5L10,0L0,5" fill="#F0E442" /></marker><marker id="arrow-7" viewBox="0 -5 10 10" refX="10" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,-5L10,0L0,5" fill="#999999" /></marker></defs><g transform="translate(22.5 0.0) scale(1)"><path d="M 634.2904480172479 645.2614793977853 Q 489.21568627450984 552.9411764705883 346.67190899496813 462.23150001997084" fill="none" stroke="#CC79A7" stroke-width="1.2" marker-end="url(#arrow-3)"><title>e-cypher-q (queries)</title></path><path d="M 342.7165849152984 451.4851961408576 Q 406.8627450980392 374.5098039215686 469.0883520817865 299.83907554107185" fill="none" stroke="#999999" stroke-width="1.2" marker-end="url(#arrow-7)"><title>e-stores-e (stores)</title></path><path d="M 342.7165849152984 462.24029405522083 Q 406.8627450980392 539.2156862745098 469.0883520817865 613.8864146550067" fill="none" stroke="#999999" stroke-width="1.2" marker-end="url(#arrow-7)"><title>e-stores-n (stores)</title></path><path d="M 338.2352941176471 793.0 Q 338.2352941176471 628.4313725490197 338.2352941176471 466.8627450980392" fill="none" stroke="#D55E00" stroke-width="1.2" marker-end="url(#arrow-5)"><title>e-graphql-q (may_use_via_resolvers)</title></path><path d="M 1004.0588235294117 347.0588235294118 Q 1079.4117647058824 347.0588235294118 1151.764705882353 347.0588235294118" fill="none" stroke="#0072B2" stroke-width="1.2" marker-end="url(#arrow-0)"><title>e-onto-has (contains)</title></path><path d="M 997.0588235294117 354.0588235294118 Q 997.0588235294117 456.8627450980392 997.0588235294117 556.6666666666666" fill="none" stroke="#999999" stroke-width="1.2" marker-end="url(#arrow-7)"><title>e-onto-sel (selected_axioms_only)</title></path><path d="M 991.2344714690468 562.78376529309 Q 914.7058823529412 511.7647058823529 840.673444119849 462.4097470602915" fill="none" stroke="#E69F00" stroke-width="1.2" marker-end="url(#arrow-1)"><title>e-owl-ext (can_serialize_as)</title></path><path d="M 481.8459117699345 295.0902699873303 Q 653.9215686274509 374.5098039215686 823.2733473314661 452.6721633234218" fill="none" stroke="#D55E00" stroke-width="1.2" marker-end="url(#arrow-5)"><title>e-e-proj (explicit_term_mapping)</title></path><path d="M 481.8459117699345 618.6352202087483 Q 653.9215686274509 539.2156862745098 823.2733473314661 461.05332687265667" fill="none" stroke="#D55E00" stroke-width="1.2" marker-end="url(#arrow-5)"><title>e-n-proj (explicit_label_mapping)</title></path><path d="M 635.6744827411094 105.3437039975838 Q 489.21568627450984 278.4313725490196 344.6947165323088 449.2288822443481" fill="none" stroke="#999999" stroke-width="1.2" marker-end="url(#arrow-7)"><title>e-sql-q (graph_patterns_via_PGQ)</title></path><circle cx="1161.764705882353" cy="347.0588235294118" r="7" fill="#009E73" stroke="#1a1a1a" stroke-width="1.2"><title>axiom</title></circle><circle cx="640.1960784313726" cy="649.0196078431374" r="7" fill="#CC79A7" stroke="#1a1a1a" stroke-width="1.2"><title>cypher</title></circle><circle cx="338.2352941176471" cy="456.8627450980392" r="7" fill="#F0E442" stroke="#1a1a1a" stroke-width="1.2"><title>graphdb</title></circle><circle cx="338.2352941176471" cy="800.0" r="7" fill="#CC79A7" stroke="#1a1a1a" stroke-width="1.2"><title>graphql</title></circle><circle cx="997.0588235294117" cy="347.0588235294118" r="7" fill="#009E73" stroke="#1a1a1a" stroke-width="1.2"><title>onto</title></circle><circle cx="997.0588235294117" cy="566.6666666666666" r="7" fill="#0072B2" stroke="#1a1a1a" stroke-width="1.2"><title>owl</title></circle><circle cx="475.4901960784313" cy="292.15686274509807" r="7" fill="#D55E00" stroke="#1a1a1a" stroke-width="1.2"><title>pedge</title></circle><circle cx="475.4901960784313" cy="621.5686274509804" r="7" fill="#D55E00" stroke="#1a1a1a" stroke-width="1.2"><title>pnode</title></circle><circle cx="832.3529411764706" cy="456.8627450980392" r="7" fill="#D55E00" stroke="#1a1a1a" stroke-width="1.2"><title>rdf</title></circle><circle cx="640.1960784313726" cy="100.0" r="7" fill="#CC79A7" stroke="#1a1a1a" stroke-width="1.2"><title>sql</title></circle><text x="489.8484323903089" y="549.3438330897332" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="13">queries</text><text x="406.38260679829085" y="371.0859698812667" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="13">stores</text><text x="406.38260679829085" y="534.6395203148118" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="13">stores</text><text x="338.2352941176471" y="625.1813725490197" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="13">may_use_via_resolvers</text><text x="1078.6617647058824" y="343.0588235294118" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="13">contains</text><text x="997.0588235294117" y="452.1127450980392" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="13">selected_axioms_only</text><text x="915.3299200736946" y="508.1807310295219" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="13">can_serialize_as</text><text x="653.2405990890757" y="370.19551028847235" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="13">explicit_term_mapping</text><text x="653.2405990890757" y="535.5299799076062" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="13">explicit_label_mapping</text><text x="489.70014295560946" y="273.85883283499277" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="13">graph_patterns_via_PGQ</text><text x="1161.764705882353" y="371.0588235294118" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="16">Axiom</text><text x="640.1960784313726" y="673.0196078431374" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="16">Cypher</text><text x="338.2352941176471" y="480.8627450980392" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="16">Property Graph DB</text><text x="338.2352941176471" y="824.0" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="16">GraphQL</text><text x="997.0588235294117" y="371.0588235294118" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="16">Ontology (core-v1)</text><text x="997.0588235294117" y="590.6666666666666" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="16">OWL (RDF encoding)</text><text x="475.4901960784313" y="316.15686274509807" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="16">Typed Edge</text><text x="475.4901960784313" y="645.5686274509804" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="16">Labeled Node</text><text x="832.3529411764706" y="480.8627450980392" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="16">RDF Triple</text><text x="640.1960784313726" y="124.0" fill="#1a1a1a" stroke="none" stroke-width="3" paint-order="stroke" text-anchor="middle" font-family="sans-serif" font-size="16">SQL / SQL-PGQ</text></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="987.40" height="883.40" viewBox="0.00 0.00 987.40 883.40" role="img" aria-label="2 · Adding the semantic overlay">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(25.2 858.2)">
+<title>tutorial</title>
+<polygon fill="white" stroke="transparent" points="-25.2,25.2 -25.2,-858.2 962.2,-858.2 962.2,25.2 -25.2,25.2" />
+<text text-anchor="middle" x="468.5" y="-811.4" font-family="DejaVu Sans" font-size="22.00">2 · Adding the semantic overlay</text>
+<g id="clust1" class="cluster">
+<title>cluster_property</title>
+<path fill="white" stroke="#4164a5" stroke-width="1.4" d="M20,-346C20,-346 660,-346 660,-346 666,-346 672,-352 672,-358 672,-358 672,-781 672,-781 672,-787 666,-793 660,-793 660,-793 20,-793 20,-793 14,-793 8,-787 8,-781 8,-781 8,-358 8,-358 8,-352 14,-346 20,-346" />
+<text text-anchor="middle" x="340" y="-774.6" font-family="DejaVu Sans" font-size="18.00">Property graphs &amp; application languages</text>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_semantic</title>
+<path fill="white" stroke="#7753a6" stroke-width="1.4" d="M95,-8C95,-8 617,-8 617,-8 623,-8 629,-14 629,-20 629,-20 629,-317 629,-317 629,-323 623,-329 617,-329 617,-329 95,-329 95,-329 89,-329 83,-323 83,-317 83,-317 83,-20 83,-20 83,-14 89,-8 95,-8" />
+<text text-anchor="middle" x="356" y="-310.6" font-family="DejaVu Sans" font-size="18.00">Semantic models &amp; schema axioms</text>
+</g>
+
+<g id="relation-e-stores-n" class="edge">
+<title>graphdb-&gt;pnode</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M330.8,-517.66C304.46,-497.52 271.7,-472.48 244.2,-451.46" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="246.42,-448.53 235.85,-445.08 241.96,-454.37 246.42,-448.53" />
+<polygon fill="white" stroke="transparent" points="294,-469 294,-494 348,-494 348,-469 294,-469" />
+<text text-anchor="start" x="298" y="-477.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">stores</text>
+</g>
+
+<g id="relation-e-stores-e" class="edge">
+<title>graphdb-&gt;pedge</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M391.87,-517.66C398.51,-498.65 406.68,-475.27 413.75,-455.03" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="417.23,-456.2 417.22,-445.08 410.29,-453.78 417.23,-456.2" />
+<polygon fill="white" stroke="transparent" points="407,-469 407,-494 461,-494 461,-469 407,-469" />
+<text text-anchor="start" x="411" y="-477.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">stores</text>
+</g>
+
+<g id="relation-e-n-proj" class="edge">
+<title>pnode-&gt;rdf</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M253.48,-369.89C273.31,-360.44 295.53,-351.42 317,-346 349.8,-337.72 596.58,-352.41 621,-329 652.88,-298.44 661.28,-168.53 638,-131 631.85,-121.08 623.53,-112.73 614.11,-105.73" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="615.93,-102.52 605.17,-99.66 611.8,-108.6 615.93,-102.52" />
+<polygon fill="white" stroke="transparent" points="651,-216 651,-241 768,-241 768,-216 651,-216" />
+<text text-anchor="start" x="655.5" y="-224.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">label mapping</text>
+</g>
+
+
+<g id="relation-e-e-proj" class="edge">
+<title>pedge-&gt;rdf</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M527.87,-399.28C624.05,-389.91 761.07,-369.68 794,-329 835.67,-277.53 829.04,-236.19 794,-180 756.3,-119.54 679.03,-92.44 615.5,-80.3" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="616.01,-76.66 605.02,-78.41 614.7,-83.89 616.01,-76.66" />
+<polygon fill="white" stroke="transparent" points="822,-216 822,-241 937,-241 937,-216 822,-216" />
+<text text-anchor="start" x="826.5" y="-224.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">term mapping</text>
+</g>
+
+
+<g id="relation-e-cypher-q" class="edge">
+<title>cypher-&gt;graphdb</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M539.82,-665.84C525.83,-649.67 508.17,-631.16 490,-617 481.76,-610.58 472.74,-604.45 463.52,-598.73" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="465.14,-595.42 454.25,-593.15 461.35,-601.71 465.14,-595.42" />
+<polygon fill="white" stroke="transparent" points="516,-617 516,-642 580,-642 580,-617 516,-617" />
+<text text-anchor="start" x="520" y="-625.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">queries</text>
+</g>
+
+<g id="relation-e-graphql-q" class="edge">
+<title>graphql-&gt;graphdb</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M379,-665.66C379,-646.83 379,-623.7 379,-603.59" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="382.68,-603.58 379,-593.08 375.33,-603.58 382.68,-603.58" />
+<polygon fill="white" stroke="transparent" points="379,-617 379,-642 482,-642 482,-617 379,-617" />
+<text text-anchor="start" x="383.5" y="-625.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">via resolvers</text>
+</g>
+
+<g id="relation-e-sql-q" class="edge">
+<title>sql-&gt;graphdb</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M194.67,-665.97C214.96,-650.1 239.61,-631.8 263,-617 273.09,-610.61 283.94,-604.29 294.79,-598.29" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="296.86,-601.35 304.32,-593.1 293.34,-594.9 296.86,-601.35" />
+<polygon fill="white" stroke="transparent" points="263,-617 263,-642 371,-642 371,-617 263,-617" />
+<text text-anchor="start" x="267" y="-625.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">PGQ patterns</text>
+</g>
+
+<g id="relation-e-owl-ext" class="edge">
+<title>owl-&gt;rdf</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M516.7,-179.97C516.57,-160.25 516.43,-137.42 516.3,-117.73" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="519.98,-117.63 516.23,-107.15 512.63,-117.67 519.98,-117.63" />
+<polygon fill="white" stroke="transparent" points="516,-131 516,-156 630,-156 630,-131 516,-131" />
+<text text-anchor="start" x="520" y="-139.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">RDF encoding</text>
+</g>
+
+<g id="relation-e-onto-sel" class="edge">
+<title>onto-&gt;owl</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M269.33,-228.5C314.53,-228.5 371.09,-228.5 418.75,-228.5" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="418.91,-232.18 429.41,-228.5 418.91,-224.83 418.91,-232.18" />
+<polygon fill="white" stroke="transparent" points="284.75,-231.5 284.75,-256.5 413.75,-256.5 413.75,-231.5 284.75,-231.5" />
+<text text-anchor="start" x="289.25" y="-240" font-family="DejaVu Sans" font-size="15.00" fill="#334155">selected axioms</text>
+</g>
+
+<g id="relation-e-onto-has" class="edge">
+<title>onto-&gt;axiom</title>
+<path fill="none" stroke="#64748b" stroke-width="2.3" d="M188,-179.97C188,-160.25 188,-137.42 188,-117.73" />
+<polygon fill="#64748b" stroke="#64748b" stroke-width="2.3" points="191.68,-117.65 188,-107.15 184.33,-117.65 191.68,-117.65" />
+<polygon fill="white" stroke="transparent" points="188,-131 188,-156 260,-156 260,-131 188,-131" />
+<text text-anchor="start" x="192" y="-139.5" font-family="DejaVu Sans" font-size="15.00" fill="#334155">contains</text>
+</g>
+
+<g id="concept-graphdb" class="node">
+<title>graphdb</title>
+<path fill="#eaf2ff" stroke="#4164a5" stroke-width="2.2" d="M514,-593C514,-593 244,-593 244,-593 238,-593 232,-587 232,-581 232,-581 232,-530 232,-530 232,-524 238,-518 244,-518 244,-518 514,-518 514,-518 520,-518 526,-524 526,-530 526,-530 526,-581 526,-581 526,-587 520,-593 514,-593" />
+<text text-anchor="start" x="358.5" y="-567.9" font-family="DejaVu Sans" font-size="12.00" fill="#4164a5">STORE</text>
+<text text-anchor="start" x="251" y="-540.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Property Graph DB</text>
+</g>
+
+<g id="concept-pnode" class="node">
+<title>pnode</title>
+<path fill="#eaf2ff" stroke="#4164a5" stroke-width="2.2" d="M288.5,-445C288.5,-445 87.5,-445 87.5,-445 81.5,-445 75.5,-439 75.5,-433 75.5,-433 75.5,-382 75.5,-382 75.5,-376 81.5,-370 87.5,-370 87.5,-370 288.5,-370 288.5,-370 294.5,-370 300.5,-376 300.5,-382 300.5,-382 300.5,-433 300.5,-433 300.5,-439 294.5,-445 288.5,-445" />
+<text text-anchor="start" x="172.5" y="-419.9" font-family="DejaVu Sans" font-size="12.00" fill="#4164a5">DATA</text>
+<text text-anchor="start" x="95" y="-392.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Labeled Node</text>
+</g>
+
+<g id="concept-pedge" class="node">
+<title>pedge</title>
+<path fill="#eaf2ff" stroke="#4164a5" stroke-width="2.2" d="M515.5,-445C515.5,-445 344.5,-445 344.5,-445 338.5,-445 332.5,-439 332.5,-433 332.5,-433 332.5,-382 332.5,-382 332.5,-376 338.5,-370 344.5,-370 344.5,-370 515.5,-370 515.5,-370 521.5,-370 527.5,-376 527.5,-382 527.5,-382 527.5,-433 527.5,-433 527.5,-439 521.5,-445 515.5,-445" />
+<text text-anchor="start" x="414.5" y="-419.9" font-family="DejaVu Sans" font-size="12.00" fill="#4164a5">DATA</text>
+<text text-anchor="start" x="352" y="-392.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Typed Edge</text>
+</g>
+
+<g id="concept-cypher" class="node">
+<title>cypher</title>
+<path fill="#eaf2ff" stroke="#4164a5" stroke-width="2.2" d="M636,-741C636,-741 502,-741 502,-741 496,-741 490,-735 490,-729 490,-729 490,-678 490,-678 490,-672 496,-666 502,-666 502,-666 636,-666 636,-666 642,-666 648,-672 648,-678 648,-678 648,-729 648,-729 648,-735 642,-741 636,-741" />
+<text text-anchor="start" x="536" y="-715.9" font-family="DejaVu Sans" font-size="12.00" fill="#4164a5">LANGUAGE</text>
+<text text-anchor="start" x="521" y="-688.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Cypher</text>
+</g>
+
+<g id="concept-graphql" class="node">
+<title>graphql</title>
+<path fill="#eaf2ff" stroke="#4164a5" stroke-width="2.2" d="M446,-741C446,-741 312,-741 312,-741 306,-741 300,-735 300,-729 300,-729 300,-678 300,-678 300,-672 306,-666 312,-666 312,-666 446,-666 446,-666 452,-666 458,-672 458,-678 458,-678 458,-729 458,-729 458,-735 452,-741 446,-741" />
+<text text-anchor="start" x="345.5" y="-715.9" font-family="DejaVu Sans" font-size="12.00" fill="#4164a5">LANGUAGE</text>
+<text text-anchor="start" x="320" y="-688.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">GraphQL</text>
+</g>
+
+<g id="concept-sql" class="node">
+<title>sql</title>
+<path fill="#eaf2ff" stroke="#4164a5" stroke-width="2.2" d="M256,-741C256,-741 44,-741 44,-741 38,-741 32,-735 32,-729 32,-729 32,-678 32,-678 32,-672 38,-666 44,-666 44,-666 256,-666 256,-666 262,-666 268,-672 268,-678 268,-678 268,-729 268,-729 268,-735 262,-741 256,-741" />
+<text text-anchor="start" x="116.5" y="-715.9" font-family="DejaVu Sans" font-size="12.00" fill="#4164a5">LANGUAGE</text>
+<text text-anchor="start" x="51" y="-688.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">SQL / SQL-PGQ</text>
+</g>
+
+<g id="concept-rdf" class="node">
+<title>rdf</title>
+<path fill="#f2ecff" stroke="#7753a6" stroke-width="2.2" d="M593,-107C593,-107 439,-107 439,-107 433,-107 427,-101 427,-95 427,-95 427,-44 427,-44 427,-38 433,-32 439,-32 439,-32 593,-32 593,-32 599,-32 605,-38 605,-44 605,-44 605,-95 605,-95 605,-101 599,-107 593,-107" />
+<text text-anchor="start" x="500" y="-81.9" font-family="DejaVu Sans" font-size="12.00" fill="#7753a6">DATA</text>
+<text text-anchor="start" x="446" y="-54.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">RDF Triple</text>
+</g>
+
+<g id="concept-owl" class="node">
+<title>owl</title>
+<path fill="#f2ecff" stroke="#7753a6" stroke-width="2.2" d="M592.5,-277C592.5,-277 441.5,-277 441.5,-277 435.5,-277 429.5,-271 429.5,-265 429.5,-265 429.5,-192 429.5,-192 429.5,-186 435.5,-180 441.5,-180 441.5,-180 592.5,-180 592.5,-180 598.5,-180 604.5,-186 604.5,-192 604.5,-192 604.5,-265 604.5,-265 604.5,-271 598.5,-277 592.5,-277" />
+<text text-anchor="start" x="484" y="-251.9" font-family="DejaVu Sans" font-size="12.00" fill="#7753a6">STANDARD</text>
+<text text-anchor="start" x="449" y="-224.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">OWL (RDF</text>
+<text text-anchor="start" x="449.5" y="-200.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">encoding)</text>
+</g>
+
+<g id="concept-onto" class="node">
+<title>onto</title>
+<path fill="#f2ecff" stroke="#7753a6" stroke-width="2.2" d="M257,-277C257,-277 119,-277 119,-277 113,-277 107,-271 107,-265 107,-265 107,-192 107,-192 107,-186 113,-180 119,-180 119,-180 257,-180 257,-180 263,-180 269,-186 269,-192 269,-192 269,-265 269,-265 269,-271 263,-277 257,-277" />
+<text text-anchor="start" x="166" y="-251.9" font-family="DejaVu Sans" font-size="12.00" fill="#7753a6">MODEL</text>
+<text text-anchor="start" x="126" y="-224.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Ontology</text>
+<text text-anchor="start" x="126" y="-200.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">(core-v1)</text>
+</g>
+
+<g id="concept-axiom" class="node">
+<title>axiom</title>
+<path fill="#f2ecff" stroke="#7753a6" stroke-width="2.2" d="M255,-107C255,-107 121,-107 121,-107 115,-107 109,-101 109,-95 109,-95 109,-44 109,-44 109,-38 115,-32 121,-32 121,-32 255,-32 255,-32 261,-32 267,-38 267,-44 267,-44 267,-95 267,-95 267,-101 261,-107 255,-107" />
+<text text-anchor="start" x="166.5" y="-81.9" font-family="DejaVu Sans" font-size="12.00" fill="#7753a6">MODEL</text>
+<text text-anchor="start" x="146" y="-54.3" font-family="DejaVu Sans" font-weight="bold" font-size="24.00" fill="#172b4d">Axiom</text>
+</g>
+</g>
+</svg>

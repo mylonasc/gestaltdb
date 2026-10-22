@@ -26,3 +26,12 @@ each row names the doc file, the epic/issue anchor, and the verification.
 - [x] Separate available implementations, experimental contracts, and active acceptance work.
 - [x] Document setup, expected outcomes, temporary stores, and notebook downloads.
 - [x] Add tests executing chapter code and notebook cells, and reproducing all figures.
+
+## Graphics and PDF (2026-10-22)
+
+- [x] Replace tiny circles with large rounded, padded nodes and bold wrapped names.
+- [x] Use automatic layered layout, crossing reduction, conceptual clusters, and curved splines.
+- [x] Preserve GestaltDB node/edge data and engine-computed memberships; distinguish inferred edges.
+- [x] Add a full-resolution overview download and selectable vector text.
+- [x] Add `build_docs.sh --pdf` for a tutorial-only XeLaTeX PDF with vector diagrams.
+- [x] Document optional build dependencies and test flag handling and missing-tool errors.

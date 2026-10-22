@@ -2,8 +2,8 @@
 
 Builds the domain map — property graphs, RDF/OWL, query languages,
 ontology fragment, reasoning engine — as real gestaltdb ``Node``/``Edge``
-objects so every figure is rendered by gestaltdb's own viz
-(``gestaltdb.viz.api``) via ``save_svg``. Three progressive stages let ch01
+objects, laid out by Graphviz dot with label-aware spline routing.
+Three progressive stages let ch01
 grow the picture instead of dropping it whole:
 
 * stage 1 — the property-graph world (store + query languages),
@@ -14,32 +14,35 @@ grow the picture instead of dropping it whole:
 from __future__ import annotations
 
 from gestaltdb.graphdb import Edge, Node
+from html import escape
+import json
 from pathlib import Path
+import shutil
+import subprocess
+import textwrap
 from xml.etree import ElementTree
 
-# Fixed canvas positions (fitted to image by render_svg). Keep labels apart.
-POSITIONS: dict[str, tuple[float, float]] = {
-    # stage 1 — property world (left column)
-    "graphdb": (0.0, 3.0),
-    "pnode": (1.0, 4.2),
-    "pedge": (1.0, 1.8),
-    "cypher": (2.2, 4.4),
-    "graphql": (0.0, 5.5),
-    "sql": (2.2, 0.4),
-    # stage 2 — semantic overlay (middle column)
-    "rdf": (3.6, 3.0),
-    "owl": (4.8, 3.8),
-    "onto": (4.8, 2.2),
-    "axiom": (6.0, 2.2),
-    # stage 3 — reasoning layer (right column)
-    "datalog": (7.2, 4.2),
-    "prolog": (7.2, 5.2),
-    "rule": (7.2, 3.0),
-    "engine": (8.4, 2.0),
-    "claims": (8.4, 0.4),
-    "sampler": (11.2, 3.0),
-    "handoff": (9.7, 2.4),
-    "adapter": (5.0, 6.7),
+PALETTE = {
+    "property": ("#eaf2ff", "#4164a5", "Property graphs & application languages"),
+    "semantic": ("#f2ecff", "#7753a6", "Semantic models & schema axioms"),
+    "reasoning": ("#e5f5ee", "#26745b", "Reasoning & explicit consumption"),
+    "schema": ("#f2ecff", "#7753a6", "Schema: the rulebook"),
+    "data": ("#eaf2ff", "#4164a5", "Data: the assertion"),
+}
+
+# Short reading labels keep cross-layer edges from making the canvas too wide.
+# The underlying type strings remain unchanged for the inspectable graph model.
+RELATION_LABELS = {
+    "may_use_via_resolvers": "via resolvers",
+    "graph_patterns_via_PGQ": "PGQ patterns",
+    "explicit_label_mapping": "label mapping",
+    "explicit_term_mapping": "term mapping",
+    "can_serialize_as": "RDF encoding",
+    "selected_axioms_only": "selected axioms",
+    "related_Horn_languages": "Horn family",
+    "evidence_via_adapter": "via adapter",
+    "seeds_not_inferred_edges": "seeds only",
+    "both_bind_variables": "variable binding",
 }
 
 _NODES: dict[str, tuple[str, str, str]] = {
@@ -89,9 +92,9 @@ _EDGES: list[tuple[str, str, str, str, int]] = [
 ]
 
 STAGE_BLURB = {
-    1: "Stage 1 — the property-graph world: a store plus its query languages.",
-    2: "Stage 2 — the semantic overlay: triples, OWL, and the selected fragment.",
-    3: "Stage 3 — the reasoning layer: rules, the engine, and its consumers.",
+    1: "1 · Property graphs and languages",
+    2: "2 · Adding the semantic overlay",
+    3: "3 · Reasoning and explicit consumers",
 }
 
 
@@ -117,17 +120,10 @@ def _layer_of(nid: str) -> int:
     return {"property": 1, "semantic": 2, "reasoning": 3}[_NODES[nid][2]]
 
 
-def stage_positions(stage: int) -> dict[str, tuple[float, float]]:
-    nodes, _ = build_stage(stage)
-    ids = {n.get_id for n in nodes}
-    return {k: v for k, v in POSITIONS.items() if k in ids}
-
-
-def subsumption_figure():
+def build_subsumption() -> tuple[list[Node], list[Edge]]:
     """Generate the worked example's membership edges from actual inference."""
     from gestaltdb.ontology import Domain, Ontology, SubClassOf, TYPE_PREDICATE, compile_ontology
     from gestaltdb.reasoning import DatalogEngine, Fact, ReasoningLimits
-    from gestaltdb.viz.api import VizOptions, visualize_nodes_edges
 
     plan = compile_ontology(Ontology("people", [
         Domain("worksFor", "Researcher"), SubClassOf("Researcher", "Person"),
@@ -135,7 +131,7 @@ def subsumption_figure():
     result = DatalogEngine().evaluate(
         plan.program, [Fact("alice", "worksFor", "acme")], limits=ReasoningLimits())
     nodes = [
-        Node(node_id=key, labels=[kind], properties={"label": key, "kind": kind})
+        Node(node_id=key, labels=[kind], properties={"label": key, "kind": kind, "layer": kind})
         for key, kind in [("alice", "data"), ("acme", "data"),
                           ("worksFor", "schema"), ("Researcher", "schema"),
                           ("Person", "schema")]
@@ -148,57 +144,110 @@ def subsumption_figure():
     edges = [Edge(edge_id=f"example-{index}", source=source, target=target,
                   properties={"type": relation})
              for index, (source, target, relation) in enumerate(relations)]
-    figure = visualize_nodes_edges(nodes, edges, options=VizOptions(
-        node_label_property="label", node_color_property="kind", edge_labels="all",
-        title="Asserted fact, schema axioms, and computed memberships"))
-    positions = {"alice": (0, 3), "acme": (4, 3), "worksFor": (0, 0),
-                 "Researcher": (2, 0), "Person": (4, 0)}
-    return figure, positions
+    return nodes, edges
 
 
-def save_tutorial_svg(figure, destination, *, positions, width=1200, height=800):
-    """Use GestaltDB geometry with larger, portable labels for documentation.
+def _lines(value: str, width: int) -> str:
+    """Escape labels before inserting intentional Graphviz HTML line breaks."""
+    return '<BR/>'.join(escape(line) for line in textwrap.wrap(
+        value, width=width, break_long_words=False, break_on_hyphens=False))
 
-    Some image converters ignore SVG paint-order and draw the white text halo
-    over the glyphs. Remove that halo rather than depending on browser-only
-    paint-order behavior. Keep this presentation adjustment outside the library.
+
+def graph_source(nodes: list[Node], edges: list[Edge], *, title: str) -> str:
+    """A layered, crossing-minimized graph; dot owns coordinates and routing.
+
+    Clusters encode conceptual layers, not runtime support. Back-edges do not
+    force a cyclic ranking; their arrow direction is nevertheless preserved.
     """
-    document = ElementTree.fromstring(figure.as_svg(
-        positions=positions, width=width, height=height))
-    for element in document.iter("{http://www.w3.org/2000/svg}text"):
-        element.set("stroke", "none")
-        is_node = element.get("text-anchor") == "start"
-        element.set("font-size", "16" if is_node else "13")
-        if is_node:
-            # Put names under their nodes, away from horizontal edge captions.
-            element.set("x", str(float(element.get("x")) - 10))
-            element.set("y", str(float(element.get("y")) + 20))
-            element.set("text-anchor", "middle")
+    def quote(value):
+        return json.dumps(value, ensure_ascii=False)
+    lines = ['digraph tutorial {',
+             'graph [rankdir=TB, splines=spline, nodesep=0.45, ranksep=0.65, '
+             'pad=0.35, bgcolor="white", compound=true, outputorder=edgesfirst, '
+             'fontname="DejaVu Sans", fontsize=22, labelloc=t, '
+             f'label={quote(title)}];',
+             'node [shape=box, style="rounded,filled", penwidth=2.2, '
+             'fontname="DejaVu Sans", fontcolor="#172b4d", margin="0.22,0.16", '
+             'width=2.2, height=0.85];',
+             'edge [color="#64748b", penwidth=2.3, arrowsize=1.05, '
+             'fontname="DejaVu Sans", fontsize=15, fontcolor="#334155"];']
+    ids = {node.get_id for node in nodes}
+    if any(edge.source not in ids or edge.target not in ids for edge in edges):
+        raise ValueError("every illustrated edge must have both endpoints")
+    for layer, (fill, stroke, caption) in PALETTE.items():
+        members = [node for node in nodes if node.properties["layer"] == layer]
+        if not members:
+            continue
+        lines.extend([f'subgraph cluster_{layer} {{',
+                      f'label={quote(caption)}; color={quote(stroke)}; '
+                      'style="rounded"; penwidth=1.4; margin=24; fontsize=18;'])
+        for node in members:
+            label = ('<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3">'
+                     f'<TR><TD><FONT POINT-SIZE="12" COLOR="{stroke}">'
+                     f'{escape(node.properties["kind"].upper())}</FONT></TD></TR>'
+                     '<TR><TD><FONT POINT-SIZE="24"><B>'
+                     f'{_lines(node.properties["label"], 17)}</B></FONT></TD></TR></TABLE>>')
+            lines.append(f'{quote(node.get_id)} [id={quote("concept-" + node.get_id)}, '
+                         f'fillcolor={quote(fill)}, color={quote(stroke)}, label={label}];')
+        lines.append('}')
+    for edge in edges:
+        relation = edge.properties["type"]
+        inferred = relation.startswith("inferred:")
+        # These compare technologies rather than introducing execution stages.
+        unconstrained = edge.get_id in {"e-onto-sel", "e-cy-dl", "e-eng-eval"}
+        label = ('<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" '
+                 'CELLPADDING="4" BGCOLOR="white"><TR><TD>'
+                 f'{_lines(RELATION_LABELS.get(relation, relation.replace("_", " ")), 16)}</TD></TR></TABLE>>')
+        lines.append(f'{quote(edge.source)} -> {quote(edge.target)} '
+                     f'[id={quote("relation-" + edge.get_id)}, label={label}, '
+                     f'constraint={str(not unconstrained).lower()}, '
+                     f'color={quote("#19835c" if inferred else "#64748b")}, '
+                     f'style={quote("dashed" if inferred else "solid")}];')
+    # Rank whole conceptual layers from top to bottom instead of letting
+    # long comparison edges spread the overview into a thin horizontal strip.
+    if "onto" in ids:
+        for source in ("pnode", "pedge"):
+            lines.append(f'{quote(source)} -> "onto" [style=invis, weight=20];')
+    if "adapter" in ids:
+        for source in ("rdf", "axiom"):
+            lines.append(f'{quote(source)} -> "adapter" [style=invis, weight=20];')
+    lines.append('}')
+    return '\n'.join(lines)
+
+
+def save_tutorial_svg(nodes, edges, destination, *, title):
+    """Run the optional build-time Graphviz executable, never a shell string."""
+    dot = shutil.which("dot")
+    if dot is None:
+        raise RuntimeError("Install Graphviz (the 'dot' executable) to regenerate figures; "
+                           "building the docs from committed SVGs does not require it.")
+    result = subprocess.run([dot, "-Tsvg"], input=graph_source(nodes, edges, title=title),
+                            text=True, capture_output=True, check=True, timeout=30)
+    document = ElementTree.fromstring(result.stdout)
+    document.set("role", "img")
+    document.set("aria-label", title)
+    # Responsive SVG with a native viewBox; text stays selectable and searchable.
+    document.set("width", document.get("viewBox").split()[2])
+    document.set("height", document.get("viewBox").split()[3])
     ElementTree.register_namespace("", "http://www.w3.org/2000/svg")
-    Path(destination).write_text(ElementTree.tostring(document, encoding="unicode") + "\n")
+    Path(destination).write_text(ElementTree.tostring(document, encoding="unicode") + "\n",
+                                 encoding="utf-8")
 
 
 def render_all(output_dir: str = "docs/onto-tutorial/figures") -> list[str]:
     """Regenerate all four committed SVGs, including evaluated memberships."""
-    from gestaltdb.viz.api import VizOptions, visualize_nodes_edges
-
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     written = []
     for stage in (1, 2, 3):
         nodes, edges = build_stage(stage)
-        fig = visualize_nodes_edges(
-            nodes, edges,
-            options=VizOptions(
-                node_label_property="label", edge_labels="all",
-                edge_label_property="type", node_color_property="kind",
-                title=f"Onto-tutorial landscape — stage {stage}"))
         dest = out / f"landscape-stage{stage}.svg"
-        save_tutorial_svg(fig, dest, width=1500, height=900, positions=stage_positions(stage))
+        save_tutorial_svg(nodes, edges, dest, title=STAGE_BLURB[stage])
         written.append(str(dest))
-    figure, positions = subsumption_figure()
+    nodes, edges = build_subsumption()
     dest = out / "subsumption-example.svg"
-    save_tutorial_svg(figure, dest, positions=positions)
+    save_tutorial_svg(nodes, edges, dest,
+                      title="One assertion, two inferred memberships")
     written.append(str(dest))
     return written
 

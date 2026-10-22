@@ -46,8 +46,8 @@ Theory and further reading
   reflexivity is a different restriction: it needs an explicit finite domain
   of individuals here, not a different logical clause shape.
 
-**Intuition.** Read the picture below in two layers: the bottom row is *data*
-(what someone asserted), the top row is *schema* (what the arrows mean).
+**Intuition.** Read the picture below in two groups: blue is *data*
+(what someone asserted), purple is *schema* (what the arrows mean).
 ``domain`` says "anything a ``worksFor`` arrow leaves is a ``Researcher``";
 ``subClassOf`` says "every ``Researcher`` is also a ``Person``". The
 ``inferred type`` arrows are computed consequences, not stored labels. Both

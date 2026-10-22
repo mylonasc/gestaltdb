@@ -3,6 +3,8 @@
 import importlib.util
 import json
 import re
+import shutil
+import subprocess
 import textwrap
 from pathlib import Path
 from xml.etree import ElementTree
@@ -50,18 +52,75 @@ def test_chapter_code(chapter, tmp_path, monkeypatch):
         exec(compile(textwrap.dedent(block), str(chapter), "exec"), namespace)
 
 
-def test_committed_figures_are_reproducible(tmp_path):
+def check_diagram(path):
+    root = ElementTree.parse(path).getroot()
+    assert root.get("role") == "img" and root.get("aria-label")
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    nodes = root.findall('.//svg:g[@class="node"]', ns)
+    edges = root.findall('.//svg:g[@class="edge"]', ns)
+    assert nodes and edges
+    assert all(node.find("svg:path", ns) is not None for node in nodes)  # rounded boxes
+    assert all("C" in edge.find("svg:path", ns).get("d") for edge in edges)
+    fonts = [float(element.get("font-size")) for element in root.findall('.//svg:text', ns)]
+    assert min(fonts) >= 12 and max(fonts) >= 24
+    return {group.get("id") for group in nodes + edges}
+
+
+def test_committed_figures_are_readable():
+    for path in (TUTORIAL / "figures").glob("*.svg"):
+        check_diagram(path)
+
+
+def test_graphviz_regeneration_is_repeatable(tmp_path):
+    if shutil.which("dot") is None:
+        pytest.skip("Graphviz is only required for figure regeneration")
     landscape = load_helper("landscape")
-    for generated in landscape.render_all(str(tmp_path)):
+    first = landscape.render_all(str(tmp_path / "first"))
+    second = landscape.render_all(str(tmp_path / "second"))
+    for generated, repeated in zip(first, second):
         generated = Path(generated)
-        assert generated.read_bytes() == (TUTORIAL / "figures" / generated.name).read_bytes()
-        ElementTree.parse(generated)
+        assert generated.read_bytes() == Path(repeated).read_bytes()
+        assert check_diagram(generated) == check_diagram(TUTORIAL / "figures" / generated.name)
     for stage in (1, 2, 3):
         nodes, edges = landscape.build_stage(stage)
         ids = {node.get_id for node in nodes}
         assert all(edge.source in ids and edge.target in ids for edge in edges)
     with pytest.raises(ValueError):
         landscape.build_stage(0)
+
+
+def test_graphviz_missing_dependency_has_actionable_error(tmp_path, monkeypatch):
+    landscape = load_helper("landscape")
+    monkeypatch.setattr(landscape.shutil, "which", lambda executable: None)
+    with pytest.raises(RuntimeError, match="Install Graphviz"):
+        landscape.save_tutorial_svg([], [], tmp_path / "unused.svg", title="test")
+
+
+def test_graph_source_escapes_labels():
+    from gestaltdb.graphdb import Node
+
+    source = load_helper("landscape").graph_source([
+        Node("a", properties={"label": "A & B < C", "kind": "data", "layer": "data"}),
+    ], [], title="Unicode · title")
+    assert "A &amp; B &lt; C" in source and "Unicode · title" in source
+
+
+def test_pdf_preflight_has_actionable_error(tmp_path, monkeypatch):
+    script = TUTORIAL.parents[1] / "scripts" / "build_tutorial_pdf.py"
+    spec = importlib.util.spec_from_file_location("build_tutorial_pdf", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module.shutil, "which", lambda executable: None)
+    with pytest.raises(RuntimeError, match="PDF export needs XeLaTeX"):
+        module.build(tmp_path)
+
+
+def test_build_docs_flag_help_and_validation():
+    script = TUTORIAL.parents[1] / "scripts" / "build_docs.sh"
+    help_result = subprocess.run([str(script), "--help"], capture_output=True, text=True)
+    assert help_result.returncode == 0 and "--pdf" in help_result.stdout
+    invalid = subprocess.run([str(script), "--pdf", "--output"], capture_output=True, text=True)
+    assert invalid.returncode == 2 and "requires a directory" in invalid.stderr
 
 
 def test_small_svg_escapes_labels_and_defines_marker():
