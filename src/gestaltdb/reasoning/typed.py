@@ -318,7 +318,8 @@ def expand_predicate_variables(rule: GenericRule, domain: Iterable[str]) -> tupl
         expanded.append(GenericRule(f"{rule.rule_id}[{suffix}]",
                                     tuple(specialize(atom) for atom in rule.body),
                                     rule.filters,
-                                    TypedAtom(rule.head.predicate, rule.head.args)))
+                                    TypedAtom(rule.head.predicate, rule.head.args),
+                                    rule.negated))
     return tuple(expanded)
 
 
