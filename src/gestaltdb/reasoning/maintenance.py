@@ -22,7 +22,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
-from .model import ReasoningError, ReasoningLimitError, ReasoningLimits, _text, check_cancelled
+from .model import ReasoningError, ReasoningLimitError, ReasoningLimits, Variable, _text, check_cancelled
 from .typed import (
     GenericProgram,
     GenericRule,
@@ -401,8 +401,17 @@ def _find_all_supports(program: GenericProgram, full: _TypedIndex, target: Typed
     for rule in program.rules:
         if rule.head.predicate != target.predicate or len(rule.head.args) != len(target.values):
             continue
-        bindings = _unify(rule.head, target, {})
-        if bindings is None:
+        bindings, compatible = {}, True
+        for term, value in zip(rule.head.args, target.values):
+            if isinstance(term, Variable):
+                if term in bindings and bindings[term] != value:
+                    compatible = False
+                    break
+                bindings[term] = value
+            elif term != value:
+                compatible = False
+                break
+        if not compatible:
             continue
         # The requested conclusion supplies bindings for indexed body probes.
         # Do not enumerate the entire unbound join once per output fact.
