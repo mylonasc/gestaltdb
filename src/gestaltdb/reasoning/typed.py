@@ -758,7 +758,7 @@ class GenericEngine:
             raise ReasoningError(
                 "scoped negation requires evaluate_stratified; plain evaluation stays positive")
         check_cancelled(cancel)
-        if len(program.rules) > limits.max_rules:
+        if len(program.rules) + len(program.aggregates) > limits.max_rules:
             raise ReasoningLimitError(f"evaluation exceeded max_rules={limits.max_rules}")
         try:
             iterator = iter(facts)
@@ -813,6 +813,8 @@ class GenericEngine:
                 full.add(fact)
             delta = _TypedIndex(ordered)
         if program.aggregates:
+            if iterations >= limits.max_iterations:
+                raise ReasoningLimitError(f"evaluation exceeded max_iterations={limits.max_iterations}")
             for fact in self._evaluate_aggregates(program, full, budget, cancel):
                 if fact in full.facts:
                     continue
@@ -842,7 +844,7 @@ class GenericEngine:
         if not isinstance(collect_negation_trace, bool):
             raise ReasoningError("collect_negation_trace must be a bool")
         check_cancelled(cancel)
-        if len(program.rules) > limits.max_rules:
+        if len(program.rules) + len(program.aggregates) > limits.max_rules:
             raise ReasoningLimitError(f"evaluation exceeded max_rules={limits.max_rules}")
         try:
             iterator = iter(facts)
@@ -911,6 +913,8 @@ class GenericEngine:
                 delta = _TypedIndex(ordered)
             rounds.append(local_rounds)
         if program.aggregates:
+            if iterations >= limits.max_iterations:
+                raise ReasoningLimitError("evaluation exceeded max_iterations (component delta rounds)")
             for fact in self._evaluate_aggregates(program, full, budget, cancel):
                 if fact in full.facts:
                     continue
