@@ -42,6 +42,15 @@ class ExtractionProfile:
     pushdown: str
 
 
+def _intersect_policy(left, right):
+    """None is unrestricted; an empty collection remains an empty scope."""
+    if left is None:
+        return right
+    if right is None:
+        return left
+    return tuple(value for value in left if value in right)
+
+
 class PinnedBatchedClaimSource:
     """Borrow one existing GraphReadView and yield bounded evidence batches.
 
@@ -64,6 +73,13 @@ class PinnedBatchedClaimSource:
             raise ReasoningError("source limits must be ClaimSourceLimits")
         _text(request.world, "world")
         _text(ontology_revision, "ontology_revision")
+        # One effective policy governs filtering, identity and result metadata.
+        # A request restriction must never be ignored or broaden a selection.
+        selection = ClaimSelection(
+            agents=_intersect_policy(request.agents, selection.agents),
+            sources=_intersect_policy(request.sources, selection.sources),
+            include_derived=selection.include_derived,
+        )
         self._original = view
         self._graph = view._graph
         self._provenance = ReadViewProvenance.from_dict(view.provenance.to_dict())
