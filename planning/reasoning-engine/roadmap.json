@@ -179,10 +179,12 @@
       "integration_commit": "f8cc14e"
     },
     "RE-19": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-19-intervals",
       "worktree": "re-19-intervals",
-      "contract": "docs/reasoning-intervals.rst"
+      "contract": "docs/reasoning-intervals.rst",
+      "pr": 220,
+      "validation": "Focused suites (intervals/contracts incl. 300-case oracle) green; docs drift, Sphinx -W, roadmap validator passed. 5k-interval evidence (union/diff/inter/coalesce in ms). PR CI running."
     }
   },
   "source_sha256": {
