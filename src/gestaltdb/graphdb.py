@@ -18,7 +18,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import replace
 from importlib import metadata as importlib_metadata
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING, Callable, List, Optional, Union
 
 if TYPE_CHECKING:
     from .kvstores import KVStore
@@ -2290,6 +2290,72 @@ class GraphDB:
             >>> graph_db.edges_by_edge_type("drug-1", "drug-to-protein")  # doctest: +SKIP
         """
         return [record['edge_id'] for record in self.get_typed_adjacency(node_id, edge_type, direction)]
+
+    def sample_nodes(
+        self,
+        sample_size: int,
+        *,
+        label: str | None = None,
+        node_filter: Callable[[Node], bool] | None = None,
+        rng=None,
+    ) -> list[str]:
+        """Sample live node IDs using reservoir sampling.
+
+        Memory is bounded by ``sample_size`` rather than by graph size, but
+        eligible keys are still scanned. ``label`` restricts the scan to one
+        native-label index; otherwise all live node keys are visited. No
+        property-index pushdown is performed: ``node_filter`` receives each
+        decoded ``Node`` and runs during the scan. Use snapshot
+        ``SamplerEngine.sample_nodes`` for array-native, index-free sampling.
+
+        Args:
+            sample_size: Maximum number of node IDs to return.
+            label: Optional native label restricting the candidate set.
+            node_filter: Optional predicate over decoded ``Node`` objects.
+            rng: Optional random number generator with ``randrange``.
+
+        Returns:
+            Sampled node IDs as strings, in reservoir order.
+
+        Raises:
+            ValueError: If ``sample_size`` is not a non-negative integer.
+            TypeError: If ``node_filter`` is not callable.
+
+        Examples:
+            >>> graph_db.sample_nodes(5, label="Drug", rng=random.Random(7))  # doctest: +SKIP
+            ['drug-3', 'drug-1', 'drug-7', 'drug-2', 'drug-5']
+        """
+        if (
+            isinstance(sample_size, bool)
+            or not isinstance(sample_size, int)
+            or sample_size < 0
+        ):
+            raise ValueError("sample_size must be a non-negative integer")
+        if node_filter is not None and not callable(node_filter):
+            raise TypeError("node_filter must be callable")
+        if sample_size == 0:
+            return []
+        rng = rng or random
+        keys = (
+            self.get_node_keys_generator()
+            if label is None
+            else self.iter_node_ids_by_label(label)
+        )
+        sample: list[str] = []
+        seen = 0
+        for key in keys:
+            if node_filter is not None:
+                node = self.get_node(key)
+                if node is None or not node_filter(node):
+                    continue
+            seen += 1
+            if len(sample) < sample_size:
+                sample.append(self.key_to_string(key))
+                continue
+            replacement_idx = rng.randrange(seen)
+            if replacement_idx < sample_size:
+                sample[replacement_idx] = self.key_to_string(key)
+        return sample
 
     def sample_neighbors(self, node_id, edge_type: str, direction: str = 'out', sample_size: int = 10, rng=None, *, relation_hierarchy=None):
         """Sample typed neighbors using reservoir sampling.
