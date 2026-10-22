@@ -969,6 +969,104 @@ class SamplerEngine:
             causal_policy=causal_policy,
         )
 
+    def sample_induced_subgraph(
+        self,
+        num_nodes: int,
+        *,
+        max_edges: int,
+        relations: Sequence[int] | np.ndarray | None = None,
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+    ) -> SampledSubgraphBatch:
+        """Sample a bounded node-induced subgraph.
+
+        Nodes are drawn uniformly without replacement from the snapshot. Every
+        eligible edge whose endpoints are both in the sampled node set is
+        included after optional relation and temporal filters. If the eligible
+        edge count exceeds ``max_edges``, the call fails closed instead of
+        truncating or silently sampling edges. The result contains no positive
+        or negative triples; use ``sample_subgraph`` for edge-seeded training
+        batches.
+
+        Args:
+            num_nodes: Number of nodes to draw without replacement.
+            max_edges: Maximum eligible induced edges allowed. Exceeding it
+                raises ``ValueError``.
+            relations: Optional compact relation IDs to restrict induced edges.
+            temporal: Optional point or finite-window validity filter applied
+                to induced edges.
+            window_policy: Window matching policy, ``"overlap"`` or
+                ``"contained"``.
+
+        Returns:
+            ``SampledSubgraphBatch`` with sampled nodes and all eligible induced
+            edges. ``positives`` and ``negatives`` are empty.
+
+        Raises:
+            ValueError: If counts are invalid, ``num_nodes`` exceeds the
+                snapshot, or the induced edge count exceeds ``max_edges``.
+
+        Examples:
+            Draw a bounded GraphSAINT-style node subgraph::
+
+                batch = engine.sample_induced_subgraph(
+                    256, max_edges=50_000
+                )
+        """
+        _validate_count(num_nodes, "num_nodes")
+        _validate_count(max_edges, "max_edges")
+        if num_nodes > self.snapshot.num_nodes:
+            raise ValueError("num_nodes exceeds snapshot node count")
+        self._validate_sampling_options(
+            fanout=0, direction="out", temporal=temporal,
+            window_policy=window_policy, causal_policy="none",
+        )
+        relation_ids = (
+            None
+            if relations is None
+            else self._validated_ids(relations, self.snapshot.num_relations, "relations")
+        )
+        empty_triples = np.empty((0, 3), dtype=np.int64)
+        if num_nodes == 0:
+            return self._batch_from_edges(
+                [], [], positives=empty_triples, negatives=empty_triples
+            )
+        sampled_nodes = self.rng.choice(
+            self.snapshot.num_nodes, size=int(num_nodes), replace=False
+        ).astype(np.int64, copy=False)
+        ranges = [
+            self.snapshot.incident.edge_range(node)
+            for node in sampled_nodes.tolist()
+        ]
+        candidates = (
+            np.unique(np.concatenate(ranges)).astype(np.int64, copy=False)
+            if ranges
+            else np.empty(0, dtype=np.int64)
+        )
+        if candidates.size:
+            src = self.snapshot.src_int[candidates]
+            dst = self.snapshot.dst_int[candidates]
+            candidates = candidates[
+                np.isin(src, sampled_nodes) & np.isin(dst, sampled_nodes)
+            ]
+        if relation_ids is not None and candidates.size:
+            candidates = candidates[
+                np.isin(self.snapshot.rel_int[candidates], relation_ids)
+            ]
+        if temporal is not None:
+            candidates = self._filter_temporal_edges(
+                candidates, temporal, window_policy
+            )
+        if candidates.size > max_edges:
+            raise ValueError(
+                f"induced subgraph has {candidates.size} eligible edges, "
+                f"exceeding max_edges={max_edges}"
+            )
+        return self._batch_from_edges(
+            sampled_nodes, candidates,
+            positives=empty_triples, negatives=empty_triples,
+        )
+
     def is_positive(
         self, src: int, rel: int, dst: int, *, temporal: TemporalContext | None = None,
         policy: str = "any_time", window_policy: str = "overlap",

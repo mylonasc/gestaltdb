@@ -658,6 +658,9 @@ with TemporaryDirectory() as tmpdir:
         )
         arrays = batch.to_numpy()
         print(arrays["senders"], arrays["receivers"], arrays["positives"], arrays["negatives"])
+
+        induced = engine.sample_induced_subgraph(2, max_edges=10)
+        print(induced.n_nodes, induced.n_edges)
     finally:
         graph.close()
 ```
