@@ -1,0 +1,116 @@
+{
+  "complete": true,
+  "git_revision": "3341b83d93c7828fc71df0979cb000bd21e97852",
+  "harness_sha256": "c932b00dbe453357d9bbab031b8195066da0faf362fbe0854a4dce769d5018dc",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "python": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
+  "rows": [
+    {
+      "facts": 65,
+      "iterations": 11,
+      "p50_s": 0.00046488200314342976,
+      "p95_s": 0.0005370560102164745,
+      "rss_peak_bytes": 54427648,
+      "size": 10,
+      "status": "ok",
+      "workload": "transitive-chain"
+    },
+    {
+      "facts": 230,
+      "iterations": 21,
+      "p50_s": 0.0015755160129629076,
+      "p95_s": 0.0015861419960856438,
+      "rss_peak_bytes": 54427648,
+      "size": 20,
+      "status": "ok",
+      "workload": "transitive-chain"
+    },
+    {
+      "facts": 860,
+      "iterations": 41,
+      "p50_s": 0.005860352976014838,
+      "p95_s": 0.005929293984081596,
+      "rss_peak_bytes": 54427648,
+      "size": 40,
+      "status": "ok",
+      "workload": "transitive-chain"
+    },
+    {
+      "facts": 440,
+      "iterations": 1,
+      "p50_s": 0.002876274986192584,
+      "p95_s": 0.0028816700214520097,
+      "rss_peak_bytes": 54427648,
+      "size": 20,
+      "status": "ok",
+      "workload": "star-multiway"
+    },
+    {
+      "facts": 6560,
+      "iterations": 1,
+      "p50_s": 0.049459305009804666,
+      "p95_s": 0.050119871011702344,
+      "rss_peak_bytes": 57749504,
+      "size": 80,
+      "status": "ok",
+      "workload": "star-multiway"
+    },
+    {
+      "facts": 120,
+      "iterations": 3,
+      "p50_s": 0.0015450910141225904,
+      "p95_s": 0.001557168987346813,
+      "rss_peak_bytes": 57749504,
+      "size": 8,
+      "status": "ok",
+      "workload": "dense-small"
+    },
+    {
+      "dred_p50_s": 0.004484160017454997,
+      "dred_p95_s": 0.0044977090146858245,
+      "dred_work": 25,
+      "facts": 299,
+      "overdeleted": 25,
+      "rebuild_p50_s": 0.22529959201347083,
+      "rebuild_p95_s": 0.22566792799625546,
+      "rebuild_work": 152376,
+      "rederived": 0,
+      "rss_peak_bytes": 57749504,
+      "size": 24,
+      "status": "ok",
+      "workload": "dred-vs-rebuild-single-edge"
+    },
+    {
+      "dred_p50_s": 0.004175861016847193,
+      "dred_p95_s": 0.004186507983831689,
+      "dred_work": 49,
+      "facts": 275,
+      "overdeleted": 49,
+      "rebuild_p50_s": 0.19011442601913586,
+      "rebuild_p95_s": 0.19144948601024225,
+      "rebuild_work": 128041,
+      "rederived": 0,
+      "rss_peak_bytes": 57749504,
+      "size": 24,
+      "status": "ok",
+      "workload": "dred-vs-rebuild-two-edge"
+    },
+    {
+      "dred_p50_s": 0.0021371229959186167,
+      "dred_p95_s": 0.002143168996553868,
+      "dred_work": 289,
+      "facts": 90,
+      "overdeleted": 234,
+      "rebuild_p50_s": 0.01921185399987735,
+      "rebuild_p95_s": 0.019236367021221668,
+      "rebuild_work": 12181,
+      "rederived": 0,
+      "rss_peak_bytes": 57749504,
+      "size": 24,
+      "status": "ok",
+      "workload": "dred-vs-rebuild-half-closure"
+    }
+  ],
+  "schema_version": 1,
+  "working_tree_dirty": true
+}
