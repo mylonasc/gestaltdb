@@ -67,7 +67,10 @@ time, resolved system time, exact claim/rule versions, validity, commit ID and
 ordinal, payload hashes, scores and provenance. Alternative justifications
 retain their ordered premise-version groups per conclusion. They are not
 collapsed through shared rule nodes; recursive evidence may be a finite graph,
-not a tree. Evidence is untrusted data and can contain sensitive metadata;
+not a tree. Rules using closed-world negation also export ``absence`` nodes and
+per-support ``absences`` lists. These record absence checks at the evaluation
+horizon; they are not claim versions, negative facts or independent proof that
+the closed-world declaration was justified. Evidence is untrusted data and can contain sensitive metadata;
 review it before sharing. JSON serialization does not authenticate the report.
 
 ``max_depth`` and ``max_nodes`` use the existing ``explain_claim`` traversal

@@ -165,6 +165,51 @@ with TemporaryDirectory() as tmpdir:
         graph.close()
 ```
 
+## Flag Absent Certifications With Stratified Negation
+
+Negated atoms are closed-world absence checks, not negative claims. List the
+complete predicates in `closed_world`; unstratifiable programs fail before the
+rule catalog changes. Absence evidence appears in explanations as `absence`
+nodes.
+
+```python
+from tempfile import TemporaryDirectory
+
+from gestaltdb.graphdb import GraphDB
+
+with TemporaryDirectory() as tmpdir:
+    graph = GraphDB.create(f"{tmpdir}/graph", backend="leveldb", serializer="json")
+    try:
+        graph.assert_claim(
+            subject="supplier-1", predicate="SHIPS", object="widgets",
+            polarity="positive", agent="erp", valid=(0, 100),
+        )
+        graph.create_rule(
+            "review-uncertified",
+            when=[("?s", "SHIPS", "?goods")],
+            then=("?s", "REQUIRES_SAFETY_REVIEW", "yes"),
+            not_when=[("?s", "CERTIFIED", "iso9001")],
+            closed_world=["CERTIFIED"],
+        )
+        graph.run_rules(as_of=10)
+        flagged = next(graph.iter_claims_as_of(
+            valid_time=10, predicate="REQUIRES_SAFETY_REVIEW"))
+        assert flagged.claim.subject == "supplier-1"
+
+        explanation = graph.explain_claim(flagged.logical_id, valid_time=10)
+        assert any(node.kind == "absence" for node in explanation.nodes)
+
+        graph.assert_claim(
+            subject="supplier-1", predicate="CERTIFIED", object="iso9001",
+            polarity="positive", agent="audit", valid=(0, 100),
+        )
+        assert graph.maintain_truth(as_of=10).retracted_count == 1
+        assert list(graph.iter_claims_as_of(
+            valid_time=10, predicate="REQUIRES_SAFETY_REVIEW")) == []
+    finally:
+        graph.close()
+```
+
 ## Evaluate Bounded Belief and Knowledge
 
 Accessibility is an explicit temporal fact. Belief and knowledge use separate

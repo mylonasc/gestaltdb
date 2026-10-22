@@ -1,7 +1,9 @@
-"""Immutable positive Horn rules and rule-evaluation result values."""
+"""Immutable Horn rules, stratified negation values and evaluation results."""
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 
@@ -53,7 +55,13 @@ class RuleAtom:
 
 @dataclass(frozen=True)
 class RuleVersion:
-    """One immutable system-time version of a named safe positive Horn rule."""
+    """One immutable system-time version of a named safe Horn rule.
+
+    ``when`` holds positive body atoms. ``not_when`` holds closed-world
+    absence atoms whose variables must already be bound by ``when``. ``closed``
+    declares predicates treated as complete for negation; the active program's
+    effective scope is the union of these declarations, checked at creation.
+    """
 
     rule_id: str
     version_id: str
@@ -61,6 +69,8 @@ class RuleVersion:
     then: RuleAtom
     system_time: TemporalInstant
     catalog_ordinal: int
+    not_when: tuple[RuleAtom, ...] = ()
+    closed: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.rule_id, str) or not self.rule_id:
@@ -74,12 +84,38 @@ class RuleVersion:
         if not body:
             raise RuleError("rule body must contain at least one atom")
         head = self.then if isinstance(self.then, RuleAtom) else RuleAtom.from_value(self.then)
+        if isinstance(self.not_when, (str, bytes)):
+            raise RuleError("negated rule body must be an iterable of atoms")
+        if isinstance(self.closed, (str, bytes)):
+            raise RuleError("closed-world scope must be an iterable of predicates")
+        negated = tuple(
+            atom if isinstance(atom, RuleAtom) else RuleAtom.from_value(atom)
+            for atom in self.not_when
+        )
+        closed = tuple(self.closed)
+        for predicate in closed:
+            if not isinstance(predicate, str) or not predicate:
+                raise RuleError("closed-world predicates must be non-empty strings")
+            if predicate.startswith("?"):
+                raise RuleError("closed-world predicates must be constants")
         body_variables = {
             term
             for atom in body
             for term in (atom.subject, atom.object)
             if term.startswith("?")
         }
+        negated_variables = {
+            term
+            for atom in negated
+            for term in (atom.subject, atom.object)
+            if term.startswith("?")
+        }
+        unsafe_negation = sorted(negated_variables - body_variables)
+        if unsafe_negation:
+            raise RuleError(
+                "unsafe negated variables are not bound by the positive body: "
+                + ", ".join(unsafe_negation)
+            )
         head_variables = {
             term for term in (head.subject, head.object) if term.startswith("?")
         }
@@ -98,9 +134,11 @@ class RuleVersion:
             raise RuleError("rule catalog_ordinal must be a positive integer")
         object.__setattr__(self, "when", body)
         object.__setattr__(self, "then", head)
+        object.__setattr__(self, "not_when", negated)
+        object.__setattr__(self, "closed", tuple(sorted(set(closed))))
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        value = {
             "rule_id": self.rule_id,
             "version_id": self.version_id,
             "when": [list(atom.to_tuple()) for atom in self.when],
@@ -108,6 +146,12 @@ class RuleVersion:
             "system_time_us": self.system_time.epoch_microseconds,
             "catalog_ordinal": self.catalog_ordinal,
         }
+        # Omit empty fields so pre-negation catalogs keep their exact shape.
+        if self.not_when:
+            value["not_when"] = [list(atom.to_tuple()) for atom in self.not_when]
+        if self.closed:
+            value["closed"] = list(self.closed)
+        return value
 
     @classmethod
     def from_dict(cls, value: Mapping[str, object]) -> "RuleVersion":
@@ -115,7 +159,11 @@ class RuleVersion:
             raise RuleError("rule version payload must be an object")
         try:
             when = value["when"]
-            if not isinstance(when, list):
+            not_when = value.get("not_when", ())
+            closed = value.get("closed", ())
+            if not isinstance(when, list) or not isinstance(not_when, (list, tuple)):
+                raise TypeError
+            if not isinstance(closed, (list, tuple)):
                 raise TypeError
             return cls(
                 rule_id=value["rule_id"],
@@ -124,30 +172,132 @@ class RuleVersion:
                 then=RuleAtom.from_value(value["then"]),
                 system_time=TemporalInstant(value["system_time_us"]),
                 catalog_ordinal=value["catalog_ordinal"],
+                not_when=tuple(RuleAtom.from_value(atom) for atom in not_when),
+                closed=tuple(closed),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise RuleError("invalid rule version payload") from exc
 
 
 @dataclass(frozen=True)
+class RuleAbsence:
+    """One ground closed-world absence check used as a negated premise.
+
+    This is recorded evidence that no matching positive claim was visible at
+    the pinned evaluation horizon. It is not a negative claim, a denial, or a
+    claim version, and it carries no version identity.
+    """
+
+    position: int
+    predicate: str
+    subject: str
+    object: str
+    scope: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if isinstance(self.position, bool) or not isinstance(self.position, int) or self.position < 0:
+            raise RuleError("absence position must be a non-negative integer")
+        if not isinstance(self.predicate, str) or not self.predicate:
+            raise RuleError("absence predicate must be a non-empty string")
+        for name, value in (("subject", self.subject), ("object", self.object)):
+            if not isinstance(value, str) or not value:
+                raise RuleError(f"absence {name} must be a non-empty string")
+        scope = tuple(self.scope)
+        if not scope:
+            raise RuleError("absence scope must be a non-empty tuple of predicates")
+        for predicate in scope:
+            if not isinstance(predicate, str) or not predicate:
+                raise RuleError("absence scope predicates must be non-empty strings")
+        object.__setattr__(self, "scope", tuple(sorted(set(scope))))
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "position": self.position,
+            "predicate": self.predicate,
+            "subject": self.subject,
+            "object": self.object,
+            "scope": list(self.scope),
+        }
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, object]) -> "RuleAbsence":
+        if not isinstance(value, Mapping):
+            raise RuleError("absence payload must be an object")
+        try:
+            return cls(
+                position=value["position"],
+                predicate=value["predicate"],
+                subject=value["subject"],
+                object=value["object"],
+                scope=tuple(value["scope"]),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RuleError("invalid absence payload") from exc
+
+
+def absence_node_id(rule_version_id: str, absence: RuleAbsence) -> str:
+    """Return the deterministic explanation node ID for one absence check."""
+    payload = json.dumps(
+        [
+            normalize_version_id(rule_version_id),
+            absence.position,
+            absence.predicate,
+            absence.subject,
+            absence.object,
+            list(absence.scope),
+        ],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return "absence:sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+@dataclass(frozen=True)
 class RuleJustification:
-    """A rule version and the ordered claim versions that satisfied its body."""
+    """A rule version, ordered positive premises and any absence checks."""
 
     rule_version_id: str
     premise_version_ids: tuple[str, ...]
+    absences: tuple[RuleAbsence, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "rule_version_id", normalize_version_id(self.rule_version_id))
         premises = tuple(normalize_version_id(value) for value in self.premise_version_ids)
         if not premises:
             raise RuleError("a rule justification requires at least one premise")
+        absences = tuple(self.absences)
+        if not all(isinstance(item, RuleAbsence) for item in absences):
+            raise RuleError("justification absences must be RuleAbsence values")
+        positions = [item.position for item in absences]
+        if len(set(positions)) != len(positions):
+            raise RuleError("justification absences must have unique positions")
         object.__setattr__(self, "premise_version_ids", premises)
+        object.__setattr__(self, "absences", tuple(sorted(absences, key=lambda item: item.position)))
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        value = {
             "rule_version_id": self.rule_version_id,
             "premise_version_ids": list(self.premise_version_ids),
         }
+        if self.absences:
+            value["absences"] = [item.to_dict() for item in self.absences]
+        return value
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, object]) -> "RuleJustification":
+        if not isinstance(value, Mapping):
+            raise RuleError("justification payload must be an object")
+        try:
+            absences = value.get("absences", ())
+            if not isinstance(absences, (list, tuple)):
+                raise TypeError
+            return cls(
+                rule_version_id=value["rule_version_id"],
+                premise_version_ids=tuple(value["premise_version_ids"]),
+                absences=tuple(RuleAbsence.from_dict(item) for item in absences),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RuleError("invalid justification payload") from exc
 
 
 @dataclass(frozen=True)
@@ -207,16 +357,29 @@ class ClaimExplanation:
 
 
 def normalize_rule_definition(
-    rule_id: object, when: Iterable[object], then: object, *, version_id: str,
-    system_time: TemporalInstant, catalog_ordinal: int,
+    rule_id: object, when: Iterable[object], then: object, *,
+    version_id: str, system_time: TemporalInstant, catalog_ordinal: int,
+    not_when: Iterable[object] = (), closed: Iterable[object] = (),
 ) -> RuleVersion:
     """Validate a public rule definition and return its immutable version."""
     if isinstance(when, (str, bytes)):
         raise RuleError("rule body must be an iterable of atoms")
+    if isinstance(not_when, (str, bytes)):
+        raise RuleError("negated rule body must be an iterable of atoms")
+    if isinstance(closed, (str, bytes)):
+        raise RuleError("closed-world scope must be an iterable of predicates")
     try:
         atoms = tuple(RuleAtom.from_value(atom) for atom in when)
     except TypeError as exc:
         raise RuleError("rule body must be an iterable of atoms") from exc
+    try:
+        negated = tuple(RuleAtom.from_value(atom) for atom in not_when)
+    except TypeError as exc:
+        raise RuleError("negated rule body must be an iterable of atoms") from exc
+    try:
+        closed_values = tuple(closed)
+    except TypeError as exc:
+        raise RuleError("closed-world scope must be an iterable of predicates") from exc
     return RuleVersion(
         rule_id=rule_id,
         version_id=version_id,
@@ -224,13 +387,117 @@ def normalize_rule_definition(
         then=RuleAtom.from_value(then),
         system_time=system_time,
         catalog_ordinal=catalog_ordinal,
+        not_when=negated,
+        closed=closed_values,
     )
+
+
+def stratify_rules(rules: Iterable[RuleVersion]) -> tuple[tuple[str, ...], ...]:
+    """Return a deterministic stratum schedule or raise on unstratifiable rules.
+
+    Positive dependencies form the recursion components. Every negative edge
+    must point strictly downward: a negative edge inside one positive component,
+    or any remaining cycle after ordering, fails closed. Predicates without
+    rules keep their positions as zero-round components. The effective
+    closed-world scope is the union of all active rule declarations.
+    """
+    rules = tuple(sorted(rules, key=lambda rule: rule.rule_id))
+    if not all(isinstance(rule, RuleVersion) for rule in rules):
+        raise RuleError("stratification requires RuleVersion values")
+    closed = {predicate for rule in rules for predicate in rule.closed}
+    graph: dict[str, set[str]] = {}
+    negative: dict[str, set[str]] = {}
+    for rule in rules:
+        head = rule.then.predicate
+        graph.setdefault(head, set())
+        negative.setdefault(head, set())
+        for atom in rule.when:
+            graph.setdefault(atom.predicate, set()).add(head)
+        for atom in rule.not_when:
+            if atom.predicate not in closed:
+                raise RuleError(
+                    f"negation over {atom.predicate!r} requires a closed-world declaration"
+                )
+            negative[head].add(atom.predicate)
+            graph.setdefault(atom.predicate, set())
+
+    # Iterative Kosaraju over positive dependencies only.
+    visited: set[str] = set()
+    finished: list[str] = []
+    for node in sorted(graph):
+        if node in visited:
+            continue
+        visited.add(node)
+        stack = [(node, iter(sorted(graph[node])))]
+        while stack:
+            current, children = stack[-1]
+            child = next(children, None)
+            if child is None:
+                finished.append(current)
+                stack.pop()
+            elif child not in visited:
+                visited.add(child)
+                stack.append((child, iter(sorted(graph[child]))))
+    visited.clear()
+    components: list[tuple[str, ...]] = []
+    owner: dict[str, int] = {}
+    for node in reversed(finished):
+        if node in visited:
+            continue
+        visited.add(node)
+        members = [node]
+        pending = [node]
+        while pending:
+            current = pending.pop()
+            for parent, children in graph.items():
+                if current in children and parent not in visited:
+                    visited.add(parent)
+                    members.append(parent)
+                    pending.append(parent)
+        for member in members:
+            owner[member] = len(components)
+        components.append(tuple(sorted(members)))
+
+    for head, targets in negative.items():
+        if owner[head] in {owner[target] for target in targets}:
+            raise RuleError(
+                "negative dependency cycle: "
+                f"{head!r} negatively depends on its own stratum"
+            )
+    before: dict[int, set[int]] = {index: set() for index in range(len(components))}
+    for rule in rules:
+        head = owner[rule.then.predicate]
+        for atom in (*rule.when, *rule.not_when):
+            before[head].add(owner[atom.predicate])
+    remaining = {index: set(deps) - {index} for index, deps in before.items()}
+    ordered: list[int] = []
+    ready = sorted(
+        [index for index, deps in remaining.items() if not deps],
+        key=lambda index: components[index],
+    )
+    while ready:
+        current = ready.pop(0)
+        ordered.append(current)
+        for index, deps in remaining.items():
+            if current in deps:
+                deps.discard(current)
+                if not deps and index not in ordered and index not in ready:
+                    ready.append(index)
+        ready.sort(key=lambda index: components[index])
+    if len(ordered) != len(components):
+        stuck = [components[index] for index in range(len(components)) if index not in ordered]
+        raise RuleError(
+            "negative dependency cycle involving "
+            + ", ".join(sorted({name for component in stuck for name in component}))
+        )
+    return tuple(components[index] for index in ordered)
 
 
 __all__ = [
     "ClaimExplanation",
     "ExplanationEdge",
     "ExplanationNode",
+    "RuleAbsence",
     "RuleAtom",
     "RuleError",
     "RuleEvaluationLimitError",
@@ -238,4 +505,6 @@ __all__ = [
     "RuleRunResult",
     "RuleVersion",
     "TruthMaintenanceResult",
+    "absence_node_id",
+    "stratify_rules",
 ]

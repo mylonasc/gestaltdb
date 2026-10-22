@@ -34,13 +34,16 @@ from .rules import (
     ClaimExplanation,
     ExplanationEdge,
     ExplanationNode,
+    RuleAbsence,
     RuleError,
     RuleEvaluationLimitError,
     RuleJustification,
     RuleRunResult,
     RuleVersion,
     TruthMaintenanceResult,
+    absence_node_id,
     normalize_rule_definition,
+    stratify_rules,
 )
 from .sampling import SamplingPattern, as_sampling_pattern
 from .serializers import JSONSerializer, temporal_tagged_value
@@ -4103,8 +4106,16 @@ class GraphDB:
         except (KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise RuleError("invalid rule catalog") from exc
 
-    def create_rule(self, rule_id, *, when, then, version_id=None) -> RuleVersion:
-        """Validate and append one immutable version of a positive Horn rule."""
+    def create_rule(
+        self, rule_id, *, when, then, not_when=(), closed_world=(), version_id=None
+    ) -> RuleVersion:
+        """Validate and append one immutable version of a Horn rule.
+
+        ``not_when`` atoms are closed-world absence checks. Every negated
+        predicate must be named in the active program's ``closed_world``
+        declarations, and the resulting active program must be stratified.
+        Unstratifiable programs are rejected before the catalog changes.
+        """
         with self._temporal_write_lock:
             catalog = self._load_rule_catalog()
             normalized_version_id = normalize_version_id(version_id)
@@ -4119,7 +4130,14 @@ class GraphDB:
                 version_id=normalized_version_id,
                 system_time=system_time,
                 catalog_ordinal=len(catalog) + 1,
+                not_when=not_when,
+                closed=closed_world,
             )
+            active = {item.rule_id: item for item in catalog}
+            active[rule.rule_id] = rule
+            # Fail closed on negative cycles or undeclared absence before any
+            # catalog write, so an unstratifiable program never becomes active.
+            stratify_rules(tuple(active.values()))
             self.store.put_metadata(
                 _RULE_CATALOG_KEY,
                 canonical_json_bytes({
@@ -4146,7 +4164,9 @@ class GraphDB:
         return versions[-1] if versions else None
 
     @staticmethod
-    def _rule_justifications(provenance) -> set[tuple[str, tuple[str, ...]]]:
+    def _rule_justifications(
+        provenance,
+    ) -> set[tuple[str, tuple[str, ...], tuple[RuleAbsence, ...]]]:
         if not isinstance(provenance, Mapping) or provenance.get("derived_by") != "gestaltdb.rules":
             return set()
         result = set()
@@ -4157,13 +4177,68 @@ class GraphDB:
             if not isinstance(value, Mapping):
                 continue
             try:
-                justification = RuleJustification(
-                    value["rule_version_id"], tuple(value["premise_version_ids"])
-                )
-            except (KeyError, TypeError, ValueError):
+                justification = RuleJustification.from_dict(value)
+            except RuleError:
                 continue
-            result.add((justification.rule_version_id, justification.premise_version_ids))
+            result.add((
+                justification.rule_version_id,
+                justification.premise_version_ids,
+                justification.absences,
+            ))
         return result
+
+    @staticmethod
+    def _justification_order(justification):
+        rule_version_id, premise_ids, absences = justification
+        return (
+            rule_version_id,
+            premise_ids,
+            tuple(
+                (
+                    item.position,
+                    item.predicate,
+                    item.subject,
+                    item.object,
+                    item.scope,
+                )
+                for item in absences
+            ),
+        )
+
+    def _rule_program(self, *, system_time):
+        """Return active rule versions and their stratification schedule."""
+        by_id = {}
+        for rule in self.iter_rule_versions(system_time=system_time):
+            by_id[rule.rule_id] = rule
+        rules = tuple(sorted(by_id.values(), key=lambda item: item.rule_id))
+        return rules, stratify_rules(rules)
+
+    @staticmethod
+    def _rule_scope(rules) -> tuple[str, ...]:
+        return tuple(sorted({predicate for rule in rules for predicate in rule.closed}))
+
+    @staticmethod
+    def _absence_checks(rule, bindings, valid, world, facts_by_predicate, scope):
+        """Return ground absence witnesses or ``None`` when negation is blocked.
+
+        A negated atom is satisfied only when no matching positive claim
+        overlaps the candidate conclusion's whole validity interval. Partial
+        overlap blocks the derivation instead of producing an interval fragment
+        that the claim model cannot represent.
+        """
+        checks = []
+        for position, atom in enumerate(rule.not_when):
+            subject = bindings.get(atom.subject, atom.subject)
+            object_value = bindings.get(atom.object, atom.object)
+            for fact in facts_by_predicate.get(atom.predicate, ()):
+                if world is not None and fact["world"] != world:
+                    continue
+                if fact["subject"] != subject or fact["object"] != object_value:
+                    continue
+                if valid.intersection(fact["valid"]) is not None:
+                    return None
+            checks.append(RuleAbsence(position, atom.predicate, subject, object_value, scope))
+        return tuple(checks)
 
     def run_rules(
         self,
@@ -4178,9 +4253,12 @@ class GraphDB:
     ) -> RuleRunResult:
         """Evaluate active rules semi-naively and persist a bounded fixpoint.
 
-        Only positive entity-object claims participate. Premises must share a
-        world, and each conclusion receives their half-open validity
-        intersection. No claims are written if any resource bound is exceeded.
+        Positive components run in stratification order. Only positive
+        entity-object claims participate; ``not_when`` atoms are closed-world
+        absence checks against completed lower strata, not negative claims.
+        Premises must share a world, and each conclusion receives their
+        half-open validity intersection. No claims are written if any resource
+        bound is exceeded.
         """
         limits = {
             "max_iterations": max_iterations,
@@ -4198,12 +4276,10 @@ class GraphDB:
 
         instant = normalize_temporal_instant(as_of)
         horizon = self._temporal_system_horizon(system_time=system_time)
-        rules_by_id = {}
-        for rule in self.iter_rule_versions(system_time=system_time):
-            rules_by_id[rule.rule_id] = rule
-        rules = tuple(sorted(rules_by_id.values(), key=lambda item: item.rule_id))
+        rules, strata = self._rule_program(system_time=system_time)
         if not rules:
             return RuleRunResult(0, 0, 0, None, ())
+        scope = self._rule_scope(rules)
 
         facts = []
         facts_by_predicate = {}
@@ -4233,6 +4309,7 @@ class GraphDB:
             facts_by_predicate.setdefault(claim.predicate, []).append(fact)
             return fact
 
+        has_negation = any(rule.not_when for rule in rules)
         for version in self.iter_claims_as_of(
             valid_time=instant,
             polarity=ClaimPolarity.POSITIVE,
@@ -4242,13 +4319,26 @@ class GraphDB:
             claim = version.claim
             if claim is None or claim.object_kind is not ClaimObjectKind.ENTITY:
                 continue
-            fact = add_fact(version.version_id, claim, version.valid)
-            if claim.agent == _RULE_ENGINE_AGENT and claim.provenance.get("derived_by") == "gestaltdb.rules":
-                existing_derived[conclusion_key(
+            engine_derived = (
+                claim.agent == _RULE_ENGINE_AGENT
+                and claim.provenance.get("derived_by") == "gestaltdb.rules"
+            )
+            if engine_derived:
+                key = conclusion_key(
                     claim.subject, claim.predicate, claim.object, claim.world
-                )] = (version, fact)
+                )
+                # Negation needs an authoritative base: a stale conclusion from
+                # an earlier run must not block or satisfy an absence check.
+                # Positive-only programs keep their historical seed behaviour.
+                if has_negation:
+                    existing_derived[key] = (version, None)
+                    continue
+                existing_derived[key] = (
+                    version, add_fact(version.version_id, claim, version.valid)
+                )
+                continue
+            add_fact(version.version_id, claim, version.valid)
 
-        delta_ids = {fact["version_id"] for fact in facts}
         outputs = {}
         generated_justifications = set()
         generated_count = 0
@@ -4264,102 +4354,122 @@ class GraphDB:
             updated[term] = value
             return updated
 
-        while delta_ids:
-            if iterations >= max_iterations:
-                raise RuleEvaluationLimitError(
-                    f"rule evaluation exceeded max_iterations={max_iterations}"
-                )
-            next_delta = {}
-            for rule in rules:
-                rows = [({}, (), None, None, False)]
-                for atom in rule.when:
-                    joined = []
-                    for bindings, premises, valid, row_world, used_delta in rows:
-                        for fact in facts_by_predicate.get(atom.predicate, ()):
-                            if row_world is not None and fact["world"] != row_world:
-                                continue
-                            subject_bindings = unify(atom.subject, fact["subject"], bindings)
-                            if subject_bindings is None:
-                                continue
-                            bound = unify(atom.object, fact["object"], subject_bindings)
-                            if bound is None:
-                                continue
-                            intersection = fact["valid"] if valid is None else valid.intersection(fact["valid"])
-                            if intersection is None:
-                                continue
-                            joined.append((
-                                bound,
-                                (*premises, fact["version_id"]),
-                                intersection,
-                                fact["world"],
-                                used_delta or fact["version_id"] in delta_ids,
-                            ))
-                    rows = joined
-                    if not rows:
-                        break
-                for bindings, premises, valid, row_world, used_delta in rows:
-                    if not used_delta:
-                        continue
-                    subject = bindings.get(rule.then.subject, rule.then.subject)
-                    object_value = bindings.get(rule.then.object, rule.then.object)
-                    key = conclusion_key(subject, rule.then.predicate, object_value, row_world)
-                    justification = (rule.version_id, premises)
-                    marker = (key, justification)
-                    output = outputs.get(key)
-                    if output is None:
-                        existing_entry = existing_derived.get(key)
-                        existing = None if existing_entry is None else existing_entry[0]
-                        version_id = (
-                            existing.version_id if existing is not None else normalize_version_id()
-                        )
-                        output = {
-                            "existing": existing,
-                            "version_id": version_id,
-                            "subject": subject,
-                            "predicate": rule.then.predicate,
-                            "object": object_value,
-                            "world": row_world,
-                            "valid": existing.valid if existing is not None else valid,
-                            "fact": None if existing_entry is None else existing_entry[1],
-                            "justifications": set(),
-                        }
-                        outputs[key] = output
-                        if existing is None:
-                            generated_count += 1
-                            if generated_count > max_derivations:
-                                raise RuleEvaluationLimitError(
-                                    f"rule evaluation exceeded max_derivations={max_derivations}"
-                                )
-                            next_delta[key] = output
-                    merged_valid = union_validity(output["valid"], valid)
-                    if merged_valid != output["valid"]:
-                        output["valid"] = merged_valid
-                        next_delta[key] = output
-                    if marker in generated_justifications:
-                        continue
-                    generated_justifications.add(marker)
-                    if len(generated_justifications) > max_justifications:
-                        raise RuleEvaluationLimitError(
-                            f"rule evaluation exceeded max_justifications={max_justifications}"
-                        )
-                    output["justifications"].add(justification)
-            iterations += 1
-            added_facts = []
-            for output in next_delta.values():
-                fact = output["fact"]
-                if fact is None:
-                    claim = Claim(
-                        output["subject"], output["predicate"], output["object"],
-                        ClaimPolarity.POSITIVE, _RULE_ENGINE_AGENT,
-                        world=output["world"],
-                        provenance={"derived_by": "gestaltdb.rules"},
+        for stratum in strata:
+            stratum_rules = tuple(
+                rule for rule in rules if rule.then.predicate in stratum
+            )
+            if not stratum_rules:
+                continue
+            # Lower strata are complete before this component starts. Seeding
+            # each component's delta with the facts available at entry keeps
+            # semi-naive evaluation local without re-reading unfinished state.
+            delta_ids = {fact["version_id"] for fact in facts}
+            while delta_ids:
+                if iterations >= max_iterations:
+                    raise RuleEvaluationLimitError(
+                        f"rule evaluation exceeded max_iterations={max_iterations}"
                     )
-                    fact = add_fact(output["version_id"], claim, output["valid"])
-                    output["fact"] = fact
-                else:
-                    fact["valid"] = output["valid"]
-                added_facts.append(fact)
-            delta_ids = {fact["version_id"] for fact in added_facts}
+                next_delta = {}
+                for rule in stratum_rules:
+                    rows = [({}, (), None, None, False)]
+                    for atom in rule.when:
+                        joined = []
+                        for bindings, premises, valid, row_world, used_delta in rows:
+                            for fact in facts_by_predicate.get(atom.predicate, ()):
+                                if row_world is not None and fact["world"] != row_world:
+                                    continue
+                                subject_bindings = unify(atom.subject, fact["subject"], bindings)
+                                if subject_bindings is None:
+                                    continue
+                                bound = unify(atom.object, fact["object"], subject_bindings)
+                                if bound is None:
+                                    continue
+                                intersection = fact["valid"] if valid is None else valid.intersection(fact["valid"])
+                                if intersection is None:
+                                    continue
+                                joined.append((
+                                    bound,
+                                    (*premises, fact["version_id"]),
+                                    intersection,
+                                    fact["world"],
+                                    used_delta or fact["version_id"] in delta_ids,
+                                ))
+                        rows = joined
+                        if not rows:
+                            break
+                    for bindings, premises, valid, row_world, used_delta in rows:
+                        if not used_delta:
+                            continue
+                        absences = self._absence_checks(
+                            rule, bindings, valid, row_world, facts_by_predicate, scope
+                        )
+                        if absences is None:
+                            continue
+                        subject = bindings.get(rule.then.subject, rule.then.subject)
+                        object_value = bindings.get(rule.then.object, rule.then.object)
+                        key = conclusion_key(subject, rule.then.predicate, object_value, row_world)
+                        justification = (rule.version_id, premises, absences)
+                        marker = (key, justification)
+                        output = outputs.get(key)
+                        if output is None:
+                            existing_entry = existing_derived.get(key)
+                            existing = None if existing_entry is None else existing_entry[0]
+                            version_id = (
+                                existing.version_id if existing is not None else normalize_version_id()
+                            )
+                            output = {
+                                "existing": existing,
+                                "version_id": version_id,
+                                "subject": subject,
+                                "predicate": rule.then.predicate,
+                                "object": object_value,
+                                "world": row_world,
+                                "valid": existing.valid if existing is not None else valid,
+                                "fact": None if existing_entry is None else existing_entry[1],
+                                "justifications": set(),
+                            }
+                            outputs[key] = output
+                            if existing is None:
+                                generated_count += 1
+                                if generated_count > max_derivations:
+                                    raise RuleEvaluationLimitError(
+                                        f"rule evaluation exceeded max_derivations={max_derivations}"
+                                    )
+                                next_delta[key] = output
+                            elif output["fact"] is None:
+                                # An excluded prior conclusion becomes a fact
+                                # again once re-derived, so higher strata see it
+                                # even when its validity did not change.
+                                next_delta[key] = output
+                        merged_valid = union_validity(output["valid"], valid)
+                        if merged_valid != output["valid"]:
+                            output["valid"] = merged_valid
+                            next_delta[key] = output
+                        if marker in generated_justifications:
+                            continue
+                        generated_justifications.add(marker)
+                        if len(generated_justifications) > max_justifications:
+                            raise RuleEvaluationLimitError(
+                                f"rule evaluation exceeded max_justifications={max_justifications}"
+                            )
+                        output["justifications"].add(justification)
+                iterations += 1
+                added_facts = []
+                for output in next_delta.values():
+                    fact = output["fact"]
+                    if fact is None:
+                        claim = Claim(
+                            output["subject"], output["predicate"], output["object"],
+                            ClaimPolarity.POSITIVE, _RULE_ENGINE_AGENT,
+                            world=output["world"],
+                            provenance={"derived_by": "gestaltdb.rules"},
+                        )
+                        fact = add_fact(output["version_id"], claim, output["valid"])
+                        output["fact"] = fact
+                    else:
+                        fact["valid"] = output["valid"]
+                    added_facts.append(fact)
+                delta_ids = {fact["version_id"] for fact in added_facts}
 
         writes = []
         output_order = sorted(outputs)
@@ -4370,8 +4480,10 @@ class GraphDB:
             if existing is not None:
                 justifications.update(self._rule_justifications(existing.claim.provenance))
             encoded_justifications = [
-                RuleJustification(rule_version_id, premise_ids).to_dict()
-                for rule_version_id, premise_ids in sorted(justifications)
+                RuleJustification(rule_version_id, premise_ids, absences).to_dict()
+                for rule_version_id, premise_ids, absences in sorted(
+                    justifications, key=self._justification_order
+                )
             ]
             if (
                 existing is not None
@@ -4466,7 +4578,8 @@ class GraphDB:
 
         The authoritative base excludes claims emitted by the rule engine, so a
         cycle cannot preserve itself after its final independent support is
-        removed. If ``as_of`` is omitted, the valid time from the most recent
+        removed, and completed lower strata are rechecked for closed-world
+        absence. If ``as_of`` is omitted, the valid time from the most recent
         rule run or maintenance pass is resumed.
         """
         limits = {
@@ -4488,10 +4601,8 @@ class GraphDB:
 
         with self._temporal_write_lock:
             input_horizon = self._temporal_system_horizon(system_time=system_time)
-            rules_by_id = {}
-            for rule in self.iter_rule_versions(system_time=system_time):
-                rules_by_id[rule.rule_id] = rule
-            rules = tuple(sorted(rules_by_id.values(), key=lambda item: item.rule_id))
+            rules, strata = self._rule_program(system_time=system_time)
+            scope = self._rule_scope(rules)
 
             facts = []
             facts_by_predicate = {}
@@ -4551,95 +4662,106 @@ class GraphDB:
                 return updated
 
             outputs = {}
-            delta = {fact["ref"] for fact in facts}
             iterations = 0
             support_count = 0
-            while delta:
-                if iterations >= max_iterations:
-                    raise RuleEvaluationLimitError(
-                        f"truth maintenance exceeded max_iterations={max_iterations}"
-                    )
-                next_delta = {}
-                for rule in rules:
-                    rows = [({}, (), None, None, False)]
-                    for atom in rule.when:
-                        joined = []
-                        for bindings, premises, valid, row_world, used_delta in rows:
-                            for fact in facts_by_predicate.get(atom.predicate, ()):
-                                if row_world is not None and fact["world"] != row_world:
-                                    continue
-                                subject_bindings = unify(atom.subject, fact["subject"], bindings)
-                                if subject_bindings is None:
-                                    continue
-                                bound = unify(atom.object, fact["object"], subject_bindings)
-                                if bound is None:
-                                    continue
-                                intersection = fact["valid"] if valid is None else valid.intersection(fact["valid"])
-                                if intersection is None:
-                                    continue
-                                joined.append((
-                                    bound,
-                                    (*premises, fact["ref"]),
-                                    intersection,
-                                    fact["world"],
-                                    used_delta or fact["ref"] in delta,
-                                ))
-                        rows = joined
-                        if not rows:
-                            break
-                    for bindings, premises, valid, row_world, used_delta in rows:
-                        if not used_delta:
-                            continue
-                        subject = bindings.get(rule.then.subject, rule.then.subject)
-                        object_value = bindings.get(rule.then.object, rule.then.object)
-                        key = conclusion_key(subject, rule.then.predicate, object_value, row_world)
-                        output = outputs.get(key)
-                        if output is None:
-                            if len(outputs) >= max_derivations:
-                                raise RuleEvaluationLimitError(
-                                    f"truth maintenance exceeded max_derivations={max_derivations}"
-                                )
-                            output = {
-                                "subject": subject,
-                                "predicate": rule.then.predicate,
-                                "object": object_value,
-                                "world": row_world,
-                                "valid": valid,
-                                "supports": set(),
-                                "fact": None,
-                            }
-                            outputs[key] = output
-                            next_delta[key] = output
-                        merged = union_validity(output["valid"], valid)
-                        if merged != output["valid"]:
-                            output["valid"] = merged
-                            next_delta[key] = output
-                        support = (rule.version_id, premises)
-                        if support not in output["supports"]:
-                            support_count += 1
-                            if support_count > max_justifications:
-                                raise RuleEvaluationLimitError(
-                                    f"truth maintenance exceeded max_justifications={max_justifications}"
-                                )
-                            output["supports"].add(support)
-                iterations += 1
-                added = []
-                for key, output in next_delta.items():
-                    fact = output["fact"]
-                    if fact is None:
-                        fact = add_fact(
-                            ("derived", key),
-                            output["subject"],
-                            output["predicate"],
-                            output["object"],
-                            output["world"],
-                            output["valid"],
+            for stratum in strata:
+                stratum_rules = tuple(
+                    rule for rule in rules if rule.then.predicate in stratum
+                )
+                if not stratum_rules:
+                    continue
+                delta = {fact["ref"] for fact in facts}
+                while delta:
+                    if iterations >= max_iterations:
+                        raise RuleEvaluationLimitError(
+                            f"truth maintenance exceeded max_iterations={max_iterations}"
                         )
-                        output["fact"] = fact
-                    else:
-                        fact["valid"] = output["valid"]
-                    added.append(fact)
-                delta = {fact["ref"] for fact in added}
+                    next_delta = {}
+                    for rule in stratum_rules:
+                        rows = [({}, (), None, None, False)]
+                        for atom in rule.when:
+                            joined = []
+                            for bindings, premises, valid, row_world, used_delta in rows:
+                                for fact in facts_by_predicate.get(atom.predicate, ()):
+                                    if row_world is not None and fact["world"] != row_world:
+                                        continue
+                                    subject_bindings = unify(atom.subject, fact["subject"], bindings)
+                                    if subject_bindings is None:
+                                        continue
+                                    bound = unify(atom.object, fact["object"], subject_bindings)
+                                    if bound is None:
+                                        continue
+                                    intersection = fact["valid"] if valid is None else valid.intersection(fact["valid"])
+                                    if intersection is None:
+                                        continue
+                                    joined.append((
+                                        bound,
+                                        (*premises, fact["ref"]),
+                                        intersection,
+                                        fact["world"],
+                                        used_delta or fact["ref"] in delta,
+                                    ))
+                            rows = joined
+                            if not rows:
+                                break
+                        for bindings, premises, valid, row_world, used_delta in rows:
+                            if not used_delta:
+                                continue
+                            absences = self._absence_checks(
+                                rule, bindings, valid, row_world, facts_by_predicate, scope
+                            )
+                            if absences is None:
+                                continue
+                            subject = bindings.get(rule.then.subject, rule.then.subject)
+                            object_value = bindings.get(rule.then.object, rule.then.object)
+                            key = conclusion_key(subject, rule.then.predicate, object_value, row_world)
+                            output = outputs.get(key)
+                            if output is None:
+                                if len(outputs) >= max_derivations:
+                                    raise RuleEvaluationLimitError(
+                                        f"truth maintenance exceeded max_derivations={max_derivations}"
+                                    )
+                                output = {
+                                    "subject": subject,
+                                    "predicate": rule.then.predicate,
+                                    "object": object_value,
+                                    "world": row_world,
+                                    "valid": valid,
+                                    "supports": set(),
+                                    "fact": None,
+                                }
+                                outputs[key] = output
+                                next_delta[key] = output
+                            merged = union_validity(output["valid"], valid)
+                            if merged != output["valid"]:
+                                output["valid"] = merged
+                                next_delta[key] = output
+                            support = (rule.version_id, premises, absences)
+                            if support not in output["supports"]:
+                                support_count += 1
+                                if support_count > max_justifications:
+                                    raise RuleEvaluationLimitError(
+                                        f"truth maintenance exceeded max_justifications={max_justifications}"
+                                    )
+                                output["supports"].add(support)
+                    iterations += 1
+                    added = []
+                    for key, output in next_delta.items():
+                        fact = output["fact"]
+                        if fact is None:
+                            fact = add_fact(
+                                ("derived", key),
+                                output["subject"],
+                                output["predicate"],
+                                output["object"],
+                                output["world"],
+                                output["valid"],
+                            )
+                            output["fact"] = fact
+                        else:
+                            fact["valid"] = output["valid"]
+                        added.append(fact)
+                    delta = {fact["ref"] for fact in added}
 
             def semantic_premise(version_id):
                 premise = self.get_claim_version(version_id, through_commit=input_horizon)
@@ -4657,8 +4779,14 @@ class GraphDB:
 
             def existing_semantic_supports(version):
                 return {
-                    (rule_id, tuple(semantic_premise(premise) for premise in premises))
-                    for rule_id, premises in self._rule_justifications(version.claim.provenance)
+                    (
+                        rule_id,
+                        tuple(semantic_premise(premise) for premise in premises),
+                        absences,
+                    )
+                    for rule_id, premises, absences in self._rule_justifications(
+                        version.claim.provenance
+                    )
                 }
 
             changed = set()
@@ -4678,7 +4806,7 @@ class GraphDB:
                         continue
                     if any(
                         reference[0] == "derived" and reference[1] in changed
-                        for _, premises in output["supports"]
+                        for _, premises, _ in output["supports"]
                         for reference in premises
                     ):
                         changed.add(key)
@@ -4695,14 +4823,17 @@ class GraphDB:
 
             def encoded_supports(output):
                 encoded = []
-                for rule_id, premises in sorted(output["supports"]):
+                for rule_id, premises, absences in sorted(
+                    output["supports"], key=self._justification_order
+                ):
                     premise_ids = tuple(
                         reference[1]
                         if reference[0] == "version"
-                        else result_ids[reference[1]]
-                        for reference in premises
+                        else result_ids[reference[1]] for reference in premises
                     )
-                    encoded.append(RuleJustification(rule_id, premise_ids).to_dict())
+                    encoded.append(
+                        RuleJustification(rule_id, premise_ids, absences).to_dict()
+                    )
                 return encoded
 
             writes = []
@@ -4873,7 +5004,9 @@ class GraphDB:
             if depth >= max_depth:
                 truncated = True
                 return
-            for rule_id, premise_ids in sorted(supports):
+            for rule_id, premise_ids, absences in sorted(
+                supports, key=self._justification_order
+            ):
                 rule = rules.get(rule_id)
                 if rule is None or not add_node(rule_id, "rule", rule):
                     truncated = True
@@ -4888,6 +5021,13 @@ class GraphDB:
                         continue
                     edges.add(ExplanationEdge(rule_id, premise_id, "premise", ordinal))
                     visit(premise, depth + 1)
+                for absence in absences:
+                    absence_id = absence_node_id(rule_id, absence)
+                    if not add_node(absence_id, "absence", absence):
+                        continue
+                    edges.add(ExplanationEdge(
+                        rule_id, absence_id, "absent_premise", absence.position
+                    ))
 
         visit(root, 0)
         ordered_nodes = tuple(nodes[key] for key in sorted(nodes))

@@ -366,6 +366,68 @@ remain separate from mutable graph edges and unqualified Cypher. Rule
 evaluation does not consume negative claims, literal-object claims, or claims
 from different worlds in one match.
 
+Closed-world negation and stratification
+----------------------------------------
+
+``create_rule(..., not_when=[...], closed_world=[...])`` adds negated body
+atoms. A negated atom is an absence check, not a negative claim or a stored
+denial. Every negated predicate must appear in the active program's
+closed-world declarations; the effective scope is the union of declarations on
+the latest version of each rule. Undeclared predicates, unbound negated
+variables and negative dependency cycles are rejected before the catalog
+changes.
+
+``run_rules`` and ``maintain_truth`` order positive predicate components so
+every negative edge points strictly downward. A negated atom anti-joins only
+against completed lower strata; a negative edge inside one component is
+unstratifiable and never falls back to unstratified evaluation. Components
+without rules keep zero-round positions. Programs containing negation exclude
+prior rule-engine conclusions from their authoritative input, so a stale
+derived claim cannot block an absence check after its base support disappears.
+
+For a candidate conclusion interval, a negated atom is satisfied only when no
+matching positive claim overlaps any part of that interval. Partial overlap
+blocks the derivation instead of producing an interval fragment that the claim
+model cannot represent. Rules whose interval spans periods with and without
+the negated fact must therefore be evaluated over narrower intervals or model
+the distinction with explicit claims. This is conservative absence evidence,
+not a closed-world default for undocumented predicates.
+
+.. code-block:: python
+
+   from pathlib import Path
+   from tempfile import TemporaryDirectory
+   from gestaltdb.graphdb import GraphDB
+
+   with TemporaryDirectory() as directory:
+       graph = GraphDB.create(Path(directory) / "db", backend="lmdb", serializer="json")
+       try:
+           graph.assert_claim(
+               subject="supplier-1", predicate="SHIPS", object="widgets",
+               polarity="positive", agent="erp", valid=(0, 100),
+           )
+           graph.create_rule(
+               "review-uncertified",
+               when=[("?s", "SHIPS", "?goods")],
+               then=("?s", "REQUIRES_SAFETY_REVIEW", "yes"),
+               not_when=[("?s", "CERTIFIED", "iso9001")],
+               closed_world=["CERTIFIED"],
+           )
+           graph.run_rules(as_of=10)
+           flagged = next(graph.iter_claims_as_of(
+               valid_time=10, predicate="REQUIRES_SAFETY_REVIEW"))
+           assert flagged.claim.subject == "supplier-1"
+
+           graph.assert_claim(
+               subject="supplier-1", predicate="CERTIFIED", object="iso9001",
+               polarity="positive", agent="audit", valid=(0, 100),
+           )
+           assert graph.maintain_truth(as_of=10).retracted_count == 1
+           assert list(graph.iter_claims_as_of(
+               valid_time=10, predicate="REQUIRES_SAFETY_REVIEW")) == []
+       finally:
+           graph.close()
+
 Incremental Truth Maintenance and Explanations
 -----------------------------------------------
 
@@ -399,11 +461,15 @@ no maintenance commit.
 
 ``explain_claim`` resolves the claim at both valid and system time and returns a
 ``ClaimExplanation`` graph. Claim nodes contain exact immutable
-``ClaimVersion`` values, rule nodes contain exact ``RuleVersion`` values, and
-``derived_by``/``premise`` edges retain premise order. Historical horizons keep
-earlier explanations reproducible after later corrections or retractions.
+``ClaimVersion`` values, rule nodes contain exact ``RuleVersion`` values,
+absence nodes contain ``RuleAbsence`` evidence, and
+``derived_by``/``premise``/``absent_premise`` edges retain positive and
+negated body positions. Absence nodes are closed-world checks at the
+evaluation horizon, not claim versions or negative facts. Historical horizons
+keep earlier explanations reproducible after later corrections or retractions.
 Traversal tracks visited version IDs and accepts ``max_depth`` and ``max_nodes``
-bounds; ``truncated`` reports a reached bound.
+bounds; ``truncated`` reports a reached bound. The unified audit export in
+``gestaltdb.inference`` preserves absence nodes and their justification groups.
 
 .. code-block:: python
 
