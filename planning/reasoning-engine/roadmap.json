@@ -253,10 +253,12 @@
       "integration_commit": "59cc1a4"
     },
     "RE-27": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-27-proofs",
       "worktree": "re-27-proofs",
-      "contract": "docs/reasoning-proofs.rst"
+      "contract": "docs/reasoning-proofs.rst",
+      "pr": 241,
+      "validation": "Focused suites (explanations/scale/contracts incl. isolation) green; docs drift, Sphinx -W, roadmap validator passed. Export/checkpoint evidence frozen. PR CI running."
     }
   },
   "source_sha256": {
