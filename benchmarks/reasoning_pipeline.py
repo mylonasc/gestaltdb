@@ -27,8 +27,10 @@ def run_once(rows: int, backend: str, batch_rows: int) -> dict:
     if not 1 <= rows <= 1_000_000 or not 1 <= batch_rows <= 100_000:
         raise ValueError("rows must be 1..1000000 and batch_rows 1..100000")
     metrics = {}
+    backend_options = {"map_size": max(64 * 1024 * 1024, rows * 32_768)} if backend == "lmdb" else {}
     with tempfile.TemporaryDirectory(prefix="reasoning-pipeline-", dir="/tmp/opencode") as directory:
-        graph = GraphDB.create(Path(directory) / "db", backend=backend, serializer="json")
+        graph = GraphDB.create(Path(directory) / "db", backend=backend, serializer="json",
+                               backend_options=backend_options)
         try:
             begin = time.perf_counter()
             for index in range(rows):
@@ -74,12 +76,31 @@ def run_once(rows: int, backend: str, batch_rows: int) -> dict:
             digest = hashlib.sha256(json.dumps(sorted(map(identity, evidence))).encode()).hexdigest()
             return {"status": "ok", "rows": rows, "closure_facts": len(result.facts),
                     "evidence_digest": digest, "backend": backend, "batch_rows": batch_rows,
+                    "backend_options": backend_options,
                     "cache_state": "fresh worker with newly loaded warm database; not OS-cold",
                     "scanned": profile.scanned, "accepted": profile.rows, "verifications": profile.verifications,
                     "metrics": metrics, "rss_peak_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024,
                     "mode": "closure-only; supports/publication/native adapters require separate measurements"}
         finally:
             graph.close()
+
+
+def run_worker(command: list[str], timeout: float) -> dict:
+    """Preserve bounded worker diagnostics; a failed worker is never success."""
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return {"status": "timeout", "timeout_s": timeout}
+    if completed.returncode:
+        return {"status": "error", "returncode": completed.returncode,
+                "stderr": completed.stderr[-4000:], "stdout": completed.stdout[-4000:]}
+    try:
+        sample = json.loads(completed.stdout)
+    except (ValueError, TypeError):
+        return {"status": "error", "reason": "worker emitted invalid JSON", "stdout": completed.stdout[-4000:]}
+    if not isinstance(sample, dict) or sample.get("status") != "ok" or not isinstance(sample.get("metrics"), dict):
+        return {"status": "error", "reason": "worker emitted an incomplete sample"}
+    return sample
 
 
 def main():
@@ -101,22 +122,28 @@ def main():
                "--backend", args.backend, "--batch-rows", str(args.batch_rows)]
     samples = []
     for _ in range(args.repeats):
-        completed = subprocess.run(command, capture_output=True, text=True, timeout=args.timeout, check=True)
-        samples.append(json.loads(completed.stdout))
+        sample = run_worker(command, args.timeout)
+        samples.append(sample)
+        if sample["status"] != "ok":
+            break
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     summary = {}
-    for metric in samples[0]["metrics"]:
+    complete = len(samples) == args.repeats and all(sample["status"] == "ok" for sample in samples)
+    for metric in samples[0]["metrics"] if complete else ():
         values = sorted(sample["metrics"][metric] for sample in samples)
         summary[metric] = {"p50": statistics.median(values), "p95": values[max(0, math.ceil(.95 * len(values)) - 1)]}
     report = {"schema_version": 1, "git_revision": revision, "python": sys.version, "samples": samples,
               "working_tree_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], text=True).strip()),
               "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "summary": summary,
-              "complete": all(sample["status"] == "ok" for sample in samples)}
+              "configuration": {"rows": args.rows, "backend": args.backend, "batch_rows": args.batch_rows,
+                                "repeats": args.repeats, "timeout_s": args.timeout}, "complete": complete}
     text = json.dumps(report, indent=2)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(text + "\n")
     print(text)
+    if not complete:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

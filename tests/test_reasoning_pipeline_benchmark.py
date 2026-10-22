@@ -1,5 +1,9 @@
 """Small semantic smoke; this is not evidence for 100K-row performance."""
 
+import json
+import subprocess
+import sys
+
 import pytest
 
 
@@ -14,3 +18,37 @@ def test_pipeline_worker_checks_exact_evidence_and_closure():
     assert len(report["evidence_digest"]) == 64
     assert report["metrics"]["load_s"] >= 0
     assert report["metrics"]["reasoning_pipeline_s"] >= report["metrics"]["evaluate_s"]
+    assert report["backend_options"]["map_size"] >= 64 * 1024 * 1024
+
+
+def test_failed_workers_write_an_explicit_incomplete_report(tmp_path, monkeypatch):
+    from benchmarks import reasoning_pipeline as runner
+
+    output = tmp_path / "failed.json"
+    monkeypatch.setattr(sys, "argv", ["runner", "--repeats", "2", "--output", str(output)])
+    calls = []
+
+    def failure(command, timeout):
+        calls.append(command)
+        return {"status": "error", "stderr": "MapFullError", "returncode": 1}
+
+    monkeypatch.setattr(runner, "run_worker", failure)
+    with pytest.raises(SystemExit) as error:
+        runner.main()
+    assert error.value.code == 1
+    report = json.loads(output.read_text())
+    assert not report["complete"] and report["summary"] == {}
+    assert report["samples"][0]["stderr"] == "MapFullError"
+    assert len(calls) == 1  # do not repeat a known failing expensive workload
+
+
+def test_worker_timeout_and_invalid_output_are_not_success(monkeypatch):
+    from benchmarks import reasoning_pipeline as runner
+
+    def timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
+
+    monkeypatch.setattr(runner.subprocess, "run", timeout)
+    assert runner.run_worker(["worker"], 1)["status"] == "timeout"
+    monkeypatch.setattr(runner.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a[0], 0, "no JSON", ""))
+    assert runner.run_worker(["worker"], 1)["status"] == "error"
