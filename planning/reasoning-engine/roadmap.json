@@ -151,10 +151,12 @@
       "integration_commit": "31f72d5"
     },
     "RE-16": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-16-deletion",
       "worktree": "re-16-deletion",
-      "contract": "docs/reasoning-maintenance.rst"
+      "contract": "docs/reasoning-maintenance.rst",
+      "pr": 206,
+      "validation": "Focused suites (deletion/maintenance/contracts) green; docs drift, Sphinx -W, roadmap validator passed. 30-case oracle parity; affected-work 13 vs ~48.7k. PR CI running."
     }
   },
   "source_sha256": {
