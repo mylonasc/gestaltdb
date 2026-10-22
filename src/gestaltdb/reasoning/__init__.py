@@ -38,6 +38,7 @@ from .typed import AggregateRule, Aggregation, Comparison, GenericEngine, Generi
 from .catalog import CatalogEntry, PinnedGeneration, RuleCatalog, catalog_legacy_parity_gates, migrate_dict, pin_generation
 from .intervals import Interval, IntervalError, IntervalSet, SupportSegment, coalesce_segments
 from .el import EL_PROFILE, ELClassification, ELDerivation, check_proof, classify, holds_in_all_models, normalize_axiom
+from .explanations import CHECKPOINT_FORMAT_VERSION, RankedWitness, checkpoint_closure, discard_checkpoint, export_proof, is_complete_checkpoint, minimal_witness, resume_checkpoint, top_k
 from .profiles import ConstructEntry, MATRIX, NAMED_SUBSETS, approval_checklist, check_construct, matrix_digest, subset_constructs
 from .scale import OPERATOR_API_VERSION, SpillBudget, WorkerPolicy, backend_scale_notes, check_operator_api
 from .scopes import CalculusPolicy, CalculusRegistry, CalculusSpec, InheritanceGrant, InheritancePolicy, ModalBoundary, ModalScope, approval_gates as scope_approval_gates
@@ -68,6 +69,9 @@ __all__ = [
     "approval_checklist", "check_construct", "matrix_digest", "subset_constructs",
     "EL_PROFILE", "ELClassification", "ELDerivation",
     "check_proof", "classify", "holds_in_all_models", "normalize_axiom",
+    "CHECKPOINT_FORMAT_VERSION", "RankedWitness",
+    "checkpoint_closure", "discard_checkpoint", "export_proof",
+    "is_complete_checkpoint", "minimal_witness", "resume_checkpoint", "top_k",
     "CalculusPolicy", "CalculusRegistry", "CalculusSpec",
     "InheritanceGrant", "InheritancePolicy", "ModalBoundary", "ModalScope",
     "scope_approval_gates",

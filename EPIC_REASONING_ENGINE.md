@@ -612,3 +612,13 @@ satisfied). Join-shape/transitive profiler with frozen evidence,
 DRed-vs-rebuild crossover comparison with no-adoption default, spill/worker
 ownership-cancellation-budget gates and a pinned common operator API. No
 second runtime, no constant-memory promises.
+
+### Implementation started: RE-27 (#188)
+
+Dedicated worktree `re-27-proofs`, branch `feature/re-27-proofs`, based
+on accepted integration `59cc1a4` (RE-26 integrated; prerequisites
+RE-18/RE-22 satisfied; final roadmap slice). Bounded minimal/top-k proof
+contracts with witness-vs-supports export interchange (#126), authenticated
+generation checkpoints with incompatible-resume rejection and explicit
+incomplete discard, ranked-vs-deterministic separation with published
+complexity/resource limits.
