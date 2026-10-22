@@ -1,11 +1,17 @@
 # Exact-version ledger transition contract — #250
 
-Status: design milestone; adapter admission depends on #248. No string token
+Status: executable standalone ledger; adapter admission depends on #248. No string token
 in this design independently authenticates a backend snapshot.
 
 The ledger maps an exact immutable assertion/version ID to one logical typed
 fact. It maintains the inverse set of active version IDs per fact. Derivations
 remain in the maintenance support index, not this asserted-evidence ledger.
+
+Implemented in `reasoning/evidence_ledger.py`; see
+`docs/reasoning-evidence-ledger.rst`. Tombstones bind retired IDs permanently
+within the bounded ledger; assertion retries do not reactivate retired IDs.
+Scope identity excludes the changing source horizon, whose transition must be
+authenticated separately by the future session adapter.
 
 | Atomic transition | Logical maintenance delta |
 |---|---|
