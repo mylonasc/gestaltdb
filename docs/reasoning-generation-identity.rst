@@ -1,7 +1,7 @@
 :orphan:
 
 Opt-in generation identity and admission
-=======================================
+========================================
 
 ``gestaltdb.reasoning.generation.GenerationIdentity`` composes a temporal source
 identity, ``InputContext``, program/catalog digests, semantic profile and exact
