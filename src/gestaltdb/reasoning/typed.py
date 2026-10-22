@@ -682,7 +682,12 @@ class _TypedIndex:
 
     @staticmethod
     def _key(value):
-        return ("literal", value.kind, value.lexical) if isinstance(value, Literal) else ("entity", value)
+        if isinstance(value, Literal):
+            # IEEE signed zero compares equal; positional probes must agree
+            # with exact fact membership and literal unification.
+            lexical = "0.0" if value.kind == "float" and value.value == 0.0 else value.lexical
+            return ("literal", value.kind, lexical)
+        return ("entity", value)
 
     def add(self, fact: TypedFact) -> None:
         if fact in self.facts:
