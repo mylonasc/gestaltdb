@@ -19,8 +19,9 @@ explicit rematerialization; B/F stays a documented conditional alternative.
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
-from typing import Callable, Iterable
+from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import Callable, Iterable, Mapping
 
 from .model import ReasoningError, ReasoningLimitError, ReasoningLimits, _text, check_cancelled
 from .typed import (
@@ -79,6 +80,9 @@ class DependencyIndex:
     program_digest: str
     horizon: str
     supports: tuple[Support, ...]
+    _supports_by_fact: Mapping[TypedFact, tuple[Support, ...]] = field(init=False, repr=False, compare=False, hash=False)
+    _derived_by_premise: Mapping[TypedFact, tuple[TypedFact, ...]] = field(init=False, repr=False, compare=False, hash=False)
+    _premises_by_fact: Mapping[TypedFact, tuple[TypedFact, ...]] = field(init=False, repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
         _text(self.program_digest, "program_digest")
@@ -88,8 +92,20 @@ class DependencyIndex:
         if not all(isinstance(item, Support) for item in self.supports):
             raise ReasoningError("supports must contain only Support values")
         object.__setattr__(self, "supports", tuple(sorted(set(self.supports),
-                                                           key=lambda s: (s.fact.predicate, s.rule_id,
-                                                                          _sort_key(s.fact)))))
+                                                            key=lambda s: (s.fact.predicate, s.rule_id,
+                                                                           _sort_key(s.fact)))))
+        forward, reverse, premises = defaultdict(list), defaultdict(set), defaultdict(set)
+        for support in self.supports:
+            forward[support.fact].append(support)
+            premises[support.fact].update(support.premises)
+            for premise in support.premises:
+                reverse[premise].add(support.fact)
+        object.__setattr__(self, "_supports_by_fact", MappingProxyType({
+            fact: tuple(items) for fact, items in forward.items()}))
+        object.__setattr__(self, "_derived_by_premise", MappingProxyType({
+            fact: tuple(sorted(items, key=_sort_key)) for fact, items in reverse.items()}))
+        object.__setattr__(self, "_premises_by_fact", MappingProxyType({
+            fact: tuple(sorted(items, key=_sort_key)) for fact, items in premises.items()}))
 
     @property
     def digest(self) -> str:
@@ -102,18 +118,13 @@ class DependencyIndex:
             ensure_ascii=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
     def supports_for(self, fact: TypedFact) -> tuple[Support, ...]:
-        return tuple(item for item in self.supports if item.fact == fact)
+        return self._supports_by_fact.get(fact, ())
 
     def derived_from(self, premise: TypedFact) -> tuple[TypedFact, ...]:
-        return tuple(sorted({item.fact for item in self.supports if premise in item.premises},
-                            key=_sort_key))
+        return self._derived_by_premise.get(premise, ())
 
     def premises_of(self, fact: TypedFact) -> tuple[TypedFact, ...]:
-        out = set()
-        for item in self.supports:
-            if item.fact == fact:
-                out.update(item.premises)
-        return tuple(sorted(out, key=_sort_key))
+        return self._premises_by_fact.get(fact, ())
 
 
 @dataclass(frozen=True)
@@ -516,17 +527,13 @@ def retract_facts(program: GenericProgram, closure: Iterable[TypedFact], retract
     known = set(known_list)
     if index.program_digest != program.digest or index.horizon != _digest_facts(sorted(known, key=_sort_key)):
         raise ReasoningError("stale dependency index; rematerialize explicitly")
-    reverse: dict[TypedFact, set[TypedFact]] = defaultdict(set)
-    for item in index.supports:
-        for premise in item.premises:
-            reverse[premise].add(item.fact)
     overdeleted = {fact for fact in doomed_list if fact in known}
     queue = sorted(overdeleted, key=_sort_key)
     work = 0
     while queue:
         check_cancelled(cancel)
         current = queue.pop()
-        for derived in sorted(reverse.get(current, ()), key=_sort_key):
+        for derived in index.derived_from(current):
             work += 1
             if derived in known and derived not in overdeleted:
                 overdeleted.add(derived)
