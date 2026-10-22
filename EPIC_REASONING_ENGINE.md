@@ -585,3 +585,12 @@ RE-09/RE-11/RE-22 satisfied; first RE-E5 slice). Construct-by-construct
 semantics/conformance matrix with digest pinning, Horn/validation/
 satisfiability separation gates, and named-subset publication with
 per-extension approval. No full-OWL-RL claim.
+
+### Implementation started: RE-24 (#185)
+
+Dedicated worktree `re-24-el`, branch `feature/re-24-el`, based on
+accepted integration `0e0ec9a` (RE-23 integrated; prerequisite RE-23
+satisfied). Bounded EL completion with witness identity, chase
+termination and strict budgets; independent proof replay plus
+finite-model oracle with 40-case parity; experimental-profile gate,
+anonymous-construction rejection and full-OWL-DL deferral record.
