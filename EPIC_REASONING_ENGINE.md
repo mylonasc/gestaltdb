@@ -594,3 +594,12 @@ satisfied). Bounded EL completion with witness identity, chase
 termination and strict budgets; independent proof replay plus
 finite-model oracle with 40-case parity; experimental-profile gate,
 anonymous-construction rejection and full-OWL-DL deferral record.
+
+### Implementation started: RE-25 (#186)
+
+Dedicated worktree `re-25-scopes`, branch `feature/re-25-scopes`, based
+on accepted integration `1c64d3a` (RE-24 integrated; prerequisite RE-22
+satisfied). Default-deny inheritance allowlists, temporal-modal bounds
+with the modal API unchanged, separately-selected confidence calculi
+with four-policy approval, and design-gate retention with #124/#128
+coordination.
