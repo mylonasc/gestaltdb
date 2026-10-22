@@ -179,12 +179,19 @@
       "integration_commit": "f8cc14e"
     },
     "RE-19": {
-      "status": "in-review",
+      "status": "integrated",
       "branch": "feature/re-19-intervals",
       "worktree": "re-19-intervals",
       "contract": "docs/reasoning-intervals.rst",
       "pr": 220,
-      "validation": "Focused suites (intervals/contracts incl. 300-case oracle) green; docs drift, Sphinx -W, roadmap validator passed. 5k-interval evidence (union/diff/inter/coalesce in ms). PR CI running."
+      "validation": "Focused suites (intervals/contracts incl. 300-case oracle) green; docs drift, Sphinx -W, roadmap validator passed; linear-sweep 5k evidence; Python 3.10-3.13 and fuzz CI passed.",
+      "integration_commit": "ebd652d"
+    },
+    "RE-20": {
+      "status": "in-progress",
+      "branch": "feature/re-20-temporal",
+      "worktree": "re-20-temporal",
+      "contract": "docs/reasoning-temporal.rst"
     }
   },
   "source_sha256": {
