@@ -974,16 +974,19 @@ class GenericEngine:
     def _evaluate_aggregates(self, program, full, budget, cancel):
         for rule in program.aggregates:
             check_cancelled(cancel)
+            variables = tuple(sorted(
+                frozenset().union(*(atom.variables for atom in rule.body)), key=lambda var: var.name))
             rows: set[tuple] = set()
             for pivot in range(len(rule.body)):
                 for bindings in self._matches(rule, pivot, full, full, budget):
-                    rows.add(tuple(bindings.get(term, term) if isinstance(term, Variable) else term
-                                   for term in (*rule.group, *[item.source for item in rule.aggregations])))
-            groups: dict[tuple, dict[str, list]] = {}
-            width = len(rule.group)
-            for row in rows:
-                key = row[:width]
-                groups.setdefault(key, []).append(row[width:])
+                    # Deduplicate repeated pivot work, not distinct body rows
+                    # that happen to project to the same aggregate operands.
+                    rows.add(tuple(bindings[variable] for variable in variables))
+            groups: dict[tuple, list[tuple]] = {}
+            for row in sorted(rows, key=_group_key):
+                bindings = dict(zip(variables, row))
+                key = tuple(bindings[variable] for variable in rule.group)
+                groups.setdefault(key, []).append(tuple(bindings[item.source] for item in rule.aggregations))
             for key, members in sorted(groups.items(), key=lambda item: _group_key(item[0])):
                 targets: dict = {}
                 for index, item in enumerate(rule.aggregations):
