@@ -225,10 +225,12 @@
       "integration_commit": "0e0ec9a"
     },
     "RE-24": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-24-el",
       "worktree": "re-24-el",
-      "contract": "docs/reasoning-el.rst"
+      "contract": "docs/reasoning-el.rst",
+      "pr": 238,
+      "validation": "Focused suites (el/profiles/contracts incl. 40-case oracle parity, proof replay, budgets) green; docs drift, Sphinx -W, roadmap validator passed. PR CI running."
     }
   },
   "source_sha256": {
