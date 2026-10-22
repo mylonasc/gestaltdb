@@ -40,3 +40,28 @@ each time. SCC plans (``reasoning/plans.py``) group mutually recursive rules
 so each group reaches its own fixpoint before downstream rules fire; demand
 evaluation works backwards from the question ("who is a ``Person``?") and
 only explores rules that could produce an answer.
+
+Theory and further reading
+---------------------------
+
+- `Datalog <https://en.wikipedia.org/wiki/Datalog>`_ fixes the language:
+  function-free Horn rules with set semantics. `Prolog
+  <https://en.wikipedia.org/wiki/Prolog>`_ relaxes it toward a full
+  programming language (compound terms, cut, negation as failure) at the cost
+  of declarative evaluation order — which is why gestaltdb compiles
+  ontologies to Datalog, not Prolog.
+- `Least fixed point <https://en.wikipedia.org/wiki/Least_fixed_point>`_
+  and the `Knaster–Tarski theorem
+  <https://en.wikipedia.org/wiki/Knaster%E2%80%93Tarski_theorem>`_ justify
+  the ``lfp(T_P)`` equation above: ``T_P`` is monotone over the finite
+  powerset lattice of ground facts, so iterating from ``∅`` converges to the
+  least model. Finiteness (no function symbols) is what keeps the iteration
+  from running forever.
+- `Magic sets <https://en.wikipedia.org/wiki/Magic_sets>`_ is the rewriting
+  behind demand evaluation: bound arguments propagate sideways so the
+  fixpoint only explores facts relevant to the query, with full-closure
+  parity by construction.
+- `Stratified negation
+  <https://en.wikipedia.org/wiki/Stratified_negation>`_ explains the scoping
+  discipline of ``closed`` declarations — negation applies per completed
+  stratum, never inside its own recursive loop.

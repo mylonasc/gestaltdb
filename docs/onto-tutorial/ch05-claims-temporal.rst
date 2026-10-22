@@ -24,3 +24,27 @@ Temporal closure evaluates change segments, not samples at one instant
 Confidence/fuzzy combination is a separately-selected calculus, never silent
 multiplication (#186, RE-25). Domain/range *entail* memberships; validation
 (``reasoning/validation.py``) *reports* conflicts without explosion.
+
+Theory and further reading
+---------------------------
+
+- `Temporal database <https://en.wikipedia.org/wiki/Temporal_database>`_
+  distinguishes valid time (when the world was so) from transaction/system
+  time (when the database recorded it). GestaltDB keeps exactly this split:
+  ``validFrom``/``validTo`` on versions, ``systemFrom`` on commits — which is
+  why ``verify_closure`` can replay history instead of trusting one snapshot.
+- `Allen's interval algebra
+  <https://en.wikipedia.org/wiki/Allen%27s_interval_algebra>`_ catalogues the
+  relations between time intervals (before, meets, overlaps, …). The tutorial
+  uses half-open ``[start, end)`` intervals rather than Allen's closed ones:
+  touching intervals (``[1,2)``, ``[2,3)``) are then disjoint by construction,
+  so coalescing never needs an epsilon.
+- `Open-world assumption
+  <https://en.wikipedia.org/wiki/Open-world_assumption>`_ vs `closed-world
+  assumption <https://en.wikipedia.org/wiki/Closed-world_assumption>`_:
+  claims default to open-world (absent evidence means ``unknown``, not false);
+  only explicitly ``closed`` scopes license negation-as-absence (ch03).
+- `Kripke semantics <https://en.wikipedia.org/wiki/Kripke_semantics>`_
+  (possible worlds linked by accessibility relations) is the model behind the
+  modal/belief layer: each agent's frame is a set of worlds, and ``entails``
+  checks the formula in the worlds reachable under the depth/state bounds.

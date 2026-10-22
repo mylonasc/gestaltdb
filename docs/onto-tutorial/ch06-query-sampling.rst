@@ -22,3 +22,17 @@ Seed filtering alone never constrains every hop — define the eligible graph
 with snapshot ``node_filter`` / ``edge_filter``. See :doc:`../typed-sampling`
 and :doc:`../ontology-graph`. End-to-end pipeline glue is open work (#255,
 #256).
+
+Theory and further reading
+---------------------------
+
+- `SPARQL <https://en.wikipedia.org/wiki/SPARQL>`_ (`SPARQL 1.1 overview
+  <https://www.w3.org/TR/sparql11-overview/>`_) shows the alternative design:
+  entailment regimes baked into the query language itself. GestaltDB goes the
+  other way — plain Cypher over stored facts plus explicit adapters — so that
+  inferred and stored facts never mix silently.
+- `Graph query language
+  <https://en.wikipedia.org/wiki/Graph_query_language>`_ compares the
+  traversal idioms (pattern matching, path queries, fanout control) that both
+  Cypher clauses and ``expand_edge_types`` sampling implement in their own
+  layer.

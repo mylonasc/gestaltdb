@@ -78,6 +78,29 @@ data; RDF/OWL stores (RDFLib, OWL-RL, Jena) treat triples plus entailment
 regimes as the data model. GestaltDB is an LPG store with an opt-in, offline
 semantic overlay — nothing is silently rewritten.
 
+Theory and further reading
+---------------------------
+
+- `Graph database <https://en.wikipedia.org/wiki/Graph_database>`_ and
+  `Graph query language <https://en.wikipedia.org/wiki/Graph_query_language>`_
+  survey the LPG/RDF split and the language families (Cypher, Gremlin,
+  SPARQL) that grew around each side.
+- `Cypher <https://en.wikipedia.org/wiki/Cypher_(query_language)>`_ is
+  pattern matching over stored structure; `SPARQL
+  <https://en.wikipedia.org/wiki/SPARQL>`_ is the W3C counterpart over
+  triple stores (`SPARQL 1.1 overview <https://www.w3.org/TR/sparql11-overview/>`_).
+  GestaltDB deliberately exposes Cypher but no SPARQL endpoint — inferred
+  triples are consumed through explicit adapters, not a second query language.
+- `Resource Description Framework
+  <https://en.wikipedia.org/wiki/Resource_Description_Framework>`_ (`RDF 1.1
+  Concepts <https://www.w3.org/TR/rdf11-concepts/>`_) defines the triple
+  model gestaltdb projects onto; the `Semantic Web
+  <https://en.wikipedia.org/wiki/Semantic_Web>`_ article gives the original
+  vision (machine-readable web of data) that OWL and the ontology layer come
+  from.
+- `GraphQL <https://en.wikipedia.org/wiki/GraphQL>`_ queries by client-shaped
+  selection rather than pattern matching — same graph, different gesture.
+
 .. code-block:: python
 
    from gestaltdb.graphdb import Edge, GraphDB, Node
