@@ -663,6 +663,12 @@ the in-batch pool is exhausted, the configured source and random fallback run as
 before. ``accepted_in_batch`` counts accepted peers in
 ``return_diagnostics``.
 
+``candidate_distribution="degree"`` applies only to the random fallback and
+weights candidates by ``incident_degree ** degree_exponent`` (default
+``0.75``). In-batch and context candidates are still tried first. A graph with
+no incident edges falls back to uniform sampling; non-finite weights fail closed
+instead of silently degrading.
+
 ``sample_hard_negatives`` accepts aligned ``positive_times_us`` and optionally
 returns deterministic rejection counters with ``return_diagnostics=True``.
 Direct calls on temporal snapshots must supply ``positive_times_us`` or a
