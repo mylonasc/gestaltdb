@@ -336,7 +336,7 @@ class AggregateRule:
 
     ``group`` lists grouping variables (possibly empty for a global aggregate).
     Each ``Aggregation`` consumes a body-bound ``source`` into a fresh
-    ``target``; the head may use body variables and targets only. Heads define
+    ``target``; the head may use grouping keys and targets only. Heads define
     sink predicates: they must not occur in any rule body of the same program,
     and aggregate bodies must not reference other aggregate heads, keeping the
     aggregate stratum single-pass and termination-obvious. Recursive aggregates
@@ -379,10 +379,10 @@ class AggregateRule:
         for item in aggregations:
             if item.source not in bound:
                 raise ReasoningError("aggregation sources must occur in the relational body")
-        allowed = bound | set(targets)
+        allowed = set(group) | set(targets)
         head_variables = {term for term in self.head.args if isinstance(term, Variable)}
         if not head_variables <= allowed:
-            raise ReasoningError("unsafe rule: head variables must be bound by the body or an aggregation")
+            raise ReasoningError("unsafe rule: head variables must be grouping keys or aggregation targets")
         object.__setattr__(self, "body", body)
         object.__setattr__(self, "group", group)
         object.__setattr__(self, "aggregations", aggregations)
