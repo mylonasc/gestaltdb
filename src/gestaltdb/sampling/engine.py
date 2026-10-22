@@ -1169,6 +1169,7 @@ class SamplerEngine:
             "attempted": 0, "accepted": 0, "rejected_self_loop": 0,
             "rejected_duplicate": 0, "rejected_type": 0,
             "rejected_unavailable": 0, "rejected_positive": 0, "repeated": 0,
+            "accepted_in_batch": 0,
         }
         if positives.size == 0 or config.negatives_per_positive == 0:
             empty = np.empty((positives.shape[0] if positives.ndim else 0, 0, 3), dtype=np.int64)
@@ -1202,14 +1203,35 @@ class SamplerEngine:
             times = np.full(positives.shape[0], temporal.instant.epoch_microseconds, dtype=np.int64)
         result = np.empty((positives.shape[0], config.negatives_per_positive, 3), dtype=np.int64)
         candidate_cache: dict[tuple[int, int, int, bool, int | None], list[int]] = {}
+        in_batch_heads: dict[int, list[int]] = {}
+        in_batch_tails: dict[int, list[int]] = {}
+        if config.in_batch:
+            for src, rel, dst in positives.tolist():
+                in_batch_heads.setdefault(int(rel), []).append(int(src))
+                in_batch_tails.setdefault(int(rel), []).append(int(dst))
+            in_batch_heads = {
+                rel: list(dict.fromkeys(nodes))
+                for rel, nodes in in_batch_heads.items()
+            }
+            in_batch_tails = {
+                rel: list(dict.fromkeys(nodes))
+                for rel, nodes in in_batch_tails.items()
+            }
 
         for row_idx, (src, rel, dst) in enumerate(positives.tolist()):
             group_seen: set[tuple[int, int, int]] = set()
+            in_batch_pool = (
+                (
+                    in_batch_heads.get(int(rel), []),
+                    in_batch_tails.get(int(rel), []),
+                )
+                if config.in_batch else None
+            )
             for neg_idx in range(config.negatives_per_positive):
                 result[row_idx, neg_idx] = self._one_negative(
                     int(src), int(rel), int(dst), context, config, group_seen,
                     candidate_cache, None if times is None else int(times[row_idx]), temporal,
-                    diagnostics,
+                    diagnostics, in_batch_pool,
                 )
         return (result, diagnostics) if return_diagnostics else result
 
@@ -1314,9 +1336,32 @@ class SamplerEngine:
         positive_time: int | None,
         temporal: TemporalContext | None,
         diagnostics: dict[str, int],
+        in_batch_pool: tuple[list[int], list[int]] | None = None,
     ) -> tuple[int, int, int]:
         first_direction = bool(self.rng.random() < config.head_probability)
         for corrupt_head in (first_direction, not first_direction):
+            if in_batch_pool is not None:
+                pool = in_batch_pool[0 if corrupt_head else 1]
+                if pool:
+                    ordered = list(pool)
+                    self.rng.shuffle(ordered)
+                    for cand in ordered:
+                        if corrupt_head and cand == src:
+                            continue
+                        if not corrupt_head and cand == dst:
+                            continue
+                        candidate = (int(cand), rel, dst) if corrupt_head else (src, rel, int(cand))
+                        rejection = self._negative_rejection(
+                            candidate, src, dst, corrupt_head, config, group_seen,
+                            positive_time, temporal,
+                        )
+                        diagnostics["attempted"] += 1
+                        if rejection is None:
+                            group_seen.add(candidate)
+                            diagnostics["accepted"] += 1
+                            diagnostics["accepted_in_batch"] += 1
+                            return candidate
+                        diagnostics[rejection] += 1
             cache_key = (src, rel, dst, corrupt_head, positive_time)
             if cache_key not in candidate_cache:
                 candidate_cache[cache_key] = self._negative_candidates(
