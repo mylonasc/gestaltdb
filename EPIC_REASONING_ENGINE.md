@@ -525,3 +525,14 @@ binding, versioned v1→v2 dict migration preserving historical versions,
 explicit rebind semantics, and documented legacy parity gates with the
 compatibility path kept (no legacy semantic changes, no witness-only
 substitution).
+
+### Implementation started: RE-18 (#179)
+
+Dedicated worktree `re-18-gates`, branch `feature/re-18-gates`, based on
+accepted integration `cec7e0a` (RE-17 integrated; prerequisites RE-16/RE-17
+satisfied; final RE-E3 slice). Crash-at-every-boundary cancellation gates,
+stale plan/generation rejection, backend-gated orphan recovery, redundant
+cycle no-ops, rule-revision parity, maintenance benchmark with P50/P95, RSS,
+supports and write amplification
+(`benchmarks/results/reasoning-re18-maintenance.json`), and the
+repeatable update/audit workflow. RE-E3 exits here.
