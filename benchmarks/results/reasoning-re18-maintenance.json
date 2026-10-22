@@ -1,0 +1,43 @@
+{
+  "complete": true,
+  "git_revision": "cec7e0ab9b87e345ff6554f709735e807ebe48d5",
+  "harness_sha256": "fd066dc2ec0ed98a57df55a673a676cfe3f19ee06dfc5af6294deb1d70bea4ad",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "python": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
+  "rows": [
+    {
+      "closure_facts": 88,
+      "insert_p50_s": 0.0005258659948594868,
+      "insert_p95_s": 0.0005391930171754211,
+      "noop_insert_p50_s": 0.0004960520018357784,
+      "noop_retract_p50_s": 0.0011885479907505214,
+      "persisted_supports": 72,
+      "retract_p50_s": 0.0011068790045101196,
+      "retract_p95_s": 0.00111846299842,
+      "revision_p50_s": 0.01649925101082772,
+      "revision_p95_s": 0.016572828986681998,
+      "rss_peak_bytes": 54775808,
+      "size": 8,
+      "status": "ok",
+      "write_amplification": 10.0
+    },
+    {
+      "closure_facts": 1720,
+      "insert_p50_s": 0.012492976995417848,
+      "insert_p95_s": 0.012493376998463646,
+      "noop_insert_p50_s": 0.012697603000560775,
+      "noop_retract_p50_s": 0.03572054600226693,
+      "persisted_supports": 1640,
+      "retract_p50_s": 0.02853314101230353,
+      "retract_p95_s": 0.028888592001749203,
+      "revision_p50_s": 8.107563811005093,
+      "revision_p95_s": 8.128986770985648,
+      "rss_peak_bytes": 54775808,
+      "size": 40,
+      "status": "ok",
+      "write_amplification": 42.0
+    }
+  ],
+  "schema_version": 1,
+  "working_tree_dirty": true
+}

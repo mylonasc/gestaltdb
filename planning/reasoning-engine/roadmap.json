@@ -160,12 +160,22 @@
       "integration_commit": "8b2dcce"
     },
     "RE-17": {
-      "status": "in-review",
+      "status": "integrated",
       "branch": "feature/re-17-catalog",
       "worktree": "re-17-catalog",
       "contract": "docs/reasoning-catalog.rst",
       "pr": 218,
-      "validation": "Focused suites (catalog/deletion/maintenance/contracts) green; docs drift, Sphinx -W, roadmap validator passed. PR CI running."
+      "validation": "Focused suites (catalog/deletion/maintenance/contracts) green; docs drift, Sphinx -W, roadmap validator passed; Python 3.10-3.13 and fuzz CI passed.",
+      "integration_commit": "cec7e0a"
+    },
+    "RE-18": {
+      "status": "in-review",
+      "branch": "feature/re-18-gates",
+      "worktree": "re-18-gates",
+      "contract": "docs/reasoning-gates.rst",
+      "benchmark_evidence": "benchmarks/results/reasoning-re18-maintenance.json",
+      "pr": 219,
+      "validation": "Focused suites (gates/catalog/deletion/maintenance/contracts) green; docs drift, Sphinx -W, roadmap validator passed. Maintenance benchmark frozen (P50/P95, RSS, supports, amplification). PR CI running."
     }
   },
   "source_sha256": {
