@@ -515,3 +515,13 @@ the explicit fallback with complete support discovery, changed-rule /
 negation / equality-split fail-closed contracts, randomized oracle parity
 and affected-work crossover measurement. B/F stays a documented
 conditional alternative.
+
+### Implementation started: RE-17 (#178)
+
+Dedicated worktree `re-17-catalog`, branch `feature/re-17-catalog`, based
+on accepted integration `8b2dcce` (RE-16 integrated; prerequisites
+RE-14/15/16 satisfied). Pinned indexed rule catalog with digest + horizon
+binding, versioned v1→v2 dict migration preserving historical versions,
+explicit rebind semantics, and documented legacy parity gates with the
+compatibility path kept (no legacy semantic changes, no witness-only
+substitution).

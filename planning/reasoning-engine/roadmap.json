@@ -151,12 +151,21 @@
       "integration_commit": "31f72d5"
     },
     "RE-16": {
-      "status": "in-review",
+      "status": "integrated",
       "branch": "feature/re-16-deletion",
       "worktree": "re-16-deletion",
       "contract": "docs/reasoning-maintenance.rst",
       "pr": 206,
-      "validation": "Focused suites (deletion/maintenance/contracts) green; docs drift, Sphinx -W, roadmap validator passed. 30-case oracle parity; affected-work 13 vs ~48.7k. PR CI running."
+      "validation": "Focused suites (deletion/maintenance/contracts) green; docs drift, Sphinx -W, roadmap validator passed; 30-case oracle parity; affected-work 13 vs ~48.7k; Python 3.10-3.13 and fuzz CI passed.",
+      "integration_commit": "8b2dcce"
+    },
+    "RE-17": {
+      "status": "in-review",
+      "branch": "feature/re-17-catalog",
+      "worktree": "re-17-catalog",
+      "contract": "docs/reasoning-catalog.rst",
+      "pr": 218,
+      "validation": "Focused suites (catalog/deletion/maintenance/contracts) green; docs drift, Sphinx -W, roadmap validator passed. PR CI running."
     }
   },
   "source_sha256": {

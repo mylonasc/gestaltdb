@@ -35,6 +35,7 @@ from .proofs import Explanation, FactWitness, ProofTrace
 from .protocols import Evidence, Evaluator, FactSource, InputContext
 from .terms import Literal
 from .typed import AggregateRule, Aggregation, Comparison, GenericEngine, GenericProgram, GenericResult, GenericRule, MultiHeadRule, NegationWitness, StratifiedRun, TypedAtom, TypedFact, expand_predicate_variables, normalize_program, predicate_domain
+from .catalog import CatalogEntry, PinnedGeneration, RuleCatalog, catalog_legacy_parity_gates, migrate_dict, pin_generation
 from .maintenance import DependencyIndex, Materialization, PropagationResult, RetractionResult, Support, build_index, propagate_insertions, rematerialize, retract_facts
 from .validation import Denial, ValidationReport, ValidationSuite, Violation, find_unsatisfiable, validate
 
@@ -52,4 +53,6 @@ __all__ = [
     "BoundGoal", "DemandAnswer", "SpecializationCache", "answer", "specialize",
     "DependencyIndex", "PropagationResult", "Support", "build_index", "propagate_insertions",
     "Materialization", "RetractionResult", "rematerialize", "retract_facts",
+    "CatalogEntry", "PinnedGeneration", "RuleCatalog",
+    "catalog_legacy_parity_gates", "migrate_dict", "pin_generation",
 ]
