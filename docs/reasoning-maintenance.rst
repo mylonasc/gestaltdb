@@ -28,7 +28,28 @@ predicates; insertions of unrelated predicates only extend the closure.
 
 Stale generations fail closed: a ``DependencyIndex`` whose program digest
 or horizon no longer matches demands explicit rematerialization instead of
-incremental repair. Deletion, final-support loss and rule-change
-invalidation belong to RE-16; this slice covers insertion only, with
-budgets (``max_facts``, ``max_candidate_rows``, ``max_supports``,
-``max_iterations``) and cooperative cancellation enforced throughout.
+incremental repair. Changed rules likewise rematerialize under the new
+digest; the old index is never repaired across a ruleset change.
+
+Recursive deletion (DRed)
+----------------------------------------
+
+``retract_facts`` implements DRed-style overdeletion with support-aware
+filtering plus rederivation, so final-support loss in recursive SCCs is
+exact — bare support counting would be unsound on cycles. Overdeletion
+follows the reverse support map transitively (a safe over-approximation);
+rederivation by full evaluation on the survivors reproduces exactly the
+facts with remaining support. Duplicate evidence keeps a fact with its
+remaining supports; complete fresh supports are discovered for rederived
+facts, keeping the rebound index exact for future deletions. Changed
+programs, negation, aggregates, closed scopes and equality splits fail
+closed and demand explicit ``rematerialize``; B/F stays a documented
+conditional alternative, not a second engine.
+
+Measured crossover: on two independent 12-link chains (180-fact closure),
+retracting the head edge of one chain costs work 13 (12 overdeleted
+dependents plus rederivation) against ~48,700 for full rematerialization
+with complete support discovery — incremental deletion wins while the
+change is local. Dense or global retractions converge toward rebuild cost;
+complete support discovery is cubic in chain length, so measure before
+assuming an advantage on deep recursions.

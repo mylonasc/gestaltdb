@@ -35,7 +35,7 @@ from .proofs import Explanation, FactWitness, ProofTrace
 from .protocols import Evidence, Evaluator, FactSource, InputContext
 from .terms import Literal
 from .typed import AggregateRule, Aggregation, Comparison, GenericEngine, GenericProgram, GenericResult, GenericRule, MultiHeadRule, NegationWitness, StratifiedRun, TypedAtom, TypedFact, expand_predicate_variables, normalize_program, predicate_domain
-from .maintenance import DependencyIndex, PropagationResult, Support, build_index, propagate_insertions
+from .maintenance import DependencyIndex, Materialization, PropagationResult, RetractionResult, Support, build_index, propagate_insertions, rematerialize, retract_facts
 from .validation import Denial, ValidationReport, ValidationSuite, Violation, find_unsatisfiable, validate
 
 __all__ = [
@@ -51,4 +51,5 @@ __all__ = [
     "Denial", "ValidationReport", "ValidationSuite", "Violation", "find_unsatisfiable", "validate",
     "BoundGoal", "DemandAnswer", "SpecializationCache", "answer", "specialize",
     "DependencyIndex", "PropagationResult", "Support", "build_index", "propagate_insertions",
+    "Materialization", "RetractionResult", "rematerialize", "retract_facts",
 ]

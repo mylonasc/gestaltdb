@@ -504,3 +504,14 @@ dependency index bound to program digest + fact horizon; changed-predicate
 insertion propagation with duplicate handling and support/output/work
 budgets; stale generations fail closed demanding rematerialization. Deletion
 and rule-change invalidation stay in RE-16.
+
+### Implementation started: RE-16 (#177)
+
+Dedicated worktree `re-16-deletion`, branch `feature/re-16-deletion`,
+based on accepted integration `31f72d5` (RE-15 integrated; prerequisites
+RE-10/RE-11/RE-15 satisfied). DRed-style overdeletion with support-aware
+filtering plus rederivation (exact on recursive SCCs), `rematerialize` as
+the explicit fallback with complete support discovery, changed-rule /
+negation / equality-split fail-closed contracts, randomized oracle parity
+and affected-work crossover measurement. B/F stays a documented
+conditional alternative.
