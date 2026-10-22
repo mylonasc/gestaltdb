@@ -1,4 +1,4 @@
-"""Bounded maintenance provenance: supports, reverse dependencies, insertion propagation.
+"""Bounded maintenance provenance: supports, reverse dependencies, insertion and deletion.
 
 A ``Support`` is one finite independent justification: a derived fact produced
 by one rule from an exact premise tuple. It is not a witness DAG and never
@@ -7,9 +7,13 @@ alternative supports (preserving all sources with exact rule/premise versions)
 and maintains the reverse premise-to-derived map without path enumeration.
 
 ``propagate_insertions`` extends a materialized closure by changed predicates
-only, with support/output/work budgets and duplicate handling. Deletion and
-rule-change invalidation belong to RE-16; here incomplete metadata fails
-closed and demands explicit rematerialization.
+only, with support/output/work budgets and duplicate handling.
+``retract_facts`` implements DRed-style overdeletion with support-aware
+filtering plus rederivation, so final-support loss in recursive SCCs is exact
+(counts alone would be unsound). ``rematerialize`` is the correct explicit
+fallback: full evaluation with complete support discovery. Changed rules,
+negation, aggregates, closed scopes and equality splits fail closed and demand
+explicit rematerialization; B/F stays a documented conditional alternative.
 """
 
 from __future__ import annotations
@@ -330,3 +334,221 @@ def _match_with_premises(rule, pivot, full, delta):
         if bucket:
             stack.append((updated, used, tuple(index for index in remaining if index != chosen),
                           chosen, iter(bucket)))
+
+
+@dataclass(frozen=True)
+class Materialization:
+    """Fresh full closure with complete support discovery and a bound index."""
+
+    facts: tuple[TypedFact, ...]
+    supports: tuple[Support, ...]
+    index: DependencyIndex
+    work: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.facts, (tuple, list)) or not all(isinstance(f, TypedFact) for f in self.facts):
+            raise ReasoningError("facts must contain only TypedFact values")
+        if not isinstance(self.supports, (tuple, list)) or not all(isinstance(s, Support) for s in self.supports):
+            raise ReasoningError("supports must contain only Support values")
+        if not isinstance(self.index, DependencyIndex):
+            raise ReasoningError("index must be a DependencyIndex")
+        if isinstance(self.work, bool) or not isinstance(self.work, int) or self.work < 0:
+            raise ReasoningError("work must be a non-negative integer")
+        object.__setattr__(self, "facts", tuple(sorted(set(self.facts), key=_sort_key)))
+        object.__setattr__(self, "supports", tuple(self.supports))
+
+
+@dataclass(frozen=True)
+class RetractionResult:
+    """DRed outcome: exact final closure, removed facts and a rebound index."""
+
+    facts: tuple[TypedFact, ...]
+    removed: tuple[TypedFact, ...]
+    supports: tuple[Support, ...]
+    index: DependencyIndex
+    overdeleted: int
+    rederived: int
+    work: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.facts, (tuple, list)) or not all(isinstance(f, TypedFact) for f in self.facts):
+            raise ReasoningError("facts must contain only TypedFact values")
+        if not isinstance(self.removed, (tuple, list)) or not all(isinstance(f, TypedFact) for f in self.removed):
+            raise ReasoningError("removed must contain only TypedFact values")
+        if not isinstance(self.supports, (tuple, list)) or not all(isinstance(s, Support) for s in self.supports):
+            raise ReasoningError("supports must contain only Support values")
+        if not isinstance(self.index, DependencyIndex):
+            raise ReasoningError("index must be a DependencyIndex")
+        for name in ("overdeleted", "rederived", "work"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ReasoningError(f"{name} must be a non-negative integer")
+        object.__setattr__(self, "facts", tuple(sorted(set(self.facts), key=_sort_key)))
+        object.__setattr__(self, "removed", tuple(sorted(set(self.removed), key=_sort_key)))
+        object.__setattr__(self, "supports", tuple(self.supports))
+
+
+def _find_all_supports(program: GenericProgram, full: _TypedIndex, target: TypedFact, *,
+                        limits: ReasoningLimits, max_supports: int, work: list[int],
+                        seen: set[tuple], supports: list[Support],
+                        cancel: Callable[[], bool] | None = None) -> None:
+    """Record every (rule, premises) derivation of ``target`` in ``full``.
+
+    Completeness here is a correctness requirement: future deletions rely on
+    the reverse map, and a missing edge would under-delete. Budgets fail
+    closed instead of returning partial support sets.
+    """
+    for rule in program.rules:
+        if rule.head.predicate != target.predicate or len(rule.head.args) != len(target.values):
+            continue
+        head_blocked = False
+        for term, value in zip(rule.head.args, target.values):
+            if not hasattr(term, "name") and term != value:
+                head_blocked = True
+                break
+        if head_blocked:
+            continue
+        stack = [(dict(), dict(), tuple(range(len(rule.body))))]
+        while stack:
+            check_cancelled(cancel)
+            bindings, used, remaining = stack.pop()
+            if not remaining:
+                values = tuple(bindings.get(term, term) for term in rule.head.args)
+                if tuple(values) != tuple(target.values):
+                    continue
+                premises = tuple(sorted((used[index] for index in sorted(used)), key=_sort_key))
+                key = (target, rule.rule_id, premises)
+                if key not in seen:
+                    seen.add(key)
+                    supports.append(Support(target, rule.rule_id, premises))
+                    if len(supports) > max_supports:
+                        raise ReasoningLimitError("support discovery exceeded max_supports")
+                continue
+            position = remaining[0]
+            for fact in full.candidates(rule.body[position], bindings):
+                work[0] += 1
+                if work[0] > limits.max_candidate_rows:
+                    raise ReasoningLimitError("support discovery exceeded max_candidate_rows")
+                updated = _unify(rule.body[position], fact, bindings)
+                if updated is None or not _ready(rule.filters, updated):
+                    continue
+                used = dict(used)
+                used[position] = fact
+                stack.append((updated, used, remaining[1:]))
+
+
+def rematerialize(program: GenericProgram, base_facts: Iterable[TypedFact], *,
+                  limits: ReasoningLimits, max_supports: int = 100_000,
+                  cancel: Callable[[], bool] | None = None) -> Materialization:
+    """Full evaluation with complete support discovery; the explicit fallback.
+
+    Every derived fact gets every support, so later incremental deletions are
+    exact. Changed programs simply rematerialize under the new digest; the old
+    index is never incrementally repaired across a ruleset change.
+    """
+    if not isinstance(program, GenericProgram):
+        raise ReasoningError("program must be a GenericProgram")
+    if not isinstance(limits, ReasoningLimits):
+        raise ReasoningError("limits must be ReasoningLimits")
+    if isinstance(max_supports, bool) or not isinstance(max_supports, int) or max_supports < 1:
+        raise ReasoningError("max_supports must be a positive integer")
+    _check_supported(program)
+    check_cancelled(cancel)
+    try:
+        base = list(base_facts)
+    except TypeError as exc:
+        raise ReasoningError("base_facts must be iterable") from exc
+    if not all(isinstance(fact, TypedFact) for fact in base):
+        raise ReasoningError("base_facts must contain only TypedFact values")
+    from .typed import GenericEngine
+
+    result = GenericEngine().evaluate(program, base, limits=limits, cancel=cancel)
+    known = set(result.facts)
+    base_set = set(base)
+    full = _TypedIndex(sorted(known, key=_sort_key))
+    supports: list[Support] = []
+    seen: set[tuple] = set()
+    work = [0]
+    for target in sorted(known - base_set, key=_sort_key):
+        _find_all_supports(program, full, target, limits=limits, max_supports=max_supports,
+                            work=work, seen=seen, supports=supports, cancel=cancel)
+    index = DependencyIndex(program.digest, _digest_facts(sorted(known, key=_sort_key)), tuple(supports))
+    return Materialization(tuple(known), tuple(supports), index, work[0] + result.iterations)
+
+
+def retract_facts(program: GenericProgram, closure: Iterable[TypedFact], retract: Iterable[TypedFact], *,
+                  limits: ReasoningLimits, index: DependencyIndex, max_supports: int = 100_000,
+                  cancel: Callable[[], bool] | None = None) -> RetractionResult:
+    """DRed-style deletion: overdelete dependents, then rederive survivors.
+
+    Overdeletion follows the reverse support map transitively (an
+    over-approximation, hence safe), and rederivation by full evaluation on
+    the survivors is exact — including recursive SCCs, where bare support
+    counting would be unsound. Final-support loss removes the fact; duplicate
+    evidence keeps it with its remaining supports. Supports referencing
+    removed facts are dropped; rederived facts get complete fresh supports.
+    A stale program digest or horizon fails closed and demands explicit
+    rematerialization. Equality splits and stratified negation are out of
+    scope: canonicalization changes and negated programs rematerialize.
+    """
+    if not isinstance(program, GenericProgram):
+        raise ReasoningError("program must be a GenericProgram")
+    if not isinstance(limits, ReasoningLimits):
+        raise ReasoningError("limits must be ReasoningLimits")
+    if not isinstance(index, DependencyIndex):
+        raise ReasoningError("retraction requires an explicit DependencyIndex; rematerialize otherwise")
+    if isinstance(max_supports, bool) or not isinstance(max_supports, int) or max_supports < 1:
+        raise ReasoningError("max_supports must be a positive integer")
+    _check_supported(program)
+    check_cancelled(cancel)
+    try:
+        known_list = list(closure)
+    except TypeError as exc:
+        raise ReasoningError("closure must be iterable") from exc
+    try:
+        doomed_list = list(retract)
+    except TypeError as exc:
+        raise ReasoningError("retract must be iterable") from exc
+    if not all(isinstance(fact, TypedFact) for fact in known_list):
+        raise ReasoningError("closure must contain only TypedFact values")
+    if not all(isinstance(fact, TypedFact) for fact in doomed_list):
+        raise ReasoningError("retract must contain only TypedFact values")
+    known = set(known_list)
+    if index.program_digest != program.digest or index.horizon != _digest_facts(sorted(known, key=_sort_key)):
+        raise ReasoningError("stale dependency index; rematerialize explicitly")
+    reverse: dict[TypedFact, set[TypedFact]] = defaultdict(set)
+    for item in index.supports:
+        for premise in item.premises:
+            reverse[premise].add(item.fact)
+    overdeleted = {fact for fact in doomed_list if fact in known}
+    queue = sorted(overdeleted, key=_sort_key)
+    work = 0
+    while queue:
+        check_cancelled(cancel)
+        current = queue.pop()
+        for derived in sorted(reverse.get(current, ()), key=_sort_key):
+            work += 1
+            if derived in known and derived not in overdeleted:
+                overdeleted.add(derived)
+                queue.append(derived)
+    surviving = known - overdeleted
+    from .typed import GenericEngine
+
+    renewed = GenericEngine().evaluate(program, list(surviving), limits=limits, cancel=cancel)
+    final = set(renewed.facts)
+    removed = known - final
+    rederived = (final & overdeleted)
+    kept = [item for item in index.supports
+            if item.fact in final and all(premise in final for premise in item.premises)]
+    if len(kept) > max_supports:
+        raise ReasoningLimitError("retraction exceeded max_supports")
+    supports = list(kept)
+    seen = {(item.fact, item.rule_id, item.premises) for item in supports}
+    full = _TypedIndex(sorted(final, key=_sort_key))
+    discovery = [work]
+    for target in sorted(rederived, key=_sort_key):
+        _find_all_supports(program, full, target, limits=limits, max_supports=max_supports,
+                            work=discovery, seen=seen, supports=supports, cancel=cancel)
+    new_index = DependencyIndex(program.digest, _digest_facts(sorted(final, key=_sort_key)), tuple(supports))
+    return RetractionResult(tuple(final), tuple(removed), tuple(supports), new_index,
+                            len(overdeleted), len(rederived), discovery[0] + renewed.iterations)
