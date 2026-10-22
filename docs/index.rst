@@ -32,6 +32,7 @@ Filter, Sample, Train
 
    property-filtering
    typed-sampling
+   sampling-consistency
 
 .. toctree::
    :maxdepth: 2
