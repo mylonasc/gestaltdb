@@ -1,6 +1,9 @@
 # Durable reasoning session state machine — #251
 
-Status: initial design; production work depends on #248, #250, #252 and #253.
+Status: executable advance-in-memory milestone implemented in
+`reasoning/adapters/sessions.py` (see `docs/reasoning-sessions.rst`); durable
+cross-process persistence of session state remains open. The generation (#248)
+and evidence (#250) contracts it depends on are now merged.
 
 ## States
 
