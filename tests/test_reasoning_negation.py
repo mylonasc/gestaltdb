@@ -88,20 +88,35 @@ def test_anti_join_reads_completed_lower_strata_with_witnesses():
 
 def _reference(program, facts):
     closure = set(facts)
-    strata = {name: index for index, component in enumerate(program.strata) for name in component}
+    # Independently compute numerical ranks, rather than reuse the engine's
+    # positive-SCC schedule. Negative dependencies require a strictly lower rank.
+    predicates = {atom.predicate for rule in program.rules
+                  for atom in (*rule.body, *rule.negated, rule.head)}
+    ranks = dict.fromkeys(predicates, 0)
+    for _ in range(len(predicates) + 1):
+        before = ranks.copy()
+        for rule in program.rules:
+            required = [ranks[atom.predicate] for atom in rule.body]
+            required += [ranks[atom.predicate] + 1 for atom in rule.negated]
+            ranks[rule.head.predicate] = max(ranks[rule.head.predicate], *required)
+        if ranks == before:
+            break
+    else:
+        raise AssertionError("negative dependency cycle in reference input")
     universe = sorted({value for fact in facts for value in fact.values},
                       key=lambda v: (isinstance(v, str), str(v)))
     for rule in program.rules:
-        universe.extend(term for atom in (*rule.body, rule.head) for term in atom.args if isinstance(term, str))
+        universe.extend(term for atom in (*rule.body, *rule.negated, rule.head)
+                        for term in atom.args if isinstance(term, (str, Literal)))
         universe.extend(term for item in rule.filters for term in (item.left, item.right) if isinstance(term, Literal))
     universe = list(dict.fromkeys(universe))
     variables = sorted({term.name for rule in program.rules for atom in (*rule.body, *rule.negated)
                         for term in atom.args if isinstance(term, Variable)})
-    while True:
-        added = set()
-        for component in program.strata:
+    for rank in sorted(set(ranks.values())):
+        while True:
+            added = set()
             for rule in program.rules:
-                if rule.head.predicate not in component:
+                if ranks[rule.head.predicate] != rank:
                     continue
                 for combo in itertools.product(universe, repeat=len(variables)):
                     named = {Variable(name): value for name, value in zip(variables, combo)}
@@ -132,9 +147,10 @@ def _reference(program, facts):
                                      for term in rule.head.args)
                         if not any(isinstance(value, Variable) for value in head):
                             added.add(TypedFact(rule.head.predicate, head))
-        if added <= closure:
-            return closure
-        closure.update(added)
+            if added <= closure:
+                break
+            closure.update(added)
+    return closure
 
 
 def test_stratified_closure_matches_independent_reference_and_recomputes():
@@ -182,6 +198,25 @@ def test_compliance_example_end_to_end():
     assert run.result == GenericEngine().evaluate_stratified(
         GenericProgram([eligible], closed=["sanctioned", "sanctioned"]), facts,
         limits=ReasoningLimits()).result
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_reference_completes_derived_blockers_before_testing_absence(nested):
+    rules = [
+        GenericRule("block", [TypedAtom("p", [X])], [], TypedAtom("blocked", [X])),
+        GenericRule("free", [TypedAtom("p", [X])], [], TypedAtom("free", [X]),
+                    [TypedAtom("blocked", [X])]),
+    ]
+    if nested:
+        rules.append(GenericRule("eligible", [TypedAtom("p", [X])], [], TypedAtom("eligible", [X]),
+                                 [TypedAtom("free", [X])]))
+    program = GenericProgram(rules, closed=["blocked", "free"])
+    facts = [TypedFact("p", ["a"])]
+    expected = {TypedFact("p", ["a"]), TypedFact("blocked", ["a"])}
+    if nested:
+        expected.add(TypedFact("eligible", ["a"]))
+    assert _reference(program, facts) == expected
+    assert set(GenericEngine().evaluate_stratified(program, facts, limits=ReasoningLimits()).result.facts) == expected
 
 
 def test_limits_cancellation_and_plain_evaluation_parity():
