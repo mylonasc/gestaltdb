@@ -37,6 +37,7 @@ from .terms import Literal
 from .typed import AggregateRule, Aggregation, Comparison, GenericEngine, GenericProgram, GenericResult, GenericRule, MultiHeadRule, NegationWitness, StratifiedRun, TypedAtom, TypedFact, expand_predicate_variables, normalize_program, predicate_domain
 from .catalog import CatalogEntry, PinnedGeneration, RuleCatalog, catalog_legacy_parity_gates, migrate_dict, pin_generation
 from .intervals import Interval, IntervalError, IntervalSet, SupportSegment, coalesce_segments
+from .profiles import ConstructEntry, MATRIX, NAMED_SUBSETS, approval_checklist, check_construct, matrix_digest, subset_constructs
 from .temporal_closure import TemporalClosure, TemporalDerivation, TemporalFact, RangeUpdate, ClosureVerification, canonicalize_segments, change_segments, evaluate_range, update_range, verify_closure
 from .maintenance import DependencyIndex, Materialization, PropagationResult, RetractionResult, Support, build_index, propagate_insertions, rematerialize, retract_facts
 from .validation import Denial, ValidationReport, ValidationSuite, Violation, find_unsatisfiable, validate
@@ -60,4 +61,6 @@ __all__ = [
     "Interval", "IntervalError", "IntervalSet", "SupportSegment", "coalesce_segments",
     "TemporalClosure", "TemporalDerivation", "TemporalFact", "RangeUpdate", "ClosureVerification",
     "canonicalize_segments", "change_segments", "evaluate_range", "update_range", "verify_closure",
+    "ConstructEntry", "MATRIX", "NAMED_SUBSETS",
+    "approval_checklist", "check_construct", "matrix_digest", "subset_constructs",
 ]
