@@ -416,11 +416,13 @@ without new parameters:
 
 Expanded names absent from the snapshot fail closed (typo safety), while
 hierarchy-undefined names expand to themselves. Fanout caps apply to the
-union of expanded relations, not per sub-relation. Node label sub-types are
-available for opt-in Cypher matching through ``LabelHierarchy`` and
-``GraphDB.query(..., label_hierarchy=...)`` (see :doc:`cypher`). Sampler
-node-type expansion over compact snapshot IDs is described below; coupling
-to the ontology compiler remains open on the PropEnh-14 tracker.
+union of expanded relations, not per sub-relation. Node label sub-types and
+relationship sub-properties are available for opt-in Cypher matching through
+``LabelHierarchy``/``RelationHierarchy`` and
+``GraphDB.query(..., label_hierarchy=..., relation_hierarchy=...)`` (see
+:doc:`cypher`). Sampler node-type expansion over compact snapshot IDs is
+described below; ontology-to-hierarchy construction is described in
+:doc:`ontology`.
 
 Node type hierarchies
 ~~~~~~~~~~~~~~~~~~~~~

@@ -58,6 +58,7 @@ class QueryContext:
     edge_cache: dict[bytes, object] = field(default_factory=dict)
     label_cardinalities: dict[str, int] = field(default_factory=dict)
     label_hierarchy: object | None = None
+    relation_hierarchy: object | None = None
     read_view: object | None = None
     entity_versions: dict[int, object] = field(default_factory=dict)
 
@@ -1143,7 +1144,7 @@ def _indexed_first_hop_rows(row, clause: PathPatternClause, context: QueryContex
 def _iter_indexed_first_hop(row, clause: PathPatternClause, hop: PatternHop, context: QueryContext, spec):
     """Iterate index-backed candidate edges for the first pattern hop."""
     seen = set()
-    for edge_type in hop.edge_types:
+    for edge_type in _expanded_edge_types(hop.edge_types, context.relation_hierarchy):
         if spec[0] == "exact":
             _, property_name, value = spec
             edge_ids = context.graph.iter_edge_ids_by_type_property(edge_type, property_name, value)
@@ -1634,12 +1635,25 @@ def _is_null_bound(row: BindingRow, variable: str | None) -> bool:
     return variable is not None and variable in row.bindings and row.bindings[variable] is None
 
 
+def _expanded_edge_types(edge_types, hierarchy):
+    """Expand requested relationship types through an opt-in hierarchy."""
+    if hierarchy is None or not edge_types:
+        return edge_types
+    expanded = []
+    for edge_type in edge_types:
+        for member in hierarchy.closure(edge_type):
+            if member not in expanded:
+                expanded.append(member)
+    return tuple(expanded)
+
+
 def _iter_pattern_adjacency(context: QueryContext, node_id: bytes, hop: PatternHop):
+    edge_types = _expanded_edge_types(hop.edge_types, context.relation_hierarchy)
     if context.read_view is not None:
-        yield from context.iter_temporal_adjacency(node_id, hop.edge_types, hop.direction)
+        yield from context.iter_temporal_adjacency(node_id, edge_types, hop.direction)
         return
-    if hop.edge_types:
-        for edge_type in hop.edge_types:
+    if edge_types:
+        for edge_type in edge_types:
             yield from context.graph.iter_typed_adjacency(node_id, edge_type, direction=hop.direction)
         return
     for edge_id in context.graph.iter_edge_ids():

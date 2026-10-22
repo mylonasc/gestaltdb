@@ -444,6 +444,22 @@ matches = graph.query(
 )
 ```
 
+Relationship types can be expanded the same way for one query:
+
+```python
+from gestaltdb.hierarchy import RelationHierarchy
+
+relations = RelationHierarchy({
+    "Ocean_Freight": ["Transport_Edge"],
+    "Air_Freight": ["Transport_Edge"],
+    "Refrigerated_Freight": ["Ocean_Freight"],
+})
+matches = graph.query(
+    'MATCH (a {id: "warehouse"})-[r:Transport_Edge]->(b) RETURN type(r) AS t',
+    relation_hierarchy=relations,
+)
+```
+
 ## Traverse and Sample Typed Relationships
 
 ```python

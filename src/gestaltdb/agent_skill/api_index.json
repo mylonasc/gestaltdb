@@ -1,7 +1,7 @@
 {
   "generated_from": {
     "path": "src/gestaltdb/graphdb.py",
-    "sha256": "6fa78c3bc2d8cde43bd7f8a7ee6c2b10b43806304ac83f051975a76af58ea6cd"
+    "sha256": "43871cc12d072f4d51050f496646d0c9ab4099976bd51036c51ea844b65dd2e3"
   },
   "methods": [
     {
@@ -123,7 +123,7 @@
           "example": 2
         }
       ],
-      "line": 6868,
+      "line": 6875,
       "name": "close",
       "returns": "",
       "signature": "close()",
@@ -1263,7 +1263,7 @@
       "line": 6754,
       "name": "query",
       "returns": "``gestaltdb.QueryResult`` containing projected records.",
-      "signature": "query(cypher: str, parameters: Optional[dict[str, object]]=None, read_snapshot: bool | None=None, label_hierarchy=None)",
+      "signature": "query(cypher: str, parameters: Optional[dict[str, object]]=None, read_snapshot: bool | None=None, label_hierarchy=None, relation_hierarchy=None)",
       "summary": "Execute a supported Cypher query.",
       "topic": "cypher"
     },
@@ -1505,7 +1505,7 @@
     },
     {
       "examples": [],
-      "line": 6840,
+      "line": 6847,
       "name": "transaction",
       "returns": "",
       "signature": "transaction(**options)",
@@ -1532,7 +1532,7 @@
     },
     {
       "examples": [],
-      "line": 6796,
+      "line": 6803,
       "name": "visualize",
       "returns": "``gestaltdb.viz.api.VizFigure``.",
       "signature": "visualize(cypher=None, seeds=None, pattern=None, parameters=None, options=None, rng=None)",
