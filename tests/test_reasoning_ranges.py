@@ -123,6 +123,8 @@ def test_update_validation_and_budgets():
 
 
 def test_staged_range_validates_without_storage():
+    from gestaltdb.graphdb import GraphDB
+    from gestaltdb.reasoning.adapters.claims import ClaimMapping, ClaimSelection
     from gestaltdb.reasoning.adapters.publication import (
         GenerationStaleError,
         StagedRangePublication,
@@ -133,7 +135,16 @@ def test_staged_range_validates_without_storage():
     with pytest.raises(ReasoningError, match="GraphDB"):
         stage_range(object(), [], valid_start_us=0, valid_end_us=5, evidence_id="e",
                     source_world="b", target_world="d", publication_key="k",
-                    selection=object(), mapping=object())
+                    selection=object(), mapping=object(), ontology_revision="rev-1")
+    for bad_revision in ("", 42, None):
+        # Uninitialized instance: isinstance passes but no storage is
+        # touched, isolating argument validation from backend availability.
+        stub = object.__new__(GraphDB)
+        with pytest.raises(ReasoningError, match="ontology_revision"):
+            stage_range(stub, [], valid_start_us=0, valid_end_us=5, evidence_id="e",
+                        source_world="b", target_world="d", publication_key="k",
+                        selection=ClaimSelection(include_derived=False), mapping=ClaimMapping(),
+                        ontology_revision=bad_revision)
     with pytest.raises(ReasoningError, match="StagedRangePublication"):
         publish_staged_range(object(), "nope")
     staged = StagedRangePublication("ns", "k", "b", "d", 0, 5, "gen", "ev", "ctx",
@@ -161,6 +172,7 @@ def test_range_publication_roundtrip_on_backend(tmp_path):
     from gestaltdb.graphdb import GraphDB
     from gestaltdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
     from gestaltdb.reasoning.adapters.publication import (
+        GenerationStaleError,
         audit_publication_orphans,
         publish_staged_range,
         reclaim_publication_orphans,
@@ -180,22 +192,47 @@ def test_range_publication_roundtrip_on_backend(tmp_path):
         staged = stage_range(graph, [("a", "p", "b")], valid_start_us=1_000_000,
                              valid_end_us=2_000_000, evidence_id="sha256:" + "ab" * 32,
                              source_world="base", target_world="derived", publication_key="rk",
-                             selection=selection, mapping=mapping)
+                             selection=selection, mapping=mapping, ontology_revision="rev-1")
         assert staged.namespace.startswith("ontology-range-publication:")
         assert staged.base_fingerprint
+        assert staged.ontology_revision == "rev-1"
+        restaged = stage_range(graph, [("a", "p", "b")], valid_start_us=1_000_000,
+                               valid_end_us=2_000_000, evidence_id="sha256:" + "ab" * 32,
+                               source_world="base", target_world="derived", publication_key="rk",
+                               selection=selection, mapping=mapping, ontology_revision="rev-2")
+        assert restaged.generation != staged.generation
         out = publish_staged_range(graph, staged)
         assert (out.asserted, out.corrected, out.retracted, out.unchanged) == (1, 0, 0, 0)
         assert out.commit_id is not None
-        republish = publish_staged_range(graph, staged)
+        assert out.context.ontology_revision == "rev-1"
+        with graph.read_view(valid_time=1_000_000) as view:
+            published = [version.claim for version in view.iter_claims_as_of(
+                world="derived", agent="gestaltdb:ontology", source=staged.namespace)]
+        assert len(published) == 1
+        assert published[0].provenance["ontology_revision"] == "rev-1"
+        assert published[0].provenance["generation"] == staged.generation
+        # The consumed staged object is now stale: the publish moved the
+        # namespace, so only a fresh re-stage can observe the no-op path.
+        with pytest.raises(GenerationStaleError, match="re-stage"):
+            publish_staged_range(graph, staged)
+        restaged_same = stage_range(graph, [("a", "p", "b")], valid_start_us=1_000_000,
+                                    valid_end_us=2_000_000, evidence_id="sha256:" + "ab" * 32,
+                                    source_world="base", target_world="derived", publication_key="rk",
+                                    selection=selection, mapping=mapping, ontology_revision="rev-1")
+        republish = publish_staged_range(graph, restaged_same)
         assert (republish.asserted, republish.unchanged) == (0, 1)
         assert republish.commit_id is None
         shrunk = stage_range(graph, [], valid_start_us=1_000_000, valid_end_us=2_000_000,
                              evidence_id="sha256:" + "cd" * 32,
                              source_world="base", target_world="derived", publication_key="rk",
-                             selection=selection, mapping=mapping)
+                             selection=selection, mapping=mapping, ontology_revision="rev-1")
         removed = publish_staged_range(graph, shrunk)
         assert removed.retracted == 1 and removed.commit_id is not None
-        with pytest.raises(ReasoningError, match="re-stage"):
-            publish_staged_range(graph, staged)
+        # The retraction returned the namespace to the exact empty base the
+        # original stage was computed against, so compare-and-publish matches
+        # and reconciles by re-asserting: staleness is state mismatch, not a
+        # use-once nonce.
+        reconciled = publish_staged_range(graph, staged)
+        assert reconciled.asserted == 1 and reconciled.commit_id is not None
     finally:
         graph.close()

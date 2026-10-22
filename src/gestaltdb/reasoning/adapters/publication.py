@@ -293,19 +293,27 @@ def _range_namespace(publication_key: str, source_world: str, target_world: str,
 def stage_range(graph: GraphDB, desired: Iterable[tuple[str, str, str]], *, valid_start_us: int,
                 valid_end_us: int | None, evidence_id: str,
                 source_world: str, target_world: str, publication_key: str,
-                selection: ClaimSelection, mapping: ClaimMapping) -> StagedRangePublication:
+                selection: ClaimSelection, mapping: ClaimMapping,
+                ontology_revision: str) -> StagedRangePublication:
     """Stage caller-derived interval claims without holding the writer guard.
 
     Only target-namespace comparison plus one logical commit take the guard
     in ``publish_staged_range``. Validity is exactly the caller's range —
     never widened, never gap-filled. ``reconcile_point`` behavior is
     untouched; point generations keep their single-quantum namespaces.
+
+    ``ontology_revision`` is the caller's meaningful identity for the
+    ontology/program the desired triples were derived under (for example a
+    compiled revision id). It is validated, bound into the generation
+    digest, and published into each claim's provenance. There is no
+    default: callers must state the revision explicitly.
     """
     if not isinstance(graph, GraphDB):
         raise ReasoningError("GraphDB is required")
     for name, value in (("source_world", source_world), ("target_world", target_world),
                         ("publication_key", publication_key), ("evidence_id", evidence_id)):
         _text(value, name)
+    _text(ontology_revision, "ontology_revision")
     if source_world == target_world:
         raise ReasoningError("publication requires a separate target world")
     if not isinstance(selection, ClaimSelection) or selection.include_derived:
@@ -335,12 +343,17 @@ def stage_range(graph: GraphDB, desired: Iterable[tuple[str, str, str]], *, vali
             base.append((claim.claim_id, str(claim.provenance.get("generation", ""))))
         database_id = view.provenance.database_id
     generation = _digest(["ontology-range-publication-v1", database_id, namespace, evidence_id,
-                          selection.policy_id, mapping.mapping_id, sorted(set(triples))])
-    return StagedRangePublication(namespace, publication_key, source_world, target_world,
-                                  valid_start_us, valid_end_us, generation, evidence_id,
-                                  "explicit-range-evidence-v1", selection.policy_id,
-                                  mapping.mapping_id, database_id, tuple(sorted(set(triples))),
-                                  _stage_fingerprint(base))
+                          ontology_revision, selection.policy_id, mapping.mapping_id,
+                          sorted(set(triples))])
+    return StagedRangePublication(namespace=namespace, publication_key=publication_key,
+                                  source_world=source_world, target_world=target_world,
+                                  valid_start_us=valid_start_us, valid_end_us=valid_end_us,
+                                  generation=generation, evidence_id=evidence_id,
+                                  input_context_id="explicit-range-evidence-v1",
+                                  ontology_revision=ontology_revision,
+                                  policy_id=selection.policy_id, mapping_id=mapping.mapping_id,
+                                  database_id=database_id, desired=tuple(sorted(set(triples))),
+                                  base_fingerprint=_stage_fingerprint(base))
 
 
 def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
@@ -386,6 +399,7 @@ def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
                                   "engine": "gestaltdb.ontology", "publication_key": staged.publication_key,
                                   "generation": staged.generation, "evidence": staged.evidence_id,
                                   "input_context": staged.input_context_id,
+                                  "ontology_revision": staged.ontology_revision,
                                   "valid_start_us": staged.valid_start_us,
                                   "valid_end_us": staged.valid_end_us,
                               })
