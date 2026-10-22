@@ -1,7 +1,7 @@
 :orphan:
 
 Bounded temporal event-sweep prototype
-=====================================
+======================================
 
 ``gestaltdb.reasoning.temporal_sweep.active_segments`` accepts ``TemporalFact``
 values and returns immutable ``ActiveSegment`` records. Each contains an
