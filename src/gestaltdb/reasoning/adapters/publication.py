@@ -290,8 +290,26 @@ def _range_namespace(publication_key: str, source_world: str, target_world: str,
         [publication_key, source_world, target_world, start_us, end_us]).split(":")[1]
 
 
+def _range_target_fingerprint(graph, view, namespace, world):
+    """Include exact target versions, including retractions, to reject ABA.
+
+    The first implementation scans pinned history; a namespace revision index
+    can optimize it without weakening the compare-and-publish contract.
+    """
+    managed = set()
+    entries = []
+    for version in graph.iter_claim_versions(through_commit=view.provenance.commit_horizon):
+        claim = version.claim
+        if (claim is not None and claim.world == world and claim.agent == "gestaltdb:ontology"
+                and claim.source == namespace):
+            managed.add(version.logical_id)
+        if version.logical_id in managed:
+            entries.append((version.logical_id, version.version_id))
+    return _stage_fingerprint(entries)
+
+
 def stage_range(graph: GraphDB, desired: Iterable[tuple[str, str, str]], *, valid_start_us: int,
-                valid_end_us: int | None, evidence_id: str,
+                valid_end_us: int | None, evidence_id: str, ontology_revision: str,
                 source_world: str, target_world: str, publication_key: str,
                 selection: ClaimSelection, mapping: ClaimMapping) -> StagedRangePublication:
     """Stage caller-derived interval claims without holding the writer guard.
@@ -304,7 +322,8 @@ def stage_range(graph: GraphDB, desired: Iterable[tuple[str, str, str]], *, vali
     if not isinstance(graph, GraphDB):
         raise ReasoningError("GraphDB is required")
     for name, value in (("source_world", source_world), ("target_world", target_world),
-                        ("publication_key", publication_key), ("evidence_id", evidence_id)):
+                        ("publication_key", publication_key), ("evidence_id", evidence_id),
+                        ("ontology_revision", ontology_revision)):
         _text(value, name)
     if source_world == target_world:
         raise ReasoningError("publication requires a separate target world")
@@ -324,7 +343,6 @@ def stage_range(graph: GraphDB, desired: Iterable[tuple[str, str, str]], *, vali
     namespace = _range_namespace(publication_key, source_world, target_world, valid_start_us, valid_end_us)
     sample = TemporalInstant(valid_start_us)
     with graph.read_view(valid_time=sample) as view:
-        base = []
         for version in view.iter_claims_as_of(world=target_world, agent="gestaltdb:ontology", source=namespace):
             claim = version.claim
             if (claim.provenance.get("engine") != "gestaltdb.ontology"
@@ -332,15 +350,17 @@ def stage_range(graph: GraphDB, desired: Iterable[tuple[str, str, str]], *, vali
                     or version.valid != TemporalInterval(sample, None if valid_end_us is None
                                                          else TemporalInstant(valid_end_us))):
                 raise ReasoningError("publication namespace contains unmanaged claims")
-            base.append((claim.claim_id, str(claim.provenance.get("generation", ""))))
         database_id = view.provenance.database_id
-    generation = _digest(["ontology-range-publication-v1", database_id, namespace, evidence_id,
+        base_fingerprint = _range_target_fingerprint(graph, view, namespace, target_world)
+    generation = _digest(["ontology-range-publication-v2", database_id, namespace, evidence_id, ontology_revision,
                           selection.policy_id, mapping.mapping_id, sorted(set(triples))])
-    return StagedRangePublication(namespace, publication_key, source_world, target_world,
-                                  valid_start_us, valid_end_us, generation, evidence_id,
-                                  "explicit-range-evidence-v1", selection.policy_id,
-                                  mapping.mapping_id, database_id, tuple(sorted(set(triples))),
-                                  _stage_fingerprint(base))
+    return StagedRangePublication(
+        namespace=namespace, publication_key=publication_key, source_world=source_world,
+        target_world=target_world, valid_start_us=valid_start_us, valid_end_us=valid_end_us,
+        generation=generation, evidence_id=evidence_id, input_context_id="explicit-range-evidence-v1",
+        ontology_revision=ontology_revision, policy_id=selection.policy_id, mapping_id=mapping.mapping_id,
+        database_id=database_id, desired=tuple(sorted(set(triples))), base_fingerprint=base_fingerprint,
+    )
 
 
 def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
@@ -376,20 +396,24 @@ def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
                         or version.valid != interval):
                     raise ReasoningError("publication namespace contains unmanaged claims")
                 current[claim.claim_id] = version
-            if _stage_fingerprint([(claim_id, str(version.claim.provenance.get("generation", "")))
-                                   for claim_id, version in current.items()]) != staged.base_fingerprint:
-                raise GenerationStaleError("target namespace moved since staging; re-stage and retry")
             desired = {}
             for subject, predicate, obj in staged.desired:
                 claim = Claim(subject, predicate, obj, "positive", "gestaltdb:ontology",
                               source=staged.namespace, world=staged.target_world, provenance={
                                   "engine": "gestaltdb.ontology", "publication_key": staged.publication_key,
-                                  "generation": staged.generation, "evidence": staged.evidence_id,
-                                  "input_context": staged.input_context_id,
+                                   "generation": staged.generation, "evidence": staged.evidence_id,
+                                   "input_context": staged.input_context_id,
+                                   "ontology_revision": staged.ontology_revision,
                                   "valid_start_us": staged.valid_start_us,
                                   "valid_end_us": staged.valid_end_us,
                               })
                 desired[claim.claim_id] = claim
+            current_fingerprint = _range_target_fingerprint(graph, view, staged.namespace, staged.target_world)
+            already_published = (current.keys() == desired.keys() and all(
+                version.claim.provenance.get("generation") == staged.generation
+                for version in current.values()))
+            if current_fingerprint != staged.base_fingerprint and not already_published:
+                raise GenerationStaleError("target namespace moved since staging; re-stage and retry")
             writes = []
             asserted = corrected = retracted = unchanged = 0
             for claim_id, claim in sorted(desired.items()):

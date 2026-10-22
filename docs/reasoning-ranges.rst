@@ -28,6 +28,9 @@ Managed interval generations
 
 ``stage_range``/``publish_staged_range`` extend the staged
 compare-and-publish pattern to caller-derived interval claims: each
+stage requires an explicit ``ontology_revision`` identifying the rules that
+produced its desired triples. The revision participates in generation identity
+and is persisted in published claim provenance. Each
 validity interval is its own reserved namespace, generations bind exact
 source/rule identities plus the caller's evidence digest, and gaps between
 generations are never filled nor enveloped. Stale namespaces raise

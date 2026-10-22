@@ -131,7 +131,7 @@ def test_staged_range_validates_without_storage():
     )
 
     with pytest.raises(ReasoningError, match="GraphDB"):
-        stage_range(object(), [], valid_start_us=0, valid_end_us=5, evidence_id="e",
+        stage_range(object(), [], valid_start_us=0, valid_end_us=5, evidence_id="e", ontology_revision="rev",
                     source_world="b", target_world="d", publication_key="k",
                     selection=object(), mapping=object())
     with pytest.raises(ReasoningError, match="StagedRangePublication"):
@@ -178,11 +178,13 @@ def test_range_publication_roundtrip_on_backend(tmp_path):
         with pytest.raises(ReasoningError, match="consent"):
             reclaim_publication_orphans(graph, through_commit=0, consent=False)
         staged = stage_range(graph, [("a", "p", "b")], valid_start_us=1_000_000,
-                             valid_end_us=2_000_000, evidence_id="sha256:" + "ab" * 32,
+                             valid_end_us=2_000_000, evidence_id="sha256:" + "ab" * 32, ontology_revision="rev-1",
                              source_world="base", target_world="derived", publication_key="rk",
                              selection=selection, mapping=mapping)
         assert staged.namespace.startswith("ontology-range-publication:")
         assert staged.base_fingerprint
+        assert staged.ontology_revision == "rev-1"
+        assert staged.policy_id == selection.policy_id and staged.mapping_id == mapping.mapping_id
         out = publish_staged_range(graph, staged)
         assert (out.asserted, out.corrected, out.retracted, out.unchanged) == (1, 0, 0, 0)
         assert out.commit_id is not None
@@ -190,7 +192,7 @@ def test_range_publication_roundtrip_on_backend(tmp_path):
         assert (republish.asserted, republish.unchanged) == (0, 1)
         assert republish.commit_id is None
         shrunk = stage_range(graph, [], valid_start_us=1_000_000, valid_end_us=2_000_000,
-                             evidence_id="sha256:" + "cd" * 32,
+                             evidence_id="sha256:" + "cd" * 32, ontology_revision="rev-1",
                              source_world="base", target_world="derived", publication_key="rk",
                              selection=selection, mapping=mapping)
         removed = publish_staged_range(graph, shrunk)
