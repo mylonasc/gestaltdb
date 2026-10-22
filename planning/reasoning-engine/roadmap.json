@@ -197,10 +197,12 @@
       "integration_commit": "93ce554"
     },
     "RE-21": {
-      "status": "in-progress",
+      "status": "in-review",
       "branch": "feature/re-21-delta",
       "worktree": "re-21-delta",
-      "contract": "docs/reasoning-ranges.rst"
+      "contract": "docs/reasoning-ranges.rst",
+      "pr": 235,
+      "validation": "Focused suites (ranges/temporal/contracts) green; docs drift, Sphinx -W, roadmap validator passed. 38+1 segments ~22ms vs ~235ms rebuild. PR CI running."
     }
   },
   "source_sha256": {
