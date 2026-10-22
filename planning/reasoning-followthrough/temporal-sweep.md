@@ -1,7 +1,12 @@
 # Temporal active-set event scheduler — #254
 
-Status: design/oracle milestone. Integration depends on #245 and measurements in
+Status: executable standalone scheduler with scalar-oracle tests. Integration depends on #245 and measurements in
 #194; it must not add another cache before program identity is enforced.
+
+Implemented in `reasoning/temporal_sweep.py`; see
+`docs/reasoning-temporal-sweep.rst`. Closure evaluation is deliberately unchanged.
+The prototype retains row ordinals rather than inventing evidence IDs and
+bounds total emitted row memberships as well as rows, events and segments.
 
 Build events `(bound, logical_fact, signed_count)` from half-open intervals.
 Initialize unbounded-start intervals before finite events. At a boundary process
