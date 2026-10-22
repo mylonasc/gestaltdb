@@ -51,7 +51,7 @@ Array-Native API Map
    * - Method
      - Use
    * - ``sample_nodes`` / ``sample_edges``
-     - Seed draws with node-type/relation filters; degree/weight strategies where supported
+     - Seed draws with node-type/relation filters, balanced quotas, temporal availability, and degree/weight strategies where supported
    * - ``sample_neighbors`` / ``sample_neighbors_external``
      - Batched uniform or weighted neighbors, direction/relation filters, offsets
    * - ``sample_layers`` / ``sample_layers_external``
@@ -213,6 +213,27 @@ time: live reservoir sampling still visits the eligible typed adjacency.
        "drug-to-protein",
        direction="out",
        sample_size=1,
+       rng=random.Random(7),
+   )
+
+Live Seed Sampling
+------------------
+
+``GraphDB.sample_nodes`` draws live node IDs with reservoir sampling, so memory
+is bounded by ``sample_size`` rather than graph size. Eligible keys are still
+scanned: pass ``label`` to restrict the scan to one native-label index, and
+``node_filter`` to decode and filter candidates. There is no property-index
+pushdown; use indexed snapshot cohorts or Cypher filters when scan time
+matters. The draw is deterministic for a given key order and seeded ``rng``.
+
+.. code-block:: python
+
+   import random
+
+   seeds = graph_db.sample_nodes(
+       32,
+       label="Drug",
+       node_filter=lambda node: node.properties.get("score", 0) >= 0.5,
        rng=random.Random(7),
    )
 

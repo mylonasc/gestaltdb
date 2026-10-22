@@ -469,6 +469,7 @@ from gestaltdb.sampling import SamplingHop, SamplingPattern
 
 neighbors = graph.neighbors_by_edge_type("drug-1", "binds", direction="out")
 edges = graph.edges_by_edge_type("drug-1", "binds", direction="out")
+seeds = graph.sample_nodes(5, label="Drug", rng=random.Random(5))
 
 one_hop = graph.sample_neighbors(
     "drug-1",
