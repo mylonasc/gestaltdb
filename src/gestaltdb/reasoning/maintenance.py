@@ -401,14 +401,12 @@ def _find_all_supports(program: GenericProgram, full: _TypedIndex, target: Typed
     for rule in program.rules:
         if rule.head.predicate != target.predicate or len(rule.head.args) != len(target.values):
             continue
-        head_blocked = False
-        for term, value in zip(rule.head.args, target.values):
-            if not hasattr(term, "name") and term != value:
-                head_blocked = True
-                break
-        if head_blocked:
+        bindings = _unify(rule.head, target, {})
+        if bindings is None:
             continue
-        stack = [(dict(), dict(), tuple(range(len(rule.body))))]
+        # The requested conclusion supplies bindings for indexed body probes.
+        # Do not enumerate the entire unbound join once per output fact.
+        stack = [(bindings, dict(), tuple(range(len(rule.body))))]
         while stack:
             check_cancelled(cancel)
             bindings, used, remaining = stack.pop()
