@@ -536,3 +536,13 @@ cycle no-ops, rule-revision parity, maintenance benchmark with P50/P95, RSS,
 supports and write amplification
 (`benchmarks/results/reasoning-re18-maintenance.json`), and the
 repeatable update/audit workflow. RE-E3 exits here.
+
+### Implementation started: RE-19 (#180)
+
+Dedicated worktree `re-19-intervals`, branch `feature/re-19-intervals`,
+based on accepted integration `f8cc14e` (RE-E3 fully integrated;
+prerequisites RE-01/RE-15 satisfied; first RE-E4 slice). Storage-neutral
+half-open interval unions with linear-sweep intersection/difference,
+support-qualified coalescing with truth/segment distinction and no
+envelopes, seeded 300-case oracle parity, measured 5k-interval evidence.
+Scalar prototype only; Polars/native operators stay deferred.

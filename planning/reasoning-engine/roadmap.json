@@ -169,13 +169,22 @@
       "integration_commit": "cec7e0a"
     },
     "RE-18": {
-      "status": "in-review",
+      "status": "integrated",
       "branch": "feature/re-18-gates",
       "worktree": "re-18-gates",
       "contract": "docs/reasoning-gates.rst",
       "benchmark_evidence": "benchmarks/results/reasoning-re18-maintenance.json",
       "pr": 219,
-      "validation": "Focused suites (gates/catalog/deletion/maintenance/contracts) green; docs drift, Sphinx -W, roadmap validator passed. Maintenance benchmark frozen (P50/P95, RSS, supports, amplification). PR CI running."
+      "validation": "Focused suites incl. gates/contracts green; docs drift, Sphinx -W, roadmap validator passed; maintenance benchmark frozen (P50/P95, RSS, supports, amplification); Python 3.10-3.13 checks passed.",
+      "integration_commit": "f8cc14e"
+    },
+    "RE-19": {
+      "status": "in-review",
+      "branch": "feature/re-19-intervals",
+      "worktree": "re-19-intervals",
+      "contract": "docs/reasoning-intervals.rst",
+      "pr": 220,
+      "validation": "Focused suites (intervals/contracts incl. 300-case oracle) green; docs drift, Sphinx -W, roadmap validator passed. 5k-interval evidence (union/diff/inter/coalesce in ms). PR CI running."
     }
   },
   "source_sha256": {
