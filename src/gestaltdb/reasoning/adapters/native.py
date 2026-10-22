@@ -84,6 +84,155 @@ def require_native_scan(store: object):
 
 
 @dataclass(frozen=True)
+class DecodedRow:
+    """One decoded native row: fact triple plus exact version/evidence identity."""
+
+    subject: str
+    predicate: str
+    object: str
+    version_id: str
+    evidence_id: str
+
+    def __post_init__(self) -> None:
+        for field in ("subject", "predicate", "object", "version_id", "evidence_id"):
+            value = getattr(self, field)
+            if not isinstance(value, str) or not value:
+                raise ReasoningError(f"decoded {field} must be a non-empty string")
+
+
+@dataclass(frozen=True)
+class DecodedBatch:
+    """Immutable decoded batch; ``visibility`` pins the authenticated horizon."""
+
+    rows: tuple[DecodedRow, ...]
+    batch_index: int
+    complete: bool
+    visibility: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.rows, (tuple, list)) or not self.rows:
+            raise ReasoningError("decoded batch rows must be non-empty")
+        if not all(isinstance(row, DecodedRow) for row in self.rows):
+            raise ReasoningError("decoded batch rows must contain only DecodedRow values")
+        if isinstance(self.batch_index, bool) or not isinstance(self.batch_index, int) or self.batch_index < 0:
+            raise ReasoningError("batch_index must be a non-negative integer")
+        if not isinstance(self.complete, bool):
+            raise ReasoningError("complete must be a bool")
+        if not isinstance(self.visibility, str) or not self.visibility:
+            raise ReasoningError("visibility must be a non-empty authenticated token")
+        object.__setattr__(self, "rows", tuple(self.rows))
+
+
+def _check_bindings(bindings) -> dict[str, str]:
+    if bindings is None:
+        return {}
+    if not isinstance(bindings, dict):
+        raise ReasoningError("bindings must be a mapping of subject/object to entities")
+    cleaned = {}
+    for key, value in bindings.items():
+        if key not in ("subject", "object"):
+            raise ReasoningError("bindings only support subject/object pushdown")
+        if not isinstance(value, str) or not value:
+            raise ReasoningError("binding values must be non-empty strings")
+        cleaned[key] = value
+    return cleaned
+
+
+def iter_decoded_evidence(scan, decode_row, *, predicate: str | None = None,
+                          bindings: dict[str, str] | None = None, visibility: str,
+                          max_rows: int = 100_000) -> Iterator[DecodedBatch]:
+    """Decode native batches into evidence without ever leaking raw rows.
+
+    ``decode_row`` is caller-owned: it maps ``(key, value)`` bytes to a
+    ``DecodedRow`` or ``None`` to skip. Corrupt rows fail closed with the
+    native/decoding error chained and no raw bytes in the message.
+    ``predicate``/``bindings`` push down filters before materialization;
+    every batch carries the caller-authenticated ``visibility`` token.
+    Version IDs must be unique per scan; duplicates fail closed. The
+    ``complete`` flag mirrors the raw batch it was decoded from — it is
+    provenance, not framing: end-of-scan is always generator exhaustion,
+    since filtered-out tails carry no batch. Decoding
+    stays caller-owned — this plumbing only bounds, filters and
+    authenticates the handoff into inference.
+    """
+    if not callable(decode_row):
+        raise ReasoningError("decode_row must be callable")
+    if predicate is not None and (not isinstance(predicate, str) or not predicate):
+        raise ReasoningError("predicate must be a non-empty string or None")
+    wanted = _check_bindings(bindings)
+    if not isinstance(visibility, str) or not visibility:
+        raise ReasoningError("visibility must be a non-empty authenticated token")
+    if isinstance(max_rows, bool) or not isinstance(max_rows, int) or max_rows < 1:
+        raise ReasoningError("max_rows must be a positive integer")
+    try:
+        batches = iter(scan)
+    except TypeError as exc:
+        raise ReasoningError("scan must be iterable of RawBatch values") from exc
+    seen: set[str] = set()
+    total = 0
+    pending: tuple[tuple[DecodedRow, ...], int] | None = None
+    raw_complete = False
+    for batch in batches:
+        if not isinstance(batch, RawBatch):
+            raise ReasoningError("scan must yield RawBatch values only")
+        rows = []
+        for key, value in batch.rows:
+            try:
+                decoded = decode_row(key, value)
+            except Exception as exc:
+                raise ReasoningError(f"native row decoding failed: {type(exc).__name__}: {exc}") from exc
+            if decoded is None:
+                continue
+            if not isinstance(decoded, DecodedRow):
+                raise ReasoningError("decode_row must return DecodedRow or None")
+            if predicate is not None and decoded.predicate != predicate:
+                continue
+            if any(getattr(decoded, field) != expected for field, expected in wanted.items()):
+                continue
+            if decoded.version_id in seen:
+                raise ReasoningError(f"duplicate version id in native scan: {decoded.version_id!r}")
+            seen.add(decoded.version_id)
+            rows.append(decoded)
+        total += len(rows)
+        if total > max_rows:
+            raise ReasoningLimitError(f"decoded native scan exceeded max_rows={max_rows}")
+        if pending is not None:
+            yield DecodedBatch(pending[0], pending[1], False, visibility)
+        pending = (tuple(rows), batch.batch_index) if rows else None
+        if batch.complete:
+            raw_complete = True
+            break
+    if pending is not None:
+        yield DecodedBatch(pending[0], pending[1], raw_complete, visibility)
+
+
+def iter_locator_keys(scan, *, max_rows: int = 100_000) -> Iterator[bytes]:
+    """Yield native keys for caller point-materialization; values are dropped.
+
+    Locator scans skip payload copies for the index-prefix probe, so callers
+    can measure locator versus full-scan tradeoffs per backend. Snapshot
+    validity stays with the underlying scan; decoding stays caller-owned.
+    Column projection would need upstream support and is documented, not
+    assumed.
+    """
+    if isinstance(max_rows, bool) or not isinstance(max_rows, int) or max_rows < 1:
+        raise ReasoningError("max_rows must be a positive integer")
+    try:
+        batches = iter(scan)
+    except TypeError as exc:
+        raise ReasoningError("scan must be iterable of RawBatch values") from exc
+    total = 0
+    for batch in batches:
+        if not isinstance(batch, RawBatch):
+            raise ReasoningError("scan must yield RawBatch values only")
+        for key, _value in batch.rows:
+            total += 1
+            if total > max_rows:
+                raise ReasoningLimitError(f"locator scan exceeded max_rows={max_rows}")
+            yield key
+
+
+@dataclass(frozen=True)
 class RawBatch:
     """One immutable copied key/value batch; ``complete`` marks the last one."""
 

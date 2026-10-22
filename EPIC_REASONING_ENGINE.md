@@ -622,3 +622,15 @@ contracts with witness-vs-supports export interchange (#126), authenticated
 generation checkpoints with incompatible-resume rejection and explicit
 incomplete discard, ranked-vs-deterministic separation with published
 complexity/resource limits.
+
+### Techdebt implementation: #194 decoded native Evidence path (#techedt slice)
+
+Dedicated worktree `re-194-decoded`, branch `feature/re-194-decoded`,
+based on accepted integration `3b14d61` (full RE-01–RE-27 integrated).
+Decoded Evidence handoff over native scans with predicate/binding
+pushdown, authenticated visibility, exact version IDs and no raw-row
+leaks; locator-key iteration for per-backend tradeoff measurement;
+capability-matrix re-audit (TransactionDB still unscanned in
+pyrex-rocksdb==0.5.0); GenerationStore question settled by the RE-26
+no-bespoke-kernel decision. The 100K-row measurement box stays explicitly
+open: no performance claim is made.
