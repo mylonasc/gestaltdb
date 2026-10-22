@@ -678,6 +678,11 @@ class GraphDB:
         )
         self._typed_adjacency_count_cache: dict[tuple[str, bytes, str], int] = {}
         self._verified_current_provenance: dict[str, str] = {}
+        # Decoded temporal commits are immutable (commit IDs are never
+        # reused), so caching them per handle is sound. The cache only
+        # covers successfully decoded visible commits; invisible IDs are
+        # re-checked every time. It is bounded below in get_temporal_commit.
+        self._temporal_commit_cache: dict[tuple[int, bool], TemporalCommit] = {}
         persisted_node_indexes = self._load_property_index_metadata(_NODE_PROPERTY_INDEXES_METADATA_KEY)
         persisted_edge_indexes = self._load_property_index_metadata(_EDGE_PROPERTY_INDEXES_METADATA_KEY)
         self.indexed_node_properties = set(persisted_node_indexes).union(indexed_node_properties or [])
@@ -5636,9 +5641,20 @@ class GraphDB:
     def get_temporal_commit(
         self, commit_id: int, *, _validate_supersession: bool = True
     ) -> TemporalCommit | None:
-        """Return a fully validated visible temporal commit."""
+        """Return a fully validated visible temporal commit.
+
+        Successfully decoded commits are cached per handle. Commits are
+        immutable and their IDs are never reused, so a cached entry cannot
+        go stale; invisible commit IDs are never cached. The cache is
+        bounded to keep long-lived handles from retaining every commit
+        they have ever touched.
+        """
         if isinstance(commit_id, bool) or not isinstance(commit_id, int) or commit_id < 1:
             raise ValueError("commit_id must be a positive integer")
+        cache_key = (commit_id, bool(_validate_supersession))
+        cached = self._temporal_commit_cache.get(cache_key)
+        if cached is not None:
+            return cached
         descriptor_payload = self.store.get_metadata(self._temporal_commit_key(commit_id))
         marker = self.store.get_metadata(self._temporal_visible_key(commit_id))
         if marker is None:
@@ -5709,7 +5725,14 @@ class GraphDB:
                     raise TemporalCorruptionError("temporal version supersedes a missing version")
                 if type(target) is not type(version) or target.logical_id != version.logical_id:
                     raise TemporalCorruptionError("temporal supersession kind or logical ID mismatch")
-        return TemporalCommit(commit_id, system_time, metadata, tuple(versions))
+        commit = TemporalCommit(commit_id, system_time, metadata, tuple(versions))
+        if len(self._temporal_commit_cache) >= 256:
+            # Drop the oldest half; commits are immutable so eviction only
+            # costs a future re-decode, never correctness.
+            for old_key in list(self._temporal_commit_cache)[:128]:
+                del self._temporal_commit_cache[old_key]
+        self._temporal_commit_cache[cache_key] = commit
+        return commit
 
     def _decode_temporal_version(self, envelope: bytes):
         header, payload = decode_version_envelope(envelope)
