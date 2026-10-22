@@ -427,6 +427,23 @@ sampled = graph.query(
 )
 ```
 
+Node label matching is exact by default. Pass a `LabelHierarchy` to expand a
+parent label to its transitive sub-types for one query:
+
+```python
+from gestaltdb import LabelHierarchy
+
+transport = LabelHierarchy({
+    "Ocean_Freight": ["Transport_Edge"],
+    "Air_Freight": ["Transport_Edge"],
+    "Refrigerated_Freight": ["Ocean_Freight"],
+})
+matches = graph.query(
+    'MATCH (n:Transport_Edge) RETURN n.id AS id',
+    label_hierarchy=transport,
+)
+```
+
 ## Traverse and Sample Typed Relationships
 
 ```python

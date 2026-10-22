@@ -32,6 +32,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Optional offline RDF: `ontology/adapters/rdf.py` (`rdf` extra). Explicit current-graph projection/fanout: `reasoning/adapters/graph.py` / `docs/ontology-graph.rst`. Point-only separate-world publication: `reasoning/adapters/publication.py` / `docs/ontology-publication.rst`; nontransactional orphan recovery is caller-managed, never silently repaired.
 - Cypher engine: `src/gestaltdb/query_engine/cypher/`
 - Legacy Cypher import shims: `src/gestaltdb/cypher.py` and `src/gestaltdb/cypher_*.py`
+- Explicit type hierarchies: `src/gestaltdb/hierarchy.py`; `RelationHierarchy` expands sampler relations, `LabelHierarchy` enables opt-in Cypher node sub-type matching. The historical `sampling/hierarchy.py` path is a compatibility shim.
 - Sampling API: `src/gestaltdb/sampling/`
 - Sphinx docs: `docs/`; user-facing filtering and sampling guides: `docs/property-filtering.rst`, `docs/typed-sampling.rst`; performance boundaries and benchmark commands: `docs/performance.rst`
 - Tests: `tests/`
@@ -122,7 +123,7 @@ Do not assume `GraphDB`, `Node`, `Edge`, backend classes, or serializer classes 
 
 ## Cypher Support
 
-Use `GraphDB.query(cypher, parameters=None)` for Cypher reads and writes. It returns `QueryResult(columns, records)`, and iterating over the result yields record dictionaries.
+Use `GraphDB.query(cypher, parameters=None)` for Cypher reads and writes. It returns `QueryResult(columns, records)`, and iterating over the result yields record dictionaries. Pass `label_hierarchy=LabelHierarchy({...})` to opt into transitive node sub-type matching for scans, label expressions, endpoint filters and indexed lookups; default matching stays exact.
 
 Supported features include:
 
@@ -166,7 +167,7 @@ There are two sampling layers:
 
 For repeated property-constrained sampling, select cohorts through explicit indexes, then define the eligible graph with snapshot `node_filter`/`edge_filter`. Filtering seeds alone does not constrain every hop. Build callbacks scan decoded source records (no automatic index pushdown); runtime sampling uses relation/direction/type/temporal policies over arrays. Memmap avoids eager array loading, not all memory use. Keep these two first-class features prominent in README and the docs landing page.
 
-`SamplerSnapshot.build(graph, output_path, ...)` and `graph.build_sampler_snapshot(output_path, ...)` persist immutable `.npy` arrays and metadata. Snapshots may include edge weights for weighted neighbor, edge, and random-walk sampling. `SamplerEngine.load(path, mode="ram"|"memmap", seed=...)` loads the arrays for node/edge seed, neighbor, heterogeneous layer, first-order random walk, multihop, subgraph, positive-triple, and hard-negative sampling.
+`RelationHierarchy` expands parent relation names to transitive sub-properties before sampling; `SamplerSnapshot.expand_relations` fails closed on unknown snapshot relations and fanout applies to the union. `SamplerSnapshot.build(graph, output_path, ...)` and `graph.build_sampler_snapshot(output_path, ...)` persist immutable `.npy` arrays and metadata. Snapshots may include edge weights for weighted neighbor, edge, and random-walk sampling. `SamplerEngine.load(path, mode="ram"|"memmap", seed=...)` loads the arrays for node/edge seed, neighbor, heterogeneous layer, first-order random walk, multihop, subgraph, positive-triple, and hard-negative sampling.
 
 High-level non-temporal snapshot builds automatically use authenticated mutable-state snapshots when the backend exposes a verifiable identity. Pass `read_snapshot=True` to require this guarantee or `False` to opt out; unsupported requests fail before building.
 

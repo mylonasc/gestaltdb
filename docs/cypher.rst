@@ -2,7 +2,7 @@ Cypher Queries
 ==============
 
 GestaltDB exposes an expanding openCypher subset through
-``GraphDB.query(cypher, parameters=None, read_snapshot=None)``. The grammar-based frontend supports
+``GraphDB.query(cypher, parameters=None, read_snapshot=None, label_hierarchy=None)``. The grammar-based frontend supports
 comments, Unicode and backtick-escaped names, source-located syntax errors, and
 standard expression precedence. Execution covers indexed node and relationship
 scans, typed relationship expansion, filtering, ordering, chained ``MATCH``
@@ -55,6 +55,43 @@ with the smallest labeled scan.
    graph_db.query('MATCH (n:Drug {name: "Aspirin", approved: true}) RETURN n.id')
    graph_db.query('MATCH (n:Drug:Approved) RETURN n.id')
    graph_db.query('MATCH (n) RETURN n.id LIMIT 5')
+
+Sub-type Label Expansion
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Default label matching is exact. To treat native labels as a hierarchy, build a
+``LabelHierarchy`` and pass it explicitly to ``GraphDB.query``. A required
+parent label then also matches nodes carrying any transitive sub-type label.
+Expansion applies to label scans, label expressions and their negation,
+endpoint filters, multi-label intersections, and exact/range label-property
+index lookups. ``labels(n)`` still returns the node's literal labels, and
+writes are unchanged.
+
+.. code-block:: python
+
+   from gestaltdb import LabelHierarchy
+
+   labels = LabelHierarchy({
+       "Ocean_Freight": ["Transport_Edge"],
+       "Air_Freight": ["Transport_Edge"],
+       "Refrigerated_Freight": ["Ocean_Freight"],
+   })
+
+   graph_db.query(
+       'MATCH (n:Transport_Edge) RETURN n.id',
+       label_hierarchy=labels,
+   )
+   graph_db.query(
+       'MATCH (a:Warehouse)-[:ships]->(b:Transport_Edge) RETURN b.id',
+       label_hierarchy=labels,
+   )
+
+Schema construction is immutable and fail-closed: empty names, self-parenting,
+duplicate child entries, scalar parent strings, and cycles raise ``ValueError``.
+Unknown names expand only to themselves. Hierarchy expansion is opt-in per
+query; omitting ``label_hierarchy`` preserves exact-label semantics for existing
+applications. Relation sub-property hierarchies for array-native sampling are a
+separate, snapshot-scoped feature described in :doc:`typed-sampling`.
 
 Typed Relationship Traversal
 ----------------------------
