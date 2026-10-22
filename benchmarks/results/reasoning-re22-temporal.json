@@ -1,0 +1,45 @@
+{
+  "complete": true,
+  "git_revision": "cfd35a7149326a80406dfa0fa49576dde6bf3eaa",
+  "harness_sha256": "4d03975760d2168535cfb8eeffba37a158299d2019be75ea7b20da08f01e3091",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "python": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
+  "rows": [
+    {
+      "derivations": 77,
+      "extract_p50_s": 1.815002178773284e-05,
+      "extract_p95_s": 1.815002178773284e-05,
+      "infer_p50_s": 0.0034538500185590237,
+      "infer_p95_s": 0.0034538500185590237,
+      "rebuild_p50_s": 0.00335670800996013,
+      "rebuild_p95_s": 0.00335670800996013,
+      "recomputed_segments": 1,
+      "reused_segments": 38,
+      "rss_peak_bytes": 54599680,
+      "segments": 39,
+      "size": 20,
+      "status": "ok",
+      "update_p50_s": 0.0008528920006938279,
+      "update_p95_s": 0.0008528920006938279
+    },
+    {
+      "derivations": 237,
+      "extract_p50_s": 4.578000516630709e-05,
+      "extract_p95_s": 4.578000516630709e-05,
+      "infer_p50_s": 0.011551642994163558,
+      "infer_p95_s": 0.011551642994163558,
+      "rebuild_p50_s": 0.011991859006229788,
+      "rebuild_p95_s": 0.011991859006229788,
+      "recomputed_segments": 1,
+      "reused_segments": 118,
+      "rss_peak_bytes": 54599680,
+      "segments": 119,
+      "size": 60,
+      "status": "ok",
+      "update_p50_s": 0.005725717986933887,
+      "update_p95_s": 0.005725717986933887
+    }
+  ],
+  "schema_version": 1,
+  "working_tree_dirty": true
+}

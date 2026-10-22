@@ -565,3 +565,14 @@ propagation with full-range fallback and reuse diagnostics, managed
 interval generations with exact identities and no gap filling (point
 behavior preserved), correction/retraction/resurrection parity, plus #154
 interval/locking coordination.
+
+### Implementation started: RE-22 (#183)
+
+Dedicated worktree `re-22-conformance`, branch `feature/re-22-conformance`,
+based on accepted integration `cfd35a7` (RE-21 integrated; prerequisites
+RE-20/RE-21 satisfied; final RE-E4 slice). Independent `verify_closure`
+conformance gate, supported temporal/profile matrix, temporal benchmark
+with P50/P95, RSS and reuse ratios
+(`benchmarks/results/reasoning-re22-temporal.json`), when/why workflows and
+runnable historical compliance scenarios (core + backend-gated). RE-E4
+exits here.

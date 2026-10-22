@@ -197,12 +197,20 @@
       "integration_commit": "93ce554"
     },
     "RE-21": {
-      "status": "in-review",
+      "status": "integrated",
       "branch": "feature/re-21-delta",
       "worktree": "re-21-delta",
       "contract": "docs/reasoning-ranges.rst",
       "pr": 235,
-      "validation": "Focused suites (ranges/temporal/contracts) green; docs drift, Sphinx -W, roadmap validator passed. 38+1 segments ~22ms vs ~235ms rebuild. PR CI running."
+      "validation": "Focused suites (ranges/temporal/contracts) green; docs drift, Sphinx -W, roadmap validator passed; 38+1 segments ~22ms vs ~235ms rebuild; Python 3.10-3.13 and fuzz CI passed.",
+      "integration_commit": "cfd35a7"
+    },
+    "RE-22": {
+      "status": "in-progress",
+      "branch": "feature/re-22-conformance",
+      "worktree": "re-22-conformance",
+      "contract": "docs/reasoning-conformance.rst",
+      "benchmark_evidence": "benchmarks/results/reasoning-re22-temporal.json"
     }
   },
   "source_sha256": {

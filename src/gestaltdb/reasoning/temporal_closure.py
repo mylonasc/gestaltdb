@@ -178,6 +178,70 @@ class RangeUpdate:
         object.__setattr__(self, "removed", tuple(sorted(set(self.removed), key=_sort_key)))
 
 
+@dataclass(frozen=True)
+class ClosureVerification:
+    """Independent re-verification counts for a pinned range closure."""
+
+    segments: int
+    derivations: int
+    points_checked: int
+
+    def __post_init__(self) -> None:
+        for name in ("segments", "derivations", "points_checked"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ReasoningError(f"{name} must be a non-negative integer")
+
+
+def verify_closure(program: GenericProgram, closure: TemporalClosure, *,
+                   limits: ReasoningLimits,
+                   cancel: Callable[[], bool] | None = None) -> ClosureVerification:
+    """Independently re-verify a range closure through a different path.
+
+    Re-derives the segmentation from base validity, point-evaluates every
+    segment fresh, and checks that every derived fact, derivation and
+    validity answer matches. Any drift — stale segments, missing supports,
+    wrong validity — fails closed. This is the conformance gate for
+    published temporal/profile combinations: supported paths verify;
+    anything else rematerializes.
+    """
+    if not isinstance(program, GenericProgram):
+        raise ReasoningError("program must be a GenericProgram")
+    if not isinstance(closure, TemporalClosure):
+        raise ReasoningError("closure must be a TemporalClosure")
+    if not isinstance(limits, ReasoningLimits):
+        raise ReasoningError("limits must be ReasoningLimits")
+    _check_supported(program)
+    check_cancelled(cancel)
+    expected_segments = change_segments(closure.base, max_segments=max(1, len(closure.segments)))
+    if expected_segments != closure.segments:
+        raise ReasoningError("closure segments drifted from base validity; rematerialize explicitly")
+    rule_ids = {rule.rule_id for rule in program.rules}
+    points = 0
+    for segment in closure.segments:
+        check_cancelled(cancel)
+        point = _sample(segment)
+        active = [item.fact for item in closure.base if point in item.valid]
+        fresh = set(GenericEngine().evaluate(program, active, limits=limits, cancel=cancel).facts)
+        if set(closure.at(point)) != fresh:
+            raise ReasoningError("point closure mismatch; rematerialize explicitly")
+        points += 1
+    for derivation in closure.derivations:
+        if derivation.segment not in closure.segments:
+            raise ReasoningError("derivation references an unknown segment")
+        if derivation.rule_id not in rule_ids:
+            raise ReasoningError(f"unknown rule in derivation: {derivation.rule_id!r}")
+        if derivation.fact not in closure.at(_sample(derivation.segment)):
+            raise ReasoningError("derivation fact not covered by its own segment")
+        if any(premise not in closure.at(_sample(derivation.segment)) for premise in derivation.premises):
+            raise ReasoningError("derivation premises not active on their segment")
+    for item in closure.base:
+        uncovered = item.valid.difference(closure.answers(item.fact))
+        if uncovered.intervals:
+            raise ReasoningError("base validity not covered by closure answers")
+    return ClosureVerification(len(closure.segments), len(closure.derivations), points)
+
+
 def _sample(segment: Interval) -> int:
     if segment.start is not None:
         return segment.start
