@@ -656,6 +656,13 @@ available during the configured number of days ending at the example time.
 Without a candidate window they must be available at the example time. Future
 candidates are excluded unless ``allow_future_candidates=True``.
 
+``in_batch=True`` tries other positive heads or tails with the same relation
+before random or context candidates. The current positive endpoint is skipped;
+normal type, availability, duplicate, and positive rejection still apply. If
+the in-batch pool is exhausted, the configured source and random fallback run as
+before. ``accepted_in_batch`` counts accepted peers in
+``return_diagnostics``.
+
 ``sample_hard_negatives`` accepts aligned ``positive_times_us`` and optionally
 returns deterministic rejection counters with ``return_diagnostics=True``.
 Direct calls on temporal snapshots must supply ``positive_times_us`` or a

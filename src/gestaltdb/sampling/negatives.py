@@ -24,10 +24,13 @@ class HardNegativeConfig:
     temporal_candidate_window_days: float | None = None
     allow_future_candidates: bool = False
     exhaustion_policy: str = "raise"
+    in_batch: bool = False
 
     def __post_init__(self):
         if self.negatives_per_positive < 0:
             raise ValueError("negatives_per_positive must be non-negative")
+        if not isinstance(self.in_batch, bool):
+            raise ValueError("in_batch must be a boolean")
         if not 0.0 <= self.head_probability <= 1.0:
             raise ValueError("head_probability must be between 0 and 1")
         if self.max_retries < 1:
