@@ -55,6 +55,12 @@ Filter, Sample, Train
 
 .. toctree::
    :maxdepth: 2
+   :caption: Ontology Tutorial
+
+   onto-tutorial/index
+
+.. toctree::
+   :maxdepth: 2
    :caption: API Reference
 
    api
