@@ -555,3 +555,13 @@ RE-08/RE-11/RE-19 satisfied). Change-segment range evaluation with
 per-interval evidence and budgets, change-point point-parity, temporal
 negation/equality fail-closed contracts, and per-segment equality rebuilds
 with no global merges. Measured 29-segment/935-derivation evidence.
+
+### Implementation started: RE-21 (#182)
+
+Dedicated worktree `re-21-delta`, branch `feature/re-21-delta`, based on
+accepted integration `499614f` (RE-20 integrated plus fixes #207–#217 and
+#221; prerequisites RE-14/RE-16/RE-20 satisfied). Segment-memoized validity
+propagation with full-range fallback and reuse diagnostics, managed
+interval generations with exact identities and no gap filling (point
+behavior preserved), correction/retraction/resurrection parity, plus #154
+interval/locking coordination.

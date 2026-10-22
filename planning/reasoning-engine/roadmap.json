@@ -188,12 +188,19 @@
       "integration_commit": "ebd652d"
     },
     "RE-20": {
-      "status": "in-review",
+      "status": "integrated",
       "branch": "feature/re-20-temporal",
       "worktree": "re-20-temporal",
       "contract": "docs/reasoning-temporal.rst",
       "pr": 231,
-      "validation": "Focused suites (temporal/intervals/contracts incl. 25-case point parity) green; docs drift, Sphinx -W, roadmap validator passed. 29-segment/935-derivation evidence ~150ms. PR CI running."
+      "validation": "Focused suites (temporal/intervals/contracts incl. 25-case point parity) green; docs drift, Sphinx -W, roadmap validator passed; 29-segment/935-derivation evidence ~150ms; Python 3.10-3.13 and fuzz CI passed.",
+      "integration_commit": "93ce554"
+    },
+    "RE-21": {
+      "status": "in-progress",
+      "branch": "feature/re-21-delta",
+      "worktree": "re-21-delta",
+      "contract": "docs/reasoning-ranges.rst"
     }
   },
   "source_sha256": {
