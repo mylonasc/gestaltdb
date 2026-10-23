@@ -177,6 +177,7 @@ Legacy script invocations from repository root and `scripts/` are preserved as f
   ```bash
   python -m benchmarks sampler --nodes 10000 --edges 500000 --batch-nodes 512 --fanout 15 --iterations 100
   python -m benchmarks sampler --nodes 10000 --edges 500000 --workload all --high-degree --iterations 50
+  python -m benchmarks sampler --nodes 10000 --edges 500000 --high-degree --importance degree --iterations 50
   ```
 
 ### 5. Embedded Graph Databases Benchmark (`benchmarks/embedded.py`)

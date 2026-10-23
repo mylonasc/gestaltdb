@@ -20,7 +20,12 @@ for p in (str(SRC), str(ROOT)):
         sys.path.insert(0, p)
 
 from gestaltdb.graphdb import Edge, Node
-from gestaltdb.sampling import NeighborSamplingSpec, SamplerEngine, SamplerSnapshot
+from gestaltdb.sampling import (
+    NeighborSamplingSpec,
+    SamplerEngine,
+    SamplerSnapshot,
+    derive_edge_weights,
+)
 from benchmarks.common.timing import reservoir_count, seconds
 
 
@@ -240,6 +245,54 @@ def time_walks(
     return elapsed, sampled
 
 
+def time_weighted_neighbors(
+    engine: SamplerEngine,
+    nodes: np.ndarray,
+    relations: np.ndarray,
+    *,
+    fanout: int,
+    iterations: int,
+) -> tuple[float, int]:
+    """Time importance-weighted neighbor sampling."""
+
+    def run_workload() -> int:
+        count = 0
+        for _ in range(iterations):
+            for rel in np.unique(relations):
+                rel_nodes = nodes[relations == rel]
+                count += int(engine.sample_neighbors(
+                    rel_nodes, fanout, direction="out",
+                    relations=[int(rel)], strategy="weighted",
+                ).edge_indices.size)
+        return count
+
+    sampled, elapsed = seconds(run_workload)
+    return elapsed, sampled
+
+
+def mean_sampled_degree(
+    engine: SamplerEngine,
+    nodes: np.ndarray,
+    relations: np.ndarray,
+    *,
+    fanout: int,
+    strategy: str,
+) -> float:
+    """Measure the mean incident degree of sampled neighbors (bias probe)."""
+    degrees = np.diff(engine.snapshot.incident.indptr).astype(np.float64)
+    total = 0.0
+    count = 0
+    for rel in np.unique(relations):
+        rel_nodes = nodes[relations == rel]
+        sampled = engine.sample_neighbors(
+            rel_nodes, fanout, direction="out",
+            relations=[int(rel)], strategy=strategy,
+        )
+        total += float(degrees[sampled.neighbor_nodes].sum())
+        count += int(sampled.neighbor_nodes.size)
+    return total / count if count else 0.0
+
+
 def build_parser(subparser: argparse.ArgumentParser | None = None) -> argparse.ArgumentParser:
     """Build or configure argument parser for sampler engine benchmark."""
     parser = subparser or argparse.ArgumentParser(
@@ -262,6 +315,13 @@ def build_parser(subparser: argparse.ArgumentParser | None = None) -> argparse.A
         "--high-degree",
         action="store_true",
         help="Skew synthetic edges toward hub nodes (top 2%% hold ~75%% of endpoints).",
+    )
+    parser.add_argument(
+        "--importance",
+        choices=("none", "degree"),
+        default="none",
+        help="Persist degree-policy importance weights and compare weighted "
+        "neighbor step-time and sampled-degree bias against uniform.",
     )
     return parser
 
@@ -300,6 +360,12 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     with tempfile.TemporaryDirectory(prefix="gestaltdb-sampler-bench-") as tmpdir:
         snapshot = SamplerSnapshot.build(graph, Path(tmpdir) / "snapshot")
+        if args.importance == "degree":
+            weights = derive_edge_weights(
+                snapshot.src_int, snapshot.dst_int,
+                policy="degree", num_nodes=snapshot.num_nodes,
+            )
+            snapshot.set_edge_weights(weights, source="policy:degree")
         engine = SamplerEngine(snapshot, seed=args.seed)
         if "neighbors" in workloads:
             baseline_seconds, baseline_sampled = time_baseline(
@@ -314,6 +380,19 @@ def main(argv: Sequence[str] | None = None) -> None:
             print(f"baseline GraphDB-style sampler: {baseline_rate:,.0f} sampled edges/s ({baseline_seconds:.3f}s)")
             print(f"array SamplerEngine:          {engine_rate:,.0f} sampled edges/s ({engine_seconds:.3f}s)")
             print(f"speedup: {speedup:.2f}x")
+            if args.importance == "degree":
+                weighted_seconds, weighted_sampled = time_weighted_neighbors(
+                    engine, batch_nodes, batch_relations, fanout=args.fanout, iterations=args.iterations
+                )
+                weighted_rate = weighted_sampled / weighted_seconds if weighted_seconds else 0.0
+                uniform_degree = mean_sampled_degree(
+                    engine, batch_nodes, batch_relations, fanout=args.fanout, strategy="uniform"
+                )
+                weighted_degree = mean_sampled_degree(
+                    engine, batch_nodes, batch_relations, fanout=args.fanout, strategy="weighted"
+                )
+                print(f"importance-weighted neighbors: {weighted_rate:,.0f} sampled edges/s ({weighted_seconds:.3f}s)")
+                print(f"mean sampled neighbor degree: uniform={uniform_degree:.1f} weighted={weighted_degree:.1f}")
         if "seeds" in workloads:
             elapsed, sampled = time_seeds(engine, batch_nodes, iterations=args.iterations)
             rate = sampled / elapsed if elapsed else 0.0
