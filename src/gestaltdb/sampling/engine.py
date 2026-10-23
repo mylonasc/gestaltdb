@@ -122,6 +122,116 @@ class LayeredSampleBatch:
             "layers": tuple(layer.to_external(snapshot) for layer in self.layers),
         }
 
+    def to_blocks(self, snapshot: SamplerSnapshot) -> list[dict[str, np.ndarray]]:
+        """Convert layer blocks to bipartite message-passing blocks.
+
+        Each layer's ``SampledNeighbors`` groups sampled edges by input node.
+        This method repackages each layer as one bipartite block with plain
+        NumPy arrays, consumable by DGL/PyG-style gather-scatter loops without
+        a framework dependency.
+
+        Every block maps ``edge_index`` columns to unique sorted node frames:
+        row 0 indexes ``src_nodes`` (sampled neighbors, the message sources)
+        and row 1 indexes ``dst_nodes`` (layer inputs, the message
+        destinations). One column is emitted per sampled edge occurrence, so
+        duplicate draws under ``replace=True`` are preserved. ``edge_ids``
+        and ``relation_ids`` align with the columns for weight or
+        relation-specific lookups.
+
+        The blocks are oriented by message flow (neighbor to input), not by
+        graph-edge orientation: for ``direction="out"`` layers the underlying
+        graph edges point from input to neighbor, while for
+        ``direction="in"`` layers they point from neighbor to input. Graph
+        orientation is not encoded; callers that need it must consult the
+        ``NeighborSamplingSpec`` values they passed to ``sample_layers``.
+
+        Args:
+            snapshot: Snapshot providing relation IDs for sampled edges.
+
+        Returns:
+            One block dict per layer with ``src_nodes``, ``dst_nodes``,
+            ``edge_index``, ``edge_ids``, and ``relation_ids``. Empty layers
+            yield zero-column blocks with ``edge_index`` shaped ``(2, 0)``.
+
+        Raises:
+            ValueError: If a layer's offsets do not align with its inputs and
+                sampled edges.
+
+        Examples:
+            Aggregate one message-passing step per layer::
+
+                for block in batch.to_blocks(snapshot):
+                    messages = features[block["src_nodes"]][block["edge_index"][0]]
+        """
+        blocks: list[dict[str, np.ndarray]] = []
+        for layer in self.layers:
+            if len(layer.offsets) != layer.input_nodes.size + 1:
+                raise ValueError(
+                    "layer offsets must have one more entry than input nodes"
+                )
+            widths = np.diff(layer.offsets)
+            if int(widths.sum()) != layer.edge_indices.size:
+                raise ValueError(
+                    "layer offsets must cover exactly the sampled edges"
+                )
+            src_nodes = np.unique(layer.neighbor_nodes)
+            dst_nodes = np.unique(layer.input_nodes)
+            if layer.edge_indices.size:
+                row_of = np.repeat(np.arange(layer.input_nodes.size), widths)
+                input_per_column = layer.input_nodes[row_of]
+                edge_index = np.stack(
+                    (
+                        np.searchsorted(src_nodes, layer.neighbor_nodes),
+                        np.searchsorted(dst_nodes, input_per_column),
+                    )
+                ).astype(np.int64, copy=False)
+                relation_ids = snapshot.rel_int[layer.edge_indices].astype(
+                    np.int64, copy=False
+                )
+            else:
+                edge_index = np.empty((2, 0), dtype=np.int64)
+                relation_ids = np.empty(0, dtype=np.int64)
+            blocks.append(
+                {
+                    "src_nodes": src_nodes,
+                    "dst_nodes": dst_nodes,
+                    "edge_index": edge_index,
+                    "edge_ids": layer.edge_indices,
+                    "relation_ids": relation_ids,
+                }
+            )
+        return blocks
+
+    def to_blocks_external(
+        self, snapshot: SamplerSnapshot
+    ) -> list[dict[str, np.ndarray]]:
+        """Convert :meth:`to_blocks` output to external IDs.
+
+        ``src_nodes``, ``dst_nodes``, ``edge_ids``, and ``relation_ids`` are
+        mapped through the snapshot's external ID arrays; ``edge_index``
+        local positions are unchanged.
+        """
+        external_blocks: list[dict[str, np.ndarray]] = []
+        for block in self.to_blocks(snapshot):
+            external_blocks.append(
+                {
+                    "src_nodes": _external_id_array(
+                        block["src_nodes"], snapshot.external_node_ids
+                    ),
+                    "dst_nodes": _external_id_array(
+                        block["dst_nodes"], snapshot.external_node_ids
+                    ),
+                    "edge_index": block["edge_index"],
+                    "edge_ids": _external_id_array(
+                        block["edge_ids"], snapshot.external_edge_ids
+                    ),
+                    "relation_ids": _external_id_array(
+                        block["relation_ids"], snapshot.external_relation_ids
+                    ),
+                }
+            )
+        return external_blocks
+
 
 @dataclass(slots=True)
 class RandomWalkBatch:

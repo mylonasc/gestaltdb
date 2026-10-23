@@ -644,6 +644,8 @@ with TemporaryDirectory() as tmpdir:
             ["drug-1"], [ExternalNeighborSamplingSpec(fanout=5, relations=["binds"])]
         )
         print(layers.to_external(snapshot)["layers"][0]["neighbor_nodes"].tolist())
+        blocks = layers.to_blocks(snapshot)
+        print(blocks[0]["src_nodes"].tolist(), blocks[0]["edge_index"].shape)
 
         walks = engine.sample_random_walks_external(
             ["drug-1"], 2, metapath=["binds", "associated_with"]
