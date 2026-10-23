@@ -6,6 +6,92 @@ Planning/integration branch: **`feature/onto-dev-epic-2`**, inherited from that
 baseline, not `main`. This is a plan, not an implementation or release claim.
 Parent roadmap: [#156](https://github.com/mylonasc/gestaltdb/issues/156).
 
+## Current priority: release readiness and early user testing
+
+Priority update: **2026-10-23**. Focus subsequent work on #156-related
+release blockers and phase acceptance evidence, not on expanding the feature
+backlog. **Releasing a useful testing milestone soon is a priority; completing
+every remaining roadmap enhancement is not a prerequisite.** No further
+sampling-feature-roadmap work is scheduled by this update.
+
+### Why release soon
+
+The integration branch already contains the original RE-01–RE-27 deliveries;
+their child issues are closed, and RE-E2 (#158) has been verified and closed.
+Other phase epics still require evidence reconciliation: closed child issues
+alone do not certify their exit gates. Review follow-ups under #200 also remain
+authoritative, including partially delivered issues whose broader scope is open.
+
+The branch now contains hundreds of commits beyond `main`. At this review,
+`origin/main` was an ancestor of the integration branch, with no main-only
+commits. That makes integration mechanically simpler, **not low-risk**: the
+large accumulated API surface still needs release validation. Continuing to
+add optional features delays user feedback, enlarges the review surface and
+makes future fixes or independent changes on `main` harder to integrate.
+External testing of installation, API usability, compatibility and composed
+reasoning workflows is now more valuable than another open-ended feature batch.
+
+### Work order and release-blocker rule
+
+1. **Freeze a candidate scope and triage correctness first.** Review #200 and
+   its linked follow-ups against the candidate SHA. Incorrect results,
+   cross-world/horizon or identity leakage, unsafe publication/recovery,
+   data-loss risks and compatibility regressions in advertised workflows block
+   release. Fix them, or explicitly exclude the affected feature with enforced
+   fail-closed admission and a documented boundary; a warning alone is not a
+   substitute for correctness. Record the decision and evidence per issue.
+2. **Reconcile phase exit gates.** Verify the delivered contracts, runnable
+   user scenarios and acceptance evidence for #157/#159/#160/#161. Keep
+   unsupported profiles and deferred combinations explicit. Do not close an
+   epic merely because its children are closed, or turn every broader follow-up
+   into a prerequisite for this release.
+3. **Validate the exact release candidate.** Run the full suite on supported
+   Python 3.10–3.13, applicable backend/optional-extra isolation checks, docs and
+   runnable reasoning scenarios. Build wheel and sdist, check metadata, and
+   test installed artifacts outside the checkout, including reopening existing
+   databases. Exercise correction/retraction, provenance and fresh-recomputation
+   parity for the workflows advertised in the release.
+4. **Prepare the release contract.** Curate the changelog, choose a deliberate
+   minor prerelease version (proposed: `0.13.0rc1`, not the existing patch
+   version), and separate supported APIs from experimental executors/profiles.
+   Document compatibility/migration requirements and known limitations; do not
+   imply full OWL coverage, general zero-copy operation or unmeasured scale.
+5. **Merge and publish only after the gates below pass.** Aim for a bounded
+   hardening pass, not another feature-development cycle. Publish an opt-in
+   prerelease for user testing, then use feedback and fixes to decide when to
+   promote a stable release.
+
+Optimization-only work, broader tutorials, unrelated tooling and experimental
+extensions do not block this milestone unless needed for a promised workflow.
+For example, #194's native decoded extraction need not block a release that
+does not promise that path. Open #248–#256 follow-ups must be classified by
+their actual correctness impact and delivered scope, not treated as either
+automatically complete or automatically release-blocking. Deferred work keeps
+its issue and dependency links; the roadmap is not being declared complete.
+
+### Main integration and CI gates
+
+- Continue individual hardening PRs into `feature/onto-dev-epic-2`. Prepare one
+  reviewed release-integration PR **from that branch to `main`** once scope and
+  blocker triage are recorded. This is the planned exception to the normal
+  feature-PR target below, not authorization to push directly to `main`.
+- Run all applicable main-target PR workflows on the candidate, including the
+  general test matrix, optional-dependency checks, documentation and relevant
+  regression/security gates. Integration-branch ontology/fuzz checks alone
+  are **not** proof that every repository pipeline passed.
+- After merging, require applicable **main push workflows to pass on the exact
+  merged SHA** before tagging/publishing it. Fix failures and revalidate the new
+  SHA; do not publish based solely on green feature-branch checks.
+- Publishing a GitHub release triggers the current PyPI Publish workflow,
+  including for a prerelease. Verify its success and smoke-test the published
+  distribution. Keep merge, tag and publishing actions subject to explicit
+  maintainer authorization; this priority update does not perform those actions.
+- While hardening, regularly fetch `main` and integrate any new main fixes into
+  the candidate, rerunning affected gates. After this milestone, base subsequent
+  slices on the released baseline and use smaller release batches. Carry urgent
+  main fixes promptly into any retained integration branch to prevent renewed
+  long-lived divergence.
+
 ## Sources and tracking authority
 
 - Original assessment, preserved unchanged: [source-assessment.md](planning/reasoning-engine/source-assessment.md).
@@ -208,7 +294,8 @@ repository cannot promise an unimplemented upstream native entry point.
 - Keep this branch as the designated second-slice integration branch. Each RE-NN
   feature uses its own persistent worktree and `feature/re-NN-<slug>` branch based
   on its accepted prerequisites here. PRs target `feature/onto-dev-epic-2`, not
-  `main`; changing that destination requires an explicit roadmap update.
+   `main`; the reviewed release-integration PR described above is the explicit
+   exception. Ordinary feature PRs retain the integration target.
 - Create feature worktrees when implementation starts, not dozens of stale empty
   worktrees during planning. Stacking is only for true dependencies. Preserve all
   unrelated example/feature worktrees; no forced reset or shared force-push.
