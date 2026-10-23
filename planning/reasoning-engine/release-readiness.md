@@ -43,6 +43,23 @@ remain release blockers even if its originating issue is closed.
 - Draft main-target PR #307 enables the general, optional dependency,
   documentation, security, visualization and fuzzing checks. Its early runs
   predate some hardening and are not final release evidence.
+- PR #308 (`release/reasoning-0.13.0rc1`, head `a59211d`): curated 0.13.0rc1
+  metadata, changelog, `docs/reasoning-testing.rst` user-testing guide and
+  phase-evidence reconciliation. All 17 PR checks passed; merged as `352ecad`.
+  Post-merge integration push runs 39931451048 (readiness) and 39931451017
+  (ontology) both succeeded on that SHA.
+- Issue #309 / PR #310: main-target review exposed a real saved-view zoom
+  bug (ResizeObserver auto-fit overwrote the restored viewport). Fixed at the
+  runtime level with exact-transform assertions, post-restore resize
+  regression and explicit-Fit behavior; merged as `6e5c3ff`. All 10 PR checks
+  passed, including offline browser and fuzzing gates.
+- Post-merge integration push run 39931993057 (readiness) succeeded on
+  `6e5c3ff`. `origin/main` (`25daaf9`) remains a strict ancestor: 292
+  integration-only commits, zero main-only commits.
+- Main-target PR #307 at `6e5c3ff`: general Tests, optional-dependency,
+  documentation, security, visualization and readiness gates all green;
+  ClusterFuzzLite address gate was the last remaining check at the time of
+  this update (see PR for final status). No main merge or publication yet.
 
 | Phase | Existing acceptance evidence inspected | Remaining decision |
 |---|---|---|
