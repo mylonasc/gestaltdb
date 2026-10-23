@@ -41,10 +41,15 @@ What is checked
 
 ``max_violations`` bounds the report; hitting it sets ``truncated`` instead of
 failing, and deterministic canonical order makes repeat runs identical.
-``cancel`` cooperates between chunks and raises without a report. Violations
+``cancel`` cooperates during indexed input processing and raises without a report;
+input is fully buffered and sorted before those periodic checks. It does not
+interrupt a blocking input iterator. ``max_violations`` limits report size, not
+input memory. Violations
 reference supporting ``TypedFact`` values and stable constraint identities
 (``disjoint:A:B``, ``functional:age``), so every conflict traces to exact
-inputs and an exact scope entry.
+logical input facts and a structural scope entry. These source strings are
+generated constraint labels, not caller-supplied axiom IDs or exact historical
+claim-version references.
 
 What is *not* claimed
 ----------------------------------------
@@ -56,12 +61,18 @@ and disjointness pairs — no instance data is read, and anonymous constructions
 are out of scope. Full SHACL-style shapes, satisfiability beyond disjointness
 closure, probabilistic combination and classical explosion are explicitly
 deferred; the report vocabulary stays within the four implemented checks and
-fails closed on anything else.
+fails closed on anything else. Ground ``Denial`` values are validation inputs,
+not polarity-aware rule premises: missing positive evidence cannot satisfy a
+denied premise. Generic rules support positive atoms and explicitly scoped
+absence, not signed-denial premises. Datatype shape/constraint checking is not
+provided by this suite; strict ``Literal`` construction is a separate contract.
 
 Measured cost
 ----------------------------------------
 
-Validation scans the closure once with small per-fact indexes: 20,000 typed
-facts with 100 planted disjointness conflicts validate in about 70ms warm
-(single process), linear in closure size with bounded memory. See the roadmap
-register for the frozen budget reference.
+The original small-workload measurement was about 70ms warm for 20,000 typed
+facts with 100 planted disjointness conflicts (single process). It is not a
+general complexity or release-performance guarantee: validation buffers the
+closure, sorts/deduplicates it, and some checks rescan it per constraint or
+conflict. See #200 (D6) for the indexing/cancellation follow-up; callers must
+bound their input independently.

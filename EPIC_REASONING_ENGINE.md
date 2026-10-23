@@ -33,6 +33,9 @@ reasoning workflows is now more valuable than another open-ended feature batch.
 
 ### Work order and release-blocker rule
 
+Track candidate-specific triage and outstanding evidence in the
+[release-readiness register](planning/reasoning-engine/release-readiness.md).
+
 1. **Freeze a candidate scope and triage correctness first.** Review #200 and
    its linked follow-ups against the candidate SHA. Incorrect results,
    cross-world/horizon or identity leakage, unsafe publication/recovery,
