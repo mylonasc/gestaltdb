@@ -171,9 +171,12 @@ Legacy script invocations from repository root and `scripts/` are preserved as f
 ### 4. Sampler Engine Benchmark (`benchmarks/sampler.py`)
 - **Purpose**: Compares GestaltDB's ML training sampler engine (`SamplerEngine` with pre-built numpy array snapshots) against the baseline dictionary-based neighbor sampling protocol.
 - **Workload**: Batch neighbor sampling across multiple relation types with configurable fanout.
+- **Options**: `--workload {neighbors,seeds,weighted,layers,walks,all}` selects the
+  sampling API under test; `--high-degree` skews synthetic edges toward hub nodes.
 - **Example**:
   ```bash
   python -m benchmarks sampler --nodes 10000 --edges 500000 --batch-nodes 512 --fanout 15 --iterations 100
+  python -m benchmarks sampler --nodes 10000 --edges 500000 --workload all --high-degree --iterations 50
   ```
 
 ### 5. Embedded Graph Databases Benchmark (`benchmarks/embedded.py`)
