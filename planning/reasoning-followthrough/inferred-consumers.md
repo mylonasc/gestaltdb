@@ -1,8 +1,13 @@
 # Inferred query and immutable sampler acceptance workflow — #256
 
-Status: initial integration design. Blocked by #248, #249, #251 and #254.
-Coordinate #127/#128; no automatic Cypher rewrite or probabilistic calculus is
-being introduced by this fixture.
+Status: executable scenario milestone implemented in
+`tests/test_reasoning_inferred_consumers.py` (see
+`docs/reasoning-inferred-consumers.rst`): session query, caller-driven
+publication into a managed world, correct/retract transitions with
+fresh-recomputation parity and pinned-reader stability. Sampler-artifact
+building with generation provenance remains open. Blocked-by notes: #248 and
+#251 merged; #249 planner merged (binding/pushdown still open); #254 sweep
+prototype merged.
 
 ## End-to-end fixture
 

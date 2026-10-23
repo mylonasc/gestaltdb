@@ -115,11 +115,15 @@ def _check_version(version: ClaimVersion, horizon: int, instant: TemporalInstant
     claim = version.claim
     if (isinstance(version.commit_id, bool) or not isinstance(version.commit_id, int)
             or not 0 < version.commit_id <= horizon
-            or not version.valid.contains(instant) or version.logical_id != claim.claim_id
-            or version.operation not in (VersionOperation.ASSERT, VersionOperation.CORRECT)
-            or claim.world != scope.world or claim.polarity is not ClaimPolarity.POSITIVE
-            or claim.object_kind is not ClaimObjectKind.ENTITY):
+            or version.logical_id != claim.claim_id
+            or version.operation not in (VersionOperation.ASSERT, VersionOperation.CORRECT)):
         raise ProvenanceMismatchError("claim falls outside the pinned session scope")
+    if (not version.valid.contains(instant) or claim.world != scope.world
+            or claim.polarity is not ClaimPolarity.POSITIVE
+            or claim.object_kind is not ClaimObjectKind.ENTITY):
+        # Valid but out-of-scope input (another world, a different validity
+        # window, non-entity content): skip, do not ingest.
+        raise _SkipVersion()
     if not isinstance(version.version_id, str):
         raise ProvenanceMismatchError("claim version ID is invalid")
     if agents is not None and claim.agent not in agents:
@@ -242,34 +246,28 @@ def advance_session(graph: GraphDB, session: ReasoningSession, *, limits: Reason
             if not isinstance(version, ClaimVersion):
                 continue
             if version.operation == VersionOperation.RETRACT:
-                target = version.supersedes_version_id
-                if target is not None:
-                    if target not in logical_of:
-                        return _rebuild(graph, session, current, limits=limits,
-                                        max_versions=max_versions, cancel=cancel)
-                    retirements.append(target)
-                    del logical_of[target]
-                else:
-                    matches = [vid for vid, logical in logical_of.items()
-                               if logical == version.logical_id]
-                    if not matches:
-                        return _rebuild(graph, session, current, limits=limits,
-                                        max_versions=max_versions, cancel=cancel)
-                    retirements.extend(matches)
-                    for vid in matches:
-                        del logical_of[vid]
+                # Retractions are logical: they retire every active version of
+                # the named claim, however the retraction names it. Naming an
+                # unobserved version or an unknown logical ID means foreign or
+                # pre-history input, which is skipped, never guessed.
+                matches = [vid for vid, logical in logical_of.items()
+                           if logical == version.logical_id]
+                retirements.extend(matches)
+                for vid in matches:
+                    del logical_of[vid]
                 continue
             try:
                 claim = _check_version(version, current, instant, scope, agents, sources)
             except _SkipVersion:
                 continue
             if version.operation == VersionOperation.CORRECT:
-                superseded = version.supersedes_version_id
-                if superseded is None or superseded not in logical_of:
-                    return _rebuild(graph, session, current, limits=limits,
-                                    max_versions=max_versions, cancel=cancel)
-                retirements.append(superseded)
-                del logical_of[superseded]
+                # A correction replaces the whole logical claim: retire every
+                # active version under its identity, then assert the new one.
+                matches = [vid for vid, logical in logical_of.items()
+                           if logical == version.logical_id]
+                retirements.extend(matches)
+                for vid in matches:
+                    del logical_of[vid]
             logical_of[version.version_id] = version.logical_id
             assertions.append(AssertionVersion(version.version_id, _typed_fact(claim, scope.mapping)))
     try:

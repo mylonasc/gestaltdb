@@ -119,22 +119,39 @@ def test_alternative_evidence_survives_single_retraction(tmp_path, backend, modu
 
 
 @pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
-def test_unknown_history_rebuilds_explicitly(tmp_path, backend, module):
+def test_stale_supersedes_retraction_applies_logically(tmp_path, backend, module):
     pytest.importorskip(module)
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
     try:
         first = assert_member(graph, "a")
         # v1 is retired before the session starts; a later retraction naming
-        # v1 references history the session never observed as active.
+        # v1 still retracts the logical claim the session observes as v2.
         graph.correct_claim(first.logical_id, supersedes_version_id=first.version_id, valid=(0, 100))
         session = start(graph)
         graph.retract_claim(first.logical_id, valid=(0, 100), supersedes_version_id=first.version_id)
         moved = advance_session(graph, session, limits=ReasoningLimits())
-        assert moved.rebuilt
-        # The stale-supersession retraction wins over the whole claim in
+        assert not moved.rebuilt
+        # The retraction wins over the whole logical claim in
         # retract-winner resolution, so the fact disappears entirely.
         assert TypedFact("person", ("a",)) not in set(moved.session.facts)
+        assert set(moved.session.facts) == fresh_facts(moved.session.program, graph) == set()
+    finally:
+        graph.close()
+
+
+@pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
+def test_overwide_gap_rebuilds_explicitly(tmp_path, backend, module):
+    pytest.importorskip(module)
+    graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
+    try:
+        assert_member(graph, "a")
+        session = start(graph)
+        assert_member(graph, "b")
+        assert_member(graph, "c")
+        moved = advance_session(graph, session, limits=ReasoningLimits(), max_advance_commits=1)
+        assert moved.rebuilt
         assert set(moved.session.facts) == fresh_facts(moved.session.program, graph)
+        assert TypedFact("person", ("c",)) in set(moved.session.facts)
     finally:
         graph.close()
 
