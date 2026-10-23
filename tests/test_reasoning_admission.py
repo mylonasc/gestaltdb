@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from gestaltdb.reasoning.admission import AdmissionRequest, admit
+from gestaltdb.reasoning.generation import AdmissionRequest, admit
 from gestaltdb.reasoning.executors import INDEXED_PYTHON, INDEXED_SCC, POLARS_PROTOTYPE
 from gestaltdb.reasoning.generation import GenerationIdentity, TemporalSourceIdentity
 from gestaltdb.reasoning.model import ReasoningError

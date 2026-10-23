@@ -3,7 +3,7 @@
 Generation-bound executor admission
 ===================================
 
-``gestaltdb.reasoning.admission.admit`` checks one explicit
+``gestaltdb.reasoning.generation.admit`` checks one explicit
 ``AdmissionRequest`` (mode, executor, dictionary) against a pinned
 ``GenerationIdentity``. Dictionary identity must match exactly; witness and
 stateful modes (``proofs``, ``maintenance-supports``, ``temporal-closure``)
