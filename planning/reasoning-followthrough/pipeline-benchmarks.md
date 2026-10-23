@@ -149,3 +149,16 @@ padding/reopen setup; reopening alone has **not** been isolated as the cause.
 This slice delivers the reproducible harness and honest bounded/failure evidence,
 not all of #194's larger acceptance. Keep #194 open; rerun the larger authenticated
 matrix after #314, and retain the native-claims/support/publication deferrals.
+
+### Subsequent grouped-read rerun (#314 / PR #315)
+
+The blocked authenticated size ladder and 10K coverage expansion were rerun on
+clean source `49231f3` after commit-grouped reads retained full integrity checks.
+All **120 samples** passed exact evidence/closure parity, including 100K fixed
+and variable provenance padding on both LMDB and PyRex, first/primed reads.
+First-read 100K fixed extraction medians were 2.403/4.207 s (LMDB/PyRex); variable
+medians were 2.560/4.806 s. Original timeout reports above remain unchanged.
+See [bounded-claim-validation.md](bounded-claim-validation.md) and
+`benchmarks/results/reasoning-314-*.json` for full evidence and memory/cache limits.
+This unblocks the measured authenticated pipeline, not a native claims adapter;
+the remaining #194 integration and workload scopes stay open.

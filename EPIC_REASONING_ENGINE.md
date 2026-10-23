@@ -738,3 +738,21 @@ claims adapter. The larger claims matrix remains open, with repeated full-commit
 integrity-read costs tracked separately in [#314](https://github.com/mylonasc/gestaltdb/issues/314).
 No validation bypass, production cache change, #194 closure, main merge or release
 is part of this measurement slice.
+
+### Integrity-preserving grouped claim reads: #314 / PR #315
+
+Dedicated branch/worktree `feature/onto-314-bounded-validation` /
+`gestaltdb-onto-314`, based on integration `f6342d5`. Candidate/history locators
+are grouped by commit with full existing validation and final touched-commit
+revalidation on exhaustion; no live-cache trust bypass or new backend snapshot.
+Deterministic work/corruption/history tests and **120 exact-parity measurement
+samples** cover the previously blocked 1K/10K/100K first/primed reads and 100K
+variable provenance payloads. Evidence and boundaries:
+[bounded-claim-validation.md](planning/reasoning-followthrough/bounded-claim-validation.md).
+#194 remains open for native-claims/recursive/support/publication integration.
+
+Completion review also reconciled #252/#253: merged #266/#267 already deliver
+head-bound support discovery and immutable dependency lookup reuse, with budget,
+alternative-support/literal and randomized deletion regression coverage. Their
+scoped issues are closed; this is not a claim that dependent session/executor or
+phase crash/durability acceptance is complete.
