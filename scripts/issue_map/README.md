@@ -1,5 +1,22 @@
 # Issue atlas (D3)
 
+The reusable, repository-independent implementation is the **`issue-atlas`
+OpenCode skill** in `.opencode/skills/issue-atlas/`. Copy that entire directory
+to another repository or `~/.config/opencode/skills/` to reuse it; no GestaltDB
+code or planning files are needed. Invoke `@issue-atlas` after reloading
+OpenCode. Its `references/configuration.md` documents JSON configuration,
+CLI parameters and the optional repository-neutral roadmap overlay schema.
+
+The commands below are a thin **GestaltDB-specific wrapper**: they translate
+this project's roadmap register into the generic schema. Templates, rendering,
+GitHub export and browser smoke tests are owned exclusively by the skill,
+not duplicated here. For another repository, run the skill script directly:
+
+```bash
+python /path/to/issue-atlas/scripts/build.py --refresh --repo owner/repository
+python /path/to/issue-atlas/scripts/build.py --config /path/to/atlas.json --refresh
+```
+
 Read-only GitHub export → reusable JSON snapshot → **self-contained interactive
 HTML**. Requires Python 3.10+ and authenticated `gh` for refreshes. No npm/build
 step or Python extras. The finished file opens directly in a browser offline.
