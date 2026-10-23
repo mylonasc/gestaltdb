@@ -66,6 +66,8 @@ Array-Native API Map
      - Multi-hop fanouts, with causal valid-start policies on temporal snapshots
    * - ``sample_subgraph`` / ``sample_subgraph_external``
      - Edge-seeded local batches with positives, negatives, and sampled topology
+   * - ``sample_packed_subgraphs``
+     - Independent per-group subgraphs in one batch with component offsets
    * - ``sample_induced_subgraph``
      - Uniform node draws with all eligible induced edges and a fail-closed edge cap
    * - ``sample_hard_negatives``
@@ -618,6 +620,14 @@ metadata because their edge-feature stores only accept numeric tensors.
 
 Bounded Induced Subgraphs
 -------------------------
+
+``sample_packed_subgraphs`` samples one independent subgraph per seed-edge
+group — each exactly as ``sample_subgraph`` would sample it alone — and
+repackages them into a single ``SampledSubgraphBatch``. ``graph_node_offsets``
+and ``graph_edge_offsets`` mark each component's rows; local IDs are rebased
+to the concatenated frame, so global IDs may repeat across components while
+each slice stays self-contained. Positive rows follow seed-group order and
+negative diagnostics are summed.
 
 ``sample_induced_subgraph`` draws nodes uniformly without replacement and
 returns every eligible edge induced by that node set. Relation and temporal
