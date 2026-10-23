@@ -6574,7 +6574,14 @@ class GraphDB:
         system_time=None,
         through_commit=None,
     ):
-        """Iterate visible claims matching indexed epistemic dimensions."""
+        """Iterate visible claims matching indexed epistemic dimensions.
+
+        Locator reads are grouped by commit, with full commit validation per
+        group rather than per row. Winners are buffered at one logical horizon.
+        Live-store commit integrity is checked again on successful exhaustion;
+        partially consumed iterators are not completed authenticated reads.
+        """
+        read_store = self.store
         instant = normalize_temporal_instant(valid_time)
         horizon = self._temporal_system_horizon(
             system_time=system_time, through_commit=through_commit
@@ -6624,16 +6631,66 @@ class GraphDB:
         else:
             index_name = _TEMPORAL_CLAIM_CATALOG_INDEX
             parts = [b"claims"]
+        # This is an operation-local bulk-read protocol, not admission of live
+        # cache entries as immutable. Every group still takes the existing full
+        # descriptor/marker/envelope validation path. Retain only marker identity
+        # and selected winners, not an unbounded second cache of whole commits.
+        admitted_markers = {}
+
+        def admit_commit(commit_id):
+            if self.store is not read_store:
+                raise TemporalCorruptionError("claim read store changed during iteration")
+            marker = read_store.get_metadata(self._temporal_visible_key(commit_id))
+            if commit_id in admitted_markers and admitted_markers[commit_id] != marker:
+                raise TemporalCorruptionError("claim read commit changed during iteration")
+            commit = self._get_temporal_commit_cached(commit_id, _validate_supersession=False)
+            if marker != read_store.get_metadata(self._temporal_visible_key(commit_id)):
+                raise TemporalCorruptionError("claim read commit changed during validation")
+            admitted_markers[commit_id] = marker
+            return commit
+
+        def read_locators(locators):
+            groups = {}
+            for locator in locators:
+                commit_id, ordinal = self._decode_temporal_locator(locator)
+                if commit_id <= horizon:
+                    groups.setdefault(commit_id, set()).add(ordinal)
+            for commit_id, ordinals in sorted(groups.items()):
+                commit = admit_commit(commit_id)
+                if commit is None:
+                    continue
+                for ordinal in sorted(ordinals):
+                    if ordinal >= len(commit.versions):
+                        raise TemporalCorruptionError("temporal index locator ordinal is out of range")
+                    yield commit.versions[ordinal]
+
+        if horizon:
+            admit_commit(horizon)
         logical_ids = set()
-        for locator in self._temporal_interval_locators(index_name, parts, instant):
-            candidate = self._get_temporal_version_at(locator)
+        for candidate in read_locators(self._temporal_interval_locators(index_name, parts, instant)):
             if isinstance(candidate, ClaimVersion) and candidate.commit_id <= horizon:
                 logical_ids.add(candidate.logical_id)
+
+        # Resolve every candidate identity against its complete logical history,
+        # not just the originally selected dimension: a later correction or
+        # retraction must still win. Do not repeatedly recompute/validate the
+        # latest system horizon for each logical ID.
+        def logical_locators():
+            for claim_id in sorted(logical_ids):
+                yield from self._temporal_interval_locators(
+                    _TEMPORAL_LOGICAL_VALID_INDEX, [b"c", claim_id.encode("utf-8")], instant
+                )
+
+        winners = {}
+        for version in read_locators(logical_locators()):
+            if (isinstance(version, ClaimVersion) and version.logical_id in logical_ids
+                    and version.commit_id <= horizon and version.valid.contains(instant)):
+                previous = winners.get(version.logical_id)
+                if previous is None or (version.commit_id, version.commit_ordinal) > (previous.commit_id, previous.commit_ordinal):
+                    winners[version.logical_id] = version
         for claim_id in sorted(logical_ids):
-            version = self.get_claim_as_of(
-                claim_id, valid_time=instant, through_commit=horizon
-            )
-            if version is None or version.claim is None:
+            version = winners.get(claim_id)
+            if version is None or version.operation is VersionOperation.RETRACT or version.claim is None:
                 continue
             claim = version.claim
             if statement_id is not None and claim.statement_id != statement_id:
@@ -6657,6 +6714,12 @@ class GraphDB:
             ).object:
                 continue
             yield version
+
+        # No successful complete pass may hide damage/rewrite/removal of an
+        # already touched commit, including an unrelated row in that commit.
+        # Appends beyond the captured horizon do not change these markers.
+        for commit_id in admitted_markers:
+            admit_commit(commit_id)
 
     def claim_status(
         self,
