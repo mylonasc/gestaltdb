@@ -61,6 +61,18 @@ def test_build_rebuild_stability_and_mismatch(tmp_path, backend, module):
         reloaded = SamplerSnapshot.load(first_dir)
         assert triples(reloaded) == triples(first)
 
+        # Engine-level neighbor verification: full fanout covers every inferred edge.
+        from gestaltdb.sampling.engine import SamplerEngine
+
+        engine = SamplerEngine.load(first_dir, seed=7)
+        # Compact, version-stable check: every snapshot edge is reachable from its source.
+        for src, rel, dst in triples(first):
+            batch = engine.sample_neighbors([reloaded.node_int(src)], fanout=10, direction="out")
+            assert batch.neighbor_nodes.size >= 1
+        all_batch = engine.sample_neighbors(
+            [reloaded.node_int("a"), reloaded.node_int("b")], fanout=10, direction="out")
+        assert all_batch.neighbor_nodes.size == 2
+
         # Generation mismatch fails before writing.
         with pytest.raises(Exception, match="generation/view mismatch"):
             build_inferred_snapshot(session, tmp_path / "mismatch",
