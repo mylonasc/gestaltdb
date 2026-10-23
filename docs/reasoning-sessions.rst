@@ -22,7 +22,15 @@ fact survive single retractions; the fact disappears only with its final
 active version.
 
 This milestone advances sessions in memory; the returned session value is the
-resumable state. Durable cross-process persistence of that value is not
-implemented. Sessions do not publish; publication stays with the managed
-generation APIs. Identity strings and ledger records alone do not authenticate
-data — the session verifies its database on every advance.
+resumable state. ``gestaltdb.reasoning.adapters.session_store`` adds durable
+cross-process persistence for that value: ``save_session`` writes one versioned
+JSON document atomically (temporary file plus rename, so readers observe the
+old or the new session, never a partial write), ``load_session`` verifies the
+embedded digest, program/catalog digests, index binding and ledger consistency,
+and ``advance_persisted_session`` resumes a file in a new process, advances
+through live commit deltas (or explicit rebuild) and re-persists with a
+horizon compare. A concurrent writer changing the file between load and
+persist fails closed; callers reload and retry. Sessions do not publish;
+publication stays with the managed generation APIs. Identity strings and
+ledger records alone do not authenticate data — every resume re-verifies the
+live database identity and horizon.
