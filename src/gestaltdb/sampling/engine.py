@@ -837,6 +837,149 @@ class SamplerEngine:
             window_policy=window_policy,
         )
 
+    def sample_node2vec_walks(
+        self,
+        start_nodes: Sequence[int] | np.ndarray,
+        walk_length: int,
+        *,
+        return_factor: float = 1.0,
+        inout_factor: float = 1.0,
+        direction: str = "out",
+        relations: Sequence[int] | np.ndarray | None = None,
+        dead_end: str = "terminate",
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+    ) -> RandomWalkBatch:
+        """Sample second-order biased walks in the node2vec style.
+
+        From the second transition on, each candidate edge is weighted by the
+        shortest-path distance ``d`` between the previous node and the
+        candidate endpoint: ``1 / return_factor`` for ``d == 0`` (return),
+        ``1`` for ``d == 1``, and ``1 / inout_factor`` for ``d >= 2``. Small
+        ``inout_factor`` values push walks outward (DFS-like); large values
+        keep them local (BFS-like). Large ``return_factor`` values discourage
+        immediately revisiting the previous node. The first transition of
+        every walk is uniform over the directed candidates. Static snapshot
+        edge weights multiply the bias factors.
+
+        Candidates follow ``direction`` and the optional ``relations`` and
+        temporal filters. Distances are measured on the undirected incident
+        adjacency of the static snapshot, ignoring relation and temporal
+        filters; document this when mixing biased walks with filters.
+
+        Args:
+            start_nodes: Compact node IDs where walks begin.
+            walk_length: Transitions per walk.
+            return_factor: Positive finite ``p``; the return weight is
+                ``1 / return_factor``.
+            inout_factor: Positive finite ``q``; the outward weight is
+                ``1 / inout_factor``.
+            direction: ``"out"``, ``"in"``, or ``"any"`` traversal.
+            relations: Optional compact relation IDs to restrict candidates.
+            dead_end: ``"terminate"`` stops the walk, ``"restart"`` jumps
+                back to the start node with ``-1`` edge and relation IDs.
+            temporal: Optional point or finite-window validity filter.
+            window_policy: ``"overlap"`` or ``"contained"`` window matching.
+
+        Returns:
+            ``RandomWalkBatch`` with the same ``-1`` gap conventions as
+            :meth:`sample_random_walks`.
+
+        Raises:
+            ValueError: If factors are not positive finite numbers, options
+                are invalid, or IDs are out of range.
+        """
+        _validate_count(walk_length, "walk_length")
+        self._validate_sampling_options(
+            fanout=0, direction=direction, temporal=temporal,
+            window_policy=window_policy, causal_policy="none",
+        )
+        for name, factor in (("return_factor", return_factor), ("inout_factor", inout_factor)):
+            if isinstance(factor, bool) or not isinstance(factor, (int, float, np.integer, np.floating)):
+                raise ValueError(f"{name} must be a positive finite number")
+            if not np.isfinite(factor) or factor <= 0:
+                raise ValueError(f"{name} must be a positive finite number")
+        if dead_end not in {"terminate", "restart"}:
+            raise ValueError("dead_end must be 'terminate' or 'restart'")
+        starts = self._validated_ids(start_nodes, self.snapshot.num_nodes, "start_nodes")
+        relation_filter = None
+        if relations is not None:
+            relation_filter = set(self._validated_ids(relations, self.snapshot.num_relations, "relations").tolist())
+
+        node_ids = np.full((starts.size, walk_length + 1), -1, dtype=np.int64)
+        edge_indices = np.full((starts.size, walk_length), -1, dtype=np.int64)
+        relation_ids = np.full((starts.size, walk_length), -1, dtype=np.int64)
+        lengths = np.zeros(starts.size, dtype=np.int64)
+        if starts.size:
+            node_ids[:, 0] = starts
+
+        for row, start in enumerate(starts.tolist()):
+            current = int(start)
+            previous: int | None = None
+            for step in range(walk_length):
+                candidates = self._candidate_edges(
+                    current, direction, relation_filter, temporal, window_policy
+                )
+                if candidates.size == 0:
+                    if dead_end == "restart":
+                        current = int(start)
+                        previous = None
+                        node_ids[row, step + 1] = current
+                        lengths[row] = step + 1
+                        continue
+                    break
+                if previous is None:
+                    weights: np.ndarray | None = None
+                else:
+                    endpoints = self._neighbors_for_edges(current, candidates, direction)
+                    incident = self.snapshot.incident.edge_range(previous)
+                    previous_neighbors = set(
+                        self.snapshot.src_int[incident].tolist()
+                    ) | set(self.snapshot.dst_int[incident].tolist())
+                    bias = np.ones(candidates.size, dtype=np.float64)
+                    is_return = endpoints == previous
+                    bias[is_return] = 1.0 / float(return_factor)
+                    farther = ~is_return & ~np.isin(endpoints, list(previous_neighbors))
+                    bias[farther] = 1.0 / float(inout_factor)
+                    weights = self.snapshot.edge_weights[candidates] * bias
+                chosen = self._choose_candidates(candidates, 1, replace=False, weights=weights)
+                edge = int(chosen[0])
+                previous = current
+                current = int(self._neighbors_for_edges(current, chosen, direction)[0])
+                edge_indices[row, step] = edge
+                relation_ids[row, step] = int(self.snapshot.rel_int[edge])
+                node_ids[row, step + 1] = current
+                lengths[row] = step + 1
+
+        return RandomWalkBatch(node_ids, edge_indices, relation_ids, lengths)
+
+    def sample_node2vec_walks_external(
+        self,
+        start_nodes: Sequence[object],
+        walk_length: int,
+        *,
+        return_factor: float = 1.0,
+        inout_factor: float = 1.0,
+        direction: str = "out",
+        relations: Sequence[object] | None = None,
+        dead_end: str = "terminate",
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+    ) -> RandomWalkBatch:
+        """Sample node2vec walks using external node and relation IDs."""
+        compact_relations = None if relations is None else self.snapshot.relation_ints(relations)
+        return self.sample_node2vec_walks(
+            self.snapshot.node_ints(start_nodes),
+            walk_length,
+            return_factor=return_factor,
+            inout_factor=inout_factor,
+            direction=direction,
+            relations=compact_relations,
+            dead_end=dead_end,
+            temporal=temporal,
+            window_policy=window_policy,
+        )
+
     def sample_multihop(
         self,
         seeds: Sequence[int] | np.ndarray,

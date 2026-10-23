@@ -60,6 +60,8 @@ Array-Native API Map
      - Bipartite message-passing blocks with local ``edge_index`` frames per layer
    * - ``sample_random_walks`` / ``sample_random_walks_external``
      - Uniform/weighted first-order walks, repeating metapaths, restarts, dead-end policies
+   * - ``sample_node2vec_walks`` / ``sample_node2vec_walks_external``
+     - Second-order biased walks with return/in-out factors and restart/terminate dead ends
    * - ``sample_multihop``
      - Multi-hop fanouts, with causal valid-start policies on temporal snapshots
    * - ``sample_subgraph`` / ``sample_subgraph_external``
@@ -391,6 +393,13 @@ selection with an optional relation filter. These are filtered draws by default;
 pass ``balanced=True`` for deterministic equal quotas across node types or
 relation IDs. Layer specifications independently select fanout, direction,
 relations, replacement, strategy, and balanced allocation.
+``sample_node2vec_walks`` samples node2vec-style second-order walks. From the
+second transition on, candidates are weighted ``1/p`` for returning to the
+previous node, ``1`` at distance one, and ``1/q`` beyond, measured on the
+undirected incident adjacency; the first transition is uniform and static
+snapshot edge weights multiply the bias. Distances ignore relation and
+temporal filters by design.
+
 ``LayeredSampleBatch`` preserves each layer's ``SampledNeighbors`` block and
 deduplicates the next frontier. ``to_blocks(snapshot)`` additionally repackages
 each layer as a framework-neutral bipartite message-passing block: unique
