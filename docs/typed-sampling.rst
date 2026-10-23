@@ -56,6 +56,8 @@ Array-Native API Map
      - Batched uniform or weighted neighbors, direction/relation filters, offsets
    * - ``sample_layers`` / ``sample_layers_external``
      - Independent fanout, direction, relations, replacement, strategy per layer
+   * - ``LayeredSampleBatch.to_blocks`` / ``to_blocks_external``
+     - Bipartite message-passing blocks with local ``edge_index`` frames per layer
    * - ``sample_random_walks`` / ``sample_random_walks_external``
      - Uniform/weighted first-order walks, repeating metapaths, restarts, dead-end policies
    * - ``sample_multihop``
@@ -390,8 +392,15 @@ pass ``balanced=True`` for deterministic equal quotas across node types or
 relation IDs. Layer specifications independently select fanout, direction,
 relations, replacement, strategy, and balanced allocation.
 ``LayeredSampleBatch`` preserves each layer's ``SampledNeighbors`` block and
-deduplicates the next frontier; it does not construct framework-native
-bipartite message-passing blocks.
+deduplicates the next frontier. ``to_blocks(snapshot)`` additionally repackages
+each layer as a framework-neutral bipartite message-passing block: unique
+sorted ``src_nodes`` (sampled neighbors) and ``dst_nodes`` (layer inputs) plus
+an ``edge_index`` with one column per sampled edge occurrence, aligned
+``edge_ids``, and ``relation_ids``. Blocks are oriented by message flow
+(neighbor to input); graph-edge orientation is not encoded, so consult the
+``NeighborSamplingSpec`` values passed to ``sample_layers`` when it matters.
+``to_blocks_external(snapshot)`` maps the ID arrays without touching
+``edge_index`` positions.
 
 Balanced quotas
 ~~~~~~~~~~~~~~~
