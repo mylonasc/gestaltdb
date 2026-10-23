@@ -1,6 +1,7 @@
 """Small parity/report gates, never throughput assertions in CI."""
 
 import json
+from pathlib import Path
 import sys
 
 import pytest
@@ -101,3 +102,24 @@ def test_worker_protocol_preserves_unavailability(monkeypatch):
     monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(
         args[0], 0, json.dumps({"status": "unavailable", "reason": "missing runtime"}), ""))
     assert reasoning_pipeline.run_worker(["worker"], 1)["status"] == "unavailable"
+
+
+@pytest.mark.parametrize("name,cases,samples,complete", [
+    ("ladder", 6, 14, False), ("native", 6, 18, True), ("coverage-1k", 24, 72, True),
+])
+def test_committed_evidence_preserves_failures_and_sample_counts(name, cases, samples, complete):
+    path = Path(__file__).resolve().parents[1] / "benchmarks" / "results" / f"reasoning-194-{name}.json"
+    report = json.loads(path.read_text())
+    assert report["git_revision"] == "4bd5a6d6853303bc16b415c7442c5930bcb8fc83"
+    assert report["working_tree_dirty"] is False
+    assert report["complete"] is complete
+    assert len(report["cases"]) == cases
+    assert sum(len(case["samples"]) for case in report["cases"]) == samples
+    for case in report["cases"]:
+        assert case["summary"] == runner.quantiles(case["samples"])
+        if not case["summary"]:
+            assert case["configuration"]["rows"] == 100000
+            assert case["samples"][0]["status"] == "timeout"
+            assert '"phase": "load_s"' in case["samples"][0]["progress"]
+        else:
+            assert len(case["samples"]) == 3

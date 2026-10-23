@@ -307,3 +307,7 @@ and classification-closure parity. Use `--selections all predicate subject`,
 not authenticated claims or a native inference-speedup claim. See the boundaries,
 capability/failure semantics and reproduction commands in
 [`pipeline-benchmarks.md`](../planning/reasoning-followthrough/pipeline-benchmarks.md).
+Checked-in `results/reasoning-194-*.json` includes successful bounded/native cases
+and an explicitly **incomplete** reopened-handle ladder with 100K extraction
+timeouts. See #314 for the separately tracked integrity-preserving optimization;
+these reports do not establish a native claims speedup.

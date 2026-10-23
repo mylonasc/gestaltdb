@@ -724,3 +724,17 @@ capability-matrix re-audit (TransactionDB still unscanned in
 pyrex-rocksdb==0.5.0); GenerationStore question settled by the RE-26
 no-bespoke-kernel decision. The 100K-row measurement box stays explicitly
 open: no performance claim is made.
+
+### Measurement continuation: #194 / PR #313
+
+Preserves the unfinished #262 harness in a dedicated continuation branch/worktree
+(`feature/onto-194-benchmark-matrix`, `gestaltdb-onto-194-matrix`) refreshed from
+integration `54eb114`. Clean-source `4bd5a6d` produced 102 successful exact-parity
+samples and two retained 100K authenticated-extraction timeouts. Evidence and
+precise boundaries: [pipeline-benchmarks.md](planning/reasoning-followthrough/pipeline-benchmarks.md)
+and `benchmarks/results/reasoning-194-*.json`. The native 100K experiment is
+synthetic KV only and demonstrates no acceleration; it is not a real native
+claims adapter. The larger claims matrix remains open, with repeated full-commit
+integrity-read costs tracked separately in [#314](https://github.com/mylonasc/gestaltdb/issues/314).
+No validation bypass, production cache change, #194 closure, main merge or release
+is part of this measurement slice.
