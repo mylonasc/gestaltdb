@@ -311,3 +311,7 @@ Checked-in `results/reasoning-194-*.json` includes successful bounded/native cas
 and an explicitly **incomplete** reopened-handle ladder with 100K extraction
 timeouts. See #314 for the separately tracked integrity-preserving optimization;
 these reports do not establish a native claims speedup.
+Subsequent `results/reasoning-314-*.json` records 120 successful authenticated
+pipeline samples after integrity-preserving grouped reads, including the 100K
+ladder and variable provenance payloads. See
+[`bounded-claim-validation.md`](../planning/reasoning-followthrough/bounded-claim-validation.md).

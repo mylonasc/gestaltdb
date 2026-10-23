@@ -123,3 +123,29 @@ def test_committed_evidence_preserves_failures_and_sample_counts(name, cases, sa
             assert '"phase": "load_s"' in case["samples"][0]["progress"]
         else:
             assert len(case["samples"]) == 3
+
+
+@pytest.mark.parametrize("name,cases,samples", [
+    ("ladder", 12, 36), ("coverage-10k", 24, 72), ("variable-100k", 4, 12),
+])
+def test_grouped_read_reports_complete_the_previously_blocked_matrix(name, cases, samples):
+    directory = Path(__file__).resolve().parents[1] / "benchmarks" / "results"
+    report = json.loads((directory / f"reasoning-314-{name}.json").read_text())
+    baseline = json.loads((directory / "reasoning-194-ladder.json").read_text())
+    assert report["git_revision"] == "49231f3bddc5b916dace9fa73ef2092089699137"
+    assert report["working_tree_dirty"] is False
+    assert report["complete"] and report["all_available"]
+    assert report["source_sha256"] == baseline["source_sha256"]
+    assert report["packages"] == baseline["packages"]
+    assert len(report["cases"]) == cases
+    assert sum(len(case["samples"]) for case in report["cases"]) == samples
+    for case in report["cases"]:
+        assert case["summary"] == runner.quantiles(case["samples"])
+        assert len(case["samples"]) == 3
+        config = case["configuration"]
+        expected = {"all": config["rows"], "predicate": (config["rows"] + 3) // 4,
+                    "subject": 1}[config["selection"]]
+        for sample in case["samples"]:
+            assert sample["status"] == "ok"
+            assert sample["accepted"] == expected
+            assert sample["closure_facts"] == 3 * expected

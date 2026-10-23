@@ -138,6 +138,16 @@ no bespoke native kernel — recorded defer.
 Batched claim source
 ----------------------------------------
 
+The underlying claim iterator groups locators by commit and validates complete
+touched commits before resolving buffered winners and again on exhaustion.
+This avoids a full commit-sized integrity scan per extracted row without
+treating a mutable decode cache as trusted storage. Successful consumption of
+all batches (including the final verification) is required; discard partial
+batches on any error. Row budgets are not a hard bound on the grouped iterator's
+locator/winner buffers or on commit-validation work. This does not introduce a
+backend snapshot or change LevelDB/PyRex capability guarantees; see
+:doc:`temporal-versioning` for the integrity and memory boundaries.
+
 .. code-block:: python
 
    from gestaltdb.reasoning.adapters.batched import PinnedBatchedClaimSource

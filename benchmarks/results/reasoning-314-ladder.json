@@ -1,0 +1,1923 @@
+{
+  "all_available": true,
+  "batch_rows": 256,
+  "cache_note": "OS cache uncontrolled; no privileged cache eviction",
+  "cases": [
+    {
+      "configuration": {
+        "backend": "lmdb",
+        "cache": "first",
+        "payload": "fixed",
+        "rows": 1000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 1000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 67108864
+          },
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 3000,
+          "commit_batch": 2000,
+          "evidence_digest": "907a85e87eeb9ea3507a2d3ac0bf1ab4d5decbb6e856384faed4c4d98e654b9f",
+          "metrics": {
+            "compile_s": 9.310903260484338e-05,
+            "evaluate_s": 0.008966105990111828,
+            "extract_decode_verify_s": 0.02484370901947841,
+            "load_s": 0.16845519904745743,
+            "post_evaluation_verify_s": 0.0020229630172252655,
+            "reasoning_pipeline_s": 0.04084811807842925,
+            "reopen_s": 0.0007511649746447802,
+            "source_enter_verify_s": 0.001972939004190266,
+            "source_open_verify_s": 0.0021981270401738584
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 1000,
+          "rss_peak_bytes": 87281664,
+          "scanned": 1000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 1000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 67108864
+          },
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 3000,
+          "commit_batch": 2000,
+          "evidence_digest": "350db790c1ee53ba17bd195d74c99727b616b75735a3e9ec3154d51b3e205d72",
+          "metrics": {
+            "compile_s": 9.189499542117119e-05,
+            "evaluate_s": 0.00892959302291274,
+            "extract_decode_verify_s": 0.02501551399473101,
+            "load_s": 0.16600370703963563,
+            "post_evaluation_verify_s": 0.0020367089891806245,
+            "reasoning_pipeline_s": 0.041038307012058794,
+            "reopen_s": 0.000738533039111644,
+            "source_enter_verify_s": 0.0020113990176469088,
+            "source_open_verify_s": 0.0022146639530546963
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 1000,
+          "rss_peak_bytes": 85827584,
+          "scanned": 1000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 1000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 67108864
+          },
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 3000,
+          "commit_batch": 2000,
+          "evidence_digest": "6c654fcc393d232c474528394cb96685517a19adaecee13bc3ea76b4d090e834",
+          "metrics": {
+            "compile_s": 9.617599425837398e-05,
+            "evaluate_s": 0.008967778994701803,
+            "extract_decode_verify_s": 0.024901427037548274,
+            "load_s": 0.16916172701166943,
+            "post_evaluation_verify_s": 0.001960913010407239,
+            "reasoning_pipeline_s": 0.04087092308327556,
+            "reopen_s": 0.0007401590119116008,
+            "source_enter_verify_s": 0.002004358044359833,
+            "source_open_verify_s": 0.002200110990088433
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 1000,
+          "rss_peak_bytes": 87724032,
+          "scanned": 1000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        }
+      ],
+      "summary": {
+        "compile_s": {
+          "n": 3,
+          "p50": 9.310903260484338e-05,
+          "p95": 9.617599425837398e-05
+        },
+        "evaluate_s": {
+          "n": 3,
+          "p50": 0.008966105990111828,
+          "p95": 0.008967778994701803
+        },
+        "extract_decode_verify_s": {
+          "n": 3,
+          "p50": 0.024901427037548274,
+          "p95": 0.02501551399473101
+        },
+        "load_s": {
+          "n": 3,
+          "p50": 0.16845519904745743,
+          "p95": 0.16916172701166943
+        },
+        "post_evaluation_verify_s": {
+          "n": 3,
+          "p50": 0.0020229630172252655,
+          "p95": 0.0020367089891806245
+        },
+        "reasoning_pipeline_s": {
+          "n": 3,
+          "p50": 0.04087092308327556,
+          "p95": 0.041038307012058794
+        },
+        "reopen_s": {
+          "n": 3,
+          "p50": 0.0007401590119116008,
+          "p95": 0.0007511649746447802
+        },
+        "source_enter_verify_s": {
+          "n": 3,
+          "p50": 0.002004358044359833,
+          "p95": 0.0020113990176469088
+        },
+        "source_open_verify_s": {
+          "n": 3,
+          "p50": 0.002200110990088433,
+          "p95": 0.0022146639530546963
+        }
+      }
+    },
+    {
+      "configuration": {
+        "backend": "lmdb",
+        "cache": "primed",
+        "payload": "fixed",
+        "rows": 1000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 1000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 67108864
+          },
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 3000,
+          "commit_batch": 2000,
+          "evidence_digest": "a7f8b847272c94d3ef7d33e00dd92d2ab915e903bc7b597216a5637d7dfbe8ea",
+          "metrics": {
+            "compile_s": 9.410298662260175e-05,
+            "evaluate_s": 0.00902022299123928,
+            "extract_decode_verify_s": 0.025254380016122013,
+            "load_s": 0.16580007696757093,
+            "post_evaluation_verify_s": 0.0020955069921910763,
+            "reasoning_pipeline_s": 0.041253599047195166,
+            "reopen_s": 0.0007763769826851785,
+            "source_enter_verify_s": 0.0019371990347281098,
+            "source_open_verify_s": 0.002075810043606907,
+            "warmup_s": 0.029596870997920632
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 1000,
+          "rss_peak_bytes": 86671360,
+          "scanned": 1000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 1000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 67108864
+          },
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 3000,
+          "commit_batch": 2000,
+          "evidence_digest": "9d7091d344f84f95085292322f73e1f074debf9cec215477ee676f4ea24d3c1c",
+          "metrics": {
+            "compile_s": 9.688799036666751e-05,
+            "evaluate_s": 0.00892838096478954,
+            "extract_decode_verify_s": 0.02481832099147141,
+            "load_s": 0.16570005897665396,
+            "post_evaluation_verify_s": 0.002006818016525358,
+            "reasoning_pipeline_s": 0.040519513888284564,
+            "reopen_s": 0.0007009299588389695,
+            "source_enter_verify_s": 0.0019307329785078764,
+            "source_open_verify_s": 0.0020374429877847433,
+            "warmup_s": 0.02908232598565519
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 1000,
+          "rss_peak_bytes": 86192128,
+          "scanned": 1000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 1000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 67108864
+          },
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 3000,
+          "commit_batch": 2000,
+          "evidence_digest": "46daa5c18bbc2b634eb5f29cb930546291a1abaef0b3f0126d83323c39553b22",
+          "metrics": {
+            "compile_s": 9.142601629719138e-05,
+            "evaluate_s": 0.008911332988645881,
+            "extract_decode_verify_s": 0.02505181502783671,
+            "load_s": 0.16784495598403737,
+            "post_evaluation_verify_s": 0.0022460520267486572,
+            "reasoning_pipeline_s": 0.04099784913705662,
+            "reopen_s": 0.0006909930380061269,
+            "source_enter_verify_s": 0.0019410630338825285,
+            "source_open_verify_s": 0.0020651670056395233,
+            "warmup_s": 0.029672103992197663
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 1000,
+          "rss_peak_bytes": 86822912,
+          "scanned": 1000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        }
+      ],
+      "summary": {
+        "compile_s": {
+          "n": 3,
+          "p50": 9.410298662260175e-05,
+          "p95": 9.688799036666751e-05
+        },
+        "evaluate_s": {
+          "n": 3,
+          "p50": 0.00892838096478954,
+          "p95": 0.00902022299123928
+        },
+        "extract_decode_verify_s": {
+          "n": 3,
+          "p50": 0.02505181502783671,
+          "p95": 0.025254380016122013
+        },
+        "load_s": {
+          "n": 3,
+          "p50": 0.16580007696757093,
+          "p95": 0.16784495598403737
+        },
+        "post_evaluation_verify_s": {
+          "n": 3,
+          "p50": 0.0020955069921910763,
+          "p95": 0.0022460520267486572
+        },
+        "reasoning_pipeline_s": {
+          "n": 3,
+          "p50": 0.04099784913705662,
+          "p95": 0.041253599047195166
+        },
+        "reopen_s": {
+          "n": 3,
+          "p50": 0.0007009299588389695,
+          "p95": 0.0007763769826851785
+        },
+        "source_enter_verify_s": {
+          "n": 3,
+          "p50": 0.0019371990347281098,
+          "p95": 0.0019410630338825285
+        },
+        "source_open_verify_s": {
+          "n": 3,
+          "p50": 0.0020651670056395233,
+          "p95": 0.002075810043606907
+        },
+        "warmup_s": {
+          "n": 3,
+          "p50": 0.029596870997920632,
+          "p95": 0.029672103992197663
+        }
+      }
+    },
+    {
+      "configuration": {
+        "backend": "pyrex",
+        "cache": "first",
+        "payload": "fixed",
+        "rows": 1000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 1000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 3000,
+          "commit_batch": 2000,
+          "evidence_digest": "f957b92f3ff1bc856c76212e8f507c6e1a1727e87f34881a419a4a036c2f26c3",
+          "metrics": {
+            "compile_s": 0.00015261495718732476,
+            "evaluate_s": 0.009014522016514093,
+            "extract_decode_verify_s": 0.03944359300658107,
+            "load_s": 0.18333741201786324,
+            "post_evaluation_verify_s": 0.0033030249760486186,
+            "reasoning_pipeline_s": 0.09334304399089888,
+            "reopen_s": 0.03469455405138433,
+            "source_enter_verify_s": 0.0031838580034673214,
+            "source_open_verify_s": 0.003550876979716122
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 1000,
+          "rss_peak_bytes": 97320960,
+          "scanned": 1000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 1000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 3000,
+          "commit_batch": 2000,
+          "evidence_digest": "b4c7fc5336f22815fe15328f623b47bac5627f65fad498f4a71014cdc5a2d8f4",
+          "metrics": {
+            "compile_s": 0.00010105199180543423,
+            "evaluate_s": 0.00883044395595789,
+            "extract_decode_verify_s": 0.03998248599236831,
+            "load_s": 0.17441771499579772,
+            "post_evaluation_verify_s": 0.0031291329651139677,
+            "reasoning_pipeline_s": 0.08870870590908453,
+            "reopen_s": 0.03028069599531591,
+            "source_enter_verify_s": 0.0030993630061857402,
+            "source_open_verify_s": 0.003285532002337277
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 1000,
+          "rss_peak_bytes": 97517568,
+          "scanned": 1000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 1000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 3000,
+          "commit_batch": 2000,
+          "evidence_digest": "e31624531217904524f7e7f41e84b6e2be73d81c19164f80eb863413a8af3f90",
+          "metrics": {
+            "compile_s": 9.902199963107705e-05,
+            "evaluate_s": 0.00901140901260078,
+            "extract_decode_verify_s": 0.03927613899577409,
+            "load_s": 0.17664047400467098,
+            "post_evaluation_verify_s": 0.003127976960968226,
+            "reasoning_pipeline_s": 0.08810529991751537,
+            "reopen_s": 0.03019622794818133,
+            "source_enter_verify_s": 0.003123560978565365,
+            "source_open_verify_s": 0.003270964021794498
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 1000,
+          "rss_peak_bytes": 97001472,
+          "scanned": 1000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        }
+      ],
+      "summary": {
+        "compile_s": {
+          "n": 3,
+          "p50": 0.00010105199180543423,
+          "p95": 0.00015261495718732476
+        },
+        "evaluate_s": {
+          "n": 3,
+          "p50": 0.00901140901260078,
+          "p95": 0.009014522016514093
+        },
+        "extract_decode_verify_s": {
+          "n": 3,
+          "p50": 0.03944359300658107,
+          "p95": 0.03998248599236831
+        },
+        "load_s": {
+          "n": 3,
+          "p50": 0.17664047400467098,
+          "p95": 0.18333741201786324
+        },
+        "post_evaluation_verify_s": {
+          "n": 3,
+          "p50": 0.0031291329651139677,
+          "p95": 0.0033030249760486186
+        },
+        "reasoning_pipeline_s": {
+          "n": 3,
+          "p50": 0.08870870590908453,
+          "p95": 0.09334304399089888
+        },
+        "reopen_s": {
+          "n": 3,
+          "p50": 0.03028069599531591,
+          "p95": 0.03469455405138433
+        },
+        "source_enter_verify_s": {
+          "n": 3,
+          "p50": 0.003123560978565365,
+          "p95": 0.0031838580034673214
+        },
+        "source_open_verify_s": {
+          "n": 3,
+          "p50": 0.003285532002337277,
+          "p95": 0.003550876979716122
+        }
+      }
+    },
+    {
+      "configuration": {
+        "backend": "pyrex",
+        "cache": "primed",
+        "payload": "fixed",
+        "rows": 1000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 1000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 3000,
+          "commit_batch": 2000,
+          "evidence_digest": "dbade3fc8f9e5f6de028fc72f5c26f1f584517990aabba67697a95b46114ef40",
+          "metrics": {
+            "compile_s": 0.00010083400411531329,
+            "evaluate_s": 0.008940992993302643,
+            "extract_decode_verify_s": 0.03908913902705535,
+            "load_s": 0.17873145203338936,
+            "post_evaluation_verify_s": 0.0032377049792557955,
+            "reasoning_pipeline_s": 0.08880868804408237,
+            "reopen_s": 0.030967300990596414,
+            "source_enter_verify_s": 0.0031543500372208655,
+            "source_open_verify_s": 0.0033183660125359893,
+            "warmup_s": 0.046268038044217974
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 1000,
+          "rss_peak_bytes": 97050624,
+          "scanned": 1000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 1000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 3000,
+          "commit_batch": 2000,
+          "evidence_digest": "4ee1e5734cf6d3a839c92bbe98839de18f3d3cf4e404c8cc607a30eb166ca441",
+          "metrics": {
+            "compile_s": 0.00010226102313026786,
+            "evaluate_s": 0.009052178007550538,
+            "extract_decode_verify_s": 0.038867778959684074,
+            "load_s": 0.17528777598636225,
+            "post_evaluation_verify_s": 0.0032771459664218128,
+            "reasoning_pipeline_s": 0.08809911494608968,
+            "reopen_s": 0.03049021598417312,
+            "source_enter_verify_s": 0.0030810890020802617,
+            "source_open_verify_s": 0.003228446003049612,
+            "warmup_s": 0.04595775401685387
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 1000,
+          "rss_peak_bytes": 97202176,
+          "scanned": 1000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 1000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 3000,
+          "commit_batch": 2000,
+          "evidence_digest": "ea53a5a3edc3a24eeadbbd6c3958a24c078064ccd30d56f65be40ab156598e87",
+          "metrics": {
+            "compile_s": 0.00010159204248338938,
+            "evaluate_s": 0.008966986963059753,
+            "extract_decode_verify_s": 0.0393661399721168,
+            "load_s": 0.17429500800790265,
+            "post_evaluation_verify_s": 0.00327053404180333,
+            "reasoning_pipeline_s": 0.08760482695652172,
+            "reopen_s": 0.02965837495867163,
+            "source_enter_verify_s": 0.0030621240148320794,
+            "source_open_verify_s": 0.00317907496355474,
+            "warmup_s": 0.04553472105180845
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 1000,
+          "rss_peak_bytes": 97173504,
+          "scanned": 1000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        }
+      ],
+      "summary": {
+        "compile_s": {
+          "n": 3,
+          "p50": 0.00010159204248338938,
+          "p95": 0.00010226102313026786
+        },
+        "evaluate_s": {
+          "n": 3,
+          "p50": 0.008966986963059753,
+          "p95": 0.009052178007550538
+        },
+        "extract_decode_verify_s": {
+          "n": 3,
+          "p50": 0.03908913902705535,
+          "p95": 0.0393661399721168
+        },
+        "load_s": {
+          "n": 3,
+          "p50": 0.17528777598636225,
+          "p95": 0.17873145203338936
+        },
+        "post_evaluation_verify_s": {
+          "n": 3,
+          "p50": 0.00327053404180333,
+          "p95": 0.0032771459664218128
+        },
+        "reasoning_pipeline_s": {
+          "n": 3,
+          "p50": 0.08809911494608968,
+          "p95": 0.08880868804408237
+        },
+        "reopen_s": {
+          "n": 3,
+          "p50": 0.03049021598417312,
+          "p95": 0.030967300990596414
+        },
+        "source_enter_verify_s": {
+          "n": 3,
+          "p50": 0.0030810890020802617,
+          "p95": 0.0031543500372208655
+        },
+        "source_open_verify_s": {
+          "n": 3,
+          "p50": 0.003228446003049612,
+          "p95": 0.0033183660125359893
+        },
+        "warmup_s": {
+          "n": 3,
+          "p50": 0.04595775401685387,
+          "p95": 0.046268038044217974
+        }
+      }
+    },
+    {
+      "configuration": {
+        "backend": "lmdb",
+        "cache": "first",
+        "payload": "fixed",
+        "rows": 10000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 10000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 327680000
+          },
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 30000,
+          "commit_batch": 2000,
+          "evidence_digest": "bfeee146d9569b3f9aa59b7c7f48e3f2aa526354c6816aa8c313cd213069636a",
+          "metrics": {
+            "compile_s": 9.493296965956688e-05,
+            "evaluate_s": 0.1121671490254812,
+            "extract_decode_verify_s": 0.22276028495980427,
+            "load_s": 1.7034711230080575,
+            "post_evaluation_verify_s": 0.011659568001050502,
+            "reasoning_pipeline_s": 0.37037743494147435,
+            "reopen_s": 0.0007434069993905723,
+            "source_enter_verify_s": 0.011343105987180024,
+            "source_open_verify_s": 0.011608986998908222
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 10000,
+          "rss_peak_bytes": 226021376,
+          "scanned": 10000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 10000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 327680000
+          },
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 30000,
+          "commit_batch": 2000,
+          "evidence_digest": "b67eba188fe74f5a77082f512ab7f76af7e20abb888b688508bf81394053a347",
+          "metrics": {
+            "compile_s": 9.888695785775781e-05,
+            "evaluate_s": 0.11253858299460262,
+            "extract_decode_verify_s": 0.22338577499613166,
+            "load_s": 1.7361558959819376,
+            "post_evaluation_verify_s": 0.011604784987866879,
+            "reasoning_pipeline_s": 0.37119455297943205,
+            "reopen_s": 0.0007771950331516564,
+            "source_enter_verify_s": 0.011252455005887896,
+            "source_open_verify_s": 0.011536873003933579
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 10000,
+          "rss_peak_bytes": 231833600,
+          "scanned": 10000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 10000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 327680000
+          },
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 30000,
+          "commit_batch": 2000,
+          "evidence_digest": "f8aac2b2c001246a485ad81fcc02fe86a0c8012c29477463b1b8a0ae7b773142",
+          "metrics": {
+            "compile_s": 9.941501775756478e-05,
+            "evaluate_s": 0.11366852303035557,
+            "extract_decode_verify_s": 0.22506090195383877,
+            "load_s": 1.7107146950438619,
+            "post_evaluation_verify_s": 0.011750086967367679,
+            "reasoning_pipeline_s": 0.3741453519323841,
+            "reopen_s": 0.0007852429989725351,
+            "source_enter_verify_s": 0.01120141299907118,
+            "source_open_verify_s": 0.011579768965020776
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 10000,
+          "rss_peak_bytes": 225390592,
+          "scanned": 10000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        }
+      ],
+      "summary": {
+        "compile_s": {
+          "n": 3,
+          "p50": 9.888695785775781e-05,
+          "p95": 9.941501775756478e-05
+        },
+        "evaluate_s": {
+          "n": 3,
+          "p50": 0.11253858299460262,
+          "p95": 0.11366852303035557
+        },
+        "extract_decode_verify_s": {
+          "n": 3,
+          "p50": 0.22338577499613166,
+          "p95": 0.22506090195383877
+        },
+        "load_s": {
+          "n": 3,
+          "p50": 1.7107146950438619,
+          "p95": 1.7361558959819376
+        },
+        "post_evaluation_verify_s": {
+          "n": 3,
+          "p50": 0.011659568001050502,
+          "p95": 0.011750086967367679
+        },
+        "reasoning_pipeline_s": {
+          "n": 3,
+          "p50": 0.37119455297943205,
+          "p95": 0.3741453519323841
+        },
+        "reopen_s": {
+          "n": 3,
+          "p50": 0.0007771950331516564,
+          "p95": 0.0007852429989725351
+        },
+        "source_enter_verify_s": {
+          "n": 3,
+          "p50": 0.011252455005887896,
+          "p95": 0.011343105987180024
+        },
+        "source_open_verify_s": {
+          "n": 3,
+          "p50": 0.011579768965020776,
+          "p95": 0.011608986998908222
+        }
+      }
+    },
+    {
+      "configuration": {
+        "backend": "lmdb",
+        "cache": "primed",
+        "payload": "fixed",
+        "rows": 10000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 10000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 327680000
+          },
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 30000,
+          "commit_batch": 2000,
+          "evidence_digest": "cae87f610890f8daf9dda4c0fcbff5e1a61d220a64e08da62aea6c5ce1f0fe8a",
+          "metrics": {
+            "compile_s": 9.978702291846275e-05,
+            "evaluate_s": 0.11133798095397651,
+            "extract_decode_verify_s": 0.2217653010156937,
+            "load_s": 1.7217097120010294,
+            "post_evaluation_verify_s": 0.011685775010846555,
+            "reasoning_pipeline_s": 0.3680587799753994,
+            "reopen_s": 0.0008009700104594231,
+            "source_enter_verify_s": 0.011070386972278357,
+            "source_open_verify_s": 0.011298578989226371,
+            "warmup_s": 0.24656364001566544
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 10000,
+          "rss_peak_bytes": 228720640,
+          "scanned": 10000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 10000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 327680000
+          },
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 30000,
+          "commit_batch": 2000,
+          "evidence_digest": "438f579e299634a8ecf458793cf987bf8fc4327caf63e65bed3d4051d0311e0c",
+          "metrics": {
+            "compile_s": 9.99419717118144e-05,
+            "evaluate_s": 0.11095174599904567,
+            "extract_decode_verify_s": 0.22048272797837853,
+            "load_s": 1.7170045939856209,
+            "post_evaluation_verify_s": 0.011705569981131703,
+            "reasoning_pipeline_s": 0.3665457309689373,
+            "reopen_s": 0.0007781810127198696,
+            "source_enter_verify_s": 0.01116742001613602,
+            "source_open_verify_s": 0.011360144009813666,
+            "warmup_s": 0.24572421301854774
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 10000,
+          "rss_peak_bytes": 228200448,
+          "scanned": 10000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 10000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 327680000
+          },
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 30000,
+          "commit_batch": 2000,
+          "evidence_digest": "dafb8f4d667b02e5668eeed15448b0fb99654135f1dfa9e493dc8165fb2e9e88",
+          "metrics": {
+            "compile_s": 9.855203097686172e-05,
+            "evaluate_s": 0.11148454900830984,
+            "extract_decode_verify_s": 0.2229538899846375,
+            "load_s": 1.7301126880338416,
+            "post_evaluation_verify_s": 0.01164793799398467,
+            "reasoning_pipeline_s": 0.3694805100094527,
+            "reopen_s": 0.000811617006547749,
+            "source_enter_verify_s": 0.011175466002896428,
+            "source_open_verify_s": 0.011308497982099652,
+            "warmup_s": 0.24880123400362208
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 10000,
+          "rss_peak_bytes": 230281216,
+          "scanned": 10000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        }
+      ],
+      "summary": {
+        "compile_s": {
+          "n": 3,
+          "p50": 9.978702291846275e-05,
+          "p95": 9.99419717118144e-05
+        },
+        "evaluate_s": {
+          "n": 3,
+          "p50": 0.11133798095397651,
+          "p95": 0.11148454900830984
+        },
+        "extract_decode_verify_s": {
+          "n": 3,
+          "p50": 0.2217653010156937,
+          "p95": 0.2229538899846375
+        },
+        "load_s": {
+          "n": 3,
+          "p50": 1.7217097120010294,
+          "p95": 1.7301126880338416
+        },
+        "post_evaluation_verify_s": {
+          "n": 3,
+          "p50": 0.011685775010846555,
+          "p95": 0.011705569981131703
+        },
+        "reasoning_pipeline_s": {
+          "n": 3,
+          "p50": 0.3680587799753994,
+          "p95": 0.3694805100094527
+        },
+        "reopen_s": {
+          "n": 3,
+          "p50": 0.0008009700104594231,
+          "p95": 0.000811617006547749
+        },
+        "source_enter_verify_s": {
+          "n": 3,
+          "p50": 0.01116742001613602,
+          "p95": 0.011175466002896428
+        },
+        "source_open_verify_s": {
+          "n": 3,
+          "p50": 0.011308497982099652,
+          "p95": 0.011360144009813666
+        },
+        "warmup_s": {
+          "n": 3,
+          "p50": 0.24656364001566544,
+          "p95": 0.24880123400362208
+        }
+      }
+    },
+    {
+      "configuration": {
+        "backend": "pyrex",
+        "cache": "first",
+        "payload": "fixed",
+        "rows": 10000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 10000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 30000,
+          "commit_batch": 2000,
+          "evidence_digest": "e16c520cbdc4f5d92a545de6fda2985a4f1e22b41e9ed0d3999d26b5d71ba440",
+          "metrics": {
+            "compile_s": 0.00010179297532886267,
+            "evaluate_s": 0.11546263395575806,
+            "extract_decode_verify_s": 0.3395687669981271,
+            "load_s": 1.815768589032814,
+            "post_evaluation_verify_s": 0.01868899102555588,
+            "reasoning_pipeline_s": 0.7778599088778719,
+            "reopen_s": 0.2674205149523914,
+            "source_enter_verify_s": 0.01816638995660469,
+            "source_open_verify_s": 0.018450819014105946
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 10000,
+          "rss_peak_bytes": 192684032,
+          "scanned": 10000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 10000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 30000,
+          "commit_batch": 2000,
+          "evidence_digest": "0a9f482cf06d5135978ab64bf7c3171181124359fc3e1a39a5ac4d90ac3fe4b4",
+          "metrics": {
+            "compile_s": 0.00011299498146399856,
+            "evaluate_s": 0.11264363303780556,
+            "extract_decode_verify_s": 0.3388458509580232,
+            "load_s": 1.7985796689754352,
+            "post_evaluation_verify_s": 0.01854151696898043,
+            "reasoning_pipeline_s": 0.7726005949662067,
+            "reopen_s": 0.26579255901742727,
+            "source_enter_verify_s": 0.018167018017265946,
+            "source_open_verify_s": 0.01849702198524028
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 10000,
+          "rss_peak_bytes": 193617920,
+          "scanned": 10000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 10000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 30000,
+          "commit_batch": 2000,
+          "evidence_digest": "c23b1c2e9f2f71b9b083fae0460091ad16d2b59bad478b5b93be3bfb440c2ddb",
+          "metrics": {
+            "compile_s": 0.00011172197991982102,
+            "evaluate_s": 0.11267761996714398,
+            "extract_decode_verify_s": 0.3418680760078132,
+            "load_s": 1.7981408310006373,
+            "post_evaluation_verify_s": 0.018553035042714328,
+            "reasoning_pipeline_s": 0.7764147839625366,
+            "reopen_s": 0.2662945589981973,
+            "source_enter_verify_s": 0.018360539979767054,
+            "source_open_verify_s": 0.018549231986980885
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 10000,
+          "rss_peak_bytes": 193843200,
+          "scanned": 10000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        }
+      ],
+      "summary": {
+        "compile_s": {
+          "n": 3,
+          "p50": 0.00011172197991982102,
+          "p95": 0.00011299498146399856
+        },
+        "evaluate_s": {
+          "n": 3,
+          "p50": 0.11267761996714398,
+          "p95": 0.11546263395575806
+        },
+        "extract_decode_verify_s": {
+          "n": 3,
+          "p50": 0.3395687669981271,
+          "p95": 0.3418680760078132
+        },
+        "load_s": {
+          "n": 3,
+          "p50": 1.7985796689754352,
+          "p95": 1.815768589032814
+        },
+        "post_evaluation_verify_s": {
+          "n": 3,
+          "p50": 0.018553035042714328,
+          "p95": 0.01868899102555588
+        },
+        "reasoning_pipeline_s": {
+          "n": 3,
+          "p50": 0.7764147839625366,
+          "p95": 0.7778599088778719
+        },
+        "reopen_s": {
+          "n": 3,
+          "p50": 0.2662945589981973,
+          "p95": 0.2674205149523914
+        },
+        "source_enter_verify_s": {
+          "n": 3,
+          "p50": 0.018167018017265946,
+          "p95": 0.018360539979767054
+        },
+        "source_open_verify_s": {
+          "n": 3,
+          "p50": 0.01849702198524028,
+          "p95": 0.018549231986980885
+        }
+      }
+    },
+    {
+      "configuration": {
+        "backend": "pyrex",
+        "cache": "primed",
+        "payload": "fixed",
+        "rows": 10000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 10000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 30000,
+          "commit_batch": 2000,
+          "evidence_digest": "63ff9853b053c70c24d73f7e86576226eed7a19e307dc5c47f614976490b2deb",
+          "metrics": {
+            "compile_s": 0.00010467198444530368,
+            "evaluate_s": 0.11215558100957423,
+            "extract_decode_verify_s": 0.34697338700061664,
+            "load_s": 1.8115687720128335,
+            "post_evaluation_verify_s": 0.019473569002002478,
+            "reasoning_pipeline_s": 0.77989843103569,
+            "reopen_s": 0.2629034799756482,
+            "source_enter_verify_s": 0.018991478020325303,
+            "source_open_verify_s": 0.019296264043077826,
+            "warmup_s": 0.3882463569752872
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 10000,
+          "rss_peak_bytes": 193040384,
+          "scanned": 10000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 10000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 30000,
+          "commit_batch": 2000,
+          "evidence_digest": "1d8428ef4e303b134552bd310eff5a33c3fc47eec2006e6dd0d1efa20919a52e",
+          "metrics": {
+            "compile_s": 0.00010361999738961458,
+            "evaluate_s": 0.11171363404719159,
+            "extract_decode_verify_s": 0.3374516509938985,
+            "load_s": 1.808543090999592,
+            "post_evaluation_verify_s": 0.019303417997434735,
+            "reasoning_pipeline_s": 0.7679795479634777,
+            "reopen_s": 0.2629920339677483,
+            "source_enter_verify_s": 0.018124514957889915,
+            "source_open_verify_s": 0.01829067600192502,
+            "warmup_s": 0.37464286998147145
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 10000,
+          "rss_peak_bytes": 192544768,
+          "scanned": 10000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 10000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 30000,
+          "commit_batch": 2000,
+          "evidence_digest": "e1c48c10a83bd3f696aace5bbd67af131caf1d6734701bf309778069ad7799ce",
+          "metrics": {
+            "compile_s": 0.00010013196151703596,
+            "evaluate_s": 0.11257900996133685,
+            "extract_decode_verify_s": 0.35318732797168195,
+            "load_s": 1.8104719260009006,
+            "post_evaluation_verify_s": 0.019323582004290074,
+            "reasoning_pipeline_s": 0.7897256768774241,
+            "reopen_s": 0.2665353220072575,
+            "source_enter_verify_s": 0.01905165397329256,
+            "source_open_verify_s": 0.018948648998048156,
+            "warmup_s": 0.38830434501869604
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 10000,
+          "rss_peak_bytes": 192958464,
+          "scanned": 10000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        }
+      ],
+      "summary": {
+        "compile_s": {
+          "n": 3,
+          "p50": 0.00010361999738961458,
+          "p95": 0.00010467198444530368
+        },
+        "evaluate_s": {
+          "n": 3,
+          "p50": 0.11215558100957423,
+          "p95": 0.11257900996133685
+        },
+        "extract_decode_verify_s": {
+          "n": 3,
+          "p50": 0.34697338700061664,
+          "p95": 0.35318732797168195
+        },
+        "load_s": {
+          "n": 3,
+          "p50": 1.8104719260009006,
+          "p95": 1.8115687720128335
+        },
+        "post_evaluation_verify_s": {
+          "n": 3,
+          "p50": 0.019323582004290074,
+          "p95": 0.019473569002002478
+        },
+        "reasoning_pipeline_s": {
+          "n": 3,
+          "p50": 0.77989843103569,
+          "p95": 0.7897256768774241
+        },
+        "reopen_s": {
+          "n": 3,
+          "p50": 0.2629920339677483,
+          "p95": 0.2665353220072575
+        },
+        "source_enter_verify_s": {
+          "n": 3,
+          "p50": 0.018991478020325303,
+          "p95": 0.01905165397329256
+        },
+        "source_open_verify_s": {
+          "n": 3,
+          "p50": 0.018948648998048156,
+          "p95": 0.019296264043077826
+        },
+        "warmup_s": {
+          "n": 3,
+          "p50": 0.3882463569752872,
+          "p95": 0.38830434501869604
+        }
+      }
+    },
+    {
+      "configuration": {
+        "backend": "lmdb",
+        "cache": "first",
+        "payload": "fixed",
+        "rows": 100000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 100000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 3276800000
+          },
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 300000,
+          "commit_batch": 2000,
+          "evidence_digest": "7ea6d7ffcf8b6758777b18492754a8ff4507db5750d3d956b990e1ebaaf5a408",
+          "metrics": {
+            "compile_s": 9.71650006249547e-05,
+            "evaluate_s": 1.664065747987479,
+            "extract_decode_verify_s": 2.4048721159924753,
+            "load_s": 25.54773737199139,
+            "post_evaluation_verify_s": 0.09803055098745972,
+            "reasoning_pipeline_s": 4.364187035011128,
+            "reopen_s": 0.0008733770227991045,
+            "source_enter_verify_s": 0.09795362100703642,
+            "source_open_verify_s": 0.09829445701325312
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 100000,
+          "rss_peak_bytes": 1538977792,
+          "scanned": 100000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 100000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 3276800000
+          },
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 300000,
+          "commit_batch": 2000,
+          "evidence_digest": "321e137e5412a30a29796d2713ae0e0e8cc4f33845e5a79ab9548b60b2539556",
+          "metrics": {
+            "compile_s": 9.734201012179255e-05,
+            "evaluate_s": 1.6641784149687737,
+            "extract_decode_verify_s": 2.3943549529649317,
+            "load_s": 25.59899318200769,
+            "post_evaluation_verify_s": 0.09962753497529775,
+            "reasoning_pipeline_s": 4.355274937930517,
+            "reopen_s": 0.0008730129920877516,
+            "source_enter_verify_s": 0.09758395503740758,
+            "source_open_verify_s": 0.09855972498189658
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 100000,
+          "rss_peak_bytes": 1535488000,
+          "scanned": 100000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 100000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 3276800000
+          },
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 300000,
+          "commit_batch": 2000,
+          "evidence_digest": "56b1ade0cd5f46dc286f739548a848d69d3de5327be7710904dcbf11e325181e",
+          "metrics": {
+            "compile_s": 9.592203423380852e-05,
+            "evaluate_s": 1.6546552180079743,
+            "extract_decode_verify_s": 2.4029937830055133,
+            "load_s": 25.755269570974633,
+            "post_evaluation_verify_s": 0.0989541650051251,
+            "reasoning_pipeline_s": 4.3534672050736845,
+            "reopen_s": 0.0008650770178064704,
+            "source_enter_verify_s": 0.09759429900441319,
+            "source_open_verify_s": 0.0983087409986183
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 100000,
+          "rss_peak_bytes": 1533517824,
+          "scanned": 100000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        }
+      ],
+      "summary": {
+        "compile_s": {
+          "n": 3,
+          "p50": 9.71650006249547e-05,
+          "p95": 9.734201012179255e-05
+        },
+        "evaluate_s": {
+          "n": 3,
+          "p50": 1.664065747987479,
+          "p95": 1.6641784149687737
+        },
+        "extract_decode_verify_s": {
+          "n": 3,
+          "p50": 2.4029937830055133,
+          "p95": 2.4048721159924753
+        },
+        "load_s": {
+          "n": 3,
+          "p50": 25.59899318200769,
+          "p95": 25.755269570974633
+        },
+        "post_evaluation_verify_s": {
+          "n": 3,
+          "p50": 0.0989541650051251,
+          "p95": 0.09962753497529775
+        },
+        "reasoning_pipeline_s": {
+          "n": 3,
+          "p50": 4.355274937930517,
+          "p95": 4.364187035011128
+        },
+        "reopen_s": {
+          "n": 3,
+          "p50": 0.0008730129920877516,
+          "p95": 0.0008733770227991045
+        },
+        "source_enter_verify_s": {
+          "n": 3,
+          "p50": 0.09759429900441319,
+          "p95": 0.09795362100703642
+        },
+        "source_open_verify_s": {
+          "n": 3,
+          "p50": 0.0983087409986183,
+          "p95": 0.09855972498189658
+        }
+      }
+    },
+    {
+      "configuration": {
+        "backend": "lmdb",
+        "cache": "primed",
+        "payload": "fixed",
+        "rows": 100000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 100000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 3276800000
+          },
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 300000,
+          "commit_batch": 2000,
+          "evidence_digest": "84969d660364caf5a932e08bb3e21815add303fd2570fab0f732a7b7e05c276d",
+          "metrics": {
+            "compile_s": 9.436497930437326e-05,
+            "evaluate_s": 1.6598358760238625,
+            "extract_decode_verify_s": 2.3954315750161186,
+            "load_s": 25.83295090700267,
+            "post_evaluation_verify_s": 0.10570811800425872,
+            "reasoning_pipeline_s": 4.3584799250238575,
+            "reopen_s": 0.0008770530112087727,
+            "source_enter_verify_s": 0.09806267498061061,
+            "source_open_verify_s": 0.09847026300849393,
+            "warmup_s": 2.4737346309702843
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 100000,
+          "rss_peak_bytes": 1534599168,
+          "scanned": 100000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 100000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 3276800000
+          },
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 300000,
+          "commit_batch": 2000,
+          "evidence_digest": "a7efe0d95a1219712ddb637eff52bacec71606d6ea01d53c4636d832580335fa",
+          "metrics": {
+            "compile_s": 9.765999857336283e-05,
+            "evaluate_s": 1.6617584699997678,
+            "extract_decode_verify_s": 2.3810495029902086,
+            "load_s": 18.625627837027423,
+            "post_evaluation_verify_s": 0.09867427794961259,
+            "reasoning_pipeline_s": 4.3387243179022335,
+            "reopen_s": 0.0008261649636551738,
+            "source_enter_verify_s": 0.0977692209999077,
+            "source_open_verify_s": 0.09854902100050822,
+            "warmup_s": 2.451939875027165
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 100000,
+          "rss_peak_bytes": 1542598656,
+          "scanned": 100000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 100000,
+          "backend": "lmdb",
+          "backend_options": {
+            "map_size": 3276800000
+          },
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 300000,
+          "commit_batch": 2000,
+          "evidence_digest": "b74f3f99fe1d078a6d5a6f814325787b161696907cd9fedbe8aff78303e9dd0a",
+          "metrics": {
+            "compile_s": 9.47709777392447e-05,
+            "evaluate_s": 1.625025834015105,
+            "extract_decode_verify_s": 2.369630886008963,
+            "load_s": 18.650239559006877,
+            "post_evaluation_verify_s": 0.10007987101562321,
+            "reasoning_pipeline_s": 4.291827178967651,
+            "reopen_s": 0.0008484969730488956,
+            "source_enter_verify_s": 0.0981342329760082,
+            "source_open_verify_s": 0.09801308700116351,
+            "warmup_s": 2.4428293079836294
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 100000,
+          "rss_peak_bytes": 1534304256,
+          "scanned": 100000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        }
+      ],
+      "summary": {
+        "compile_s": {
+          "n": 3,
+          "p50": 9.47709777392447e-05,
+          "p95": 9.765999857336283e-05
+        },
+        "evaluate_s": {
+          "n": 3,
+          "p50": 1.6598358760238625,
+          "p95": 1.6617584699997678
+        },
+        "extract_decode_verify_s": {
+          "n": 3,
+          "p50": 2.3810495029902086,
+          "p95": 2.3954315750161186
+        },
+        "load_s": {
+          "n": 3,
+          "p50": 18.650239559006877,
+          "p95": 25.83295090700267
+        },
+        "post_evaluation_verify_s": {
+          "n": 3,
+          "p50": 0.10007987101562321,
+          "p95": 0.10570811800425872
+        },
+        "reasoning_pipeline_s": {
+          "n": 3,
+          "p50": 4.3387243179022335,
+          "p95": 4.3584799250238575
+        },
+        "reopen_s": {
+          "n": 3,
+          "p50": 0.0008484969730488956,
+          "p95": 0.0008770530112087727
+        },
+        "source_enter_verify_s": {
+          "n": 3,
+          "p50": 0.09806267498061061,
+          "p95": 0.0981342329760082
+        },
+        "source_open_verify_s": {
+          "n": 3,
+          "p50": 0.09847026300849393,
+          "p95": 0.09854902100050822
+        },
+        "warmup_s": {
+          "n": 3,
+          "p50": 2.451939875027165,
+          "p95": 2.4737346309702843
+        }
+      }
+    },
+    {
+      "configuration": {
+        "backend": "pyrex",
+        "cache": "first",
+        "payload": "fixed",
+        "rows": 100000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 100000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 300000,
+          "commit_batch": 2000,
+          "evidence_digest": "ef011c3d8e494bbd5b0e51668cc73f12f189033bf61f16e04c8de6bb711a9c24",
+          "metrics": {
+            "compile_s": 0.0001100310473702848,
+            "evaluate_s": 1.6808208919828758,
+            "extract_decode_verify_s": 4.219702992995735,
+            "load_s": 19.30725627200445,
+            "post_evaluation_verify_s": 0.23822097899392247,
+            "reasoning_pipeline_s": 6.740958387032151,
+            "reopen_s": 0.1260162289836444,
+            "source_enter_verify_s": 0.2376792849972844,
+            "source_open_verify_s": 0.23840797803131863
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 100000,
+          "rss_peak_bytes": 658264064,
+          "scanned": 100000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 100000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 300000,
+          "commit_batch": 2000,
+          "evidence_digest": "3b2a035f928a3eb06018eb05fff0dfa4ad152b875f22cb81f1cce996b2f3a316",
+          "metrics": {
+            "compile_s": 0.00011478201486170292,
+            "evaluate_s": 1.6671170379850082,
+            "extract_decode_verify_s": 4.207369567011483,
+            "load_s": 19.334769237029832,
+            "post_evaluation_verify_s": 0.23905854002805427,
+            "reasoning_pipeline_s": 6.712642753031105,
+            "reopen_s": 0.12612035096390173,
+            "source_enter_verify_s": 0.23459260299568996,
+            "source_open_verify_s": 0.23826987203210592
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 100000,
+          "rss_peak_bytes": 658919424,
+          "scanned": 100000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 100000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "first extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 300000,
+          "commit_batch": 2000,
+          "evidence_digest": "621b5ab3a7df0e0c5d32ad903f208c0bfa4b415cc9ed72ff0f2f544970e16081",
+          "metrics": {
+            "compile_s": 0.00011436297791078687,
+            "evaluate_s": 1.6717888310085982,
+            "extract_decode_verify_s": 3.896336033998523,
+            "load_s": 19.321540111966897,
+            "post_evaluation_verify_s": 0.20164366299286485,
+            "reasoning_pipeline_s": 6.321430874988437,
+            "reopen_s": 0.13402890803990886,
+            "source_enter_verify_s": 0.20790659199701622,
+            "source_open_verify_s": 0.20961248397361487
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 100000,
+          "rss_peak_bytes": 660234240,
+          "scanned": 100000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        }
+      ],
+      "summary": {
+        "compile_s": {
+          "n": 3,
+          "p50": 0.00011436297791078687,
+          "p95": 0.00011478201486170292
+        },
+        "evaluate_s": {
+          "n": 3,
+          "p50": 1.6717888310085982,
+          "p95": 1.6808208919828758
+        },
+        "extract_decode_verify_s": {
+          "n": 3,
+          "p50": 4.207369567011483,
+          "p95": 4.219702992995735
+        },
+        "load_s": {
+          "n": 3,
+          "p50": 19.321540111966897,
+          "p95": 19.334769237029832
+        },
+        "post_evaluation_verify_s": {
+          "n": 3,
+          "p50": 0.23822097899392247,
+          "p95": 0.23905854002805427
+        },
+        "reasoning_pipeline_s": {
+          "n": 3,
+          "p50": 6.712642753031105,
+          "p95": 6.740958387032151
+        },
+        "reopen_s": {
+          "n": 3,
+          "p50": 0.12612035096390173,
+          "p95": 0.13402890803990886
+        },
+        "source_enter_verify_s": {
+          "n": 3,
+          "p50": 0.23459260299568996,
+          "p95": 0.2376792849972844
+        },
+        "source_open_verify_s": {
+          "n": 3,
+          "p50": 0.23826987203210592,
+          "p95": 0.23840797803131863
+        }
+      }
+    },
+    {
+      "configuration": {
+        "backend": "pyrex",
+        "cache": "primed",
+        "payload": "fixed",
+        "rows": 100000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 100000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 300000,
+          "commit_batch": 2000,
+          "evidence_digest": "02e3a0f832c95972db8afc02abb5c71e4b5547ec3a12e2c468b445c0eff950b0",
+          "metrics": {
+            "compile_s": 0.00011332699796184897,
+            "evaluate_s": 1.6916359449969605,
+            "extract_decode_verify_s": 3.822084087994881,
+            "load_s": 19.392947977990843,
+            "post_evaluation_verify_s": 0.1987810109858401,
+            "reasoning_pipeline_s": 6.235567844007164,
+            "reopen_s": 0.12687673000618815,
+            "source_enter_verify_s": 0.19784395501483232,
+            "source_open_verify_s": 0.19823278801050037,
+            "warmup_s": 4.052106392977294
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 100000,
+          "rss_peak_bytes": 660480000,
+          "scanned": 100000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 100000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 300000,
+          "commit_batch": 2000,
+          "evidence_digest": "d0892ec159042970d8150b34c31177f5c62e971612be00a07533ab5a2fd40d8a",
+          "metrics": {
+            "compile_s": 0.00011407799320295453,
+            "evaluate_s": 1.6071347980177961,
+            "extract_decode_verify_s": 4.207400932034943,
+            "load_s": 19.441867896006443,
+            "post_evaluation_verify_s": 0.23644447204424068,
+            "reasoning_pipeline_s": 6.65341760404408,
+            "reopen_s": 0.1286372029571794,
+            "source_enter_verify_s": 0.23673516901908442,
+            "source_open_verify_s": 0.23695095197763294,
+            "warmup_s": 4.513920978002716
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 100000,
+          "rss_peak_bytes": 657219584,
+          "scanned": 100000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        },
+        {
+          "accepted": 100000,
+          "backend": "pyrex",
+          "backend_options": {},
+          "batch_rows": 256,
+          "cache_state": "primed extraction on reopened handle; OS cache uncontrolled, not OS-cold",
+          "closure_facts": 300000,
+          "commit_batch": 2000,
+          "evidence_digest": "3f5cc823aee5e3f61e5ffa13f30b0d584966888d3fde1b2b239d9d5fa1810ab9",
+          "metrics": {
+            "compile_s": 0.00011527998140081763,
+            "evaluate_s": 1.6180392419919372,
+            "extract_decode_verify_s": 3.8190876690205187,
+            "load_s": 19.152164073020685,
+            "post_evaluation_verify_s": 0.20902680500876158,
+            "reasoning_pipeline_s": 6.173111063078977,
+            "reopen_s": 0.13168446603231132,
+            "source_enter_verify_s": 0.19705083803273737,
+            "source_open_verify_s": 0.19810676301131025,
+            "warmup_s": 4.107147160975728
+          },
+          "mode": "closure-only; supports/publication/native adapters require separate measurements",
+          "payload": "fixed",
+          "payload_location": "claim provenance; short entity IDs respect index limits",
+          "pushdown": "none",
+          "rows": 100000,
+          "rss_peak_bytes": 658968576,
+          "scanned": 100000,
+          "selection": "all",
+          "status": "ok",
+          "verifications": 5
+        }
+      ],
+      "summary": {
+        "compile_s": {
+          "n": 3,
+          "p50": 0.00011407799320295453,
+          "p95": 0.00011527998140081763
+        },
+        "evaluate_s": {
+          "n": 3,
+          "p50": 1.6180392419919372,
+          "p95": 1.6916359449969605
+        },
+        "extract_decode_verify_s": {
+          "n": 3,
+          "p50": 3.822084087994881,
+          "p95": 4.207400932034943
+        },
+        "load_s": {
+          "n": 3,
+          "p50": 19.392947977990843,
+          "p95": 19.441867896006443
+        },
+        "post_evaluation_verify_s": {
+          "n": 3,
+          "p50": 0.20902680500876158,
+          "p95": 0.23644447204424068
+        },
+        "reasoning_pipeline_s": {
+          "n": 3,
+          "p50": 6.235567844007164,
+          "p95": 6.65341760404408
+        },
+        "reopen_s": {
+          "n": 3,
+          "p50": 0.1286372029571794,
+          "p95": 0.13168446603231132
+        },
+        "source_enter_verify_s": {
+          "n": 3,
+          "p50": 0.19784395501483232,
+          "p95": 0.23673516901908442
+        },
+        "source_open_verify_s": {
+          "n": 3,
+          "p50": 0.19823278801050037,
+          "p95": 0.23695095197763294
+        },
+        "warmup_s": {
+          "n": 3,
+          "p50": 4.107147160975728,
+          "p95": 4.513920978002716
+        }
+      }
+    }
+  ],
+  "complete": true,
+  "git_revision": "49231f3bddc5b916dace9fa73ef2092089699137",
+  "packages": {
+    "lmdb": "2.2.1",
+    "numpy": "2.5.2",
+    "plyvel": "1.5.1",
+    "pyarrow": "24.0.0",
+    "pyrex-rocksdb": "0.5.0"
+  },
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "python": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
+  "repeats": 3,
+  "rss_note": "whole worker high-water mark, including load and reference verification; not engine-only",
+  "schema_version": 1,
+  "source_sha256": {
+    "reasoning_matrix.py": "d8e973509267cd358fabe07bff9f1c5dd8e2e205129866108b664f2b02532516",
+    "reasoning_pipeline.py": "b749651f16f398da8204d1e7f667c88de30c530bccf501f2039ac553b6f3f113"
+  },
+  "timeout_s": 300,
+  "working_tree_dirty": false
+}
