@@ -33,7 +33,7 @@ def test_batched_commits_match_per_claim_load_and_record_progress(tmp_path):
     assert batched["closure_facts"] == single["closure_facts"] == 60
     assert batched["scanned"] == single["scanned"] == 20
     phases = [json.loads(line)["phase"] for line in progress.read_text().splitlines()]
-    assert phases[:2] == ["load_s", "compile_s"]
+    assert phases[:3] == ["load_s", "reopen_s", "compile_s"]
     assert set(phases) >= {"load_s", "extract_decode_verify_s", "evaluate_s"}
 
 

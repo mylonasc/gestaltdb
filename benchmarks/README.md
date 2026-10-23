@@ -297,3 +297,13 @@ from benchmarks.common import (
     gestaltdb_star_traversal, gestaltdb_typed_path, gestaltdb_deep_typed_query,
 )
 ```
+# Authenticated reasoning measurement matrix (#194)
+
+`python -m benchmarks.reasoning_matrix --output /tmp/opencode/reasoning-matrix.json`
+runs isolated repeated 1K/10K/100K LMDB/PyRex claims workloads with exact evidence
+and classification-closure parity. Use `--selections all predicate subject`,
+`--payloads fixed variable`, and `--caches first primed` to expand the matrix.
+`--backends pyrex-native` is a **separate synthetic KV** scan/decode experiment,
+not authenticated claims or a native inference-speedup claim. See the boundaries,
+capability/failure semantics and reproduction commands in
+[`pipeline-benchmarks.md`](../planning/reasoning-followthrough/pipeline-benchmarks.md).
