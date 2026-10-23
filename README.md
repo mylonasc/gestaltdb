@@ -19,6 +19,14 @@ Optional, explicit adapters add strict offline RDF import (`gestaltdb[rdf]`),
 and [point-only publication/reconciliation](docs/ontology-publication.rst).
 These do not implicitly change Cypher or sampler results.
 
+**Reasoning engine testing milestone (0.13.0rc1 candidate):** standalone typed
+rules, selective demand queries, scoped negation/validation/equality, explicit
+incremental sessions and positive temporal range workflows are available for
+release testing. Indexed Python stays the default; experimental paths and
+unsupported combinations remain explicit. See the
+[testing guide and compatibility boundaries](docs/reasoning-testing.rst).
+The candidate version is not available from PyPI until its prerelease is published.
+
 ## Filter, Sample, Train
 
 | Capability | What you can do |

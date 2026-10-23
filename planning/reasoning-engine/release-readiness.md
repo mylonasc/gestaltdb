@@ -7,8 +7,8 @@ not the entire enhancement backlog. Parent: #156; policy:
 This is a release decision register, not a claim that the candidate is ready.
 Initial audited baseline: `4789f94` (2026-10-23, after PR #305). Any main/release
 decision must identify its exact SHA and rerun applicable gates after changes.
-Proposed version: **0.13.0rc1**, pending release preparation; current metadata
-still says 0.12.1 and must not be published as the reasoning milestone.
+Candidate version: **0.13.0rc1**, prepared separately from the readiness gate.
+It must not be published until the final candidate and main push gates pass.
 
 ## Blocker triage
 
@@ -30,6 +30,32 @@ This triage is based on issue/merge history and existing tests, not a new formal
 proof or exhaustive composition audit. Newly reproduced incorrect results,
 isolation leaks, unsafe publication or data loss in an advertised workflow
 remain release blockers even if its originating issue is closed.
+
+## Evidence history and phase reconciliation
+
+- PR #306, head `c333899`: full suites (including docs/examples/Sphinx),
+  installed artifacts and ontology checks passed on Python 3.10–3.13 (12 jobs).
+  Local full-extras runs on 3.10 and 3.13 each passed **2367 tests / 1 skip**.
+  The skip is the LMDB case of nontransactional publication fault injection;
+  the nontransactional backend cases run. No test deselections were used.
+- Integration merge `0db0133`: push checks must be verified separately; green
+  PR results above are not a claim about this or later merged SHAs.
+- Draft main-target PR #307 enables the general, optional dependency,
+  documentation, security, visualization and fuzzing checks. Its early runs
+  predate some hardening and are not final release evidence.
+
+| Phase | Existing acceptance evidence inspected | Remaining decision |
+|---|---|---|
+| #157 / RE-E1 | `test_reasoning_execution_baseline.py`, `test_reasoning_plans.py`, `test_reasoning_polars.py`, `test_reasoning_executors.py`, extraction policy/identity tests; `docs/reasoning-executors.rst` and checked-in RE-03 reports record the indexed-default/opt-in-Polars/no-native decision. | Small synthetic reports are not scale certification; #194's expanded extraction matrix remains deferred. Final candidate matrix/installation gates still required. |
+| #158 / RE-E2 | Closed after prior verification; typed/aggregate/negation/oracle/demand/equality/validation suites rerun in #306. | Preserve narrower validation/provenance and combination boundaries documented in this release; do not reopen scope merely to implement every construct. |
+| #159 / RE-E3 | Maintenance/deletion/catalog/session/freshness and publication tests; `test_reasoning_workload_gates.py` checks cooperative cancellation boundaries, stale identities and recovery consent; RE-18 maintenance reports record small-workload crossover evidence. | Cancellation/fault injection is not proof of every OS/process/crash scenario. Do not certify a blanket crash/concurrency guarantee or close the phase solely on these tests; broader durable recovery acceptance remains open. |
+| #160 / RE-E4 | `test_reasoning_intervals.py`, `test_reasoning_temporal.py`, `test_reasoning_ranges.py`, revision/conformance and publication tests; RE-22 temporal reports and `docs/reasoning-conformance.rst`. | Advertise positive range closure and explicit unsupported fragments only; retain the broader crash-safe publication phase gate pending reconciliation with #159. |
+| #161 / RE-E5 | Profile/EL/scope/scale/proof tests and corresponding docs provide named subsets, bounded experiments and explicit defers. | Full OWL DL, probabilistic/context calculi, spill, native kernels and differential runtimes are not this release's prerequisites. Do not claim their implementation or generic composition. |
+
+The open phase epics are not automatically release blockers for a clearly
+bounded testing slice. Any advertised stronger durability or composition
+guarantee would require its missing evidence first. This register does not
+close those epics or supersede their broader acceptance criteria.
 
 ## Required evidence before main merge
 
