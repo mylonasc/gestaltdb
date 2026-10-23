@@ -1197,6 +1197,142 @@ class SamplerEngine:
         """Batched alias for ``sample_subgraph``."""
         return self.sample_subgraph(*args, **kwargs)
 
+    def sample_packed_subgraphs(
+        self,
+        seed_edge_groups: Sequence[Sequence[int] | np.ndarray],
+        fanouts: Sequence[int],
+        *,
+        direction: str = "any",
+        relations: Sequence[int] | np.ndarray | None = None,
+        negative_config: HardNegativeConfig | None = None,
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+        causal_policy: str = "none",
+    ) -> SampledSubgraphBatch:
+        """Sample one independent subgraph per seed group in a single batch.
+
+        Each group is sampled exactly as :meth:`sample_subgraph` would sample
+        it alone, then repackaged into one batch with per-component frames:
+        ``graph_node_offsets`` and ``graph_edge_offsets`` mark each
+        component's node and edge rows, and all local IDs (``senders``,
+        ``receivers``, ``positives``, ``negatives``) are rebased to the
+        concatenated node frame. Global node and edge IDs may repeat across
+        components; each component's slice is self-contained. Positive rows
+        appear in seed-group order (``len(group)`` rows per component when
+        no temporal filtering drops seed edges) and negative rows align with
+        positive rows. Temporal
+        arrays, example times, and negative diagnostics are concatenated or
+        summed component-wise.
+
+        Args:
+            seed_edge_groups: One compact seed-edge sequence per component.
+                Groups are validated exactly as in :meth:`sample_subgraph`.
+            fanouts: Fanout per hop, shared by every component.
+            direction: Traversal direction for context expansion.
+            relations: Optional relation filter for context expansion.
+            negative_config: Optional hard-negative configuration shared by
+                every component.
+            temporal: Optional point or finite-window validity filter.
+            window_policy: Window matching policy, ``"overlap"`` or
+                ``"contained"``.
+            causal_policy: Valid-start policy propagated through context hops.
+
+        Returns:
+            ``SampledSubgraphBatch`` with ``graph_node_offsets`` and
+            ``graph_edge_offsets`` of length ``len(seed_edge_groups) + 1``.
+
+        Raises:
+            ValueError: If options are invalid or a group fails
+                :meth:`sample_subgraph` validation.
+
+        Examples:
+            Sample two disjoint training neighborhoods at once::
+
+                batch = engine.sample_packed_subgraphs(
+                    [[10, 11], [42]], fanouts=[8, 4]
+                )
+                first_nodes = batch.node_ids_global[
+                    batch.graph_node_offsets[0]:batch.graph_node_offsets[1]
+                ]
+        """
+        groups = list(seed_edge_groups)
+        components = [
+            self.sample_subgraph(
+                group, fanouts, direction=direction, relations=relations,
+                negative_config=negative_config, temporal=temporal,
+                window_policy=window_policy, causal_policy=causal_policy,
+            )
+            for group in groups
+        ]
+
+        def concat(arrays: list[np.ndarray | None]) -> np.ndarray | None:
+            present = [array for array in arrays if array is not None]
+            if not present:
+                return None
+            if len(present) != len(arrays):
+                raise ValueError("packed components have inconsistent optional arrays")
+            return np.concatenate(present)
+
+        node_ids = [component.node_ids_global for component in components]
+        edge_ids = [component.edge_ids_global for component in components]
+        node_offsets = np.zeros(len(components) + 1, dtype=np.int64)
+        edge_offsets = np.zeros(len(components) + 1, dtype=np.int64)
+        senders: list[np.ndarray] = []
+        receivers: list[np.ndarray] = []
+        positives: list[np.ndarray] = []
+        negatives: list[np.ndarray] = []
+        for index, component in enumerate(components):
+            base = int(node_offsets[index])
+            node_offsets[index + 1] = base + component.n_nodes
+            edge_offsets[index + 1] = int(edge_offsets[index]) + component.n_edges
+            senders.append(component.senders + base if component.n_edges else component.senders)
+            receivers.append(component.receivers + base if component.n_edges else component.receivers)
+            localized = np.array(component.positives, dtype=np.int64, copy=True)
+            if localized.size:
+                localized[..., 0] += base
+                localized[..., 2] += base
+            positives.append(localized)
+            grouped = np.array(component.negatives, dtype=np.int64, copy=True)
+            if grouped.size:
+                grouped[..., 0] += base
+                grouped[..., 2] += base
+            negatives.append(grouped)
+
+        diagnostics: dict[str, int] | None = None
+        component_diagnostics = [
+            component.negative_diagnostics for component in components
+            if component.negative_diagnostics is not None
+        ]
+        if component_diagnostics:
+            if len(component_diagnostics) != len(components):
+                raise ValueError("packed components have inconsistent diagnostics")
+            diagnostics = {
+                key: sum(entry[key] for entry in component_diagnostics)
+                for key in component_diagnostics[0]
+            }
+
+        return SampledSubgraphBatch(
+            node_ids_global=np.concatenate(node_ids) if node_ids else np.empty(0, dtype=np.int64),
+            node_type_ids=concat([component.node_type_ids for component in components])
+            if components else np.empty(0, dtype=np.int64),
+            senders=np.concatenate(senders) if senders else np.empty(0, dtype=np.int64),
+            receivers=np.concatenate(receivers) if receivers else np.empty(0, dtype=np.int64),
+            edge_ids_global=np.concatenate(edge_ids) if edge_ids else np.empty(0, dtype=np.int64),
+            edge_relation_ids=concat([component.edge_relation_ids for component in components])
+            if components else np.empty(0, dtype=np.int64),
+            positives=np.concatenate(positives) if positives else np.empty((0, 3), dtype=np.int64),
+            negatives=np.concatenate(negatives) if negatives else np.empty((0, 3), dtype=np.int64),
+            graph_node_offsets=node_offsets,
+            graph_edge_offsets=edge_offsets,
+            edge_version_ids=concat([component.edge_version_ids for component in components]),
+            valid_from_us=concat([component.valid_from_us for component in components]),
+            valid_to_us=concat([component.valid_to_us for component in components]),
+            valid_to_open=concat([component.valid_to_open for component in components]),
+            positive_time_us=concat([component.positive_time_us for component in components]),
+            negative_time_us=concat([component.negative_time_us for component in components]),
+            negative_diagnostics=diagnostics,
+        )
+
     def sample_subgraph_external(
         self,
         seed_edges: Sequence[object],
