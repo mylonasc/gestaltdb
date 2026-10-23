@@ -68,6 +68,8 @@ Array-Native API Map
      - Edge-seeded local batches with positives, negatives, and sampled topology
    * - ``sample_packed_subgraphs``
      - Independent per-group subgraphs in one batch with component offsets
+   * - ``sample_partition_block``
+     - Uniform random balanced partition block with exact normalization
    * - ``sample_induced_subgraph``
      - Uniform node draws with all eligible induced edges and a fail-closed edge cap
    * - ``sample_hard_negatives``
@@ -620,6 +622,14 @@ metadata because their edge-feature stores only accept numeric tensors.
 
 Bounded Induced Subgraphs
 -------------------------
+
+``sample_partition_block`` draws a Cluster-GCN-style random balanced
+partition block: nodes are randomly permuted, split into contiguous chunks of
+nearly equal size, and one chunk is chosen uniformly. Partitions are uniform,
+not cut-optimized — no METIS-style cut quality is claimed. With
+``normalize=True`` nodes carry weight ``num_partitions`` and non-loop edges
+carry the exact reciprocal of the realized pair-selection probability;
+self-loops carry the node weight.
 
 ``sample_packed_subgraphs`` samples one independent subgraph per seed-edge
 group — each exactly as ``sample_subgraph`` would sample it alone — and

@@ -1447,29 +1447,9 @@ class SamplerEngine:
         sampled_nodes = self.rng.choice(
             self.snapshot.num_nodes, size=int(num_nodes), replace=False
         ).astype(np.int64, copy=False)
-        ranges = [
-            self.snapshot.incident.edge_range(node)
-            for node in sampled_nodes.tolist()
-        ]
-        candidates = (
-            np.unique(np.concatenate(ranges)).astype(np.int64, copy=False)
-            if ranges
-            else np.empty(0, dtype=np.int64)
+        candidates = self._induced_edge_candidates(
+            sampled_nodes, relation_ids, temporal, window_policy
         )
-        if candidates.size:
-            src = self.snapshot.src_int[candidates]
-            dst = self.snapshot.dst_int[candidates]
-            candidates = candidates[
-                np.isin(src, sampled_nodes) & np.isin(dst, sampled_nodes)
-            ]
-        if relation_ids is not None and candidates.size:
-            candidates = candidates[
-                np.isin(self.snapshot.rel_int[candidates], relation_ids)
-            ]
-        if temporal is not None:
-            candidates = self._filter_temporal_edges(
-                candidates, temporal, window_policy
-            )
         if candidates.size > max_edges:
             raise ValueError(
                 f"induced subgraph has {candidates.size} eligible edges, "
@@ -1500,6 +1480,168 @@ class SamplerEngine:
             else:
                 edge_weights = np.empty(0, dtype=np.float64)
             batch = replace(batch, node_weights=node_weights, edge_weights=edge_weights)
+        return batch
+
+    def _induced_edge_candidates(
+        self,
+        sampled_nodes: np.ndarray,
+        relation_ids: np.ndarray | None,
+        temporal: TemporalContext | None,
+        window_policy: str,
+    ) -> np.ndarray:
+        """Return eligible edges with both endpoints in ``sampled_nodes``."""
+        ranges = [
+            self.snapshot.incident.edge_range(node)
+            for node in sampled_nodes.tolist()
+        ]
+        candidates = (
+            np.unique(np.concatenate(ranges)).astype(np.int64, copy=False)
+            if ranges
+            else np.empty(0, dtype=np.int64)
+        )
+        if candidates.size:
+            src = self.snapshot.src_int[candidates]
+            dst = self.snapshot.dst_int[candidates]
+            candidates = candidates[
+                np.isin(src, sampled_nodes) & np.isin(dst, sampled_nodes)
+            ]
+        if relation_ids is not None and candidates.size:
+            candidates = candidates[
+                np.isin(self.snapshot.rel_int[candidates], relation_ids)
+            ]
+        if temporal is not None:
+            candidates = self._filter_temporal_edges(
+                candidates, temporal, window_policy
+            )
+        return candidates
+
+    def sample_partition_block(
+        self,
+        num_partitions: int,
+        *,
+        max_edges: int,
+        relations: Sequence[int] | np.ndarray | None = None,
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+        normalize: bool = False,
+    ) -> SampledSubgraphBatch:
+        """Sample one uniformly chosen block of a random balanced partition.
+
+        Nodes are randomly permuted with the engine RNG, split into
+        ``num_partitions`` contiguous chunks with sizes differing by at most
+        one, and one chunk is chosen uniformly at random. Every eligible edge
+        induced by the chosen chunk is returned after optional relation and
+        temporal filters; exceeding ``max_edges`` fails closed. Partitions
+        are uniformly random, not cut-optimized: unlike METIS-based
+        Cluster-GCN, no cut quality is claimed. The result contains no
+        positive or negative triples.
+
+        Args:
+            num_partitions: Number of balanced partitions, at least one.
+            max_edges: Maximum eligible induced edges allowed. Exceeding it
+                raises ``ValueError``.
+            relations: Optional compact relation IDs to restrict induced edges.
+            temporal: Optional point or finite-window validity filter applied
+                to induced edges.
+            window_policy: Window matching policy, ``"overlap"`` or
+                ``"contained"``.
+            normalize: When true, attach exact unbiased ``node_weights`` and
+                ``edge_weights``. Every node is selected with probability
+                ``1 / num_partitions`` by symmetry, so node weights equal
+                ``num_partitions``. A distinct node pair is selected with
+                probability ``(sum_c C(size_c, 2) / C(N, 2)) / num_partitions``
+                over the realized chunk sizes, and non-loop edges carry its
+                reciprocal. Self-loops are node-inclusion events and carry
+                the node weight. Relation and temporal filters do not change
+                the draw probabilities.
+
+        Returns:
+            ``SampledSubgraphBatch`` with the chosen partition's nodes and all
+            eligible induced edges.
+
+        Raises:
+            ValueError: If counts are invalid, the induced edge count exceeds
+                ``max_edges``, ``normalize`` is not a boolean, or the
+                partition invariant is violated.
+
+        Examples:
+            Sample a Cluster-GCN-style random partition block::
+
+                batch = engine.sample_partition_block(
+                    8, max_edges=50_000, normalize=True
+                )
+        """
+        _validate_count(num_partitions, "num_partitions")
+        _validate_count(max_edges, "max_edges")
+        if num_partitions < 1:
+            raise ValueError("num_partitions must be at least 1")
+        if not isinstance(normalize, bool):
+            raise ValueError("normalize must be a boolean")
+        self._validate_sampling_options(
+            fanout=0, direction="out", temporal=temporal,
+            window_policy=window_policy, causal_policy="none",
+        )
+        relation_ids = (
+            None
+            if relations is None
+            else self._validated_ids(relations, self.snapshot.num_relations, "relations")
+        )
+        empty_triples = np.empty((0, 3), dtype=np.int64)
+        permutation = self.rng.permutation(self.snapshot.num_nodes)
+        chunks = np.array_split(permutation, int(num_partitions))
+        sizes = np.asarray([chunk.size for chunk in chunks], dtype=np.int64)
+        choice = int(self.rng.integers(int(num_partitions)))
+        sampled_nodes = chunks[choice].astype(np.int64, copy=False)
+        candidates = self._induced_edge_candidates(
+            sampled_nodes, relation_ids, temporal, window_policy
+        )
+        if candidates.size > max_edges:
+            raise ValueError(
+                f"partition block has {candidates.size} eligible edges, "
+                f"exceeding max_edges={max_edges}"
+            )
+        batch = self._batch_from_edges(
+            sampled_nodes, candidates,
+            positives=empty_triples, negatives=empty_triples,
+        )
+        if normalize:
+            node_weights = np.full(
+                batch.n_nodes, float(num_partitions), dtype=np.float64
+            )
+            if batch.n_edges:
+                loops = (
+                    self.snapshot.src_int[batch.edge_ids_global]
+                    == self.snapshot.dst_int[batch.edge_ids_global]
+                )
+                total_pairs = float(
+                    np.sum(sizes * (sizes - 1) // 2, dtype=np.int64)
+                )
+                all_pairs = (
+                    float(self.snapshot.num_nodes)
+                    * float(self.snapshot.num_nodes - 1) / 2.0
+                )
+                if all_pairs <= 0 or total_pairs <= 0:
+                    if not bool(np.all(loops)):
+                        raise ValueError(
+                            "partition block has non-loop edges but zero "
+                            "pair-selection probability"
+                        )
+                    edge_weights = np.full(
+                        batch.n_edges, float(num_partitions), dtype=np.float64
+                    )
+                else:
+                    pair_weight = (
+                        all_pairs / total_pairs * float(num_partitions)
+                    )
+                    edge_weights = np.full(
+                        batch.n_edges, pair_weight, dtype=np.float64
+                    )
+                    edge_weights[loops] = float(num_partitions)
+            else:
+                edge_weights = np.empty(0, dtype=np.float64)
+            batch = replace(
+                batch, node_weights=node_weights, edge_weights=edge_weights
+            )
         return batch
 
     def is_positive(
