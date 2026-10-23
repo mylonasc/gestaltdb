@@ -1,6 +1,9 @@
 # Application executor admission — #255
 
-Status: design milestone; depends on #248, #194, #249 and #251.
+Status: executable admission milestone implemented in
+`reasoning/admission.py` (see `docs/reasoning-admission.rst`); existing
+`reasoning/executors.py` selection is unchanged. Depends on #248 (merged);
+benchmark crossovers in #194 remain the gate for enabling new physical paths.
 
 | Requested mode | Initial admitted implementation |
 |---|---|
