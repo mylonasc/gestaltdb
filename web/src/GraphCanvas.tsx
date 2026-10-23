@@ -85,6 +85,7 @@ export function GraphCanvas({
   const edgeLabelRef = useRef<d3.Selection<SVGTextElement, SimLink, SVGGElement, unknown> | null>(null);
   const hoveredEdge = useRef<string | null>(null);
   const settingsRef = useRef(settings);
+  const restoredViewportRef = useRef(false);
   settingsRef.current = settings;
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
@@ -103,6 +104,9 @@ export function GraphCanvas({
         simulation: { nodes: (simRef.current?.nodes() ?? []).map(node => node.uid), edges: activeLinksRef.current.map(link => link.uid) } };
     },
     restore: state => {
+      // Imported pan/zoom belongs to the user. Status/inspector changes can
+      // resize the canvas after this effect and must not silently auto-fit it.
+      restoredViewportRef.current = true;
       simRef.current?.stop();
       const activeNodes = new Set(state.simulation.nodes), activeEdges = new Set(state.simulation.edges);
       activeLinksRef.current = linksRef.current.filter(link => activeEdges.has(link.uid));
@@ -417,6 +421,7 @@ export function GraphCanvas({
   }
 
   function fitViewport() {
+    restoredViewportRef.current = false;
     const svgEl = svgRef.current;
     const zoom = zoomRef.current;
     if (!svgEl || !zoom) return;
@@ -505,7 +510,7 @@ export function GraphCanvas({
     let initial = true;
     const observer = new ResizeObserver(() => {
       if (initial) { initial = false; return; }
-      fitViewport();
+      if (!restoredViewportRef.current) fitViewport();
     });
     observer.observe(svg);
     return () => observer.disconnect();

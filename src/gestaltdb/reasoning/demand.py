@@ -63,6 +63,28 @@ def _bound_positions(atom: TypedAtom, bound: set[Variable]) -> tuple[Variable | 
     return tuple(term if isinstance(term, Variable) and term in bound else None for term in atom.args)
 
 
+def required_predicates(program: GenericProgram, goal: BoundGoal) -> tuple[str, ...]:
+    """Conservative input predicate plan for positive goal evaluation.
+
+    Include headed predicates: they may also have asserted base facts. This
+    does not restrict subjects or objects to the goal seed; recursive frontier
+    bindings require a separate storage-aware execution plan.
+    """
+    if not isinstance(program, GenericProgram) or not isinstance(goal, BoundGoal):
+        raise ReasoningError("GenericProgram and BoundGoal required")
+    _check_supported(program)
+    by_head: dict[str, set[str]] = {}
+    for rule in program.rules:
+        by_head.setdefault(rule.head.predicate, set()).update(atom.predicate for atom in rule.body)
+    reachable, pending = {goal.predicate}, [goal.predicate]
+    while pending:
+        for predicate in sorted(by_head.get(pending.pop(), ())):
+            if predicate not in reachable:
+                reachable.add(predicate)
+                pending.append(predicate)
+    return tuple(sorted(reachable))
+
+
 def specialize(program: GenericProgram, goal: BoundGoal) -> GenericProgram:
     """Rewrite to a magic-guarded program with full-closure answer parity.
 

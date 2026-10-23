@@ -45,6 +45,8 @@ Filter, Sample, Train
    operations
    temporal-versioning
    modal-epistemic
+   inference-audit
+   reasoning-testing
    ontology
    ontology-graph
    ontology-benchmarks

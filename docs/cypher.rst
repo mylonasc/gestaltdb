@@ -2,7 +2,7 @@ Cypher Queries
 ==============
 
 GestaltDB exposes an expanding openCypher subset through
-``GraphDB.query(cypher, parameters=None, read_snapshot=None)``. The grammar-based frontend supports
+``GraphDB.query(cypher, parameters=None, read_snapshot=None, label_hierarchy=None, relation_hierarchy=None)``. The grammar-based frontend supports
 comments, Unicode and backtick-escaped names, source-located syntax errors, and
 standard expression precedence. Execution covers indexed node and relationship
 scans, typed relationship expansion, filtering, ordering, chained ``MATCH``
@@ -55,6 +55,75 @@ with the smallest labeled scan.
    graph_db.query('MATCH (n:Drug {name: "Aspirin", approved: true}) RETURN n.id')
    graph_db.query('MATCH (n:Drug:Approved) RETURN n.id')
    graph_db.query('MATCH (n) RETURN n.id LIMIT 5')
+
+Sub-type Label Expansion
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Default label matching is exact. To treat native labels as a hierarchy, build a
+``LabelHierarchy`` and pass it explicitly to ``GraphDB.query``. A required
+parent label then also matches nodes carrying any transitive sub-type label.
+Expansion applies to label scans, label expressions and their negation,
+endpoint filters, multi-label intersections, and exact/range label-property
+index lookups. ``labels(n)`` still returns the node's literal labels, and
+writes are unchanged.
+
+.. code-block:: python
+
+   from gestaltdb import LabelHierarchy
+
+   labels = LabelHierarchy({
+       "Ocean_Freight": ["Transport_Edge"],
+       "Air_Freight": ["Transport_Edge"],
+       "Refrigerated_Freight": ["Ocean_Freight"],
+   })
+
+   graph_db.query(
+       'MATCH (n:Transport_Edge) RETURN n.id',
+       label_hierarchy=labels,
+   )
+   graph_db.query(
+       'MATCH (a:Warehouse)-[:ships]->(b:Transport_Edge) RETURN b.id',
+       label_hierarchy=labels,
+   )
+
+Schema construction is immutable and fail-closed: empty names, self-parenting,
+duplicate child entries, scalar parent strings, and cycles raise ``ValueError``.
+Unknown names expand only to themselves. Hierarchy expansion is opt-in per
+query; omitting ``label_hierarchy`` preserves exact-label semantics for existing
+applications. Sampler-specific relation expansion is described in
+:doc:`typed-sampling`.
+
+Sub-property Relationship Expansion
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Default relationship matching is exact. Pass a ``RelationHierarchy`` to
+``GraphDB.query`` to make a required parent relationship type also match edges
+whose ``properties["type"]`` is a transitive sub-property. Expansion applies to
+anchored and unanchored traversal, relationship property maps, variable-length
+paths, and exact/range type/property index lookups. ``type(r)`` still returns
+the literal stored type.
+
+.. code-block:: python
+
+   from gestaltdb.hierarchy import RelationHierarchy
+
+   relations = RelationHierarchy({
+       "Ocean_Freight": ["Transport_Edge"],
+       "Air_Freight": ["Transport_Edge"],
+       "Refrigerated_Freight": ["Ocean_Freight"],
+   })
+
+   graph_db.query(
+       'MATCH (a {id: "warehouse"})-[r:Transport_Edge]->(b) RETURN type(r)',
+       relation_hierarchy=relations,
+   )
+   graph_db.query(
+       'MATCH ()-[r:Transport_Edge {weight: 2}]->(b) RETURN b.id',
+       relation_hierarchy=relations,
+   )
+
+The label and relationship hierarchies are independent and opt-in per query;
+omitting them preserves exact matching.
 
 Typed Relationship Traversal
 ----------------------------

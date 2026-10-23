@@ -35,6 +35,11 @@ class SampledSubgraphBatch:
         positive_time_us: Example times aligned with positive triples.
         negative_time_us: Example times aligned with grouped negatives.
         negative_diagnostics: Deterministic rejection and exhaustion counters.
+        node_weights: Optional per-node training weights aligned with
+            ``node_ids_global``, e.g. GraphSAINT inclusion-probability
+            normalization.
+        edge_weights: Optional per-edge training weights aligned with
+            ``edge_ids_global``.
 
     Examples:
         Convert to plain NumPy arrays::
@@ -60,6 +65,8 @@ class SampledSubgraphBatch:
     positive_time_us: np.ndarray | None = None
     negative_time_us: np.ndarray | None = None
     negative_diagnostics: dict[str, int] | None = None
+    node_weights: np.ndarray | None = None
+    edge_weights: np.ndarray | None = None
 
     @property
     def n_nodes(self) -> int:
@@ -100,6 +107,10 @@ class SampledSubgraphBatch:
             result["graph_node_offsets"] = self.graph_node_offsets
         if self.graph_edge_offsets is not None:
             result["graph_edge_offsets"] = self.graph_edge_offsets
+        if self.node_weights is not None:
+            result["node_weights"] = self.node_weights
+        if self.edge_weights is not None:
+            result["edge_weights"] = self.edge_weights
         return result
 
     def to_arrow(self):
@@ -131,6 +142,11 @@ class SampledSubgraphBatch:
             "receiver": self.receivers,
             "relation_id": self.edge_relation_ids,
         }
+        node_columns = {"node_id_global": self.node_ids_global, "node_type_id": self.node_type_ids}
+        if self.node_weights is not None:
+            node_columns["weight"] = self.node_weights
+        if self.edge_weights is not None:
+            edge_columns["weight"] = self.edge_weights
         if self.edge_version_ids is not None:
             edge_columns.update({
                 "edge_version_id": self.edge_version_ids,
@@ -139,7 +155,7 @@ class SampledSubgraphBatch:
                 "valid_to_open": self.valid_to_open,
             })
         result = {
-            "nodes": pa.table({"node_id_global": self.node_ids_global, "node_type_id": self.node_type_ids}),
+            "nodes": pa.table(node_columns),
             "edges": pa.table(edge_columns),
             "positives": pa.table({"src": positives[:, 0], "rel": positives[:, 1], "dst": positives[:, 2]}),
             "negatives": pa.table({"src": negatives[:, 0], "rel": negatives[:, 1], "dst": negatives[:, 2]}),
@@ -186,6 +202,10 @@ class SampledSubgraphBatch:
         if self.positive_time_us is not None:
             result["positive_time_us"] = torch.as_tensor(self.positive_time_us, dtype=torch.long)
             result["negative_time_us"] = torch.as_tensor(self.negative_time_us, dtype=torch.long)
+        if self.node_weights is not None:
+            result["node_weight"] = torch.as_tensor(self.node_weights, dtype=torch.float64)
+        if self.edge_weights is not None:
+            result["edge_weight"] = torch.as_tensor(self.edge_weights, dtype=torch.float64)
         return result
 
     def to_tf_gnns(self):
@@ -221,6 +241,10 @@ class SampledSubgraphBatch:
                 "valid_to_us": tf.convert_to_tensor(self.valid_to_us, dtype=tf.int64),
                 "valid_to_open": tf.convert_to_tensor(self.valid_to_open, dtype=tf.bool),
             })
+        if self.node_weights is not None:
+            graph["node_weights"] = tf.convert_to_tensor(self.node_weights, dtype=tf.float64)
+        if self.edge_weights is not None:
+            graph["edge_weights"] = tf.convert_to_tensor(self.edge_weights, dtype=tf.float64)
         labels = {
             "positives": tf.convert_to_tensor(self.positives, dtype=tf.int64),
             "negatives": tf.convert_to_tensor(self.negatives, dtype=tf.int64),
@@ -251,6 +275,10 @@ class SampledSubgraphBatch:
         graph.ndata["global_id"] = torch.as_tensor(self.node_ids_global, dtype=torch.long)
         graph.edata["relation_id"] = torch.as_tensor(self.edge_relation_ids, dtype=torch.long)
         graph.edata["global_id"] = torch.as_tensor(self.edge_ids_global, dtype=torch.long)
+        if self.node_weights is not None:
+            graph.ndata["weight"] = torch.as_tensor(self.node_weights, dtype=torch.float64)
+        if self.edge_weights is not None:
+            graph.edata["weight"] = torch.as_tensor(self.edge_weights, dtype=torch.float64)
         if self.edge_version_ids is not None:
             graph.edge_version_ids = self.edge_version_ids.copy()
             graph.edata["valid_from_us"] = torch.as_tensor(self.valid_from_us, dtype=torch.long)

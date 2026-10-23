@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -23,6 +23,7 @@ class NeighborSamplingSpec:
     relations: Sequence[int] | None = None
     replace: bool = False
     strategy: str = "uniform"
+    balanced: bool = False
 
     def __post_init__(self):
         _validate_count(self.fanout, "fanout")
@@ -30,6 +31,8 @@ class NeighborSamplingSpec:
             raise ValueError("direction must be 'out', 'in', or 'any'")
         if self.strategy not in {"uniform", "weighted"}:
             raise ValueError("strategy must be 'uniform' or 'weighted'")
+        if not isinstance(self.balanced, bool):
+            raise ValueError("balanced must be a boolean")
         if self.relations is not None:
             relations = _integer_array(self.relations, "relations")
             object.__setattr__(self, "relations", tuple(int(rel) for rel in relations))
@@ -44,6 +47,7 @@ class ExternalNeighborSamplingSpec:
     relations: Sequence[object] | None = None
     replace: bool = False
     strategy: str = "uniform"
+    balanced: bool = False
 
     def __post_init__(self):
         _validate_count(self.fanout, "fanout")
@@ -51,6 +55,8 @@ class ExternalNeighborSamplingSpec:
             raise ValueError("direction must be 'out', 'in', or 'any'")
         if self.strategy not in {"uniform", "weighted"}:
             raise ValueError("strategy must be 'uniform' or 'weighted'")
+        if not isinstance(self.balanced, bool):
+            raise ValueError("balanced must be a boolean")
         if self.relations is not None:
             if isinstance(self.relations, (str, bytes)):
                 raise TypeError("relations must be a sequence, not a scalar string")
@@ -115,6 +121,180 @@ class LayeredSampleBatch:
             "seed_nodes": _external_id_array(self.seed_nodes, snapshot.external_node_ids),
             "layers": tuple(layer.to_external(snapshot) for layer in self.layers),
         }
+
+    def to_blocks(self, snapshot: SamplerSnapshot) -> list[dict[str, np.ndarray]]:
+        """Convert layer blocks to bipartite message-passing blocks.
+
+        Each layer's ``SampledNeighbors`` groups sampled edges by input node.
+        This method repackages each layer as one bipartite block with plain
+        NumPy arrays, consumable by DGL/PyG-style gather-scatter loops without
+        a framework dependency.
+
+        Every block maps ``edge_index`` columns to unique sorted node frames:
+        row 0 indexes ``src_nodes`` (sampled neighbors, the message sources)
+        and row 1 indexes ``dst_nodes`` (layer inputs, the message
+        destinations). One column is emitted per sampled edge occurrence, so
+        duplicate draws under ``replace=True`` are preserved. ``edge_ids``
+        and ``relation_ids`` align with the columns for weight or
+        relation-specific lookups.
+
+        The blocks are oriented by message flow (neighbor to input), not by
+        graph-edge orientation: for ``direction="out"`` layers the underlying
+        graph edges point from input to neighbor, while for
+        ``direction="in"`` layers they point from neighbor to input. Graph
+        orientation is not encoded; callers that need it must consult the
+        ``NeighborSamplingSpec`` values they passed to ``sample_layers``.
+
+        Args:
+            snapshot: Snapshot providing relation IDs for sampled edges.
+
+        Returns:
+            One block dict per layer with ``src_nodes``, ``dst_nodes``,
+            ``edge_index``, ``edge_ids``, and ``relation_ids``. Empty layers
+            yield zero-column blocks with ``edge_index`` shaped ``(2, 0)``.
+
+        Raises:
+            ValueError: If a layer's offsets do not align with its inputs and
+                sampled edges.
+
+        Examples:
+            Aggregate one message-passing step per layer::
+
+                for block in batch.to_blocks(snapshot):
+                    messages = features[block["src_nodes"]][block["edge_index"][0]]
+        """
+        blocks: list[dict[str, np.ndarray]] = []
+        for layer in self.layers:
+            if len(layer.offsets) != layer.input_nodes.size + 1:
+                raise ValueError(
+                    "layer offsets must have one more entry than input nodes"
+                )
+            widths = np.diff(layer.offsets)
+            if int(widths.sum()) != layer.edge_indices.size:
+                raise ValueError(
+                    "layer offsets must cover exactly the sampled edges"
+                )
+            src_nodes = np.unique(layer.neighbor_nodes)
+            dst_nodes = np.unique(layer.input_nodes)
+            if layer.edge_indices.size:
+                row_of = np.repeat(np.arange(layer.input_nodes.size), widths)
+                input_per_column = layer.input_nodes[row_of]
+                edge_index = np.stack(
+                    (
+                        np.searchsorted(src_nodes, layer.neighbor_nodes),
+                        np.searchsorted(dst_nodes, input_per_column),
+                    )
+                ).astype(np.int64, copy=False)
+                relation_ids = snapshot.rel_int[layer.edge_indices].astype(
+                    np.int64, copy=False
+                )
+            else:
+                edge_index = np.empty((2, 0), dtype=np.int64)
+                relation_ids = np.empty(0, dtype=np.int64)
+            blocks.append(
+                {
+                    "src_nodes": src_nodes,
+                    "dst_nodes": dst_nodes,
+                    "edge_index": edge_index,
+                    "edge_ids": layer.edge_indices,
+                    "relation_ids": relation_ids,
+                }
+            )
+        return blocks
+
+    def to_blocks_external(
+        self, snapshot: SamplerSnapshot
+    ) -> list[dict[str, np.ndarray]]:
+        """Convert :meth:`to_blocks` output to external IDs.
+
+        ``src_nodes``, ``dst_nodes``, ``edge_ids``, and ``relation_ids`` are
+        mapped through the snapshot's external ID arrays; ``edge_index``
+        local positions are unchanged.
+        """
+        external_blocks: list[dict[str, np.ndarray]] = []
+        for block in self.to_blocks(snapshot):
+            external_blocks.append(
+                {
+                    "src_nodes": _external_id_array(
+                        block["src_nodes"], snapshot.external_node_ids
+                    ),
+                    "dst_nodes": _external_id_array(
+                        block["dst_nodes"], snapshot.external_node_ids
+                    ),
+                    "edge_index": block["edge_index"],
+                    "edge_ids": _external_id_array(
+                        block["edge_ids"], snapshot.external_edge_ids
+                    ),
+                    "relation_ids": _external_id_array(
+                        block["relation_ids"], snapshot.external_relation_ids
+                    ),
+                }
+            )
+        return external_blocks
+
+    def to_pyg_blocks(
+        self, snapshot: SamplerSnapshot
+    ) -> list[dict[str, object]]:
+        """Convert :meth:`to_blocks` output to PyTorch tensors.
+
+        Each layer becomes a PyG-style bipartite block dictionary with
+        ``src_nodes``, ``dst_nodes``, ``edge_index``, ``edge_ids``, and
+        ``relation_ids`` tensors plus the layer's temporal edge-version
+        arrays when present. ID tensors use ``torch.long``; temporal
+        version IDs stay string-array metadata, matching
+        ``SampledSubgraphBatch.to_pyg``. The dictionaries convert directly
+        into ``torch_geometric`` bipartite blocks; no ``torch_geometric``
+        dependency is required or imported here.
+
+        Args:
+            snapshot: Snapshot providing relation IDs for sampled edges.
+
+        Returns:
+            One tensor dictionary per layer, in layer order.
+
+        Raises:
+            ImportError: If ``torch`` is not installed.
+        """
+        try:
+            import torch
+        except ImportError as exc:
+            raise ImportError(
+                "Missing optional dependency 'torch' required for "
+                "LayeredSampleBatch.to_pyg_blocks"
+            ) from exc
+        tensor_blocks: list[dict[str, object]] = []
+        for index, block in enumerate(self.to_blocks(snapshot)):
+            layer = self.layers[index]
+            tensor_blocks.append(
+                {
+                    "src_nodes": torch.as_tensor(block["src_nodes"], dtype=torch.long),
+                    "dst_nodes": torch.as_tensor(block["dst_nodes"], dtype=torch.long),
+                    "edge_index": torch.as_tensor(block["edge_index"], dtype=torch.long),
+                    "edge_ids": torch.as_tensor(block["edge_ids"], dtype=torch.long),
+                    "relation_ids": torch.as_tensor(block["relation_ids"], dtype=torch.long),
+                    "edge_version_ids": (
+                        None
+                        if layer.edge_version_ids is None
+                        else layer.edge_version_ids.copy()
+                    ),
+                    "valid_from_us": (
+                        None
+                        if layer.valid_from_us is None
+                        else torch.as_tensor(layer.valid_from_us, dtype=torch.long)
+                    ),
+                    "valid_to_us": (
+                        None
+                        if layer.valid_to_us is None
+                        else torch.as_tensor(layer.valid_to_us, dtype=torch.long)
+                    ),
+                    "valid_to_open": (
+                        None
+                        if layer.valid_to_open is None
+                        else torch.as_tensor(layer.valid_to_open, dtype=torch.bool)
+                    ),
+                }
+            )
+        return tensor_blocks
 
 
 @dataclass(slots=True)
@@ -254,6 +434,7 @@ class SamplerEngine:
         window_policy: str = "overlap",
         causal_policy: str = "none",
         strategy: str = "uniform",
+        balanced: bool = False,
     ) -> SampledNeighbors:
         """Sample neighbors for each input node.
 
@@ -272,6 +453,11 @@ class SamplerEngine:
                 starts across hops in multihop and subgraph sampling.
             strategy: ``"uniform"`` or ``"weighted"``. Weighted sampling uses
                 the snapshot's edge weights.
+            balanced: When true, split ``fanout`` into deterministic equal
+                shares across the relation IDs present for each input node.
+                Groups smaller than their share return fewer edges when
+                ``replace=False``; unused quota is not borrowed from other
+                relations. Default uniform allocation is unchanged.
 
         Returns:
             ``SampledNeighbors`` with concatenated edge and neighbor arrays.
@@ -293,7 +479,7 @@ class SamplerEngine:
         return self._sample_neighbors(
             nodes, fanout, direction=direction, relations=relations, replace=replace,
             temporal=temporal, window_policy=window_policy, causal_policy=causal_policy,
-            strategy=strategy,
+            strategy=strategy, balanced=balanced,
         )
 
     def _sample_neighbors(
@@ -309,9 +495,12 @@ class SamplerEngine:
         causal_policy="none",
         causal_starts=None,
         strategy="uniform",
+        balanced=False,
     ) -> SampledNeighbors:
         if strategy not in {"uniform", "weighted"}:
             raise ValueError("strategy must be 'uniform' or 'weighted'")
+        if not isinstance(balanced, bool):
+            raise ValueError("balanced must be a boolean")
         input_nodes = self._validated_ids(nodes, self.snapshot.num_nodes, "nodes")
         if causal_starts is not None and len(causal_starts) != input_nodes.size:
             raise ValueError("causal_starts must align with input nodes")
@@ -331,7 +520,16 @@ class SamplerEngine:
                 elif causal_policy == "nonincreasing":
                     candidates = candidates[starts <= causal_starts[row]]
             weights = self.snapshot.edge_weights[candidates] if strategy == "weighted" else None
-            chosen = self._choose_candidates(candidates, fanout, replace=replace, weights=weights)
+            if balanced:
+                chosen = self._choose_balanced(
+                    candidates,
+                    fanout,
+                    replace=replace,
+                    weights=weights,
+                    groups=self.snapshot.rel_int[candidates],
+                )
+            else:
+                chosen = self._choose_candidates(candidates, fanout, replace=replace, weights=weights)
             sampled_edges.append(chosen.astype(np.int64, copy=False))
             sampled_neighbors.append(self._neighbors_for_edges(node, chosen, direction))
             offsets.append(offsets[-1] + int(chosen.size))
@@ -356,6 +554,7 @@ class SamplerEngine:
         temporal: TemporalContext | None = None,
         window_policy: str = "overlap",
         causal_policy: str = "none",
+        balanced: bool = False,
     ) -> SampledNeighbors:
         """Sample neighbors using external node and relation IDs as input."""
         compact_nodes = self.snapshot.node_ints(nodes)
@@ -370,6 +569,7 @@ class SamplerEngine:
             temporal=temporal,
             window_policy=window_policy,
             causal_policy=causal_policy,
+            balanced=balanced,
         )
 
     def sample_nodes(
@@ -380,12 +580,53 @@ class SamplerEngine:
         replace: bool = False,
         strategy: str = "uniform",
         weights: Sequence[float] | np.ndarray | None = None,
+        balanced: bool = False,
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
     ) -> np.ndarray:
-        """Sample compact node IDs, optionally restricted by node type."""
+        """Sample compact node IDs, optionally restricted by node type.
+
+        Args:
+            count: Maximum number of node IDs to return.
+            node_types: Optional compact node type IDs to restrict candidates.
+            replace: Whether to sample with replacement.
+            strategy: ``"uniform"``, ``"weighted"``, or ``"degree"``.
+            weights: Per-node weights for ``strategy="weighted"``.
+            balanced: When true, split ``count`` into deterministic equal
+                shares across the distinct node type IDs present in the
+                candidate set. Groups smaller than their share return fewer
+                nodes when ``replace=False``; unused quota is not borrowed
+                from other types. Untyped nodes (compact type ``-1``) form
+                their own group when no ``node_types`` filter excludes them.
+            temporal: Optional point or finite-window node availability
+                filter. Requires a temporal format-v2 snapshot.
+            window_policy: ``"overlap"`` keeps nodes whose availability
+                intersects the window; ``"contained"`` keeps nodes whose
+                availability is fully inside it. Ignored for point contexts.
+        """
+        self._validate_sampling_options(
+            fanout=0,
+            direction="out",
+            temporal=temporal,
+            window_policy=window_policy,
+            causal_policy="none",
+        )
+        if not isinstance(balanced, bool):
+            raise ValueError("balanced must be a boolean")
         candidates = np.arange(self.snapshot.num_nodes, dtype=np.int64)
         if node_types is not None:
             types = self._validated_nonnegative_ids(node_types, "node_types")
             candidates = candidates[np.isin(self.snapshot.node_type_ids, types)]
+        if temporal is not None:
+            available = np.fromiter(
+                (
+                    self._node_available(int(node), temporal, window_policy)
+                    for node in candidates
+                ),
+                dtype=bool,
+                count=candidates.size,
+            )
+            candidates = candidates[available]
         if strategy == "degree":
             if weights is not None:
                 raise ValueError("weights cannot be combined with strategy='degree'")
@@ -401,6 +642,14 @@ class SamplerEngine:
             weights_array = None
         else:
             raise ValueError("strategy must be 'uniform', 'weighted', or 'degree'")
+        if balanced:
+            return self._choose_balanced(
+                candidates,
+                count,
+                replace=replace,
+                weights=weights_array,
+                groups=self.snapshot.node_type_ids[candidates],
+            )
         return self._choose_candidates(candidates, count, replace=replace, weights=weights_array)
 
     def sample_edges(
@@ -411,12 +660,46 @@ class SamplerEngine:
         replace: bool = False,
         strategy: str = "uniform",
         weights: Sequence[float] | np.ndarray | None = None,
+        balanced: bool = False,
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
     ) -> np.ndarray:
-        """Sample compact edge IDs, optionally restricted by relation."""
+        """Sample compact edge IDs, optionally restricted by relation.
+
+        Args:
+            count: Maximum number of edge IDs to return.
+            relations: Optional compact relation IDs to restrict candidates.
+            replace: Whether to sample with replacement.
+            strategy: ``"uniform"`` or ``"weighted"``.
+            weights: Per-edge weights for ``strategy="weighted"``.
+            balanced: When true, split ``count`` into deterministic equal
+                shares across the distinct relation IDs present in the
+                candidate set. Groups smaller than their share return fewer
+                edges when ``replace=False``; unused quota is not borrowed
+                from other relations.
+            temporal: Optional point or finite-window edge validity filter.
+                Requires a temporal format-v2 snapshot.
+            window_policy: ``"overlap"`` keeps edge versions whose validity
+                intersects the window; ``"contained"`` keeps versions fully
+                inside it. Ignored for point contexts.
+        """
+        self._validate_sampling_options(
+            fanout=0,
+            direction="out",
+            temporal=temporal,
+            window_policy=window_policy,
+            causal_policy="none",
+        )
+        if not isinstance(balanced, bool):
+            raise ValueError("balanced must be a boolean")
         candidates = np.arange(self.snapshot.num_edges, dtype=np.int64)
         if relations is not None:
             relation_ids = self._validated_ids(relations, self.snapshot.num_relations, "relations")
             candidates = candidates[np.isin(self.snapshot.rel_int, relation_ids)]
+        if temporal is not None:
+            candidates = candidates[
+                self._edge_available_mask(candidates, temporal, window_policy)
+            ]
         if strategy == "weighted":
             all_weights = self.snapshot.edge_weights if weights is None else self._validated_weights(weights, self.snapshot.num_edges, "weights")
             candidate_weights = all_weights[candidates]
@@ -426,6 +709,14 @@ class SamplerEngine:
             candidate_weights = None
         else:
             raise ValueError("strategy must be 'uniform' or 'weighted'")
+        if balanced:
+            return self._choose_balanced(
+                candidates,
+                count,
+                replace=replace,
+                weights=candidate_weights,
+                groups=self.snapshot.rel_int[candidates],
+            )
         return self._choose_candidates(candidates, count, replace=replace, weights=candidate_weights)
 
     def sample_layers(
@@ -454,6 +745,7 @@ class SamplerEngine:
                 relations=layer.relations,
                 replace=layer.replace,
                 strategy=layer.strategy,
+                balanced=layer.balanced,
                 temporal=temporal,
                 window_policy=window_policy,
             )
@@ -482,6 +774,7 @@ class SamplerEngine:
                     relations=relations,
                     replace=layer.replace,
                     strategy=layer.strategy,
+                    balanced=layer.balanced,
                 )
             )
         return self.sample_layers(
@@ -603,6 +896,149 @@ class SamplerEngine:
             metapath=compact_metapath,
             restart_probability=restart_probability,
             strategy=strategy,
+            dead_end=dead_end,
+            temporal=temporal,
+            window_policy=window_policy,
+        )
+
+    def sample_node2vec_walks(
+        self,
+        start_nodes: Sequence[int] | np.ndarray,
+        walk_length: int,
+        *,
+        return_factor: float = 1.0,
+        inout_factor: float = 1.0,
+        direction: str = "out",
+        relations: Sequence[int] | np.ndarray | None = None,
+        dead_end: str = "terminate",
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+    ) -> RandomWalkBatch:
+        """Sample second-order biased walks in the node2vec style.
+
+        From the second transition on, each candidate edge is weighted by the
+        shortest-path distance ``d`` between the previous node and the
+        candidate endpoint: ``1 / return_factor`` for ``d == 0`` (return),
+        ``1`` for ``d == 1``, and ``1 / inout_factor`` for ``d >= 2``. Small
+        ``inout_factor`` values push walks outward (DFS-like); large values
+        keep them local (BFS-like). Large ``return_factor`` values discourage
+        immediately revisiting the previous node. The first transition of
+        every walk is uniform over the directed candidates. Static snapshot
+        edge weights multiply the bias factors.
+
+        Candidates follow ``direction`` and the optional ``relations`` and
+        temporal filters. Distances are measured on the undirected incident
+        adjacency of the static snapshot, ignoring relation and temporal
+        filters; document this when mixing biased walks with filters.
+
+        Args:
+            start_nodes: Compact node IDs where walks begin.
+            walk_length: Transitions per walk.
+            return_factor: Positive finite ``p``; the return weight is
+                ``1 / return_factor``.
+            inout_factor: Positive finite ``q``; the outward weight is
+                ``1 / inout_factor``.
+            direction: ``"out"``, ``"in"``, or ``"any"`` traversal.
+            relations: Optional compact relation IDs to restrict candidates.
+            dead_end: ``"terminate"`` stops the walk, ``"restart"`` jumps
+                back to the start node with ``-1`` edge and relation IDs.
+            temporal: Optional point or finite-window validity filter.
+            window_policy: ``"overlap"`` or ``"contained"`` window matching.
+
+        Returns:
+            ``RandomWalkBatch`` with the same ``-1`` gap conventions as
+            :meth:`sample_random_walks`.
+
+        Raises:
+            ValueError: If factors are not positive finite numbers, options
+                are invalid, or IDs are out of range.
+        """
+        _validate_count(walk_length, "walk_length")
+        self._validate_sampling_options(
+            fanout=0, direction=direction, temporal=temporal,
+            window_policy=window_policy, causal_policy="none",
+        )
+        for name, factor in (("return_factor", return_factor), ("inout_factor", inout_factor)):
+            if isinstance(factor, bool) or not isinstance(factor, (int, float, np.integer, np.floating)):
+                raise ValueError(f"{name} must be a positive finite number")
+            if not np.isfinite(factor) or factor <= 0:
+                raise ValueError(f"{name} must be a positive finite number")
+        if dead_end not in {"terminate", "restart"}:
+            raise ValueError("dead_end must be 'terminate' or 'restart'")
+        starts = self._validated_ids(start_nodes, self.snapshot.num_nodes, "start_nodes")
+        relation_filter = None
+        if relations is not None:
+            relation_filter = set(self._validated_ids(relations, self.snapshot.num_relations, "relations").tolist())
+
+        node_ids = np.full((starts.size, walk_length + 1), -1, dtype=np.int64)
+        edge_indices = np.full((starts.size, walk_length), -1, dtype=np.int64)
+        relation_ids = np.full((starts.size, walk_length), -1, dtype=np.int64)
+        lengths = np.zeros(starts.size, dtype=np.int64)
+        if starts.size:
+            node_ids[:, 0] = starts
+
+        for row, start in enumerate(starts.tolist()):
+            current = int(start)
+            previous: int | None = None
+            for step in range(walk_length):
+                candidates = self._candidate_edges(
+                    current, direction, relation_filter, temporal, window_policy
+                )
+                if candidates.size == 0:
+                    if dead_end == "restart":
+                        current = int(start)
+                        previous = None
+                        node_ids[row, step + 1] = current
+                        lengths[row] = step + 1
+                        continue
+                    break
+                if previous is None:
+                    weights: np.ndarray | None = None
+                else:
+                    endpoints = self._neighbors_for_edges(current, candidates, direction)
+                    incident = self.snapshot.incident.edge_range(previous)
+                    previous_neighbors = set(
+                        self.snapshot.src_int[incident].tolist()
+                    ) | set(self.snapshot.dst_int[incident].tolist())
+                    bias = np.ones(candidates.size, dtype=np.float64)
+                    is_return = endpoints == previous
+                    bias[is_return] = 1.0 / float(return_factor)
+                    farther = ~is_return & ~np.isin(endpoints, list(previous_neighbors))
+                    bias[farther] = 1.0 / float(inout_factor)
+                    weights = self.snapshot.edge_weights[candidates] * bias
+                chosen = self._choose_candidates(candidates, 1, replace=False, weights=weights)
+                edge = int(chosen[0])
+                previous = current
+                current = int(self._neighbors_for_edges(current, chosen, direction)[0])
+                edge_indices[row, step] = edge
+                relation_ids[row, step] = int(self.snapshot.rel_int[edge])
+                node_ids[row, step + 1] = current
+                lengths[row] = step + 1
+
+        return RandomWalkBatch(node_ids, edge_indices, relation_ids, lengths)
+
+    def sample_node2vec_walks_external(
+        self,
+        start_nodes: Sequence[object],
+        walk_length: int,
+        *,
+        return_factor: float = 1.0,
+        inout_factor: float = 1.0,
+        direction: str = "out",
+        relations: Sequence[object] | None = None,
+        dead_end: str = "terminate",
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+    ) -> RandomWalkBatch:
+        """Sample node2vec walks using external node and relation IDs."""
+        compact_relations = None if relations is None else self.snapshot.relation_ints(relations)
+        return self.sample_node2vec_walks(
+            self.snapshot.node_ints(start_nodes),
+            walk_length,
+            return_factor=return_factor,
+            inout_factor=inout_factor,
+            direction=direction,
+            relations=compact_relations,
             dead_end=dead_end,
             temporal=temporal,
             window_policy=window_policy,
@@ -825,6 +1261,142 @@ class SamplerEngine:
         """Batched alias for ``sample_subgraph``."""
         return self.sample_subgraph(*args, **kwargs)
 
+    def sample_packed_subgraphs(
+        self,
+        seed_edge_groups: Sequence[Sequence[int] | np.ndarray],
+        fanouts: Sequence[int],
+        *,
+        direction: str = "any",
+        relations: Sequence[int] | np.ndarray | None = None,
+        negative_config: HardNegativeConfig | None = None,
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+        causal_policy: str = "none",
+    ) -> SampledSubgraphBatch:
+        """Sample one independent subgraph per seed group in a single batch.
+
+        Each group is sampled exactly as :meth:`sample_subgraph` would sample
+        it alone, then repackaged into one batch with per-component frames:
+        ``graph_node_offsets`` and ``graph_edge_offsets`` mark each
+        component's node and edge rows, and all local IDs (``senders``,
+        ``receivers``, ``positives``, ``negatives``) are rebased to the
+        concatenated node frame. Global node and edge IDs may repeat across
+        components; each component's slice is self-contained. Positive rows
+        appear in seed-group order (``len(group)`` rows per component when
+        no temporal filtering drops seed edges) and negative rows align with
+        positive rows. Temporal
+        arrays, example times, and negative diagnostics are concatenated or
+        summed component-wise.
+
+        Args:
+            seed_edge_groups: One compact seed-edge sequence per component.
+                Groups are validated exactly as in :meth:`sample_subgraph`.
+            fanouts: Fanout per hop, shared by every component.
+            direction: Traversal direction for context expansion.
+            relations: Optional relation filter for context expansion.
+            negative_config: Optional hard-negative configuration shared by
+                every component.
+            temporal: Optional point or finite-window validity filter.
+            window_policy: Window matching policy, ``"overlap"`` or
+                ``"contained"``.
+            causal_policy: Valid-start policy propagated through context hops.
+
+        Returns:
+            ``SampledSubgraphBatch`` with ``graph_node_offsets`` and
+            ``graph_edge_offsets`` of length ``len(seed_edge_groups) + 1``.
+
+        Raises:
+            ValueError: If options are invalid or a group fails
+                :meth:`sample_subgraph` validation.
+
+        Examples:
+            Sample two disjoint training neighborhoods at once::
+
+                batch = engine.sample_packed_subgraphs(
+                    [[10, 11], [42]], fanouts=[8, 4]
+                )
+                first_nodes = batch.node_ids_global[
+                    batch.graph_node_offsets[0]:batch.graph_node_offsets[1]
+                ]
+        """
+        groups = list(seed_edge_groups)
+        components = [
+            self.sample_subgraph(
+                group, fanouts, direction=direction, relations=relations,
+                negative_config=negative_config, temporal=temporal,
+                window_policy=window_policy, causal_policy=causal_policy,
+            )
+            for group in groups
+        ]
+
+        def concat(arrays: list[np.ndarray | None]) -> np.ndarray | None:
+            present = [array for array in arrays if array is not None]
+            if not present:
+                return None
+            if len(present) != len(arrays):
+                raise ValueError("packed components have inconsistent optional arrays")
+            return np.concatenate(present)
+
+        node_ids = [component.node_ids_global for component in components]
+        edge_ids = [component.edge_ids_global for component in components]
+        node_offsets = np.zeros(len(components) + 1, dtype=np.int64)
+        edge_offsets = np.zeros(len(components) + 1, dtype=np.int64)
+        senders: list[np.ndarray] = []
+        receivers: list[np.ndarray] = []
+        positives: list[np.ndarray] = []
+        negatives: list[np.ndarray] = []
+        for index, component in enumerate(components):
+            base = int(node_offsets[index])
+            node_offsets[index + 1] = base + component.n_nodes
+            edge_offsets[index + 1] = int(edge_offsets[index]) + component.n_edges
+            senders.append(component.senders + base if component.n_edges else component.senders)
+            receivers.append(component.receivers + base if component.n_edges else component.receivers)
+            localized = np.array(component.positives, dtype=np.int64, copy=True)
+            if localized.size:
+                localized[..., 0] += base
+                localized[..., 2] += base
+            positives.append(localized)
+            grouped = np.array(component.negatives, dtype=np.int64, copy=True)
+            if grouped.size:
+                grouped[..., 0] += base
+                grouped[..., 2] += base
+            negatives.append(grouped)
+
+        diagnostics: dict[str, int] | None = None
+        component_diagnostics = [
+            component.negative_diagnostics for component in components
+            if component.negative_diagnostics is not None
+        ]
+        if component_diagnostics:
+            if len(component_diagnostics) != len(components):
+                raise ValueError("packed components have inconsistent diagnostics")
+            diagnostics = {
+                key: sum(entry[key] for entry in component_diagnostics)
+                for key in component_diagnostics[0]
+            }
+
+        return SampledSubgraphBatch(
+            node_ids_global=np.concatenate(node_ids) if node_ids else np.empty(0, dtype=np.int64),
+            node_type_ids=concat([component.node_type_ids for component in components])
+            if components else np.empty(0, dtype=np.int64),
+            senders=np.concatenate(senders) if senders else np.empty(0, dtype=np.int64),
+            receivers=np.concatenate(receivers) if receivers else np.empty(0, dtype=np.int64),
+            edge_ids_global=np.concatenate(edge_ids) if edge_ids else np.empty(0, dtype=np.int64),
+            edge_relation_ids=concat([component.edge_relation_ids for component in components])
+            if components else np.empty(0, dtype=np.int64),
+            positives=np.concatenate(positives) if positives else np.empty((0, 3), dtype=np.int64),
+            negatives=np.concatenate(negatives) if negatives else np.empty((0, 3), dtype=np.int64),
+            graph_node_offsets=node_offsets,
+            graph_edge_offsets=edge_offsets,
+            edge_version_ids=concat([component.edge_version_ids for component in components]),
+            valid_from_us=concat([component.valid_from_us for component in components]),
+            valid_to_us=concat([component.valid_to_us for component in components]),
+            valid_to_open=concat([component.valid_to_open for component in components]),
+            positive_time_us=concat([component.positive_time_us for component in components]),
+            negative_time_us=concat([component.negative_time_us for component in components]),
+            negative_diagnostics=diagnostics,
+        )
+
     def sample_subgraph_external(
         self,
         seed_edges: Sequence[object],
@@ -849,6 +1421,292 @@ class SamplerEngine:
             window_policy=window_policy,
             causal_policy=causal_policy,
         )
+
+    def sample_induced_subgraph(
+        self,
+        num_nodes: int,
+        *,
+        max_edges: int,
+        relations: Sequence[int] | np.ndarray | None = None,
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+        normalize: bool = False,
+    ) -> SampledSubgraphBatch:
+        """Sample a bounded node-induced subgraph.
+
+        Nodes are drawn uniformly without replacement from the snapshot. Every
+        eligible edge whose endpoints are both in the sampled node set is
+        included after optional relation and temporal filters. If the eligible
+        edge count exceeds ``max_edges``, the call fails closed instead of
+        truncating or silently sampling edges. The result contains no positive
+        or negative triples; use ``sample_subgraph`` for edge-seeded training
+        batches.
+
+        Args:
+            num_nodes: Number of nodes to draw without replacement.
+            max_edges: Maximum eligible induced edges allowed. Exceeding it
+                raises ``ValueError``.
+            relations: Optional compact relation IDs to restrict induced edges.
+            temporal: Optional point or finite-window validity filter applied
+                to induced edges.
+            window_policy: Window matching policy, ``"overlap"`` or
+                ``"contained"``.
+            normalize: When true, attach GraphSAINT-style unbiased
+                ``node_weights`` and ``edge_weights``. Uniform
+                without-replacement node sampling includes each node with
+                probability ``num_nodes / num_nodes_snapshot`` and each
+                distinct node pair with probability
+                ``num_nodes * (num_nodes - 1) / (num_nodes_snapshot *
+                (num_nodes_snapshot - 1))``, so node weights are the
+                reciprocal of the first probability and non-loop edge weights
+                the reciprocal of the second. Self-loops are node-inclusion
+                events and carry the node weight. Weights are exact for the
+                unfiltered node draw; relation and temporal filters restrict
+                which edges are returned but do not change the draw
+                probabilities, so filtered batches keep the same weights.
+
+        Returns:
+            ``SampledSubgraphBatch`` with sampled nodes and all eligible induced
+            edges. ``positives`` and ``negatives`` are empty.
+
+        Raises:
+            ValueError: If counts are invalid, ``num_nodes`` exceeds the
+                snapshot, the induced edge count exceeds ``max_edges``, or
+                ``normalize`` is not a boolean.
+
+        Examples:
+            Draw a bounded GraphSAINT-style node subgraph::
+
+                batch = engine.sample_induced_subgraph(
+                    256, max_edges=50_000, normalize=True
+                )
+        """
+        _validate_count(num_nodes, "num_nodes")
+        _validate_count(max_edges, "max_edges")
+        if not isinstance(normalize, bool):
+            raise ValueError("normalize must be a boolean")
+        if num_nodes > self.snapshot.num_nodes:
+            raise ValueError("num_nodes exceeds snapshot node count")
+        self._validate_sampling_options(
+            fanout=0, direction="out", temporal=temporal,
+            window_policy=window_policy, causal_policy="none",
+        )
+        relation_ids = (
+            None
+            if relations is None
+            else self._validated_ids(relations, self.snapshot.num_relations, "relations")
+        )
+        empty_triples = np.empty((0, 3), dtype=np.int64)
+        if num_nodes == 0:
+            batch = self._batch_from_edges(
+                [], [], positives=empty_triples, negatives=empty_triples
+            )
+            if normalize:
+                batch = replace(
+                    batch,
+                    node_weights=np.empty(0, dtype=np.float64),
+                    edge_weights=np.empty(0, dtype=np.float64),
+                )
+            return batch
+        sampled_nodes = self.rng.choice(
+            self.snapshot.num_nodes, size=int(num_nodes), replace=False
+        ).astype(np.int64, copy=False)
+        candidates = self._induced_edge_candidates(
+            sampled_nodes, relation_ids, temporal, window_policy
+        )
+        if candidates.size > max_edges:
+            raise ValueError(
+                f"induced subgraph has {candidates.size} eligible edges, "
+                f"exceeding max_edges={max_edges}"
+            )
+        batch = self._batch_from_edges(
+            sampled_nodes, candidates,
+            positives=empty_triples, negatives=empty_triples,
+        )
+        if normalize:
+            total_nodes = self.snapshot.num_nodes
+            node_weight = float(total_nodes) / float(num_nodes)
+            node_weights = np.full(batch.n_nodes, node_weight, dtype=np.float64)
+            if batch.n_edges:
+                loops = (
+                    self.snapshot.src_int[batch.edge_ids_global]
+                    == self.snapshot.dst_int[batch.edge_ids_global]
+                )
+                if num_nodes < 2:
+                    pair_weight = node_weight
+                else:
+                    pair_weight = (
+                        float(total_nodes) * float(total_nodes - 1)
+                        / (float(num_nodes) * float(num_nodes - 1))
+                    )
+                edge_weights = np.full(batch.n_edges, pair_weight, dtype=np.float64)
+                edge_weights[loops] = node_weight
+            else:
+                edge_weights = np.empty(0, dtype=np.float64)
+            batch = replace(batch, node_weights=node_weights, edge_weights=edge_weights)
+        return batch
+
+    def _induced_edge_candidates(
+        self,
+        sampled_nodes: np.ndarray,
+        relation_ids: np.ndarray | None,
+        temporal: TemporalContext | None,
+        window_policy: str,
+    ) -> np.ndarray:
+        """Return eligible edges with both endpoints in ``sampled_nodes``."""
+        ranges = [
+            self.snapshot.incident.edge_range(node)
+            for node in sampled_nodes.tolist()
+        ]
+        candidates = (
+            np.unique(np.concatenate(ranges)).astype(np.int64, copy=False)
+            if ranges
+            else np.empty(0, dtype=np.int64)
+        )
+        if candidates.size:
+            src = self.snapshot.src_int[candidates]
+            dst = self.snapshot.dst_int[candidates]
+            candidates = candidates[
+                np.isin(src, sampled_nodes) & np.isin(dst, sampled_nodes)
+            ]
+        if relation_ids is not None and candidates.size:
+            candidates = candidates[
+                np.isin(self.snapshot.rel_int[candidates], relation_ids)
+            ]
+        if temporal is not None:
+            candidates = self._filter_temporal_edges(
+                candidates, temporal, window_policy
+            )
+        return candidates
+
+    def sample_partition_block(
+        self,
+        num_partitions: int,
+        *,
+        max_edges: int,
+        relations: Sequence[int] | np.ndarray | None = None,
+        temporal: TemporalContext | None = None,
+        window_policy: str = "overlap",
+        normalize: bool = False,
+    ) -> SampledSubgraphBatch:
+        """Sample one uniformly chosen block of a random balanced partition.
+
+        Nodes are randomly permuted with the engine RNG, split into
+        ``num_partitions`` contiguous chunks with sizes differing by at most
+        one, and one chunk is chosen uniformly at random. Every eligible edge
+        induced by the chosen chunk is returned after optional relation and
+        temporal filters; exceeding ``max_edges`` fails closed. Partitions
+        are uniformly random, not cut-optimized: unlike METIS-based
+        Cluster-GCN, no cut quality is claimed. The result contains no
+        positive or negative triples.
+
+        Args:
+            num_partitions: Number of balanced partitions, at least one.
+            max_edges: Maximum eligible induced edges allowed. Exceeding it
+                raises ``ValueError``.
+            relations: Optional compact relation IDs to restrict induced edges.
+            temporal: Optional point or finite-window validity filter applied
+                to induced edges.
+            window_policy: Window matching policy, ``"overlap"`` or
+                ``"contained"``.
+            normalize: When true, attach exact unbiased ``node_weights`` and
+                ``edge_weights``. Every node is selected with probability
+                ``1 / num_partitions`` by symmetry, so node weights equal
+                ``num_partitions``. A distinct node pair is selected with
+                probability ``(sum_c C(size_c, 2) / C(N, 2)) / num_partitions``
+                over the realized chunk sizes, and non-loop edges carry its
+                reciprocal. Self-loops are node-inclusion events and carry
+                the node weight. Relation and temporal filters do not change
+                the draw probabilities.
+
+        Returns:
+            ``SampledSubgraphBatch`` with the chosen partition's nodes and all
+            eligible induced edges.
+
+        Raises:
+            ValueError: If counts are invalid, the induced edge count exceeds
+                ``max_edges``, ``normalize`` is not a boolean, or the
+                partition invariant is violated.
+
+        Examples:
+            Sample a Cluster-GCN-style random partition block::
+
+                batch = engine.sample_partition_block(
+                    8, max_edges=50_000, normalize=True
+                )
+        """
+        _validate_count(num_partitions, "num_partitions")
+        _validate_count(max_edges, "max_edges")
+        if num_partitions < 1:
+            raise ValueError("num_partitions must be at least 1")
+        if not isinstance(normalize, bool):
+            raise ValueError("normalize must be a boolean")
+        self._validate_sampling_options(
+            fanout=0, direction="out", temporal=temporal,
+            window_policy=window_policy, causal_policy="none",
+        )
+        relation_ids = (
+            None
+            if relations is None
+            else self._validated_ids(relations, self.snapshot.num_relations, "relations")
+        )
+        empty_triples = np.empty((0, 3), dtype=np.int64)
+        permutation = self.rng.permutation(self.snapshot.num_nodes)
+        chunks = np.array_split(permutation, int(num_partitions))
+        sizes = np.asarray([chunk.size for chunk in chunks], dtype=np.int64)
+        choice = int(self.rng.integers(int(num_partitions)))
+        sampled_nodes = chunks[choice].astype(np.int64, copy=False)
+        candidates = self._induced_edge_candidates(
+            sampled_nodes, relation_ids, temporal, window_policy
+        )
+        if candidates.size > max_edges:
+            raise ValueError(
+                f"partition block has {candidates.size} eligible edges, "
+                f"exceeding max_edges={max_edges}"
+            )
+        batch = self._batch_from_edges(
+            sampled_nodes, candidates,
+            positives=empty_triples, negatives=empty_triples,
+        )
+        if normalize:
+            node_weights = np.full(
+                batch.n_nodes, float(num_partitions), dtype=np.float64
+            )
+            if batch.n_edges:
+                loops = (
+                    self.snapshot.src_int[batch.edge_ids_global]
+                    == self.snapshot.dst_int[batch.edge_ids_global]
+                )
+                total_pairs = float(
+                    np.sum(sizes * (sizes - 1) // 2, dtype=np.int64)
+                )
+                all_pairs = (
+                    float(self.snapshot.num_nodes)
+                    * float(self.snapshot.num_nodes - 1) / 2.0
+                )
+                if all_pairs <= 0 or total_pairs <= 0:
+                    if not bool(np.all(loops)):
+                        raise ValueError(
+                            "partition block has non-loop edges but zero "
+                            "pair-selection probability"
+                        )
+                    edge_weights = np.full(
+                        batch.n_edges, float(num_partitions), dtype=np.float64
+                    )
+                else:
+                    pair_weight = (
+                        all_pairs / total_pairs * float(num_partitions)
+                    )
+                    edge_weights = np.full(
+                        batch.n_edges, pair_weight, dtype=np.float64
+                    )
+                    edge_weights[loops] = float(num_partitions)
+            else:
+                edge_weights = np.empty(0, dtype=np.float64)
+            batch = replace(
+                batch, node_weights=node_weights, edge_weights=edge_weights
+            )
+        return batch
 
     def is_positive(
         self, src: int, rel: int, dst: int, *, temporal: TemporalContext | None = None,
@@ -952,6 +1810,7 @@ class SamplerEngine:
             "attempted": 0, "accepted": 0, "rejected_self_loop": 0,
             "rejected_duplicate": 0, "rejected_type": 0,
             "rejected_unavailable": 0, "rejected_positive": 0, "repeated": 0,
+            "accepted_in_batch": 0,
         }
         if positives.size == 0 or config.negatives_per_positive == 0:
             empty = np.empty((positives.shape[0] if positives.ndim else 0, 0, 3), dtype=np.int64)
@@ -985,14 +1844,35 @@ class SamplerEngine:
             times = np.full(positives.shape[0], temporal.instant.epoch_microseconds, dtype=np.int64)
         result = np.empty((positives.shape[0], config.negatives_per_positive, 3), dtype=np.int64)
         candidate_cache: dict[tuple[int, int, int, bool, int | None], list[int]] = {}
+        in_batch_heads: dict[int, list[int]] = {}
+        in_batch_tails: dict[int, list[int]] = {}
+        if config.in_batch:
+            for src, rel, dst in positives.tolist():
+                in_batch_heads.setdefault(int(rel), []).append(int(src))
+                in_batch_tails.setdefault(int(rel), []).append(int(dst))
+            in_batch_heads = {
+                rel: list(dict.fromkeys(nodes))
+                for rel, nodes in in_batch_heads.items()
+            }
+            in_batch_tails = {
+                rel: list(dict.fromkeys(nodes))
+                for rel, nodes in in_batch_tails.items()
+            }
 
         for row_idx, (src, rel, dst) in enumerate(positives.tolist()):
             group_seen: set[tuple[int, int, int]] = set()
+            in_batch_pool = (
+                (
+                    in_batch_heads.get(int(rel), []),
+                    in_batch_tails.get(int(rel), []),
+                )
+                if config.in_batch else None
+            )
             for neg_idx in range(config.negatives_per_positive):
                 result[row_idx, neg_idx] = self._one_negative(
                     int(src), int(rel), int(dst), context, config, group_seen,
                     candidate_cache, None if times is None else int(times[row_idx]), temporal,
-                    diagnostics,
+                    diagnostics, in_batch_pool,
                 )
         return (result, diagnostics) if return_diagnostics else result
 
@@ -1097,9 +1977,32 @@ class SamplerEngine:
         positive_time: int | None,
         temporal: TemporalContext | None,
         diagnostics: dict[str, int],
+        in_batch_pool: tuple[list[int], list[int]] | None = None,
     ) -> tuple[int, int, int]:
         first_direction = bool(self.rng.random() < config.head_probability)
         for corrupt_head in (first_direction, not first_direction):
+            if in_batch_pool is not None:
+                pool = in_batch_pool[0 if corrupt_head else 1]
+                if pool:
+                    ordered = list(pool)
+                    self.rng.shuffle(ordered)
+                    for cand in ordered:
+                        if corrupt_head and cand == src:
+                            continue
+                        if not corrupt_head and cand == dst:
+                            continue
+                        candidate = (int(cand), rel, dst) if corrupt_head else (src, rel, int(cand))
+                        rejection = self._negative_rejection(
+                            candidate, src, dst, corrupt_head, config, group_seen,
+                            positive_time, temporal,
+                        )
+                        diagnostics["attempted"] += 1
+                        if rejection is None:
+                            group_seen.add(candidate)
+                            diagnostics["accepted"] += 1
+                            diagnostics["accepted_in_batch"] += 1
+                            return candidate
+                        diagnostics[rejection] += 1
             cache_key = (src, rel, dst, corrupt_head, positive_time)
             if cache_key not in candidate_cache:
                 candidate_cache[cache_key] = self._negative_candidates(
@@ -1119,9 +2022,8 @@ class SamplerEngine:
                     diagnostics["accepted"] += 1
                     return candidate
                 diagnostics[rejection] += 1
-            fallback = np.arange(self.snapshot.num_nodes, dtype=np.int64)
-            self.rng.shuffle(fallback)
-            for cand in fallback[:config.max_retries].tolist():
+            fallback = self._negative_fallback_candidates(config)
+            for cand in fallback.tolist():
                 candidate = (cand, rel, dst) if corrupt_head else (src, rel, cand)
                 rejection = self._negative_rejection(
                     candidate, src, dst, corrupt_head, config, group_seen,
@@ -1138,6 +2040,36 @@ class SamplerEngine:
             diagnostics["accepted"] += 1
             return sorted(group_seen)[0]
         raise RuntimeError("failed to sample a hard negative that is not a known positive")
+
+    def _negative_fallback_candidates(self, config: HardNegativeConfig) -> np.ndarray:
+        """Return random fallback candidates, optionally degree-weighted."""
+        if self.snapshot.num_nodes == 0:
+            return np.empty(0, dtype=np.int64)
+        if config.candidate_distribution == "uniform":
+            fallback = np.arange(self.snapshot.num_nodes, dtype=np.int64)
+            self.rng.shuffle(fallback)
+            return fallback[:config.max_retries]
+        degrees = np.diff(self.snapshot.incident.indptr).astype(np.float64)
+        with np.errstate(over="ignore", invalid="ignore"):
+            weights = np.power(degrees, config.degree_exponent)
+        if not np.all(np.isfinite(weights)):
+            raise ValueError("degree_exponent produces non-finite candidate weights")
+        total = float(weights.sum())
+        if not np.isfinite(total):
+            raise ValueError("degree_exponent produces non-finite candidate weights")
+        if total <= 0.0:
+            fallback = np.arange(self.snapshot.num_nodes, dtype=np.int64)
+            self.rng.shuffle(fallback)
+            return fallback[:config.max_retries]
+        probabilities = weights / total
+        size = min(config.max_retries, int(np.count_nonzero(probabilities)))
+        draws = self.rng.choice(
+            self.snapshot.num_nodes,
+            size=size,
+            replace=False,
+            p=probabilities,
+        )
+        return draws.astype(np.int64, copy=False)
 
     def _negative_candidates(self, src: int, rel: int, dst: int, context_nodes: set[int], corrupt_head: bool, config: HardNegativeConfig, positive_time: int | None, query_temporal: TemporalContext | None) -> list[int]:
         if config.source == "random" or not context_nodes:
@@ -1256,7 +2188,12 @@ class SamplerEngine:
         width = self._candidate_window_us(config)
         return TemporalContext.during(positive_time - width, positive_time + 1)
 
-    def _node_available(self, node: int, temporal: TemporalContext | None) -> bool:
+    def _node_available(
+        self,
+        node: int,
+        temporal: TemporalContext | None,
+        window_policy: str = "overlap",
+    ) -> bool:
         if temporal is None:
             return True
         start = int(self.snapshot.node_history_indptr[node])
@@ -1271,7 +2208,76 @@ class SamplerEngine:
             return bool(np.any((starts <= instant) & (open_ends | (instant < ends))))
         window_start = temporal.interval.start.epoch_microseconds
         window_end = temporal.interval.end.epoch_microseconds
+        if window_policy == "contained":
+            return bool(np.any(
+                (window_start <= starts) & (~open_ends) & (ends <= window_end)
+            ))
         return bool(np.any((starts < window_end) & (open_ends | (window_start < ends))))
+
+    def _edge_available_mask(
+        self,
+        edges: np.ndarray,
+        temporal: TemporalContext | None,
+        window_policy: str,
+    ) -> np.ndarray:
+        if temporal is None:
+            return np.ones(edges.size, dtype=bool)
+        starts = self.snapshot.valid_from_us[edges]
+        ends = self.snapshot.valid_to_us[edges]
+        open_ends = self.snapshot.valid_to_open[edges]
+        if temporal.instant is not None:
+            instant = temporal.instant.epoch_microseconds
+            return (starts <= instant) & (open_ends | (instant < ends))
+        window_start = temporal.interval.start.epoch_microseconds
+        window_end = temporal.interval.end.epoch_microseconds
+        if window_policy == "contained":
+            return (window_start <= starts) & (~open_ends) & (ends <= window_end)
+        return (starts < window_end) & (open_ends | (window_start < ends))
+
+    def _choose_balanced(
+        self,
+        candidates: np.ndarray,
+        count: int,
+        *,
+        replace: bool,
+        weights: np.ndarray | None,
+        groups: np.ndarray,
+    ) -> np.ndarray:
+        """Choose a deterministic equal share from each group.
+
+        Groups are visited in sorted compact-ID order. When the requested
+        ``count`` does not divide evenly, earlier groups receive one extra
+        selection. A group smaller than its share returns all its candidates
+        when ``replace=False``; unused quota is intentionally not redistributed
+        so the quota contract stays explicit and reproducible.
+        """
+        _validate_count(count, "count")
+        if count == 0 or candidates.size == 0:
+            return np.empty(0, dtype=np.int64)
+        if groups.shape != candidates.shape:
+            raise ValueError("balanced groups must align with candidates")
+        unique_groups = np.unique(groups)
+        base, extra = divmod(count, int(unique_groups.size))
+        selections: list[np.ndarray] = []
+        for index, group in enumerate(unique_groups):
+            quota = base + (1 if index < extra else 0)
+            if quota == 0:
+                continue
+            mask = groups == group
+            group_candidates = candidates[mask]
+            group_weights = None if weights is None else weights[mask]
+            if group_weights is not None and float(np.max(group_weights)) <= 0:
+                continue
+            selections.append(
+                self._choose_candidates(
+                    group_candidates, quota, replace=replace, weights=group_weights
+                )
+            )
+        if not selections:
+            return self._choose_candidates(
+                candidates, count, replace=replace, weights=weights
+            )
+        return np.concatenate(selections).astype(np.int64, copy=False)
 
     def _choose_candidates(self, candidates: np.ndarray, count: int, *, replace: bool, weights: np.ndarray | None) -> np.ndarray:
         _validate_count(count, "count")

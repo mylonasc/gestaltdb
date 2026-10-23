@@ -148,13 +148,24 @@ test("saved views restore coordinates, pins, zoom, settings and filters atomical
   await expect(page.locator(".gdviz")).toHaveAttribute("data-theme", "dark");
   await expect(page.getByRole("button", { name: "Node a", exact: true })).toHaveAttribute("transform", transform!);
   await expect(page.getByRole("button", { name: "Unpin selected node", exact: true })).toBeVisible();
-  const zoom = await page.locator(".viewport").getAttribute("transform");
-  expect(zoom).toBe(`translate(${state.layout.zoom.x},${state.layout.zoom.y}) scale(${state.layout.zoom.k})`);
+  // The status update can render before the layout-restoration effect runs.
+  // Retry the DOM assertion, retaining exact saved-transform equality rather
+  // than reading one frame from the interrupted Reset layout transition.
+  await expect(page.locator(".viewport")).toHaveAttribute("transform",
+    `translate(${state.layout.zoom.x},${state.layout.zoom.y}) scale(${state.layout.zoom.k})`);
+  await page.setViewportSize({ width: 1000, height: 700 });
+  // Allow the ResizeObserver and any formerly scheduled fit animation to run.
+  await page.waitForTimeout(350);
+  await expect(page.locator(".viewport")).toHaveAttribute("transform",
+    `translate(${state.layout.zoom.x},${state.layout.zoom.y}) scale(${state.layout.zoom.k})`);
   state.layout.nodes[0].x = "invalid";
   state.settings.theme = "light";
   await page.getByLabel("Load view state", { exact: true }).setInputFiles({ name: "bad.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(state)) });
   await expect(page.getByRole("alert")).toContainText("finite numbers");
   await expect(page.locator(".gdviz")).toHaveAttribute("data-theme", "dark");
+  await page.getByRole("button", { name: "Fit visible graph", exact: true }).click();
+  await expect(page.locator(".viewport")).not.toHaveAttribute("transform",
+    `translate(${state.layout.zoom.x},${state.layout.zoom.y}) scale(${state.layout.zoom.k})`);
 });
 
 test("property search, secondary labels, directed focus and styling are usable offline", async ({ page }) => {

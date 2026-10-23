@@ -15,7 +15,7 @@ instead of silently falling back, with the complete strategy documented.
    from gestaltdb.reasoning import BoundGoal, GenericProgram, GenericRule, TypedAtom, TypedFact, answer
    from gestaltdb.reasoning.model import ReasoningLimits, Variable
 
-   x, y = Variable("x"), Variable("y")
+   x, y, z = Variable("x"), Variable("y"), Variable("z")
    program = GenericProgram([
        GenericRule("base", [TypedAtom("edge", [x, y])], [], TypedAtom("reach", [x, y])),
        GenericRule("step", [TypedAtom("reach", [x, y]), TypedAtom("edge", [y, z])], [],

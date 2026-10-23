@@ -57,6 +57,8 @@ class QueryContext:
     node_cache: dict[bytes, object] = field(default_factory=dict)
     edge_cache: dict[bytes, object] = field(default_factory=dict)
     label_cardinalities: dict[str, int] = field(default_factory=dict)
+    label_hierarchy: object | None = None
+    relation_hierarchy: object | None = None
     read_view: object | None = None
     entity_versions: dict[int, object] = field(default_factory=dict)
 
@@ -797,6 +799,34 @@ def _reset_used_relationships(rows):
         yield typed_row.with_bindings(dict(typed_row.bindings), used_relationship_ids=frozenset())
 
 
+def _label_matches(node_labels, label, hierarchy) -> bool:
+    """Return whether literal node labels satisfy ``label`` under a hierarchy."""
+    if hierarchy is None:
+        return label in node_labels
+    return any(member in node_labels for member in hierarchy.closure(label))
+
+
+def _labels_satisfy(node_labels, required, excluded, hierarchy) -> bool:
+    """Return whether a node satisfies all required and no excluded labels."""
+    return (
+        all(_label_matches(node_labels, label, hierarchy) for label in required)
+        and not any(_label_matches(node_labels, label, hierarchy) for label in excluded)
+    )
+
+
+def _label_id_sets(labels, context: QueryContext, lookup):
+    """Return one ID set per required label, expanded through the hierarchy."""
+    hierarchy = context.label_hierarchy
+    sets = []
+    for label in labels:
+        members = hierarchy.closure(label) if hierarchy is not None else (label,)
+        current = set()
+        for member in members:
+            current.update(lookup(member))
+        sets.append(current)
+    return sets
+
+
 def node_scan_ids(parsed: NodeScanQuery, context: QueryContext):
     """Yield node IDs for a label scan, using property indexes when available."""
     if parsed.limit == 0:
@@ -813,9 +843,21 @@ def node_scan_ids(parsed: NodeScanQuery, context: QueryContext):
     property_value = context.resolve(parsed.property_value)
     labels = tuple(label for label in (parsed.labels or (parsed.label,)) if label is not None)
     if labels and hasattr(context.graph, "iter_node_ids_by_label_property"):
-        node_ids = set(context.graph.iter_node_ids_by_label_property(labels[0], parsed.property_name, property_value))
-        for label in labels[1:]:
-            node_ids = node_ids.intersection(context.graph.iter_node_ids_by_label(label))
+        if context.label_hierarchy is None:
+            node_ids = set(context.graph.iter_node_ids_by_label_property(labels[0], parsed.property_name, property_value))
+            for label in labels[1:]:
+                node_ids = node_ids.intersection(context.graph.iter_node_ids_by_label(label))
+        else:
+            sets = _label_id_sets(
+                labels,
+                context,
+                lambda label: context.graph.iter_node_ids_by_label_property(
+                    label, parsed.property_name, property_value
+                ),
+            )
+            node_ids = sets[0]
+            for current in sets[1:]:
+                node_ids = node_ids.intersection(current)
         return iter(sorted(node_ids))
     property_ids = set(context.graph.iter_node_ids_by_property(parsed.property_name, property_value))
     return iter(sorted(set(label_ids).intersection(property_ids)))
@@ -828,9 +870,21 @@ def _node_range_scan(parsed: NodeScanQuery, context: QueryContext):
     property_name, start_value, end_value, include_start, include_end = bounds
     labels = tuple(label for label in (parsed.labels or (parsed.label,)) if label is not None)
     if labels and hasattr(context.graph, "iter_node_ids_by_label_property_range"):
-        node_ids = set(context.graph.iter_node_ids_by_label_property_range(labels[0], property_name, start_value, end_value, include_start, include_end))
-        for label in labels[1:]:
-            node_ids = node_ids.intersection(context.graph.iter_node_ids_by_label(label))
+        if context.label_hierarchy is None:
+            node_ids = set(context.graph.iter_node_ids_by_label_property_range(labels[0], property_name, start_value, end_value, include_start, include_end))
+            for label in labels[1:]:
+                node_ids = node_ids.intersection(context.graph.iter_node_ids_by_label(label))
+        else:
+            sets = _label_id_sets(
+                labels,
+                context,
+                lambda label: context.graph.iter_node_ids_by_label_property_range(
+                    label, property_name, start_value, end_value, include_start, include_end
+                ),
+            )
+            node_ids = sets[0]
+            for current in sets[1:]:
+                node_ids = node_ids.intersection(current)
         return iter(sorted(node_ids))
     if hasattr(context.graph, "iter_node_ids_by_property_range"):
         return context.graph.iter_node_ids_by_property_range(property_name, start_value, end_value, include_start, include_end)
@@ -882,12 +936,14 @@ def _node_ids_for_labels(parsed: NodeScanQuery, context: QueryContext):
     labels = tuple(label for label in labels if label is not None)
     if not labels:
         return context.graph.get_node_keys_generator()
-    if len(labels) == 1:
+    if len(labels) == 1 and context.label_hierarchy is None:
         return context.graph.iter_node_ids_by_label(labels[0])
-    matching_ids = None
-    for label in labels:
-        current_ids = set(context.graph.iter_node_ids_by_label(label))
-        matching_ids = current_ids if matching_ids is None else matching_ids.intersection(current_ids)
+    sets = _label_id_sets(
+        labels, context, lambda label: context.graph.iter_node_ids_by_label(label)
+    )
+    matching_ids = sets[0]
+    for current_ids in sets[1:]:
+        matching_ids = matching_ids.intersection(current_ids)
     return iter(sorted(matching_ids or set()))
 
 
@@ -1088,7 +1144,7 @@ def _indexed_first_hop_rows(row, clause: PathPatternClause, context: QueryContex
 def _iter_indexed_first_hop(row, clause: PathPatternClause, hop: PatternHop, context: QueryContext, spec):
     """Iterate index-backed candidate edges for the first pattern hop."""
     seen = set()
-    for edge_type in hop.edge_types:
+    for edge_type in _expanded_edge_types(hop.edge_types, context.relation_hierarchy):
         if spec[0] == "exact":
             _, property_name, value = spec
             edge_ids = context.graph.iter_edge_ids_by_type_property(edge_type, property_name, value)
@@ -1579,12 +1635,25 @@ def _is_null_bound(row: BindingRow, variable: str | None) -> bool:
     return variable is not None and variable in row.bindings and row.bindings[variable] is None
 
 
+def _expanded_edge_types(edge_types, hierarchy):
+    """Expand requested relationship types through an opt-in hierarchy."""
+    if hierarchy is None or not edge_types:
+        return edge_types
+    expanded = []
+    for edge_type in edge_types:
+        for member in hierarchy.closure(edge_type):
+            if member not in expanded:
+                expanded.append(member)
+    return tuple(expanded)
+
+
 def _iter_pattern_adjacency(context: QueryContext, node_id: bytes, hop: PatternHop):
+    edge_types = _expanded_edge_types(hop.edge_types, context.relation_hierarchy)
     if context.read_view is not None:
-        yield from context.iter_temporal_adjacency(node_id, hop.edge_types, hop.direction)
+        yield from context.iter_temporal_adjacency(node_id, edge_types, hop.direction)
         return
-    if hop.edge_types:
-        for edge_type in hop.edge_types:
+    if edge_types:
+        for edge_type in edge_types:
             yield from context.graph.iter_typed_adjacency(node_id, edge_type, direction=hop.direction)
         return
     for edge_id in context.graph.iter_edge_ids():
@@ -1608,14 +1677,17 @@ def _node_pattern_matches(node, pattern: NodePattern, properties, context: Query
     An ``id`` entry always addresses the stable entity ID, in every pattern
     position; all other entries match stored properties.
     """
+    node_labels = set(getattr(node, "labels", ()))
+    hierarchy = context.label_hierarchy
     if pattern.label_expression is not None:
-        node_labels = set(getattr(node, "labels", ()))
         if not any(
-            required.issubset(node_labels) and not (excluded & node_labels)
+            _labels_satisfy(node_labels, required, excluded, hierarchy)
             for required, excluded in pattern.label_expression
         ):
             return False
-    elif pattern.labels and not set(pattern.labels).issubset(set(getattr(node, "labels", ()))):
+    elif pattern.labels and not _labels_satisfy(
+        node_labels, pattern.labels, (), hierarchy
+    ):
         return False
     for property_name, property_value in properties:
         if property_name == "id":
@@ -1679,15 +1751,20 @@ def _order_match_patterns(patterns, context: QueryContext):
         if not labels or pattern.source.label_expression is not None:
             return (2, float("inf"), position)
         counts = []
+        hierarchy = context.label_hierarchy
         for label in labels:
-            if label not in context.label_cardinalities:
-                counter = getattr(context.graph, "count_nodes_by_label", None)
-                context.label_cardinalities[label] = (
-                    counter(label)
-                    if counter is not None
-                    else sum(1 for _ in context.graph.iter_node_ids_by_label(label))
-                )
-            counts.append(context.label_cardinalities[label])
+            members = hierarchy.closure(label) if hierarchy is not None else (label,)
+            count = 0
+            for member in members:
+                if member not in context.label_cardinalities:
+                    counter = getattr(context.graph, "count_nodes_by_label", None)
+                    context.label_cardinalities[member] = (
+                        counter(member)
+                        if counter is not None
+                        else sum(1 for _ in context.graph.iter_node_ids_by_label(member))
+                    )
+                count += context.label_cardinalities[member]
+            counts.append(count)
         return (1, min(counts), position)
 
     return tuple(pattern for _, pattern in sorted(enumerate(patterns), key=estimate))
@@ -1703,8 +1780,11 @@ def _node_ids_for_label_expression(source: NodePattern, context: QueryContext):
     if not required:
         return context.graph.get_node_keys_generator()
     matching: set = set()
+    hierarchy = context.label_hierarchy
     for label in required:
-        matching.update(context.graph.iter_node_ids_by_label(label))
+        members = hierarchy.closure(label) if hierarchy is not None else (label,)
+        for member in members:
+            matching.update(context.graph.iter_node_ids_by_label(member))
     return iter(sorted(matching))
 
 

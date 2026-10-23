@@ -51,17 +51,29 @@ Array-Native API Map
    * - Method
      - Use
    * - ``sample_nodes`` / ``sample_edges``
-     - Seed draws with node-type/relation filters; degree/weight strategies where supported
+     - Seed draws with node-type/relation filters, balanced quotas, temporal availability, and degree/weight strategies where supported
    * - ``sample_neighbors`` / ``sample_neighbors_external``
      - Batched uniform or weighted neighbors, direction/relation filters, offsets
    * - ``sample_layers`` / ``sample_layers_external``
      - Independent fanout, direction, relations, replacement, strategy per layer
+   * - ``LayeredSampleBatch.to_blocks`` / ``to_blocks_external``
+     - Bipartite message-passing blocks with local ``edge_index`` frames per layer
+   * - ``LayeredSampleBatch.to_pyg_blocks``
+     - Per-layer PyG-style tensor dictionaries with temporal edge metadata
    * - ``sample_random_walks`` / ``sample_random_walks_external``
      - Uniform/weighted first-order walks, repeating metapaths, restarts, dead-end policies
+   * - ``sample_node2vec_walks`` / ``sample_node2vec_walks_external``
+     - Second-order biased walks with return/in-out factors and restart/terminate dead ends
    * - ``sample_multihop``
      - Multi-hop fanouts, with causal valid-start policies on temporal snapshots
    * - ``sample_subgraph`` / ``sample_subgraph_external``
      - Edge-seeded local batches with positives, negatives, and sampled topology
+   * - ``sample_packed_subgraphs``
+     - Independent per-group subgraphs in one batch with component offsets
+   * - ``sample_partition_block``
+     - Uniform random balanced partition block with exact normalization
+   * - ``sample_induced_subgraph``
+     - Uniform node draws with all eligible induced edges and a fail-closed edge cap
    * - ``sample_hard_negatives``
      - Endpoint-type/relation constraints, positive rejection, temporal policies
 
@@ -216,6 +228,27 @@ time: live reservoir sampling still visits the eligible typed adjacency.
        rng=random.Random(7),
    )
 
+Live Seed Sampling
+------------------
+
+``GraphDB.sample_nodes`` draws live node IDs with reservoir sampling, so memory
+is bounded by ``sample_size`` rather than graph size. Eligible keys are still
+scanned: pass ``label`` to restrict the scan to one native-label index, and
+``node_filter`` to decode and filter candidates. There is no property-index
+pushdown; use indexed snapshot cohorts or Cypher filters when scan time
+matters. The draw is deterministic for a given key order and seeded ``rng``.
+
+.. code-block:: python
+
+   import random
+
+   seeds = graph_db.sample_nodes(
+       32,
+       label="Drug",
+       node_filter=lambda node: node.properties.get("score", 0) >= 0.5,
+       rng=random.Random(7),
+   )
+
 Object-Based Sampling Patterns
 ------------------------------
 
@@ -319,8 +352,8 @@ Persist derived weights with ``snapshot.set_edge_weights(weights,
 source="policy:degree")`` — the rewrite is atomic, compact IDs are untouched,
 and ``edge_weight_source`` records provenance. Draws stay ``uniform`` unless a
 call passes ``strategy="weighted"``; with replacement, fanout caps, and
-zero-weight exclusion are unchanged, and per-type/per-relation quotas remain
-out of scope.
+zero-weight exclusion are unchanged, and per-type/per-relation quotas are
+opt-in through ``balanced=True`` (see below).
 
 .. code-block:: python
 
@@ -362,11 +395,56 @@ out of scope.
 
 ``sample_nodes`` supports uniform, degree-based, and caller-weighted selection,
 with an optional node-type filter. ``sample_edges`` supports uniform or weighted
-selection with an optional relation filter. These are filtered draws, not
-balanced per-type/per-relation quotas. Layer specifications independently select
-fanout, direction, relations, replacement, and strategy. ``LayeredSampleBatch``
-preserves each layer's ``SampledNeighbors`` block and deduplicates the next
-frontier; it does not construct framework-native bipartite message-passing blocks.
+selection with an optional relation filter. These are filtered draws by default;
+pass ``balanced=True`` for deterministic equal quotas across node types or
+relation IDs. Layer specifications independently select fanout, direction,
+relations, replacement, strategy, and balanced allocation.
+``sample_node2vec_walks`` samples node2vec-style second-order walks. From the
+second transition on, candidates are weighted ``1/p`` for returning to the
+previous node, ``1`` at distance one, and ``1/q`` beyond, measured on the
+undirected incident adjacency; the first transition is uniform and static
+snapshot edge weights multiply the bias. Distances ignore relation and
+temporal filters by design.
+
+``LayeredSampleBatch`` preserves each layer's ``SampledNeighbors`` block and
+deduplicates the next frontier. ``to_blocks(snapshot)`` additionally repackages
+each layer as a framework-neutral bipartite message-passing block: unique
+sorted ``src_nodes`` (sampled neighbors) and ``dst_nodes`` (layer inputs) plus
+an ``edge_index`` with one column per sampled edge occurrence, aligned
+``edge_ids``, and ``relation_ids``. Blocks are oriented by message flow
+(neighbor to input); graph-edge orientation is not encoded, so consult the
+``NeighborSamplingSpec`` values passed to ``sample_layers`` when it matters.
+``to_blocks_external(snapshot)`` maps the ID arrays without touching
+``edge_index`` positions. ``to_pyg_blocks(snapshot)`` converts each block to
+``torch.long`` tensors (temporal version IDs stay string-array metadata,
+matching ``SampledSubgraphBatch.to_pyg``); the dictionaries convert directly
+into ``torch_geometric`` bipartite blocks without a ``torch_geometric``
+dependency here.
+
+Balanced quotas
+~~~~~~~~~~~~~~~
+
+``sample_nodes(..., balanced=True)`` splits the requested count equally across
+the distinct compact node types present in the candidate set. ``sample_edges``
+and ``sample_neighbors`` do the same across relation IDs, per candidate for
+edges and per input node for neighbors. Groups are visited in sorted compact-ID
+order; when the count does not divide evenly, earlier groups receive one extra
+slot. With ``replace=False``, a group smaller than its share returns fewer rows
+and unused quota is not borrowed from other groups, so the result can be below
+the requested count. With ``replace=True`` every quota is filled, possibly with
+duplicate rows. Balanced weighted draws skip groups with no positive weight; if
+every group has zero weight, the usual all-zero-weight error is raised.
+
+``balanced`` is also available on ``NeighborSamplingSpec`` and
+``ExternalNeighborSamplingSpec`` so layered sampling can request the same
+contract per layer.
+
+.. code-block:: python
+
+   balanced_neighbors = engine.sample_neighbors([0], 9, balanced=True)
+   balanced_nodes = engine.sample_nodes(30, balanced=True)
+   balanced_edges = engine.sample_edges(9, balanced=True)
+   layer = NeighborSamplingSpec(fanout=9, balanced=True)
 
 Relation sub-property hierarchies
 ---------------------------------
@@ -389,7 +467,24 @@ and expand parent names to their transitive sub-properties before sampling:
 
 Hierarchies are immutable and validated at construction: empty names,
 self-parenting, duplicate child entries, and parent/child cycles all fail
-closed. Then resolve through the snapshot so every engine method composes
+closed. Live typed traversal accepts the hierarchy per call, applying it to
+every hop while keeping the requested fanout as the total across expanded
+relations:
+
+.. code-block:: python
+
+   paths = graph.sample_typed_paths(
+       ["warehouse"],
+       [{"edge_type": "Transport_Edge", "sample_size": 10}],
+       relation_hierarchy=hierarchy,
+   )
+   neighbors = graph.sample_neighbors(
+       "warehouse", "Transport_Edge", sample_size=10,
+       relation_hierarchy=hierarchy,
+   )
+
+Without ``relation_hierarchy``, live traversal keeps literal relation matching.
+Then resolve through the snapshot so every array-native engine method composes
 without new parameters:
 
 .. code-block:: python
@@ -399,9 +494,38 @@ without new parameters:
 
 Expanded names absent from the snapshot fail closed (typo safety), while
 hierarchy-undefined names expand to themselves. Fanout caps apply to the
-union of expanded relations, not per sub-relation. Node sub-types and
-Cypher/planner integration remain open follow-ups on the PropEnh-14
-tracker.
+union of expanded relations, not per sub-relation. Node label sub-types and
+relationship sub-properties are available for opt-in Cypher matching through
+``LabelHierarchy``/``RelationHierarchy`` and
+``GraphDB.query(..., label_hierarchy=..., relation_hierarchy=...)`` (see
+:doc:`cypher`). Sampler node-type expansion over compact snapshot IDs is
+described below; ontology-to-hierarchy construction is described in
+:doc:`ontology`.
+
+Node type hierarchies
+~~~~~~~~~~~~~~~~~~~~~
+
+Snapshots built with semantic ``node_type_values`` record the index-to-name
+mapping. Expand a parent node type to its transitive sub-types before passing
+compact IDs to APIs that accept ``node_types``:
+
+.. code-block:: python
+
+   from gestaltdb import LabelHierarchy
+
+   node_types = LabelHierarchy({
+       "Ocean_Node": ["Transport_Node"],
+       "Refrigerated_Node": ["Ocean_Node"],
+       "Air_Node": ["Transport_Node"],
+   })
+   expanded = snapshot.expand_node_types(["Transport_Node"], node_types)
+   sampled = engine.sample_nodes(32, node_types=expanded)
+
+Values absent from the snapshot fail closed (typo safety), and snapshots built
+only from raw ``node_type_ids`` cannot be expanded because compact IDs have no
+recorded names. Hierarchy-undefined names expand to themselves. Expansion
+changes which nodes are eligible for selection; returned rows keep their
+original arrays and literal compact type IDs.
 
 
 Walks support direction/relation filters, repeating metapaths, weighted steps,
@@ -419,9 +543,12 @@ edge rows rather than ``edge_int``/``sample_subgraph_external`` in that case.
 Layer and walk APIs accept ``temporal`` and ``window_policy`` filters, applied
 before selection at every step; these filters do not impose causal ordering
 between steps. Use the existing multihop/subgraph APIs for causal policies.
-Seed-node and seed-edge draws select from the entire snapshot, including all
-history rows in temporal snapshots; they do not perform time-based selection.
-Omitting ``temporal`` on traversal APIs likewise selects from all snapshot rows.
+Seed-node and seed-edge draws also accept ``temporal`` and ``window_policy``:
+node draws filter node availability, while edge draws filter edge-version
+validity. ``"overlap"`` keeps intervals intersecting the window;
+``"contained"`` keeps intervals fully inside it and therefore excludes
+open-ended intervals. Omitting ``temporal`` on traversal APIs still selects
+from all snapshot rows.
 
 New weights and lookup arrays are authenticated by the v2 artifact catalog.
 Older v2 snapshots without them still load with unit weights and derived
@@ -478,12 +605,76 @@ Set ``causal_policy`` to ``"nondecreasing"`` or ``"nonincreasing"`` to compare
 edge valid-start instants hop by hop along each sampled path. Temporal, relation,
 direction, and causal filters all run before fanout selection.
 
+Seed draws use the same temporal contract before selection:
+
+.. code-block:: python
+
+   seed_nodes = engine.sample_nodes(
+       32, temporal=TemporalContext.as_of(cutoff)
+   )
+   seed_edges = engine.sample_edges(
+       32, temporal=TemporalContext.during(window_start, window_end)
+   )
+
+Node seeds filter on node availability history; edge seeds filter on
+edge-version validity rows. Both accept ``"overlap"`` and ``"contained"``.
+
 Temporal ``SampledNeighbors`` and ``SampledSubgraphBatch`` values expose
 ``edge_version_ids``, ``valid_from_us``, ``valid_to_us``, and
 ``valid_to_open`` aligned with their sampled edge arrays. Supplying a temporal
 filter or causal policy to a non-temporal/legacy snapshot raises ``ValueError``.
 PyG dictionaries and DGL graphs retain string ``edge_version_ids`` as Python
 metadata because their edge-feature stores only accept numeric tensors.
+
+Bounded Induced Subgraphs
+-------------------------
+
+``sample_partition_block`` draws a Cluster-GCN-style random balanced
+partition block: nodes are randomly permuted, split into contiguous chunks of
+nearly equal size, and one chunk is chosen uniformly. Partitions are uniform,
+not cut-optimized — no METIS-style cut quality is claimed. With
+``normalize=True`` nodes carry weight ``num_partitions`` and non-loop edges
+carry the exact reciprocal of the realized pair-selection probability;
+self-loops carry the node weight.
+
+``sample_packed_subgraphs`` samples one independent subgraph per seed-edge
+group — each exactly as ``sample_subgraph`` would sample it alone — and
+repackages them into a single ``SampledSubgraphBatch``. ``graph_node_offsets``
+and ``graph_edge_offsets`` mark each component's rows; local IDs are rebased
+to the concatenated frame, so global IDs may repeat across components while
+each slice stays self-contained. Positive rows follow seed-group order and
+negative diagnostics are summed.
+
+``sample_induced_subgraph`` draws nodes uniformly without replacement and
+returns every eligible edge induced by that node set. Relation and temporal
+filters apply before the ``max_edges`` cap; exceeding the cap raises instead of
+truncating or silently resampling. Positives and negatives are empty, so the
+batch is a framework-neutral topology block for GraphSAINT-style training.
+
+.. code-block:: python
+
+   batch = engine.sample_induced_subgraph(
+       256,
+       max_edges=50_000,
+       relations=[works_for_id],
+       temporal=TemporalContext.as_of(cutoff),
+   )
+   assert batch.positives.size == 0
+   assert batch.n_nodes == 256
+
+Node selection is uniform over the snapshot; there is no degree correction or
+partition sampling in this method. The cap is a fail-closed memory bound, not a
+statistical normalization.
+
+Pass ``normalize=True`` to attach GraphSAINT-style unbiased weights instead:
+``node_weights`` are ``num_nodes_snapshot / num_nodes`` per node and
+non-loop ``edge_weights`` are ``N (N - 1) / (k (k - 1))`` per edge, the exact
+reciprocals of the without-replacement inclusion probabilities. Self-loops
+are node-inclusion events and carry the node weight. Relation and temporal
+filters restrict which edges are returned but do not change the draw
+probabilities, so filtered batches keep the same weights. Weights are
+``None`` by default and flow through ``to_numpy`` and the framework exports
+when present.
 
 Time-Aware Hard Negatives
 -------------------------
@@ -518,6 +709,19 @@ window is trailing: candidates and relation neighborhoods must have been
 available during the configured number of days ending at the example time.
 Without a candidate window they must be available at the example time. Future
 candidates are excluded unless ``allow_future_candidates=True``.
+
+``in_batch=True`` tries other positive heads or tails with the same relation
+before random or context candidates. The current positive endpoint is skipped;
+normal type, availability, duplicate, and positive rejection still apply. If
+the in-batch pool is exhausted, the configured source and random fallback run as
+before. ``accepted_in_batch`` counts accepted peers in
+``return_diagnostics``.
+
+``candidate_distribution="degree"`` applies only to the random fallback and
+weights candidates by ``incident_degree ** degree_exponent`` (default
+``0.75``). In-batch and context candidates are still tried first. A graph with
+no incident edges falls back to uniform sampling; non-finite weights fail closed
+instead of silently degrading.
 
 ``sample_hard_negatives`` accepts aligned ``positive_times_us`` and optionally
 returns deterministic rejection counters with ``return_diagnostics=True``.
