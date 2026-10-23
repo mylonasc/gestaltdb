@@ -663,6 +663,8 @@ with TemporaryDirectory() as tmpdir:
 
         induced = engine.sample_induced_subgraph(2, max_edges=10)
         print(induced.n_nodes, induced.n_edges)
+        normalized = engine.sample_induced_subgraph(2, max_edges=10, normalize=True)
+        print(normalized.node_weights.tolist(), normalized.edge_weights.tolist())
     finally:
         graph.close()
 ```

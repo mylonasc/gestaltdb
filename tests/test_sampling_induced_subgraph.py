@@ -163,3 +163,70 @@ def test_induced_subgraph_temporal_filter(graph, tmp_path):
         window_policy="contained",
     )
     assert contained.n_edges == 0
+
+
+def test_induced_subgraph_weights_absent_by_default(graph, tmp_path):
+    snapshot = build_plain_snapshot(graph, tmp_path / "snapshot")
+    batch = SamplerEngine(snapshot, seed=31).sample_induced_subgraph(3, max_edges=10)
+
+    assert batch.node_weights is None
+    assert batch.edge_weights is None
+    assert "node_weights" not in batch.to_numpy()
+    assert "edge_weights" not in batch.to_numpy()
+
+
+def test_induced_subgraph_normalize_full_graph(graph, tmp_path):
+    snapshot = build_plain_snapshot(graph, tmp_path / "snapshot")
+    batch = SamplerEngine(snapshot, seed=37).sample_induced_subgraph(
+        snapshot.num_nodes, max_edges=20, normalize=True
+    )
+
+    assert batch.node_weights.tolist() == [1.0] * snapshot.num_nodes
+    assert batch.edge_weights.tolist() == [1.0] * batch.n_edges
+    assert batch.to_numpy()["node_weights"].tolist() == batch.node_weights.tolist()
+
+
+def test_induced_subgraph_normalize_partial_graph(graph, tmp_path):
+    snapshot = build_plain_snapshot(graph, tmp_path / "snapshot")
+    batch = SamplerEngine(snapshot, seed=41).sample_induced_subgraph(
+        3, max_edges=10, normalize=True
+    )
+    total = snapshot.num_nodes
+
+    assert batch.node_weights.tolist() == [total / 3] * batch.n_nodes
+    pair_weight = total * (total - 1) / (3 * 2)
+    assert batch.edge_weights.tolist() == [pair_weight] * batch.n_edges
+
+
+def test_induced_subgraph_normalize_self_loops(tmp_path):
+    from gestaltdb.sampling import SamplerSnapshot
+
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "snapshot",
+        external_node_ids=["n0", "n1", "n2"],
+        external_edge_ids=["loop0", "loop1", "loop2"],
+        external_relation_ids=["R"],
+        src_int=[0, 1, 2],
+        dst_int=[0, 1, 2],
+        rel_int=[0, 0, 0],
+    )
+    batch = SamplerEngine(snapshot, seed=43).sample_induced_subgraph(
+        1, max_edges=10, normalize=True
+    )
+
+    assert batch.n_nodes == 1
+    assert batch.n_edges == 1
+    assert batch.node_weights.tolist() == [3.0]
+    assert batch.edge_weights.tolist() == [3.0]
+
+
+def test_induced_subgraph_normalize_empty_and_validation(graph, tmp_path):
+    snapshot = build_plain_snapshot(graph, tmp_path / "snapshot")
+    engine = SamplerEngine(snapshot, seed=47)
+
+    empty = engine.sample_induced_subgraph(0, max_edges=0, normalize=True)
+    assert empty.node_weights.size == 0
+    assert empty.edge_weights.size == 0
+
+    with pytest.raises(ValueError, match="normalize"):
+        engine.sample_induced_subgraph(1, max_edges=10, normalize="yes")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -1230,6 +1230,7 @@ class SamplerEngine:
         relations: Sequence[int] | np.ndarray | None = None,
         temporal: TemporalContext | None = None,
         window_policy: str = "overlap",
+        normalize: bool = False,
     ) -> SampledSubgraphBatch:
         """Sample a bounded node-induced subgraph.
 
@@ -1250,6 +1251,19 @@ class SamplerEngine:
                 to induced edges.
             window_policy: Window matching policy, ``"overlap"`` or
                 ``"contained"``.
+            normalize: When true, attach GraphSAINT-style unbiased
+                ``node_weights`` and ``edge_weights``. Uniform
+                without-replacement node sampling includes each node with
+                probability ``num_nodes / num_nodes_snapshot`` and each
+                distinct node pair with probability
+                ``num_nodes * (num_nodes - 1) / (num_nodes_snapshot *
+                (num_nodes_snapshot - 1))``, so node weights are the
+                reciprocal of the first probability and non-loop edge weights
+                the reciprocal of the second. Self-loops are node-inclusion
+                events and carry the node weight. Weights are exact for the
+                unfiltered node draw; relation and temporal filters restrict
+                which edges are returned but do not change the draw
+                probabilities, so filtered batches keep the same weights.
 
         Returns:
             ``SampledSubgraphBatch`` with sampled nodes and all eligible induced
@@ -1257,17 +1271,20 @@ class SamplerEngine:
 
         Raises:
             ValueError: If counts are invalid, ``num_nodes`` exceeds the
-                snapshot, or the induced edge count exceeds ``max_edges``.
+                snapshot, the induced edge count exceeds ``max_edges``, or
+                ``normalize`` is not a boolean.
 
         Examples:
             Draw a bounded GraphSAINT-style node subgraph::
 
                 batch = engine.sample_induced_subgraph(
-                    256, max_edges=50_000
+                    256, max_edges=50_000, normalize=True
                 )
         """
         _validate_count(num_nodes, "num_nodes")
         _validate_count(max_edges, "max_edges")
+        if not isinstance(normalize, bool):
+            raise ValueError("normalize must be a boolean")
         if num_nodes > self.snapshot.num_nodes:
             raise ValueError("num_nodes exceeds snapshot node count")
         self._validate_sampling_options(
@@ -1281,9 +1298,16 @@ class SamplerEngine:
         )
         empty_triples = np.empty((0, 3), dtype=np.int64)
         if num_nodes == 0:
-            return self._batch_from_edges(
+            batch = self._batch_from_edges(
                 [], [], positives=empty_triples, negatives=empty_triples
             )
+            if normalize:
+                batch = replace(
+                    batch,
+                    node_weights=np.empty(0, dtype=np.float64),
+                    edge_weights=np.empty(0, dtype=np.float64),
+                )
+            return batch
         sampled_nodes = self.rng.choice(
             self.snapshot.num_nodes, size=int(num_nodes), replace=False
         ).astype(np.int64, copy=False)
@@ -1315,10 +1339,32 @@ class SamplerEngine:
                 f"induced subgraph has {candidates.size} eligible edges, "
                 f"exceeding max_edges={max_edges}"
             )
-        return self._batch_from_edges(
+        batch = self._batch_from_edges(
             sampled_nodes, candidates,
             positives=empty_triples, negatives=empty_triples,
         )
+        if normalize:
+            total_nodes = self.snapshot.num_nodes
+            node_weight = float(total_nodes) / float(num_nodes)
+            node_weights = np.full(batch.n_nodes, node_weight, dtype=np.float64)
+            if batch.n_edges:
+                loops = (
+                    self.snapshot.src_int[batch.edge_ids_global]
+                    == self.snapshot.dst_int[batch.edge_ids_global]
+                )
+                if num_nodes < 2:
+                    pair_weight = node_weight
+                else:
+                    pair_weight = (
+                        float(total_nodes) * float(total_nodes - 1)
+                        / (float(num_nodes) * float(num_nodes - 1))
+                    )
+                edge_weights = np.full(batch.n_edges, pair_weight, dtype=np.float64)
+                edge_weights[loops] = node_weight
+            else:
+                edge_weights = np.empty(0, dtype=np.float64)
+            batch = replace(batch, node_weights=node_weights, edge_weights=edge_weights)
+        return batch
 
     def is_positive(
         self, src: int, rel: int, dst: int, *, temporal: TemporalContext | None = None,
