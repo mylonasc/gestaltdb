@@ -16,6 +16,7 @@ python -m gestaltdb.agent_docs install-opencode-skill
 python -m gestaltdb.agent_docs list
 python -m gestaltdb.agent_docs get quickstart
 python -m gestaltdb.agent_docs get cypher --examples
+python -m gestaltdb.agent_docs get ontology --examples
 python -m gestaltdb.agent_docs search "IndexMaintenanceMode.DEFER"
 ```
 

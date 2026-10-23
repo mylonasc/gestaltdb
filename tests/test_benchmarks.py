@@ -80,6 +80,33 @@ def test_sampler_benchmark_cli_smoke(capsys):
     assert "SamplerEngine" in output
 
 
+def test_sampler_benchmark_all_workloads_high_degree(capsys):
+    cli.main([
+        "sampler", "--nodes", "30", "--edges", "200", "--relations", "2",
+        "--batch-nodes", "8", "--fanout", "3", "--iterations", "1", "--seed", "7",
+        "--workload", "all", "--high-degree",
+    ])
+    output = capsys.readouterr().out
+    assert "mode=high-degree" in output
+    assert "baseline GraphDB-style sampler:" in output
+    assert "seed selection (sample_nodes + sample_edges):" in output
+    assert "weighted selection:" in output
+    assert "two-layer expansion:" in output
+    assert "first-order walks:" in output
+
+
+def test_sampler_benchmark_importance_degree(capsys):
+    cli.main([
+        "sampler", "--nodes", "30", "--edges", "200", "--relations", "2",
+        "--batch-nodes", "8", "--fanout", "3", "--iterations", "1", "--seed", "7",
+        "--high-degree", "--importance", "degree",
+    ])
+    output = capsys.readouterr().out
+    assert "importance-weighted neighbors:" in output
+    assert "mean sampled neighbor degree: uniform=" in output
+    assert "weighted=" in output
+
+
 def test_timing_timed(capsys):
     result, elapsed = timed("test_op", lambda: "ok")
     assert result == "ok"

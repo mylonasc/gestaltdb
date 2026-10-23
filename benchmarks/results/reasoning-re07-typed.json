@@ -1,0 +1,182 @@
+{
+  "complete": true,
+  "git_revision": "15912396024697477aa1f6bce89a1a8f8b11db42",
+  "harness_sha256": "89ba7fbbef3e00e4d317b59b2877f4d4c75af09cc45e8a47aaed022701487e83",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "python": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
+  "rows": [
+    {
+      "closure_digest": "3248f024d4fe5f3737546cd9e5a8b20e56938c2f348630554d11822ea4088911",
+      "closure_facts": 1280,
+      "execution_kind": "translated-binary-programs-no-literals",
+      "iterations": 5,
+      "metrics": {
+        "compile_s": 9.057098941411823e-05,
+        "fixture_s": 0.004412306996528059,
+        "generic_s": 0.005462907996843569,
+        "indexed_s": 0.003695652005262673,
+        "pipeline_s": 0.009158560002106242,
+        "translation_s": 3.169100091326982e-05
+      },
+      "rss_peak_bytes": 55230464,
+      "size": 256,
+      "status": "ok",
+      "worker_wall_s": 0.2881291249941569,
+      "workload": "hierarchy"
+    },
+    {
+      "closure_digest": "3248f024d4fe5f3737546cd9e5a8b20e56938c2f348630554d11822ea4088911",
+      "closure_facts": 1280,
+      "execution_kind": "translated-binary-programs-no-literals",
+      "iterations": 5,
+      "metrics": {
+        "compile_s": 8.963800792116672e-05,
+        "fixture_s": 0.004337086997111328,
+        "generic_s": 0.005548960994929075,
+        "indexed_s": 0.003725329996086657,
+        "pipeline_s": 0.009274290991015732,
+        "translation_s": 3.278799704276025e-05
+      },
+      "rss_peak_bytes": 55771136,
+      "size": 256,
+      "status": "ok",
+      "worker_wall_s": 0.28750953200506046,
+      "workload": "hierarchy"
+    },
+    {
+      "closure_digest": "3248f024d4fe5f3737546cd9e5a8b20e56938c2f348630554d11822ea4088911",
+      "closure_facts": 1280,
+      "execution_kind": "translated-binary-programs-no-literals",
+      "iterations": 5,
+      "metrics": {
+        "compile_s": 9.34590061660856e-05,
+        "fixture_s": 0.004524596995906904,
+        "generic_s": 0.005583840000326745,
+        "indexed_s": 0.0037154729943722486,
+        "pipeline_s": 0.009299312994698994,
+        "translation_s": 3.522199403960258e-05
+      },
+      "rss_peak_bytes": 55648256,
+      "size": 256,
+      "status": "ok",
+      "worker_wall_s": 0.2891075439983979,
+      "workload": "hierarchy"
+    },
+    {
+      "closure_digest": "76e0c97270d0ec60210c8e4759df120246ac7760091bded75232b9c73a555e86",
+      "closure_facts": 9227,
+      "execution_kind": "translated-binary-programs-no-literals",
+      "iterations": 6,
+      "metrics": {
+        "compile_s": 8.372400770895183e-05,
+        "fixture_s": 0.005616413996904157,
+        "generic_s": 0.1427731820003828,
+        "indexed_s": 0.08567504900565837,
+        "pipeline_s": 0.22844823100604117,
+        "translation_s": 2.5478002498857677e-05
+      },
+      "rss_peak_bytes": 62189568,
+      "size": 1024,
+      "status": "ok",
+      "worker_wall_s": 0.5357963949936675,
+      "workload": "recursive"
+    },
+    {
+      "closure_digest": "76e0c97270d0ec60210c8e4759df120246ac7760091bded75232b9c73a555e86",
+      "closure_facts": 9227,
+      "execution_kind": "translated-binary-programs-no-literals",
+      "iterations": 6,
+      "metrics": {
+        "compile_s": 7.795800047460943e-05,
+        "fixture_s": 0.005579482007306069,
+        "generic_s": 0.14181247200758662,
+        "indexed_s": 0.08747006799967494,
+        "pipeline_s": 0.22928254000726156,
+        "translation_s": 2.4815002689138055e-05
+      },
+      "rss_peak_bytes": 61485056,
+      "size": 1024,
+      "status": "ok",
+      "worker_wall_s": 0.5302129830088234,
+      "workload": "recursive"
+    },
+    {
+      "closure_digest": "76e0c97270d0ec60210c8e4759df120246ac7760091bded75232b9c73a555e86",
+      "closure_facts": 9227,
+      "execution_kind": "translated-binary-programs-no-literals",
+      "iterations": 6,
+      "metrics": {
+        "compile_s": 7.964299584273249e-05,
+        "fixture_s": 0.005464197995024733,
+        "generic_s": 0.1418252970033791,
+        "indexed_s": 0.08465590000560042,
+        "pipeline_s": 0.2264811970089795,
+        "translation_s": 2.584898902568966e-05
+      },
+      "rss_peak_bytes": 60710912,
+      "size": 1024,
+      "status": "ok",
+      "worker_wall_s": 0.5318670109991217,
+      "workload": "recursive"
+    },
+    {
+      "closure_digest": "12edbc64b9fab8587ccd9719eb02df6aee8cadce4083100c0c588a093e32c0fc",
+      "closure_facts": 8128,
+      "execution_kind": "translated-binary-programs-no-literals",
+      "iterations": 8,
+      "metrics": {
+        "compile_s": 5.746200622525066e-05,
+        "fixture_s": 0.005038499002694152,
+        "generic_s": 0.9349165629973868,
+        "indexed_s": 0.548591380007565,
+        "pipeline_s": 1.4835079430049518,
+        "translation_s": 1.847399107646197e-05
+      },
+      "rss_peak_bytes": 58802176,
+      "size": 128,
+      "status": "ok",
+      "worker_wall_s": 1.7794211429863935,
+      "workload": "dense"
+    },
+    {
+      "closure_digest": "12edbc64b9fab8587ccd9719eb02df6aee8cadce4083100c0c588a093e32c0fc",
+      "closure_facts": 8128,
+      "execution_kind": "translated-binary-programs-no-literals",
+      "iterations": 8,
+      "metrics": {
+        "compile_s": 5.971599603071809e-05,
+        "fixture_s": 0.004918378006550483,
+        "generic_s": 0.929433319994132,
+        "indexed_s": 0.5440186669875402,
+        "pipeline_s": 1.4734519869816722,
+        "translation_s": 1.85959943337366e-05
+      },
+      "rss_peak_bytes": 58974208,
+      "size": 128,
+      "status": "ok",
+      "worker_wall_s": 1.762869154001237,
+      "workload": "dense"
+    },
+    {
+      "closure_digest": "12edbc64b9fab8587ccd9719eb02df6aee8cadce4083100c0c588a093e32c0fc",
+      "closure_facts": 8128,
+      "execution_kind": "translated-binary-programs-no-literals",
+      "iterations": 8,
+      "metrics": {
+        "compile_s": 6.0393998865038157e-05,
+        "fixture_s": 0.005235638003796339,
+        "generic_s": 0.9296018360037124,
+        "indexed_s": 0.5433291820081649,
+        "pipeline_s": 1.4729310180118773,
+        "translation_s": 1.8598002498038113e-05
+      },
+      "rss_peak_bytes": 58433536,
+      "size": 128,
+      "status": "ok",
+      "worker_wall_s": 1.7762241589953192,
+      "workload": "dense"
+    }
+  ],
+  "schema_version": 1,
+  "working_tree_dirty": false
+}

@@ -8,6 +8,25 @@ GestaltDB is an embedded property-graph toolkit with **high-performance graph sa
 
 Documentation: https://mylonasc.github.io/gestaltdb/
 
+**Ontology reasoning:** compile immutable class/property axioms into bounded,
+read-only Datalog closure, with optional witness explanations and an explicit
+pinned temporal-claims adapter. No new solver dependency or JVM is required.
+This is the selected `gestalt-core-v1` fragment, not full OWL or automatic query/
+sampling expansion. See [the guide](docs/ontology.rst) and
+[measured solver trade-offs](docs/ontology-benchmarks.rst).
+Optional, explicit adapters add strict offline RDF import (`gestaltdb[rdf]`),
+[current-graph projection and inferred-neighbor fanout](docs/ontology-graph.rst),
+and [point-only publication/reconciliation](docs/ontology-publication.rst).
+These do not implicitly change Cypher or sampler results.
+
+**Reasoning engine testing milestone (0.13.0rc1 candidate):** standalone typed
+rules, selective demand queries, scoped negation/validation/equality, explicit
+incremental sessions and positive temporal range workflows are available for
+release testing. Indexed Python stays the default; experimental paths and
+unsupported combinations remain explicit. See the
+[testing guide and compatibility boundaries](docs/reasoning-testing.rst).
+The candidate version is not available from PyPI until its prerelease is published.
+
 ## Filter, Sample, Train
 
 | Capability | What you can do |

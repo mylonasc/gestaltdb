@@ -80,7 +80,9 @@ def as_sampling_pattern(
 
 
 from .batch import SampledSubgraphBatch  # noqa: E402
-from .engine import ExternalNeighborSamplingSpec, LayeredSampleBatch, NeighborSamplingSpec, RandomWalkBatch, SampledNeighbors, SamplerEngine  # noqa: E402
+from .engine import ExternalNeighborSamplingSpec, LayeredSampleBatch, NeighborSamplingSpec, RandomWalkBatch, SampledNeighbors, SamplerEngine, split_seed  # noqa: E402
+from .hierarchy import RelationHierarchy  # noqa: E402
+from .importance import IMPORTANCE_POLICIES, derive_edge_weights  # noqa: E402
 from .feeder import AsyncBatchFeeder  # noqa: E402
 from .negatives import HardNegativeConfig  # noqa: E402
 from .snapshot import SamplerSnapshot  # noqa: E402
@@ -88,11 +90,13 @@ from .snapshot import SamplerSnapshot  # noqa: E402
 
 __all__ = [
     "HardNegativeConfig",
+    "IMPORTANCE_POLICIES",
     "AsyncBatchFeeder",
     "ExternalNeighborSamplingSpec",
     "LayeredSampleBatch",
     "NeighborSamplingSpec",
     "RandomWalkBatch",
+    "RelationHierarchy",
     "SampledNeighbors",
     "SampledSubgraphBatch",
     "SamplerEngine",
@@ -101,4 +105,6 @@ __all__ = [
     "SamplingPattern",
     "as_sampling_hop",
     "as_sampling_pattern",
+    "derive_edge_weights",
+    "split_seed",
 ]

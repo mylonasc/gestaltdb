@@ -1,0 +1,41 @@
+{
+  "repository": "mylonasc/gestaltdb",
+  "roadmap": 156,
+  "epics": {
+    "RE-E1": 157,
+    "RE-E2": 158,
+    "RE-E3": 159,
+    "RE-E4": 160,
+    "RE-E5": 161
+  },
+  "features": {
+    "RE-01": 162,
+    "RE-02": 163,
+    "RE-03": 164,
+    "RE-04": 165,
+    "RE-05": 166,
+    "RE-06": 167,
+    "RE-07": 168,
+    "RE-08": 169,
+    "RE-09": 170,
+    "RE-10": 171,
+    "RE-11": 172,
+    "RE-12": 173,
+    "RE-13": 174,
+    "RE-14": 175,
+    "RE-15": 176,
+    "RE-16": 177,
+    "RE-17": 178,
+    "RE-18": 179,
+    "RE-19": 180,
+    "RE-20": 181,
+    "RE-21": 182,
+    "RE-22": 183,
+    "RE-23": 184,
+    "RE-24": 185,
+    "RE-25": 186,
+    "RE-26": 187,
+    "RE-27": 188
+  },
+  "relationships": "Native GitHub parent/sub-issue and blocked-by links verified on 2026-10-20; expected graph is roadmap.json."
+}

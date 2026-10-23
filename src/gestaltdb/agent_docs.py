@@ -24,6 +24,10 @@ class Topic(NamedTuple):
 
 
 TOPICS: dict[str, Topic] = {
+    "ontology": Topic(
+        "ontology", "Ontology Reasoning", "Standalone ontology compilation, bounded Datalog, witnesses and pinned claim evidence.",
+        "references/ontology.md",
+    ),
     "quickstart": Topic(
         "quickstart",
         "Quickstart For Library Users",

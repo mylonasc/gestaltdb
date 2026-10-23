@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gestaltdb"
-version = "0.12.1"
+version = "0.13.0rc1"
 description = "A pure Python GraphDB for attributed graphs."
 authors = [
     { name = "Mylonas Charilaos", email = "mylonas.charilaos@gmail.com" },
@@ -24,6 +24,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+rdf = ["rdflib>=7.6.0,<8"]
 lmdb = ["lmdb"]
 leveldb = ["plyvel>=1.5.1"]
 msgpack = ["msgpack>=1.2.1"]

@@ -32,6 +32,7 @@ Filter, Sample, Train
 
    property-filtering
    typed-sampling
+   sampling-consistency
 
 .. toctree::
    :maxdepth: 2
@@ -44,6 +45,12 @@ Filter, Sample, Train
    operations
    temporal-versioning
    modal-epistemic
+   inference-audit
+   reasoning-testing
+   ontology
+   ontology-graph
+   ontology-benchmarks
+   ontology-publication
    cypher
    visualization
    performance

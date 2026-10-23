@@ -1,0 +1,161 @@
+name: Ontology conformance
+
+on:
+  push:
+    branches: [main, onto-dev, feature/onto-dev-epic-2]
+    paths:
+      - "src/gestaltdb/**/*.py"
+      - "tests/**"
+      - "benchmarks/ontology.py"
+      - "benchmarks/reasoning_contracts.py"
+      - "benchmarks/reasoning_batches.py"
+      - "benchmarks/reasoning_extraction.py"
+      - "benchmarks/reasoning_typed.py"
+      - "planning/reasoning-engine/**"
+      - "gestaltdb_reasoning_feature_tracker.xlsx"
+      - "EPIC_REASONING_ENGINE.md"
+      - "docs/reasoning-execution.rst"
+      - "docs/reasoning-batches.rst"
+      - "docs/reasoning-polars.rst"
+      - "docs/reasoning-plans.rst"
+      - "docs/reasoning-extraction.rst"
+      - "docs/reasoning-executors.rst"
+      - "docs/reasoning-typed.rst"
+      - "benchmarks/ontology-requirements.txt"
+      - "benchmarks/cli.py"
+      - "docs/ontology-contract.rst"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/ontology.yml"
+  pull_request:
+    branches: [main, onto-dev, feature/onto-dev-epic-2]
+    paths:
+      - "src/gestaltdb/**/*.py"
+      - "tests/**"
+      - "benchmarks/ontology.py"
+      - "benchmarks/reasoning_contracts.py"
+      - "benchmarks/reasoning_batches.py"
+      - "benchmarks/reasoning_extraction.py"
+      - "benchmarks/reasoning_typed.py"
+      - "planning/reasoning-engine/**"
+      - "gestaltdb_reasoning_feature_tracker.xlsx"
+      - "EPIC_REASONING_ENGINE.md"
+      - "docs/reasoning-execution.rst"
+      - "docs/reasoning-batches.rst"
+      - "docs/reasoning-polars.rst"
+      - "docs/reasoning-plans.rst"
+      - "docs/reasoning-extraction.rst"
+      - "docs/reasoning-executors.rst"
+      - "docs/reasoning-typed.rst"
+      - "benchmarks/ontology-requirements.txt"
+      - "benchmarks/cli.py"
+      - "docs/ontology-contract.rst"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/ontology.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  ontology:
+    name: Ontology (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install LevelDB build dependency
+        run: sudo apt-get update && sudo apt-get install --yes libleveldb-dev
+      - name: Install test backends and optional conformance oracle
+        run: python -m pip install -e ".[coverage,lmdb,leveldb,arrow,polars]" "pyrex-rocksdb>=0.5.0" -r benchmarks/ontology-requirements.txt
+      - name: Require an importable oracle rather than silently skipping
+        run: >-
+          python -c "import owlrl, rdflib, clingo, pyarrow, polars; from importlib.metadata import version; print({name: version(name) for name in ('owlrl', 'rdflib', 'clingo', 'pyarrow', 'polars')})"
+      - name: Run standalone, adapter and oracle gates
+        # Glob discovery (not a hand-maintained file list): every
+        # test_reasoning* and test_ontology* module runs here. The
+        # workflow-selection guard test fails if explicit per-file
+        # paths are reintroduced.
+        run: >-
+          python -m pytest -q
+          tests/test_reasoning*.py
+          tests/test_rule*.py
+          tests/test_ontology*.py
+          tests/test_temporal*.py
+          tests/test_graphdb_versions.py
+      - name: Build the distributable wheel
+        run: python -m pip wheel --no-deps --wheel-dir "${{ runner.temp }}/ontology-wheels" .
+      - name: Smoke installed standalone APIs outside the checkout
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -m venv ontology-wheel-env
+          ontology-wheel-env/bin/python -m pip install ontology-wheels/*.whl
+          ontology-wheel-env/bin/python - <<'PY'
+          import sys
+          import gestaltdb
+          from gestaltdb import agent_docs
+          from gestaltdb.reasoning import Program, ReasoningLimits
+          from gestaltdb.reasoning.protocols import InputContext
+          from gestaltdb.reasoning.relational import CompilationIdentity, RelationalProgram, explain_plan
+          from gestaltdb.reasoning.plans import PlannedDatalogEngine, PreparedProgram
+          from gestaltdb.reasoning.batches import SymbolDictionary, CompactRelation
+          from gestaltdb.ontology.adapters.rdf import RDFDocument, import_rdf
+          assert "site-packages" in gestaltdb.__file__, gestaltdb.__file__
+          program = Program()
+          identity = CompilationIdentity(program.digest, InputContext("h", "w", "o", "p", "m"),
+                                         "d", "positive-binary-entity-v1", "indexed-python-v1")
+          assert explain_plan(program, identity=identity)["relational_digest"] == RelationalProgram.from_program(program).digest
+          planned_identity = CompilationIdentity(program.digest, identity.context, "external-strings-v1",
+                                                 "positive-binary-entity-v1", "indexed-scc-v1")
+          prepared = PreparedProgram(program, planned_identity)
+          planned_run = PlannedDatalogEngine().evaluate(prepared, [], identity=planned_identity,
+                                                       limits=ReasoningLimits(), collect_telemetry=True)
+          assert planned_run.result.facts == () and planned_run.telemetry_enabled
+          from gestaltdb.reasoning.relational import RelationSchema
+          from gestaltdb.reasoning.adapters.arrow import to_arrow
+          from gestaltdb.reasoning.adapters.polars import PolarsDatalogPrototype
+          dictionary = SymbolDictionary(identity.context, ("a", "b"))
+          batch = CompactRelation.from_rows(RelationSchema("p", ("s", "o")), dictionary, [("a", "b")])
+          assert batch.nbytes == 16
+          assert "pyarrow" not in sys.modules and "polars" not in sys.modules
+          try:
+              to_arrow(batch)
+          except ImportError as error:
+              assert "gestaltdb[arrow]" in str(error)
+          else:
+              raise AssertionError("base wheel unexpectedly installed PyArrow")
+          try:
+              PolarsDatalogPrototype().evaluate(program, [], context=identity.context,
+                                                limits=ReasoningLimits())
+          except ImportError as error:
+              assert "gestaltdb[polars]" in str(error)
+          else:
+              raise AssertionError("base wheel unexpectedly installed Polars")
+          from gestaltdb.reasoning.adapters.native import NativeKeyScan
+          assert "pyrex" not in sys.modules
+          try:
+              NativeKeyScan(object())
+          except ImportError as error:
+              assert "pyrex-rocksdb" in str(error)
+          else:
+              raise AssertionError("base wheel unexpectedly installed PyRex")
+          for example in agent_docs.extract_python_examples(agent_docs.read_topic("ontology")):
+              exec(example, {})
+          assert "rdflib" not in sys.modules
+          assert "clingo" not in sys.modules
+          try:
+              import_rdf(RDFDocument(""), ontology_id="urn:smoke")
+          except ImportError as error:
+              assert "gestaltdb[rdf]" in str(error)
+          else:
+              raise AssertionError("base wheel unexpectedly installed RDFLib")
+          PY

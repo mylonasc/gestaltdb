@@ -1,0 +1,138 @@
+{
+  "command": [
+    "/tmp/opencode/gestaltdb-onto-07/benchmarks/ontology.py",
+    "--backends",
+    "native",
+    "native-proofs",
+    "--workloads",
+    "dense",
+    "--sizes",
+    "128",
+    "--repeats",
+    "1",
+    "--max-candidates",
+    "100",
+    "--timeout",
+    "10",
+    "--temp-root",
+    "/tmp/opencode",
+    "--output",
+    "benchmarks/results/ontology-v1-limits.json"
+  ],
+  "complete": true,
+  "footprint": {
+    "clingo_runtime_chain": {
+      "cffi": {
+        "installed_file_bytes": 735670,
+        "version": "2.1.1"
+      },
+      "clingo": {
+        "installed_file_bytes": 6617709,
+        "version": "5.8.2"
+      },
+      "pycparser": {
+        "installed_file_bytes": 203921,
+        "version": "3.0"
+      }
+    },
+    "common_existing_dependencies": {
+      "lark": {
+        "installed_file_bytes": 358152,
+        "version": "1.3.1"
+      },
+      "numpy": {
+        "installed_file_bytes": 57129271,
+        "version": "2.5.2"
+      }
+    },
+    "feature_python_files": 10,
+    "feature_source_bytes": 55337,
+    "feature_sources_sha256": "1e51aa429716505e1470dbf1a7863c023bb8d9058d7ee5967c568621953c0e36",
+    "legacy_backend": {
+      "lmdb": {
+        "installed_file_bytes": 1014808,
+        "version": "2.2.1"
+      }
+    },
+    "owlrl_runtime_chain": {
+      "owlrl": {
+        "installed_file_bytes": 223893,
+        "version": "7.6.2"
+      },
+      "pyparsing": {
+        "installed_file_bytes": 489173,
+        "version": "3.3.3"
+      },
+      "rdflib": {
+        "installed_file_bytes": 2361176,
+        "version": "7.6.0"
+      }
+    }
+  },
+  "git_revision": "a5f63354edddb6723bd35144a4a057a95a7d773a",
+  "harness_sha256": "41c37e788177c0a4c8923c3768622bd4976ec3db5c652cd5270e0ef15442d4d5",
+  "logical_cpus": 24,
+  "machine": "x86_64",
+  "planned_rows": 2,
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "processor": "x86_64",
+  "python": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
+  "rows": [
+    {
+      "backend": "native",
+      "max_candidates": 100,
+      "max_facts": 100000,
+      "max_input": 100000,
+      "max_justifications": 100000,
+      "metrics": {
+        "backend_import_s": 6.779955583624542e-07,
+        "common_import_s": 0.2612495709981886,
+        "compile_s": 5.690300167771056e-05,
+        "conversion_s": 8.62969973240979e-05,
+        "fixture_s": 0.0013771879966952838,
+        "ground_s": 0.0,
+        "init_s": 2.4099426809698343e-07,
+        "load_s": 0.0,
+        "proof_query_s": null,
+        "proofs_truncated": null
+      },
+      "reason": "ReasoningLimitError: evaluation exceeded max_candidate_rows=100",
+      "repeat": 0,
+      "rss_peak_bytes": 55214080,
+      "size": 128,
+      "status": "limited",
+      "temp_root": "/tmp/opencode",
+      "worker_wall_s": 0.30933028899744386,
+      "workload": "dense"
+    },
+    {
+      "backend": "native-proofs",
+      "max_candidates": 100,
+      "max_facts": 100000,
+      "max_input": 100000,
+      "max_justifications": 100000,
+      "metrics": {
+        "backend_import_s": 6.859991117380559e-07,
+        "common_import_s": 0.26630933200067375,
+        "compile_s": 6.412199581973255e-05,
+        "conversion_s": 8.887799776857719e-05,
+        "fixture_s": 0.001548106003610883,
+        "ground_s": 0.0,
+        "init_s": 2.490050974301994e-07,
+        "load_s": 0.0,
+        "proof_query_s": null,
+        "proofs_truncated": null
+      },
+      "reason": "ReasoningLimitError: evaluation exceeded max_candidate_rows=100",
+      "repeat": 0,
+      "rss_peak_bytes": 55062528,
+      "size": 128,
+      "status": "limited",
+      "temp_root": "/tmp/opencode",
+      "worker_wall_s": 0.32077528099762276,
+      "workload": "dense"
+    }
+  ],
+  "schema_version": 1,
+  "started_utc": "2026-10-19T21:17:25.986642+00:00"
+}

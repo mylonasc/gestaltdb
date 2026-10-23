@@ -32,6 +32,10 @@ graph API lives in submodules rather than entirely at the package root:
    finally:
        graph.close()
 
+Standalone ontology compilation lives in ``gestaltdb.ontology`` and bounded
+Datalog/witness values in ``gestaltdb.reasoning``. Database adapters are explicit
+imports from ``gestaltdb.reasoning.adapters``; inference does not mutate graphs.
+
 Import core graph classes from ``gestaltdb.graphdb``, storage backends from
 ``gestaltdb.kvstores``, serializers from ``gestaltdb.serializers``, canonical
 temporal values from ``gestaltdb.temporal``, epistemic claim values from
@@ -92,6 +96,7 @@ from .modal import (
     ModalExpression,
     ModalOperator,
 )
+from .hierarchy import LabelHierarchy
 from .ingestion import ColumnarIngestionMode, EdgeList, IndexMaintenanceMode, NodeList
 from .query_engine.cypher import QueryResult
 from .readview import (
@@ -105,6 +110,7 @@ from .rules import (
     ClaimExplanation,
     ExplanationEdge,
     ExplanationNode,
+    RuleAbsence,
     RuleAtom,
     RuleError,
     RuleEvaluationLimitError,
@@ -136,6 +142,7 @@ __all__ = [
     "ExplanationEdge",
     "ExplanationNode",
     "IndexMaintenanceMode",
+    "LabelHierarchy",
     "ModalEntailmentResult",
     "ModalError",
     "ModalEvaluationLimitError",
@@ -148,6 +155,7 @@ __all__ = [
     "CurrentReadProvenance",
     "ProvenanceMismatchError",
     "ReadViewProvenance",
+    "RuleAbsence",
     "RuleAtom",
     "RuleError",
     "RuleEvaluationLimitError",

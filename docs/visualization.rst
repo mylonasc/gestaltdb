@@ -151,6 +151,8 @@ Load view state accepts a local file for the same embedded graph topology and
 validates all fields before applying changes. No server or notebook kernel
 communication is required. Loading a paused view restores the arrangement
 exactly; loading an unpaused view resumes simulation from the saved positions.
+The imported pan/zoom survives automatic canvas resizing until an explicit
+Fit visible graph or Reset layout action chooses a new viewport.
 Download graph JSON remains a separate data export.
 
 To reuse saved coordinates in Python, read the view JSON and pass its positions

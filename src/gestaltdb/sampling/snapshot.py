@@ -15,6 +15,7 @@ from typing import Callable, Sequence
 import numpy as np
 
 from .adjacency import CSRAdjacency, build_csr
+from ..hierarchy import LabelHierarchy, RelationHierarchy
 
 
 SNAPSHOT_FORMAT_VERSION = 2
@@ -324,6 +325,7 @@ class SamplerSnapshot:
             "storage": storage,
             "layout": layout,
             "dtypes": {"ids": "str", "indices": "int64"},
+            "filtered": node_filter is not None or edge_filter is not None,
         }
         if source_db is not None:
             metadata["source_db"] = cls._normalize_source_reference(source_db, path)
@@ -333,6 +335,20 @@ class SamplerSnapshot:
             from gestaltdb.readview import parse_read_provenance
 
             metadata["source_provenance"] = parse_read_provenance(source_provenance).to_dict()
+        metadata["snapshot_id"] = uuid.uuid4().hex
+        metadata["source_version"] = cls._source_version_of(graph)
+        metadata["schema_hash"] = _consistency_schema_hash({
+            "edge_type_property": edge_type_property,
+            "edge_weight_property": edge_weight_property,
+            "node_type_property": node_type_property,
+            "directed": directed,
+            "include_reverse": include_reverse,
+            "reverse_relation_policy": reverse_relation_policy,
+            "layout": layout,
+            "storage": storage,
+        })
+        metadata["append_generation"] = 0
+        metadata["compactions"] = 0
 
         cls._write(path, metadata, node_ids, node_type_ids, edge_ids, relations, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, edge_weights_array, out, in_, incident, relation_out, relation_in, positive_triples)
         return cls.load(path)
@@ -704,7 +720,6 @@ class SamplerSnapshot:
         if node_type_ids.size != external_node_ids.size:
             raise ValueError("node_type_ids length must match external_node_ids")
         edge_weights = _normalize_edge_weights(edge_weights, src_int.size)
-        edge_indices = np.arange(src_int.size, dtype=np.int64)
 
         relation_count = int(external_relation_ids.size)
         if relation_src_type_ids is None or relation_dst_type_ids is None:
@@ -722,17 +737,9 @@ class SamplerSnapshot:
             if relation_src_type_ids.size != relation_count or relation_dst_type_ids.size != relation_count:
                 raise ValueError("sampler snapshot relation type arrays must match external_relation_ids")
 
-        out = build_csr(src_int, edge_indices, external_node_ids.size)
-        in_ = build_csr(dst_int, edge_indices, external_node_ids.size)
-        incident = build_csr(
-            np.concatenate([src_int, dst_int]) if src_int.size else np.empty(0, dtype=np.int64),
-            np.concatenate([edge_indices, edge_indices]) if edge_indices.size else np.empty(0, dtype=np.int64),
-            external_node_ids.size,
+        out, in_, incident, relation_out, relation_in, positive_triples = _build_sampling_indexes(
+            int(external_node_ids.size), relation_count, src_int, dst_int, rel_int
         )
-        relation_size = max(1, external_node_ids.size * max(1, relation_count))
-        relation_out = build_csr(src_int * max(1, relation_count) + rel_int, edge_indices, relation_size)
-        relation_in = build_csr(dst_int * max(1, relation_count) + rel_int, edge_indices, relation_size)
-        positive_triples = np.stack([src_int, rel_int, dst_int], axis=1) if src_int.size else np.empty((0, 3), dtype=np.int64)
         temporal_values = None
         supplied_temporal = (
             edge_version_ids, valid_from_us, valid_to_us, valid_to_open,
@@ -790,6 +797,15 @@ class SamplerSnapshot:
             snapshot_metadata["source_db"] = cls._normalize_source_reference(source_db, path)
         if source_artifacts is not None:
             snapshot_metadata["source_artifacts"] = cls._normalize_artifact_references(source_artifacts, path)
+        snapshot_metadata.setdefault("snapshot_id", uuid.uuid4().hex)
+        snapshot_metadata.setdefault("source_version", None)
+        snapshot_metadata.setdefault("schema_hash", _consistency_schema_hash({
+            "layout": "csr",
+            "storage": "npy",
+            "temporal": temporal_values is not None,
+        }))
+        snapshot_metadata.setdefault("append_generation", 0)
+        snapshot_metadata.setdefault("compactions", 0)
         cls._write(
             path, snapshot_metadata, external_node_ids, node_type_ids, external_edge_ids,
             external_relation_ids, relation_src_type_ids, relation_dst_type_ids, src_int,
@@ -975,6 +991,360 @@ class SamplerSnapshot:
 
         parse_read_provenance(value).verify_source(graph)
 
+    @staticmethod
+    def _source_version_of(graph) -> dict | None:
+        """Extract the best observable source-version token from a graph.
+
+        Prefers an authenticated current-read-view token (LMDB, transactional
+        PyRex). Graphs without verifiable read identity report ``None``:
+        plain mutations on such backends leave no observable counter, so no
+        version is manufactured. Duck-typed for graph-like test doubles.
+        """
+        view_factory = getattr(graph, "current_read_view", None)
+        if callable(view_factory):
+            try:
+                with view_factory() as view:
+                    to_dict = getattr(getattr(view, "provenance", None), "to_dict", None)
+                    if callable(to_dict):
+                        payload = to_dict()
+                        token = {
+                            "kind": "current-read-view",
+                            "database_id": payload.get("database_id"),
+                            "snapshot_sequence": payload.get("snapshot_sequence"),
+                            "state_sha256": payload.get("state_sha256"),
+                            "token": payload.get("token"),
+                        }
+                        if all(isinstance(token[key], str) for key in (
+                                "database_id", "state_sha256", "token")) and isinstance(
+                                token["snapshot_sequence"], int):
+                            return token
+            except Exception:
+                pass
+        return None
+
+    def is_stale(self, graph) -> bool:
+        """Return whether the source graph moved past the recorded version.
+
+        Snapshots without a recorded source version (legacy builds, graphs
+        without verifiable read identity) always report stale: freshness
+        cannot be proven, so it is never assumed. Temporal-only counters are
+        deliberately not consulted — they are blind to plain mutations.
+        """
+        recorded = self.metadata.get("source_version")
+        if not isinstance(recorded, dict):
+            return True
+        return self._source_version_of(graph) != recorded
+
+    def check_fresh(self, graph) -> dict:
+        """Return the recorded source version if the graph still matches it.
+
+        Raises ``ValueError`` naming the recorded and observed versions when
+        the source moved or when either side is unverifiable. Call this
+        before training runs that must not silently reuse invalidated data.
+        """
+        recorded = self.metadata.get("source_version")
+        if not isinstance(recorded, dict):
+            raise ValueError("snapshot records no verifiable source version; rebuild or re-append explicitly")
+        current = self._source_version_of(graph)
+        if current != recorded:
+            raise ValueError(
+                f"source graph moved past the snapshot version (recorded={recorded!r}, current={current!r}); "
+                "rebuild, append, or compact explicitly"
+            )
+        return recorded
+
+    def append_from_graph(self, graph, edge_keys, *, edge_type_property: str = "type",
+                          edge_weight_property: str | None = None,
+                          node_type_property: str = "kind") -> dict:
+        """Append graph edges to this snapshot without a full rebuild.
+
+        Node and relation maps grow append-only: existing compact IDs never
+        change, so stored batches stay valid. Adjacency indexes are rebuilt
+        from the extended rows (documented ``O(E)`` cost — measure before
+        assuming append beats rebuild at scale). The snapshot identity is
+        preserved while ``append_generation`` advances and the source version
+        is restamped from the graph.
+
+        Only snapshots built by ``build`` carry the recorded interpretation
+        (type properties) required to encode new rows; array-built snapshots
+        are rejected. Temporal snapshots are rejected. Duplicate external
+        edge IDs fail closed. No live readers may hold this snapshot path
+        (including memmap loads) across the call.
+        """
+        if self.metadata.get("format_version") != SNAPSHOT_FORMAT_VERSION:
+            raise ValueError("append requires a current-format snapshot; rebuild legacy snapshots first")
+        if self.metadata.get("temporal") is True:
+            raise ValueError("temporal snapshots do not support append; rebuild explicitly")
+        if not isinstance(edge_type_property, str) or not edge_type_property:
+            raise ValueError("edge_type_property must be a non-empty string")
+        if edge_weight_property is not None and (
+                not isinstance(edge_weight_property, str) or not edge_weight_property):
+            raise ValueError("edge_weight_property must be a non-empty string or None")
+        if not isinstance(node_type_property, str) or not node_type_property:
+            raise ValueError("node_type_property must be a non-empty string")
+        expected_schema = _consistency_schema_hash({
+            "edge_type_property": self.metadata.get("edge_type_property"),
+            "edge_weight_property": self.metadata.get("edge_weight_property"),
+            "node_type_property": self.metadata.get("node_type_property"),
+            "directed": self.metadata.get("directed"),
+            "include_reverse": self.metadata.get("include_reverse"),
+            "reverse_relation_policy": self.metadata.get("reverse_relation_policy"),
+            "layout": self.metadata.get("layout"),
+            "storage": self.metadata.get("storage"),
+        })
+        if "edge_type_property" not in self.metadata or self.metadata.get("schema_hash") != expected_schema:
+            raise ValueError("snapshot lacks recorded build interpretation; extend array-built snapshots via from_arrays")
+        candidate = {
+            "edge_type_property": edge_type_property,
+            "edge_weight_property": edge_weight_property,
+            "node_type_property": node_type_property,
+            "directed": self.metadata.get("directed"),
+            "include_reverse": self.metadata.get("include_reverse"),
+            "reverse_relation_policy": self.metadata.get("reverse_relation_policy"),
+            "layout": self.metadata.get("layout"),
+            "storage": self.metadata.get("storage"),
+        }
+        if _consistency_schema_hash(candidate) != self.metadata.get("schema_hash"):
+            raise ValueError("append interpretation does not match the snapshot schema hash")
+        try:
+            keys = list(edge_keys)
+        except TypeError as exc:
+            raise ValueError("edge_keys must be iterable") from exc
+        if not keys:
+            raise ValueError("edge_keys must be non-empty")
+        existing_edge_ids = set(self.external_edge_ids.tolist())
+        node_ids = self.external_node_ids.tolist()
+        node_to_int = {node_id: idx for idx, node_id in enumerate(node_ids)}
+        relations = self.external_relation_ids.tolist()
+        rel_to_int = {relation: idx for idx, relation in enumerate(relations)}
+        type_by_index = {int(index): value for index, value in (self.metadata.get("node_type_values") or {}).items()}
+        index_by_type = {value: index for index, value in type_by_index.items()}
+        next_type_index = max(type_by_index, default=-1) + 1
+        node_type_ids = self.node_type_ids.tolist()
+        new_edge_ids: list[str] = []
+        new_src: list[int] = []
+        new_dst: list[int] = []
+        new_rel: list[int] = []
+        new_weights: list[float] = []
+        seen_batch: set[str] = set()
+        for key in keys:
+            edge = graph.get_edge(key)
+            if edge is None:
+                raise ValueError(f"append edge key does not resolve: {key!r}")
+            external_edge_id = str(edge.get_id)
+            if external_edge_id in existing_edge_ids or external_edge_id in seen_batch:
+                raise ValueError(f"duplicate external edge ID on append: {external_edge_id!r}")
+            seen_batch.add(external_edge_id)
+            src = graph.key_to_string(edge.source)
+            dst = graph.key_to_string(edge.target)
+            for endpoint in (src, dst):
+                if endpoint not in node_to_int:
+                    node = graph.get_node(endpoint)
+                    node_type = None if node is None else node.properties.get(node_type_property)
+                    if node_type is None:
+                        node_type_ids.append(-1)
+                    elif str(node_type) in index_by_type:
+                        node_type_ids.append(index_by_type[str(node_type)])
+                    elif type_by_index:
+                        index_by_type[str(node_type)] = next_type_index
+                        type_by_index[next_type_index] = str(node_type)
+                        node_type_ids.append(next_type_index)
+                        next_type_index += 1
+                    else:
+                        node_type_ids.append(-1)
+                    node_to_int[endpoint] = len(node_ids)
+                    node_ids.append(endpoint)
+            relation = edge.properties.get(edge_type_property)
+            if relation is None:
+                raise ValueError(f"append edge lacks the relation property: {external_edge_id!r}")
+            relation = str(relation)
+            if relation not in rel_to_int:
+                rel_to_int[relation] = len(relations)
+                relations.append(relation)
+            weight = 1.0 if edge_weight_property is None else edge.properties.get(edge_weight_property, 1.0)
+            new_edge_ids.append(external_edge_id)
+            new_src.append(node_to_int[src])
+            new_dst.append(node_to_int[dst])
+            new_rel.append(rel_to_int[relation])
+            new_weights.append(_validate_weight(weight))
+        pre_node_count = len(self.external_node_ids)
+        pre_relation_count = len(self.external_relation_ids)
+        external_edge_ids = self.external_edge_ids.tolist() + new_edge_ids
+        src_int = np.concatenate([self.src_int, np.asarray(new_src, dtype=np.int64)])
+        dst_int = np.concatenate([self.dst_int, np.asarray(new_dst, dtype=np.int64)])
+        rel_int = np.concatenate([self.rel_int, np.asarray(new_rel, dtype=np.int64)])
+        edge_weights = np.concatenate([self.edge_weights, np.asarray(new_weights, dtype=np.float64)])
+        relation_src_type_ids, relation_dst_type_ids = self._derive_relation_endpoint_types(
+            np.asarray(node_type_ids, dtype=np.int64), src_int, dst_int, rel_int, len(relations))
+        out, in_, incident, relation_out, relation_in, positive_triples = _build_sampling_indexes(
+            len(node_ids), len(relations), src_int, dst_int, rel_int)
+        metadata = dict(self.metadata)
+        metadata.update({
+            "node_count": len(node_ids),
+            "edge_count": int(src_int.size),
+            "relation_count": len(relations),
+            "schema_hash": _consistency_schema_hash(candidate),
+            "source_version": self._source_version_of(graph),
+            "append_generation": int(self.metadata.get("append_generation", 0)) + 1,
+        })
+        if type_by_index:
+            metadata["node_type_values"] = {str(index): value for index, value in sorted(type_by_index.items())}
+        self._replace(
+            self.path, metadata, node_ids, np.asarray(node_type_ids, dtype=np.int64),
+            external_edge_ids, relations, relation_src_type_ids, relation_dst_type_ids,
+            src_int, dst_int, rel_int, edge_weights, out, in_, incident,
+            relation_out, relation_in, positive_triples)
+        self._refresh_from_disk()
+        return {
+            "appended_edges": len(new_edge_ids),
+            "appended_nodes": len(node_ids) - pre_node_count,
+            "appended_relations": len(relations) - pre_relation_count,
+            "append_generation": int(metadata["append_generation"]),
+            "snapshot_id": metadata["snapshot_id"],
+        }
+
+    def compact(self, graph=None) -> dict:
+        """Canonically rebuild this snapshot in place and verify integrity.
+
+        Rebuilds every adjacency index from the current edge rows, rewrites
+        all arrays atomically, and re-authenticates the result on load.
+        Compact IDs for nodes and relations are never reordered: map
+        extension stays append-only across compactions.
+
+        With ``graph`` (unfiltered snapshots only), edge rows whose external
+        ID no longer resolves in the source are pruned first — the
+        incremental answer to source deletions. Pruned edge rows disappear,
+        so edge compact IDs after pruned rows shift; node and relation IDs
+        do not. Filtered snapshots reject graph pruning: recorded filters
+        are callables that cannot be re-applied, so pruning would silently
+        drop intentionally excluded edges. No live readers may hold this
+        snapshot path across the call.
+        """
+        if self.metadata.get("format_version") != SNAPSHOT_FORMAT_VERSION:
+            raise ValueError("compact requires a current-format snapshot; rebuild legacy snapshots first")
+        if self.metadata.get("temporal") is True:
+            raise ValueError("temporal snapshots do not support compact; rebuild explicitly")
+        pruned = 0
+        if graph is not None:
+            if self.metadata.get("filtered") is True:
+                raise ValueError("cannot prune filtered snapshots; rebuild explicitly")
+            live: set[str] = set()
+            for edge_key in graph.store.get_edge_keys_generator():
+                edge = graph.get_edge(edge_key)
+                if edge is not None:
+                    live.add(str(edge.get_id))
+            keep = np.array([edge_id in live for edge_id in self.external_edge_ids.tolist()], dtype=bool)
+            pruned = int((~keep).sum())
+            external_edge_ids = self.external_edge_ids[keep].tolist()
+            src_int = self.src_int[keep]
+            dst_int = self.dst_int[keep]
+            rel_int = self.rel_int[keep]
+            edge_weights = self.edge_weights[keep]
+        else:
+            external_edge_ids = self.external_edge_ids.tolist()
+            src_int = self.src_int
+            dst_int = self.dst_int
+            rel_int = self.rel_int
+            edge_weights = self.edge_weights
+        node_ids = self.external_node_ids.tolist()
+        relations = self.external_relation_ids.tolist()
+        out, in_, incident, relation_out, relation_in, positive_triples = _build_sampling_indexes(
+            len(node_ids), len(relations), src_int, dst_int, rel_int)
+        metadata = dict(self.metadata)
+        metadata.update({
+            "node_count": len(node_ids),
+            "edge_count": int(src_int.size),
+            "relation_count": len(relations),
+            "compactions": int(self.metadata.get("compactions", 0)) + 1,
+        })
+        if graph is not None:
+            metadata["source_version"] = self._source_version_of(graph)
+        self._replace(
+            self.path, metadata, node_ids, self.node_type_ids,
+            external_edge_ids, relations, self.relation_src_type_ids, self.relation_dst_type_ids,
+            src_int, dst_int, rel_int, edge_weights, out, in_, incident,
+            relation_out, relation_in, positive_triples)
+        self._refresh_from_disk()
+        return {
+            "pruned_edges": pruned,
+            "edge_count": int(src_int.size),
+            "compactions": int(metadata["compactions"]),
+            "snapshot_id": metadata["snapshot_id"],
+        }
+
+    def set_edge_weights(self, weights, *, source: str) -> dict:
+        """Persist caller-derived per-edge sampling weights in place.
+
+        Validates length, finiteness and non-negativity, rewrites the
+        snapshot atomically (staging directory, authenticated load,
+        backup-swap with restore), then refreshes this object. The
+        snapshot identity, compact IDs, adjacency and source version are
+        untouched — weights are a derived view, not new data — while
+        ``edge_weight_source`` records their provenance (for example
+        ``"policy:degree"`` or ``"manual:confidence-v3"``). No live readers
+        may hold this snapshot path across the call.
+        """
+        if self.metadata.get("format_version") != SNAPSHOT_FORMAT_VERSION:
+            raise ValueError("set_edge_weights requires a current-format snapshot; rebuild legacy snapshots first")
+        if self.metadata.get("temporal") is True:
+            raise ValueError("temporal snapshots do not support set_edge_weights; rebuild explicitly")
+        if not isinstance(source, str) or not source:
+            raise ValueError("source must be a non-empty provenance label")
+        edge_weights = _normalize_edge_weights(weights, int(self.src_int.size))
+        metadata = dict(self.metadata)
+        metadata["edge_weight_source"] = source
+        self._replace(
+            self.path, metadata, self.external_node_ids.tolist(), self.node_type_ids,
+            self.external_edge_ids.tolist(), self.external_relation_ids.tolist(),
+            self.relation_src_type_ids, self.relation_dst_type_ids,
+            self.src_int, self.dst_int, self.rel_int, edge_weights, self.out, self.in_,
+            self.incident, self.relation_out, self.relation_in, self.positive_triples)
+        self._refresh_from_disk()
+        return {
+            "edge_weight_source": source,
+            "weight_mean": float(edge_weights.mean()) if edge_weights.size else 1.0,
+            "weight_min": float(edge_weights.min()) if edge_weights.size else 1.0,
+            "weight_max": float(edge_weights.max()) if edge_weights.size else 1.0,
+            "snapshot_id": metadata["snapshot_id"],
+        }
+
+    def _refresh_from_disk(self) -> None:
+        """Reload persisted state into this object after an in-place rewrite."""
+        fresh = type(self).load(self.path)
+        for name in self.__dataclass_fields__:
+            setattr(self, name, getattr(fresh, name))
+
+    @classmethod
+    def _replace(cls, path: Path, metadata: dict, node_ids, node_type_ids, edge_ids, relations, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, edge_weights, out, in_, incident, relation_out, relation_in, positive_triples) -> None:
+        """Atomically replace the snapshot at an existing path.
+
+        Writes and authenticates a staging directory exactly like a fresh
+        build, then swaps it over the live directory with backup/restore so
+        a failed swap never leaves a half-written snapshot. Callers must
+        guarantee no live readers (including memmap loads) during the swap.
+        """
+        path = Path(path)
+        if not (path / "metadata.json").is_file():
+            raise ValueError(f"no snapshot to replace at: {path}")
+        staging = Path(tempfile.mkdtemp(prefix=f".{path.name}.", dir=path.parent))
+        backup = path.parent / f".{path.name}.backup"
+        try:
+            cls._write(staging / "snapshot", metadata, node_ids, node_type_ids, edge_ids, relations, relation_src_type_ids, relation_dst_type_ids, src_int, dst_int, rel_int, edge_weights, out, in_, incident, relation_out, relation_in, positive_triples)
+            staged = staging / "snapshot"
+            if backup.exists():
+                shutil.rmtree(backup)
+            os.replace(path, backup)
+            try:
+                os.replace(staged, path)
+            except Exception:
+                os.replace(backup, path)
+                raise
+            shutil.rmtree(backup, ignore_errors=True)
+            shutil.rmtree(staging, ignore_errors=True)
+        except Exception:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise
+
     def external_node_id(self, node_int) -> str:
         return str(self.external_node_ids[int(node_int)])
 
@@ -1010,6 +1380,52 @@ class SamplerSnapshot:
         """Resolve external relation IDs to compact integer IDs."""
         lookup_ids, lookup_order = self._lookup_arrays("relation")
         return self._resolve_external_ids(external_relation_ids, self.external_relation_ids, lookup_ids, lookup_order, "relation")
+
+    def expand_relations(self, relations: Sequence[str], hierarchy: RelationHierarchy) -> np.ndarray:
+        """Expand parent relation names through a sub-property hierarchy.
+
+        Each name resolves to itself plus all transitive sub-properties,
+        then to compact IDs usable by every engine method. Unknown snapshot
+        relations fail closed; hierarchy-undefined names expand to
+        themselves. Fanout caps in downstream sampling apply to the union,
+        not per expanded relation.
+        """
+        if not isinstance(hierarchy, RelationHierarchy):
+            raise ValueError("hierarchy must be a RelationHierarchy")
+        expanded = hierarchy.expand(relations)
+        known = set(self.external_relation_ids.tolist())
+        unknown = [name for name in expanded if name not in known]
+        if unknown:
+            raise ValueError(f"unknown snapshot relations: {unknown!r}")
+        return self.relation_ints(list(expanded))
+
+    def expand_node_types(
+        self, node_types: Sequence[str], hierarchy: LabelHierarchy
+    ) -> np.ndarray:
+        """Expand semantic node-type names through a sub-type hierarchy.
+
+        Each name resolves to itself plus all transitive sub-types, then to the
+        compact node-type IDs recorded in snapshot metadata. Unknown snapshot
+        types fail closed; hierarchy-undefined names expand to themselves.
+        Snapshots built from raw ``node_type_ids`` without recorded
+        ``node_type_values`` cannot be expanded safely and fail closed.
+        """
+        if not isinstance(hierarchy, LabelHierarchy):
+            raise ValueError("hierarchy must be a LabelHierarchy")
+        expanded = hierarchy.expand(node_types)
+        mapping = {
+            str(value): int(index)
+            for index, value in (self.metadata.get("node_type_values") or {}).items()
+        }
+        if not mapping:
+            raise ValueError(
+                "snapshot has no recorded node type values; build with "
+                "node_type_values to expand a hierarchy"
+            )
+        unknown = [name for name in expanded if name not in mapping]
+        if unknown:
+            raise ValueError(f"unknown snapshot node types: {unknown!r}")
+        return np.asarray(sorted({mapping[name] for name in expanded}), dtype=np.int64)
 
     def global_triple_to_external(self, triple) -> tuple[str, str, str]:
         src, rel, dst = np.asarray(triple, dtype=np.int64).tolist()
@@ -1618,6 +2034,31 @@ class SamplerSnapshot:
         except Exception:
             shutil.rmtree(staging, ignore_errors=True)
             raise
+
+
+def _consistency_schema_hash(params: dict) -> str:
+    """Hash the snapshot interpretation contract (never the data vocab)."""
+    return hashlib.sha256(_canonical_json_bytes(params)).hexdigest()
+
+
+def _build_sampling_indexes(node_count: int, relation_count: int, src_int, dst_int, rel_int):
+    """Rebuild every CSR adjacency plus positive triples from edge rows."""
+    src_int = np.asarray(src_int, dtype=np.int64)
+    dst_int = np.asarray(dst_int, dtype=np.int64)
+    rel_int = np.asarray(rel_int, dtype=np.int64)
+    edge_indices = np.arange(src_int.size, dtype=np.int64)
+    out = build_csr(src_int, edge_indices, node_count)
+    in_ = build_csr(dst_int, edge_indices, node_count)
+    incident = build_csr(
+        np.concatenate([src_int, dst_int]) if src_int.size else np.empty(0, dtype=np.int64),
+        np.concatenate([edge_indices, edge_indices]) if edge_indices.size else np.empty(0, dtype=np.int64),
+        node_count,
+    )
+    relation_size = max(1, node_count * max(1, relation_count))
+    relation_out = build_csr(src_int * max(1, relation_count) + rel_int, edge_indices, relation_size)
+    relation_in = build_csr(dst_int * max(1, relation_count) + rel_int, edge_indices, relation_size)
+    positive_triples = np.stack([src_int, rel_int, dst_int], axis=1) if src_int.size else np.empty((0, 3), dtype=np.int64)
+    return out, in_, incident, relation_out, relation_in, positive_triples
 
 
 def _encode_type_values(values, *, expected_size: int) -> tuple[np.ndarray, dict[str, int]]:

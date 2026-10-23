@@ -1,0 +1,83 @@
+name: Reasoning release readiness
+
+on:
+  pull_request:
+    branches: [main, feature/onto-dev-epic-2]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'docs/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'scripts/reasoning_release_smoke.py'
+      - '.github/workflows/reasoning-release.yml'
+  push:
+    branches: [main, feature/onto-dev-epic-2]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'docs/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'scripts/reasoning_release_smoke.py'
+      - '.github/workflows/reasoning-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-suite:
+    name: Full suite (${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: sudo apt-get update && sudo apt-get install --yes libleveldb-dev
+      - name: Install backends, serializers and independent reasoning oracles
+        run: >-
+          python -m pip install -e '.[coverage,backends,serializers,rdf,polars,bloom,docs]'
+          'pyrex-rocksdb>=0.5.0' -r benchmarks/ontology-requirements.txt
+      - run: python -m pytest -q
+      - run: python planning/reasoning-engine/check_roadmap.py
+      - run: python .opencode/skills/gestaltdb-docs-maintainer/scripts/check_docs.py
+      - run: python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py test-examples
+      - run: python -m sphinx -W -b html docs "${{ runner.temp }}/release-docs"
+
+  distributions:
+    name: Installed artifacts (${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install build twine
+      # build makes the wheel from the sdist by default, exercising both artifacts.
+      - run: python -m build --outdir "${{ runner.temp }}/release-dist"
+      - run: python -m twine check "${{ runner.temp }}"/release-dist/*
+      - name: Test isolated wheel and baseline database compatibility
+        working-directory: ${{ runner.temp }}
+        env:
+          SMOKE: ${{ github.workspace }}/scripts/reasoning_release_smoke.py
+        run: |
+          python -m venv candidate
+          candidate/bin/python -m pip install release-dist/*.whl
+          candidate/bin/python -I "$SMOKE" core
+          python -m venv baseline
+          baseline/bin/python -m pip install 'gestaltdb[lmdb]==0.12.0'
+          baseline/bin/python -I "$SMOKE" create-legacy --database legacy-db
+          candidate/bin/python -m pip install lmdb
+          candidate/bin/python -I "$SMOKE" check --database legacy-db
