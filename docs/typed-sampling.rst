@@ -58,6 +58,8 @@ Array-Native API Map
      - Independent fanout, direction, relations, replacement, strategy per layer
    * - ``LayeredSampleBatch.to_blocks`` / ``to_blocks_external``
      - Bipartite message-passing blocks with local ``edge_index`` frames per layer
+   * - ``LayeredSampleBatch.to_pyg_blocks``
+     - Per-layer PyG-style tensor dictionaries with temporal edge metadata
    * - ``sample_random_walks`` / ``sample_random_walks_external``
      - Uniform/weighted first-order walks, repeating metapaths, restarts, dead-end policies
    * - ``sample_node2vec_walks`` / ``sample_node2vec_walks_external``
@@ -413,7 +415,11 @@ an ``edge_index`` with one column per sampled edge occurrence, aligned
 (neighbor to input); graph-edge orientation is not encoded, so consult the
 ``NeighborSamplingSpec`` values passed to ``sample_layers`` when it matters.
 ``to_blocks_external(snapshot)`` maps the ID arrays without touching
-``edge_index`` positions.
+``edge_index`` positions. ``to_pyg_blocks(snapshot)`` converts each block to
+``torch.long`` tensors (temporal version IDs stay string-array metadata,
+matching ``SampledSubgraphBatch.to_pyg``); the dictionaries convert directly
+into ``torch_geometric`` bipartite blocks without a ``torch_geometric``
+dependency here.
 
 Balanced quotas
 ~~~~~~~~~~~~~~~

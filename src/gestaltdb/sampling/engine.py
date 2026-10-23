@@ -232,6 +232,70 @@ class LayeredSampleBatch:
             )
         return external_blocks
 
+    def to_pyg_blocks(
+        self, snapshot: SamplerSnapshot
+    ) -> list[dict[str, object]]:
+        """Convert :meth:`to_blocks` output to PyTorch tensors.
+
+        Each layer becomes a PyG-style bipartite block dictionary with
+        ``src_nodes``, ``dst_nodes``, ``edge_index``, ``edge_ids``, and
+        ``relation_ids`` tensors plus the layer's temporal edge-version
+        arrays when present. ID tensors use ``torch.long``; temporal
+        version IDs stay string-array metadata, matching
+        ``SampledSubgraphBatch.to_pyg``. The dictionaries convert directly
+        into ``torch_geometric`` bipartite blocks; no ``torch_geometric``
+        dependency is required or imported here.
+
+        Args:
+            snapshot: Snapshot providing relation IDs for sampled edges.
+
+        Returns:
+            One tensor dictionary per layer, in layer order.
+
+        Raises:
+            ImportError: If ``torch`` is not installed.
+        """
+        try:
+            import torch
+        except ImportError as exc:
+            raise ImportError(
+                "Missing optional dependency 'torch' required for "
+                "LayeredSampleBatch.to_pyg_blocks"
+            ) from exc
+        tensor_blocks: list[dict[str, object]] = []
+        for index, block in enumerate(self.to_blocks(snapshot)):
+            layer = self.layers[index]
+            tensor_blocks.append(
+                {
+                    "src_nodes": torch.as_tensor(block["src_nodes"], dtype=torch.long),
+                    "dst_nodes": torch.as_tensor(block["dst_nodes"], dtype=torch.long),
+                    "edge_index": torch.as_tensor(block["edge_index"], dtype=torch.long),
+                    "edge_ids": torch.as_tensor(block["edge_ids"], dtype=torch.long),
+                    "relation_ids": torch.as_tensor(block["relation_ids"], dtype=torch.long),
+                    "edge_version_ids": (
+                        None
+                        if layer.edge_version_ids is None
+                        else layer.edge_version_ids.copy()
+                    ),
+                    "valid_from_us": (
+                        None
+                        if layer.valid_from_us is None
+                        else torch.as_tensor(layer.valid_from_us, dtype=torch.long)
+                    ),
+                    "valid_to_us": (
+                        None
+                        if layer.valid_to_us is None
+                        else torch.as_tensor(layer.valid_to_us, dtype=torch.long)
+                    ),
+                    "valid_to_open": (
+                        None
+                        if layer.valid_to_open is None
+                        else torch.as_tensor(layer.valid_to_open, dtype=torch.bool)
+                    ),
+                }
+            )
+        return tensor_blocks
+
 
 @dataclass(slots=True)
 class RandomWalkBatch:
