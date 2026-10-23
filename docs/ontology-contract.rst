@@ -6,11 +6,11 @@ Ontology v1 implementation contract
 Development status
 ------------------
 
-This is the ONTO-01 interface agreement for epic #131 on ``onto-dev``.
-The immutable reasoning contracts, standalone Datalog evaluator, ontology
-compiler, bounded witness explanations and pinned claims adapter now exist on
-the epic branch. They are not yet a main-branch release.
-See ``ONTO-EPIC.md`` in the repository for priorities and dependencies.
+This is the ONTO-01 interface agreement for epic #131. The immutable reasoning
+contracts, standalone Datalog evaluator, ontology compiler, bounded witness
+explanations and pinned claims adapter shipped on ``main`` in ``0.13.0rc1``.
+See ``EPIC_REASONING_ENGINE.md`` in the repository for roadmap priorities and
+``planning/reasoning-engine/release-readiness.md`` for release evidence.
 
 Separation of concerns
 ----------------------

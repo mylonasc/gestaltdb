@@ -104,7 +104,10 @@ its issue and dependency links; the roadmap is not being declared complete.
 - GitHub issue index: [issues.json](planning/reasoning-engine/issues.json).
 - Validate source hashes, complete GR coverage and dependency DAG:
   `uv run python planning/reasoning-engine/check_roadmap.py`.
-- Previous delivery and its precise boundaries: [ONTO-EPIC.md](ONTO-EPIC.md).
+- Previous v1 delivery (#131, ONTO-01–ONTO-11, PRs #143–#155) and its boundaries:
+  see epic [#131](https://github.com/mylonasc/gestaltdb/issues/131), its child
+  issues and git history. The standalone v1 epic note was removed after the
+  `0.13.0rc1` main merge; it is preserved in history, not in the working tree.
 
 This document and the new parent tracker carry the **whole** reviewed roadmap.
 The workbook is historical input, not the current delivery dashboard: its audit
@@ -499,7 +502,7 @@ parent/sub-issue and blocked-by relationships were read back and verified.
 
 These checks confirm existing baseline behavior and planning consistency, not
 new performance or all-backend guarantees. Previous baseline integration evidence
-is recorded in `ONTO-EPIC.md`. No new executor was implemented or benchmarked
+is recorded in epic #131, its child issues/PRs and git history. No new executor was implemented or benchmarked
 during this review.
 
 ### Implementation started: RE-08 (#169)
