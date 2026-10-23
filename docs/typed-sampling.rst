@@ -640,6 +640,16 @@ Node selection is uniform over the snapshot; there is no degree correction or
 partition sampling in this method. The cap is a fail-closed memory bound, not a
 statistical normalization.
 
+Pass ``normalize=True`` to attach GraphSAINT-style unbiased weights instead:
+``node_weights`` are ``num_nodes_snapshot / num_nodes`` per node and
+non-loop ``edge_weights`` are ``N (N - 1) / (k (k - 1))`` per edge, the exact
+reciprocals of the without-replacement inclusion probabilities. Self-loops
+are node-inclusion events and carry the node weight. Relation and temporal
+filters restrict which edges are returned but do not change the draw
+probabilities, so filtered batches keep the same weights. Weights are
+``None`` by default and flow through ``to_numpy`` and the framework exports
+when present.
+
 Time-Aware Hard Negatives
 -------------------------
 
