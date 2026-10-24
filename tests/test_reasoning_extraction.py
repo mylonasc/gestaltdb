@@ -317,6 +317,75 @@ def test_selective_extraction_preserves_demand_closure(tmp_path, backend, module
         graph.close()
 
 
+def test_mapping_storage_predicates_inverts_exactly():
+    aliased = ClaimMapping((("worksFor", "memberOf"), ("employedBy", "memberOf"), ("edge", "linked")))
+    assert aliased.storage_predicates(["memberOf"]) == ("employedBy", "memberOf", "worksFor")
+    assert aliased.storage_predicates(["linked"]) == ("edge", "linked")
+    assert aliased.storage_predicates(["plain"]) == ("plain",)
+    # "edge" is itself an aliased source, so it can never surface as logical "edge".
+    assert aliased.storage_predicates(["edge"]) == ()
+    assert aliased.storage_predicates([]) == ()
+    assert ClaimMapping().storage_predicates(["p", "p"]) == ("p",)
+    with pytest.raises(ReasoningError, match="predicates must be an explicit collection"):
+        aliased.storage_predicates("memberOf")
+
+
+@pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
+def test_aliased_selective_extraction_matches_full_closure(tmp_path, backend, module):
+    pytest.importorskip(module)
+    from gestaltdb.graphdb import GraphDB
+    from gestaltdb.reasoning.demand import BoundGoal, answer, required_predicates
+    from gestaltdb.reasoning.typed import GenericEngine, GenericProgram, GenericRule, TypedAtom, TypedFact
+    from gestaltdb.reasoning.model import Variable
+
+    x, y, z = Variable("x"), Variable("y"), Variable("z")
+    program = GenericProgram([
+        GenericRule("base", [TypedAtom("memberOf", [x, y])], [], TypedAtom("person", [x])),
+        GenericRule("step", [TypedAtom("person", [x]), TypedAtom("memberOf", [x, y])], [],
+                    TypedAtom("veteran", [x])),
+    ])
+    goal = BoundGoal("veteran", [x])
+    plan = required_predicates(program, goal)
+    assert plan == ("memberOf", "person", "veteran")
+    mapping = ClaimMapping((("worksFor", "memberOf"), ("employedBy", "memberOf")))
+    assert mapping.storage_predicates(list(plan)) == ("employedBy", "memberOf", "person", "veteran", "worksFor")
+    graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
+    try:
+        graph.assert_claim(subject="a", predicate="worksFor", object="g1",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        graph.assert_claim(subject="b", predicate="employedBy", object="g1",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        graph.assert_claim(subject="n", predicate="noise", object="unused",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        with graph.read_view(valid_time=50) as view:
+            # Without inversion the logical plan matches nothing at storage level.
+            naive_request = ExtractionRequest(world="default", predicates=list(plan),
+                                              batch_rows=100, max_rows=100)
+            with _batched(graph, view, naive_request, mapping=mapping) as source:
+                assert [e for b in source.iter_batches() for e in b.evidence] == []
+            selective_request = ExtractionRequest(
+                world="default", predicates=mapping.storage_predicates(list(plan)),
+                batch_rows=100, max_rows=100)
+            with _batched(graph, view, selective_request, mapping=mapping) as source:
+                selective = [e for b in source.iter_batches() for e in b.evidence]
+                assert source.profile.pushdown == "predicates"
+            full_request = ExtractionRequest(world="default", batch_rows=100, max_rows=100)
+            with _batched(graph, view, full_request, mapping=mapping) as source:
+                full = [e for b in source.iter_batches() for e in b.evidence]
+        to_fact = lambda e: TypedFact(e.fact.predicate, (e.fact.subject, e.fact.object))
+        selective_facts = [to_fact(e) for e in selective]
+        assert {e.reference_id for e in selective} == {
+            e.reference_id for e in full if e.fact.predicate == "memberOf"}
+        assert answer(program, selective_facts, goal, limits=ReasoningLimits()).facts == \
+            answer(program, [to_fact(e) for e in full], goal, limits=ReasoningLimits()).facts == \
+            (TypedFact("veteran", ["a"]), TypedFact("veteran", ["b"]))
+        assert GenericEngine().evaluate(program, selective_facts, limits=ReasoningLimits()) == \
+            GenericEngine().evaluate(program, [to_fact(e) for e in full
+                                               if to_fact(e).predicate in plan], limits=ReasoningLimits())
+    finally:
+        graph.close()
+
+
 @pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel")])
 def test_batched_limits_rebinding_and_evaluation_parity(tmp_path, backend, module):
     pytest.importorskip(module)

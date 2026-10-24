@@ -96,6 +96,27 @@ class ClaimMapping:
             raise ReasoningError("mapping input must be a Fact")
         return Fact(fact.subject, self._aliases.get(fact.predicate, fact.predicate), fact.object)
 
+    def storage_predicates(self, predicates) -> tuple[str, ...]:
+        """Invert logical predicate names to the storage names that map to them.
+
+        ``ExtractionRequest.predicates`` are storage-level: they are compared
+        against claim predicates before ``map`` runs. A demand plan produces
+        logical (post-mapping) names, so callers must invert first. Each
+        logical name expands to every aliased storage source targeting it,
+        plus itself when it is not itself an aliased source (unmapped storage
+        predicates are preserved by ``map``). Aliased-away names are excluded:
+        a storage claim under such a name can never surface as itself.
+        """
+        if not isinstance(predicates, (tuple, list, set, frozenset)):
+            raise ReasoningError("predicates must be an explicit collection")
+        inverted: set[str] = set()
+        for predicate in predicates:
+            _text(predicate, "predicate")
+            inverted.update(source for source, target in self.predicate_aliases if target == predicate)
+            if predicate not in self._aliases:
+                inverted.add(predicate)
+        return tuple(sorted(inverted))
+
 
 @dataclass(frozen=True)
 class ClaimSourceLimits:
