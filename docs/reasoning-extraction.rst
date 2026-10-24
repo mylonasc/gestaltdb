@@ -28,7 +28,11 @@ Requests, batches and capabilities
 
 ``ExtractionRequest`` carries predicate/binding/world selection plus explicit
 ``batch_rows``/``max_rows`` budgets. ``predicates=None`` selects all predicates;
-an empty collection selects none. The claim adapter intersects request
+an empty collection selects none. Request predicates, subjects and objects are
+storage-level: they are compared against claim fields before
+``ClaimMapping.map`` runs. A demand plan produces logical (post-mapping) names,
+so callers must pass it through ``ClaimMapping.storage_predicates`` first —
+pushing logical names directly matches nothing at storage level. The claim adapter intersects request
 ``agents``/``sources`` with ``ClaimSelection``: neither can broaden the other.
 ``None`` is unrestricted, an empty collection selects none, and ``sources=(None,)``
 selects unsourced claims only. Budgets bound yielded logical rows, not RSS, snapshot history
