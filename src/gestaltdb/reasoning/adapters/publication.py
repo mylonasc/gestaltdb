@@ -20,7 +20,9 @@ from ...temporal import TemporalInstant, TemporalInterval
 from ...versioning import ClaimVersionWrite, normalize_temporal_instant
 from ..model import ReasoningError, ReasoningLimitError, ReasoningLimits, _text
 from ..protocols import InputContext
+from ..generation import GenerationIdentity, TemporalSourceIdentity
 from .claims import ClaimMapping, ClaimSelection, ClaimSourceLimits, PinnedClaimSource, _digest
+from .generation import ClaimGenerationBinding, catalog_for_ontology
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,7 @@ class StagedPointPublication:
     desired: tuple[tuple[str, str, str], ...]
     base_fingerprint: str
     source_provenance: ReadViewProvenance | None = None
+    generation_binding: ClaimGenerationBinding | None = None
 
     def __post_init__(self):
         for name in ("namespace", "publication_key", "source_world", "target_world",
@@ -84,6 +87,22 @@ class StagedPointPublication:
             if provenance.database_id != self.database_id or provenance.valid_time_us != self.valid_point_us:
                 raise ReasoningError("source provenance does not match the staged database/time")
             object.__setattr__(self, "source_provenance", provenance)
+        if self.generation_binding is not None:
+            binding = self.generation_binding
+            if not isinstance(binding, ClaimGenerationBinding):
+                raise ReasoningError("generation_binding must be ClaimGenerationBinding")
+            if self.source_provenance is None:
+                raise ReasoningError("source provenance required for generation binding")
+            context = binding.identity.context
+            if (binding.provenance != self.source_provenance
+                    or context.context_id != self.input_context_id
+                    or context.world != self.source_world
+                    or context.ontology_revision != self.ontology_revision
+                    or binding.selection.policy_id != self.policy_id
+                    or binding.mapping.mapping_id != self.mapping_id
+                    or binding.identity.semantics_profile != "positive-binary-entity-v1"
+                    or binding.identity.dictionary_id != "external-strings-v1"):
+                raise ReasoningError("staged generation binding mismatch")
 
 
 def _stage_fingerprint(entries: Iterable[tuple[str, str]]) -> str:
@@ -128,6 +147,13 @@ def stage_point(
             result = DatalogEngine().evaluate(compiled.program, evidence, limits=limits)
             source.verify_source()
             context = source.context
+            provenance = view.provenance
+            identity = GenerationIdentity(
+                TemporalSourceIdentity(provenance.database_id, provenance.commit_horizon,
+                                       provenance.token, provenance.valid_time_us),
+                context, compiled.program.digest, catalog_for_ontology(compiled).digest,
+                "positive-binary-entity-v1", "external-strings-v1")
+            binding = ClaimGenerationBinding(identity, provenance, selection, mapping)
         generation = _digest([
             "ontology-point-publication-v1", view.provenance.database_id, namespace,
             compiled.revision_id, selection.policy_id, mapping.mapping_id,
@@ -146,7 +172,7 @@ def stage_point(
     return StagedPointPublication(namespace, publication_key, source_world, target_world,
                                   instant.epoch_microseconds, generation, context.context_id,
                                   compiled.revision_id, selection.policy_id, mapping.mapping_id,
-                                  database_id, desired, _stage_fingerprint(base), view.provenance)
+                                   database_id, desired, _stage_fingerprint(base), view.provenance, binding)
 
 
 def publish_staged(
@@ -169,6 +195,12 @@ def publish_staged(
         raise ReasoningError("freshness must be latest or historical")
     if staged.source_provenance is None:
         raise ReasoningError("staged source provenance is required; re-stage explicitly")
+    generation_metadata = {}
+    if staged.generation_binding is not None:
+        identity = staged.generation_binding.identity
+        generation_metadata = {"reasoning_generation": identity.digest,
+                               "program_digest": identity.program_digest,
+                               "catalog_digest": identity.catalog_digest}
     instant = TemporalInstant(staged.valid_point_us)
     interval = (instant, TemporalInstant(instant.epoch_microseconds + 1))
     with graph._temporal_writer_guard():
@@ -181,6 +213,10 @@ def publish_staged(
             if freshness == "latest" and (
                     view.provenance.commit_horizon != staged.source_provenance.commit_horizon):
                 raise GenerationStaleError("source horizon moved since staging; re-stage and retry")
+            if staged.generation_binding is not None:
+                # The guard remains held until commit; the binding alone is
+                # deliberately not a compare-and-publish authorization.
+                staged.generation_binding.verify_source(graph, freshness=freshness)
             current = {}
             for version in view.iter_claims_as_of(world=staged.target_world, agent="gestaltdb:ontology",
                                                   source=staged.namespace):
@@ -205,7 +241,8 @@ def publish_staged(
                                    "valid_point_us": staged.valid_point_us,
                                    "source_commit_horizon": staged.source_provenance.commit_horizon,
                                    "source_provenance_token": staged.source_provenance.token,
-                                   "publication_freshness": freshness,
+                                    "publication_freshness": freshness,
+                                    **generation_metadata,
                               })
                 desired[claim.claim_id] = claim
             writes = []
@@ -231,8 +268,9 @@ def publish_staged(
         if writes:
             commit = graph.commit_versions(writes, metadata={"engine": "gestaltdb.ontology", "generation": staged.generation,
                                                              "input_context": staged.input_context_id,
-                                                             "source_commit_horizon": staged.source_provenance.commit_horizon,
-                                                             "publication_freshness": freshness})
+                                                              "source_commit_horizon": staged.source_provenance.commit_horizon,
+                                                              "publication_freshness": freshness,
+                                                              **generation_metadata})
         return PublicationResult(context, staged.generation, None if commit is None else commit.commit_id,
                                  asserted, corrected, retracted, unchanged)
 

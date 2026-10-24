@@ -21,6 +21,7 @@ The resulting ``ClaimGenerationBinding.verify_source(graph)`` authenticates
 the original prefix and conservatively rejects any newer commit. Explicit
 ``freshness="historical"`` verifies the old prefix instead. This read-only check
 is not an atomic publication permit: publishers must hold their writer guard
-through checking and committing. Existing publication/cache APIs are not yet
-migrated. No identity string or result record independently proves that an
+through checking and committing. Staged binary point publication now carries
+and revalidates this binding (see :doc:`reasoning-generations`); other publication
+and cache paths are not migrated. No identity string or result record independently proves that an
 inference computation is sound.

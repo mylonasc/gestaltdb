@@ -24,6 +24,20 @@ modes retain target compare-and-publish checks and record the source horizon,
 provenance token and freshness policy in published claim provenance. Legacy
 manually constructed stages without source provenance must be re-staged.
 
+New point stages also carry ``generation_binding``: the shared authenticated
+``ClaimGenerationBinding`` with database/horizon, input context, compiled
+program and catalog digests, binary-entity semantics and external-string
+dictionary identity. Stage construction rejects mismatched world, policy,
+mapping, revision, provenance or representation. Publication revalidates the
+binding under the same writer guard; the binding alone is not a publication
+permit or proof of derivation. New claim writes and their commit metadata
+record ``reasoning_generation``, ``program_digest`` and ``catalog_digest``.
+The existing publication generation ID and target fingerprint remain unchanged.
+Legacy stages with source provenance but no shared binding retain the existing
+freshness checks; unchanged claims are not rewritten merely to add metadata.
+This migration covers binary point publication only, not typed sessions,
+current-graph admission, temporal ranges or cache reuse.
+
 .. code-block:: python
 
    staged = stage_point(graph, compiled, valid_time=t, source_world="base",
