@@ -1,7 +1,9 @@
-# Draft generation admission contract — #248
+# Generation admission contract — #248
 
-Status: executable opt-in identity/admission prototype; publisher integration blocked by #244,
-#245 and #246. Target: `feature/onto-dev-epic-2`.
+Status: shared identity, binary point publication and typed-point admission.
+#244, #245 and #246 are closed. Target: `feature/onto-dev-epic-2`.
+GitHub #248 remains the authority for remaining migration scope; this is not
+a claim that current-graph/range admission or all cache paths are implemented.
 
 ## Identity and authority
 
@@ -23,9 +25,12 @@ logical identity. Source versions and logical fact IDs are different keys.
 | Batch size | Reuse logical identity; replan physical execution if necessary |
 | Unsupported backend snapshot | Fail before inference/publication |
 
-Implemented in `reasoning/generation.py` and `reasoning/adapters/generation.py`;
-see `docs/reasoning-generation-identity.rst`. No existing publisher/cache is
-silently migrated to this contract, and legacy digest values remain unchanged.
+Implemented in `reasoning/generation.py`, `reasoning/adapters/generation.py`
+and `reasoning/adapters/session_generation.py`; see
+`docs/reasoning-generation-identity.rst`. Binary point stages carry and verify
+the binding, with optional exact caller pins. Typed sessions authenticate their
+active assertion ledger against the exact historical source before admission.
+Legacy digest values and persisted session formats remain unchanged.
 
 The database adapter authenticates provenance. The stdlib core verifies exact
 value compatibility only; it must not import GraphDB or acquire storage handles.
@@ -36,4 +41,7 @@ Stage, correct a source claim, then publish: latest rejects without writes;
 historical publication is opt-in and records the old horizon. Change a rule
 without changing its ID: temporal reuse must rebuild. Repeat after target
 movement and after dictionary rebinding. Verify all rejection paths preserve the
-previous visible generation. These fixtures depend on the three prerequisite fixes.
+previous visible generation. The three prerequisite fixes and binary point
+publication fixtures are merged. Typed session fixtures additionally compare
+exact independent assertion versions, catalog content, scope/mapping, durable
+state pins, and explicit bounds/cancellation across supported backends.

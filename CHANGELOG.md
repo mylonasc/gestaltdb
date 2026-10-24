@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added explicit authenticated typed-point session admission with exact active
+  evidence/catalog checks, shared generation/state pins and bounded cancellation
+  controls (#248). This verifies source input, not closure soundness.
 - Fixed incremental and persisted reasoning sessions dropping active evidence
   when a retraction's valid interval excludes the pinned query time (#327).
 
