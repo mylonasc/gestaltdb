@@ -28,13 +28,15 @@ from ..model import (
     Fact,
     Program,
     ReasoningError,
+    ReasoningLimitError,
     ReasoningLimits,
     _text,
     check_cancelled,
 )
 from ..plans import PlannedDatalogEngine, PlannedRun, PreparedProgram
 from ..protocols import Evidence, InputContext
-from .polars import PolarsDatalogPrototype, PolarsRun
+from ..relational import CompilationIdentity
+from .polars import PolarsDatalogPrototype, PolarsRun, _polars
 
 
 @dataclass(frozen=True)
@@ -131,12 +133,29 @@ def execute_closure(program: Program, facts: Iterable[Fact | Evidence], *,
     if executor_request.mode != mode:
         raise ReasoningError("executor request mode must match the requested proof behavior")
     decision = select_executor(executor_request)
+    if len(program.rules) > limits.max_rules:
+        raise ReasoningLimitError("max_rules exceeded")
+    if decision.kind == INDEXED_SCC and plan is None:
+        raise ReasoningError("prepared-plan execution requires an explicit PreparedProgram")
+    if plan is not None and decision.kind != INDEXED_SCC:
+        raise ReasoningError("a prepared plan requires indexed-scc execution")
+    if (decision.kind != INDEXED_PYTHON or generation is not None) and context is None:
+        raise ReasoningError("bound or non-reference execution requires an explicit InputContext")
+    identity = None if context is None else CompilationIdentity(
+        program.digest, context, "external-strings-v1", executor_request.profile, decision.kind)
+    if plan is not None:
+        plan.identity.require_compatible(identity)
+    if decision.kind == POLARS_PROTOTYPE:
+        _polars()
     admission_digest: str | None = None
     if generation is not None or admission_request is not None:
         if generation is None or admission_request is None:
             raise ReasoningError("generation and admission_request are required together")
         if admission_request.mode != mode:
             raise ReasoningError("admission mode must match the requested proof behavior")
+        if admission_request.executor != decision.kind:
+            raise ReasoningError("admission executor must match the selected executor")
+        generation.require_compilation(identity)
         admission = admit(generation, admission_request)
         admission_digest = admission.generation_digest
     rationale = decision.rationale
@@ -149,10 +168,8 @@ def execute_closure(program: Program, facts: Iterable[Fact | Evidence], *,
         return ExecutionOutcome(result, _telemetry(decision.kind, mode, rationale, admission_digest,
                                                    None, len(inputs), result, collect_proofs))
     if decision.kind == INDEXED_SCC:
-        if plan is None:
-            raise ReasoningError("prepared-plan execution requires an explicit PreparedProgram")
         run: PlannedRun = PlannedDatalogEngine().evaluate(
-            plan, inputs, identity=plan.identity, limits=limits,
+            plan, inputs, identity=identity, limits=limits,
             collect_proofs=collect_proofs, cancel=cancel)
         return ExecutionOutcome(run.result, _telemetry(decision.kind, mode, rationale, admission_digest,
                                                        plan.digest, len(inputs), run.result,

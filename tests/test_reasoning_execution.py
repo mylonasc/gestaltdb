@@ -1,5 +1,7 @@
 """Opt-in executor-aware closure: decision, admission, uniform telemetry."""
 
+from dataclasses import replace
+
 import pytest
 
 from gestaltdb.reasoning import Atom, Fact, Program, ReasoningLimits, Rule, Variable
@@ -57,7 +59,7 @@ def test_scc_plan_matches_indexed_closure_with_plan_telemetry():
     expected = execute_closure(program(), facts(), limits=ReasoningLimits())
     outcome = execute_closure(program(), facts(),
                               executor_request=ExecutorRequest(preferred="indexed-scc"),
-                              plan=plan, limits=ReasoningLimits())
+                              plan=plan, context=CONTEXT, limits=ReasoningLimits())
     assert outcome.telemetry.executor == INDEXED_SCC
     assert outcome.telemetry.plan_digest == plan.digest
     assert set(outcome.result.facts) == set(expected.result.facts)
@@ -98,19 +100,19 @@ def test_polars_unavailable_or_missing_context_fails_closed():
 def test_admission_binds_generation_dictionary_and_mode():
     request = AdmissionRequest("closure", INDEXED_PYTHON, DICTIONARY)
     outcome = execute_closure(program(), facts(), admission_request=request,
-                              generation=generation(), limits=ReasoningLimits())
+                              generation=generation(), context=CONTEXT, limits=ReasoningLimits())
     assert outcome.telemetry.admission_digest == generation().digest
     assert outcome.telemetry.input_facts == 3
     with pytest.raises(ReasoningError, match="dictionary"):
         execute_closure(program(), facts(),
                         admission_request=AdmissionRequest("closure", INDEXED_PYTHON, "other"),
-                        generation=generation(), limits=ReasoningLimits())
+                        generation=generation(), context=CONTEXT, limits=ReasoningLimits())
     with pytest.raises(ReasoningError, match="required together"):
         execute_closure(program(), facts(), admission_request=request, limits=ReasoningLimits())
     with pytest.raises(ReasoningError, match="mode"):
         execute_closure(program(), facts(),
                         admission_request=AdmissionRequest("proofs", INDEXED_PYTHON, DICTIONARY),
-                        generation=generation(), limits=ReasoningLimits())
+                        generation=generation(), context=CONTEXT, limits=ReasoningLimits())
     with pytest.raises(ReasoningError, match="proof"):
         execute_closure(program(), facts(), collect_proofs=True,
                         executor_request=ExecutorRequest(preferred="polars-prototype",
@@ -135,3 +137,64 @@ def test_generators_evaluate_once_with_shared_inputs():
     assert {f.predicate for f in outcome.result.facts} == {"edge", "reach"}
     with pytest.raises(ReasoningError, match="iterable"):
         execute_closure(program(), object(), limits=ReasoningLimits())
+
+
+def unread():
+    raise AssertionError("invalid invocation consumed input")
+    yield
+
+
+def test_unrelated_program_plan_rejected_before_input():
+    other = Program([Rule("other", [Atom(X, "edge", Y)], Atom(X, "wrong", Y))])
+    plan = PreparedProgram(other, CompilationIdentity(
+        other.digest, CONTEXT, DICTIONARY, "positive-binary-entity-v1", INDEXED_SCC))
+    with pytest.raises(ReasoningError, match="compilation"):
+        execute_closure(program(), unread(), plan=plan, context=CONTEXT,
+                        executor_request=ExecutorRequest(preferred="indexed-scc"), limits=ReasoningLimits())
+
+
+@pytest.mark.parametrize("field,value", [
+    ("program_digest", "other"), ("semantics_profile", "other"),
+    ("dictionary_id", "other"), ("context", replace(CONTEXT, world="other")),
+])
+def test_generation_must_match_actual_invocation_before_input(field, value):
+    with pytest.raises(ReasoningError, match="compilation"):
+        execute_closure(program(), unread(), context=CONTEXT,
+                        generation=replace(generation(), **{field: value}),
+                        admission_request=AdmissionRequest(), limits=ReasoningLimits())
+
+
+def test_admission_executor_must_match_dispatch_before_input():
+    with pytest.raises(ReasoningError, match="executor"):
+        execute_closure(program(), unread(), context=CONTEXT, generation=generation(),
+                        admission_request=AdmissionRequest(executor=INDEXED_SCC), limits=ReasoningLimits())
+
+
+def test_plan_context_and_dictionary_are_not_self_attested():
+    for context, dictionary in [(replace(CONTEXT, world="other"), DICTIONARY), (CONTEXT, "other")]:
+        plan = PreparedProgram(program(), CompilationIdentity(
+            program().digest, context, dictionary, "positive-binary-entity-v1", INDEXED_SCC))
+        with pytest.raises(ReasoningError, match="compilation"):
+            execute_closure(program(), unread(), plan=plan, context=CONTEXT,
+                            executor_request=ExecutorRequest(preferred="indexed-scc"), limits=ReasoningLimits())
+
+
+def test_bound_execution_requires_independent_context():
+    with pytest.raises(ReasoningError, match="InputContext"):
+        execute_closure(program(), unread(), generation=generation(),
+                        admission_request=AdmissionRequest(), limits=ReasoningLimits())
+    with pytest.raises(ReasoningError, match="InputContext"):
+        execute_closure(program(), unread(), plan=prepare(),
+                        executor_request=ExecutorRequest(preferred="indexed-scc"), limits=ReasoningLimits())
+    with pytest.raises(ReasoningError, match="indexed-scc"):
+        execute_closure(program(), unread(), plan=prepare(), limits=ReasoningLimits())
+
+
+def test_actual_missing_runtime_rejected_before_input(monkeypatch):
+    def missing():
+        raise ImportError("requires gestaltdb[polars]")
+    monkeypatch.setattr("gestaltdb.reasoning.adapters.execution._polars", missing)
+    with pytest.raises(ImportError, match="polars"):
+        execute_closure(program(), unread(), context=CONTEXT,
+                        executor_request=ExecutorRequest(preferred="polars-prototype", polars_available=True),
+                        limits=ReasoningLimits())
