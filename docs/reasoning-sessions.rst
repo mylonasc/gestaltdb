@@ -39,3 +39,11 @@ persist fails closed; callers reload and retry. Sessions do not publish;
 publication stays with the managed generation APIs. Identity strings and
 ledger records alone do not authenticate data — every resume re-verifies the
 live database identity and horizon.
+
+For source-verified reuse, explicitly admit a session with
+``bind_session_generation`` from
+``gestaltdb.reasoning.adapters.session_generation``. This compares exact active
+version/fact/logical-ID evidence against the authenticated historical prefix
+and checks catalog content, rather than trusting a persisted digest alone.
+See :doc:`reasoning-generation-identity` for limits, freshness and unsupported
+profiles. The returned binding is not a proof of closure soundness.

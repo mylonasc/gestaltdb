@@ -22,6 +22,41 @@ This selected positive fragment is not full OWL. Inference is read-only and proo
 truncation is distinct from inference failure. See `docs/ontology.rst` for the
 explicit pinned-claims adapter and `docs/ontology-benchmarks.rst` for cost bounds.
 
+## Authenticate a Typed Point Session
+
+This opt-in scan verifies active input evidence, not the soundness of closure.
+It needs an installed backend; the example uses LevelDB.
+
+```python
+from tempfile import TemporaryDirectory
+from gestaltdb.graphdb import GraphDB
+from gestaltdb.reasoning.adapters.claims import ClaimMapping, ClaimSelection
+from gestaltdb.reasoning.adapters.sessions import SessionScope, start_session
+from gestaltdb.reasoning.adapters.session_generation import bind_session_generation, catalog_for_typed_program
+from gestaltdb.reasoning.model import ReasoningLimits, Variable
+from gestaltdb.reasoning.typed import GenericProgram, GenericRule, TypedAtom
+
+x, y = Variable("x"), Variable("y")
+program = GenericProgram([GenericRule("person", [TypedAtom("worksFor", [x, y])], [], TypedAtom("Person", [x]))])
+with TemporaryDirectory() as directory:
+    graph = GraphDB.create(directory, backend="leveldb", serializer="json")
+    try:
+        graph.assert_claim(subject="alice", predicate="worksFor", object="acme",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        session = start_session(graph, program, catalog_for_typed_program(program),
+                                scope=SessionScope("default", 50, ClaimSelection(), ClaimMapping()),
+                                limits=ReasoningLimits())
+        binding = bind_session_generation(graph, session)
+        binding.verify(graph, session)
+        assert binding.identity.program_digest == program.digest
+    finally:
+        graph.close()
+```
+
+Latest admission rejects source movement; old-prefix evaluation requires explicit
+`freshness="historical"`. See `docs/reasoning-generation-identity.rst` for bounds
+and unsupported range/current-graph profiles.
+
 ## Create, Query, and Close a Graph
 
 ```python
