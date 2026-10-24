@@ -116,3 +116,39 @@ def test_explicit_selection_contract(tmp_path):
             build_inferred_snapshot(session, tmp_path / "bad", edge_predicates=())
     finally:
         graph.close()
+
+
+@pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
+def test_snapshot_respects_pinned_valid_time(tmp_path, backend, module):
+    pytest.importorskip(module)
+    from gestaltdb.reasoning.adapters.sessions import SessionScope, start_session
+    graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
+    try:
+        rules = program()
+        graph.assert_claim(subject="a", predicate="memberOf", object="g1",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        graph.assert_claim(subject="b", predicate="memberOf", object="g1",
+                           agent="registry", polarity="positive", valid=(200, 300))
+        graph.assert_claim(subject="c", predicate="memberOf", object="g1",
+                           agent="registry", polarity="positive", valid=(0, 50))
+        catalog = catalog_for(rules)
+        selection, mapping = ClaimSelection(), ClaimMapping()
+        at_50 = start_session(graph, rules, catalog,
+                              scope=SessionScope("default", 50, selection, mapping),
+                              limits=ReasoningLimits())
+        snap_50 = build_inferred_snapshot(at_50, tmp_path / "snap50")
+        assert triples(snap_50) == {("a", "memberOf", "g1")}
+        assert snap_50.metadata["reasoning_generation"]["valid_time_us"] == 50
+        at_250 = start_session(graph, rules, catalog,
+                               scope=SessionScope("default", 250, selection, mapping),
+                               limits=ReasoningLimits())
+        snap_250 = build_inferred_snapshot(at_250, tmp_path / "snap250")
+        assert triples(snap_250) == {("b", "memberOf", "g1")}
+        assert snap_250.metadata["reasoning_generation"]["valid_time_us"] == 250
+        at_25 = start_session(graph, rules, catalog,
+                              scope=SessionScope("default", 25, selection, mapping),
+                              limits=ReasoningLimits())
+        assert triples(build_inferred_snapshot(at_25, tmp_path / "snap25")) == {
+            ("a", "memberOf", "g1"), ("c", "memberOf", "g1")}
+    finally:
+        graph.close()
