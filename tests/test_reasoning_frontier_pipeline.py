@@ -88,3 +88,36 @@ def test_limit_is_diagnostic_not_partial_success(tmp_path, monkeypatch):
     result = worker(path, 2, "selective", "indexed-python", "first")
     assert result["status"] == "bounded" and result["no_result"] is True
     assert "answers" not in result and "intentional" in result["reason"]
+
+
+def test_committed_measurements_distinguish_parity_from_bounded_outcomes():
+    from collections import Counter
+    from pathlib import Path
+    import hashlib
+    root = Path(__file__).parents[1]
+    paths = list((root / "benchmarks/results").glob("reasoning-re342-*.json"))
+    counts = Counter()
+    final_reports = 0
+    for path in paths:
+        report = json.loads(path.read_text())
+        if "initial-limit-diagnostic" in path.name:
+            assert not report["complete"]
+            continue
+        final_reports += 1
+        assert report["complete"] and not report["dirty"]
+        assert report["revision"] == "a1cfceb9cbac2d6b8140bf03f55bcc19fd8354e7"
+        assert report["harness_sha256"] == hashlib.sha256(
+            (root / "benchmarks/reasoning_frontier_pipeline.py").read_bytes()).hexdigest()
+        config = report["configuration"]
+        assert len(report["samples"]) == config["repeats"] * len(config["methods"]) * len(config["caches"])
+        assert report["all_parity_verified"] == all(s["status"] == "ok" for s in report["samples"])
+        for sample in report["samples"]:
+            counts[sample["status"]] += 1
+            if sample["status"] == "bounded":
+                assert sample["no_result"] is True and "answers" not in sample
+                assert sample["method"] == "polars-prototype" and config["rows"] == 100000
+            else:
+                assert sample["status"] == "ok" and sample["answer_digest"]
+                if sample["method"] != "frontier":
+                    assert sample["evidence_digest"] == report["fixture"]["evidence_digest"]
+    assert final_reports == 6 and counts == {"ok": 126, "bounded": 18}

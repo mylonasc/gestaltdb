@@ -89,6 +89,15 @@ not initial-seed filtering masquerading as recursive demand execution.
 
 ### 3. Measured executor/native optimization (#194, #255, RE-26)
 
+Implemented measurement cut #342 / PR #349 in `re-342-pipeline-crossover`,
+branch `feature/re-342-pipeline-crossover`. Clean measured source `a1cfceb`:
+six final reports, 126 parity-verified results plus 18 bounded Polars outcomes;
+see `docs/reasoning-frontier-benchmarks.rst`. Unexpected failures are not
+successful samples. Decision: no automatic executor/native adoption. Repeated
+authentication outweighs frontier row pruning on these fixtures; prepared
+execution ties reference; native primed gains do not offset first-read/RSS and
+restricted-fixture admission costs. Production bounds/defaults unchanged.
+
 After correctness and a real demand consumer, benchmark the actual pipeline:
 reference indexed, prepared indexed, explicitly selected Polars where supported,
 and existing decoded/locator native extraction. Native decoding already exists;

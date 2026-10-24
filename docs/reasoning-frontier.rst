@@ -112,3 +112,5 @@ and prefixes; it is a correctness-first bounded reference strategy, not a native
 join optimizer. Compare it with predicate-selective extraction on the same
 authenticated source before claiming a workload-specific improvement. Larger
 pipeline/executor/native comparisons are tracked in #342/#194/#255.
+The first measured decision and reproducible 100K-input evidence are in
+:doc:`reasoning-frontier-benchmarks`; defaults remain unchanged.

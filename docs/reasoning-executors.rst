@@ -136,6 +136,10 @@ witness engines retain exact references for their selected bounded witnesses,
 not all independent supports. Polars consumes
 the same evidence values but projects them to set-valued facts internally for
 closure-only conversion. It does not return proofs or all-support provenance.
+Actual pinned frontier/reference/prepared/Polars/native pipeline evidence and
+the no-automatic-adoption decision are in :doc:`reasoning-frontier-benchmarks`.
+In particular, installed Polars availability does not imply that an application's
+intermediates fit the dispatcher's fixed prototype cap.
 
 Installation isolation
 ----------------------------------------
