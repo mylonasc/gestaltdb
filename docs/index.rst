@@ -49,6 +49,7 @@ Filter, Sample, Train
    reasoning-testing
    ontology
    ontology-graph
+   reasoning-current-frontier
    ontology-benchmarks
    ontology-publication
    cypher

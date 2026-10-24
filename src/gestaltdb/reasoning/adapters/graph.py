@@ -68,6 +68,32 @@ class GraphSourceLimits:
             raise ReasoningError("max_records must be a positive integer")
 
 
+def _node_evidence(record, mapping):
+    """One projection convention shared by full and selective graph sources."""
+    labels = dict(mapping.labels)
+    for label in record.labels:
+        if label in labels:
+            yield Evidence(Fact(record.get_id, TYPE_PREDICATE, labels[label]),
+                           _digest(["node-label", record.get_id, label]))
+    for prop, predicate in mapping.node_properties:
+        if prop in record.properties:
+            yield Evidence(Fact(record.get_id, predicate, _text(record.properties[prop], "mapped entity property")),
+                           _digest(["node-property", record.get_id, prop]))
+
+
+def _edge_evidence(record, mapping):
+    types = dict(mapping.edge_types)
+    edge_type = record.properties.get("type")
+    if isinstance(edge_type, str) and edge_type in types:
+        yield Evidence(Fact(record.source, types[edge_type], record.target), _digest(["edge", record.get_id]))
+
+
+def _graph_context(provenance, revision, mapping):
+    return InputContext(
+        _digest(["current-graph-context-v1", provenance.token, revision, mapping.mapping_id]),
+        "current-property-graph", revision, "explicit-current-records-v1", mapping.mapping_id)
+
+
 @dataclass(frozen=True)
 class GraphReasoningResult:
     context: InputContext
@@ -252,7 +278,6 @@ class PinnedGraphSource:
             raise ProvenanceMismatchError("current snapshot database identity mismatch")
 
     def _evidence(self):
-        labels, types, properties = dict(self._mapping.labels), dict(self._mapping.edge_types), dict(self._mapping.node_properties)
         count = 0
         for kind, keys in (("node", self._store.get_node_keys_generator()),
                            ("edge", self._store.get_edge_keys_generator())):
@@ -265,19 +290,9 @@ class PinnedGraphSource:
                 if record is None:
                     raise ReasoningError("snapshot record disappeared")
                 if kind == "node":
-                    for label in record.labels:
-                        if label in labels:
-                            fact = Fact(record.get_id, TYPE_PREDICATE, labels[label])
-                            yield Evidence(fact, _digest(["node-label", record.get_id, label]))
-                    for prop, predicate in properties.items():
-                        if prop in record.properties:
-                            fact = Fact(record.get_id, predicate, _text(record.properties[prop], "mapped entity property"))
-                            yield Evidence(fact, _digest(["node-property", record.get_id, prop]))
+                    yield from _node_evidence(record, self._mapping)
                 else:
-                    edge_type = record.properties.get("type")
-                    if isinstance(edge_type, str) and edge_type in types:
-                        fact = Fact(record.source, types[edge_type], record.target)
-                        yield Evidence(fact, _digest(["edge", record.get_id]))
+                    yield from _edge_evidence(record, self._mapping)
         self._check()
 
     def evaluate(self, compiled: CompiledOntology, *, limits: ReasoningLimits, collect_proofs: bool = False,
@@ -288,10 +303,7 @@ class PinnedGraphSource:
         result = DatalogEngine().evaluate(compiled.program, self._evidence(), limits=limits, collect_proofs=collect_proofs,
                                           cancel=cancel)
         self._check()
-        context = InputContext(
-            _digest(["current-graph-context-v1", self._provenance.token, compiled.revision_id, self._mapping.mapping_id]),
-            "current-property-graph", compiled.revision_id, "explicit-current-records-v1", self._mapping.mapping_id,
-        )
+        context = _graph_context(self._provenance, compiled.revision_id, self._mapping)
         return GraphReasoningResult(context, self._provenance, result)
 
     def close(self):
