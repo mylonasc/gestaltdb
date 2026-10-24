@@ -16,7 +16,10 @@ input rows, endpoint events, segments and total emitted row memberships;
 over-budget or cancelled runs return no partial output. Emitting dense active
 sets still costs output-sized memory and work.
 
-This is a standalone scheduler with seeded scalar-membership oracle tests.
-``evaluate_range`` and ``update_range`` do not yet use it. Wiring it into
-temporal closure depends on program-bound reuse and representative measurements;
-no production temporal speedup or persistent-evidence guarantee is claimed.
+This scheduler backs range evaluation: ``evaluate_range`` and
+``update_range`` schedule active inputs through it instead of scanning every
+input at every segment, with row-to-fact mapping preserving overlapping
+multiplicity and ``verify_closure`` independently re-checking segment
+identity through its own scan path. Segment-memoized reuse keys in
+``update_range`` are unchanged. No persistent-evidence or publication
+guarantee is added; limits still fail closed without partial output.

@@ -9,7 +9,17 @@ elementary segments with uniform active inputs, and each segment evaluates
 under the ordinary engine. A derived fact holds exactly on the union of
 segments where it derives — the union of all support intersections — with
 exact per-interval evidence. Point queries agree with independent point
-evaluation by construction.
+evaluation by construction. Active inputs are scheduled once with an
+interval event sweep (``gestaltdb.reasoning.temporal_sweep``) instead of
+scanning every input at every segment: each validity bound contributes one
+add/remove event pair, segments tile exactly the change points, and
+overlapping assertions keep their multiplicity. A fragmented draw (400
+inputs, 199 segments) performs 800 events plus 1,957 scheduled memberships
+instead of 79,600 scan checks (~40x fewer membership operations); sweep
+bounds (``max_sweep_rows``/``max_sweep_events``/``max_sweep_memberships``)
+fail closed instead of degrading. The independent ``verify_closure`` gate
+still re-derives segmentation and point-evaluates through its own scan
+path, so scheduled closures keep proving segment identity.
 
 .. code-block:: python
 
