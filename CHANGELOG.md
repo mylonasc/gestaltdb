@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed incremental and persisted reasoning sessions dropping active evidence
+  when a retraction's valid interval excludes the pinned query time (#327).
+
 ## 0.13.0rc1 — reasoning engine testing milestone
 
 Prerelease for opt-in user testing; publication is pending release gates. This

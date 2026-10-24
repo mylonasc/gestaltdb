@@ -172,3 +172,53 @@ def test_session_rejects_uncovered_rules_and_foreign_database(tmp_path):
     finally:
         graph.close()
         other.close()
+
+
+@pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
+@pytest.mark.parametrize("interval", [(0, 50), (51, 100), (60, 100), (50, 100), (0, 51)])
+@pytest.mark.parametrize("operation", ["retract", "correct"])
+def test_delta_validity_matches_pinned_point(tmp_path, backend, module, interval, operation):
+    pytest.importorskip(module)
+    graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
+    try:
+        first = assert_member(graph, "a")
+        session = start(graph)
+        if operation == "retract":
+            graph.retract_claim(first.logical_id, valid=interval, supersedes_version_id=first.version_id)
+        else:
+            graph.correct_claim(first.logical_id, valid=interval, supersedes_version_id=first.version_id)
+        moved = advance_session(graph, session, limits=ReasoningLimits())
+        fresh = start(graph)
+        assert not moved.rebuilt
+        assert moved.session.facts == fresh.facts
+        assert moved.session.version_logical == fresh.version_logical
+        assert moved.session.ledger.facts == fresh.ledger.facts
+        assert set(moved.session.facts) == fresh_facts(session.program, graph)
+        if not interval[0] <= 50 < interval[1]:
+            assert moved.inserted == moved.retracted == ()
+            assert moved.session.version_logical == session.version_logical
+    finally:
+        graph.close()
+
+
+@pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
+def test_batch_correction_and_out_of_point_retractions_preserve_exact_versions(tmp_path, backend, module):
+    pytest.importorskip(module)
+    graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
+    try:
+        first = assert_member(graph, "a")
+        session = start(graph)
+        corrected = graph.correct_claim(first.logical_id, valid=(0, 100),
+                                        supersedes_version_id=first.version_id)
+        graph.retract_claim(first.logical_id, valid=(0, 50), supersedes_version_id=first.version_id)
+        graph.retract_claim(first.logical_id, valid=(51, 100), supersedes_version_id=corrected.version_id)
+        moved = advance_session(graph, session, limits=ReasoningLimits())
+        assert not moved.rebuilt
+        assert moved.inserted == moved.retracted == ()
+        assert moved.session.facts == start(graph).facts
+        assert moved.session.version_logical == ((corrected.version_id, first.logical_id),)
+        graph.retract_claim(first.logical_id, valid=(50, 51), supersedes_version_id=first.version_id)
+        removed = advance_session(graph, moved.session, limits=ReasoningLimits())
+        assert removed.session.facts == start(graph).facts == ()
+    finally:
+        graph.close()
