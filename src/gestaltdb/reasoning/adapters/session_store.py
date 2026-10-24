@@ -29,13 +29,15 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import tempfile
+import threading
 from typing import Callable
 
-from ...graphdb import GraphDB
+from ...graphdb import GraphDB, _TemporalWriterLock
 from ..catalog import RuleCatalog
 from ..evidence_ledger import AssertionVersion, EvidenceLedger
 from ..maintenance import DependencyIndex, Support
-from ..model import ReasoningError, ReasoningLimitError, ReasoningLimits, Variable, _text
+from ..model import ReasoningError, ReasoningLimitError, ReasoningLimits, Variable, _text, check_cancelled
 from ..terms import Literal
 from ..typed import (
     AggregateRule,
@@ -57,6 +59,8 @@ from .sessions import (
 
 SESSION_FORMAT = "gestaltdb-reasoning-session-v1"
 SESSION_FORMAT_VERSION = 1
+_SESSION_FILE_LOCKS = {}
+_SESSION_FILE_LOCKS_GUARD = threading.Lock()
 
 
 def _digest(payload: object) -> str:
@@ -395,12 +399,30 @@ def _encoded_bytes(session: ReasoningSession) -> bytes:
     return encoded
 
 
-def _read_horizon(path: Path) -> int | None:
+def _session_file_guard(path):
+    """Cooperating writers share the existing cross-process lock primitive.
+
+    Resolve the lock identity, not the data path's replacement semantics.
+    Direct filesystem writers and hardlink aliases are outside this contract.
+    """
+    target = Path(path).resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = target.with_name(f".{target.name}.session.lock")
+    with _SESSION_FILE_LOCKS_GUARD:
+        return _SESSION_FILE_LOCKS.setdefault(str(lock_path), _TemporalWriterLock(lock_path))
+
+
+def _read_state(path: Path, max_bytes: int):
     try:
         with open(path, "rb") as handle:
-            data = json.loads(handle.read().decode("utf-8"))
+            raw = handle.read(max_bytes + 1)
+        if len(raw) > max_bytes:
+            raise ReasoningLimitError("persisted session exceeds max_bytes")
+        data = json.loads(raw.decode("utf-8"))
     except FileNotFoundError:
         return None
+    except ReasoningLimitError:
+        raise
     except (OSError, ValueError, UnicodeDecodeError) as exc:
         raise ReasoningError(f"cannot read existing session file: {exc}") from exc
     if not isinstance(data, dict) or data.get("format") != SESSION_FORMAT:
@@ -408,7 +430,10 @@ def _read_horizon(path: Path) -> int | None:
     horizon = data.get("commit_horizon")
     if isinstance(horizon, bool) or not isinstance(horizon, int):
         raise ReasoningError("existing session file has an invalid horizon")
-    return horizon
+    stored = data.pop("session_digest", None)
+    if not isinstance(stored, str) or stored != _digest(data):
+        raise ReasoningError("existing session digest mismatch; recover explicitly")
+    return horizon, stored
 
 
 def save_session(
@@ -416,66 +441,81 @@ def save_session(
     path: str | os.PathLike,
     *,
     expected_horizon: int | None = None,
+    expected_session_digest: str | None = None,
     max_bytes: int = 256_000_000,
+    cancel: Callable[[], bool] | None = None,
 ) -> str:
     """Persist one session atomically; return its session digest.
 
-    ``expected_horizon`` implements file-level compare-and-swap: when the
-    target already exists its stored horizon must match, otherwise the write
-    fails closed and the existing file is left untouched.
+    Cooperating writers serialize through a sidecar file lock. Optional
+    ``expected_session_digest`` compares exact state, including same-horizon
+    changes and deletion; horizon-only pins retain their legacy behavior.
+    Checksums/locks do not authenticate the database or prove closure soundness.
     """
     if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 1:
         raise ReasoningError("max_bytes must be a positive integer")
     if expected_horizon is not None:
         if isinstance(expected_horizon, bool) or not isinstance(expected_horizon, int):
             raise ReasoningError("expected_horizon must be an integer or None")
+    if expected_session_digest is not None:
+        _text(expected_session_digest, "expected_session_digest")
+    check_cancelled(cancel)
     target = Path(path)
-    if target.exists():
-        current = _read_horizon(target)
-        if expected_horizon is not None and current != expected_horizon:
-            raise ReasoningError("session file changed underneath this writer; reload and retry")
     encoded = _encoded_bytes(session)
     if len(encoded) > max_bytes:
         raise ReasoningLimitError("persisted session exceeds max_bytes")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(f"{target.name}.tmp.{os.getpid()}")
-    with open(tmp, "wb") as handle:
-        handle.write(encoded)
-        handle.flush()
-        os.fsync(handle.fileno())
-    if expected_horizon is not None and target.exists():
-        # Narrow the lost-update window: re-check before replacing. Callers
-        # needing strict mutual exclusion must still serialize writers.
-        if _read_horizon(target) != expected_horizon:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
+    def compare():
+        state = _read_state(target, max_bytes)
+        if expected_session_digest is not None and (state is None or state[1] != expected_session_digest):
+            raise ReasoningError("session file state changed underneath this writer; reload and retry")
+        if expected_horizon is not None and state is not None and state[0] != expected_horizon:
             raise ReasoningError("session file changed underneath this writer; reload and retry")
-    os.replace(tmp, target)
-    try:
-        with open(target.parent, "rb") as handle:
-            pass
-        dir_fd = os.open(target.parent, os.O_DIRECTORY)
-    except (OSError, AttributeError):
-        dir_fd = None
-    else:
+    with _session_file_guard(target):
+        check_cancelled(cancel)
+        compare()
+        tmp = None
         try:
-            os.fsync(dir_fd)
+            with tempfile.NamedTemporaryFile(mode="wb", dir=target.parent, prefix=f".{target.name}.tmp.", delete=False) as handle:
+                tmp = Path(handle.name)
+                handle.write(encoded)
+                handle.flush()
+                os.fsync(handle.fileno())
+            check_cancelled(cancel)
+            compare()
+            os.replace(tmp, target)
+            tmp = None
         finally:
-            os.close(dir_fd)
+            if tmp is not None:
+                tmp.unlink(missing_ok=True)
+        try:
+            dir_fd = os.open(target.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        except OSError:
+            pass  # Some platforms cannot open/fsync directories.
+        else:
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
     return json.loads(encoded.decode("utf-8"))["session_digest"]
 
 
 def load_session(
-    path: str | os.PathLike, *, max_versions: int = 100_000, max_supports: int = 100_000
+    path: str | os.PathLike, *, max_versions: int = 100_000, max_supports: int = 100_000,
+    max_bytes: int = 256_000_000,
 ) -> ReasoningSession:
     """Load and fully verify a persisted session file."""
+    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 1:
+        raise ReasoningError("max_bytes must be a positive integer")
     try:
         with open(path, "rb") as handle:
-            data = json.loads(handle.read().decode("utf-8"))
+            raw = handle.read(max_bytes + 1)
+        if len(raw) > max_bytes:
+            raise ReasoningLimitError("persisted session exceeds max_bytes")
+        data = json.loads(raw.decode("utf-8"))
     except FileNotFoundError as exc:
         raise ReasoningError(f"session file not found: {path}") from exc
+    except ReasoningLimitError:
+        raise
     except (OSError, ValueError, UnicodeDecodeError) as exc:
         raise ReasoningError(f"cannot decode session file: {exc}") from exc
     return session_from_dict(data, max_versions=max_versions, max_supports=max_supports)
@@ -515,5 +555,6 @@ def advance_persisted_session(
         max_advance_commits=max_advance_commits,
         cancel=cancel,
     )
-    save_session(outcome.session, path, expected_horizon=session.commit_horizon, max_bytes=max_bytes)
+    save_session(outcome.session, path, expected_horizon=session.commit_horizon,
+                 expected_session_digest=_digest(session_to_dict(session)), max_bytes=max_bytes, cancel=cancel)
     return outcome
