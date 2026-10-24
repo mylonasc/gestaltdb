@@ -101,3 +101,35 @@ mapping and ontology. It checks analytical goal parity and records snapshot
 authentication, total pipeline time, candidate counts and worker peak RSS.
 OS cache is uncontrolled; the selective synthetic fixture and fixed worker
 order do not establish a universal speedup.
+
+Clean-source results at ``c340af4`` (three fresh workers per mode, CPython 3.13,
+JSON/LMDB; raw reports ``benchmarks/results/reasoning-re350-*.json``):
+
+.. list-table:: Median seconds and candidate record visits
+   :header-rows: 1
+
+   * - Nodes
+     - Full total
+     - Frontier total
+     - Full candidates
+     - Frontier candidates
+   * - 10,000
+     - 0.788
+     - 0.369
+     - 19,999
+     - 9
+   * - 100,000
+     - 6.478
+     - 1.015
+     - 199,999
+     - 9
+
+Every worker returned the eight expected goal facts. The fixture contains an
+eight-link reachable chain, a terminal self-loop and many disconnected
+self-loops, with mapped labels and properties included in full projection.
+At 100K nodes the frontier still spent about 0.364s opening/authenticating the
+snapshot and 0.356s extracting/evaluating (including a second full-state digest).
+Worker peak RSS medians were 513MB full / 199MB frontier, including imports and
+authentication, not query-only memory. Candidate counts exclude that full-state
+work: this demonstrates selective decoding savings, not constant-time end-to-end
+queries, general graph speedups or automatic executor admission.

@@ -50,6 +50,13 @@ frontier work and this mutable projection, plus parity/measurement evidence.
 Typed/negation/equality execution is outside this positive binary demand cut.
 The #342 authentication bottleneck is not solved by skipping verification.
 
+Validation: 2,790 tests passed / 1 skipped, documentation drift and 8/8 examples,
+Sphinx with warnings as errors, roadmap and diff checks passed. Clean-source
+`c340af4` reports at 10K/100K nodes contain 12 parity-verified observations.
+100K median total: 6.478s full projection vs 1.015s frontier; candidate reads
+199,999 vs 9. Full-state authentication remains outside candidate budgets;
+synthetic selective evidence does not justify default executor changes.
+
 ### Prior ordered follow-through
 
 Native GitHub links established: #338 (identity), #339 (input bounds), #340
