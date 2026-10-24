@@ -18,7 +18,7 @@ from ...temporal import TemporalInstant
 from ...versioning import ClaimVersion, VersionOperation, normalize_version_id
 from ..engine import DatalogEngine
 from ..extraction import ExtractionCapability, ExtractionRequest, FactBatch, batch_evidence
-from ..model import Fact, ReasoningError, ReasoningLimitError, ReasoningLimits, _text
+from ..model import Fact, ReasoningError, ReasoningLimitError, ReasoningLimits, _text, check_cancelled
 from ..protocols import Evidence, InputContext
 from .claims import (
     ClaimMapping,
@@ -131,7 +131,7 @@ class PinnedBatchedClaimSource:
     def __exit__(self, exc_type, exc, traceback) -> None:
         self.close()
 
-    def _filtered(self) -> Iterator[Evidence]:
+    def _filtered(self, cancel=None) -> Iterator[Evidence]:
         request = self._request
         predicates = request.predicates
         if predicates is not None and len(predicates) >= 1:
@@ -147,6 +147,10 @@ class PinnedBatchedClaimSource:
                 pushdown = "predicates+subject" if request.subject is not None else "predicates"
         else:
             queries, pushdown = [{}], "none"
+        if request.object is not None:
+            for query in queries:
+                query["object"] = request.object
+            pushdown = "object" if pushdown == "none" else pushdown + "+object"
         self._pushdown = pushdown
         seen: set[str] = set()
         count = 0
@@ -156,6 +160,7 @@ class PinnedBatchedClaimSource:
                 polarity=ClaimPolarity.POSITIVE, object_kind=ClaimObjectKind.ENTITY, **query,
             ))
             while True:
+                check_cancelled(cancel)
                 self._check_binding()
                 try:
                     version = next(iterator)
@@ -203,12 +208,12 @@ class PinnedBatchedClaimSource:
                                version.version_id)
         self.verify_source()
 
-    def iter_batches(self) -> Iterator[FactBatch]:
+    def iter_batches(self, *, cancel=None) -> Iterator[FactBatch]:
         """Yield bounded batches; each batch is bracketed by verification."""
         self.verify_source()
         self._pushdown, self._scanned = "none", 0
         batches, rows = 0, 0
-        for batch in batch_evidence(self._filtered(), self._request):
+        for batch in batch_evidence(self._filtered(cancel), self._request):
             batches += 1
             rows += len(batch.evidence)
             self._check_binding()
