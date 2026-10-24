@@ -80,6 +80,16 @@ snapshot graph manifest independently and pins the decoder object through reads;
 matching a copied provenance token alone must not admit forged representation
 metadata or a decoder rebound after authentication.
 
+Validation for #352: 2,830 passed / 1 skipped with optional backends, serializers,
+RDF, Polars and independent reasoning oracles; docs drift, 8/8 examples, Sphinx
+with warnings as errors, roadmap and diff gates passed. Regressions cover exact
+pin dimensions before record extraction, catalog content/version differences,
+temporal digest stability and source-kind isolation, real indexed/SCC/Polars
+closure parity, exact bounded witness references, active-old/latest/expired
+views, forged representation metadata, decoder rebinding, unmapped-record
+cancellation and stale-index-independent complete projection. This is an
+admission/integration result, not new executor performance evidence.
+
 ### Prior ordered follow-through
 
 Native GitHub links established: #338 (identity), #339 (input bounds), #340
