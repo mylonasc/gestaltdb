@@ -14,7 +14,10 @@ atomically, and retractions retire that logical claim's observed versions.
 Only changes whose half-open valid interval contains the session's pinned
 valid-time point affect its active evidence. For a point at ``50``, retractions
 over ``[0,50)`` or ``[51,100)`` leave evidence intact; ``[50,51)`` retracts it.
-The same rule applies when resuming a persisted session.
+The same rule applies when resuming a persisted session. A later re-assertion
+of the same logical claim resurrects exactly its facts under fresh evidence
+versions; rebind the generation identity after any advance, since state
+digests change with horizons and version maps.
 Logical insertions propagate through
 existing supports; logical retractions use DRed against the pinned dependency
 index. Every advance is verified against the pinned database identity, and a
