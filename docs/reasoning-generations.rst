@@ -38,6 +38,16 @@ freshness checks; unchanged claims are not rewritten merely to add metadata.
 This migration covers binary point publication only, not typed sessions,
 current-graph admission, temporal ranges or cache reuse.
 
+Callers that retain an expected ``GenerationIdentity`` may pass it as
+``publish_staged(..., expected_generation=identity)``. All source, context,
+program, catalog, profile and dictionary fields must match the stage's shared
+binding before publication proceeds. This opt-in check rejects legacy stages
+without that binding; re-stage explicitly rather than guessing their identity.
+A matching pin never bypasses freshness or target compare-and-publish checks,
+and historical mode does not waive compatibility. Omitting the pin preserves
+existing behavior. Identity pins describe source evaluation, not the output
+namespace, desired facts or a proof that the computation is sound.
+
 .. code-block:: python
 
    staged = stage_point(graph, compiled, valid_time=t, source_world="base",
