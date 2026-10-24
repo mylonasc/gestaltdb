@@ -34,6 +34,23 @@ checks are not universal identity admission or concurrent atomic publication.
 
 ## Ordered implementation
 
+Native GitHub links established: #338 (identity), #339 (input bounds), #340
+(evidence) are children of #255. #341 (pinned frontier) is a child of #249 and
+blocked by all three fixes. #342 (measured crossover) is a child of #194 and
+blocked by #341; it also coordinates #255 and RE-26/#187.
+
+Dispatcher fixes merged via #343/#344/#345, each on its own issue-numbered
+branch/worktree. Combined local validation: 2729 passed, one optional fault
+injection skip; docs/examples/Sphinx/roadmap gates passed. Source compatibility
+checks do not authenticate caller facts, and proofs remain bounded witnesses.
+
+The #341 implementation uses an explicit storage-neutral tabled scheduler over
+binary `Program`/`Atom`, reusing reference indexed lookup/unification. Its claim
+adapter preserves one authenticated temporal view. This is intentionally a
+different API from n-ary magic-set evaluation; no implicit fragment downgrade.
+Its scheduler work counters include repeated rule/prefix visits and cannot be
+compared directly with full-closure attempted-unification counters.
+
 ### 1. Trustworthy executor dispatch (#255, #248)
 
 Create separate issue-numbered fix branches/worktrees for identity preflight,
