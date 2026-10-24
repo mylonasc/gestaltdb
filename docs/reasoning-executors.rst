@@ -112,7 +112,14 @@ returns the closure with uniform ``StageTelemetry`` (executor, mode,
 rationale, admission/plan digests, input/output counts, proof flag).
 
 Prepared-plan execution requires the caller to supply the matching
-``PreparedProgram``; Polars execution requires an explicit ``InputContext``
+``PreparedProgram`` and an independently supplied ``InputContext``. Bound
+generation execution also requires that context. Before input iteration the
+dispatcher compares the actual program, context, profile, external-string
+dictionary and selected executor with the supplied plan/admission identities.
+These compatibility checks do not authenticate caller-supplied facts or prove
+closure soundness. Compact-dictionary generations require explicit recoding;
+they cannot be admitted to this external-string entry point.
+Polars execution requires an explicit ``InputContext``
 and a declared-available runtime. Omitting the preference keeps the indexed
 reference even when Polars is installed; there is no automatic switching
 and no dictionary recoding — mismatches fail closed. Request/program/type
