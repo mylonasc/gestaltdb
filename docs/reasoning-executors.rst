@@ -10,6 +10,10 @@ stdlib-only: identical requests always agree, unknown profiles/modes/preferences
 fail closed, and optional-runtime availability is caller-declared, never
 probed by importing optionals here.
 
+An authenticated complete mutable-graph consumer is available via
+:doc:`reasoning-current-admission`; it owns source projection and exact
+generation binding before calling the explicit dispatcher.
+
 .. code-block:: python
 
    from gestaltdb.reasoning import ExecutorRequest, select_executor

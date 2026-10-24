@@ -35,10 +35,30 @@ class TemporalSourceIdentity:
 
 
 @dataclass(frozen=True)
+class CurrentSourceIdentity:
+    """One adapter-verified mutable snapshot, never a temporal commit horizon.
+
+    The provenance token includes state, backend, serializer and snapshot kind.
+    This value alone authenticates nothing and cannot reopen an expired view.
+    """
+
+    database_id: str
+    snapshot_sequence: int
+    provenance_token: str
+
+    def __post_init__(self) -> None:
+        _text(self.database_id, "database_id")
+        _text(self.provenance_token, "provenance_token")
+        if (isinstance(self.snapshot_sequence, bool) or not isinstance(self.snapshot_sequence, int)
+                or self.snapshot_sequence < 0):
+            raise ReasoningError("snapshot_sequence must be a non-negative integer")
+
+
+@dataclass(frozen=True)
 class GenerationIdentity:
     """Exact logical reuse identity; physical executor/batch settings stay separate."""
 
-    source: TemporalSourceIdentity
+    source: TemporalSourceIdentity | CurrentSourceIdentity
     context: InputContext
     program_digest: str
     catalog_digest: str
@@ -46,16 +66,23 @@ class GenerationIdentity:
     dictionary_id: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.source, TemporalSourceIdentity) or not isinstance(self.context, InputContext):
-            raise ReasoningError("TemporalSourceIdentity and InputContext required")
+        if not isinstance(self.source, (TemporalSourceIdentity, CurrentSourceIdentity)) or not isinstance(self.context, InputContext):
+            raise ReasoningError("temporal/current source identity and InputContext required")
         for name in ("program_digest", "catalog_digest", "semantics_profile", "dictionary_id"):
             _text(getattr(self, name), name)
 
     @property
     def digest(self) -> str:
         context, source = self.context, self.source
-        return _digest(["gestaltdb-generation-identity-v1",
-                        [source.database_id, source.commit_horizon, source.provenance_token, source.valid_time_us],
+        # Preserve every existing temporal digest byte-for-byte. Current-state
+        # identities get a separate domain, not fake temporal sentinel fields.
+        if isinstance(source, TemporalSourceIdentity):
+            domain = "gestaltdb-generation-identity-v1"
+            fields = [source.database_id, source.commit_horizon, source.provenance_token, source.valid_time_us]
+        else:
+            domain = "gestaltdb-current-generation-identity-v1"
+            fields = [source.database_id, source.snapshot_sequence, source.provenance_token]
+        return _digest([domain, fields,
                         [context.context_id, context.world, context.ontology_revision,
                          context.source_policy_id, context.mapping_id],
                         self.program_digest, self.catalog_digest, self.semantics_profile, self.dictionary_id])

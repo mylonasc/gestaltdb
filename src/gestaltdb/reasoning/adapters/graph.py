@@ -16,7 +16,7 @@ from ...ontology.model import TYPE_PREDICATE
 from ...graphdb import _DATABASE_ID_METADATA_KEY
 from ...readview import CurrentGraphReadView, CurrentReadProvenance, ProvenanceMismatchError
 from ..engine import DatalogEngine
-from ..model import EvaluationResult, Fact, ReasoningError, ReasoningLimitError, ReasoningLimits, _text
+from ..model import EvaluationResult, Fact, ReasoningError, ReasoningLimitError, ReasoningLimits, _text, check_cancelled
 from ..protocols import Evidence, InputContext
 
 
@@ -260,16 +260,24 @@ class PinnedGraphSource:
         if not isinstance(mapping, GraphMapping) or not isinstance(limits, GraphSourceLimits):
             raise ReasoningError("explicit GraphMapping and GraphSourceLimits required")
         self._view, self._graph, self._store = view, view._graph, view.store
+        self._serializer = self._graph.serializer
         self._provenance = CurrentReadProvenance.from_dict(view.provenance.to_dict())
         self._mapping, self._limits, self._closed = mapping, limits, False
         self._check()
+        manifest = self._graph.manifest
+        if (manifest["backend"]["name"] != self._provenance.backend_name
+                or manifest["backend"]["layout_version"] != self._provenance.backend_layout_version
+                or manifest["serializer"]["name"] != self._provenance.serializer_name
+                or manifest["serializer"]["format_version"] != self._provenance.serializer_format_version):
+            raise ProvenanceMismatchError("current snapshot backend/serializer identity mismatch")
         if self._store.state_sha256() != self._provenance.state_sha256:
             raise ProvenanceMismatchError("current snapshot state digest mismatch")
 
     def _check(self):
         if self._closed:
             raise ReasoningError("graph source is closed")
-        if self._view._graph is not self._graph or self._view.store is not self._store:
+        if (self._view._graph is not self._graph or self._view.store is not self._store
+                or self._graph.serializer is not self._serializer):
             raise ProvenanceMismatchError("current view was rebound")
         self._provenance.verify_view(self._view)
         self._provenance.verify_snapshot_store(self._view)
@@ -277,16 +285,19 @@ class PinnedGraphSource:
         if self._store.get_metadata(_DATABASE_ID_METADATA_KEY) != self._provenance.database_id.encode("ascii"):
             raise ProvenanceMismatchError("current snapshot database identity mismatch")
 
-    def _evidence(self):
+    def _evidence(self, *, cancel=None):
         count = 0
         for kind, keys in (("node", self._store.get_node_keys_generator()),
                            ("edge", self._store.get_edge_keys_generator())):
             for key in keys:
+                check_cancelled(cancel)
                 self._check()
                 count += 1
                 if count > self._limits.max_records:
                     raise ReasoningLimitError("current graph exceeded max_records")
                 record = self._view.get_node(key) if kind == "node" else self._view.get_edge(key)
+                check_cancelled(cancel)
+                self._check()
                 if record is None:
                     raise ReasoningError("snapshot record disappeared")
                 if kind == "node":
@@ -300,7 +311,7 @@ class PinnedGraphSource:
         self._check()
         if not isinstance(compiled, CompiledOntology):
             raise ReasoningError("compiled ontology required")
-        result = DatalogEngine().evaluate(compiled.program, self._evidence(), limits=limits, collect_proofs=collect_proofs,
+        result = DatalogEngine().evaluate(compiled.program, self._evidence(cancel=cancel), limits=limits, collect_proofs=collect_proofs,
                                           cancel=cancel)
         self._check()
         context = _graph_context(self._provenance, compiled.revision_id, self._mapping)
