@@ -61,6 +61,10 @@ prefix and program. General authenticated range-result admission is not
 provided by this API; changing to historical mode does not verify a derivation
 either. Published metadata must not be treated as an independent closure proof.
 
+For authenticated finite-range source extraction, evaluation and re-admission,
+see :doc:`reasoning-range-admission`. That separate API does not change this
+raw caller-derived staging/publication contract or grant batch atomicity.
+
 Measured cost
 ----------------------------------------
 

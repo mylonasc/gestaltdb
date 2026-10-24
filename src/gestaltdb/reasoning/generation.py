@@ -55,10 +55,31 @@ class CurrentSourceIdentity:
 
 
 @dataclass(frozen=True)
+class TemporalRangeSourceIdentity:
+    """One authenticated temporal prefix and a finite half-open valid range."""
+
+    database_id: str
+    commit_horizon: int
+    provenance_token: str
+    valid_start_us: int
+    valid_end_us: int
+
+    def __post_init__(self) -> None:
+        _text(self.database_id, "database_id")
+        _text(self.provenance_token, "provenance_token")
+        for name in ("commit_horizon", "valid_start_us", "valid_end_us"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ReasoningError(f"{name} must be an integer")
+        if self.commit_horizon < 0 or self.valid_start_us >= self.valid_end_us:
+            raise ReasoningError("range requires non-negative horizon and start < end")
+
+
+@dataclass(frozen=True)
 class GenerationIdentity:
     """Exact logical reuse identity; physical executor/batch settings stay separate."""
 
-    source: TemporalSourceIdentity | CurrentSourceIdentity
+    source: TemporalSourceIdentity | CurrentSourceIdentity | TemporalRangeSourceIdentity
     context: InputContext
     program_digest: str
     catalog_digest: str
@@ -66,8 +87,9 @@ class GenerationIdentity:
     dictionary_id: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.source, (TemporalSourceIdentity, CurrentSourceIdentity)) or not isinstance(self.context, InputContext):
-            raise ReasoningError("temporal/current source identity and InputContext required")
+        if (not isinstance(self.source, (TemporalSourceIdentity, CurrentSourceIdentity, TemporalRangeSourceIdentity))
+                or not isinstance(self.context, InputContext)):
+            raise ReasoningError("point/current/range source identity and InputContext required")
         for name in ("program_digest", "catalog_digest", "semantics_profile", "dictionary_id"):
             _text(getattr(self, name), name)
 
@@ -79,9 +101,13 @@ class GenerationIdentity:
         if isinstance(source, TemporalSourceIdentity):
             domain = "gestaltdb-generation-identity-v1"
             fields = [source.database_id, source.commit_horizon, source.provenance_token, source.valid_time_us]
-        else:
+        elif isinstance(source, CurrentSourceIdentity):
             domain = "gestaltdb-current-generation-identity-v1"
             fields = [source.database_id, source.snapshot_sequence, source.provenance_token]
+        else:
+            domain = "gestaltdb-range-generation-identity-v1"
+            fields = [source.database_id, source.commit_horizon, source.provenance_token,
+                      source.valid_start_us, source.valid_end_us]
         return _digest([domain, fields,
                         [context.context_id, context.world, context.ontology_revision,
                          context.source_policy_id, context.mapping_id],
