@@ -36,10 +36,19 @@ compare-and-publish pattern to caller-derived interval claims: each
 validity interval is its own reserved namespace, generations bind the
 caller's explicit ontology revision plus source/rule identities and the
 evidence digest, and the revision is published into each claim's
-provenance. Gaps between generations are never filled nor enveloped. Stale
-namespaces raise ``GenerationStaleError`` for explicit re-staging;
-interruptions surface as unreclaimed temporal artifacts for consent-gated
-recovery. Single-quantum ``reconcile_point`` behavior is preserved unchanged.
+provenance. Stages retain authenticated source read-view provenance.
+The default ``publish_staged_range(..., freshness="latest")`` also
+requires the current commit horizon to match that source horizon, so
+conclusions derived from a moved source are never published silently;
+explicit ``freshness="historical"`` verifies the old pinned prefix
+instead. Both modes retain target compare-and-publish checks and record
+the source horizon, provenance token and freshness policy in published
+claim provenance and commit metadata. Legacy stages without source
+provenance must be re-staged. Gaps between generations are never filled
+nor enveloped. Stale namespaces raise ``GenerationStaleError`` for
+explicit re-staging; interruptions surface as unreclaimed temporal
+artifacts for consent-gated recovery. Single-quantum
+``reconcile_point`` behavior is preserved unchanged.
 
 Measured cost
 ----------------------------------------
