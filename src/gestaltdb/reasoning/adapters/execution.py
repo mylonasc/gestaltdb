@@ -161,7 +161,7 @@ def execute_closure(program: Program, facts: Iterable[Fact | Evidence], *,
     rationale = decision.rationale
     # Materialize once up front: generators are single-pass and every engine
     # below must observe the same input multiset for parity.
-    inputs = _materialize_inputs(facts)
+    inputs = _materialize_inputs(facts, limits=limits, cancel=cancel)
     if decision.kind == INDEXED_PYTHON:
         result = DatalogEngine().evaluate(program, inputs, limits=limits,
                                           collect_proofs=collect_proofs, cancel=cancel)
@@ -182,13 +182,22 @@ def execute_closure(program: Program, facts: Iterable[Fact | Evidence], *,
                                                           None, len(inputs), run_polars.result, False))
 
 
-def _materialize_inputs(facts: Iterable[Fact | Evidence]) -> list[Fact]:
+def _materialize_inputs(facts: Iterable[Fact | Evidence], *, limits: ReasoningLimits,
+                        cancel: Callable[[], bool] | None) -> list[Fact]:
     try:
-        items = list(facts)
+        iterator = iter(facts)
     except TypeError as exc:
         raise ReasoningError("facts must be iterable") from exc
     out = []
-    for value in items:
+    while True:
+        check_cancelled(cancel)
+        try:
+            value = next(iterator)
+        except StopIteration:
+            break
+        check_cancelled(cancel)
+        if len(out) >= limits.max_input_facts:
+            raise ReasoningLimitError("max_input_facts exceeded")
         fact = value.fact if isinstance(value, Evidence) else value
         if not isinstance(fact, Fact):
             raise ReasoningError("facts must contain only Fact or Evidence values")
