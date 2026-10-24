@@ -133,65 +133,74 @@ class PinnedBatchedClaimSource:
 
     def _filtered(self) -> Iterator[Evidence]:
         request = self._request
-        if request.predicates is not None and len(request.predicates) == 1:
-            predicate = request.predicates[0]
-            if request.subject is not None:
-                query = {"subject": request.subject, "predicate": predicate}
-                pushdown = "predicate+subject"
+        predicates = request.predicates
+        if predicates is not None and len(predicates) >= 1:
+            queries = []
+            for predicate in predicates:
+                if request.subject is not None:
+                    queries.append({"subject": request.subject, "predicate": predicate})
+                else:
+                    queries.append({"predicate": predicate})
+            if len(queries) == 1:
+                pushdown = "predicate+subject" if request.subject is not None else "predicate"
             else:
-                query = {"predicate": predicate}
-                pushdown = "predicate"
+                pushdown = "predicates+subject" if request.subject is not None else "predicates"
         else:
-            query, pushdown = {}, "none"
+            queries, pushdown = [{}], "none"
         self._pushdown = pushdown
-        iterator = iter(self._pinned.iter_claims_as_of(
-            valid_time=self._time, world=request.world,
-            polarity=ClaimPolarity.POSITIVE, object_kind=ClaimObjectKind.ENTITY, **query,
-        ))
+        seen: set[str] = set()
         count = 0
-        while True:
-            self._check_binding()
-            try:
-                version = next(iterator)
-            except StopIteration:
-                break
-            self._check_binding()
-            count += 1
-            self._scanned = count
-            if count > self._limits.max_scanned_claims:
-                raise ReasoningLimitError(f"claim extraction exceeded max_scanned_claims={self._limits.max_scanned_claims}")
-            if not isinstance(version, ClaimVersion) or not isinstance(version.claim, Claim):
-                raise ProvenanceMismatchError("source yielded an invalid claim version")
-            claim = version.claim
-            if (isinstance(version.commit_id, bool) or not isinstance(version.commit_id, int)
-                    or not 0 < version.commit_id <= self._provenance.commit_horizon
-                    or not version.valid.contains(self._time) or version.logical_id != claim.claim_id
-                    or version.operation not in (VersionOperation.ASSERT, VersionOperation.CORRECT)
-                    or claim.world != request.world or claim.polarity is not ClaimPolarity.POSITIVE
-                    or claim.object_kind is not ClaimObjectKind.ENTITY):
-                raise ProvenanceMismatchError("claim falls outside the pinned input context")
-            if not isinstance(version.version_id, str):
-                raise ProvenanceMismatchError("claim version ID is invalid")
-            try:
-                normalize_version_id(version.version_id)
-            except ValueError as exc:
-                raise ProvenanceMismatchError("claim version ID is invalid") from exc
-            if request.predicates is not None and claim.predicate not in request.predicates:
-                continue
-            if request.subject is not None and claim.subject != request.subject:
-                continue
-            if request.object is not None and claim.object != request.object:
-                continue
-            if self._agents is not None and claim.agent not in self._agents:
-                continue
-            if self._sources is not None and claim.source not in self._sources:
-                continue
-            marker = _DERIVED_AGENTS.get(claim.agent)
-            derived = marker is not None and claim.provenance.get("derived_by") == marker
-            if derived and not self._selection.include_derived:
-                continue
-            yield Evidence(self._mapping.map(Fact(claim.subject, claim.predicate, claim.object)),
-                           version.version_id)
+        for query in queries:
+            iterator = iter(self._pinned.iter_claims_as_of(
+                valid_time=self._time, world=request.world,
+                polarity=ClaimPolarity.POSITIVE, object_kind=ClaimObjectKind.ENTITY, **query,
+            ))
+            while True:
+                self._check_binding()
+                try:
+                    version = next(iterator)
+                except StopIteration:
+                    break
+                self._check_binding()
+                count += 1
+                self._scanned = count
+                if count > self._limits.max_scanned_claims:
+                    raise ReasoningLimitError(f"claim extraction exceeded max_scanned_claims={self._limits.max_scanned_claims}")
+                if not isinstance(version, ClaimVersion) or not isinstance(version.claim, Claim):
+                    raise ProvenanceMismatchError("source yielded an invalid claim version")
+                claim = version.claim
+                if (isinstance(version.commit_id, bool) or not isinstance(version.commit_id, int)
+                        or not 0 < version.commit_id <= self._provenance.commit_horizon
+                        or not version.valid.contains(self._time) or version.logical_id != claim.claim_id
+                        or version.operation not in (VersionOperation.ASSERT, VersionOperation.CORRECT)
+                        or claim.world != request.world or claim.polarity is not ClaimPolarity.POSITIVE
+                        or claim.object_kind is not ClaimObjectKind.ENTITY):
+                    raise ProvenanceMismatchError("claim falls outside the pinned input context")
+                if not isinstance(version.version_id, str):
+                    raise ProvenanceMismatchError("claim version ID is invalid")
+                try:
+                    normalize_version_id(version.version_id)
+                except ValueError as exc:
+                    raise ProvenanceMismatchError("claim version ID is invalid") from exc
+                if version.version_id in seen:
+                    continue
+                seen.add(version.version_id)
+                if request.predicates is not None and claim.predicate not in request.predicates:
+                    continue
+                if request.subject is not None and claim.subject != request.subject:
+                    continue
+                if request.object is not None and claim.object != request.object:
+                    continue
+                if self._agents is not None and claim.agent not in self._agents:
+                    continue
+                if self._sources is not None and claim.source not in self._sources:
+                    continue
+                marker = _DERIVED_AGENTS.get(claim.agent)
+                derived = marker is not None and claim.provenance.get("derived_by") == marker
+                if derived and not self._selection.include_derived:
+                    continue
+                yield Evidence(self._mapping.map(Fact(claim.subject, claim.predicate, claim.object)),
+                               version.version_id)
         self.verify_source()
 
     def iter_batches(self) -> Iterator[FactBatch]:
