@@ -75,3 +75,16 @@ def test_worker_failures_are_not_success(code):
 
 def test_worker_timeout_is_not_success():
     assert call_worker([sys.executable, "-c", "import time; time.sleep(5)"], .01)["status"] == "timeout"
+
+
+def test_limit_is_diagnostic_not_partial_success(tmp_path, monkeypatch):
+    pytest.importorskip("lmdb")
+    from gestaltdb.reasoning.model import ReasoningLimitError
+    path = tmp_path / "db"
+    fixture(path, 2, "selective", "lmdb")
+    def bounded(*args, **kwargs):
+        raise ReasoningLimitError("intentional intermediate cap")
+    monkeypatch.setattr("gestaltdb.reasoning.adapters.execution.execute_closure", bounded)
+    result = worker(path, 2, "selective", "indexed-python", "first")
+    assert result["status"] == "bounded" and result["no_result"] is True
+    assert "answers" not in result and "intentional" in result["reason"]

@@ -161,6 +161,7 @@ def worker(path, rows, shape, method, cache, proofs=False):
     started = time.perf_counter()
     from gestaltdb.graphdb import GraphDB
     from gestaltdb.reasoning import Atom, Fact, Program, Rule, Variable, ReasoningLimits
+    from gestaltdb.reasoning.model import ReasoningLimitError
     from gestaltdb.reasoning.adapters.batched import PinnedBatchedClaimSource
     from gestaltdb.reasoning.adapters.claims import ClaimMapping, ClaimSelection, ClaimSourceLimits
     from gestaltdb.reasoning.adapters.execution import execute_closure
@@ -275,6 +276,10 @@ def worker(path, rows, shape, method, cache, proofs=False):
                 "rss_boundary": "worker high-water, includes warmup and parity validation; not query-only RSS",
                 "conversion_boundary": "included in evaluate_convert_s; no zero-copy claim",
                 "bytes_copied": None, "bytes_copied_boundary": "not instrumented, not assumed zero"}
+    except ReasoningLimitError as exc:
+        return {"status": "bounded", "method": method, "rows": rows, "shape": shape,
+                "cache": cache, "mode": "proofs" if proofs else "closure", "reason": str(exc),
+                "no_result": True, "metrics": {"elapsed_to_limit_s": time.perf_counter() - started}}
     finally:
         graph.close()
 
@@ -291,7 +296,7 @@ def call_worker(command, timeout):
         row = json.loads(result.stdout)
     except ValueError:
         return {"status": "error", "stdout": result.stdout[-1000:]}
-    if not isinstance(row, dict) or row.get("status") != "ok":
+    if not isinstance(row, dict) or row.get("status") not in ("ok", "bounded"):
         return {"status": "error", "reason": "worker returned incomplete result", "stdout": result.stdout[-1000:]}
     row["worker_wall_s"] = time.perf_counter() - start
     return row
@@ -364,13 +369,17 @@ def main():
                     row.update(repeat=repeat, method=method, cache=cache)
                     report["samples"].append(row)
                     save()
-                    if row.get("status") != "ok":
+                    if row.get("status") not in ("ok", "bounded"):
                         raise SystemExit(f"worker failed: {method}; diagnostics saved")
         report["complete"] = True
+        report["all_parity_verified"] = all(s["status"] == "ok" for s in report["samples"])
         report["summary"] = {}
         for method in args.methods:
             for cache in args.caches:
-                group = [s for s in report["samples"] if s["method"] == method and s["cache"] == cache]
+                group = [s for s in report["samples"] if s["method"] == method and s["cache"] == cache and s["status"] == "ok"]
+                if not group:
+                    report["summary"][method + "/" + cache] = {"status": "bounded; no validated result"}
+                    continue
                 report["summary"][method + "/" + cache] = {
                     key: {"p50": statistics.median(values), "p95": values[math.ceil(.95 * len(values)) - 1]}
                     for key in group[0]["metrics"]
