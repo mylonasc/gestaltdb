@@ -38,6 +38,9 @@ Native GitHub links established: #338 (identity), #339 (input bounds), #340
 (evidence) are children of #255. #341 (pinned frontier) is a child of #249 and
 blocked by all three fixes. #342 (measured crossover) is a child of #194 and
 blocked by #341; it also coordinates #255 and RE-26/#187.
+Documentation correction #347 is a separate child of #248: range staging
+freshness does not authenticate the caller's derivation, and provenance tokens
+are currently claim metadata, not commit metadata.
 
 Dispatcher fixes merged via #343/#344/#345, each on its own issue-numbered
 branch/worktree. Combined local validation: 2729 passed, one optional fault

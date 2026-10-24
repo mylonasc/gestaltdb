@@ -386,6 +386,10 @@ def stage_range(graph: GraphDB, desired: Iterable[tuple[str, str, str]], *, vali
     compiled revision id). It is validated, bound into the generation
     digest, and published into each claim's provenance. There is no
     default: callers must state the revision explicitly.
+
+    Captured source provenance authenticates this staging prefix only. The
+    caller supplies already-derived triples: no check binds their computation
+    to that prefix or independently verifies the evidence digest/derivation.
     """
     if not isinstance(graph, GraphDB):
         raise ReasoningError("GraphDB is required")
@@ -446,10 +450,10 @@ def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
     logical commit. Namespace movement raises ``GenerationStaleError``;
     callers re-stage explicitly. Validity is published exactly as staged.
 
-    An optional expected source prefix is verified under the same guard: the
+    The captured staging prefix is verified under the same guard: the
     default ``freshness="latest"`` additionally requires the current commit
-    horizon to match the staged source horizon, so conclusions derived from
-    a moved source are never published silently. Explicit
+    horizon to match the staged source horizon, rejecting movement between
+    staging and publication (not a stale computation before staging). Explicit
     ``freshness="historical"`` verifies the original pinned prefix instead.
     """
     if not isinstance(staged, StagedRangePublication):
