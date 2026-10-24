@@ -1,10 +1,16 @@
 # Temporal active-set event scheduler — #254
 
-Status: executable standalone scheduler with scalar-oracle tests. Integration depends on #245 and measurements in
-#194; it must not add another cache before program identity is enforced.
+Status: scheduler wired into range evaluation. Integration depended on #245
+(done) and #194 measurements (bounded matrix merged; native comparison remains
+separate and untouched). Program identity is enforced by the existing
+generation digest and program-bound reuse contracts, not by a new cache.
 
 Implemented in `reasoning/temporal_sweep.py`; see
-`docs/reasoning-temporal-sweep.rst`. Closure evaluation is deliberately unchanged.
+`docs/reasoning-temporal-sweep.rst`. `evaluate_range` and `update_range` schedule
+active inputs through the sweep instead of scanning every input at every segment
+(row-to-fact mapping preserves overlapping multiplicity; `verify_closure` keeps
+independently re-deriving segmentation through its own scan path). Measured on a
+fragmented draw: 800 events + 1,957 memberships replace 79,600 scan checks.
 The prototype retains row ordinals rather than inventing evidence IDs and
 bounds total emitted row memberships as well as rows, events and segments.
 
