@@ -183,7 +183,7 @@ def execute_closure(program: Program, facts: Iterable[Fact | Evidence], *,
 
 
 def _materialize_inputs(facts: Iterable[Fact | Evidence], *, limits: ReasoningLimits,
-                        cancel: Callable[[], bool] | None) -> list[Fact]:
+                        cancel: Callable[[], bool] | None) -> list[Fact | Evidence]:
     try:
         iterator = iter(facts)
     except TypeError as exc:
@@ -201,5 +201,5 @@ def _materialize_inputs(facts: Iterable[Fact | Evidence], *, limits: ReasoningLi
         fact = value.fact if isinstance(value, Evidence) else value
         if not isinstance(fact, Fact):
             raise ReasoningError("facts must contain only Fact or Evidence values")
-        out.append(fact)
+        out.append(value)
     return out
