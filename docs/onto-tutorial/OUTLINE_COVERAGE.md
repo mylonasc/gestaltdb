@@ -33,7 +33,7 @@ each row names the doc file, the epic/issue anchor, and the verification.
 - [x] Use automatic layered layout, crossing reduction, conceptual clusters, and curved splines.
 - [x] Preserve GestaltDB node/edge data and engine-computed memberships; distinguish inferred edges.
 - [x] Add a full-resolution overview download and selectable vector text.
-- [x] Add `build_docs.sh --pdf` for a tutorial-only XeLaTeX PDF with vector diagrams.
+- [x] Add `build_tutorial.sh --pdf` for a tutorial-only XeLaTeX PDF with vector diagrams.
 - [x] Document optional build dependencies and test flag handling and missing-tool errors.
 
 ## Reader and reasoning-engine pass (2026-10-22)
@@ -49,6 +49,10 @@ each row names the doc file, the epic/issue anchor, and the verification.
 - [x] Validate the PDF's assembled source excludes maintainer pages and reject missing font glyphs.
 
 ## Employment and role-model correction
+
+Standalone publication: the tutorial now has its own Sphinx configuration,
+HTML/PDF build command, navigation, and local PDF extension. The library build
+excludes it; links to library references are external and optional.
 
 - [x] Give worksFor an Employee domain; infer Person via the subclass relation.
 - [x] Require separate positive job-description evidence to refine Employee into Researcher.

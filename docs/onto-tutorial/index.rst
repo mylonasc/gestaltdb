@@ -1,6 +1,10 @@
 From Graph Databases to Knowledge Graphs
 ========================================
 
+Looking for installation instructions or the API reference? Visit the
+`GestaltDB library documentation <https://mylonasc.github.io/gestaltdb/>`_.
+This tutorial is a separate, self-contained learning guide.
+
 Imagine building a research directory from three sources. A personnel system
 lists appointments, a grant system identifies investigators, and a public
 catalog records which laboratories belong to which institutions. Each source
@@ -95,6 +99,14 @@ promising a universal reasoner. The glossary provides a quick reference, and
 each chapter ends with a self-check and an answer.
 
 .. rubric:: Running the examples
+
+This is a standalone tutorial: its chapters introduce the concepts and supply
+the worked examples without requiring you to read the library manual first.
+For API details and installation alternatives, consult the
+`GestaltDB library documentation <https://mylonasc.github.io/gestaltdb/>`_
+and `library repository <https://github.com/mylonasc/gestaltdb>`_. External
+library references follow the current library and may describe APIs newer than
+the checkout tested here; they are optional further reading, not prerequisites.
 
 The examples target the source checkout accompanying this tutorial, including
 its ``gestalt-core-v1`` ontology fragment. Do not assume that an older PyPI

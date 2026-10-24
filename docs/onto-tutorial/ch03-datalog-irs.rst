@@ -233,9 +233,12 @@ Neither transport nor compactness supplies logical semantics, proofs, or
 maintenance automatically. The default binary evaluator remains indexed
 Python; the Polars path is explicitly selected and closure-only.
 
-To inspect these boundaries in GestaltDB, continue with :doc:`../reasoning-plans`,
-:doc:`../reasoning-batches`, and :doc:`../reasoning-demand`. The typed n-ary
-engine is a separate API (:doc:`../reasoning-typed`), not an implicit upgrade of
+To inspect these boundaries in GestaltDB, see the library references for
+`plans <https://github.com/mylonasc/gestaltdb/blob/main/docs/reasoning-plans.rst>`_,
+`batches <https://github.com/mylonasc/gestaltdb/blob/main/docs/reasoning-batches.rst>`_, and
+`demand evaluation <https://github.com/mylonasc/gestaltdb/blob/main/docs/reasoning-demand.rst>`_.
+The `typed n-ary engine <https://github.com/mylonasc/gestaltdb/blob/main/docs/reasoning-typed.rst>`_
+is a separate API, not an implicit upgrade of
 the binary ontology program used here.
 
 Other engines: similar notation, different jobs

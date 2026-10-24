@@ -140,7 +140,7 @@ def test_reader_pdf_rejects_maintainer_material(tmp_path):
     document.write_text("A reader-facing introduction to reasoning engines.")
     module.validate_reader_document(document)
     for page in ("maintainer-notes", "OUTLINE_COVERAGE", "toolkit/index"):
-        document.write_text(f"onto-tutorial/{page}::doc")
+        document.write_text(f"{page}::doc")
         with pytest.raises(RuntimeError, match="unexpectedly includes maintainer page"):
             module.validate_reader_document(document)
 
@@ -152,12 +152,43 @@ def test_every_chapter_has_a_question_and_explained_answer():
         assert "**Question.**" in text and "**Answer.**" in text, chapter.name
 
 
-def test_build_docs_flag_help_and_validation():
-    script = TUTORIAL.parents[1] / "scripts" / "build_docs.sh"
+def test_build_tutorial_flag_help_and_validation():
+    script = TUTORIAL.parents[1] / "scripts" / "build_tutorial.sh"
     help_result = subprocess.run([str(script), "--help"], capture_output=True, text=True)
     assert help_result.returncode == 0 and "--pdf" in help_result.stdout
     invalid = subprocess.run([str(script), "--pdf", "--output"], capture_output=True, text=True)
     assert invalid.returncode == 2 and "requires a directory" in invalid.stderr
+
+
+def test_tutorial_builds_as_an_isolated_sphinx_project(tmp_path):
+    pytest.importorskip("sphinx")
+    pytest.importorskip("sphinx_rtd_theme")
+    pytest.importorskip("myst_parser")
+    # Copy only the tutorial, not docs/conf.py, library pages or Python package.
+    source = tmp_path / "tutorial"
+    shutil.copytree(TUTORIAL, source, ignore=shutil.ignore_patterns("_build", "__pycache__"))
+    output = tmp_path / "html"
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", "sphinx", "-W", "-b", "html", str(source), str(output)],
+        cwd=tmp_path, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    index = (output / "index.html").read_text()
+    assert "https://mylonasc.github.io/gestaltdb/" in index
+    assert (output / "ch08-gaps.html").is_file()
+    assert not (output / "api.html").exists()
+    assert not (output / "quickstart.html").exists()
+
+
+def test_library_and_tutorial_builds_are_separate():
+    docs = TUTORIAL.parent
+    assert "onto-tutorial/index" not in (docs / "index.rst").read_text()
+    assert '"onto-tutorial/**"' in (docs / "conf.py").read_text()
+    assert "tutorial-pdf" not in (docs / "conf.py").read_text()
+    for chapter in TUTORIAL.glob("ch*.rst"):
+        assert ":doc:`../" not in chapter.read_text(), chapter.name
 
 
 def test_small_svg_escapes_labels_and_defines_marker():

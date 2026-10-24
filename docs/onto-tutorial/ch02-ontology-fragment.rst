@@ -204,7 +204,9 @@ binary property chains, selected left-side class expressions, and scoped
 reflexivity. It is not full RDFS or OWL. Disjunctive conclusions, arbitrary
 anonymous restrictions, longer property chains, and unscoped reflexivity must
 not be inferred from the fact that the engine supports simpler forms. See
-:doc:`ch08-gaps` for boundaries and :doc:`../ontology` for API details.
+:doc:`ch08-gaps` for boundaries and the library's
+`ontology reference <https://github.com/mylonasc/gestaltdb/blob/main/docs/ontology.rst>`_
+for API details.
 
 Theory and further reading
 ---------------------------

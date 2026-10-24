@@ -28,15 +28,24 @@ Build and validation
 
 From the repository root::
 
-   ./scripts/build_docs.sh
-   ./scripts/build_docs.sh --pdf --examples
+   ./scripts/build_tutorial.sh
+   ./scripts/build_tutorial.sh --pdf --examples
    uv run --extra lmdb pytest tests/test_ontology_tutorial.py -q
 
-HTML starts at ``docs/_build/html/onto-tutorial/index.html``. The optional PDF is
-``docs/_build/html/onto-tutorial/onto-tutorial.pdf``; ``--output DIR`` changes that
-prefix. LaTeX intermediates and diagnostic logs live under ``onto-tutorial/latex``
+HTML starts at ``docs/onto-tutorial/_build/html/index.html``. The optional PDF is
+``docs/onto-tutorial/_build/html/onto-tutorial.pdf``; ``--output DIR`` changes that
+prefix. LaTeX intermediates and diagnostic logs live under ``latex``
 in the output directory. A Sphinx build renders text but does not execute cells;
-``--examples`` also runs the tutorial regressions and modular documentation labs.
+``--examples`` runs only the tutorial chapter, notebook, and illustration tests.
+
+The tutorial is an independent Sphinx project with its own ``conf.py`` and
+local PDF extension. It can be rendered directly with
+``sphinx-build -W -b html docs/onto-tutorial OUTPUT``; rendering needs no installed
+GestaltDB and does not import the main documentation configuration. Library
+references use external GitHub links, while chapter links stay inside this site.
+The main library build (``scripts/build_docs.sh``) excludes the tutorial entirely.
+Use a fresh output directory when switching from the old combined build:
+Sphinx does not remove stale HTML from previous builds.
 
 PDF export requires XeLaTeX, Sphinx's standard LaTeX packages, DejaVu fonts, and
 Cairo for vector SVG conversion. For example, Debian/Ubuntu packages include
@@ -50,6 +59,6 @@ page, build commands, the toolkit reference, or the outline checklist. Tests
 check the assembled LaTeX reader document for that separation. After validating
 the PDF and inspecting representative pages, refresh the committed reader copy::
 
-   cp docs/_build/html/onto-tutorial/onto-tutorial.pdf docs/onto-tutorial/onto-tutorial.pdf
+   cp docs/onto-tutorial/_build/html/onto-tutorial.pdf docs/onto-tutorial/onto-tutorial.pdf
 
 Do not add the LaTeX intermediates or the full HTML build to Git.

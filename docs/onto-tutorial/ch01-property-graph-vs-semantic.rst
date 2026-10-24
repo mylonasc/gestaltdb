@@ -84,7 +84,8 @@ Stage 1 — the property-graph world
    Stage 1: graph storage and related language/API families.
 
 ``Property Graph DB`` *stores* labeled nodes and typed edges. **Cypher**
-expresses graph patterns (GestaltDB's query language; see :doc:`../cypher`).
+expresses graph patterns (GestaltDB's query language; see the library's
+`Cypher reference <https://github.com/mylonasc/gestaltdb/blob/main/docs/cypher.rst>`_).
 **GraphQL** describes a typed API response: application resolvers may read a
 graph, a relational database, or remote services. It is not a native property-
 graph query language. **SQL** queries relations; **SQL/PGQ** adds property-graph

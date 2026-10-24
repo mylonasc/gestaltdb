@@ -66,7 +66,9 @@ There is a similar trap with filtering. Choosing Alice as an eligible seed does
 not ensure every intermediate node belongs to a desired cohort. To constrain
 the sampled graph, define snapshot ``node_filter``/``edge_filter`` as appropriate,
 not just a seed list. The supported logical and array-native workflows are
-described separately in :doc:`../ontology-graph` and :doc:`../typed-sampling`.
+described separately in the library's
+`graph adapter <https://github.com/mylonasc/gestaltdb/blob/main/docs/ontology-graph.rst>`_
+and `sampling <https://github.com/mylonasc/gestaltdb/blob/main/docs/typed-sampling.rst>`_ guides.
 
 Theory and further reading
 ---------------------------

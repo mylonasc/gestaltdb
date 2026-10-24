@@ -68,7 +68,8 @@ replacing them by their min/max envelope would invent truth at time 2.5.
 Truth coverage may coalesce while evidence history keeps both supports.
 
 Temporal closure therefore evaluates supported change segments, not just a
-sample at one instant. See :doc:`../reasoning-temporal` for the supported
+sample at one instant. See the library's
+`temporal reasoning guide <https://github.com/mylonasc/gestaltdb/blob/main/docs/reasoning-temporal.rst>`_ for the supported
 contracts. It is a stronger task than attaching a timestamp to a point answer.
 
 Why deleting an assertion can be difficult
@@ -86,7 +87,7 @@ DRed-style deletion—overdelete potentially affected consequences, then
 rederive those still justified. Full rematerialization is the explicit fallback
 for unsupported changes or combinations. A chosen explanation witness alone
 is not sufficient state for safe deletion. The detailed supported boundaries
-are in :doc:`../reasoning-maintenance`.
+are in the library's `maintenance guide <https://github.com/mylonasc/gestaltdb/blob/main/docs/reasoning-maintenance.rst>`_.
 
 Belief and confidence answer different questions
 -------------------------------------------------

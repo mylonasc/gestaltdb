@@ -95,7 +95,8 @@ publication must compare its source/target identities with the state it is
 allowed to publish against; a stale stage needs an explicit retry rather than
 quietly becoming current. Recovery after an interrupted nontransactional write
 also requires an audit policy, not an assumption that every artifact is valid.
-See :doc:`../reasoning-generations` and :doc:`../ontology-publication` for the
+See the library's `generation <https://github.com/mylonasc/gestaltdb/blob/main/docs/reasoning-generations.rst>`_
+and `publication <https://github.com/mylonasc/gestaltdb/blob/main/docs/ontology-publication.rst>`_ guides for the
 point-publication contracts; they are not implicit behavior of ``evaluate``.
 
 Why extraction can dominate performance
@@ -111,7 +112,8 @@ substitute a weaker read.
 
 For this reason the example chooses LMDB explicitly. It does not assume that
 every backend offers the same verifiable current snapshot. The deeper APIs are
-documented in :doc:`../ontology-graph` and :doc:`../reasoning-extraction`.
+documented in the library's `graph adapter <https://github.com/mylonasc/gestaltdb/blob/main/docs/ontology-graph.rst>`_
+and `extraction <https://github.com/mylonasc/gestaltdb/blob/main/docs/reasoning-extraction.rst>`_ guides.
 
 Check your understanding
 -------------------------

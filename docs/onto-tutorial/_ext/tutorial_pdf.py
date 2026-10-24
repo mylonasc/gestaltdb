@@ -1,4 +1,4 @@
-"""Build-time vector SVG conversion for the tutorial's LaTeX/PDF export."""
+"""Tutorial-local vector SVG conversion for LaTeX/PDF export."""
 
 import os
 

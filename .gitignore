@@ -16,6 +16,7 @@ __pycache__/
 .coverage.*
 htmlcov/
 docs/_build/
+docs/onto-tutorial/_build/
 benchmark_results/
 log/
 INGESTION_PERFORMANCE_OPTS_ROADMAP.md

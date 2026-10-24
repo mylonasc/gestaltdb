@@ -39,7 +39,8 @@ from the selected named-entity fragment. GestaltDB has separately gated
 experimental capabilities, including bounded EL work, but their existence
 does not expand the compiler used in the introductory examples. Start from
 the required constructs and inspect their exact supported semantics. See
-:doc:`../reasoning-profiles` and :doc:`../reasoning-el` for those boundaries.
+the library's `profile <https://github.com/mylonasc/gestaltdb/blob/main/docs/reasoning-profiles.rst>`_
+and `EL <https://github.com/mylonasc/gestaltdb/blob/main/docs/reasoning-el.rst>`_ guides for those boundaries.
 
 Validation is another distinct need. "Every record must contain a field" is
 not the same statement as an ontology domain implication. Selected conflict

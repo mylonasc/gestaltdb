@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compile the tutorial's Sphinx tree and vector figures to a standalone PDF.
 
-Run through build_docs.sh --pdf to provision Python build dependencies. Requires
+Run through build_tutorial.sh --pdf to provision Python build dependencies. Requires
 XeLaTeX plus the LaTeX packages used by Sphinx, but not latexmk or Graphviz.
 """
 
@@ -20,7 +20,7 @@ def validate_reader_document(path: Path) -> None:
     """Keep contributor bookkeeping out of the reader edition."""
     text = path.read_text(encoding="utf-8")
     for page in ("maintainer-notes", "OUTLINE_COVERAGE", "toolkit/index"):
-        if f"onto-tutorial/{page}::doc" in text:
+        if f"{page}::doc" in text:
             raise RuntimeError(f"Reader PDF unexpectedly includes maintainer page: {page}")
 
 
@@ -36,7 +36,7 @@ def build(output: Path) -> Path:
     work = output / "latex"
     work.mkdir(parents=True, exist_ok=True)
     status = build_main(["-b", "latex", "-W", "-t", "tutorial-pdf",
-                         str(ROOT / "docs"), str(work)])
+                         str(ROOT / "docs" / "onto-tutorial"), str(work)])
     if status:
         raise RuntimeError(f"Sphinx LaTeX build failed with exit status {status}")
     validate_reader_document(work / "onto-tutorial.tex")

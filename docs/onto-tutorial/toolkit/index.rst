@@ -35,7 +35,7 @@ Graphviz versions can change placement without changing the graph. Tests check
 graph content, large text, spline paths, and repeatability on the installed
 version rather than requiring one version's exact coordinates everywhere.
 SVG text remains selectable. These static figures do not capture an interactive
-notebook's browser state. See :doc:`../index` for ``build_docs.sh --pdf``.
+notebook's browser state. See :doc:`../maintainer-notes` for ``build_tutorial.sh --pdf``.
 
 .. toctree::
    :maxdepth: 1

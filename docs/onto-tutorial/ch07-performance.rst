@@ -47,7 +47,8 @@ Compact batches also have a boundary. A binary row of two uint64 IDs uses
 join state, and support indexes still occupy memory. Arrow imports copy and
 canonicalize; little-endian exports can share immutable column payloads, while
 wrappers allocate and downstream consumers may copy. "Columnar" and "zero-copy"
-are not synonyms. See :doc:`../reasoning-batches` for ownership details.
+are not synonyms. See the library's
+`batch reference <https://github.com/mylonasc/gestaltdb/blob/main/docs/reasoning-batches.rst>`_ for ownership details.
 
 Some costs are inherent in the requested answer
 ------------------------------------------------
@@ -97,7 +98,8 @@ proof/maintenance modes that the prototype does not provide.
 The timings include compilation, conversion, fixpoint, and decoding but exclude
 package imports and fixture construction. That definition matters as much as
 the numbers. The complete tables, scope, and reproduction commands are in
-:doc:`../reasoning-polars`; there is no reason to memorize the figures here.
+the library's `Polars guide <https://github.com/mylonasc/gestaltdb/blob/main/docs/reasoning-polars.rst>`_;
+there is no reason to memorize the figures here.
 
 When evaluating your own pipeline, distinguish cold-start latency from reused
 execution, final payload from peak process RSS, and closure-only results from
