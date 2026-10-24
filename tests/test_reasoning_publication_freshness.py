@@ -139,3 +139,67 @@ def test_legacy_stage_without_shared_binding_retains_freshness_guard(staged_grap
     with pytest.raises(GenerationStaleError, match="source"):
         publish_staged(graph, legacy)
     assert publish_staged(graph, legacy, freshness="historical").asserted == 2
+
+
+@pytest.mark.parametrize("path,value", [
+    ("source.database_id", "foreign-database"),
+    ("source.commit_horizon", 999),
+    ("source.provenance_token", "foreign-token"),
+    ("source.valid_time_us", 51),
+    ("context.context_id", "other-context"),
+    ("context.world", "other-world"),
+    ("context.ontology_revision", "other-revision"),
+    ("context.source_policy_id", "other-policy"),
+    ("context.mapping_id", "other-mapping"),
+    ("program_digest", "other-program"),
+    ("catalog_digest", "other-catalog"),
+    ("semantics_profile", "other-profile"),
+    ("dictionary_id", "other-dictionary"),
+])
+@pytest.mark.parametrize("freshness", ["latest", "historical"])
+def test_expected_generation_rejects_every_identity_drift_without_writes(
+        staged_graph, path, value, freshness):
+    graph, _, staged = staged_graph
+    expected = staged.generation_binding.identity
+    if "." in path:
+        outer, inner = path.split(".")
+        expected = replace(expected, **{outer: replace(getattr(expected, outer), **{inner: value})})
+    else:
+        expected = replace(expected, **{path: value})
+    with graph.read_view(valid_time=50) as view:
+        horizon = view.provenance.commit_horizon
+    with pytest.raises(ReasoningError, match="drifted"):
+        publish_staged(graph, staged, expected_generation=expected, freshness=freshness)
+    with graph.read_view(valid_time=50) as view:
+        assert view.provenance.commit_horizon == horizon
+        assert list(view.iter_claims_as_of(world="derived")) == []
+
+
+def test_expected_generation_is_opt_in_and_requires_a_bound_stage(staged_graph):
+    graph, _, staged = staged_graph
+    expected = staged.generation_binding.identity
+    with pytest.raises(ReasoningError, match="expected_generation must"):
+        publish_staged(graph, staged, expected_generation="not-an-identity")
+    with pytest.raises(ReasoningError, match="requires a shared generation binding"):
+        publish_staged(graph, replace(staged, generation_binding=None), expected_generation=expected)
+    assert publish_staged(graph, staged, expected_generation=expected).asserted == 2
+
+
+def test_matching_pin_does_not_bypass_freshness(staged_graph):
+    graph, version, staged = staged_graph
+    expected = staged.generation_binding.identity
+    graph.retract_claim(version.logical_id, valid=(0, 100))
+    with pytest.raises(GenerationStaleError, match="source"):
+        publish_staged(graph, staged, expected_generation=expected)
+    assert publish_staged(graph, staged, expected_generation=expected, freshness="historical").asserted == 2
+
+
+def test_matching_pin_does_not_bypass_target_comparison(staged_graph):
+    graph, _, staged = staged_graph
+    expected = staged.generation_binding.identity
+    invalid_base = replace(staged, base_fingerprint="not-the-current-target")
+    with pytest.raises(GenerationStaleError, match="target namespace"):
+        publish_staged(graph, invalid_base, expected_generation=expected, freshness="historical")
+    with graph.read_view(valid_time=50) as view:
+        assert view.provenance.commit_horizon == expected.source.commit_horizon
+        assert list(view.iter_claims_as_of(world="derived")) == []

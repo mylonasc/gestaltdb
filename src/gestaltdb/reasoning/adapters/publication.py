@@ -177,13 +177,17 @@ def stage_point(
 
 def publish_staged(
     graph: GraphDB, staged: StagedPointPublication, *, max_target_claims: int = 100_000,
-    freshness: str = "latest",
+    freshness: str = "latest", expected_generation: GenerationIdentity | None = None,
 ) -> PublicationResult:
     """Compare the staged base fingerprint and publish exactly once on match.
 
     Holds the writer guard only for orphan audit, target comparison and one
     logical commit. Any namespace movement raises ``GenerationStaleError``;
     callers retry by re-staging explicitly. No stale closure is published.
+
+    An optional expected generation pins the caller's source/program/catalog
+    and semantic policy. It is a compatibility check, not authentication or a
+    substitute for the guarded source and target checks below.
     """
     if not isinstance(staged, StagedPointPublication):
         raise ReasoningError("a StagedPointPublication is required")
@@ -195,6 +199,12 @@ def publish_staged(
         raise ReasoningError("freshness must be latest or historical")
     if staged.source_provenance is None:
         raise ReasoningError("staged source provenance is required; re-stage explicitly")
+    if expected_generation is not None:
+        if not isinstance(expected_generation, GenerationIdentity):
+            raise ReasoningError("expected_generation must be GenerationIdentity or None")
+        if staged.generation_binding is None:
+            raise ReasoningError("expected_generation requires a shared generation binding; re-stage explicitly")
+        expected_generation.require_compatible(staged.generation_binding.identity)
     generation_metadata = {}
     if staged.generation_binding is not None:
         identity = staged.generation_binding.identity
