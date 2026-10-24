@@ -100,6 +100,25 @@ bounded single witnesses (truncation never truncates closure);
 ``polars-prototype-v1`` rejects proof collection before consuming input.
 Adapters never substitute the prototype into claims/publication paths.
 
+Opt-in executor-aware evaluation
+----------------------------------------
+
+``gestaltdb.reasoning.adapters.execution.execute_closure`` is the single
+opt-in entry that connects decisions to real engines. It verifies an
+explicit ``ExecutorRequest`` (request mode must match proof collection),
+optionally admits a bound ``GenerationIdentity`` with exact dictionary,
+mode and executor compatibility, dispatches to the decided engine, and
+returns the closure with uniform ``StageTelemetry`` (executor, mode,
+rationale, admission/plan digests, input/output counts, proof flag).
+
+Prepared-plan execution requires the caller to supply the matching
+``PreparedProgram``; Polars execution requires an explicit ``InputContext``
+and a declared-available runtime. Omitting the preference keeps the indexed
+reference even when Polars is installed; there is no automatic switching
+and no dictionary recoding — mismatches fail closed. Request/program/type
+errors, cancellations and unknown combinations fail before any engine runs.
+``collect_proofs=True`` routes to indexed witnesses only.
+
 Installation isolation
 ----------------------------------------
 
