@@ -5,6 +5,15 @@ Status: executable admission milestone implemented in
 `reasoning/executors.py` selection is unchanged. Depends on #248 (merged);
 benchmark crossovers in #194 remain the gate for enabling new physical paths.
 
+Update (in progress): `reasoning/adapters/execution.py` connects the decision
+to real engines through one opt-in entry: verified `ExecutorRequest`, optional
+generation admission with exact dictionary/mode/executor checks, dispatch to
+the decided engine (indexed reference default; prepared-plan and Polars only
+on explicit caller-supplied plan/context plus available runtime), uniform
+`StageTelemetry`, no automatic switching, no dictionary recoding. Existing
+engine call sites are unchanged; typed/maintenance/temporal paths keep their
+adapters. Benchmark crossover and broader pipeline adoption remain open.
+
 | Requested mode | Initial admitted implementation |
 |---|---|
 | Binary positive closure | Existing indexed reference; Polars only on explicit opt-in |
