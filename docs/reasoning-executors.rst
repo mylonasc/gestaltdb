@@ -131,6 +131,11 @@ value only to detect overflow. Duplicates count toward that limit. Cooperative
 cancellation is checked before and after each iterator advance; it cannot
 interrupt a blocked or long-running ``next()`` call. Iterator failures propagate
 without a successful partial outcome. This is a row bound, not a byte/RSS cap.
+Buffered values retain their original ``Fact``/``Evidence`` identity; indexed
+witness engines retain exact references for their selected bounded witnesses,
+not all independent supports. Polars consumes
+the same evidence values but projects them to set-valued facts internally for
+closure-only conversion. It does not return proofs or all-support provenance.
 
 Installation isolation
 ----------------------------------------

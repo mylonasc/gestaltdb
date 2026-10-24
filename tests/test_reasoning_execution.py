@@ -244,3 +244,40 @@ def test_exact_input_bound_and_iterator_failures():
         execute_closure(program(), broken(), limits=ReasoningLimits())
     with pytest.raises(ReasoningError, match="Fact or Evidence"):
         execute_closure(program(), [None], limits=ReasoningLimits())
+
+
+@pytest.mark.parametrize("preferred", ["default", "indexed-scc"])
+@pytest.mark.parametrize("first", ["claim-version-123", "claim-version-456"])
+def test_exact_independent_evidence_matches_direct_proofs(preferred, first):
+    from gestaltdb.reasoning.engine import DatalogEngine
+    from gestaltdb.reasoning.plans import PlannedDatalogEngine
+    from gestaltdb.reasoning.protocols import Evidence
+
+    edge = Fact("a", "edge", "b")
+    evidence = [Evidence(edge, first), Evidence(edge, "claim-version-456"),
+                Evidence(edge, "claim-version-123"), Fact("b", "edge", "c")]
+    plan = prepare() if preferred == "indexed-scc" else None
+    if plan is None:
+        direct = DatalogEngine().evaluate(program(), evidence, limits=ReasoningLimits(), collect_proofs=True)
+    else:
+        direct = PlannedDatalogEngine().evaluate(
+            plan, evidence, identity=plan.identity, limits=ReasoningLimits(), collect_proofs=True).result
+    dispatched = execute_closure(program(), iter(evidence), context=CONTEXT, plan=plan,
+                                  executor_request=ExecutorRequest(preferred=preferred, mode="proofs"),
+                                  collect_proofs=True, limits=ReasoningLimits())
+    assert dispatched.result == direct
+    assert dispatched.telemetry.input_facts == len(evidence)
+    node = next(node for node in dispatched.result.proofs.nodes if node.fact == edge)
+    # These engines select one bounded witness, not an all-support ledger.
+    assert node.evidence == ("claim-version-123",)
+
+
+def test_evidence_closure_parity_with_polars():
+    pytest.importorskip("polars")
+    from gestaltdb.reasoning.protocols import Evidence
+    evidence = [Evidence(Fact("a", "edge", "b"), "claim-version-123")]
+    indexed = execute_closure(program(), evidence, limits=ReasoningLimits())
+    polars = execute_closure(program(), evidence, context=CONTEXT, limits=ReasoningLimits(),
+                             executor_request=ExecutorRequest(preferred="polars-prototype", polars_available=True))
+    assert set(indexed.result.facts) == set(polars.result.facts)
+    assert polars.result.proofs is None
