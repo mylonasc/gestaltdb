@@ -131,6 +131,30 @@ artifacts (not sampling-roadmap expansion). Source-independent
 `SpecializationCache` needs no source invalidation; the adapter re-admission
 path handles supplied range closures rather than inventing a phantom cache.
 
+### Authenticated interval publication continuation (#355)
+
+Baseline `9a4767f` includes #358/#354 after all exact-head and post-merge gates.
+Branch `feature/re-355-range-publication`, worktree `re-355-range-publication`.
+The new consumer owns range extraction/evaluation, then independently re-admits
+source evidence and exact closure under the temporal writer guard before one
+logical commit containing every interval assertion/correction/retraction.
+Latest source checks remain separate from explicit historical mode and target
+CAS. Exact managed history/tombstones prevent an empty-target ABA bypass.
+
+Discover historical interval namespaces, not only current closure segments, so
+removed intervals are actually retracted. Fact-specific source namespaces
+preserve disjoint validity as distinct logical IDs; partial external validity
+changes fail closed. Validate typed output as binary entities before writes.
+Bind content to exact evidence/program/catalog/policy/output rather than the
+horizon alone: unchanged output after our own prior commit remains idempotent
+and retains truthful old provenance. Claims/new commits carry exact generation
+metadata; interrupted nontransactional publication remains caller-recovered.
+
+Raw caller-derived `stage_range` and point publication remain unchanged.
+This correctness-first path intentionally re-evaluates under the guard; it
+makes no short-lock-duration/performance or independent engine-proof claim.
+#356 durable sessions and #357 existing inferred-artifact identity remain open.
+
 ### Prior ordered follow-through
 
 Native GitHub links established: #338 (identity), #339 (input bounds), #340
