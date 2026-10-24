@@ -9,8 +9,13 @@ deltas to the exact-version evidence ledger and maintenance support indexes.
 mapping scope and source commit horizon, then materializes the closure from
 one full scan. ``advance_session`` consumes the exact versions committed
 since the pinned horizon: assertions become typed facts through an explicit
-claim mapping, corrections retire their superseded version atomically, and
-retractions retire the named versions. Logical insertions propagate through
+claim mapping, corrections retire active versions of their logical claim
+atomically, and retractions retire that logical claim's observed versions.
+Only changes whose half-open valid interval contains the session's pinned
+valid-time point affect its active evidence. For a point at ``50``, retractions
+over ``[0,50)`` or ``[51,100)`` leave evidence intact; ``[50,51)`` retracts it.
+The same rule applies when resuming a persisted session.
+Logical insertions propagate through
 existing supports; logical retractions use DRed against the pinned dependency
 index. Every advance is verified against the pinned database identity, and a
 backwards-moving horizon fails closed.

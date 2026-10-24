@@ -114,6 +114,33 @@ def test_roundtrip_and_resume_parity(tmp_path, backend, module):
 
 
 @pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
+@pytest.mark.parametrize("interval", [(0, 50), (50, 51), (51, 100)])
+def test_reopened_persisted_session_respects_retraction_validity(tmp_path, backend, module, interval):
+    pytest.importorskip(module)
+    database_path = tmp_path / backend
+    session_path = tmp_path / "session.json"
+    graph = GraphDB.create(database_path, backend=backend, serializer="json")
+    try:
+        first = assert_member(graph, "a")
+        save_session(start(graph), session_path)
+    finally:
+        graph.close()
+    graph = GraphDB.open(database_path)
+    try:
+        graph.retract_claim(first.logical_id, valid=interval, supersedes_version_id=first.version_id)
+        moved = advance_persisted_session(graph, session_path, limits=ReasoningLimits())
+        fresh = start(graph)
+        reloaded = load_session(session_path)
+        assert not moved.rebuilt
+        assert moved.session.facts == reloaded.facts == fresh.facts
+        assert moved.session.version_logical == reloaded.version_logical == fresh.version_logical
+        assert reloaded.commit_horizon == fresh.commit_horizon
+        assert set(reloaded.facts) == fresh_facts(reloaded.program, graph)
+    finally:
+        graph.close()
+
+
+@pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
 def test_overwide_gap_rebuild_persists(tmp_path, backend, module):
     pytest.importorskip(module)
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")

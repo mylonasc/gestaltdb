@@ -247,6 +247,10 @@ def advance_session(graph: GraphDB, session: ReasoningSession, *, limits: Reason
             if not isinstance(version, ClaimVersion):
                 continue
             if version.operation == VersionOperation.RETRACT:
+                # A retraction only wins at points inside its half-open valid
+                # interval. Outside it, the pinned assertion remains active.
+                if not version.valid.contains(instant):
+                    continue
                 # Retractions are logical: they retire every active version of
                 # the named claim, however the retraction names it. Naming an
                 # unobserved version or an unknown logical ID means foreign or
