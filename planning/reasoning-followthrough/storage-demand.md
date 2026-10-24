@@ -11,3 +11,11 @@ and #194. Next steps are predicate-alias inversion, indexed multi-predicate
 claims extraction under one view, and a frontier strategy that never confines
 all recursive reads to the initial bound subject. Track scanned/decoded rows,
 not merely the number of final answers.
+
+Update (PR #330, in review): multi-predicate plans now run one indexed
+per-predicate pass under the same pinned view with exact version-ID dedup and
+recorded ``predicates``/``predicates+subject`` pushdown modes. Demand-closure
+parity is tested against full extraction, including recursive frontiers and
+asserted headed facts, with scanned-row accounting. Binding/frontier I/O and
+native-acceleration measurements remain open; #194's native decoder comparison
+is untouched.

@@ -166,8 +166,10 @@ The source verifies snapshot authentication before the first batch, re-checks th
 view binding per record, and verifies again after the final batch. Closing the
 source invalidates its iterators, never the caller's view or graph. A single
 predicate — optionally with a subject binding — is pushed to the existing indexed
-claim query; all other selection filters in Python, with the actual pushdown mode
-(``predicate``, ``predicate+subject`` or ``none``) recorded in the profile.
+claim query; a multi-predicate plan runs one indexed pass per predicate under the same
+pinned view and deduplicates by exact version ID. All other selection filters run in
+Python, with the actual pushdown mode (``predicate``, ``predicate+subject``,
+``predicates``, ``predicates+subject`` or ``none``) recorded in the profile.
 ``source.profile`` reports batches, rows, pre-filter scanned versions,
 verification count and pushdown mode for the most recent completed pass; a new
 pass rebuilds it. Row budgets fail closed mid-stream without partial publication;
