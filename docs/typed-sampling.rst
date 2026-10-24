@@ -164,13 +164,9 @@ GestaltDB stores typed adjacency records for efficient directional scans.
 Create a Typed Graph
 --------------------
 
+.. include:: _includes/backend-setup.rst
+
 .. code-block:: python
-
-   from gestaltdb.graphdb import Edge, GraphDB, Node
-   from gestaltdb.kvstores import LMDBStore
-   from gestaltdb.serializers import PickleSerializer
-
-   graph_db = GraphDB(LMDBStore(path="typed_graph_lmdb"), PickleSerializer())
 
    for node_id, kind in [
        ("drug-1", "drug"),
@@ -329,6 +325,8 @@ them from stored edges.
 
    rebuilt = graph_db.rebuild_typed_adjacency()
    print(f"rebuilt {rebuilt} typed adjacency records")
+
+   graph_db.close()
 
 Array-Native Sampling Policies
 ------------------------------

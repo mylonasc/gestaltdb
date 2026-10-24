@@ -31,6 +31,10 @@ label. The only relevant assertion is the appointment edge. The ontology from
 chapter 2 will supply both memberships. Follow the four steps in order: store,
 map, evaluate, and compare the logical answer with the unchanged stored graph.
 
+This particular example requires a verifiable current snapshot and therefore
+uses LMDB. :doc:`backends` explains why LevelDB and default PyRex cannot replace
+it, and gives a portable basic graph lab for all three backends.
+
 .. code-block:: python
 
    from tempfile import TemporaryDirectory

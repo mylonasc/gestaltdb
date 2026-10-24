@@ -59,3 +59,11 @@ excludes it; links to library references are external and optional.
 - [x] Distinguish explicit not_researcher categories, missing evidence, and logical negation.
 - [x] Explain employment versus co-location and the fuller reified activity/job model.
 - [x] Update worked code, notebooks, illustrations, and the committed reader PDF together.
+
+## Backend choices and copyable listings
+
+- [x] Add synchronized LMDB, LevelDB, and RocksDB/PyRex setup tabs to the library examples.
+- [x] Add a standalone tutorial backend page with all three portable choices.
+- [x] Keep the verifiable-snapshot lab explicitly LMDB-only and explain why.
+- [x] Enable copy buttons on every library and tutorial code listing.
+- [x] Validate both Sphinx sites, the tutorial PDF, and executable backend examples.

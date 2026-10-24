@@ -26,6 +26,19 @@ def _rst_examples(path):
     )]
 
 
+def _backend_setup_example(backend="LMDB"):
+    """Return one selected tab from the shared backend-setup include."""
+    text = (ROOT / "docs/_includes/backend-setup.rst").read_text(encoding="utf-8")
+    section = text.split(f".. tab-item:: {backend}\n", 1)[1]
+    section = section.split("   .. tab-item::", 1)[0]
+    blocks = re.findall(
+        r"^      \.\. code-block:: python\n\n((?:[ \t]+[^\n]*\n|\n)+)", section,
+        re.MULTILINE,
+    )
+    assert blocks, f"No Python setup for {backend}"
+    return textwrap.dedent(blocks[0])
+
+
 def _execute(examples, filename, namespace=None):
     assert examples, f"No examples found in {filename}"
     namespace = {} if namespace is None else namespace
@@ -79,6 +92,7 @@ def test_quickstart_including_reusable_sampler(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     namespace = {}
     try:
+        _execute([_backend_setup_example()], "docs/_includes/backend-setup.rst", namespace)
         _execute(_rst_examples("docs/quickstart.rst"), "docs/quickstart.rst", namespace)
     finally:
         if "graph_db" in namespace:

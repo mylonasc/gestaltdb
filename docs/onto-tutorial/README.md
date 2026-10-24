@@ -20,9 +20,11 @@ The committed reader PDF is [onto-tutorial.pdf](onto-tutorial.pdf).
 
 This directory is its own Sphinx source root and can be built independently
 with `sphinx-build -W -b html docs/onto-tutorial OUTPUT`. Rendering does not
-require an installed library; executing examples requires the matching checkout
-and LMDB for the stored-graph labs. See [maintenance notes](maintainer-notes.rst)
-for PDF dependencies and verification.
+require an installed library; executing examples requires the matching checkout.
+Basic graph examples support LMDB, LevelDB, or RocksDB/PyRex; the pinned
+current-graph labs require LMDB. See [backend choices](backends.rst) and
+[maintenance notes](maintainer-notes.rst) for dependencies and verification.
+The HTML build includes copy buttons on every code listing.
 
 The main library documentation uses `scripts/build_docs.sh` and does not include
 this tutorial.

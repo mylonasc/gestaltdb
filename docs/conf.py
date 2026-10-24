@@ -25,11 +25,17 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "myst_parser",
+    "sphinx_copybutton",
+    "sphinx_design",
 ]
 
 templates_path = ["_templates"]
 myst_enable_extensions = ["dollarmath"]
-exclude_patterns = ["_build", "onto-tutorial/**", "Thumbs.db", ".DS_Store"]
+exclude_patterns = ["_build", "_includes/**", "onto-tutorial/**", "Thumbs.db", ".DS_Store"]
+
+# Strip interactive prompts, not indentation or shell continuation lines.
+copybutton_prompt_text = r">>> |\.\.\. |\$ "
+copybutton_prompt_is_regexp = True
 
 html_theme = "sphinx_rtd_theme"
 html_title = "GestaltDB"

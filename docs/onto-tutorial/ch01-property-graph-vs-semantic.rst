@@ -187,13 +187,17 @@ Theory and further reading
 - `GraphQL <https://en.wikipedia.org/wiki/GraphQL>`_ specifies client-shaped
   API selection; its resolvers choose how and where to fetch the data.
 
+Choose ``lmdb``, ``leveldb``, or ``pyrex`` in the listing below after installing
+the matching extra; see :doc:`backends`. The stored-graph result is the same.
+
 .. code-block:: python
 
    from gestaltdb.graphdb import Edge, GraphDB, Node
    from tempfile import TemporaryDirectory
 
+   backend = "lmdb"  # or "leveldb", "pyrex" (RocksDB)
    with TemporaryDirectory() as directory:
-       graph = GraphDB.create(directory, backend="lmdb", serializer="json")
+       graph = GraphDB.create(directory, backend=backend, serializer="json")
        try:
            graph.put_nodes([
                Node(node_id="alice", labels=["Employee"],

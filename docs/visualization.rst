@@ -9,16 +9,18 @@ JavaScript toolchain, no network access, and no new runtime dependency**.
 Quick Start
 -----------
 
+Install ``gestaltdb[lmdb]``, ``gestaltdb[leveldb]``, or ``gestaltdb[rocksdb]``
+and select the corresponding backend below. See :doc:`storage-backends`.
+
 .. code-block:: python
 
    from tempfile import TemporaryDirectory
 
    from gestaltdb.graphdb import Edge, GraphDB, Node
-   from gestaltdb.kvstores import LevelDBStore
-   from gestaltdb.serializers import PickleSerializer
 
+   backend = "lmdb"  # or "leveldb", "pyrex" (RocksDB)
    with TemporaryDirectory() as tmpdir:
-       graph = GraphDB(LevelDBStore(path=f"{tmpdir}/graph"), PickleSerializer())
+       graph = GraphDB.create(f"{tmpdir}/graph", backend=backend, serializer="json")
        try:
            graph.put_node(Node(node_id="alice", labels=["Person"], properties={"name": "Alice"}))
            graph.put_node(Node(node_id="bob", labels=["Person"], properties={"name": "Bob"}))

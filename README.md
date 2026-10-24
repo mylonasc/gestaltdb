@@ -87,6 +87,11 @@ Optional extras include `lmdb`, `leveldb`, `rocksdb`, `backends`, `msgpack`, `pr
 
 ## Basic Example
 
+The examples below use LevelDB for brevity. With the matching extra installed,
+replace `LevelDBStore` with `LMDBStore` or `PyRexStore`, or use
+`GraphDB.create(path, backend="lmdb"|"leveldb"|"pyrex", ...)`; the graph API is
+the same for basic writes, reads, indexes, and Cypher.
+
 ```python
 from tempfile import TemporaryDirectory
 

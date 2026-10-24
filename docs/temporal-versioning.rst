@@ -399,8 +399,9 @@ not a closed-world default for undocumented predicates.
    from tempfile import TemporaryDirectory
    from gestaltdb.graphdb import GraphDB
 
+   backend = "lmdb"  # or "leveldb", "pyrex" (RocksDB); install the matching extra
    with TemporaryDirectory() as directory:
-       graph = GraphDB.create(Path(directory) / "db", backend="lmdb", serializer="json")
+       graph = GraphDB.create(Path(directory) / "db", backend=backend, serializer="json")
        try:
            graph.assert_claim(
                subject="supplier-1", predicate="SHIPS", object="widgets",

@@ -115,8 +115,11 @@ release has the same APIs. Use Python 3.10–3.13. From the repository root::
    uv sync --extra lmdb
    uv run --with jupyterlab --with ipykernel jupyter lab docs/onto-tutorial/notebooks
 
-The standalone reasoning examples need no embedded backend. Database examples
-use the explicitly installed LMDB backend and disposable temporary directories.
+The standalone reasoning examples need no embedded backend. Basic database
+examples support LMDB, LevelDB, and RocksDB/PyRex; see :doc:`backends` for
+install commands and backend choices. Pinned current-graph examples explicitly
+use LMDB because not every backend offers the required snapshot guarantee.
+Database examples use disposable temporary directories.
 Select a Jupyter kernel from this environment. You can also just read the code:
 assertions in the examples state the expected results.
 
@@ -133,6 +136,7 @@ assertions in the examples state the expected results.
    ch07-performance
    ch08-gaps
    glossary
+   backends
    notebooks/index
 
 .. only:: html

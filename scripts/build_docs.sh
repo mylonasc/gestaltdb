@@ -36,7 +36,7 @@ echo "==> check_docs.py (drift gate)"
 uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/check_docs.py
 
 echo "==> sphinx build docs -> $OUTPUT"
-uv run --with sphinx --with sphinx-rtd-theme --with myst-parser \
+uv run --with sphinx --with sphinx-rtd-theme --with myst-parser --with sphinx-copybutton --with sphinx-design \
   python -m sphinx -b html -W docs "$OUTPUT"
 
 if [[ "$RUN_EXAMPLES" -eq 1 ]]; then

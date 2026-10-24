@@ -2,6 +2,12 @@
 
 These examples are designed for developers and agents who need working patterns quickly. They use explicit imports from submodules because the package root intentionally exports only selected helpers.
 
+Most examples use LevelDB for brevity. Install `gestaltdb[lmdb]` or
+`gestaltdb[rocksdb]` and substitute `LMDBStore` or `PyRexStore`, or use
+`GraphDB.create(path, backend="lmdb"|"leveldb"|"pyrex", ...)`. Basic writes,
+indexes, Cypher, and the temporal-claim API work on all three; pinned
+current-graph snapshots do not. See [Choose a Backend and Serializer](#choose-a-backend-and-serializer).
+
 **Filtering and sampling workflows:** [Indexed property lookups](#index-and-lookup-properties) · [Live typed sampling](#traverse-and-sample-typed-relationships) · [Filtered, reusable sampler snapshots](#build-and-use-a-sampler-snapshot). The [sampling guide](https://mylonasc.github.io/gestaltdb/typed-sampling.html) covers all policies; the [filtering guide](https://mylonasc.github.io/gestaltdb/property-filtering.html) explains seed selection versus filtering every sampled hop.
 
 ## Reason Over Named Entities Without a Database

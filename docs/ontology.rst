@@ -108,7 +108,8 @@ Read-only temporal claims
 This source adapter never writes claims. The separate explicit, point-only
 publication operation is documented in :doc:`ontology-publication`.
 
-Install an optional backend for this example (``gestaltdb[lmdb]``). The existing
+Install ``gestaltdb[lmdb]``, ``gestaltdb[leveldb]``, or ``gestaltdb[rocksdb]``
+and select ``lmdb``, ``leveldb``, or ``pyrex`` below. The existing
 read view pins one valid-time point and visible commit prefix. The adapter verifies
 its source, policy, mapping and ontology revision before returning a scoped result.
 
@@ -121,8 +122,9 @@ its source, policy, mapping and ontology revision before returning a scoped resu
    from gestaltdb.reasoning.adapters.claims import ClaimMapping, ClaimSelection, PinnedClaimSource
 
    plan = compile_ontology(Ontology("people", [Domain("worksFor", "Person")]))
+   backend = "lmdb"  # or "leveldb", "pyrex" (RocksDB)
    with TemporaryDirectory() as directory:
-       graph = GraphDB.create(directory, backend="lmdb", serializer="json")
+       graph = GraphDB.create(directory, backend=backend, serializer="json")
        try:
            graph.assert_claim(subject="alice", predicate="worksFor", object="acme",
                               agent="registry", polarity="positive", valid=(0, 100))

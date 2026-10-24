@@ -41,13 +41,9 @@ Python 3.12 is a safe default.
 Minimal Notebook Cell
 ---------------------
 
+.. include:: _includes/backend-setup.rst
+
 .. code-block:: python
-
-   from gestaltdb.graphdb import Edge, GraphDB, Node
-   from gestaltdb.kvstores import LevelDBStore
-   from gestaltdb.serializers import PickleSerializer
-
-   graph_db = GraphDB(LevelDBStore("/tmp/leveldb_notebook_example"), PickleSerializer())
 
    graph_db.put_node(Node(node_id="drug-1"))
    graph_db.put_node(Node(node_id="protein-1"))

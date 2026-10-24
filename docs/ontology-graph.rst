@@ -6,6 +6,15 @@ verifiable mutable-state read snapshot. It never reads temporal claims and
 does not alter Cypher planning, stored labels/edges, typed adjacency or sampler
 arrays. The Datalog engine imports none of these integrations.
 
+.. note::
+
+   This example intentionally requires a verifiable current snapshot, so it uses
+   LMDB (install ``gestaltdb[lmdb]``). LevelDB and default PyRex cannot run this
+   pinned workflow. Transactional PyRex is usable only with a runtime exposing a
+   verifiable transaction sequence; it is not an unconditional substitute.
+   For examples portable across all three backends, see :doc:`quickstart` and
+   the temporal-claim adapter in :doc:`ontology`.
+
 .. code-block:: python
 
    from tempfile import TemporaryDirectory

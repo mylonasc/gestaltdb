@@ -39,10 +39,14 @@ in the output directory. A Sphinx build renders text but does not execute cells;
 ``--examples`` runs only the tutorial chapter, notebook, and illustration tests.
 
 The tutorial is an independent Sphinx project with its own ``conf.py`` and
-local PDF extension. It can be rendered directly with
+local PDF extension. It uses ``sphinx-copybutton`` for copy controls and
+``sphinx-design`` for backend tabs; both are in the ``docs`` extra and the build
+scripts provision them. It can be rendered directly with
 ``sphinx-build -W -b html docs/onto-tutorial OUTPUT``; rendering needs no installed
 GestaltDB and does not import the main documentation configuration. Library
 references use external GitHub links, while chapter links stay inside this site.
+:doc:`backends` is the single source for backend installation choices; the
+pinned extraction lab intentionally remains LMDB-only.
 The main library build (``scripts/build_docs.sh``) excludes the tutorial entirely.
 The Pages workflow builds both projects separately and publishes the tutorial at
 `/onto-tutorial/ <https://mylonasc.github.io/gestaltdb/onto-tutorial/>`_, alongside

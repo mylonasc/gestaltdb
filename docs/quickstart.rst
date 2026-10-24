@@ -3,16 +3,12 @@ Quickstart
 
 This page shows the shortest path from an empty database to a useful query.
 
+.. include:: _includes/backend-setup.rst
+
 Create a Graph
 --------------
 
 .. code-block:: python
-
-   from gestaltdb.graphdb import Edge, GraphDB, Node
-   from gestaltdb.kvstores import LMDBStore
-   from gestaltdb.serializers import PickleSerializer
-
-   graph_db = GraphDB(LMDBStore(path="quickstart_lmdb"), PickleSerializer())
 
    graph_db.put_node(Node(
        node_id="drug-1",

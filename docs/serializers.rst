@@ -81,10 +81,17 @@ Install both independently selected components first:
 
    python -m pip install "gestaltdb[lmdb,msgpack]"
 
+Replace ``lmdb`` with ``leveldb`` or ``rocksdb`` in the install command to use
+another backend. The serializer is unchanged; choose ``pyrex`` for RocksDB in
+the Python code.
+
 .. code-block:: python
 
-   from gestaltdb.graphdb import GraphDB
-   from gestaltdb.kvstores import LMDBStore
-   from gestaltdb.serializers import MessagePackSerializer
+   from gestaltdb.graphdb import GraphDB, Node
 
-   graph_db = GraphDB(LMDBStore(path="msgpack_lmdb"), MessagePackSerializer())
+   backend = "lmdb"  # or "leveldb", "pyrex" (RocksDB)
+   graph_db = GraphDB.create(f"msgpack_{backend}", backend=backend, serializer="messagepack")
+   try:
+       graph_db.put_node(Node("example", properties={"name": "MessagePack"}))
+   finally:
+       graph_db.close()

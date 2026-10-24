@@ -44,7 +44,7 @@ def test_chapter_code(chapter, tmp_path, monkeypatch):
     text = chapter.read_text()
     blocks = re.findall(r"^\.\. code-block:: python\n\n((?:[ \t]+[^\n]*\n|\n)+)", text, re.MULTILINE)
     assert blocks, "the chapter's Python block must be executable, not silently ignored"
-    if 'backend="lmdb"' in text:
+    if 'backend="lmdb"' in text or 'backend = "lmdb"' in text:
         pytest.importorskip("lmdb")
     monkeypatch.chdir(tmp_path)
     namespace = {"__name__": "__main__"}
@@ -164,6 +164,8 @@ def test_tutorial_builds_as_an_isolated_sphinx_project(tmp_path):
     pytest.importorskip("sphinx")
     pytest.importorskip("sphinx_rtd_theme")
     pytest.importorskip("myst_parser")
+    pytest.importorskip("sphinx_copybutton")
+    pytest.importorskip("sphinx_design")
     # Copy only the tutorial, not docs/conf.py, library pages or Python package.
     source = tmp_path / "tutorial"
     shutil.copytree(TUTORIAL, source, ignore=shutil.ignore_patterns("_build", "__pycache__"))
@@ -180,8 +182,11 @@ def test_tutorial_builds_as_an_isolated_sphinx_project(tmp_path):
     intro = (source / "index.rst").read_text().split("Imagine building", 1)[0]
     assert "https://mylonasc.github.io/gestaltdb/" in intro
     assert (output / "ch08-gaps.html").is_file()
+    assert (output / "backends.html").is_file()
     assert not (output / "api.html").exists()
     assert not (output / "quickstart.html").exists()
+    assert (output / "_static" / "copybutton.css").is_file()
+    assert (output / "_static" / "copybutton.js").is_file()
 
 
 def test_library_and_tutorial_builds_are_separate():
@@ -198,6 +203,49 @@ def test_pages_publishes_tutorial_as_a_separate_project():
     text = workflow.read_text()
     assert "sphinx-build -W -b html docs/onto-tutorial docs/_build/html/onto-tutorial" in text
     assert "cp docs/onto-tutorial/onto-tutorial.pdf docs/_build/html/onto-tutorial/onto-tutorial.pdf" in text
+
+
+@pytest.mark.parametrize(("label", "module"), [
+    ("LMDB", "lmdb"),
+    ("LevelDB", "plyvel"),
+    ("RocksDB / PyRex", "pyrex"),
+])
+def test_tutorial_backend_tab_example_runs(label, module, tmp_path, monkeypatch):
+    pytest.importorskip(module)
+    text = (TUTORIAL / "backends.rst").read_text()
+    section = text.split(f".. tab-item:: {label}\n", 1)[1].split("   .. tab-item::", 1)[0]
+    blocks = re.findall(
+        r"^      \.\. code-block:: python\n\n((?:[ \t]+[^\n]*\n|\n)+)", section,
+        re.MULTILINE,
+    )
+    assert len(blocks) == 1, label
+    monkeypatch.chdir(tmp_path)
+    exec(compile(textwrap.dedent(blocks[0]), f"backends.rst:{label}", "exec"), {})
+
+
+def test_docs_offer_all_library_backends():
+    docs = TUTORIAL.parent
+    setup = (docs / "_includes" / "backend-setup.rst").read_text()
+    for backend in ("lmdb", "leveldb", "rocksdb"):
+        assert f"gestaltdb[{backend}]" in setup
+    for backend in ("lmdb", "leveldb", "pyrex"):
+        assert f'backend="{backend}"' in setup
+    tutorial = (TUTORIAL / "backends.rst").read_text()
+    assert "Transactional PyRex" in tutorial
+    assert "Verifiable current-graph extraction" in tutorial
+    for backend in ("lmdb", "leveldb", "pyrex"):
+        assert f'backend="{backend}"' in tutorial
+    # The pinned tutorial example must state why it cannot be ported silently.
+    chapter = (TUTORIAL / "ch04-storage-grounding.rst").read_text()
+    assert "verifiable current snapshot" in chapter and "backends" in chapter
+
+
+def test_copy_button_is_enabled_for_both_sites():
+    docs = TUTORIAL.parent
+    for config in (docs / "conf.py", TUTORIAL / "conf.py"):
+        text = config.read_text()
+        assert "sphinx_copybutton" in text
+        assert "copybutton_prompt_text" in text
 
 
 def test_small_svg_escapes_labels_and_defines_marker():

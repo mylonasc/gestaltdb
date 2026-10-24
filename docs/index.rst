@@ -65,13 +65,9 @@ Filter, Sample, Train
 Quick Example
 -------------
 
+.. include:: _includes/backend-setup.rst
+
 .. code-block:: python
-
-   from gestaltdb.graphdb import Edge, GraphDB, Node
-   from gestaltdb.kvstores import LMDBStore
-   from gestaltdb.serializers import PickleSerializer
-
-   graph_db = GraphDB(LMDBStore(path="graph_lmdb_example"), PickleSerializer())
 
    alice = Node(node_id="alice", labels=["Person"], properties={"name": "Alice"})
    bob = Node(node_id="bob", labels=["Person"], properties={"name": "Bob"})

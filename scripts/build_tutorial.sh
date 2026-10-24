@@ -23,14 +23,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 cd "$ROOT"
-uv run --with sphinx --with sphinx-rtd-theme --with myst-parser \
+uv run --with sphinx --with sphinx-rtd-theme --with myst-parser --with sphinx-copybutton --with sphinx-design \
   python -m sphinx -b html -W docs/onto-tutorial "$OUTPUT"
 if [[ "$BUILD_PDF" -eq 1 ]]; then
-  uv run --with sphinx --with sphinx-rtd-theme --with myst-parser --with cairosvg \
+  uv run --with sphinx --with sphinx-rtd-theme --with myst-parser --with sphinx-copybutton --with sphinx-design --with cairosvg \
     python scripts/build_tutorial_pdf.py --output "$OUTPUT"
 fi
 if [[ "$RUN_EXAMPLES" -eq 1 ]]; then
-  uv run --extra lmdb --with sphinx --with sphinx-rtd-theme --with myst-parser \
+  uv run --extra lmdb --with sphinx --with sphinx-rtd-theme --with myst-parser --with sphinx-copybutton --with sphinx-design \
     pytest tests/test_ontology_tutorial.py -q
 fi
 echo "OK: standalone tutorial built at $OUTPUT"

@@ -25,7 +25,9 @@ verification or a regulatory-compliance certificate.
 Runnable model-to-proof example
 -------------------------------
 
-This example requires the ``lmdb`` extra and closes the database explicitly.
+Install ``gestaltdb[lmdb]``, ``gestaltdb[leveldb]``, or ``gestaltdb[rocksdb]``
+and select ``lmdb``, ``leveldb``, or ``pyrex`` below. All three backends support
+this temporal-claim workflow; see :doc:`storage-backends` for durability differences.
 The prediction could come from a GNN; the example deliberately uses a fixed
 score rather than requiring a training framework.
 
@@ -36,8 +38,9 @@ score rather than requiring a training framework.
    from gestaltdb.graphdb import GraphDB
    from gestaltdb.inference import explain_inference
 
+   backend = "lmdb"  # or "leveldb", "pyrex" (RocksDB)
    with TemporaryDirectory() as directory:
-       graph = GraphDB.create(Path(directory) / "db", backend="lmdb", serializer="json")
+       graph = GraphDB.create(Path(directory) / "db", backend=backend, serializer="json")
        try:
            prediction = graph.assert_claim(
                subject="supplier-1", predicate="PREDICTED_RISK", object="high",

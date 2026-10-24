@@ -101,7 +101,12 @@ property index.
 End-to-End: Indexed Cohort to Filtered Sampling
 ---------------------------------------------------
 
-Install ``gestaltdb[lmdb]`` for this complete example. Only approved drugs,
+Install ``gestaltdb[lmdb]``, ``gestaltdb[leveldb]``, or ``gestaltdb[rocksdb]``
+and choose ``lmdb``, ``leveldb``, or ``pyrex`` below. This portable example
+explicitly uses an **unpinned** build with no concurrent writers. For a required
+authenticated snapshot, use LMDB and set ``require_snapshot=True``; unsupported
+backend/runtime combinations fail closed rather than falling back.
+Only approved drugs,
 high-score proteins, and high-confidence binding relationships enter the
 snapshot. Edges with excluded endpoints are omitted even if their own properties
 pass the edge filter. Retained nodes can be isolated. Snapshot edges must have
@@ -115,8 +120,10 @@ untyped edges are not included.
    from gestaltdb.graphdb import Edge, GraphDB, Node
    from gestaltdb.sampling import SamplerEngine
 
+   backend = "lmdb"  # or "leveldb", "pyrex" (RocksDB)
+   require_snapshot = False  # portable, quiescent example; True requires verifiable snapshots
    with TemporaryDirectory() as tmpdir:
-       graph = GraphDB.create(f"{tmpdir}/graph", backend="lmdb", serializer="json")
+       graph = GraphDB.create(f"{tmpdir}/graph", backend=backend, serializer="json")
        try:
            graph.create_node_property_index("approved")
            graph.create_node_property_index("score")
@@ -161,7 +168,7 @@ untyped edges are not included.
                node_filter=lambda node: node.get_id in cohort,
                edge_filter=lambda edge: edge.get_id in edge_ids,
                edge_weight_property="confidence",
-               read_snapshot=True,
+               read_snapshot=require_snapshot,
            )
        finally:
            graph.close()

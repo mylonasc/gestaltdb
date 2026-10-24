@@ -8,6 +8,10 @@ logical temporal commit into a caller-selected, separate target world. It never
 accepts an old inference result, changes current property-graph records or
 installs generated rules in the global rule catalog.
 
+This example works with all three backends. Install ``gestaltdb[lmdb]``,
+``gestaltdb[leveldb]``, or ``gestaltdb[rocksdb]`` and select the backend below.
+Nontransactional recovery differences are explained after the example.
+
 .. code-block:: python
 
    from tempfile import TemporaryDirectory
@@ -18,8 +22,9 @@ installs generated rules in the global rule catalog.
    from gestaltdb.reasoning.adapters.publication import reconcile_point
 
    plan = compile_ontology(Ontology("relations", [SubPropertyOf("p", "q")]))
+   backend = "lmdb"  # or "leveldb", "pyrex" (RocksDB)
    with TemporaryDirectory() as directory:
-       graph = GraphDB.create(directory, backend="lmdb", serializer="json")
+       graph = GraphDB.create(directory, backend=backend, serializer="json")
        try:
            graph.assert_claim(subject="a", predicate="p", object="b", agent="registry",
                               polarity="positive", valid=(0, 100))
