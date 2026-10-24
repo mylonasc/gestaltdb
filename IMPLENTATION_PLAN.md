@@ -155,6 +155,16 @@ This correctness-first path intentionally re-evaluates under the guard; it
 makes no short-lock-duration/performance or independent engine-proof claim.
 #356 durable sessions and #357 existing inferred-artifact identity remain open.
 
+Validation: 2,974 passed / 2 skipped with optional backends/serializers/RDF/
+Polars/docs and independent reasoning oracles. Docs drift, 8/8 examples,
+executable publication guide, Sphinx with warnings as errors, roadmap and diff
+checks passed. Cross-backend checks cover one-commit intervals and pinned old
+reads, exact claim/commit metadata, idempotent restaging, vanished intervals,
+stale-computation laundering, target CAS and empty-state ABA, malformed target
+validity, altered evidence/output, bounded no-write and late cancellation,
+writer exclusion through commit, historical reentrant movement, pre/post-visible
+commit interruption and explicit nontransactional orphan recovery.
+
 ### Prior ordered follow-through
 
 Native GitHub links established: #338 (identity), #339 (input bounds), #340
