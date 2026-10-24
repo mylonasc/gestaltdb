@@ -1,9 +1,11 @@
 """Durable bytes, source admission and caller compatibility remain distinct."""
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 import json
 import subprocess
 import sys
+from pathlib import Path
+import re
 
 import pytest
 
@@ -221,3 +223,77 @@ else:
         results.append(out.strip())
     assert sorted(results) == ["rejected", "saved"]
     load_session(path)
+
+
+@pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
+def test_authenticated_resume_after_process_restart(tmp_path, backend, module):
+    pytest.importorskip(module)
+    db, path = tmp_path / "db", tmp_path / "session.json"
+    graph = GraphDB.create(db, backend=backend, serializer="json")
+    try:
+        graph.assert_claim(subject="a", predicate="memberOf", object="g1", agent="one", polarity="positive", valid=(0, 100))
+        session = start_session(graph, PROGRAM, catalog_for_typed_program(PROGRAM),
+            scope=SessionScope("default", 50, ClaimSelection(), ClaimMapping()), limits=ReasoningLimits())
+        binding = bind_session_generation(graph, session)
+        save_session(session, path)
+        graph.assert_claim(subject="b", predicate="memberOf", object="g2", agent="new", polarity="positive", valid=(0, 100))
+    finally:
+        graph.close()
+    code = '''
+import json,sys
+from gestaltdb.graphdb import GraphDB
+from gestaltdb.reasoning.generation import GenerationIdentity, TemporalSourceIdentity
+from gestaltdb.reasoning.protocols import InputContext
+from gestaltdb.reasoning.model import ReasoningLimits
+from gestaltdb.reasoning.adapters.authenticated_sessions import advance_authenticated_session
+raw=json.loads(sys.argv[3]); raw['source']=TemporalSourceIdentity(**raw['source']); raw['context']=InputContext(**raw['context'])
+graph=GraphDB.open(sys.argv[1])
+try:
+    result=advance_authenticated_session(graph, sys.argv[2], expected_generation=GenerationIdentity(**raw),
+        expected_session_digest=sys.argv[4], freshness='historical', limits=ReasoningLimits())
+    print(result.binding.session_digest)
+finally:
+    graph.close()
+'''
+    done = subprocess.run([sys.executable, "-c", code, str(db), str(path), json.dumps(asdict(binding.identity)), binding.session_digest],
+                          capture_output=True, text=True, timeout=20)
+    assert done.returncode == 0, done.stderr
+    resumed = load_session(path)
+    assert TypedFact("person", ("b",)) in resumed.facts
+    assert _digest(session_to_dict(resumed)) == done.stdout.strip()
+
+
+def test_reentrant_same_horizon_edit_is_not_overwritten(source, monkeypatch):
+    import gestaltdb.reasoning.adapters.authenticated_sessions as adapter
+    graph, path, session, binding = source
+    changed = replace(session, catalog=RuleCatalog([replace(e, version_id="changed") for e in session.catalog.entries]))
+    original = adapter.advance_session
+    competing = []
+    def edit(*args, **kwargs):
+        save_session(changed, path)
+        competing.append(path.read_bytes())
+        return original(*args, **kwargs)
+    monkeypatch.setattr(adapter, "advance_session", edit)
+    with pytest.raises(ReasoningError, match="state changed"):
+        advance_authenticated_session(graph, path, **pins(binding), limits=ReasoningLimits())
+    assert path.read_bytes() == competing[0]
+
+
+def test_replace_failure_preserves_v1_file_and_cleans_own_temp(source, monkeypatch):
+    import gestaltdb.reasoning.adapters.session_store as store
+    _, path, session, binding = source
+    before = path.read_bytes()
+    def interrupted(*args):
+        raise OSError("replace failed")
+    monkeypatch.setattr(store.os, "replace", interrupted)
+    with pytest.raises(OSError, match="replace failed"):
+        save_session(session, path, expected_session_digest=binding.session_digest)
+    assert path.read_bytes() == before and not list(path.parent.glob(".session.json.tmp.*"))
+
+
+def test_authenticated_session_documentation_example():
+    pytest.importorskip("lmdb")
+    text = (Path(__file__).resolve().parents[1] / "docs/reasoning-authenticated-sessions.rst").read_text()
+    blocks = re.findall(r"\.\. code-block:: python\n\n((?:   .*\n|\n)+)", text)
+    assert len(blocks) == 1
+    exec("\n".join(line[3:] if line.startswith("   ") else line for line in blocks[0].splitlines()), {})

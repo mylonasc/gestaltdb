@@ -18,6 +18,11 @@ For a computation-owned, guarded interval-batch publisher, see
 It re-admits the range and compares target versions/history before one logical
 commit; the legacy caller-derived `stage_range` API is not silently upgraded.
 
+For source-authenticated durable-session load/advance with exact caller pins,
+see [`docs/reasoning-authenticated-sessions.rst`](docs/reasoning-authenticated-sessions.rst).
+It preserves v1 artifacts while checking both generation identity and session
+state; raw checksums and horizon-only comparisons are insufficient.
+
 These examples are designed for developers and agents who need working patterns quickly. They use explicit imports from submodules because the package root intentionally exports only selected helpers.
 
 **Filtering and sampling workflows:** [Indexed property lookups](#index-and-lookup-properties) · [Live typed sampling](#traverse-and-sample-typed-relationships) · [Filtered, reusable sampler snapshots](#build-and-use-a-sampler-snapshot). The [sampling guide](https://mylonasc.github.io/gestaltdb/typed-sampling.html) covers all policies; the [filtering guide](https://mylonasc.github.io/gestaltdb/property-filtering.html) explains seed selection versus filtering every sampled hop.

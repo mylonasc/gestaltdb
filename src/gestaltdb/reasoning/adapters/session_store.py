@@ -11,16 +11,17 @@ ledger/version-map consistency before returning a value.
 Crash/retry contract: ``save_session`` optionally checks ``expected_horizon``
 against the file already present; ``advance_persisted_session`` loads, verifies
 the live database, advances through exact commit deltas (or explicit rebuild),
-then persists with a compare of the previously loaded horizon. A concurrent
-writer changing the file between load and persist fails closed instead of
-silently merging. Callers retry from a fresh load; old-or-new file visibility
-holds because replacement is atomic.
+then persists with the previously loaded horizon and exact state digest.
+Cooperating writers serialize through a sidecar lock. Same-horizon state edits
+and deletion fail exact-state comparisons instead of being silently overwritten.
+Callers retry from a fresh load; replacement provides old-or-new file visibility.
 
 Bounds: ``max_versions`` bounds ledger entries, ``max_supports`` bounds stored
 supports, ``max_bytes`` bounds the encoded document. Unknown formats, digest
 mismatches, conflicting version IDs, unsupported snapshots and backwards
 horizons fail closed. Persistence never authenticates data by itself: resume
-always re-verifies the live database identity and horizon.
+checks database identity/horizon. Explicit independent input-source admission
+lives in authenticated_sessions; the legacy resume API does not provide it.
 """
 
 from __future__ import annotations

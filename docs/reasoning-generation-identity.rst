@@ -41,6 +41,10 @@ inference computation is sound.
 Typed point sessions
 --------------------
 
+For exact caller generation/state pins on durable v1 session load/advance,
+see :doc:`reasoning-authenticated-sessions`. That explicit consumer independently
+authenticates source input; a raw persisted checksum does not.
+
 ``gestaltdb.reasoning.adapters.session_generation`` provides
 ``catalog_for_typed_program``, ``bind_session_generation``,
 ``SessionGenerationBinding`` and ``SessionAdmissionLimits``. The catalog
