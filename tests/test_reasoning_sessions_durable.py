@@ -141,6 +141,40 @@ def test_reopened_persisted_session_respects_retraction_validity(tmp_path, backe
 
 
 @pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
+def test_reopened_resurrection_matches_fresh_materialization(tmp_path, backend, module):
+    pytest.importorskip(module)
+    database_path = tmp_path / backend
+    session_path = tmp_path / "session.json"
+    graph = GraphDB.create(database_path, backend=backend, serializer="json")
+    try:
+        first = assert_member(graph, "a")
+        save_session(start(graph), session_path)
+    finally:
+        graph.close()
+    graph = GraphDB.open(database_path)
+    try:
+        graph.retract_claim(first.logical_id, valid=(0, 100))
+        removed = advance_persisted_session(graph, session_path, limits=ReasoningLimits())
+        assert not removed.rebuilt and removed.session.facts == ()
+        assert_member(graph, "a")
+    finally:
+        graph.close()
+    graph = GraphDB.open(database_path)
+    try:
+        resurrected = advance_persisted_session(graph, session_path, limits=ReasoningLimits())
+        fresh = start(graph)
+        reloaded = load_session(session_path)
+        assert not resurrected.rebuilt
+        assert resurrected.session.facts == reloaded.facts == fresh.facts
+        assert resurrected.session.version_logical == reloaded.version_logical == fresh.version_logical
+        assert reloaded.commit_horizon == fresh.commit_horizon
+        assert set(reloaded.facts) == fresh_facts(reloaded.program, graph)
+        assert len(reloaded.facts) == 3  # base fact plus derived closure, not duplicates
+    finally:
+        graph.close()
+
+
+@pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
 def test_overwide_gap_rebuild_persists(tmp_path, backend, module):
     pytest.importorskip(module)
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")

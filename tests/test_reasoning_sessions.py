@@ -140,8 +140,35 @@ def test_stale_supersedes_retraction_applies_logically(tmp_path, backend, module
 
 
 @pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
-def test_overwide_gap_rebuilds_explicitly(tmp_path, backend, module):
+def test_retract_then_reassert_resurrects_with_fresh_parity(tmp_path, backend, module):
     pytest.importorskip(module)
+    graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
+    try:
+        first = assert_member(graph, "a")
+        session = start(graph)
+        assert len(session.facts) == 3
+        graph.retract_claim(first.logical_id, valid=(0, 100))
+        removed = advance_session(graph, session, limits=ReasoningLimits())
+        assert not removed.rebuilt
+        assert removed.session.facts == ()
+        assert TypedFact("memberOf", ("a", "g1")) in removed.retracted
+        second = assert_member(graph, "a")
+        assert second.logical_id == first.logical_id
+        assert second.version_id != first.version_id
+        resurrected = advance_session(graph, removed.session, limits=ReasoningLimits())
+        assert not resurrected.rebuilt
+        assert resurrected.session.facts == start(graph).facts
+        assert set(resurrected.session.facts) == fresh_facts(session.program, graph)
+        assert TypedFact("memberOf", ("a", "g1")) in resurrected.inserted
+        assert resurrected.session.version_logical == ((second.version_id, first.logical_id),)
+        assert resurrected.session.ledger.facts == (TypedFact("memberOf", ("a", "g1")),)
+        assert set(resurrected.session.ledger.facts) <= set(resurrected.session.facts)
+    finally:
+        graph.close()
+
+
+@pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
+def test_overwide_gap_rebuilds_explicitly(tmp_path, backend, module):
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
     try:
         assert_member(graph, "a")

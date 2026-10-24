@@ -119,6 +119,41 @@ def test_foreign_database_and_unavailable_horizon_fail_closed(bound_source, tmp_
         bind_session_generation(graph, replace(session, commit_horizon=999), freshness="historical")
 
 
+@pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
+def test_resurrected_session_rebinds_to_authenticated_source(tmp_path, backend, module):
+    pytest.importorskip(module)
+    from gestaltdb.reasoning.adapters.sessions import advance_session
+    graph = GraphDB.create(tmp_path / "db", backend=backend, serializer="json")
+    try:
+        from gestaltdb.reasoning.adapters.sessions import SessionScope, start_session
+        from gestaltdb.reasoning.catalog import RuleCatalog
+        from gestaltdb.reasoning.model import ReasoningLimits, Variable
+        from gestaltdb.reasoning.typed import GenericProgram, GenericRule, TypedAtom
+        x, y = Variable("x"), Variable("y")
+        program = GenericProgram([GenericRule("r", [TypedAtom("p", [x, y])], [], TypedAtom("q", [x]))])
+        scope = SessionScope("default", 50, ClaimSelection(), ClaimMapping())
+        first = graph.assert_claim(subject="a", predicate="p", object="b", agent="registry",
+                                   polarity="positive", valid=(0, 100))
+        session = start_session(graph, program, catalog_for_typed_program(program),
+                                scope=scope, limits=ReasoningLimits())
+        binding = bind_session_generation(graph, session)
+        binding.verify(graph, session)
+        graph.retract_claim(first.logical_id, valid=(0, 100))
+        emptied = advance_session(graph, session, limits=ReasoningLimits()).session
+        assert emptied.facts == ()
+        with pytest.raises(ProvenanceMismatchError, match="session state drifted"):
+            binding.verify(graph, emptied)
+        graph.assert_claim(subject="a", predicate="p", object="b", agent="registry",
+                           polarity="positive", valid=(0, 100))
+        resurrected = advance_session(graph, emptied, limits=ReasoningLimits()).session
+        rebound = bind_session_generation(graph, resurrected)
+        rebound.verify(graph, resurrected)
+        with pytest.raises(ReasoningError, match="source drifted"):
+            binding.identity.require_compatible(rebound.identity)
+    finally:
+        graph.close()
+
+
 @pytest.mark.parametrize("field,value", [
     ("max_versions", 1), ("max_facts", 1), ("max_supports", 1), ("max_commits", 1),
 ])
