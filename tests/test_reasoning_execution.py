@@ -198,3 +198,49 @@ def test_actual_missing_runtime_rejected_before_input(monkeypatch):
         execute_closure(program(), unread(), context=CONTEXT,
                         executor_request=ExecutorRequest(preferred="polars-prototype", polars_available=True),
                         limits=ReasoningLimits())
+
+
+@pytest.mark.parametrize("preferred", ["default", "indexed-scc", "polars-prototype"])
+def test_input_consumption_stops_at_bound_plus_one(preferred):
+    from itertools import count
+    from gestaltdb.reasoning.model import ReasoningLimitError
+
+    if preferred == "polars-prototype":
+        pytest.importorskip("polars")
+    seen = []
+    def endless_duplicates():
+        for i in count():
+            seen.append(i)
+            if i > 2:
+                raise AssertionError("read beyond input bound plus one")
+            yield Fact("a", "edge", "b")
+    with pytest.raises(ReasoningLimitError, match="max_input_facts"):
+        execute_closure(program(), endless_duplicates(), limits=ReasoningLimits(max_input_facts=2),
+                        context=CONTEXT, plan=prepare() if preferred == "indexed-scc" else None,
+                        executor_request=ExecutorRequest(preferred=preferred, polars_available=True))
+    assert seen == [0, 1, 2]
+
+
+def test_cancellation_during_input_consumption():
+    from gestaltdb.reasoning.model import ReasoningCancelledError
+
+    seen = []
+    def source():
+        for i in range(100):
+            seen.append(i)
+            yield Fact("a", "edge", "b")
+    with pytest.raises(ReasoningCancelledError):
+        execute_closure(program(), source(), limits=ReasoningLimits(), cancel=lambda: len(seen) == 2)
+    assert seen == [0, 1]
+
+
+def test_exact_input_bound_and_iterator_failures():
+    result = execute_closure(program(), iter(facts()), limits=ReasoningLimits(max_input_facts=3))
+    assert result.telemetry.input_facts == 3
+    def broken():
+        yield Fact("a", "edge", "b")
+        raise TypeError("source failed")
+    with pytest.raises(TypeError, match="source failed"):
+        execute_closure(program(), broken(), limits=ReasoningLimits())
+    with pytest.raises(ReasoningError, match="Fact or Evidence"):
+        execute_closure(program(), [None], limits=ReasoningLimits())

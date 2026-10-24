@@ -126,6 +126,12 @@ and no dictionary recoding — mismatches fail closed. Request/program/type
 errors, cancellations and unknown combinations fail before any engine runs.
 ``collect_proofs=True`` routes to indexed witnesses only.
 
+The dispatcher buffers at most ``max_input_facts`` inputs, consuming one extra
+value only to detect overflow. Duplicates count toward that limit. Cooperative
+cancellation is checked before and after each iterator advance; it cannot
+interrupt a blocked or long-running ``next()`` call. Iterator failures propagate
+without a successful partial outcome. This is a row bound, not a byte/RSS cap.
+
 Installation isolation
 ----------------------------------------
 
