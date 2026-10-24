@@ -13,6 +13,11 @@ re-admission, see the executable example in
 Range identities are distinct from point/current tokens and do not authorize
 caller-derived range publication.
 
+For a computation-owned, guarded interval-batch publisher, see
+[`docs/reasoning-bound-range-publication.rst`](docs/reasoning-bound-range-publication.rst).
+It re-admits the range and compares target versions/history before one logical
+commit; the legacy caller-derived `stage_range` API is not silently upgraded.
+
 These examples are designed for developers and agents who need working patterns quickly. They use explicit imports from submodules because the package root intentionally exports only selected helpers.
 
 **Filtering and sampling workflows:** [Indexed property lookups](#index-and-lookup-properties) · [Live typed sampling](#traverse-and-sample-typed-relationships) · [Filtered, reusable sampler snapshots](#build-and-use-a-sampler-snapshot). The [sampling guide](https://mylonasc.github.io/gestaltdb/typed-sampling.html) covers all policies; the [filtering guide](https://mylonasc.github.io/gestaltdb/property-filtering.html) explains seed selection versus filtering every sampled hop.

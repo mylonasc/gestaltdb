@@ -125,3 +125,5 @@ only its staging prefix. Multi-interval publication needs an explicit consumer
 with source freshness and target CAS under a writer guard; independently
 publishing one interval must not silently admit stale later intervals or claim
 batch atomicity. Session/sampler/cache migrations remain separate consumers.
+An explicit guarded interval-batch consumer is now available in
+:doc:`reasoning-bound-range-publication`; the raw staging API remains unchanged.
