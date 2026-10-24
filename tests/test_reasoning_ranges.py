@@ -1,5 +1,6 @@
 """RE-21 validity-change propagation and managed interval publication."""
 
+from dataclasses import replace
 import importlib.util
 
 import pytest
@@ -161,6 +162,8 @@ def test_staged_range_validates_without_storage():
     with pytest.raises(ReasoningError):
         StagedRangePublication("ns", "k", "b", "d", 5, 3, "gen", "ev", "ctx",
                                "rev", "pol", "map", "db", [], "fp")
+    with pytest.raises(ReasoningError, match="source provenance"):
+        replace(staged, source_provenance="not-provenance")
 
 
 BACKEND = next((module for module in ("lmdb", "plyvel", "pyrex")
@@ -229,10 +232,63 @@ def test_range_publication_roundtrip_on_backend(tmp_path):
         removed = publish_staged_range(graph, shrunk)
         assert removed.retracted == 1 and removed.commit_id is not None
         # The retraction returned the namespace to the exact empty base the
-        # original stage was computed against, so compare-and-publish matches
-        # and reconciles by re-asserting: staleness is state mismatch, not a
-        # use-once nonce.
-        reconciled = publish_staged_range(graph, staged)
+        # original stage was computed against, but the source horizon moved
+        # since staging (publication commits), so latest publication fails
+        # closed: re-stage or publish the old prefix explicitly as historical.
+        with pytest.raises(GenerationStaleError, match="source"):
+            publish_staged_range(graph, staged)
+        reconciled = publish_staged_range(graph, staged, freshness="historical")
         assert reconciled.asserted == 1 and reconciled.commit_id is not None
+        with graph.read_view(valid_time=1_000_000) as view:
+            stale_source = [version.claim for version in view.iter_claims_as_of(
+                world="derived", agent="gestaltdb:ontology", source=staged.namespace)]
+        assert all(claim.provenance["publication_freshness"] == "historical" for claim in stale_source)
+        assert all(claim.provenance["source_commit_horizon"] == staged.source_provenance.commit_horizon
+                   for claim in stale_source)
+    finally:
+        graph.close()
+
+
+@pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
+def test_range_publication_rejects_moved_source_without_writes(tmp_path, backend, module):
+    pytest.importorskip(module)
+    from gestaltdb.graphdb import GraphDB
+    from gestaltdb.reasoning.adapters.claims import ClaimMapping, ClaimSelection
+    from gestaltdb.reasoning.adapters.publication import (
+        GenerationStaleError,
+        publish_staged_range,
+        stage_range,
+    )
+
+    graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
+    try:
+        selection = ClaimSelection(include_derived=False)
+        staged = stage_range(graph, [("a", "p", "b")], valid_start_us=50,
+                             valid_end_us=100, evidence_id="e",
+                             source_world="base", target_world="derived", publication_key="rk",
+                             selection=selection, mapping=ClaimMapping(), ontology_revision="rev-1")
+        assert staged.source_provenance is not None
+        horizon = staged.source_provenance.commit_horizon
+        # A source-world write moves the horizon; latest must fail before writing.
+        graph.assert_claim(subject="unrelated", predicate="p", object="q", agent="other",
+                           polarity="positive", valid=(0, 100))
+        with pytest.raises(GenerationStaleError, match="source"):
+            publish_staged_range(graph, staged)
+        with graph.read_view(valid_time=50) as view:
+            assert view.provenance.commit_horizon == horizon + 1
+            assert list(view.iter_claims_as_of(world="derived")) == []
+        # Historical mode explicitly publishes the old prefix and records it.
+        published = publish_staged_range(graph, staged, freshness="historical")
+        assert published.asserted == 1
+        with graph.read_view(valid_time=50) as view:
+            claims = [version.claim for version in view.iter_claims_as_of(world="derived")]
+        assert all(claim.provenance["publication_freshness"] == "historical" for claim in claims)
+        assert all(claim.provenance["source_commit_horizon"] == horizon for claim in claims)
+        # A stage stripped of provenance cannot publish against a live graph.
+        legacy = replace(staged, source_provenance=None)
+        with pytest.raises(ReasoningError, match="source provenance is required"):
+            publish_staged_range(graph, legacy)
+        with pytest.raises(ReasoningError, match="freshness"):
+            publish_staged_range(graph, staged, freshness="guess")
     finally:
         graph.close()

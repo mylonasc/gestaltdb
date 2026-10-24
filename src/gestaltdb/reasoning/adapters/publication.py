@@ -333,6 +333,7 @@ class StagedRangePublication:
     database_id: str
     desired: tuple[tuple[str, str, str], ...]
     base_fingerprint: str
+    source_provenance: ReadViewProvenance | None = None
 
     def __post_init__(self):
         for name in ("namespace", "publication_key", "source_world", "target_world",
@@ -353,6 +354,13 @@ class StagedRangePublication:
                 raise ReasoningError("desired triples must be (subject, predicate, object)")
             cleaned.append((_text(triple[0], "subject"), _text(triple[1], "predicate"), _text(triple[2], "object")))
         object.__setattr__(self, "desired", tuple(sorted(set(cleaned))))
+        if self.source_provenance is not None:
+            if not isinstance(self.source_provenance, ReadViewProvenance):
+                raise ReasoningError("source provenance must be ReadViewProvenance")
+            provenance = ReadViewProvenance.from_dict(self.source_provenance.to_dict())
+            if provenance.database_id != self.database_id or provenance.valid_time_us != self.valid_start_us:
+                raise ReasoningError("source provenance does not match the staged database/time")
+            object.__setattr__(self, "source_provenance", provenance)
 
 
 def _range_namespace(publication_key: str, source_world: str, target_world: str,
@@ -413,6 +421,7 @@ def stage_range(graph: GraphDB, desired: Iterable[tuple[str, str, str]], *, vali
                 raise ReasoningError("publication namespace contains unmanaged claims")
             base.append((claim.claim_id, str(claim.provenance.get("generation", ""))))
         database_id = view.provenance.database_id
+        source_provenance = view.provenance
     generation = _digest(["ontology-range-publication-v1", database_id, namespace, evidence_id,
                           ontology_revision, selection.policy_id, mapping.mapping_id,
                           sorted(set(triples))])
@@ -424,16 +433,24 @@ def stage_range(graph: GraphDB, desired: Iterable[tuple[str, str, str]], *, vali
                                   ontology_revision=ontology_revision,
                                   policy_id=selection.policy_id, mapping_id=mapping.mapping_id,
                                   database_id=database_id, desired=tuple(sorted(set(triples))),
-                                  base_fingerprint=_stage_fingerprint(base))
+                                  base_fingerprint=_stage_fingerprint(base),
+                                  source_provenance=source_provenance)
 
 
 def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
-                         max_target_claims: int = 100_000) -> PublicationResult:
+                         max_target_claims: int = 100_000,
+                         freshness: str = "latest") -> PublicationResult:
     """Compare the staged base fingerprint and publish exactly once on match.
 
     Holds the writer guard only for orphan audit, target comparison and one
     logical commit. Namespace movement raises ``GenerationStaleError``;
     callers re-stage explicitly. Validity is published exactly as staged.
+
+    An optional expected source prefix is verified under the same guard: the
+    default ``freshness="latest"`` additionally requires the current commit
+    horizon to match the staged source horizon, so conclusions derived from
+    a moved source are never published silently. Explicit
+    ``freshness="historical"`` verifies the original pinned prefix instead.
     """
     if not isinstance(staged, StagedRangePublication):
         raise ReasoningError("a StagedRangePublication is required")
@@ -441,6 +458,10 @@ def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
         raise ReasoningError("max_target_claims must be a positive integer")
     if not isinstance(graph, GraphDB):
         raise ReasoningError("GraphDB is required")
+    if freshness not in ("latest", "historical"):
+        raise ReasoningError("freshness must be latest or historical")
+    if staged.source_provenance is None:
+        raise ReasoningError("staged source provenance is required; re-stage explicitly")
     interval = TemporalInterval(TemporalInstant(staged.valid_start_us),
                                 None if staged.valid_end_us is None else TemporalInstant(staged.valid_end_us))
     with graph._temporal_writer_guard():
@@ -449,6 +470,10 @@ def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
         with graph.read_view(valid_time=TemporalInstant(staged.valid_start_us)) as view:
             if view.provenance.database_id != staged.database_id:
                 raise ReasoningError("staged generation belongs to a different database")
+            staged.source_provenance.verify_source(graph)
+            if freshness == "latest" and (
+                    view.provenance.commit_horizon != staged.source_provenance.commit_horizon):
+                raise GenerationStaleError("source horizon moved since staging; re-stage and retry")
             current = {}
             for version in view.iter_claims_as_of(world=staged.target_world, agent="gestaltdb:ontology",
                                                   source=staged.namespace):
@@ -473,6 +498,9 @@ def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
                                   "ontology_revision": staged.ontology_revision,
                                   "valid_start_us": staged.valid_start_us,
                                   "valid_end_us": staged.valid_end_us,
+                                  "source_commit_horizon": staged.source_provenance.commit_horizon,
+                                  "source_provenance_token": staged.source_provenance.token,
+                                  "publication_freshness": freshness,
                               })
                 desired[claim.claim_id] = claim
             writes = []
@@ -498,7 +526,9 @@ def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
         commit = None
         if writes:
             commit = graph.commit_versions(writes, metadata={"engine": "gestaltdb.ontology", "generation": staged.generation,
-                                                             "input_context": staged.input_context_id})
+                                                             "input_context": staged.input_context_id,
+                                                             "source_commit_horizon": staged.source_provenance.commit_horizon,
+                                                             "publication_freshness": freshness})
         return PublicationResult(context, staged.generation, None if commit is None else commit.commit_id,
                                  asserted, corrected, retracted, unchanged)
 
