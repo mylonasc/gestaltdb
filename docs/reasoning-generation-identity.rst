@@ -24,6 +24,11 @@ Temporal and current identities are never interchangeable; existing temporal
 digests are preserved byte-for-byte. The temporal bridges described here remain
 temporal-only.
 
+For finite temporal ranges, :doc:`reasoning-range-admission` provides a distinct
+range source identity, complete authenticated extraction/evaluation and explicit
+source-plus-closure re-admission. It does not expand the point/session bridges
+or silently migrate caller-derived range publication.
+
 The resulting ``ClaimGenerationBinding.verify_source(graph)`` authenticates
 the original prefix and conservatively rejects any newer commit. Explicit
 ``freshness="historical"`` verifies the old prefix instead. This read-only check

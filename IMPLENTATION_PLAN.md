@@ -90,6 +90,47 @@ views, forged representation metadata, decoder rebinding, unmapped-record
 cancellation and stale-index-independent complete projection. This is an
 admission/integration result, not new executor performance evidence.
 
+### Range identity and re-admission continuation (#354)
+
+Baseline `b93254a` includes accepted #353/#352. On
+`feature/re-354-range-admission` / `re-354-range-admission`, advance #248 with
+a distinct finite temporal-range source identity, preserving both existing
+point and current generation digests. Complete historical validity cuts include
+corrections/retractions; canonical point reads at every segment resolve active
+positive entity versions under one authenticated prefix. Preserve aliases,
+independent version evidence and disjoint clipped intervals; never seed-only
+or min/max envelope filtering.
+
+Re-admission must independently re-extract exact source evidence and compare
+fresh complete closure (including derivations), then run the conformance gate.
+The existing gate checks point closure but alone is not an independent check
+of every rule application, so matching metadata or calling only that gate is
+insufficient to admit arbitrary caller supports. Bounds and cancellation cover
+yielded history, repeated point candidates, retained evidence/segments/supports;
+authentication/internal backend work stays explicitly outside those counters.
+
+This is authenticated range computation/re-admission, not publication migration.
+Raw `stage_range` still authenticates staging only. The next consumer must bind
+computed interval outputs and preserve source freshness plus target CAS; a
+multi-interval batch needs an explicit atomicity contract rather than silently
+publishing first and accepting later intervals after its source horizon moves.
+Persistent session/sampler/cache consumers remain separate #248 follow-through.
+
+Validation: 2,923 passed / 1 skipped with optional backends/serializers/RDF/
+Polars/docs and independent reasoning oracles; docs drift, 8/8 examples, executable
+range guide, Sphinx with warnings as errors, roadmap and diff checks pass.
+Independent fixture grounding checks every microsecond across correction,
+retraction, overlap and disjoint gaps on LMDB/LevelDB/PyRex; re-admission rejects
+omitted equal-fact versions, altered intervals, base/segment/support/program
+tampering, source-kind drift and moved prefixes. No performance claim.
+
+Explicit remaining #248 consumers: #355 authenticated range computation to
+guarded interval publication (blocked by #354), #356 authenticated durable
+session resume/advance, #357 identity alignment for existing inferred sampler
+artifacts (not sampling-roadmap expansion). Source-independent
+`SpecializationCache` needs no source invalidation; the adapter re-admission
+path handles supplied range closures rather than inventing a phantom cache.
+
 ### Prior ordered follow-through
 
 Native GitHub links established: #338 (identity), #339 (input bounds), #340
