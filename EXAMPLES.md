@@ -1,5 +1,12 @@
 # GestaltDB Examples
 
+For authenticated complete current-graph projection with generation pins and
+explicit executor admission, see the runnable example in
+[`docs/reasoning-current-admission.rst`](docs/reasoning-current-admission.rst).
+It uses `reasoning.adapters.graph_execution` and keeps current snapshot identity
+distinct from temporal claim horizons; partial frontier answers are not closure
+inputs.
+
 These examples are designed for developers and agents who need working patterns quickly. They use explicit imports from submodules because the package root intentionally exports only selected helpers.
 
 **Filtering and sampling workflows:** [Indexed property lookups](#index-and-lookup-properties) · [Live typed sampling](#traverse-and-sample-typed-relationships) · [Filtered, reusable sampler snapshots](#build-and-use-a-sampler-snapshot). The [sampling guide](https://mylonasc.github.io/gestaltdb/typed-sampling.html) covers all policies; the [filtering guide](https://mylonasc.github.io/gestaltdb/property-filtering.html) explains seed selection versus filtering every sampled hop.

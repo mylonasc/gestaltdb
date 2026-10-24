@@ -3,7 +3,7 @@
 Opt-in generation identity and admission
 ========================================
 
-``gestaltdb.reasoning.generation.GenerationIdentity`` composes a temporal source
+``gestaltdb.reasoning.generation.GenerationIdentity`` composes a temporal or current-snapshot source
 identity, ``InputContext``, program/catalog digests, semantic profile and exact
 dictionary identity. ``require_compatible`` rejects any logical mismatch before
 reuse. ``require_compilation`` compares the logical plan fields only: it does
@@ -17,6 +17,12 @@ rule content without changing legacy program digests. The initial profile is
 positive binary entity reasoning. Current-graph and temporal-range admission
 are not implemented by this bridge; typed point sessions have a separate
 explicit admission path below.
+
+For distinct ``CurrentSourceIdentity`` values and authenticated complete mutable
+projection through executor admission, see :doc:`reasoning-current-admission`.
+Temporal and current identities are never interchangeable; existing temporal
+digests are preserved byte-for-byte. The temporal bridges described here remain
+temporal-only.
 
 The resulting ``ClaimGenerationBinding.verify_source(graph)`` authenticates
 the original prefix and conservatively rejects any newer commit. Explicit

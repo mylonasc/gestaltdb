@@ -57,6 +57,29 @@ Sphinx with warnings as errors, roadmap and diff checks passed. Clean-source
 199,999 vs 9. Full-state authentication remains outside candidate budgets;
 synthetic selective evidence does not justify default executor changes.
 
+### Current-state admission continuation (#352)
+
+Baseline `b809af5` includes #351 and closes #249 after exact-head and post-merge
+green. #352, branch `feature/re-352-current-admission` / worktree
+`re-352-current-admission`, advances #248 and coordinates #255: add a distinct
+storage-neutral mutable snapshot source identity without changing temporal
+generation digests. Authenticate complete current-record projection, bind the
+actual program/catalog/mapping/profile/dictionary, compare optional exact pins
+before record extraction, and invoke the existing explicit executor pipeline.
+Never admit partial frontier output as closure or invent temporal horizons for
+mutable sequences. Full canonical projection needs no secondary indexes.
+
+Metadata binding enables plan preparation but is not a closure certificate;
+execution independently authenticates and projects its input. Latest-source
+checks reject movement; exact active-view checks permit isolated old reads but
+cannot reopen expired snapshots. Persistent cache/range/session/sampler
+migration and publication remain separate #248 scope. Cancellation must also
+cover unmapped canonical records, which may yield no evidence to the dispatcher.
+Admission audit also requires backend/serializer provenance fields to match the
+snapshot graph manifest independently and pins the decoder object through reads;
+matching a copied provenance token alone must not admit forged representation
+metadata or a decoder rebound after authentication.
+
 ### Prior ordered follow-through
 
 Native GitHub links established: #338 (identity), #339 (input bounds), #340
