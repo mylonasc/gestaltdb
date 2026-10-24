@@ -44,6 +44,9 @@ local PDF extension. It can be rendered directly with
 GestaltDB and does not import the main documentation configuration. Library
 references use external GitHub links, while chapter links stay inside this site.
 The main library build (``scripts/build_docs.sh``) excludes the tutorial entirely.
+The Pages workflow builds both projects separately and publishes the tutorial at
+`/onto-tutorial/ <https://mylonasc.github.io/gestaltdb/onto-tutorial/>`_, alongside
+the library site. It serves the committed PDF without requiring TeX in CI.
 Use a fresh output directory when switching from the old combined build:
 Sphinx does not remove stale HTML from previous builds.
 

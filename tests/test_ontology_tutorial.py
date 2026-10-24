@@ -177,6 +177,8 @@ def test_tutorial_builds_as_an_isolated_sphinx_project(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     index = (output / "index.html").read_text()
     assert "https://mylonasc.github.io/gestaltdb/" in index
+    intro = (source / "index.rst").read_text().split("Imagine building", 1)[0]
+    assert "https://mylonasc.github.io/gestaltdb/" in intro
     assert (output / "ch08-gaps.html").is_file()
     assert not (output / "api.html").exists()
     assert not (output / "quickstart.html").exists()
@@ -189,6 +191,13 @@ def test_library_and_tutorial_builds_are_separate():
     assert "tutorial-pdf" not in (docs / "conf.py").read_text()
     for chapter in TUTORIAL.glob("ch*.rst"):
         assert ":doc:`../" not in chapter.read_text(), chapter.name
+
+
+def test_pages_publishes_tutorial_as_a_separate_project():
+    workflow = TUTORIAL.parents[1] / ".github" / "workflows" / "docs.yml"
+    text = workflow.read_text()
+    assert "sphinx-build -W -b html docs/onto-tutorial docs/_build/html/onto-tutorial" in text
+    assert "cp docs/onto-tutorial/onto-tutorial.pdf docs/_build/html/onto-tutorial/onto-tutorial.pdf" in text
 
 
 def test_small_svg_escapes_labels_and_defines_marker():

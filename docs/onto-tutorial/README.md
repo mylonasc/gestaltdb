@@ -4,6 +4,9 @@ Start with [the introduction](index.rst). The chapters, glossary, diagrams, and
 notebooks form an independent tutorial; API references link out to the
 [GestaltDB library](https://github.com/mylonasc/gestaltdb).
 
+The Pages workflow publishes this independent site at
+<https://mylonasc.github.io/gestaltdb/onto-tutorial/> after merging to `main`.
+
 From the repository root:
 
 ```sh
