@@ -34,6 +34,31 @@ checks are not universal identity admission or concurrent atomic publication.
 
 ## Ordered implementation
 
+### Broader roadmap continuation (2026-10-25)
+
+Child #350 of #249 delivers the current-property-graph demand path on
+`feature/re-350-current-frontier`, worktree `re-350-current-frontier`, based on
+accepted integration `9f287c6`. Reuse the bounded frontier scheduler and full
+`GraphMapping` projection/evidence convention under one authenticated mutable
+snapshot. Label/property/type/adjacency reads follow bindings; unindexed
+properties use reported complete scans. Stale/unverifiable sources fail closed.
+Current identity stays separate from temporal-prefix identity. No default-mode
+changes or silent persistent cache/publication admission.
+
+Parent #249 closure requires an acceptance map across temporal predicate/alias/
+frontier work and this mutable projection, plus parity/measurement evidence.
+Typed/negation/equality execution is outside this positive binary demand cut.
+The #342 authentication bottleneck is not solved by skipping verification.
+
+Validation: 2,790 tests passed / 1 skipped, documentation drift and 8/8 examples,
+Sphinx with warnings as errors, roadmap and diff checks passed. Clean-source
+`c340af4` reports at 10K/100K nodes contain 12 parity-verified observations.
+100K median total: 6.478s full projection vs 1.015s frontier; candidate reads
+199,999 vs 9. Full-state authentication remains outside candidate budgets;
+synthetic selective evidence does not justify default executor changes.
+
+### Prior ordered follow-through
+
 Native GitHub links established: #338 (identity), #339 (input bounds), #340
 (evidence) are children of #255. #341 (pinned frontier) is a child of #249 and
 blocked by all three fixes. #342 (measured crossover) is a child of #194 and

@@ -7,6 +7,8 @@ Pinned frontier-demand queries
 rule evaluation under a caller-owned temporal ``GraphReadView``. Pass a binary
 ``Program`` (including ontology compiler output) and an ``Atom`` goal. This is
 opt-in: existing demand, graph, session and executor entry points are unchanged.
+For mutable property-graph records see :doc:`reasoning-current-frontier`;
+current-state and temporal source identities remain separate.
 
 .. code-block:: python
 

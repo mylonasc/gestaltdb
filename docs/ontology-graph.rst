@@ -6,6 +6,9 @@ verifiable mutable-state read snapshot. It never reads temporal claims and
 does not alter Cypher planning, stored labels/edges, typed adjacency or sampler
 arrays. The Datalog engine imports none of these integrations.
 
+For indexed goal-directed reads over this same mapping and snapshot contract,
+see :doc:`reasoning-current-frontier`. Full projection remains available below.
+
 .. code-block:: python
 
    from tempfile import TemporaryDirectory
