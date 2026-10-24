@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## 0.13.0rc1 — reasoning engine testing milestone
+
+Prerelease for opt-in user testing; publication is pending release gates. This
+is a minor feature milestone, not a claim that the reasoning roadmap is complete.
+
+- Added the standalone indexed Python reasoning engine and ontology compiler,
+  inspectable/prepared plans, typed n-ary rules and strict literals, scoped
+  stratified negation, aggregates and selective demand queries.
+- Added explicit negative validation, snapshot-local equality, bounded
+  explanations and named ontology subsets; no full OWL or SHACL claim.
+- Added authenticated graph/claim extraction, staged materialization generations,
+  support-safe maintenance, incremental sessions and bounded temporal range
+  closure/publication with explicit provenance and fail-closed capabilities.
+- Added opt-in Arrow exchange and experimental closure-only Polars execution;
+  indexed Python remains the default. No bespoke native executor or out-of-core
+  reasoning is introduced.
+- Fixed rule normalization, aggregate row/limit semantics, signed-zero matching,
+  extraction policy/identity, temporal revision reuse, publication freshness and
+  mutable/corrupt temporal commit-cache handling (#207–#217, #244–#247, #282).
+- Includes the integration branch's existing opt-in hierarchy/query and sampling
+  enhancements; these do not imply automatic reasoning-aware query rewriting or
+  framework-native heterogeneous graph adapters.
+- Added release validation of installed artifacts, supported Python versions and
+  baseline database reopen/transition workflows. See
+  `docs/reasoning-testing.rst` for scope, installation and feedback guidance.
 - Featured high-performance sampling and indexed property-graph filtering in the README, docs landing/navigation, dedicated filtering guide, sampling API map, examples, and packaged agent guides; clarified snapshot costs, filtering stages, and performance boundaries.
 - Fixed the sampler benchmark's temporary output path and added a CLI smoke regression so the documented command runs with immutable snapshot output rules.
 

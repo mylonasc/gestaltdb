@@ -64,6 +64,13 @@ Consistent Read Views
    :members:
    :show-inheritance:
 
+Type Hierarchies
+----------------
+
+.. automodule:: gestaltdb.hierarchy
+   :members:
+   :show-inheritance:
+
 Sampling Configuration
 ----------------------
 

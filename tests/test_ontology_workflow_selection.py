@@ -34,3 +34,14 @@ def test_gate_has_no_stale_explicit_module_list():
     text = _workflow_text()
     offenders = sorted(set(EXPLICIT_MODULE.findall(text)))
     assert offenders == [], f"explicit test module paths reintroduced: {offenders}"
+
+
+def test_gate_includes_temporal_storage_integrity_regressions():
+    text = _workflow_text()
+    assert "tests/test_temporal*.py" in text
+    assert "tests/test_graphdb_versions.py" in text
+
+
+def test_gate_includes_rule_catalog_regressions():
+    text = _workflow_text()
+    assert "tests/test_rule*.py" in text

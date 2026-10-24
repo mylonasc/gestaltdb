@@ -88,7 +88,10 @@ jobs:
         run: >-
           python -m pytest -q
           tests/test_reasoning*.py
+          tests/test_rule*.py
           tests/test_ontology*.py
+          tests/test_temporal*.py
+          tests/test_graphdb_versions.py
       - name: Build the distributable wheel
         run: python -m pip wheel --no-deps --wheel-dir "${{ runner.temp }}/ontology-wheels" .
       - name: Smoke installed standalone APIs outside the checkout

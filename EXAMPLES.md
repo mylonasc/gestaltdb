@@ -165,6 +165,51 @@ with TemporaryDirectory() as tmpdir:
         graph.close()
 ```
 
+## Flag Absent Certifications With Stratified Negation
+
+Negated atoms are closed-world absence checks, not negative claims. List the
+complete predicates in `closed_world`; unstratifiable programs fail before the
+rule catalog changes. Absence evidence appears in explanations as `absence`
+nodes.
+
+```python
+from tempfile import TemporaryDirectory
+
+from gestaltdb.graphdb import GraphDB
+
+with TemporaryDirectory() as tmpdir:
+    graph = GraphDB.create(f"{tmpdir}/graph", backend="leveldb", serializer="json")
+    try:
+        graph.assert_claim(
+            subject="supplier-1", predicate="SHIPS", object="widgets",
+            polarity="positive", agent="erp", valid=(0, 100),
+        )
+        graph.create_rule(
+            "review-uncertified",
+            when=[("?s", "SHIPS", "?goods")],
+            then=("?s", "REQUIRES_SAFETY_REVIEW", "yes"),
+            not_when=[("?s", "CERTIFIED", "iso9001")],
+            closed_world=["CERTIFIED"],
+        )
+        graph.run_rules(as_of=10)
+        flagged = next(graph.iter_claims_as_of(
+            valid_time=10, predicate="REQUIRES_SAFETY_REVIEW"))
+        assert flagged.claim.subject == "supplier-1"
+
+        explanation = graph.explain_claim(flagged.logical_id, valid_time=10)
+        assert any(node.kind == "absence" for node in explanation.nodes)
+
+        graph.assert_claim(
+            subject="supplier-1", predicate="CERTIFIED", object="iso9001",
+            polarity="positive", agent="audit", valid=(0, 100),
+        )
+        assert graph.maintain_truth(as_of=10).retracted_count == 1
+        assert list(graph.iter_claims_as_of(
+            valid_time=10, predicate="REQUIRES_SAFETY_REVIEW")) == []
+    finally:
+        graph.close()
+```
+
 ## Evaluate Bounded Belief and Knowledge
 
 Accessibility is an explicit temporal fact. Belief and knowledge use separate
@@ -382,6 +427,39 @@ sampled = graph.query(
 )
 ```
 
+Node label matching is exact by default. Pass a `LabelHierarchy` to expand a
+parent label to its transitive sub-types for one query:
+
+```python
+from gestaltdb import LabelHierarchy
+
+transport = LabelHierarchy({
+    "Ocean_Freight": ["Transport_Edge"],
+    "Air_Freight": ["Transport_Edge"],
+    "Refrigerated_Freight": ["Ocean_Freight"],
+})
+matches = graph.query(
+    'MATCH (n:Transport_Edge) RETURN n.id AS id',
+    label_hierarchy=transport,
+)
+```
+
+Relationship types can be expanded the same way for one query:
+
+```python
+from gestaltdb.hierarchy import RelationHierarchy
+
+relations = RelationHierarchy({
+    "Ocean_Freight": ["Transport_Edge"],
+    "Air_Freight": ["Transport_Edge"],
+    "Refrigerated_Freight": ["Ocean_Freight"],
+})
+matches = graph.query(
+    'MATCH (a {id: "warehouse"})-[r:Transport_Edge]->(b) RETURN type(r) AS t',
+    relation_hierarchy=relations,
+)
+```
+
 ## Traverse and Sample Typed Relationships
 
 ```python
@@ -391,6 +469,7 @@ from gestaltdb.sampling import SamplingHop, SamplingPattern
 
 neighbors = graph.neighbors_by_edge_type("drug-1", "binds", direction="out")
 edges = graph.edges_by_edge_type("drug-1", "binds", direction="out")
+seeds = graph.sample_nodes(5, label="Drug", rng=random.Random(5))
 
 one_hop = graph.sample_neighbors(
     "drug-1",
@@ -412,6 +491,27 @@ print(subgraph["nodes"].keys(), subgraph["edges"].keys(), paths)
 ```
 
 Typed traversal depends on `Edge(properties={"type": "..."})`. If a database was populated before typed adjacency existed, run `graph.rebuild_typed_adjacency()`.
+
+Live traversal can expand a parent relation through an explicit hierarchy. The
+per-hop `sample_size` remains the total fanout across the expanded union:
+
+```python
+from gestaltdb.sampling import RelationHierarchy
+
+transport = RelationHierarchy({
+    "Ocean_Freight": ["Transport_Edge"],
+    "Air_Freight": ["Transport_Edge"],
+})
+one_hop = graph.sample_neighbors(
+    "warehouse", "Transport_Edge", sample_size=5,
+    relation_hierarchy=transport,
+)
+paths = graph.sample_typed_paths(
+    ["warehouse"],
+    [{"edge_type": "Transport_Edge", "sample_size": 5}],
+    relation_hierarchy=transport,
+)
+```
 
 ## Ingest Arrow Columns
 
@@ -544,6 +644,8 @@ with TemporaryDirectory() as tmpdir:
             ["drug-1"], [ExternalNeighborSamplingSpec(fanout=5, relations=["binds"])]
         )
         print(layers.to_external(snapshot)["layers"][0]["neighbor_nodes"].tolist())
+        blocks = layers.to_blocks(snapshot)
+        print(blocks[0]["src_nodes"].tolist(), blocks[0]["edge_index"].shape)
 
         walks = engine.sample_random_walks_external(
             ["drug-1"], 2, metapath=["binds", "associated_with"]
@@ -558,11 +660,27 @@ with TemporaryDirectory() as tmpdir:
         )
         arrays = batch.to_numpy()
         print(arrays["senders"], arrays["receivers"], arrays["positives"], arrays["negatives"])
+
+        induced = engine.sample_induced_subgraph(2, max_edges=10)
+        print(induced.n_nodes, induced.n_edges)
+        normalized = engine.sample_induced_subgraph(2, max_edges=10, normalize=True)
+        print(normalized.node_weights.tolist(), normalized.edge_weights.tolist())
+        balanced_neighbors = engine.sample_neighbors([0], 9, balanced=True)
+        balanced_nodes = engine.sample_nodes(30, balanced=True)
+        balanced_edges = engine.sample_edges(9, balanced=True)
     finally:
         graph.close()
 ```
 
 Use `SamplerEngine.load(path, mode="memmap")` for large snapshots that should be memory mapped instead of eagerly loaded into RAM.
+
+Balanced draws, illustrated inside the temporary snapshot lifetime above, are
+opt-in and split the requested quota across the groups present. Layer specs
+also accept `ExternalNeighborSamplingSpec(fanout=9, balanced=True)`.
+
+Groups are compact node types for `sample_nodes` and relation IDs for
+`sample_edges` and `sample_neighbors`. A group smaller than its share returns
+fewer rows unless `replace=True`; quota is not borrowed from other groups.
 
 On LMDB, high-level non-temporal builds automatically pin one mutable MVCC
 horizon and record `CurrentReadProvenance`. Pass `read_snapshot=True` to require

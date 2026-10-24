@@ -20,7 +20,12 @@ for p in (str(SRC), str(ROOT)):
         sys.path.insert(0, p)
 
 from gestaltdb.graphdb import Edge, Node
-from gestaltdb.sampling import SamplerEngine, SamplerSnapshot
+from gestaltdb.sampling import (
+    NeighborSamplingSpec,
+    SamplerEngine,
+    SamplerSnapshot,
+    derive_edge_weights,
+)
 from benchmarks.common.timing import reservoir_count, seconds
 
 
@@ -41,18 +46,25 @@ class SyntheticStore:
 class SyntheticGraph:
     """In-memory synthetic property graph matching GestaltDB's reader protocol."""
 
-    def __init__(self, *, num_nodes: int, num_edges: int, num_relations: int, seed: int) -> None:
+    def __init__(self, *, num_nodes: int, num_edges: int, num_relations: int, seed: int, high_degree: bool = False) -> None:
         rng = random.Random(seed)
         node_kinds = ["drug", "protein", "disease", "pathway"]
         nodes = [Node(node_id=f"n{i}", properties={"kind": node_kinds[i % len(node_kinds)]}) for i in range(num_nodes)]
         edges: list[Edge] = []
         self.edge_payloads: dict[int, tuple[int, int, str, bytes]] = {}
         self.out_by_node_rel: dict[tuple[int, int], list[int]] = defaultdict(list)
+        hubs = list(range(max(1, num_nodes // 50)))
         for edge_idx in range(num_edges):
-            src = rng.randrange(num_nodes)
-            dst = rng.randrange(num_nodes - 1)
-            if dst >= src:
-                dst += 1
+            if high_degree:
+                src = rng.choice(hubs) if rng.random() < 0.5 else rng.randrange(num_nodes)
+                dst = rng.choice(hubs) if rng.random() < 0.75 else rng.randrange(num_nodes)
+                if dst == src:
+                    dst = (dst + 1) % num_nodes
+            else:
+                src = rng.randrange(num_nodes)
+                dst = rng.randrange(num_nodes - 1)
+                if dst >= src:
+                    dst += 1
             rel = rng.randrange(num_relations)
             relation_name = f"r{rel:06d}"
             edge = Edge(edge_id=f"e{edge_idx}", source=f"n{src}", target=f"n{dst}", properties={"type": relation_name})
@@ -147,6 +159,140 @@ def time_engine(
     return elapsed, sampled
 
 
+def time_seeds(
+    engine: SamplerEngine,
+    batch_nodes: np.ndarray,
+    *,
+    iterations: int,
+) -> tuple[float, int]:
+    """Time seed selection via ``sample_nodes`` and ``sample_edges``."""
+
+    def run_workload() -> int:
+        count = 0
+        for _ in range(iterations):
+            count += int(engine.sample_nodes(int(batch_nodes.size)).size)
+            count += int(engine.sample_edges(int(batch_nodes.size)).size)
+        return count
+
+    sampled, elapsed = seconds(run_workload)
+    return elapsed, sampled
+
+
+def time_weighted(
+    engine: SamplerEngine,
+    batch_nodes: np.ndarray,
+    *,
+    fanout: int,
+    iterations: int,
+) -> tuple[float, int]:
+    """Time weighted neighbor and edge-seed selection."""
+
+    def run_workload() -> int:
+        count = 0
+        for _ in range(iterations):
+            count += int(
+                engine.sample_neighbors(
+                    batch_nodes, fanout, direction="out", strategy="weighted"
+                ).edge_indices.size
+            )
+            count += int(engine.sample_edges(int(batch_nodes.size), strategy="weighted").size)
+        return count
+
+    sampled, elapsed = seconds(run_workload)
+    return elapsed, sampled
+
+
+def time_layers(
+    engine: SamplerEngine,
+    batch_nodes: np.ndarray,
+    *,
+    fanout: int,
+    iterations: int,
+) -> tuple[float, int]:
+    """Time two-layer heterogeneous neighborhood expansion."""
+    specs = [
+        NeighborSamplingSpec(fanout, direction="out"),
+        NeighborSamplingSpec(fanout, direction="in"),
+    ]
+
+    def run_workload() -> int:
+        count = 0
+        for _ in range(iterations):
+            batch = engine.sample_layers(batch_nodes, specs)
+            count += sum(int(layer.edge_indices.size) for layer in batch.layers)
+        return count
+
+    sampled, elapsed = seconds(run_workload)
+    return elapsed, sampled
+
+
+def time_walks(
+    engine: SamplerEngine,
+    batch_nodes: np.ndarray,
+    *,
+    walk_length: int,
+    iterations: int,
+) -> tuple[float, int]:
+    """Time first-order random walks."""
+
+    def run_workload() -> int:
+        count = 0
+        for _ in range(iterations):
+            count += int(engine.sample_random_walks(batch_nodes, walk_length).lengths.sum())
+        return count
+
+    sampled, elapsed = seconds(run_workload)
+    return elapsed, sampled
+
+
+def time_weighted_neighbors(
+    engine: SamplerEngine,
+    nodes: np.ndarray,
+    relations: np.ndarray,
+    *,
+    fanout: int,
+    iterations: int,
+) -> tuple[float, int]:
+    """Time importance-weighted neighbor sampling."""
+
+    def run_workload() -> int:
+        count = 0
+        for _ in range(iterations):
+            for rel in np.unique(relations):
+                rel_nodes = nodes[relations == rel]
+                count += int(engine.sample_neighbors(
+                    rel_nodes, fanout, direction="out",
+                    relations=[int(rel)], strategy="weighted",
+                ).edge_indices.size)
+        return count
+
+    sampled, elapsed = seconds(run_workload)
+    return elapsed, sampled
+
+
+def mean_sampled_degree(
+    engine: SamplerEngine,
+    nodes: np.ndarray,
+    relations: np.ndarray,
+    *,
+    fanout: int,
+    strategy: str,
+) -> float:
+    """Measure the mean incident degree of sampled neighbors (bias probe)."""
+    degrees = np.diff(engine.snapshot.incident.indptr).astype(np.float64)
+    total = 0.0
+    count = 0
+    for rel in np.unique(relations):
+        rel_nodes = nodes[relations == rel]
+        sampled = engine.sample_neighbors(
+            rel_nodes, fanout, direction="out",
+            relations=[int(rel)], strategy=strategy,
+        )
+        total += float(degrees[sampled.neighbor_nodes].sum())
+        count += int(sampled.neighbor_nodes.size)
+    return total / count if count else 0.0
+
+
 def build_parser(subparser: argparse.ArgumentParser | None = None) -> argparse.ArgumentParser:
     """Build or configure argument parser for sampler engine benchmark."""
     parser = subparser or argparse.ArgumentParser(
@@ -159,6 +305,24 @@ def build_parser(subparser: argparse.ArgumentParser | None = None) -> argparse.A
     parser.add_argument("--fanout", type=int, default=15)
     parser.add_argument("--iterations", type=int, default=200)
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument(
+        "--workload",
+        choices=("neighbors", "seeds", "weighted", "layers", "walks", "all"),
+        default="neighbors",
+        help="Which sampling API to benchmark.",
+    )
+    parser.add_argument(
+        "--high-degree",
+        action="store_true",
+        help="Skew synthetic edges toward hub nodes (top 2%% hold ~75%% of endpoints).",
+    )
+    parser.add_argument(
+        "--importance",
+        choices=("none", "degree"),
+        default="none",
+        help="Persist degree-policy importance weights and compare weighted "
+        "neighbor step-time and sampled-degree bias against uniform.",
+    )
     return parser
 
 
@@ -167,29 +331,84 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    graph = SyntheticGraph(num_nodes=args.nodes, num_edges=args.edges, num_relations=args.relations, seed=args.seed)
+    graph = SyntheticGraph(
+        num_nodes=args.nodes,
+        num_edges=args.edges,
+        num_relations=args.relations,
+        seed=args.seed,
+        high_degree=args.high_degree,
+    )
     rng = np.random.default_rng(args.seed)
-    batch_nodes = rng.integers(args.nodes, size=args.batch_nodes, dtype=np.int64)
+    if args.high_degree:
+        hubs = np.arange(max(1, args.nodes // 50), dtype=np.int64)
+        hub_batch = rng.choice(hubs, size=args.batch_nodes // 2, replace=True)
+        uniform_batch = rng.integers(args.nodes, size=args.batch_nodes - hub_batch.size, dtype=np.int64)
+        batch_nodes = np.concatenate([hub_batch, uniform_batch])
+        rng.shuffle(batch_nodes)
+    else:
+        batch_nodes = rng.integers(args.nodes, size=args.batch_nodes, dtype=np.int64)
     batch_relations = rng.integers(args.relations, size=args.batch_nodes, dtype=np.int64)
+
+    workloads = (
+        ("neighbors", "seeds", "weighted", "layers", "walks")
+        if args.workload == "all"
+        else (args.workload,)
+    )
+    mode = "high-degree" if args.high_degree else "uniform"
+    print(f"synthetic graph: nodes={args.nodes:,} edges={args.edges:,} relations={args.relations:,} mode={mode}")
+    print(f"workload: batch_nodes={args.batch_nodes:,} fanout={args.fanout:,} iterations={args.iterations:,}")
 
     with tempfile.TemporaryDirectory(prefix="gestaltdb-sampler-bench-") as tmpdir:
         snapshot = SamplerSnapshot.build(graph, Path(tmpdir) / "snapshot")
+        if args.importance == "degree":
+            weights = derive_edge_weights(
+                snapshot.src_int, snapshot.dst_int,
+                policy="degree", num_nodes=snapshot.num_nodes,
+            )
+            snapshot.set_edge_weights(weights, source="policy:degree")
         engine = SamplerEngine(snapshot, seed=args.seed)
-        baseline_seconds, baseline_sampled = time_baseline(
-            graph, batch_nodes, batch_relations, fanout=args.fanout, iterations=args.iterations, seed=args.seed
-        )
-        engine_seconds, engine_sampled = time_engine(
-            engine, batch_nodes, batch_relations, fanout=args.fanout, iterations=args.iterations
-        )
-
-    baseline_rate = baseline_sampled / baseline_seconds if baseline_seconds else 0.0
-    engine_rate = engine_sampled / engine_seconds if engine_seconds else 0.0
-    speedup = engine_rate / baseline_rate if baseline_rate else float("inf")
-    print(f"synthetic graph: nodes={args.nodes:,} edges={args.edges:,} relations={args.relations:,}")
-    print(f"workload: batch_nodes={args.batch_nodes:,} fanout={args.fanout:,} iterations={args.iterations:,}")
-    print(f"baseline GraphDB-style sampler: {baseline_rate:,.0f} sampled edges/s ({baseline_seconds:.3f}s)")
-    print(f"array SamplerEngine:          {engine_rate:,.0f} sampled edges/s ({engine_seconds:.3f}s)")
-    print(f"speedup: {speedup:.2f}x")
+        if "neighbors" in workloads:
+            baseline_seconds, baseline_sampled = time_baseline(
+                graph, batch_nodes, batch_relations, fanout=args.fanout, iterations=args.iterations, seed=args.seed
+            )
+            engine_seconds, engine_sampled = time_engine(
+                engine, batch_nodes, batch_relations, fanout=args.fanout, iterations=args.iterations
+            )
+            baseline_rate = baseline_sampled / baseline_seconds if baseline_seconds else 0.0
+            engine_rate = engine_sampled / engine_seconds if engine_seconds else 0.0
+            speedup = engine_rate / baseline_rate if baseline_rate else float("inf")
+            print(f"baseline GraphDB-style sampler: {baseline_rate:,.0f} sampled edges/s ({baseline_seconds:.3f}s)")
+            print(f"array SamplerEngine:          {engine_rate:,.0f} sampled edges/s ({engine_seconds:.3f}s)")
+            print(f"speedup: {speedup:.2f}x")
+            if args.importance == "degree":
+                weighted_seconds, weighted_sampled = time_weighted_neighbors(
+                    engine, batch_nodes, batch_relations, fanout=args.fanout, iterations=args.iterations
+                )
+                weighted_rate = weighted_sampled / weighted_seconds if weighted_seconds else 0.0
+                uniform_degree = mean_sampled_degree(
+                    engine, batch_nodes, batch_relations, fanout=args.fanout, strategy="uniform"
+                )
+                weighted_degree = mean_sampled_degree(
+                    engine, batch_nodes, batch_relations, fanout=args.fanout, strategy="weighted"
+                )
+                print(f"importance-weighted neighbors: {weighted_rate:,.0f} sampled edges/s ({weighted_seconds:.3f}s)")
+                print(f"mean sampled neighbor degree: uniform={uniform_degree:.1f} weighted={weighted_degree:.1f}")
+        if "seeds" in workloads:
+            elapsed, sampled = time_seeds(engine, batch_nodes, iterations=args.iterations)
+            rate = sampled / elapsed if elapsed else 0.0
+            print(f"seed selection (sample_nodes + sample_edges): {rate:,.0f} seed rows/s ({elapsed:.3f}s)")
+        if "weighted" in workloads:
+            elapsed, sampled = time_weighted(engine, batch_nodes, fanout=args.fanout, iterations=args.iterations)
+            rate = sampled / elapsed if elapsed else 0.0
+            print(f"weighted selection: {rate:,.0f} sampled edges/s ({elapsed:.3f}s)")
+        if "layers" in workloads:
+            elapsed, sampled = time_layers(engine, batch_nodes, fanout=args.fanout, iterations=args.iterations)
+            rate = sampled / elapsed if elapsed else 0.0
+            print(f"two-layer expansion: {rate:,.0f} sampled edges/s ({elapsed:.3f}s)")
+        if "walks" in workloads:
+            elapsed, sampled = time_walks(engine, batch_nodes, walk_length=args.fanout, iterations=args.iterations)
+            rate = sampled / elapsed if elapsed else 0.0
+            print(f"first-order walks: {rate:,.0f} walk steps/s ({elapsed:.3f}s)")
 
 
 if __name__ == "__main__":
