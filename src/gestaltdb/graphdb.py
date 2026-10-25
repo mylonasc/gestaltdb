@@ -479,7 +479,7 @@ class GraphDB:
 
     def _ensure_indexes_current(self, *index_names: str) -> None:
         """Prevent stale secondary indexes from silently returning wrong results."""
-        _index_maintenance.ensure_indexes_current(self.store, _STALE_INDEXES_METADATA_KEY, *index_names)
+        self.indexes.ensure_current(*index_names)
 
     def _validate_index_mode(self, index_mode: str) -> None:
         """Validate the columnar ingestion index mode."""
@@ -595,6 +595,13 @@ class GraphDB:
         """Write accumulated rebuild entries and clear the buffers."""
         _index_maintenance.flush_index_rebuild_batches(self.store, entries, range_entries)
 
+    @property
+    def indexes(self):
+        """Current index lookup, DDL and rebuild authority for this store scope."""
+        from .indexes import IndexService
+
+        return IndexService(self.nodes._session)
+
     def rebuild_node_indexes(
         self,
         *,
@@ -603,16 +610,8 @@ class GraphDB:
         batch_size: int = _INDEX_REBUILD_BATCH_SIZE,
     ) -> dict[str, int]:
         """Rebuild requested node secondary indexes in one node scan."""
-        if self._implicit_transaction_required():
-            with self.transaction() as tx:
-                return tx.rebuild_node_indexes(
-                    labels=labels, properties=properties, batch_size=batch_size
-                )
-        return _index_rebuild.rebuild_node_indexes(
-            self.store, self.entity_serializer, self.indexed_node_properties,
-            _STALE_INDEXES_METADATA_KEY, labels=labels, properties=properties,
-            batch_size=batch_size,
-        )
+        return self.indexes.rebuild_node_indexes(
+            labels=labels, properties=properties, batch_size=batch_size)
 
     def create_node_property_index(self, property_name: str):
         """Register and rebuild an exact-match node property index.
@@ -627,15 +626,7 @@ class GraphDB:
             >>> graph_db.create_node_property_index("kind")  # doctest: +SKIP
             10
         """
-        if self._implicit_transaction_required():
-            with self.transaction() as tx:
-                rebuilt = tx.create_node_property_index(property_name)
-            self.indexed_node_properties.add(property_name)
-            return rebuilt
-        self.indexed_node_properties.add(property_name)
-        rebuilt = self.rebuild_node_property_index(property_name)
-        self._persist_property_index_metadata(_NODE_PROPERTY_INDEXES_METADATA_KEY, self.indexed_node_properties)
-        return rebuilt
+        return self.indexes.create_node_property_index(property_name)
 
     def rebuild_node_property_index(self, property_name: str):
         """Rebuild an exact-match node property index from stored nodes.
@@ -650,8 +641,7 @@ class GraphDB:
             >>> graph_db.rebuild_node_property_index("name")  # doctest: +SKIP
             3
         """
-        rebuilt = self.rebuild_node_indexes(labels=False, properties={property_name})
-        return rebuilt[f"node_property:{property_name}"]
+        return self.indexes.rebuild_node_property_index(property_name)
 
     def rebuild_label_index(self):
         """Rebuild the node label index from stored nodes.
@@ -663,8 +653,7 @@ class GraphDB:
             >>> graph_db.rebuild_label_index()  # doctest: +SKIP
             12
         """
-        rebuilt = self.rebuild_node_indexes(labels=True, properties=set())
-        return rebuilt["node_label"]
+        return self.indexes.rebuild_label_index()
 
     def iter_node_ids_by_label(self, label: str):
         """Yield node IDs from the label index.
@@ -679,7 +668,7 @@ class GraphDB:
             >>> list(graph_db.iter_node_ids_by_label("Drug"))  # doctest: +SKIP
             [b'drug-1']
         """
-        return _index_lookup.iter_node_ids_by_label(self.store, self._ensure_indexes_current, label)
+        return self.indexes.iter_node_ids_by_label(label)
 
     def nodes_by_label(self, label: str):
         """Return nodes with a label using the label index.
@@ -713,7 +702,7 @@ class GraphDB:
             >>> list(graph_db.iter_node_ids_by_property("kind", "drug"))  # doctest: +SKIP
             [b'drug-1']
         """
-        return _index_lookup.iter_node_ids_by_property(self.store, self._ensure_indexes_current, property_name, value)
+        return self.indexes.iter_node_ids_by_property(property_name, value)
 
     def nodes_by_property(self, property_name: str, value):
         """Return nodes using an exact-match property index.
@@ -736,7 +725,7 @@ class GraphDB:
 
     def iter_node_ids_by_label_property(self, label: str, property_name: str, value):
         """Yield node IDs from the composite label/property exact-match index."""
-        return _index_lookup.iter_node_ids_by_label_property(self.store, self._ensure_indexes_current, label, property_name, value)
+        return self.indexes.iter_node_ids_by_label_property(label, property_name, value)
 
     def nodes_by_label_property(self, label: str, property_name: str, value):
         """Return nodes using the composite label/property exact-match index."""
@@ -748,7 +737,7 @@ class GraphDB:
 
     def iter_node_ids_by_property_range(self, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Yield node IDs from a scalar property range index."""
-        return _index_lookup.iter_node_ids_by_property_range(self.store, self._ensure_indexes_current, property_name, start_value, end_value, include_start, include_end)
+        return self.indexes.iter_node_ids_by_property_range(property_name, start_value, end_value, include_start, include_end)
 
     def nodes_by_property_range(self, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Return nodes using a scalar property range index."""
@@ -760,7 +749,7 @@ class GraphDB:
 
     def iter_node_ids_by_label_property_range(self, label: str, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Yield node IDs from a composite label/property range index."""
-        return _index_lookup.iter_node_ids_by_label_property_range(self.store, self._ensure_indexes_current, label, property_name, start_value, end_value, include_start, include_end)
+        return self.indexes.iter_node_ids_by_label_property_range(label, property_name, start_value, end_value, include_start, include_end)
 
     def nodes_by_label_property_range(self, label: str, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Return nodes using a composite label/property range index."""
@@ -868,16 +857,8 @@ class GraphDB:
         batch_size: int = _INDEX_REBUILD_BATCH_SIZE,
     ) -> dict[str, int]:
         """Rebuild requested edge secondary indexes in one edge scan."""
-        if self._implicit_transaction_required():
-            with self.transaction() as tx:
-                return tx.rebuild_edge_indexes(
-                    edge_types=edge_types, properties=properties, batch_size=batch_size
-                )
-        return _index_rebuild.rebuild_edge_indexes(
-            self.store, self.entity_serializer, self.indexed_edge_properties,
-            _STALE_INDEXES_METADATA_KEY, edge_types=edge_types, properties=properties,
-            batch_size=batch_size,
-        )
+        return self.indexes.rebuild_edge_indexes(
+            edge_types=edge_types, properties=properties, batch_size=batch_size)
 
     def rebuild_relationship_type_index(self):
         """Rebuild the relationship type catalog from stored edges.
@@ -889,8 +870,7 @@ class GraphDB:
             >>> graph_db.rebuild_relationship_type_index()  # doctest: +SKIP
             20
         """
-        rebuilt = self.rebuild_edge_indexes(edge_types=True, properties=set())
-        return rebuilt["edge_type"]
+        return self.indexes.rebuild_relationship_type_index()
 
     def create_edge_property_index(self, property_name: str):
         """Register and rebuild an exact-match edge property index.
@@ -905,15 +885,7 @@ class GraphDB:
             >>> graph_db.create_edge_property_index("score")  # doctest: +SKIP
             7
         """
-        if self._implicit_transaction_required():
-            with self.transaction() as tx:
-                rebuilt = tx.create_edge_property_index(property_name)
-            self.indexed_edge_properties.add(property_name)
-            return rebuilt
-        self.indexed_edge_properties.add(property_name)
-        rebuilt = self.rebuild_edge_property_index(property_name)
-        self._persist_property_index_metadata(_EDGE_PROPERTY_INDEXES_METADATA_KEY, self.indexed_edge_properties)
-        return rebuilt
+        return self.indexes.create_edge_property_index(property_name)
 
     def rebuild_edge_property_index(self, property_name: str):
         """Rebuild an exact-match edge property index from stored edges.
@@ -928,8 +900,7 @@ class GraphDB:
             >>> graph_db.rebuild_edge_property_index("score")  # doctest: +SKIP
             7
         """
-        rebuilt = self.rebuild_edge_indexes(edge_types=False, properties={property_name})
-        return rebuilt[f"edge_property:{property_name}"]
+        return self.indexes.rebuild_edge_property_index(property_name)
 
     def iter_edge_ids_by_type(self, edge_type: str):
         """Yield edge IDs from the relationship type catalog.
@@ -944,7 +915,7 @@ class GraphDB:
             >>> list(graph_db.iter_edge_ids_by_type("drug-to-protein"))  # doctest: +SKIP
             [b'd1-p1']
         """
-        return _index_lookup.iter_edge_ids_by_type(self.store, self._ensure_indexes_current, edge_type)
+        return self.indexes.iter_edge_ids_by_type(edge_type)
 
     def iter_edge_ids(self, num_edges=None, key_offset=None):
         """Yield all canonical edge IDs from the backing store.
@@ -994,7 +965,7 @@ class GraphDB:
             >>> list(graph_db.iter_edge_ids_by_property("score", 1))  # doctest: +SKIP
             [b'e1']
         """
-        return _index_lookup.iter_edge_ids_by_property(self.store, self._ensure_indexes_current, property_name, value)
+        return self.indexes.iter_edge_ids_by_property(property_name, value)
 
     def edges_by_property(self, property_name: str, value):
         """Return edges using an exact-match property index.
@@ -1017,7 +988,7 @@ class GraphDB:
 
     def iter_edge_ids_by_type_property(self, edge_type: str, property_name: str, value):
         """Yield edge IDs from the composite type/property exact-match index."""
-        return _index_lookup.iter_edge_ids_by_type_property(self.store, self._ensure_indexes_current, edge_type, property_name, value)
+        return self.indexes.iter_edge_ids_by_type_property(edge_type, property_name, value)
 
     def edges_by_type_property(self, edge_type: str, property_name: str, value):
         """Return edges using the composite type/property exact-match index."""
@@ -1029,7 +1000,7 @@ class GraphDB:
 
     def iter_edge_ids_by_property_range(self, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Yield edge IDs from a scalar property range index."""
-        return _index_lookup.iter_edge_ids_by_property_range(self.store, self._ensure_indexes_current, property_name, start_value, end_value, include_start, include_end)
+        return self.indexes.iter_edge_ids_by_property_range(property_name, start_value, end_value, include_start, include_end)
 
     def edges_by_property_range(self, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Return edges using a scalar property range index."""
@@ -1041,7 +1012,7 @@ class GraphDB:
 
     def iter_edge_ids_by_type_property_range(self, edge_type: str, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Yield edge IDs from a composite type/property range index."""
-        return _index_lookup.iter_edge_ids_by_type_property_range(self.store, self._ensure_indexes_current, edge_type, property_name, start_value, end_value, include_start, include_end)
+        return self.indexes.iter_edge_ids_by_type_property_range(edge_type, property_name, start_value, end_value, include_start, include_end)
 
     def edges_by_type_property_range(self, edge_type: str, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Return edges using a composite type/property range index."""

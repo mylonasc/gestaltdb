@@ -1,11 +1,11 @@
 """Secondary-index ID lookups (Phase 3 extraction, read side).
 
-These functions implement ``GraphDB``'s ``iter_*`` index lookups against an
-explicit backend store. The ``ensure_current`` argument is the caller's
-freshness guard (``GraphDB._ensure_indexes_current``); it runs at the same
+These functions implement ``IndexReader``'s ``iter_*`` lookups against an
+explicit backend store. The ``ensure_current`` argument is the reader's
+freshness guard; it runs at the same
 point as before — deferred to first iteration for generator lookups,
 eagerly for range lookups — so stale-index failures keep their exact
-timing. Moving the guard itself is a later slice.
+timing. IndexReader owns the guard without GraphDB callbacks.
 
 Entity-mapping wrappers (``nodes_by_*``, ``edges_by_*``, ``count_*``) stay
 on ``GraphDB``; they compose these iterators with ``get_node/get_edge``.

@@ -123,6 +123,8 @@ with TemporaryDirectory() as tmpdir:
             properties={"type": "knows", "since": 2024},
         ))
         assert graph.edges.reader.get(b"alice-knows-bob").target == "bob"
+        graph.indexes.create_edge_property_index("since")
+        assert list(graph.indexes.iter_edge_ids_by_type_property("knows", "since", 2024)) == [b"alice-knows-bob"]
 
         result = graph.query(
             'MATCH (a:Person {name: "Alice"}) '

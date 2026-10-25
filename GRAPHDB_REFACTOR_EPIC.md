@@ -97,6 +97,22 @@ both repository caches. Real-backend tests cover standalone/no-redispatch,
 topology/type/property replacement, atomic bulk rollback, cache invalidation,
 current-only deletion, and transaction/snapshot isolation.
 
+Index slice: `IndexService`/`IndexReader` in `gestaltdb.indexes` own current
+secondary-index lookup guards, rebuild transactions and property-index DDL.
+The facade's current lookup names remain integration conveniences, but the
+service requires only a StorageSession; no GraphDB construction or redispatch.
+DDL stages configuration and mutates live sets only after successful rebuild
+and metadata commit. Snapshot views expose a narrow `view.indexes` reader;
+the current reasoning frontier consumes it directly. Tests cover standalone
+lookups, failed DDL, freshness-error timing, transaction rollback and snapshot
+catalog isolation. Ingestion and traversal-service extraction remain pending.
+
+Validation for the current edge/index slices: full optional backend/serializer
+suite 3,466 passed / 3 expected skips. Ruff, module-size ratchet, generated API
+index, documentation drift/examples and Sphinx `-W` pass. GraphDB shrank from
+2,235 to 2,154 physical lines; no transaction GraphDB redispatch remains in
+current node/edge CRUD or current index DDL/rebuilds.
+
 Migrate edge/index repositories to the same scope binding; replace duplicated
 ordinary transaction checks through a session template, not dynamic method-name
 redispatch. Separate DDL's post-commit config updates. Build `graph.ingest` over

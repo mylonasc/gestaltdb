@@ -1,9 +1,9 @@
 """Secondary-index rebuild scans (Phase 3 extraction).
 
 ``rebuild_node_indexes``/``rebuild_edge_indexes`` rescan all records and
-re-emit secondary index entries in batches. The transaction boundary stays
-on ``GraphDB``: wrappers recurse into a transaction when required and
-delegate the store-bound scan here. Stale markers are cleared through
+re-emit secondary index entries in batches. ``IndexService`` owns transactions
+through StorageSession and delegates the store-bound scan here.
+Stale markers are cleared through
 ``index_maintenance`` with an explicit metadata key.
 """
 

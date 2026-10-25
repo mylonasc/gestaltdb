@@ -360,6 +360,7 @@ class CurrentGraphReadView:
         self._graph = graph
         self._nodes = graph.nodes.reader
         self._edges = graph.edges.reader
+        self._indexes = graph.indexes.reader
         self.provenance = provenance
 
     @property
@@ -371,6 +372,11 @@ class CurrentGraphReadView:
     def edges(self):
         """Read-only edge capabilities bound to this view's snapshot."""
         return self._edges
+
+    @property
+    def indexes(self):
+        """Current index reads without DDL authority on this snapshot."""
+        return self._indexes
 
     @property
     def store(self):

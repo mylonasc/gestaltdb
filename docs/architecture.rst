@@ -293,6 +293,16 @@ As with nodes, ``update`` is not an atomic read-modify-write outside an explicit
 transaction. Independently constructed sessions own independent adjacency-count
 caches: use handle-bound repositories when sharing a handle's cached reads.
 
+Current secondary indexes are owned by ``gestaltdb.indexes.IndexService``
+(``graph.indexes``), constructed over the same ``StorageSession``. It owns
+exact/composite/range ID lookups, stale-family checks, property-index DDL and
+rebuild transactions without constructing GraphDB children. DDL stages index
+configuration and publishes it to the session only after rebuild and metadata
+writes commit successfully. ``view.indexes`` exposes an ``IndexReader`` bound
+to the snapshot's index configuration, without DDL methods. Existing current
+lookup names on GraphDB remain integration conveniences; the current-graph
+reasoning frontier consumes the narrow snapshot index reader directly.
+
 The decomposition is useful, with four important boundaries:
 
 * ``GraphDB`` is the public integration facade: it owns handle lifecycle,
