@@ -3,7 +3,8 @@
 Opt-in generation identity and admission
 ========================================
 
-``gestaltdb.reasoning.generation.GenerationIdentity`` composes a temporal or current-snapshot source
+``gestaltdb.reasoning.generation.GenerationIdentity`` composes a temporal-point,
+finite-range or current-snapshot source
 identity, ``InputContext``, program/catalog digests, semantic profile and exact
 dictionary identity. ``require_compatible`` rejects any logical mismatch before
 reuse. ``require_compilation`` compares the logical plan fields only: it does
@@ -34,9 +35,13 @@ the original prefix and conservatively rejects any newer commit. Explicit
 ``freshness="historical"`` verifies the old prefix instead. This read-only check
 is not an atomic publication permit: publishers must hold their writer guard
 through checking and committing. Staged binary point publication now carries
-and revalidates this binding (see :doc:`reasoning-generations`); other publication
-and cache paths are not migrated. No identity string or result record independently proves that an
-inference computation is sound.
+and revalidates this binding (see :doc:`reasoning-generations`). Computation-owned
+finite-range publication uses :doc:`reasoning-bound-range-publication`; legacy
+caller-derived ``stage_range`` remains separate. Durable sessions and the existing
+inferred artifact consumer have explicit authenticated APIs below. These are not
+universal upgrades to every legacy API, and source-independent program caches
+do not need source-horizon invalidation. No identity string or result record
+independently proves that an inference computation is sound.
 
 Typed point sessions
 --------------------
