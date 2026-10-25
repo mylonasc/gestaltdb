@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GraphCanvas, type CanvasHandle } from "./GraphCanvas";
 import { Inspector, type Selection } from "./Inspector";
-import { legendGroups, legendTypes } from "./graph";
+import { legendGroups, legendShapes, legendTypes } from "./graph";
 import { computeView } from "./view";
 import { downloadBlob, exportJson, exportPng, exportSvg, type ExportOptions } from "./export";
 import { ExportControls } from "./ExportControls";
@@ -25,7 +25,7 @@ export function App({ payload, initial = {} }: { payload: VizPayload; initial?: 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [restoration, setRestoration] = useState<LayoutState | null>(null);
   const [filters, setFilters] = useState<ViewState["filters"]>({
-    query: "", hiddenGroups: [], hiddenTypes: [], requiredLabel: "", focusNodeId: null,
+    query: "", hiddenGroups: [], hiddenTypes: [], hiddenShapes: [], requiredLabel: "", focusNodeId: null,
     focusDirection: "both", focusHops: 1, searchProperties: true,
     highlightOn: payload.highlight.nodes.length + payload.highlight.edges.length > 0,
   });
@@ -34,8 +34,10 @@ export function App({ payload, initial = {} }: { payload: VizPayload; initial?: 
   });
   const groups = useMemo(() => legendGroups(payload), [payload]);
   const types = useMemo(() => legendTypes(payload), [payload]);
+  const shapes = useMemo(() => legendShapes(payload), [payload]);
   const view = useMemo(() => computeView(payload, {
     ...filters, hiddenGroups: new Set(filters.hiddenGroups), hiddenTypes: new Set(filters.hiddenTypes),
+    hiddenShapes: new Set(filters.hiddenShapes),
   }), [payload, filters]);
   const hiddenNodes = new Set(view.hiddenNodes), hiddenEdges = new Set(view.hiddenEdges);
 
@@ -76,7 +78,7 @@ export function App({ payload, initial = {} }: { payload: VizPayload; initial?: 
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   }
 
-  function toggleFilter(key: "hiddenGroups" | "hiddenTypes", value: string) {
+  function toggleFilter(key: "hiddenGroups" | "hiddenTypes" | "hiddenShapes", value: string) {
     setFilters(current => ({ ...current, [key]: current[key].includes(value)
       ? current[key].filter(item => item !== value) : [...current[key], value] }));
   }
@@ -134,9 +136,9 @@ export function App({ payload, initial = {} }: { payload: VizPayload; initial?: 
         {selection?.kind === "node" && <button onClick={() => controllerRef.current?.togglePin(selection.id)}>{pinnedIds.includes(selection.id) ? "Unpin selected node" : "Pin selected node"}</button>}
         <Inspector showProperties={settings.showProperties} payload={payload} selection={selection} focusNodeId={filters.focusNodeId}
           onFocus={focusNodeId => setFilters({ ...filters, focusNodeId })} onClear={() => setSelection(null)} />
-        {([ ["Node groups", groups, "hiddenGroups"], ["Edge types", types, "hiddenTypes"] ] as const).map(([heading, entries, key]) => <section key={key}>
+        {([ ["Node groups", groups, "hiddenGroups"], ["Edge types", types, "hiddenTypes"], ["Node shapes", shapes, "hiddenShapes"] ] as const).map(([heading, entries, key]) => <section key={key}>
           <h2>{heading}</h2><ul>{entries.map(([value, count]) => <li key={value}><label>
-            <input type="checkbox" checked={!filters[key].includes(value)} onChange={() => toggleFilter(key, value)} aria-label={`Toggle ${key === "hiddenGroups" ? "node group" : "edge type"} ${value}`} />
+            <input type="checkbox" checked={!filters[key].includes(value)} onChange={() => toggleFilter(key, value)} aria-label={`Toggle ${key === "hiddenGroups" ? "node group" : key === "hiddenTypes" ? "edge type" : "node shape"} ${value}`} />
             <span className="gdviz-swatch" style={{ backgroundColor: colorFor(value) }} aria-hidden="true" />{value}: {count}
           </label></li>)}</ul>
         </section>)}

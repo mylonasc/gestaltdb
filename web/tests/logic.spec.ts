@@ -19,11 +19,13 @@ const payload: VizPayload = {
   ],
   highlight: { nodes: [], edges: [] }, truncation: { nodes_dropped: 0, edges_dropped: 0, truncated: false }, meta: {},
 };
-const filters: ViewState["filters"] = { query: "", hiddenGroups: [], hiddenTypes: [], requiredLabel: "", focusNodeId: null,
+const filters: ViewState["filters"] = { query: "", hiddenGroups: [], hiddenTypes: [], hiddenShapes: [], requiredLabel: "", focusNodeId: null,
   focusDirection: "both", focusHops: 1, searchProperties: true, highlightOn: false };
 function view(overrides: Partial<ViewState["filters"]> = {}) {
   const values = { ...filters, ...overrides };
-  return computeView(payload, { ...values, hiddenGroups: new Set(values.hiddenGroups), hiddenTypes: new Set(values.hiddenTypes) });
+  const shapes = values.hiddenShapes ?? [];
+  return computeView(payload, { ...values, hiddenGroups: new Set(values.hiddenGroups), hiddenTypes: new Set(values.hiddenTypes),
+    hiddenShapes: new Set(shapes) });
 }
 function saved(): ViewState {
   return { version: 1, kind: "gestaltdb-view", graph: graphIdentity(payload), settings: { ...DEFAULT_SETTINGS }, filters: { ...filters }, selection: null,
@@ -65,6 +67,17 @@ test("layered tree coordinates are deterministic and top-down", () => {
   const cyclic = treeCoordinates([{ uid: "a" }, { uid: "b" }],
     [{ source: "a", target: "b" }, { source: "b", target: "a" }]);
   expect(cyclic.get("a")!.y).toBeLessThan(cyclic.get("b")!.y);
+});
+
+test("shape visibility hides whole node layers and survives saved views", () => {
+  expect(view({ hiddenShapes: ["circle"] }).hiddenNodes).toEqual(["a", "b", "c"]);
+  expect(view({ hiddenShapes: ["triangle"] }).hiddenNodes).toEqual([]);
+  const state = saved();
+  expect(state.filters.hiddenShapes).toEqual([]);
+  expect(parseViewState(JSON.parse(JSON.stringify(state)), payload).filters.hiddenShapes).toEqual([]);
+  const legacy = JSON.parse(JSON.stringify(state));
+  delete legacy.filters.hiddenShapes;
+  expect(parseViewState(legacy, payload).filters.hiddenShapes).toEqual([]);
 });
 
 test("view state validates topology, complete coordinates, settings and identity before restoration", () => {

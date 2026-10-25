@@ -157,17 +157,39 @@ export function GraphCanvas({
     pinsChangeRef.current(nodesRef.current.filter(node => node.fx != null).map(node => node.uid));
   }
 
+  // Reheat a stopped simulation gently: releasing a pin far from force
+  // equilibrium (e.g. one tree node among pinned anchors) must ease it
+  // there, never catapult it across the canvas. Hotter running states keep
+  // their energy. Arrange paths always cool the sim to zero first, so a
+  // stopped diagram never resumes at a stale hot alpha.
+  function wakeSim() {
+    const sim = simRef.current;
+    if (sim && !settingsRef.current.paused) {
+      sim.alpha(Math.max(sim.alpha(), 0.08)).restart();
+    }
+  }
+
   // Deterministic layered arrangement: pin every node at its tree
   // coordinates and stop the force simulation there. Unpinning (or Reset
   // layout) hands control back to the force-directed layout.
   function arrangeTree() {
     const positions = treeCoordinates(nodesRef.current, linksRef.current);
+    // Center the rows on the simulation origin so the center force stays
+    // balanced; otherwise the first released node gets yanked toward it.
+    let top = Infinity, bottom = -Infinity;
+    for (const point of positions.values()) {
+      if (point.y < top) top = point.y;
+      if (point.y > bottom) bottom = point.y;
+    }
+    const shift = (top + bottom) / 2;
     const sim = simRef.current;
+    // Cool to zero: a stopped diagram must never resume at a stale hot alpha.
+    sim?.alpha(0);
     sim?.stop();
     for (const node of nodesRef.current) {
       const point = positions.get(node.uid)!;
-      node.x = point.x; node.y = point.y; node.vx = 0; node.vy = 0;
-      node.fx = point.x; node.fy = point.y;
+      node.x = point.x; node.y = point.y - shift; node.vx = 0; node.vy = 0;
+      node.fx = node.x; node.fy = node.y;
     }
     renderRef.current(); notifyPins(); fitViewport();
   }
@@ -200,7 +222,7 @@ export function GraphCanvas({
         d3.select(svgRef.current).interrupt().call(zoomRef.current.transform,
           d3.zoomIdentity.translate(state.zoom.x, state.zoom.y).scale(state.zoom.k));
       }
-      if (!settingsRef.current.paused) simRef.current?.alpha(0.3).restart();
+      wakeSim();
     },
     togglePin: id => {
       const node = nodesRef.current.find(item => item.uid === id);
@@ -208,7 +230,7 @@ export function GraphCanvas({
       const pinned = node.fx != null;
       node.fx = pinned ? null : node.x; node.fy = pinned ? null : node.y;
       renderRef.current(); notifyPins();
-      if (!settingsRef.current.paused) simRef.current?.alpha(0.3).restart();
+      wakeSim();
     },
     relayout: visibleOnly => {
       const hidden = new Set(viewRef.current.hiddenNodes);
@@ -407,7 +429,7 @@ export function GraphCanvas({
         event.stopPropagation();
         node.fx = null;
         node.fy = null;
-        if (!settingsRef.current.paused) sim.alpha(0.3).restart();
+        wakeSim();
         renderPositions(); notifyPins();
       });
     nodeSel
@@ -632,8 +654,7 @@ export function GraphCanvas({
       node.fy = null;
     }
     renderRef.current(); notifyPins();
-    const sim = simRef.current;
-    if (sim && !settingsRef.current.paused) sim.alpha(0.3).restart();
+    wakeSim();
   }, [unpinSignal]);
 
   return (

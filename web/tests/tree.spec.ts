@@ -55,3 +55,35 @@ test("reasoning artifacts open in a deterministic pinned tree without force layo
   expect(afterPremiseY).toBeLessThan(afterY);
   expect(afterY).toBe(conclusionY);
 });
+
+test("shape visibility toggles hide whole node layers", async ({ page }) => {
+  await expect(page.locator(".node")).toHaveCount(5);
+  await page.getByLabel("Toggle node shape triangle", { exact: true }).uncheck();
+  await expect(page.locator(".node:visible")).toHaveCount(2);
+  await expect(page.locator(".node:visible polygon")).toHaveCount(0);
+  await page.getByLabel("Toggle node shape triangle", { exact: true }).check();
+  await expect(page.locator(".node:visible")).toHaveCount(5);
+  await page.getByLabel("Toggle node shape circle", { exact: true }).uncheck();
+  await expect(page.locator(".node:visible")).toHaveCount(3);
+});
+
+test("releasing a pinned tree node eases instead of flinging", async ({ page }) => {
+  const target = page.getByRole("button", { name: 'Node ["a","ancestor","c"]' });
+  const start = await target.getAttribute("transform");
+  await target.dblclick();
+  let peak = 0;
+  let previous = start;
+  for (let i = 0; i < 8; i++) {
+    await page.waitForTimeout(300);
+    const current = await target.getAttribute("transform");
+    const [px, py] = previous!.replace("translate(", "").replace(")", "").split(",").map(Number);
+    const [cx, cy] = current!.replace("translate(", "").replace(")", "").split(",").map(Number);
+    peak = Math.max(peak, Math.hypot(cx - px, cy - py));
+    previous = current;
+  }
+  const [sx, sy] = start!.replace("translate(", "").replace(")", "").split(",").map(Number);
+  const [ex, ey] = previous!.replace("translate(", "").replace(")", "").split(",").map(Number);
+  // A reheated force layout glides; it never catapults across the canvas.
+  expect(peak).toBeLessThan(200);
+  expect(Math.hypot(ex - sx, ey - sy)).toBeLessThan(400);
+});

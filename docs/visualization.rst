@@ -269,6 +269,9 @@ Canvas Features
 - Deterministic tree arrangement: reasoning artifacts open pre-arranged (and
   pinned) in a layered top-down tree; the Tree layout button re-applies it
   on demand and Reset layout returns to the force simulation.
+  Releasing a pin eases the node into the live simulation instead of
+  flinging it: arrange paths cool the simulation first and unpin paths
+  reheat gently.
 - Dragging also works while paused; fit-visible includes displayed geometry
   and labels. The viewer refits when its container is resized.
 - Explicit pin/unpin actions and dashed pin indicators, full-layout reset, and

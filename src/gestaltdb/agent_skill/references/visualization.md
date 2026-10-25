@@ -70,7 +70,9 @@ separate data export. Python PNG rasterization is not provided.
 ## Exploration and appearance
 
 Search includes property values by default and can be restricted to IDs/labels.
-Native-label filtering includes secondary labels. Neighborhood focus supports
+Native-label filtering includes secondary labels. Node groups, relationship
+types, and node shapes (circle/triangle/square) each have visibility toggles,
+so proof layers hide independently. Neighborhood focus supports
 incoming/outgoing/both traversal and 1–5 hops over enabled relationship types
 and node filters. The visible-entity selector supports keyboard selection;
 selected nodes can be explicitly pinned/unpinned. Reset layout restores the full
