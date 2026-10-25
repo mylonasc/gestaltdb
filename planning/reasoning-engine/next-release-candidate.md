@@ -34,8 +34,9 @@ These are validation-quality gaps to assess before advertising stronger claims.
 ## Gates
 
 - [x] Merge current main and retain its documentation deletion.
-- [ ] Full optional local suite with PyRex 0.6.0.
-- [ ] Docs/API drift, runnable examples, Sphinx warnings-as-errors.
+- [x] Full optional local suite with PyRex 0.6.0: 3,354 passed / 3 skipped
+      on the main-integrated source tree (62.87 seconds).
+- [x] Docs/API drift, 8/8 runnable examples, Sphinx warnings-as-errors.
 - [ ] Wheel/sdist metadata validation and isolated installed-artifact checks.
 - [ ] Main-target draft PR with all applicable CI, including general tests,
       optional dependencies, security, visualization, and fuzzing.
@@ -46,3 +47,14 @@ These are validation-quality gaps to assess before advertising stronger claims.
 
 Evidence and outstanding failures are recorded in #385. Historical green jobs
 and published rc1 do not certify this candidate.
+
+## Preliminary artifact evidence
+
+At `25e3405`, `uv build` built wheel and sdist; `twine check` passed both.
+An isolated Python 3.12 wheel install outside the checkout passed binary closure,
+new adapter imports, and packaged quickstart retrieval. Metadata deliberately
+still says `0.13.0rc1`: these are unpublished preparation artifacts, not rc1
+replacements. Rebuild and revalidate after the next version is chosen. Full
+supported-Python/compatibility artifact checks remain a final gate.
+
+Draft main-target PR: #386. Preparation issue: #385, under #156.
