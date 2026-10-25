@@ -10,7 +10,8 @@ dependency index. Unknown history (a delta referencing versions the session
 never observed) rebuilds explicitly from a full scan instead of guessing.
 
 This first milestone advances in memory with an explicit rebuild fallback.
-Durable cross-process persistence of session state is out of scope: a session
+Durable cross-process persistence of session state lives in
+``gestaltdb.reasoning.adapters.session_store``: a session
 is a value, and ``advance_session`` returns the next value. Callers persist
 it if they need resumes across restarts.
 """
@@ -246,6 +247,10 @@ def advance_session(graph: GraphDB, session: ReasoningSession, *, limits: Reason
             if not isinstance(version, ClaimVersion):
                 continue
             if version.operation == VersionOperation.RETRACT:
+                # A retraction only wins at points inside its half-open valid
+                # interval. Outside it, the pinned assertion remains active.
+                if not version.valid.contains(instant):
+                    continue
                 # Retractions are logical: they retire every active version of
                 # the named claim, however the retraction names it. Naming an
                 # unobserved version or an unknown logical ID means foreign or

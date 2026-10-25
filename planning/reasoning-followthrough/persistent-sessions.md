@@ -2,7 +2,9 @@
 
 Status: executable advance-in-memory milestone implemented in
 `reasoning/adapters/sessions.py` (see `docs/reasoning-sessions.rst`); durable
-cross-process persistence of session state remains open. The generation (#248)
+cross-process persistence of session state is implemented in
+`reasoning/adapters/session_store.py` with atomic files, digest-bound loads,
+horizon CAS and explicit rebuild fallback. The generation (#248)
 and evidence (#250) contracts it depends on are now merged.
 
 ## States

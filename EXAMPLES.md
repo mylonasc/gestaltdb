@@ -1,5 +1,50 @@
 # GestaltDB Examples
 
+For explicit authenticated native temporal-claim extraction with canonical
+correction/retraction selection and exact version parity, see the executable
+example in [`docs/reasoning-native-claims.rst`](docs/reasoning-native-claims.rst).
+This full-scan correctness path does not imply native index pushdown or speedup.
+
+For authenticated complete current-graph projection with generation pins and
+explicit executor admission, see the runnable example in
+[`docs/reasoning-current-admission.rst`](docs/reasoning-current-admission.rst).
+It uses `reasoning.adapters.graph_execution` and keeps current snapshot identity
+distinct from temporal claim horizons; partial frontier answers are not closure
+inputs.
+
+For authenticated temporal-range evaluation and explicit source/closure
+re-admission, see the executable example in
+[`docs/reasoning-range-admission.rst`](docs/reasoning-range-admission.rst).
+Range identities are distinct from point/current tokens and do not authorize
+caller-derived range publication.
+
+For a computation-owned, guarded interval-batch publisher, see
+[`docs/reasoning-bound-range-publication.rst`](docs/reasoning-bound-range-publication.rst).
+It re-admits the range and compares target versions/history before one logical
+commit; the legacy caller-derived `stage_range` API is not silently upgraded.
+
+For source-authenticated durable-session load/advance with exact caller pins,
+see [`docs/reasoning-authenticated-sessions.rst`](docs/reasoning-authenticated-sessions.rst).
+It preserves v1 artifacts while checking both generation identity and session
+state; raw checksums and horizon-only comparisons are insufficient.
+
+For the existing inferred sampler consumer's authenticated build and complete
+artifact hydration, see [`docs/reasoning-authenticated-inferred.rst`](docs/reasoning-authenticated-inferred.rst).
+Use exact caller generation/state pins and explicit projection selection;
+pass the admitted snapshot directly to `SamplerEngine` rather than reloading
+through the raw, source-unverified loader.
+
+The explicit dispatcher/current-graph execution paths accept
+`polars_max_intermediate_rows` only with an explicit Polars request. See
+[`docs/reasoning-executors.rst`](docs/reasoning-executors.rst) for a tested example;
+the default cap and indexed reference remain unchanged, and physical row
+budgets are not logical identity or hard memory bounds.
+
+For positive typed dispatcher execution and source-authenticated session input,
+see [`docs/reasoning-typed-execution.rst`](docs/reasoning-typed-execution.rst).
+The typed executor retains strict literals/n-ary values and rejects unsupported
+proof/physical-engine requests rather than converting them to binary facts.
+
 These examples are designed for developers and agents who need working patterns quickly. They use explicit imports from submodules because the package root intentionally exports only selected helpers.
 
 Most examples use LevelDB for brevity. Install `gestaltdb[lmdb]` or
@@ -27,6 +72,41 @@ assert Fact("alice", TYPE_PREDICATE, "Person") in result
 This selected positive fragment is not full OWL. Inference is read-only and proof
 truncation is distinct from inference failure. See `docs/ontology.rst` for the
 explicit pinned-claims adapter and `docs/ontology-benchmarks.rst` for cost bounds.
+
+## Authenticate a Typed Point Session
+
+This opt-in scan verifies active input evidence, not the soundness of closure.
+It needs an installed backend; the example uses LevelDB.
+
+```python
+from tempfile import TemporaryDirectory
+from gestaltdb.graphdb import GraphDB
+from gestaltdb.reasoning.adapters.claims import ClaimMapping, ClaimSelection
+from gestaltdb.reasoning.adapters.sessions import SessionScope, start_session
+from gestaltdb.reasoning.adapters.session_generation import bind_session_generation, catalog_for_typed_program
+from gestaltdb.reasoning.model import ReasoningLimits, Variable
+from gestaltdb.reasoning.typed import GenericProgram, GenericRule, TypedAtom
+
+x, y = Variable("x"), Variable("y")
+program = GenericProgram([GenericRule("person", [TypedAtom("worksFor", [x, y])], [], TypedAtom("Person", [x]))])
+with TemporaryDirectory() as directory:
+    graph = GraphDB.create(directory, backend="leveldb", serializer="json")
+    try:
+        graph.assert_claim(subject="alice", predicate="worksFor", object="acme",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        session = start_session(graph, program, catalog_for_typed_program(program),
+                                scope=SessionScope("default", 50, ClaimSelection(), ClaimMapping()),
+                                limits=ReasoningLimits())
+        binding = bind_session_generation(graph, session)
+        binding.verify(graph, session)
+        assert binding.identity.program_digest == program.digest
+    finally:
+        graph.close()
+```
+
+Latest admission rejects source movement; old-prefix evaluation requires explicit
+`freshness="historical"`. See `docs/reasoning-generation-identity.rst` for bounds
+and unsupported range/current-graph profiles.
 
 ## Create, Query, and Close a Graph
 

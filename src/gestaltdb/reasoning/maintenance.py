@@ -288,10 +288,6 @@ def propagate_insertions(program: GenericProgram, closure: Iterable[TypedFact], 
             break
         rounds += 1
         check_cancelled(cancel)
-        active = [(rule, position) for predicate in sorted(delta.by_predicate)
-                  for rule, position in by_predicate.get(predicate, ())]
-        if not active:
-            break
         derived: set[TypedFact] = set()
         for rule, pivot in active:
             for bindings, premises in _match_with_premises(rule, pivot, full, delta):

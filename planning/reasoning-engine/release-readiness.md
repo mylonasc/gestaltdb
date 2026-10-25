@@ -4,11 +4,19 @@ Priority: ship a bounded, honest reasoning milestone for external testing soon,
 not the entire enhancement backlog. Parent: #156; policy:
 [`EPIC_REASONING_ENGINE.md`](../../EPIC_REASONING_ENGINE.md).
 
-This is a release decision register, not a claim that the candidate is ready.
-Initial audited baseline: `4789f94` (2026-10-23, after PR #305). Any main/release
-decision must identify its exact SHA and rerun applicable gates after changes.
-Candidate version: **0.13.0rc1**, prepared separately from the readiness gate.
-It must not be published until the final candidate and main push gates pass.
+## Current disposition (2026-10-25)
+
+**0.13.0rc1 was released on 2026-10-23.** Main-target #307 merged at
+`1d9caad7deb4b6efdda90f8375fb3c794bb567f6`; trusted Publish `39936450890`
+succeeded on that SHA. The GitHub release is a prerelease, and #156 records
+installed-distribution smoke evidence. This file is not an unfulfilled rc1
+publication checklist. The historical preparation baseline was `4789f94`.
+
+Post-release integration at `2ed6ade` contains additional accepted work, not a
+newly released artifact. Future main/release decisions require a fresh exact-SHA
+gate; this sanitation authorizes neither. Phase evidence remains a separate
+decision: E1/E2 complete, E3/E4 gated by #370, E5 sequentially gated by E4;
+review D2–D6 disposition remains #371. See [tracking-audit.md](tracking-audit.md).
 
 ## Blocker triage
 
@@ -20,10 +28,12 @@ It must not be published until the final candidate and main push gates pass.
 | #275/#277/#282: temporal commit reads, duplicate detection, cache corruption/mutability | Closed and merged (#276/#278/#283). Integrity regression coverage must remain enabled; do not substitute performance-cache trust for storage verification. |
 | #200 D2/D3/D6: duplicated plumbing, validation indexing/cancellation/provenance | Refactor work is deferred, not a reason for an engine rewrite. Release docs must disclose full validation input buffering, cooperative cancellation boundaries and structural labels rather than exact claim-version provenance. |
 | #200 D4/D5: schema reuse and negative-premise delivery accounting | Release only the implemented subset: compilation memoization, ground-denial validation, scoped absence and strict literal values. Reusable TBox closure, signed-denial rule premises and datatype shape validation are not delivered by those mechanisms. |
-| #248/#250/#251: shared identity, evidence ledger, incremental sessions | Merged increments #261/#264/#265 are opt-in APIs with explicit scopes. Do not claim every legacy publisher/cache uses a universal identity or that every rule combination supports incremental advance. Run admission, exact-evidence, session and fresh-recomputation regressions. Broader issue scope stays open. |
-| #249/#252/#253/#254: demand/frontier/support/sweep performance | Existing tested increments remain; remaining storage pushdown, broader optimizer integration and sweep adoption are deferred unless a candidate correctness regression requires them. |
-| #255/#256: executor and inferred-consumer composition | #269/#270 deliver explicit admission and a composed scenario, not universal engine interchangeability or transparent query rewriting. Keep scenario transition parity enabled. Remaining broad integration is not a prerequisite. |
-| #194 / draft #262 | Native extraction benchmark expansion is deferred. Do not merge a draft or promise unmeasured native/100K-scale behavior. |
+| #248: shared authenticated identity and existing consumers | Closed after #362 acceptance reconciliation and green integration checks. Point/current/range admission, publication, durable-session and inferred-artifact consumers retain distinct contracts; legacy APIs are not silently authenticated. See `planning/reasoning-followthrough/generation-contract.md`. |
+| #250/#251: evidence ledger and incremental sessions | Closed scoped implementations #264/#265, extended by authenticated durable resume #360. Run exact-evidence, session and fresh-recomputation regressions. Not every rule combination supports incremental advance; unsupported modes require explicit documented rebuild/failure. |
+| #249/#252/#253/#254: demand/frontier/support/sweep performance | All closed against scoped acceptance. Pinned frontier/current-source reads, support indexing and event sweeps are integrated, not merely planned. Broader optimizer/autoadoption ideas remain distinct from those closures. |
+| #255/#256: executor and inferred-consumer composition | Both closed. #255 completed capability/conversion/identity/telemetry/application integration and measured explicit-budget pipelines via #363–#365. #256 and later authenticated inferred consumers are integrated. No universal engine interchangeability or transparent rewriting is implied. |
+| #194 | Open native follow-up: full-record admission #366, grouped correction/40 parity observations #367 and raw PyRex audit #368 are integrated; historical locator PR #369 is separate and unmerged in this audit. Earlier failures remain retained. No automatic native adoption; old draft #262 is not current work. |
+| #370 / #371 | Explicit remaining phase durability evidence and original review design/accounting dispositions. These replace vague, unowned “broader gates remain” notes; they do not authorize a new feature/release cycle. |
 | Unrelated tooling/tutorials and sampling roadmap | Not prerequisites; do not grow candidate scope for them. Existing features still participate in full-suite regression checks. |
 
 This triage is based on issue/merge history and existing tests, not a new formal
@@ -60,54 +70,40 @@ remain release blockers even if its originating issue is closed.
   documentation, security, visualization and readiness gates all green;
   ClusterFuzzLite address gate was the last remaining check at the time of
   this update (see PR for final status). No main merge or publication yet.
+- The preceding entries are historical preparation snapshots, not current state.
+  #307 subsequently passed its final checks, merged at `1d9caad`, main push
+  checks passed, and trusted Publish `39936450890` succeeded. Release
+  `v0.13.0rc1` was published at 2026-10-23T10:04:16Z. #156's release comment
+  records isolated installation, demand parity and packaged-doc smoke results.
 
 | Phase | Existing acceptance evidence inspected | Remaining decision |
 |---|---|---|
-| #157 / RE-E1 | `test_reasoning_execution_baseline.py`, `test_reasoning_plans.py`, `test_reasoning_polars.py`, `test_reasoning_executors.py`, extraction policy/identity tests; `docs/reasoning-executors.rst` and checked-in RE-03 reports record the indexed-default/opt-in-Polars/no-native decision. | Small synthetic reports are not scale certification; #194's expanded extraction matrix remains deferred. Final candidate matrix/installation gates still required. |
+| #157 / RE-E1 | Baseline/oracle/plans/Polars/executor/extraction suites and reports, explicit indexed-default/limits/cancellation/install isolation; #365 adds 48 exact-parity 100K application observations. | Complete: stale-open epic corrected. #194 is an optional follow-up, not an E1 exit requirement. No universal scale certification is claimed. |
 | #158 / RE-E2 | Closed after prior verification; typed/aggregate/negation/oracle/demand/equality/validation suites rerun in #306. | Preserve narrower validation/provenance and combination boundaries documented in this release; do not reopen scope merely to implement every construct. |
-| #159 / RE-E3 | Maintenance/deletion/catalog/session/freshness and publication tests; `test_reasoning_workload_gates.py` checks cooperative cancellation boundaries, stale identities and recovery consent; RE-18 maintenance reports record small-workload crossover evidence. | Cancellation/fault injection is not proof of every OS/process/crash scenario. Do not certify a blanket crash/concurrency guarantee or close the phase solely on these tests; broader durable recovery acceptance remains open. |
-| #160 / RE-E4 | `test_reasoning_intervals.py`, `test_reasoning_temporal.py`, `test_reasoning_ranges.py`, revision/conformance and publication tests; RE-22 temporal reports and `docs/reasoning-conformance.rst`. | Advertise positive range closure and explicit unsupported fragments only; retain the broader crash-safe publication phase gate pending reconciliation with #159. |
-| #161 / RE-E5 | Profile/EL/scope/scale/proof tests and corresponding docs provide named subsets, bounded experiments and explicit defers. | Full OWL DL, probabilistic/context calculi, spill, native kernels and differential runtimes are not this release's prerequisites. Do not claim their implementation or generic composition. |
+| #159 / RE-E3 | Maintenance/deletion/catalog/session/publication gates plus later authenticated file CAS, cross-process restart/writer allocation and fsync tests. | Open: #370 maps exact supported crash/concurrency claims and remaining process-termination evidence. Exception/cancellation injection is not blanket physical durability proof. |
+| #160 / RE-E4 | Complete ranges, support intervals, correction/retraction, conformance and bound range-publication source/target-history CAS. | Open: #159 and shared #370 crash-safe interval-publication evidence. |
+| #161 / RE-E5 | Profile/EL/scope/scale/proof tests, named subsets, bounded experiments and explicit defers. | Own bounded/defer deliverables reviewed; original sequential prerequisite #160 remains open. Full OWL DL, probabilistic calculi, spill/native/differential runtimes are not secretly missing mandatory implementation. |
 
 The open phase epics are not automatically release blockers for a clearly
 bounded testing slice. Any advertised stronger durability or composition
 guarantee would require its missing evidence first. This register does not
 close those epics or supersede their broader acceptance criteria.
 
-## Required evidence before main merge
+## Published rc1 versus any future candidate
 
-- [ ] Record the candidate SHA and compare with fresh `origin/main`; incorporate
-  any independent main fixes without discarding integration work.
-- [ ] Full suite with backend/serializer/RDF/Arrow/Polars/oracle extras on
-  Python 3.10–3.13; record skips and failures, with no hidden deselections.
-- [ ] Docs drift, all runnable markdown examples, demand quickstart regression,
-  Sphinx warnings-as-errors and roadmap validation.
-- [ ] Build/check wheel and sdist; run standalone installed-wheel demand parity
-  without optional backends, then persisted session insert/correct/retract
-  and reopen parity on a database created by published 0.12.0 (LMDB/JSON).
-  This is a representative compatibility fixture, not every historic format.
-- [ ] Existing optional-extra isolation and backend capability gates pass;
-  LevelDB unified mutable snapshots remain unsupported and fail closed.
-- [ ] Reconcile #157/#159/#160/#161 exit evidence, recording which experimental
-  extensions are explicitly deferred rather than closing phases by child count.
-- [ ] Curated changelog, prerelease version/lock metadata, compatibility notes,
-  supported/experimental boundary and user-testing instructions reviewed.
-- [ ] Main-target integration PR passes all applicable workflows, not only
-  ontology CI. No unrelated feature additions during hardening.
+- [x] rc1 main-target integration and applicable exact-merge push checks:
+  #307 / `1d9caad` (historical release evidence recorded in #156).
+- [x] rc1 trusted publication: Publish `39936450890`, release `v0.13.0rc1`.
+- [x] Published-distribution installation/demand/packaged-doc smoke recorded in
+  #156. These are observations about rc1, not later integration commits.
+- [ ] Phase #159/#160 durable-exit reconciliation: #370; independent of the
+  already-published bounded testing release.
+- [ ] Original review design/delivery-accounting dispositions: #371.
 
-The `Reasoning release readiness` workflow adds repeatable full-suite and
-installed-artifact gates on integration and main. Existing general, optional
-dependency, security and visualization gates still apply on the main PR.
-
-## Required evidence after main merge
-
-- [ ] Applicable main push workflows succeed on the exact merged SHA.
-- [ ] Publish the prerelease from that SHA via the repository's trusted
-  publishing workflow, not local credentials or a local twine upload.
-- [ ] Publish workflow succeeds; verify PyPI metadata and install the actual
-  published distribution for a final smoke test.
-- [ ] Link results and known limitations in #156; continue only small,
-  main-synchronized fixes toward stable promotion after user feedback.
-
-Do not mark a gate complete merely because its job exists. Publishing is a
-separate distribution action after validation, never part of this CI workflow.
+No next candidate is approved here. Any future stable/prerelease promotion must
+name a fresh SHA, re-triage advertised workflows, run the supported-Python full
+suite, docs/examples, wheel/sdist/compatibility and optional-backend/install
+isolation gates, pass applicable main-target and exact merged-main checks,
+and receive explicit release authorization. Existing general, security,
+visualization and dependency checks still apply. A historical green job or
+published rc1 does not certify a new integration snapshot.

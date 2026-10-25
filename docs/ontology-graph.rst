@@ -15,6 +15,11 @@ arrays. The Datalog engine imports none of these integrations.
    For examples portable across all three backends, see :doc:`quickstart` and
    the temporal-claim adapter in :doc:`ontology`.
 
+For indexed goal-directed reads over this same mapping and snapshot contract,
+see :doc:`reasoning-current-frontier`. Full projection remains available below.
+For complete projection with shared generation pins and explicit executor
+admission, see :doc:`reasoning-current-admission`.
+
 .. code-block:: python
 
    from tempfile import TemporaryDirectory

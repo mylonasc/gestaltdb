@@ -11,6 +11,7 @@ valid/system time, or distinguishing contradictory evidence from uncertainty.
 - Objects are entity IDs by default. Use `object_kind="literal"` for canonical JSON-compatible literals.
 - Claims append to temporal history and do not create current-state graph edges or participate in Cypher matching.
 - Use `get_claim_as_of` for one claim identity and `iter_claims_as_of` for indexed statement/source/agent/world/polarity lookup.
+- Claim iteration buffers winners and groups full commit integrity checks. Exhaust the iterator and discard partial output on error; early close is not authenticated completion. This does not create a backend snapshot or impose a hard memory bound.
 - Use `correct_claim` to revise confidence or provenance and `retract_claim` to withdraw a claim over a valid interval. Both preserve history.
 - `correct_claim` accepts a `Claim` or its ID. Explicit confidence/provenance keywords override the object/superseded values; omitted keywords preserve them. Use `confidence=None` or `provenance={}` to clear a value.
 - `retract_claim` rejects unknown identities, including with an explicit validity interval. Published assertions (or earlier assertions in the same commit batch) establish identity; a retraction-only history does not. Use `iter_claim_versions` to inspect retraction history.

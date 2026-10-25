@@ -53,6 +53,14 @@ This generates binary `.npy` endpoint, edge, relation, lookup, and CSR adjacency
 arrays plus metadata. Builds scan/materialize source data; they are not a
 streaming out-of-core pipeline.
 
+For the existing inferred-session consumer, use explicit
+`reasoning.adapters.authenticated_inferred_sampler` build/load APIs when source
+admission is required. They require exact caller generation AND session-state
+pins, canonical explicit node/edge predicate selection, and a new artifact path.
+Hydration independently reconstructs every artifact, not just metadata; it is
+expensive admission, not closure proof. The legacy `build_inferred_snapshot`
+partial mapping checks remain unverified. See `docs/reasoning-authenticated-inferred.rst`.
+
 ### Property-Graph Filtering Before Sampling
 
 - Select record/seed cohorts through explicit property indexes and label/type composite exact/range helpers (see `indexing.md`). ID iterators avoid hydration during candidate lookup.

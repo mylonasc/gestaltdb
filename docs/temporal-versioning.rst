@@ -25,6 +25,25 @@ cache avoids repeated decoding, not all backend I/O. Separate snapshot/store
 objects never share cache admission even when their GraphDB wrappers share the
 cache dictionary.
 
+Claim enumeration groups temporal locators by commit, amortizing these full
+checks over each group rather than each selected row. It resolves corrections
+and retractions against complete logical histories at one captured horizon,
+buffers the selected immutable winners, and revalidates all touched commits
+before successful iterator exhaustion. Marker removal, historical rewrites and
+record corruption during iteration fail the completed read; appends beyond its
+horizon do not change its answers. Consumers must exhaust the iterator and
+discard partial output on error. Closing an iterator early is not successful
+authenticated completion.
+
+This is an operation-local grouped-read protocol, not a backend snapshot or a
+change to cache trust. Full descriptor/marker/envelope validation remains in
+place on live stores, including unrelated records in touched commits. Validation
+I/O is proportional to selected locators plus the sizes of touched commits, with a
+constant number of full checks per touched commit. Selected locators/winners
+are buffered in Python; no hard RSS bound or per-row I/O guarantee is implied.
+LMDB/LevelDB/plain and transactional PyRex retain their existing distinct snapshot
+capabilities. Individual version/commit reads keep their existing validation.
+
 Assertions, Corrections, and Retractions
 ----------------------------------------
 

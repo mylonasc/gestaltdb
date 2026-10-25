@@ -18,7 +18,7 @@ from ...temporal import TemporalInstant
 from ...versioning import ClaimVersion, VersionOperation, normalize_version_id
 from ..engine import DatalogEngine
 from ..extraction import ExtractionCapability, ExtractionRequest, FactBatch, batch_evidence
-from ..model import Fact, ReasoningError, ReasoningLimitError, ReasoningLimits, _text
+from ..model import Fact, ReasoningError, ReasoningLimitError, ReasoningLimits, _text, check_cancelled
 from ..protocols import Evidence, InputContext
 from .claims import (
     ClaimMapping,
@@ -83,6 +83,8 @@ class PinnedBatchedClaimSource:
         request = replace(request, agents=selection.agents, sources=selection.sources)
         self._original = view
         self._graph = view._graph
+        self._store = self._graph.store
+        self._serializer = self._graph.serializer
         self._provenance = ReadViewProvenance.from_dict(view.provenance.to_dict())
         self._time = TemporalInstant(self._provenance.valid_time_us)
         self._pinned = GraphReadView(self._graph, self._provenance)
@@ -112,7 +114,9 @@ class PinnedBatchedClaimSource:
         if self._closed:
             raise ReasoningError("batched claim source is closed")
         if (self._original._graph is not self._graph or self._original.provenance != self._provenance
-                or self._original.valid_time != self._time):
+                or self._original.valid_time != self._time
+                or self._graph.store is not self._store
+                or self._graph.serializer is not self._serializer):
             raise ProvenanceMismatchError("source view was rebound to a different context")
 
     def verify_source(self) -> None:
@@ -131,75 +135,93 @@ class PinnedBatchedClaimSource:
     def __exit__(self, exc_type, exc, traceback) -> None:
         self.close()
 
-    def _filtered(self) -> Iterator[Evidence]:
-        request = self._request
-        if request.predicates is not None and len(request.predicates) == 1:
-            predicate = request.predicates[0]
-            if request.subject is not None:
-                query = {"subject": request.subject, "predicate": predicate}
-                pushdown = "predicate+subject"
-            else:
-                query = {"predicate": predicate}
-                pushdown = "predicate"
-        else:
-            query, pushdown = {}, "none"
-        self._pushdown = pushdown
-        iterator = iter(self._pinned.iter_claims_as_of(
-            valid_time=self._time, world=request.world,
+    def _iter_versions(self, query, cancel=None):
+        """Physical candidate provider; policy/evidence validation stays shared."""
+        return self._pinned.iter_claims_as_of(
+            valid_time=self._time, world=self._request.world,
             polarity=ClaimPolarity.POSITIVE, object_kind=ClaimObjectKind.ENTITY, **query,
-        ))
+        )
+
+    def _filtered(self, cancel=None) -> Iterator[Evidence]:
+        request = self._request
+        predicates = request.predicates
+        if predicates is not None and len(predicates) >= 1:
+            queries = []
+            for predicate in predicates:
+                if request.subject is not None:
+                    queries.append({"subject": request.subject, "predicate": predicate})
+                else:
+                    queries.append({"predicate": predicate})
+            if len(queries) == 1:
+                pushdown = "predicate+subject" if request.subject is not None else "predicate"
+            else:
+                pushdown = "predicates+subject" if request.subject is not None else "predicates"
+        else:
+            queries, pushdown = [{}], "none"
+        if request.object is not None:
+            for query in queries:
+                query["object"] = request.object
+            pushdown = "object" if pushdown == "none" else pushdown + "+object"
+        self._pushdown = pushdown
+        seen: set[str] = set()
         count = 0
-        while True:
-            self._check_binding()
-            try:
-                version = next(iterator)
-            except StopIteration:
-                break
-            self._check_binding()
-            count += 1
-            self._scanned = count
-            if count > self._limits.max_scanned_claims:
-                raise ReasoningLimitError(f"claim extraction exceeded max_scanned_claims={self._limits.max_scanned_claims}")
-            if not isinstance(version, ClaimVersion) or not isinstance(version.claim, Claim):
-                raise ProvenanceMismatchError("source yielded an invalid claim version")
-            claim = version.claim
-            if (isinstance(version.commit_id, bool) or not isinstance(version.commit_id, int)
-                    or not 0 < version.commit_id <= self._provenance.commit_horizon
-                    or not version.valid.contains(self._time) or version.logical_id != claim.claim_id
-                    or version.operation not in (VersionOperation.ASSERT, VersionOperation.CORRECT)
-                    or claim.world != request.world or claim.polarity is not ClaimPolarity.POSITIVE
-                    or claim.object_kind is not ClaimObjectKind.ENTITY):
-                raise ProvenanceMismatchError("claim falls outside the pinned input context")
-            if not isinstance(version.version_id, str):
-                raise ProvenanceMismatchError("claim version ID is invalid")
-            try:
-                normalize_version_id(version.version_id)
-            except ValueError as exc:
-                raise ProvenanceMismatchError("claim version ID is invalid") from exc
-            if request.predicates is not None and claim.predicate not in request.predicates:
-                continue
-            if request.subject is not None and claim.subject != request.subject:
-                continue
-            if request.object is not None and claim.object != request.object:
-                continue
-            if self._agents is not None and claim.agent not in self._agents:
-                continue
-            if self._sources is not None and claim.source not in self._sources:
-                continue
-            marker = _DERIVED_AGENTS.get(claim.agent)
-            derived = marker is not None and claim.provenance.get("derived_by") == marker
-            if derived and not self._selection.include_derived:
-                continue
-            yield Evidence(self._mapping.map(Fact(claim.subject, claim.predicate, claim.object)),
-                           version.version_id)
+        for query in queries:
+            iterator = iter(self._iter_versions(query, cancel))
+            while True:
+                check_cancelled(cancel)
+                self._check_binding()
+                try:
+                    version = next(iterator)
+                except StopIteration:
+                    break
+                self._check_binding()
+                count += 1
+                self._scanned = count
+                if count > self._limits.max_scanned_claims:
+                    raise ReasoningLimitError(f"claim extraction exceeded max_scanned_claims={self._limits.max_scanned_claims}")
+                if not isinstance(version, ClaimVersion) or not isinstance(version.claim, Claim):
+                    raise ProvenanceMismatchError("source yielded an invalid claim version")
+                claim = version.claim
+                if (isinstance(version.commit_id, bool) or not isinstance(version.commit_id, int)
+                        or not 0 < version.commit_id <= self._provenance.commit_horizon
+                        or not version.valid.contains(self._time) or version.logical_id != claim.claim_id
+                        or version.operation not in (VersionOperation.ASSERT, VersionOperation.CORRECT)
+                        or claim.world != request.world or claim.polarity is not ClaimPolarity.POSITIVE
+                        or claim.object_kind is not ClaimObjectKind.ENTITY):
+                    raise ProvenanceMismatchError("claim falls outside the pinned input context")
+                if not isinstance(version.version_id, str):
+                    raise ProvenanceMismatchError("claim version ID is invalid")
+                try:
+                    normalize_version_id(version.version_id)
+                except ValueError as exc:
+                    raise ProvenanceMismatchError("claim version ID is invalid") from exc
+                if version.version_id in seen:
+                    continue
+                seen.add(version.version_id)
+                if request.predicates is not None and claim.predicate not in request.predicates:
+                    continue
+                if request.subject is not None and claim.subject != request.subject:
+                    continue
+                if request.object is not None and claim.object != request.object:
+                    continue
+                if self._agents is not None and claim.agent not in self._agents:
+                    continue
+                if self._sources is not None and claim.source not in self._sources:
+                    continue
+                marker = _DERIVED_AGENTS.get(claim.agent)
+                derived = marker is not None and claim.provenance.get("derived_by") == marker
+                if derived and not self._selection.include_derived:
+                    continue
+                yield Evidence(self._mapping.map(Fact(claim.subject, claim.predicate, claim.object)),
+                               version.version_id)
         self.verify_source()
 
-    def iter_batches(self) -> Iterator[FactBatch]:
+    def iter_batches(self, *, cancel=None) -> Iterator[FactBatch]:
         """Yield bounded batches; each batch is bracketed by verification."""
         self.verify_source()
         self._pushdown, self._scanned = "none", 0
         batches, rows = 0, 0
-        for batch in batch_evidence(self._filtered(), self._request):
+        for batch in batch_evidence(self._filtered(cancel), self._request):
             batches += 1
             rows += len(batch.evidence)
             self._check_binding()
@@ -225,7 +247,7 @@ class PinnedBatchedClaimSource:
         self.verify_source()
 
         def flattened() -> Iterator[Evidence]:
-            for batch in self.iter_batches():
+            for batch in self.iter_batches(cancel=cancel):
                 yield from batch.evidence
 
         result = DatalogEngine().evaluate(compiled.program, flattened(), limits=limits,

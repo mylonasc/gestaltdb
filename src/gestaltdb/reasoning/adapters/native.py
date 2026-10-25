@@ -73,7 +73,8 @@ def require_native_scan(store: object):
             ) from None
         raise ReasoningError(
             "this store handle exposes no native Arrow scan entry points; "
-            "transactional PyRex handles do not implement scan_arrow in 0.5.0"
+            "transactional PyRex handles lack scan_arrow in 0.5.0; "
+            "0.6.0 adds default-column-family scans, not named-family scan admission"
         )
     handle = getattr(store, "db", None)
     if handle is None and hasattr(store, "scan_arrow") and hasattr(store, "create_snapshot"):

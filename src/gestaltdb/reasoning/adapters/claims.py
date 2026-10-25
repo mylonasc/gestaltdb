@@ -96,6 +96,27 @@ class ClaimMapping:
             raise ReasoningError("mapping input must be a Fact")
         return Fact(fact.subject, self._aliases.get(fact.predicate, fact.predicate), fact.object)
 
+    def storage_predicates(self, predicates) -> tuple[str, ...]:
+        """Invert logical predicate names to the storage names that map to them.
+
+        ``ExtractionRequest.predicates`` are storage-level: they are compared
+        against claim predicates before ``map`` runs. A demand plan produces
+        logical (post-mapping) names, so callers must invert first. Each
+        logical name expands to every aliased storage source targeting it,
+        plus itself when it is not itself an aliased source (unmapped storage
+        predicates are preserved by ``map``). Aliased-away names are excluded:
+        a storage claim under such a name can never surface as itself.
+        """
+        if not isinstance(predicates, (tuple, list, set, frozenset)):
+            raise ReasoningError("predicates must be an explicit collection")
+        inverted: set[str] = set()
+        for predicate in predicates:
+            _text(predicate, "predicate")
+            inverted.update(source for source, target in self.predicate_aliases if target == predicate)
+            if predicate not in self._aliases:
+                inverted.add(predicate)
+        return tuple(sorted(inverted))
+
 
 @dataclass(frozen=True)
 class ClaimSourceLimits:
@@ -212,6 +233,8 @@ class PinnedClaimSource:
         _text(ontology_revision, "ontology_revision")
         self._original = view
         self._graph = view._graph
+        self._store = self._graph.store
+        self._serializer = self._graph.serializer
         self._provenance = ReadViewProvenance.from_dict(view.provenance.to_dict())
         self._time = TemporalInstant(self._provenance.valid_time_us)
         self._pinned = GraphReadView(self._graph, self._provenance)
@@ -234,7 +257,9 @@ class PinnedClaimSource:
         if self._closed:
             raise ReasoningError("claim source is closed")
         if (self._original._graph is not self._graph or self._original.provenance != self._provenance
-                or self._original.valid_time != self._time):
+                or self._original.valid_time != self._time
+                or self._graph.store is not self._store
+                or self._graph.serializer is not self._serializer):
             raise ProvenanceMismatchError("source view was rebound to a different context")
 
     def verify_source(self) -> None:

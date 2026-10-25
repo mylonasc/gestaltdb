@@ -5,8 +5,11 @@ Status: executable scenario milestone implemented in
 `docs/reasoning-inferred-consumers.rst`): session query, caller-driven
 publication into a managed world, correct/retract transitions with
 fresh-recomputation parity and pinned-reader stability. Sampler-artifact
-building with generation provenance remains open. Blocked-by notes: #248 and
-#251 merged; #249 planner merged (binding/pushdown still open); #254 sweep
+slice implemented in `reasoning/adapters/inferred_sampler.py`
+(`tests/test_reasoning_inferred_sampler.py`): explicit inferred-node/edge
+selection with generation provenance, mismatch/overwrite fail-closed, old
+artifacts stable across generations. Blocked-by notes: #248 and
+#251 merged (durable sessions included); #249 planner merged (binding/pushdown still open); #254 sweep
 prototype merged.
 
 ## End-to-end fixture

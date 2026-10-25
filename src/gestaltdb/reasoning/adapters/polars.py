@@ -252,6 +252,7 @@ class PolarsDatalogPrototype:
                         for predicate, frame in full.items() for s, o in frame.iter_rows())
         result = EvaluationResult(decoded, iterations, program.digest)
         metrics = {**ops.metrics, "input_s": input_s, "conversion_s": conversion_s,
-                   "planning_s": planning_s, "fixpoint_s": fixpoint_s,
-                   "decode_s": time.perf_counter() - start, "dictionary_symbols": len(dictionary.symbols)}
+                    "planning_s": planning_s, "fixpoint_s": fixpoint_s,
+                    "max_intermediate_rows": max_intermediate_rows,
+                    "decode_s": time.perf_counter() - start, "dictionary_symbols": len(dictionary.symbols)}
         return PolarsRun(result, identity, tuple(sorted(metrics.items())))

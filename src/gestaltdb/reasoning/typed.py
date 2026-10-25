@@ -728,6 +728,11 @@ def _unify(atom: TypedAtom, fact: TypedFact, bindings: dict) -> dict | None:
 
 
 class _TypedBudget:
+    """Per-evaluation candidate-row budget gate.
+
+    Intentionally parallel to ``engine._Budget`` (#373 dispositions):
+    private, identical, and not worth a cross-module dependency.
+    """
     def __init__(self, limits: ReasoningLimits) -> None:
         self.limits = limits
         self.candidate_rows = 0
