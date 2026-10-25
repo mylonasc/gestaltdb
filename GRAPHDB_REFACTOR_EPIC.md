@@ -221,7 +221,43 @@ versions, rule catalog, commit path. They do not receive unrestricted
 - Large rewrite temptation — land in small reviewable slices with green
   real-backend evidence each time.
 
+
+## Completion status (2026-10-26)
+
+34 slices landed; `graphdb.py` went 7,113 -> 3,174 lines with zero
+behavior change (full optional suite: 3,418 passed, 3 expected
+capability/fault-injection skips — identical to the pre-refactor
+baseline). `_graph/` holds 24 cohesive modules, every one within the
+800-line budget (largest: truth_maintenance 559, stored_rules 497,
+entities 484, temporal_reads 488, temporal_selection 436):
+
+adjacency, edge_records, entities, index_lookup, index_maintenance,
+index_rebuild, ingest_edges, ingest_nodes, ingest_support, lifecycle,
+node_records, registry, sampling, scopes, stored_rules,
+temporal_entity_writes, temporal_indexes, temporal_keys,
+temporal_orphans, temporal_reads, temporal_selection,
+temporal_sequence, temporal_writes, truth_maintenance.
+
+What deliberately remains in `graphdb.py`: public constructors
+(`create`/`open`), handle lifecycle (`close`, `save_manifest`,
+`manifest`, `database_id`), the transaction/snapshot scope protocol,
+the temporal writer guard, thin delegating wrappers with their public
+docstrings (~960 docstring lines — kept intentionally for `help()` and
+Sphinx), top-level ingestion dispatchers, read-view/snapshot/query/viz
+orchestration, index-DDL one-liners, and small update/serialize helpers.
+Four adapter/test seams were caught by existing tests during extraction
+(retraction validation, interrupted-rebuild injection, hydration
+counting, grouped-read tripwire) and preserved via explicit facade
+hooks rather than direct module calls — see slices 21, 23, 24, 25.
+
+The other seven legacy oversized modules (backends, sampling, Cypher
+parser/runtime/semantics, typed reasoning) still need their own
+cohesive extraction plans; the module-size ratchet keeps them from
+growing in the meantime.
+
 ## Progress log
+
+## Progress log (oldest first)
 
 - 2026-10-25: Epic created; branch `feature/graphdb-refactor-388` from
   `4bcd071`. Fixed `docs/code-quality.rst` heading underlines (CI
