@@ -52,8 +52,9 @@ reasoning node carries a readable `label` property, so
 recommended setting for HTML and static SVG alike. Shapes encode the layer:
 circles for data, triangles for inferred conclusions, squares for schema;
 dotted edges mark inference steps. The viewer opens reasoning artifacts
-pre-arranged (and pinned) as a layered tree; the Tree layout button
-re-applies it and Reset layout returns to force-directed.
+pre-arranged (and pinned) as a layered tree with the simulation paused;
+Resume layout runs the force simulation. The Tree layout button re-applies
+the arrangement and Reset layout returns to force-directed.
 
 `figure.as_svg()` / `figure.save_svg(path)` produce dependency-free static SVG
 with `layout="circle"` (default for graph figures), `layout="grid"`,

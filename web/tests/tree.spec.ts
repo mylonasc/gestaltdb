@@ -30,7 +30,9 @@ function yOf(transform: string | null): number {
 }
 
 test("reasoning artifacts open in a deterministic pinned tree without force layout", async ({ page }) => {
-  // No clicks: payload meta suggested the tree arrangement on load.
+  // No clicks: payload meta suggested the tree arrangement on load, and the
+  // simulation starts paused so the static diagram never drifts.
+  await expect(page.getByRole("button", { name: "Resume layout" })).toBeVisible();
   const conclusion = 'Node ["a","ancestor","c"]';
   const premise = 'Node ["a","parent","b"]';
   const conclusionY = yOf(await page.getByRole("button", { name: conclusion }).getAttribute("transform"));
@@ -54,6 +56,9 @@ test("reasoning artifacts open in a deterministic pinned tree without force layo
   const afterPremiseY = yOf(await page.getByRole("button", { name: premise }).getAttribute("transform"));
   expect(afterPremiseY).toBeLessThan(afterY);
   expect(afterY).toBe(conclusionY);
+  // Resuming starts the force simulation gently from the tree arrangement.
+  await page.getByRole("button", { name: "Resume layout" }).click();
+  await expect(page.getByRole("button", { name: "Pause layout" })).toBeVisible();
 });
 
 test("shape visibility toggles hide whole node layers", async ({ page }) => {
@@ -68,6 +73,9 @@ test("shape visibility toggles hide whole node layers", async ({ page }) => {
 });
 
 test("releasing a pinned tree node eases instead of flinging", async ({ page }) => {
+  // Start the simulation first so the release path actually reheats it.
+  await page.getByRole("button", { name: "Resume layout" }).click();
+  await page.waitForTimeout(300);
   const target = page.getByRole("button", { name: 'Node ["a","ancestor","c"]' });
   const start = await target.getAttribute("transform");
   await target.dblclick();

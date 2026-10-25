@@ -602,14 +602,15 @@ export function GraphCanvas({
     if (!settingsRef.current.paused) simRef.current?.alpha(0.3).restart();
   }, [settings.nodeSizeProperty]);
 
-  // Pause / resume.
+  // Pause / resume. Resuming reheats gently like any other unpin path so a
+  // static tree never catapults when the simulation takes over.
   useEffect(() => {
     const sim = simRef.current;
     if (!sim) return;
     if (settings.paused) {
       sim.stop();
     } else {
-      sim.alpha(0.3).restart();
+      wakeSim();
     }
   }, [settings.paused]);
 

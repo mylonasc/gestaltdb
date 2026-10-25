@@ -12,7 +12,12 @@ import { graphIdentity, parseViewState, type LayoutState, type ViewState } from 
 import { DEFAULT_SETTINGS, type VizPayload, type VizViewOptions, type ViewerSettings } from "./viz-types";
 
 export function App({ payload, initial = {} }: { payload: VizPayload; initial?: VizViewOptions }) {
-  const [settings, setSettings] = useState<ViewerSettings>({ ...DEFAULT_SETTINGS, ...initial });
+  // Reasoning figures open as a static pinned diagram: the tree arrangement
+  // is already the final layout, so the force simulation starts paused.
+  // Explicit view overrides still win over this suggestion default.
+  const treeSuggested = payload.meta["suggested_layout"] === "tree";
+  const [settings, setSettings] = useState<ViewerSettings>(
+    { ...DEFAULT_SETTINGS, ...(treeSuggested ? { paused: true } : null), ...initial });
   const canvasRef = useRef<SVGSVGElement>(null);
   const controllerRef = useRef<CanvasHandle>(null);
   const [exporting, setExporting] = useState(false);

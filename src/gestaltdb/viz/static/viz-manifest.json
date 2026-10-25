@@ -3,7 +3,7 @@
   "app_version": "0.1.0",
   "bundle_js": "gestaltdb-viz.js",
   "bundle_css": "gestaltdb-viz.css",
-  "bundle_js_sha256": "c05d32cafd20a7e21ed07b9eafda80f594764e6996dd2969a44a726ea1bbf83d",
+  "bundle_js_sha256": "5dc3a500626d641dae20b74426f8fb0b69e6313becb4db431d0bce14e8215c7a",
   "bundle_css_sha256": "dbb72911196e8269368a25a00629420337c5a2d1d6cffddb2d7d5d3c7c13c387",
   "third_party_notices": "third-party-notices.txt",
   "third_party_notices_sha256": "24aaafe76cadbfe658c04d89096ab7398951a4ada03c3592d98a1eb9ded43080",
@@ -17,11 +17,11 @@
     "scripts/build_inputs.mjs": "980988850ab99d59fe8bbfd5a399b0b9169eedf9b3af4a112e951b64f0cd3d5c",
     "scripts/check_licenses.py": "c923c96fdf7482611a6675375400b464283f33c7b52ea4e5514f95590b328c41",
     "scripts/write_manifest.mjs": "1527a290d7eff3d7fc4419f688fabcd690fc0373afbe9853b10987dc97aad781",
-    "src/App.tsx": "e80195da9d1b56dafbb54d937e939a16ff357408c204a8fb7a74cd01e599509d",
+    "src/App.tsx": "c49b120d86b0925151c563945c047690b663d96f50348b9fd0a24597646f7cc5",
     "src/AppearanceControls.tsx": "8e46194d0036fe20d64075dcc80d80b262bde57c512bac12f8f8ecc1c2c66d9f",
     "src/ExplorationControls.tsx": "81494924f33706109d1660b4cc1f64589542180e62a31433dd8c75d20339b64c",
     "src/ExportControls.tsx": "61329848576ecffbcc661b07a349602c5020e808602edccb7cc9a25ae0ace94e",
-    "src/GraphCanvas.tsx": "7bde82b16b72af09d6970dff0fe57a9775bef96c92a26a2d4a8308620726ee50",
+    "src/GraphCanvas.tsx": "42ef5715a04d1f59bbbb1b0834911ed7cf71b6851de7d3ef69c0de588455c908",
     "src/Inspector.tsx": "1fb5f5f1a698e8d0b8fe96a78afcaa68b4d39a5f0988ce716cc1008888da2638",
     "src/appearance.ts": "da6076bedead269672f3354444782d9a8fc95d58e7f2bc43d227bd1b91ba0e85",
     "src/colors.ts": "48ad243d17671bb5c10b84deff1a0b30c4aedd5d5aaf9ee0f1d52f00bfaa3d33",
@@ -37,12 +37,12 @@
     "tsconfig.json": "5ef18e1e733ca6998c62ab11be2e7a86e71b0e3f66024c9c0d0ed10c684b876b",
     "vite.config.ts": "6bf30658a534f6c0917b89aac7d711ed6e0081d97b86dfb9dc6921605c9dc16a"
   },
-  "source_sha256": "057c90bda183482764ff7c141475b142b99a55c30bab1cfabd67c04ffb52b4e2",
+  "source_sha256": "40359ab7e5d883c9975bb0aeac00c90e2f530f572e98cfc45164b11d3dc7a119",
   "toolchain": {
     "node": "v24.11.1",
     "npm": "npm/11.6.2 node/v24.11.1 linux x64 workspaces/false",
     "typescript": "5.6.3",
     "vite": "6.4.3"
   },
-  "built_at": "2026-10-25T23:22:50.494Z"
+  "built_at": "2026-10-25T23:29:55.525Z"
 }

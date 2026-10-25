@@ -267,8 +267,9 @@ Canvas Features
   pause, and tunable charge/link distance. Labels render at 13px with node
   radii 8–32 and edge widths 1–7 (same scale as static SVG).
 - Deterministic tree arrangement: reasoning artifacts open pre-arranged (and
-  pinned) in a layered top-down tree; the Tree layout button re-applies it
-  on demand and Reset layout returns to the force simulation.
+  pinned) in a layered top-down tree with the simulation paused; press
+  Resume layout to run the force simulation. The Tree layout button
+  re-applies the arrangement on demand and Reset layout returns to force.
   Releasing a pin eases the node into the live simulation instead of
   flinging it: arrange paths cool the simulation first and unpin paths
   reheat gently.
