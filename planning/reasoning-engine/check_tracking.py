@@ -11,15 +11,13 @@ def load():
 
 
 def check_offline(snapshot):
-    assert snapshot["reviewed_integration"] == "bb81ca6183123f02fe16fc690dc87a01ff63e14f"
+    assert snapshot["reviewed_integration"] == "f5d094ee87edb9aced3785aa34e06c52646c7d33"
     assert set(snapshot["phases"]) == {"RE-E1", "RE-E2", "RE-E3", "RE-E4", "RE-E5"}
-    assert snapshot["phases"]["RE-E1"]["state"] == "closed"
-    assert snapshot["phases"]["RE-E2"]["state"] == "closed"
-    for key in ("RE-E3", "RE-E4", "RE-E5"):
-        assert snapshot["phases"][key]["state"] == "open", key
-    for key in ("194", "200", "370", "371"):
+    for key in ("RE-E1", "RE-E2", "RE-E3", "RE-E4", "RE-E5"):
+        assert snapshot["phases"][key]["state"] == "closed", key
+    for key in ("194", "200", "371"):
         assert snapshot["followups"][key]["state"] == "open", key
-    for key in ("248", "249", "250", "251", "252", "253", "254", "255", "256", "373", "374"):
+    for key in ("248", "249", "250", "251", "252", "253", "254", "255", "256", "370", "373", "374", "381"):
         assert snapshot["followups"][key]["state"] == "closed", key
     assert snapshot["expected_sub_issues"]["159"][-1] == 370
     assert snapshot["expected_sub_issues"]["200"] == [371, 373]
@@ -49,7 +47,7 @@ def main():
         if actual != sorted(expected):
             drifts.append(f"blocked_by {issue}: expected {sorted(expected)}, live {actual}")
     live_states = {}
-    for number in {156, 157, 158, 159, 160, 161, 194, 200, 248, 249, 250, 251, 252, 253, 254, 255, 256, 370, 371, 373, 374}:
+    for number in {156, 157, 158, 159, 160, 161, 194, 200, 248, 249, 250, 251, 252, 253, 254, 255, 256, 370, 371, 373, 374, 381}:
         data = json.loads(subprocess.check_output(
             ["gh", "api", f"repos/mylonasc/gestaltdb/issues/{number}", "--jq", "{number,state}"], text=True))
         live_states[str(data["number"])] = data["state"]

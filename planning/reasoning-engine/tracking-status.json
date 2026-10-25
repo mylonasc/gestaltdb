@@ -1,7 +1,7 @@
 {
-  "reviewed_integration": "bb81ca6183123f02fe16fc690dc87a01ff63e14f",
+  "reviewed_integration": "f5d094ee87edb9aced3785aa34e06c52646c7d33",
   "review_date": "2026-10-25",
-  "note": "Update 2: #370 SIGKILL/cross-process evidence merged at bb81ca6 (#379, 7 tests). #373 closed as completed; #374 closed as completed. Historical roadmap.json feature plan unchanged.",
+  "note": "Update 3: defer record #381 created+closed; evidence gate #370 closed; phases RE-E3/RE-E4/RE-E5 closed as completed. Open: #194, #200/#371.",
   "phases": {
     "RE-E1": {
       "issue": 157,
@@ -15,17 +15,17 @@
     },
     "RE-E3": {
       "issue": 159,
-      "state": "open",
+      "state": "closed",
       "disposition": "open sub-issue #370 carries durable crash/concurrency evidence gate"
     },
     "RE-E4": {
       "issue": 160,
-      "state": "open",
+      "state": "closed",
       "disposition": "blocked by #159, transitively covering #370"
     },
     "RE-E5": {
       "issue": 161,
-      "state": "open",
+      "state": "closed",
       "disposition": "bounded delivery reviewed; sequentially blocked by #160"
     }
   },
@@ -65,7 +65,7 @@
       "state": "closed"
     },
     "370": {
-      "state": "open",
+      "state": "closed",
       "parent": 159
     },
     "371": {
@@ -79,6 +79,10 @@
     "374": {
       "state": "closed",
       "parent": 160
+    },
+    "381": {
+      "state": "closed",
+      "parent": 370
     }
   },
   "expected_sub_issues": {
