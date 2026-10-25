@@ -645,3 +645,17 @@ four acceptance items linked; phase epics #159/#160/#161 closed as
 completed with evidence comments (children all closed, gates met, broader
 non-deliveries kept explicit). Remaining open: #194 (optional native
 follow-up), #200/#371 (design accounting). No main merge, tag, or release.
+
+### D2-D6 dispositions and review closure (#371, #200)
+
+`feature/re-371-dispositions` on integration `77e7651`, merged via #383 at
+`3f330f9`. Per-finding record
+`planning/reasoning-engine/design-dispositions.md`: D2/D3 documented keep
+(links #373, #374, #255 evidence); D4 fixed `CompiledSchemaCache`
+FIFO->LRU docstring plus a discriminating eviction test, TBox-closure reuse
+explicit defer; D5 delivery map verified honest, signed-premise/datatype
+capability explicit defer; D6 removed the unused `by_subject_predicate`
+index, buffering/provenance limits already disclosed with streaming/caller-ID
+provenance explicit defer. #371 and review umbrella #200 closed with linked
+evidence. Tracking snapshot refreshed; drift check green. No main merge, tag,
+or release.
