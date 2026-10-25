@@ -390,6 +390,25 @@ def evaluate_range(program: GenericProgram, facts: Iterable[TemporalFact], *,
     assertions), and segments tile exactly the change points
     ``change_segments`` would emit. Per-segment evaluation, support
     discovery and evidence identity are unchanged.
+
+    Examples:
+        Derive eligibility only during the premise's half-open validity::
+
+            >>> from gestaltdb.reasoning.model import ReasoningLimits, Variable
+            >>> from gestaltdb.reasoning.typed import GenericProgram, GenericRule, TypedAtom, TypedFact
+            >>> from gestaltdb.reasoning.intervals import Interval, IntervalSet
+            >>> from gestaltdb.reasoning.temporal_closure import TemporalFact, evaluate_range, verify_closure
+            >>> x = Variable("x")
+            >>> program = GenericProgram([GenericRule("r", [TypedAtom("member", [x])], [], TypedAtom("eligible", [x]))])
+            >>> base = [TemporalFact(TypedFact("member", ["alice"]), IntervalSet([Interval(0, 10)]))]
+            >>> closure = evaluate_range(program, base, limits=ReasoningLimits())
+            >>> assert TypedFact("eligible", ["alice"]) in closure.at(5)
+            >>> assert TypedFact("eligible", ["alice"]) not in closure.at(10)
+            >>> assert verify_closure(program, closure, limits=ReasoningLimits()).points_checked == 1
+
+    Times here are integer microseconds, not database commit IDs. Database-backed
+    extraction and publication require the separate range adapters; see the
+    reasoning-range-admission and reasoning-bound-range-publication guides.
     """
     if not isinstance(program, GenericProgram):
         raise ReasoningError("program must be a GenericProgram")

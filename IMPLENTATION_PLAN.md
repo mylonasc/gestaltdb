@@ -2,6 +2,24 @@
 
 ## Next release preparation (#385)
 
+Docstring usability pass (#387): 22 self-contained workflows cover primary
+database/backend, ingestion/sampling, ontology/reasoning, history/maintenance,
+session/projection, and visualization entry points. Execute them directly from
+public docstrings in fresh namespaces with real optional stores; reject doctest
+SKIP directives. Explain input/result/ID boundaries and link longer source-verified
+resume/publication/artifact/native workflows to their complete tested guides.
+`docs/api-workflows.rst` exposes standalone reasoning docstrings in Sphinx;
+`planning/reasoning-engine/docstring-audit.md` records coverage and deliberately
+omitted inline duplication. Production executable AST remains unchanged across
+all 21 touched Python files. No merge or version bump.
+
+Docstring validation: 22/22 workflows passed with real backends; isolated
+base-install docstring/workflow-policy tests passed 32 with 9 expected optional
+backend skips. Sphinx -W, 8/8 guide examples, API/agent-doc drift checks passed
+after regenerating the source-line API index. Final full optional suite passed
+3,395 tests with 3 expected capability/fault-injection skips and no missing-backend
+skips (137.47s). Final exact-head CI remains mandatory.
+
 PR CI cost reduction: edge-version Python matrices (3.10/3.13) for PRs, full
 3.10–3.13 on push/manual runs. Retain complete selected suites, real backend
 preflight, oracle gates, and distribution compatibility checks. Exclude prose-only

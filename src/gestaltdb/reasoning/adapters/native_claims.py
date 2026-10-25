@@ -60,6 +60,12 @@ class PinnedNativeClaimSource(PinnedBatchedClaimSource):
     No implicit source creation, index repair, publication or native adoption.
     A completed pass is authenticated; partially consumed batches are not a
     successful complete read. Close abandoned iterators to release the guard.
+
+    Requires plain PyRex and Arrow, an existing temporal read view, an extraction
+    request, and explicit selection/mapping policies. See the runnable example
+    in :doc:`reasoning-native-claims` for their construction, bounded batches,
+    exact version evidence, and resource lifetimes. For first use without native
+    scanning, start with :doc:`ontology` or :doc:`reasoning-extraction`.
     """
 
     def __init__(self, view, *, native_limits=NativeClaimLimits(), **kwargs):

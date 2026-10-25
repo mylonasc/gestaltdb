@@ -74,6 +74,7 @@ Filter, Sample, Train
    :caption: API Reference
 
    api
+   api-workflows
 
 Quick Example
 -------------

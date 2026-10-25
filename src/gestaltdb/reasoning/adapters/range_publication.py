@@ -211,7 +211,14 @@ def stage_range_generation(graph: GraphDB, program: GenericProgram, catalog: Rul
                             source_limits: RangeSourceLimits = RangeSourceLimits(),
                             publication_limits: RangePublicationLimits = RangePublicationLimits(),
                             expected_generation: GenerationIdentity | None = None, cancel=None) -> StagedRangeGeneration:
-    """Own source computation and target capture under one prefix, without writes."""
+    """Compute from a pinned source and capture the target state for publication.
+
+    ``source_world`` selects assertions; ``target_world`` must be different.
+    Staging returns a value to pass to ``publish_range_generation``; publication
+    rechecks source and target history and commits the interval batch. The
+    complete runnable setup (database, program/catalog, policies, stage, publish,
+    and interval reads) is in :doc:`reasoning-bound-range-publication`.
+    """
     if not isinstance(graph, GraphDB) or not isinstance(publication_limits, RangePublicationLimits):
         raise ReasoningError("GraphDB and RangePublicationLimits required")
     _text(publication_key, "publication_key")
@@ -239,7 +246,13 @@ def publish_range_generation(graph: GraphDB, staged: StagedRangeGeneration, *, l
                               publication_limits: RangePublicationLimits = RangePublicationLimits(),
                               expected_generation: GenerationIdentity | None = None,
                               freshness: str = "latest", cancel=None) -> PublicationResult:
-    """Re-admit computation and CAS the entire interval batch in one logical commit."""
+    """Re-admit computation and CAS the entire interval batch in one logical commit.
+
+    Pass the value returned by ``stage_range_generation``. Source/target movement
+    can reject that value; restage explicitly rather than modifying its pins.
+    See :doc:`reasoning-bound-range-publication` for a self-contained example
+    covering publication, validity gaps, and idempotent retry.
+    """
     if (not isinstance(graph, GraphDB) or not isinstance(staged, StagedRangeGeneration)
             or not isinstance(publication_limits, RangePublicationLimits)
             or not isinstance(source_limits, RangeSourceLimits) or not isinstance(limits, ReasoningLimits)):

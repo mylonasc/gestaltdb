@@ -452,6 +452,11 @@ def save_session(
     ``expected_session_digest`` compares exact state, including same-horizon
     changes and deletion; horizon-only pins retain their legacy behavior.
     Checksums/locks do not authenticate the database or prove closure soundness.
+
+    The ``start_session`` docstring in ``reasoning.adapters.sessions`` contains
+    a complete create/advance/save/reload example, including the expected state
+    digest. For independent source admission on durable resume, see
+    :doc:`reasoning-authenticated-sessions`.
     """
     if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 1:
         raise ReasoningError("max_bytes must be a positive integer")

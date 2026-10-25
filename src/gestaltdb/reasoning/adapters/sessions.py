@@ -186,7 +186,46 @@ def _materialize_session(program: GenericProgram, catalog: RuleCatalog, scope: S
 def start_session(graph: GraphDB, program: GenericProgram, catalog: RuleCatalog, *,
                   scope: SessionScope, limits: ReasoningLimits, max_versions: int = 100_000,
                   cancel: Callable[[], bool] | None = None) -> ReasoningSession:
-    """Pin the current horizon and materialize one session from a full scan."""
+    """Pin the current horizon and materialize one session from a full scan.
+
+    A session is reasoning state, not a connection: it fixes a valid-time point,
+    world, program/catalog, and commit horizon. ``advance_session`` returns new
+    state; it does not mutate the original or publish inferred claims.
+
+    Examples:
+        Advance and persist a classification after new evidence (requires LMDB)::
+
+            >>> from tempfile import TemporaryDirectory
+            >>> from gestaltdb.graphdb import GraphDB
+            >>> from gestaltdb.reasoning.model import ReasoningLimits, Variable
+            >>> from gestaltdb.reasoning.typed import GenericProgram, GenericRule, TypedAtom, TypedFact
+            >>> from gestaltdb.reasoning.adapters.claims import ClaimMapping, ClaimSelection
+            >>> from gestaltdb.reasoning.adapters.sessions import SessionScope, start_session, advance_session
+            >>> from gestaltdb.reasoning.adapters.session_generation import catalog_for_typed_program
+            >>> from gestaltdb.reasoning.adapters.session_store import save_session, load_session
+            >>> x, y = Variable("x"), Variable("y")
+            >>> program = GenericProgram([GenericRule("r", [TypedAtom("member", [x, y])], [], TypedAtom("person", [x]))])
+            >>> scope = SessionScope("default", 50, ClaimSelection(), ClaimMapping())
+            >>> with TemporaryDirectory() as root:
+            ...     graph = GraphDB.create(root + "/db", backend="lmdb", serializer="json")
+            ...     try:
+            ...         _ = graph.assert_claim(subject="alice", predicate="member", object="team",
+            ...             agent="registry", polarity="positive", valid=(0, 100))
+            ...         session = start_session(graph, program, catalog_for_typed_program(program),
+            ...             scope=scope, limits=ReasoningLimits())
+            ...         digest = save_session(session, root + "/session.json")
+            ...         _ = graph.assert_claim(subject="bob", predicate="member", object="team",
+            ...             agent="registry", polarity="positive", valid=(0, 100))
+            ...         moved = advance_session(graph, session, limits=ReasoningLimits())
+            ...         _ = save_session(moved.session, root + "/session.json", expected_session_digest=digest)
+            ...         assert TypedFact("person", ["bob"]) in load_session(root + "/session.json").facts
+            ...     finally:
+            ...         graph.close()
+
+    This demonstrates persistence and exact-file-state comparison. Source-verified
+    durable resume additionally requires caller-held generation/state pins; see
+    the reasoning-authenticated-sessions guide for the complete trusted-pin flow.
+    """
     if not isinstance(graph, GraphDB):
         raise ReasoningError("GraphDB is required")
     if not isinstance(program, GenericProgram) or not isinstance(catalog, RuleCatalog):

@@ -81,18 +81,22 @@ class SamplerSnapshot:
         relation_lookup_ids: External relation IDs in sorted lookup order.
 
     Examples:
-        Build from already compact arrays and sample with ``SamplerEngine``::
+        Persist and reload compact arrays without an embedded backend::
 
-            snapshot = SamplerSnapshot.from_edge_arrays(
-                "snapshot",
-                external_node_ids=["drug-1", "protein-1"],
-                external_edge_ids=["edge-1"],
-                external_relation_ids=["binds"],
-                src_int=[0],
-                dst_int=[1],
-                rel_int=[0],
-                node_type_values=["drug", "protein"],
-            )
+            >>> from tempfile import TemporaryDirectory
+            >>> from gestaltdb.sampling import SamplerSnapshot
+            >>> with TemporaryDirectory() as root:
+            ...     snapshot = SamplerSnapshot.from_edge_arrays(
+            ...         root + "/snapshot", external_node_ids=["drug-1", "protein-1"],
+            ...         external_edge_ids=["edge-1"], external_relation_ids=["binds"],
+            ...         src_int=[0], dst_int=[1], rel_int=[0],
+            ...         node_type_values=["drug", "protein"])
+            ...     loaded = SamplerSnapshot.load(snapshot.path)
+            ...     assert loaded.external_node_id(loaded.node_int("drug-1")) == "drug-1"
+            ...     assert loaded.num_edges == 1
+
+        Use a fresh output directory for each immutable snapshot. The
+        ``SamplerEngine`` class example continues from construction to sampling.
     """
 
     path: Path

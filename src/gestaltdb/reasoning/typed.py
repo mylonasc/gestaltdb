@@ -757,6 +757,23 @@ class GenericEngine:
     checked incrementally as their variables bind, pruning before deeper
     traversal. Only complete closures are returned; limits and cancellation
     behave like the binary engine. Witness collection is not offered here.
+
+    Examples:
+        Classify adults using kind-strict literal comparisons::
+
+            >>> from gestaltdb.reasoning.model import ReasoningLimits, Variable
+            >>> from gestaltdb.reasoning.terms import Literal
+            >>> from gestaltdb.reasoning.typed import Comparison, GenericEngine, GenericProgram, GenericRule, TypedAtom, TypedFact
+            >>> x, age = Variable("x"), Variable("age")
+            >>> rule = GenericRule("adult", [TypedAtom("age", [x, age])],
+            ...     [Comparison(">=", age, Literal("integer", 18))], TypedAtom("adult", [x]))
+            >>> facts = [TypedFact("age", ["alice", Literal("integer", 30)])]
+            >>> result = GenericEngine().evaluate(GenericProgram([rule]), facts, limits=ReasoningLimits())
+            >>> assert TypedFact("adult", ["alice"]) in result.facts
+
+    Use ``evaluate_stratified`` for declared closed-world absence. Aggregates
+    have a separate single-pass stratum; see the typed-reasoning guide for its
+    constructor restrictions and the distinction from positive maintenance.
     """
 
     def evaluate(
@@ -852,6 +869,22 @@ class GenericEngine:
         ``max_proof_nodes``. ``iterations`` counts executed component rounds;
         the aggregate stratum adds one round when aggregates exist, matching
         ``evaluate`` accounting on positive programs.
+
+        Examples:
+            Select unblocked candidates in an explicitly closed predicate::
+
+                >>> from gestaltdb.reasoning.model import ReasoningLimits, Variable
+                >>> from gestaltdb.reasoning.typed import GenericEngine, GenericProgram, GenericRule, TypedAtom, TypedFact
+                >>> x = Variable("x")
+                >>> rule = GenericRule("free", [TypedAtom("candidate", [x])], [],
+                ...     TypedAtom("free", [x]), negated=[TypedAtom("blocked", [x])])
+                >>> program = GenericProgram([rule], closed=["blocked"])
+                >>> facts = [TypedFact("candidate", ["a"]), TypedFact("candidate", ["b"]), TypedFact("blocked", ["b"])]
+                >>> run = GenericEngine().evaluate_stratified(program, facts, limits=ReasoningLimits())
+                >>> assert TypedFact("free", ["a"]) in run.result.facts
+                >>> assert TypedFact("free", ["b"]) not in run.result.facts
+
+        Here ``blocked`` is an absence check, not an explicit negative assertion.
         """
         if not isinstance(program, GenericProgram):
             raise ReasoningError("program must be a GenericProgram")

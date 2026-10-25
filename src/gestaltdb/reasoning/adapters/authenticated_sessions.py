@@ -62,6 +62,12 @@ def load_authenticated_session(graph: GraphDB, path, *, expected_generation: Gen
     Atomic file replacement permits old-or-new reads. This read-only operation
     creates no file lock; it does not promise the file/source cannot move after
     return. Use the guarded advance API for persistence.
+
+    The caller must obtain the expected generation and session digest from
+    trusted application state. For a complete create/bind/save/load/advance
+    example, including how to retain those pins, see
+    :doc:`reasoning-authenticated-sessions`. Adopting pins from the file being
+    checked would defeat the independent source/state comparison.
     """
     _validate(graph, expected_generation, expected_session_digest, admission_limits, freshness, cancel)
     return _load(graph, path, expected_generation, expected_session_digest,
@@ -81,6 +87,10 @@ def advance_authenticated_session(graph: GraphDB, path, *, expected_generation: 
     session is always verified against latest under the database writer guard.
     Lock ordering is database writer guard, then cooperating session-file lock.
     No database writes, publication, implicit program/catalog change or recoding.
+
+    See :doc:`reasoning-authenticated-sessions` for the complete runnable
+    trusted-pin workflow; ``start_session`` has the smaller introductory example
+    for in-memory advancement and file persistence without source admission.
     """
     _validate(graph, expected_generation, expected_session_digest, admission_limits, freshness, cancel)
     if not isinstance(limits, ReasoningLimits):

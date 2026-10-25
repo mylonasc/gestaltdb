@@ -201,7 +201,8 @@ Code navigation and modularity
 The main source entry points are ``graphdb.py``, ``kvstores.py``,
 ``serializers.py``, ``readview.py``, ``sampling/``, ``ontology/``,
 ``reasoning/``, ``reasoning/adapters/``, ``query_engine/cypher/``, and ``viz/``
-under ``src/gestaltdb``. :doc:`api` exposes documented APIs and source links.
+under ``src/gestaltdb``. :doc:`api` exposes documented APIs and source links;
+:doc:`api-workflows` collects runnable docstring examples for the main handoffs.
 Browse the `database implementation <https://github.com/mylonasc/gestaltdb/blob/main/src/gestaltdb/graphdb.py>`_,
 `sampling components <https://github.com/mylonasc/gestaltdb/tree/main/src/gestaltdb/sampling>`_,
 `ontology compiler <https://github.com/mylonasc/gestaltdb/blob/main/src/gestaltdb/ontology/compiler.py>`_,

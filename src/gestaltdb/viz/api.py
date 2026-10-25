@@ -192,6 +192,25 @@ def visualize_nodes_edges(
         edges: ``Edge`` objects or edge-shaped dicts.
         options: ``VizOptions`` or equivalent mapping.
         caps: Optional ``max_nodes``/``max_edges`` overrides.
+
+    Examples:
+        Create a portable SVG without a database, browser, or notebook::
+
+            >>> from tempfile import TemporaryDirectory
+            >>> from pathlib import Path
+            >>> from gestaltdb.graphdb import Node, Edge
+            >>> from gestaltdb.viz.api import VizOptions, visualize_nodes_edges
+            >>> figure = visualize_nodes_edges(
+            ...     [Node("a", properties={"name": "Alice"}), Node("b", properties={"name": "Bob"})],
+            ...     [Edge("ab", "a", "b", properties={"type": "knows"})],
+            ...     options=VizOptions(node_label_property="name"))
+            >>> assert "Alice" in figure.as_svg()
+            >>> with TemporaryDirectory() as root:
+            ...     _ = figure.save_svg(Path(root) / "graph.svg")
+            ...     assert (Path(root) / "graph.svg").is_file()
+
+    ``figure.as_html()`` produces the interactive viewer. The visualization guide
+    covers notebook display, query/sample builders, caps, and browser export.
     """
     from .ir import VizGraph
 

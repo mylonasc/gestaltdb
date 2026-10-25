@@ -642,7 +642,37 @@ class GraphEntityDictSerializer:
 
 
 class GraphDB:
-    """High-level interface to manage Node/Edge storing, retrieval, and indexing."""
+    """Persistent graph records, indexes, queries, and explicit temporal history.
+
+    Choose an installed backend and serializer with :meth:`create`; :meth:`open`
+    restores those choices from the database manifest. Always close the handle.
+    Ordinary node/edge writes and temporal claim/version writes are separate.
+
+    Examples:
+        Create, query, and reopen a disposable database (requires ``lmdb``)::
+
+            >>> from tempfile import TemporaryDirectory
+            >>> from pathlib import Path
+            >>> from gestaltdb.graphdb import GraphDB, Node
+            >>> with TemporaryDirectory() as root:
+            ...     path = Path(root) / "graph"
+            ...     graph = GraphDB.create(path, backend="lmdb", serializer="json")
+            ...     try:
+            ...         _ = graph.create_node_property_index("name")
+            ...         graph.put_node(Node("alice", labels=["Person"], properties={"name": "Alice"}))
+            ...         result = graph.query('MATCH (n:Person {name: "Alice"}) RETURN n.name AS name')
+            ...         assert result.records == [{"name": "Alice"}]
+            ...     finally:
+            ...         graph.close()
+            ...     reopened = GraphDB.open(path)
+            ...     try:
+            ...         assert reopened.get_node(b"alice").properties["name"] == "Alice"
+            ...     finally:
+            ...         reopened.close()
+
+    See the architecture and temporal-versioning guides for component handoffs
+    and historical reads; use ``ingest_arrow`` for a columnar loading example.
+    """
     def __init__(
             self, 
             store: KVStore, 
@@ -2134,7 +2164,34 @@ class GraphDB:
 
     @contextmanager
     def read_view(self, *, valid_time, system_time=None, through_commit=None):
-        """Yield a temporal read view pinned to one visible commit horizon."""
+        """Yield a temporal read view pinned to one visible commit horizon.
+
+        ``valid_time`` selects domain time; ``through_commit`` selects a recorded
+        history prefix. Omit the latter for the latest visible prefix, or use
+        ``system_time`` for selection by recorded time instead.
+
+        Examples:
+            Inspect an assertion before and after retraction (requires ``lmdb``)::
+
+                >>> from tempfile import TemporaryDirectory
+                >>> from gestaltdb.graphdb import GraphDB
+                >>> with TemporaryDirectory() as root:
+                ...     graph = GraphDB.create(root + "/db", backend="lmdb", serializer="json")
+                ...     try:
+                ...         first = graph.assert_claim(subject="alice", predicate="member", object="team",
+                ...             agent="registry", polarity="positive", valid=(0, 100))
+                ...         _ = graph.retract_claim(first.logical_id, valid=(0, 100))
+                ...         with graph.read_view(valid_time=50, through_commit=first.commit_id) as old:
+                ...             assert len(tuple(old.iter_claims_as_of(predicate="member"))) == 1
+                ...         with graph.read_view(valid_time=50) as current:
+                ...             assert not tuple(current.iter_claims_as_of(predicate="member"))
+                ...     finally:
+                ...         graph.close()
+
+        Keep the context open while its consumers run. For mutable node/edge
+        snapshots use ``current_read_view``; the temporal-versioning guide
+        explains valid time, system time, and historical Cypher qualifiers.
+        """
         from .readview import GraphReadView, ReadViewProvenance
 
         instant = normalize_temporal_instant(valid_time)
@@ -2763,8 +2820,27 @@ class GraphDB:
         ``SERIALIZED_PAYLOADS`` expects ``node_values`` and ``edge_values`` to
         contain serializer-compatible payload bytes.
 
-        Example:
-            >>> graph.ingest_arrow(node_ids, edge_ids, sources, targets, edge_types, node_properties={"kind": kinds})  # doctest: +SKIP
+        Examples:
+            Load two entities and a typed edge (requires ``lmdb`` and ``pyarrow``)::
+
+                >>> from tempfile import TemporaryDirectory
+                >>> import pyarrow as pa
+                >>> from gestaltdb.graphdb import GraphDB
+                >>> with TemporaryDirectory() as root:
+                ...     graph = GraphDB.create(root + "/db", backend="lmdb", serializer="json")
+                ...     try:
+                ...         _ = graph.ingest_arrow(
+                ...             pa.array(["a", "b"]), pa.array(["ab"]),
+                ...             pa.array(["a"]), pa.array(["b"]), pa.array(["knows"]),
+                ...             node_properties={"name": pa.array(["Alice", "Bob"])})
+                ...         assert graph.get_edge(b"ab").properties["type"] == "knows"
+                ...         assert graph.get_node(b"a").properties["name"] == "Alice"
+                ...     finally:
+                ...         graph.close()
+
+        The default rebuilds deferred indexes before returning. Native columnar
+        writes are available on plain PyRex; transactional PyRex uses a different
+        write path. See the operations/performance guides for backend trade-offs.
         """
         if self._implicit_transaction_required():
             with self.transaction() as tx:
@@ -4353,6 +4429,32 @@ class GraphDB:
         Premises must share a world, and each conclusion receives their
         half-open validity intersection. No claims are written if any resource
         bound is exceeded.
+
+        Examples:
+            Persist a conclusion, explain it, and maintain it after evidence loss
+            (requires ``lmdb``)::
+
+                >>> from tempfile import TemporaryDirectory
+                >>> from gestaltdb.graphdb import GraphDB
+                >>> with TemporaryDirectory() as root:
+                ...     graph = GraphDB.create(root + "/db", backend="lmdb", serializer="json")
+                ...     try:
+                ...         base = graph.assert_claim(subject="alice", predicate="member", object="team",
+                ...             agent="registry", polarity="positive", valid=(0, 100))
+                ...         _ = graph.create_rule("classify", when=[("?x", "member", "?team")],
+                ...             then=("?x", "is", "person"))
+                ...         _ = graph.run_rules(as_of=50)
+                ...         conclusion = next(graph.iter_claims_as_of(valid_time=50, predicate="is"))
+                ...         assert graph.explain_claim(conclusion.logical_id, valid_time=50) is not None
+                ...         _ = graph.retract_claim(base.logical_id, valid=(0, 100))
+                ...         _ = graph.maintain_truth(as_of=50)
+                ...         assert not tuple(graph.iter_claims_as_of(valid_time=50, predicate="is"))
+                ...     finally:
+                ...         graph.close()
+
+        This API writes derived temporal claims. Standalone ``DatalogEngine``
+        returns an in-memory closure instead; use explicit adapters to connect
+        that evaluator to database sources and publication.
         """
         limits = {
             "max_iterations": max_iterations,

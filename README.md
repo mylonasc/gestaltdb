@@ -57,6 +57,7 @@ Arrows show selected API calls and data handoffs, not automatic synchronization.
 `GraphDB` is the integration hub; sampling and standalone reasoning have separate
 execution interfaces. Read the [component and application architecture](docs/architecture.rst)
 for the full decomposition, workflows, code links, and modularity boundaries.
+For copyable, tested API examples, see [Runnable API Workflows](docs/api-workflows.rst).
 
 ### Scope and Caveats
 
