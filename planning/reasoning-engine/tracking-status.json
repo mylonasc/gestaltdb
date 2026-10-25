@@ -1,7 +1,7 @@
 {
-  "reviewed_integration": "f5d094ee87edb9aced3785aa34e06c52646c7d33",
+  "reviewed_integration": "3f330f944135567ffafefddccc97c4a738178be9",
   "review_date": "2026-10-25",
-  "note": "Update 3: defer record #381 created+closed; evidence gate #370 closed; phases RE-E3/RE-E4/RE-E5 closed as completed. Open: #194, #200/#371.",
+  "note": "Update 4: D2-D6 disposed at 3f330f9 (#383); #371 and review umbrella #200 closed. Open: #194 only.",
   "phases": {
     "RE-E1": {
       "issue": 157,
@@ -34,7 +34,7 @@
       "state": "open"
     },
     "200": {
-      "state": "open",
+      "state": "closed",
       "open_sub_issue": 371
     },
     "248": {
@@ -69,7 +69,7 @@
       "parent": 159
     },
     "371": {
-      "state": "open",
+      "state": "closed",
       "parent": 200
     },
     "373": {

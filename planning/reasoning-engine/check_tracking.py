@@ -11,13 +11,13 @@ def load():
 
 
 def check_offline(snapshot):
-    assert snapshot["reviewed_integration"] == "f5d094ee87edb9aced3785aa34e06c52646c7d33"
+    assert snapshot["reviewed_integration"] == "3f330f944135567ffafefddccc97c4a738178be9"
     assert set(snapshot["phases"]) == {"RE-E1", "RE-E2", "RE-E3", "RE-E4", "RE-E5"}
     for key in ("RE-E1", "RE-E2", "RE-E3", "RE-E4", "RE-E5"):
         assert snapshot["phases"][key]["state"] == "closed", key
-    for key in ("194", "200", "371"):
+    for key in ("194",):
         assert snapshot["followups"][key]["state"] == "open", key
-    for key in ("248", "249", "250", "251", "252", "253", "254", "255", "256", "370", "373", "374", "381"):
+    for key in ("200", "248", "249", "250", "251", "252", "253", "254", "255", "256", "370", "371", "373", "374", "381"):
         assert snapshot["followups"][key]["state"] == "closed", key
     assert snapshot["expected_sub_issues"]["159"][-1] == 370
     assert snapshot["expected_sub_issues"]["200"] == [371, 373]
