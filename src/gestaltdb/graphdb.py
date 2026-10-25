@@ -82,6 +82,12 @@ from .versioning import (
 from ._graph import adjacency as _adjacency
 from ._graph import index_maintenance as _index_maintenance
 from ._graph import index_lookup as _index_lookup
+from ._graph import temporal_keys as _temporal_keys
+from ._graph.temporal_keys import (
+    _TEMPORAL_COMMIT_PREFIX,
+    _TEMPORAL_RECORD_PREFIX,
+    _TEMPORAL_VISIBLE_PREFIX,
+)
 from ._graph.registry import (
     backend_registry as _backend_registry,
     gestaltdb_version as _gestaltdb_version,
@@ -119,9 +125,6 @@ _VALID_INDEX_MODES = {IndexMaintenanceMode.MAINTAIN.value, IndexMaintenanceMode.
 _INDEX_REBUILD_BATCH_SIZE = 100_000
 _TEMPORAL_PREFIX = b"temporal:v1:"
 _TEMPORAL_SEQUENCE_KEY = _TEMPORAL_PREFIX + b"sequence"
-_TEMPORAL_COMMIT_PREFIX = _TEMPORAL_PREFIX + b"commit:"
-_TEMPORAL_RECORD_PREFIX = _TEMPORAL_PREFIX + b"record:"
-_TEMPORAL_VISIBLE_PREFIX = _TEMPORAL_PREFIX + b"visible:"
 _TEMPORAL_INDEX_STATE_KEY = b"temporal:indexes:v1:state"
 _TEMPORAL_VERSION_INDEX = "temporal_v1_version"
 _TEMPORAL_LOGICAL_COMMIT_INDEX = "temporal_v1_logical_commit"
@@ -3217,36 +3220,27 @@ class GraphDB:
 
     @staticmethod
     def _temporal_commit_key(commit_id: int) -> bytes:
-        return _TEMPORAL_COMMIT_PREFIX + int(commit_id).to_bytes(8, "big", signed=False)
+        return _temporal_keys.temporal_commit_key(commit_id)
 
     @staticmethod
     def _temporal_visible_key(commit_id: int) -> bytes:
-        return _TEMPORAL_VISIBLE_PREFIX + int(commit_id).to_bytes(8, "big", signed=False)
+        return _temporal_keys.temporal_visible_key(commit_id)
 
     @staticmethod
     def _temporal_record_key(commit_id: int, ordinal: int) -> bytes:
-        return (
-            _TEMPORAL_RECORD_PREFIX
-            + int(commit_id).to_bytes(8, "big", signed=False)
-            + int(ordinal).to_bytes(4, "big", signed=False)
-        )
+        return _temporal_keys.temporal_record_key(commit_id, ordinal)
 
     @staticmethod
     def _temporal_locator(commit_id: int, ordinal: int) -> bytes:
-        return f"{commit_id:016x}{ordinal:08x}".encode("ascii")
+        return _temporal_keys.temporal_locator(commit_id, ordinal)
 
     @staticmethod
     def _decode_temporal_locator(locator: bytes) -> tuple[int, int]:
-        try:
-            if not isinstance(locator, bytes) or len(locator) != 24:
-                raise ValueError
-            return int(locator[:16], 16), int(locator[16:], 16)
-        except (TypeError, ValueError) as exc:
-            raise TemporalCorruptionError("invalid temporal index locator") from exc
+        return _temporal_keys.decode_temporal_locator(locator)
 
     @staticmethod
     def _temporal_instant_index_value(instant: TemporalInstant) -> bytes:
-        return instant.encode_sortable().hex().encode("ascii")
+        return _temporal_keys.temporal_instant_index_value(instant)
 
     def _load_temporal_index_state(self) -> dict | None:
         payload = self.store.get_metadata(_TEMPORAL_INDEX_STATE_KEY)

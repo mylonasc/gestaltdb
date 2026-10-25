@@ -4,6 +4,7 @@ from . import adjacency
 from . import index_lookup
 from . import index_maintenance
 from . import registry
+from . import temporal_keys
 from .entities import (
     Edge,
     GraphEntityDictSerializer,
@@ -39,4 +40,5 @@ __all__ = [
     "key_to_string",
     "node_key_to_bytes",
     "registry",
+    "temporal_keys",
 ]
