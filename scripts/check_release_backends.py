@@ -31,7 +31,7 @@ def main():
                     graph.put_node(Node("a", labels=["Person"], properties={"name": "Alice"}))
                     graph.put_node(Node("b", labels=["Person"], properties={"name": "Bob"}))
                     graph.put_edge(Edge("ab", "a", "b", properties={"type": "knows"}))
-                    claim = graph.assert_claim(subject="a", predicate="knows", object="b",
+                    claim = graph.epistemic.assert_claim(subject="a", predicate="knows", object="b",
                         agent="release-check", polarity="positive", valid=(0, 100))
                     database_id = graph.database_id
                 finally:
@@ -42,18 +42,18 @@ def main():
                     assert graph.database_id == database_id
                     assert graph.get_node(b"a").properties == {"name": "Alice"}
                     assert graph.get_edge(b"ab").properties == {"type": "knows"}
-                    visible = tuple(graph.iter_claims_as_of(valid_time=50, predicate="knows"))
+                    visible = tuple(graph.epistemic.iter_claims_as_of(valid_time=50, predicate="knows"))
                     assert len(visible) == 1 and visible[0].version_id == claim.version_id
-                    assert not tuple(graph.iter_claims_as_of(valid_time=100, predicate="knows"))
-                    graph.retract_claim(claim.logical_id, valid=(0, 100))
-                    assert not tuple(graph.iter_claims_as_of(valid_time=50, predicate="knows"))
+                    assert not tuple(graph.epistemic.iter_claims_as_of(valid_time=100, predicate="knows"))
+                    graph.epistemic.retract_claim(claim.logical_id, valid=(0, 100))
+                    assert not tuple(graph.epistemic.iter_claims_as_of(valid_time=50, predicate="knows"))
                 finally:
                     graph.close()
 
                 graph = GraphDB.open(path)
                 try:
-                    assert not tuple(graph.iter_claims_as_of(valid_time=50, predicate="knows"))
-                    assert len(tuple(graph.iter_temporal_commits())) == 2
+                    assert not tuple(graph.epistemic.iter_claims_as_of(valid_time=50, predicate="knows"))
+                    assert len(tuple(graph.temporal.iter_temporal_commits())) == 2
                 finally:
                     graph.close()
             print(f"PASS real persistence: {backend}/{serializer}", flush=True)

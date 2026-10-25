@@ -42,7 +42,7 @@ def create_legacy(path):
         graph.put_node(Node(node_id="a", labels=["Person"], properties={"name": "Alice"}))
         graph.put_node(Node(node_id="b", labels=["Group"], properties={}))
         graph.put_edge(Edge(edge_id="e", source="a", target="b", properties={"type": "MEMBER"}))
-        graph.assert_claim(subject="a", predicate="memberOf", object="b", agent="registry",
+        graph.epistemic.assert_claim(subject="a", predicate="memberOf", object="b", agent="registry",
                            polarity="positive", valid=(0, 100))
     finally:
         graph.close()
@@ -71,14 +71,14 @@ def check_persisted(path):
         assert graph.get_edge(b"e").properties["type"] == "MEMBER"
         session = start_session(graph, program, catalog, scope=scope, limits=ReasoningLimits())
         assert TypedFact("person", ["a"]) in session.facts
-        first = graph.assert_claim(subject="c", predicate="memberOf", object="b", agent="registry",
+        first = graph.epistemic.assert_claim(subject="c", predicate="memberOf", object="b", agent="registry",
                                    polarity="positive", valid=(0, 100))
         session = advance_session(graph, session, limits=ReasoningLimits()).session
         assert TypedFact("person", ["c"]) in session.facts
-        graph.correct_claim(first.logical_id, supersedes_version_id=first.version_id, valid=(0, 100))
+        graph.epistemic.correct_claim(first.logical_id, supersedes_version_id=first.version_id, valid=(0, 100))
         session = advance_session(graph, session, limits=ReasoningLimits()).session
         assert TypedFact("person", ["c"]) in session.facts
-        graph.retract_claim(first.logical_id, valid=(0, 100))
+        graph.epistemic.retract_claim(first.logical_id, valid=(0, 100))
         session = advance_session(graph, session, limits=ReasoningLimits()).session
         expected = rematerialize(program, [TypedFact("memberOf", ["a", "b"])], limits=ReasoningLimits())
         assert set(session.facts) == set(expected.facts)
