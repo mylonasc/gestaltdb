@@ -34,6 +34,70 @@ checks are not universal identity admission or concurrent atomic publication.
 
 ## Ordered implementation
 
+### Actual admitted native-source measurement continuation (#194)
+
+Dedicated `feature/re-194-native-evidence` / `re-194-native-evidence` based on
+`3ab78ab` (#366 merged after 13 exact-head checks; post-merge watcher active).
+Refreshed owner/open-PR audit found no competing implementation. Add separately
+named `native-authenticated` real-pipeline method; preserve old assertion-only
+benchmark methods and explicitly label their different source contracts. Record
+native row/candidate profiles and flushed worker-stage checkpoints so timeouts
+remain attributable without presenting partial work as successful timings.
+Small exact evidence/analytical recursive closure smoke precedes staged clean
+committed-source measurements. Retain canonical point authentication costs,
+bounded/timeout evidence and no-adoption decision; do not infer the new source's
+performance from older restricted benchmark decoder results.
+
+#366 post-merge gates passed: Ontology `40169585486` / readiness `40169585473`.
+Harness extension validation: **29 focused passed**, full optional suite
+**3,327 passed / 2 skipped** (67.21s). Planned serial staged collection from a
+clean committed tree, output outside checkout: PyRex selective 1K first/primed
+three repeats, then a 10K first-read gate (120-second worker limit), then a
+100K first-read gate only if the 10K comparison completes. Retain failures and
+stop escalation rather than spending a large matrix on a demonstrably slow
+correctness baseline. No current measurement or performance result presumed.
+
+Baseline clean-source `c7011bb` collection retained: 12/12 parity successes at
+1K first/primed (three repeats), 2/2 at the single-sample 10K first gate, and
+one 100K reference success plus a **120s native extraction timeout**. No native
+100K timing/closure result is claimed. Native extraction medians 3.290/3.269s
+at 1K first/primed versus reference 0.055/0.054s; 10K single samples 35.462s
+native versus 0.430s reference. These expose retained per-claim canonical point
+revalidation, not native scan throughput. Preserve reports before correcting
+that composition: replace N canonical point operations with the existing
+grouped canonical point iterator once per pass, still comparing every selected
+version to complete admitted native history and verifying the source before/
+after. Add omission/duplicate/substitution and bounded-read regression gates,
+then repeat the clean-source staged collection; no authentication skip.
+
+Grouped composition implemented: one canonical unfiltered point iterator per
+pass, with exact native-history conformance for every result, no missing active
+candidate, and no duplicate/old/non-version acceptance. The canonical iterator
+retains commit-group integrity checks and successful-exhaustion revalidation;
+before/after source verification is unchanged. Bounded-read regression rejects
+per-claim get operations and caps metadata reads for 100/200-row single commits.
+Validation before new measurements: 95 focused native/harness/counter tests;
+full optional suite **3,333 passed / 2 skipped** (56.66s). Repeat the original
+staged gates first; only after success collect a three-repeat first/primed 100K
+selective/sparse comparison serially. Baseline timeout evidence remains immutable.
+
+Corrected clean `1730fb7` collection completed **40/40 exact-evidence/full
+analytical closure parity observations** across 1K/10K/100K gates and repeated
+100K selective/sparse first/primed comparisons. No timeout/bound failure in the
+corrected cut. Native total 100K medians 16.725/9.589s selective and
+17.189/10.555s sparse versus ordinary 10.756/7.402s and 11.609/8.361s. Native
+worker RSS remains higher (~992--1020 MB vs 634--662 MB), not query-only memory.
+Grouping fixed the composition regression without establishing native benefit.
+Original 120s timeout and pre-correction reports retained unchanged. Full
+runtime/source/hash/P95/accounting limits in native guide/measurement register.
+#194 remains open for explicit locator/support/publication and reconciliation.
+
+Final evidence/correction validation: **3,334 passed / 2 skipped** (67.04s), full
+optional backend/serializer/oracle requirements. Executable native example,
+docs/API drift, 8/8 existing examples, Sphinx `-W`, roadmap and whitespace checks
+passed. Report tests preserve baseline failure attribution and bind all 40
+corrected samples to exact source/harness/evidence/closure and physical counters.
+
 ### Authenticated native claim source continuation (#194)
 
 Dedicated `feature/re-194-native-admission` / `re-194-native-admission`, based on

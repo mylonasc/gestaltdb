@@ -24,7 +24,29 @@ import tempfile
 import time
 
 
-METHODS = ("frontier", "indexed-python", "indexed-scc", "polars-prototype", "native-decoded", "native-locator")
+METHODS = ("frontier", "indexed-python", "indexed-scc", "polars-prototype", "native-decoded", "native-locator",
+           "native-authenticated")
+BENCHMARK_NATIVE_METHODS = ("native-decoded", "native-locator")
+
+
+def checkpoint(stage):
+    """Small flushed worker diagnostics, never substitute partial timings."""
+    print("PIPELINE_PROGRESS " + json.dumps({"stage": stage}), file=sys.stderr, flush=True)
+
+
+def last_checkpoint(stderr):
+    if isinstance(stderr, bytes):
+        stderr = stderr.decode("utf-8", errors="replace")
+    found = None
+    for line in (stderr or "").splitlines():
+        if line.startswith("PIPELINE_PROGRESS "):
+            try:
+                value = json.loads(line.removeprefix("PIPELINE_PROGRESS "))
+            except ValueError:
+                continue
+            if isinstance(value, dict) and isinstance(value.get("stage"), str):
+                found = value["stage"]
+    return found
 
 
 def entity(index):
@@ -163,6 +185,7 @@ def worker(path, rows, shape, method, cache, proofs=False, polars_max_intermedia
                 or polars_max_intermediate_rows < 1 or method != "polars-prototype" or proofs):
             raise ValueError("positive polars_max_intermediate_rows requires a Polars closure worker")
     effective_cap = (100_000 if polars_max_intermediate_rows is None else polars_max_intermediate_rows) if method == "polars-prototype" else None
+    checkpoint("imports")
     started = time.perf_counter()
     from gestaltdb.graphdb import GraphDB
     from gestaltdb.reasoning import Atom, Fact, Program, Rule, Variable, ReasoningLimits
@@ -187,12 +210,14 @@ def worker(path, rows, shape, method, cache, proofs=False, polars_max_intermedia
                              max_candidate_rows=max(10000000, rows * 50), max_iterations=1000)
     compile_s = time.perf_counter() - begin
     begin = time.perf_counter()
+    checkpoint("reopen")
     graph = GraphDB.open(path)
     reopen_s = time.perf_counter() - begin
 
     def measure():
         metrics = {}
         begin = time.perf_counter()
+        checkpoint("read-view")
         with graph.read_view(valid_time=50) as view:
             metrics["view_open_s"] = time.perf_counter() - begin
             if method == "frontier":
@@ -207,16 +232,27 @@ def worker(path, rows, shape, method, cache, proofs=False, polars_max_intermedia
                 requests = result.answer.requests
             else:
                 begin = time.perf_counter()
-                if method.startswith("native-"):
+                checkpoint("extraction")
+                if method in BENCHMARK_NATIVE_METHODS:
                     evidence, scanned = native_evidence(graph, view, method, rows)
                     context = None
                 else:
-                    with PinnedBatchedClaimSource(
+                    source_type, source_options = PinnedBatchedClaimSource, {}
+                    if method == "native-authenticated":
+                        from gestaltdb.reasoning.adapters.native_claims import PinnedNativeClaimSource, NativeClaimLimits
+                        source_type = PinnedNativeClaimSource
+                        source_options["native_limits"] = NativeClaimLimits(
+                            max_raw_rows=rows + 1, max_logical_claims=rows + 1)
+                    with source_type(
                         view, request=ExtractionRequest("default", predicates=("edge", "reach"), max_rows=rows + 1),
                         ontology_revision="benchmark-v1", selection=ClaimSelection(), mapping=ClaimMapping(),
-                        limits=ClaimSourceLimits(rows + 1)) as source:
+                        limits=ClaimSourceLimits(rows + 1), **source_options) as source:
                         evidence = [e for batch in source.iter_batches() for e in batch.evidence]
                         scanned, context = source.profile.scanned, source.context
+                        if method == "native-authenticated":
+                            profile = source.native_profile
+                            metrics.update(native_raw_rows=profile.raw_rows, native_visible_records=profile.visible_records,
+                                native_logical_claims=profile.logical_claims, native_resolved_claims=profile.resolved_claims)
                 metrics["extract_decode_verify_s"] = time.perf_counter() - begin
                 begin = time.perf_counter()
                 plan = None
@@ -225,6 +261,7 @@ def worker(path, rows, shape, method, cache, proofs=False, polars_max_intermedia
                         program.digest, context, "external-strings-v1", "positive-binary-entity-v1", INDEXED_SCC))
                 metrics["prepare_s"] = time.perf_counter() - begin
                 begin = time.perf_counter()
+                checkpoint("evaluation")
                 preferred = method if not method.startswith("native-") else "indexed-python"
                 result = execute_closure(program, evidence, plan=plan, context=context, limits=limits,
                                          polars_max_intermediate_rows=polars_max_intermediate_rows,
@@ -239,6 +276,7 @@ def worker(path, rows, shape, method, cache, proofs=False, polars_max_intermedia
                 if proofs and result.result.proofs is None:
                     raise ValueError("missing requested proof trace")
             begin = time.perf_counter()
+            checkpoint("post-verification")
             view.provenance.verify_source(graph)
             metrics["post_verify_s"] = time.perf_counter() - begin
         closure = None if method == "frontier" else result.result.facts
@@ -256,6 +294,7 @@ def worker(path, rows, shape, method, cache, proofs=False, polars_max_intermedia
             metrics["query_pipeline_s"] = time.perf_counter() - begin
         metrics.update(import_s=import_s, compile_s=compile_s, reopen_s=reopen_s)
         metrics["total_pipeline_s"] = import_s + compile_s + reopen_s + metrics["query_pipeline_s"]
+        checkpoint("parity-validation")
         chain = min(rows, 128 if shape == "dense" else 8)
         expected = tuple(sorted(Fact(entity(0), "reach", entity(i)) for i in range(1, chain + 1)))
         if answers != expected:
@@ -271,6 +310,9 @@ def worker(path, rows, shape, method, cache, proofs=False, polars_max_intermedia
             raise ValueError("analytical full-closure parity failed")
         # Conversion is included in evaluate_convert_s, never presented as free.
         return {"status": "ok", "method": method, "mode": "proofs" if proofs else "closure",
+                "source_contract": ("authenticated-native-full-history" if method == "native-authenticated" else
+                                    "benchmark-only-quiescent-assertions" if method in BENCHMARK_NATIVE_METHODS else
+                                    "authenticated-pinned-claims"),
                 "rows": rows, "shape": shape, "cache": cache,
                 "polars_max_intermediate_rows": effective_cap,
                 "cache_boundary": "first extraction on reopened handle" if cache == "first" else "same-method primed extraction; OS cache uncontrolled",
@@ -298,10 +340,11 @@ def call_worker(command, timeout):
     start = time.perf_counter()
     try:
         result = subprocess.run(command, text=True, capture_output=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return {"status": "timeout", "timeout_s": timeout}
+    except subprocess.TimeoutExpired as exc:
+        return {"status": "timeout", "timeout_s": timeout, "last_stage": last_checkpoint(exc.stderr)}
     if result.returncode:
-        return {"status": "error", "stderr": result.stderr[-4000:], "stdout": result.stdout[-1000:]}
+        return {"status": "error", "stderr": result.stderr[-4000:], "stdout": result.stdout[-1000:],
+                "last_stage": last_checkpoint(result.stderr)}
     try:
         row = json.loads(result.stdout)
     except ValueError:
@@ -337,7 +380,8 @@ def main():
             parser.error("positive Polars closure intermediate budget required")
         if args.worker not in (None, "polars-prototype") or (args.worker is None and "polars-prototype" not in args.methods):
             parser.error("intermediate budget requires a Polars method/worker")
-    if any(m.startswith("native-") for m in args.methods) and args.backend != "pyrex":
+    active_methods = (args.worker,) if args.worker is not None else args.methods
+    if any(m.startswith("native-") for m in active_methods) and args.backend != "pyrex":
         parser.error("native methods require plain PyRex")
     if args.worker:
         result = fixture(args.fixture, args.rows, args.shape, args.backend) if args.worker == "load" else worker(

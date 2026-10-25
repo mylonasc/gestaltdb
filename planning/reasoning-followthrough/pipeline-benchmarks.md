@@ -1,6 +1,7 @@
 # End-to-end extraction benchmark design — #194
 
-Status: executable repeated measurement slice; broader integration remains open. Target:
+Status: repeated measurement slices plus explicit full-record native claim
+admission delivered; broader native locator/support/publication acceptance stays open. Target:
 `feature/onto-dev-epic-2`. This scope is the remaining measurement checkbox,
 not a takeover of the already merged native-decoding implementation.
 
@@ -88,7 +89,10 @@ python -m benchmarks.reasoning_matrix --sizes 1000 10000 100000 \
   --output /tmp/opencode/onto-194-native.json
 ```
 
-Still open: a real authenticated native-claims decoder/locator integration,
+Subsequently delivered via #366: explicit authenticated full-record native claim
+admission with complete raw coverage and canonical historical point conformance.
+Its actual pipeline measurements and grouped-read correction are recorded below.
+Still open: native claim-index locator admission,
 variable entity-ID lengths with explicit oversize rejection measurements,
 recursive demand/frontier workloads, support discovery/publication accounting,
 transactional PyRex native capability expansion, and privileged OS-cold testing
@@ -162,3 +166,36 @@ See [bounded-claim-validation.md](bounded-claim-validation.md) and
 `benchmarks/results/reasoning-314-*.json` for full evidence and memory/cache limits.
 This unblocks the measured authenticated pipeline, not a native claims adapter;
 the remaining #194 integration and workload scopes stay open.
+
+### Actual admitted native source and grouped composition (2026-10-25)
+
+The `native-authenticated` harness method now invokes the production
+`PinnedNativeClaimSource`; old `native-decoded`/`native-locator` methods remain
+explicitly benchmark-only quiescent assertion paths. Source-contract labels and
+last-stage timeout diagnostics prevent accidental equivalence claims.
+
+Baseline clean `c7011bb`: 15 parity successes plus one retained 100K native
+timeout after 120s in extraction. The per-claim canonical point composition
+took ~3.29s at 1K and 35.46s at 10K, not native scan throughput. Corrected clean
+`1730fb7`: one existing grouped canonical point iterator per pass, preserving
+native complete-coverage/history conformance and canonical integrity checks;
+**40/40 successful evidence/full analytical closure parity observations** across
+the staged ladder and repeated 100K selective/sparse first/primed comparisons.
+Both source revisions share harness `220d7fc7`; baseline failures are immutable.
+
+The repeated 100K admitted-native total pipeline medians are 16.725/9.589s
+selective first/primed and 17.189/10.555s sparse, versus ordinary
+10.756/7.402s and 11.609/8.361s. Worker RSS medians ~992--1020 MB native versus
+634--662 MB ordinary include priming and parity validation. No native adoption
+is justified. This is PyRex 0.6.0, variable bounded IDs, compressible provenance,
+uncontrolled OS cache, fixed method order and three-repeat descriptive evidence,
+not independent OS-cold/scale/durability certification or all-support provenance.
+Full reports and reproduction/limits: `docs/reasoning-native-claims.rst`,
+`benchmarks/results/reasoning-re194-{admitted,grouped}-native-*.json`.
+
+Still separate: authenticated native index-locator source admission (the actual
+index-locator benchmark is not a general source), transactional native source
+capability expansion, oversize rejection measurements and support/publication
+stage accounting. Existing recursive/full-closure parity does not measure all
+these stages. Preserve #194 open until original acceptance and the explicit
+measurement register are reconciled; no automatic adoption/main/release action.

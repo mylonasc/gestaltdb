@@ -47,7 +47,7 @@ class NativeClaimProfile:
     visible_records: int
     logical_claims: int
     resolved_claims: int
-    scan_mode: str = "full-records; canonical-point-resolution; post-selection-filters"
+    scan_mode: str = "full-records; grouped-canonical-point-resolution; post-selection-filters"
 
 
 class PinnedNativeClaimSource(PinnedBatchedClaimSource):
@@ -154,24 +154,34 @@ class PinnedNativeClaimSource(PinnedBatchedClaimSource):
                                 raise ReasoningLimitError("native claim extraction exceeded max_logical_claims")
         if coverage != expected:
             raise ProvenanceMismatchError("native scan omitted authenticated temporal records")
+        candidate_count = len(candidates)
         winners = []
-        for claim_id in sorted(candidates):
+        # One existing grouped canonical point read, not N independently
+        # authenticated get_claim_as_of operations. The canonical iterator still
+        # validates complete commit groups on entry and successful exhaustion;
+        # native coverage independently checks omissions from its indexes.
+        iterator = iter(self._pinned.iter_claims_as_of(valid_time=self._time))
+        while True:
             check_cancelled(cancel)
             self._check_binding()
-            # Reuse the canonical complete logical-history selector. In
-            # particular, never let an earlier matched predicate/operation win
-            # over a later correction or retraction outside a pushed filter.
-            version = self._pinned.get_claim_as_of(claim_id, valid_time=self._time)
-            expected_winner = candidates[claim_id]
-            if expected_winner.operation is VersionOperation.RETRACT:
-                expected_winner = None
-            if version != expected_winner:
+            try:
+                version = next(iterator)
+            except StopIteration:
+                break
+            check_cancelled(cancel)
+            self._check_binding()
+            if not isinstance(version, ClaimVersion):
+                raise ProvenanceMismatchError("canonical point selection yielded an invalid claim version")
+            expected_winner = candidates.pop(version.logical_id, None)
+            if (expected_winner is None or expected_winner.operation is VersionOperation.RETRACT
+                    or version != expected_winner):
                 raise ProvenanceMismatchError("canonical point selection differs from complete native history")
-            if version is not None:
-                winners.append(version)
+            winners.append(version)
+        if any(version.operation is not VersionOperation.RETRACT for version in candidates.values()):
+            raise ProvenanceMismatchError("canonical point selection omitted complete native history")
         self.verify_source()
         check_cancelled(cancel)
-        return tuple(winners), NativeClaimProfile(raw_rows, visible_records, len(candidates), len(winners))
+        return tuple(winners), NativeClaimProfile(raw_rows, visible_records, candidate_count, len(winners))
 
     def _iter_versions(self, query, cancel=None):
         for version in self._native_versions:

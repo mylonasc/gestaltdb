@@ -265,7 +265,7 @@ def test_canonical_index_omissions_cannot_hide_native_history(graph, monkeypatch
     import gestaltdb.readview as views
     claim(graph)
     with graph.read_view(valid_time=50) as view, source(view) as native:
-        monkeypatch.setattr(views.GraphReadView, "get_claim_as_of", lambda *args, **kwargs: None)
+        monkeypatch.setattr(views.GraphReadView, "iter_claims_as_of", lambda *args, **kwargs: iter(()))
         with pytest.raises(ProvenanceMismatchError, match="complete native history"):
             evidence(native)
 
@@ -407,3 +407,51 @@ def test_native_claim_documentation_example():
     assert len(blocks) == 1
     for block in blocks:
         exec("\n".join(line[3:] if line.startswith("   ") else line for line in block.splitlines()), {})
+
+
+@pytest.mark.parametrize("fault", ["duplicate", "old-version", "non-version"])
+def test_grouped_canonical_stream_must_exactly_match_native_winners(graph, monkeypatch, fault):
+    import gestaltdb.readview as views
+    first = claim(graph)
+    graph.correct_claim(first.logical_id, confidence=.8, supersedes_version_id=first.version_id)
+    original = views.GraphReadView.iter_claims_as_of
+    def broken(view, **kwargs):
+        rows = list(original(view, **kwargs))
+        if fault == "duplicate":
+            rows.append(rows[0])
+        elif fault == "old-version":
+            rows[0] = first
+        else:
+            rows[0] = "not a version"
+        yield from rows
+    with graph.read_view(valid_time=50) as view, source(view) as native:
+        with monkeypatch.context() as patch:
+            patch.setattr(views.GraphReadView, "iter_claims_as_of", broken)
+            with pytest.raises(ProvenanceMismatchError):
+                evidence(native)
+            with pytest.raises(ReasoningError, match="no completed"):
+                _ = native.native_profile
+        assert len(evidence(native)) == 1
+
+
+@pytest.mark.parametrize("rows", [100, 200])
+def test_native_admission_uses_grouped_integrity_reads_not_per_claim_point_reads(graph, monkeypatch, rows):
+    from gestaltdb.epistemic import Claim
+    from gestaltdb.versioning import ClaimVersionWrite
+    graph.commit_versions([ClaimVersionWrite.assertion(
+        Claim(subject=f"entity{i}", predicate="p", object="b", agent="registry", polarity="positive"), (0, 100))
+        for i in range(rows)])
+    with graph.read_view(valid_time=50) as view:
+        reads = 0
+        original = graph.store.get_metadata
+        def counted(key):
+            nonlocal reads
+            reads += 1
+            return original(key)
+        def forbidden(*args, **kwargs):
+            pytest.fail("native extraction regressed to per-claim point operations")
+        monkeypatch.setattr(graph.store, "get_metadata", counted)
+        monkeypatch.setattr(graph, "get_claim_as_of", forbidden)
+        with source(view) as native:
+            assert len(evidence(native)) == rows
+        assert reads <= 80 * rows  # Full group validation remains; no O(rows²) reads.

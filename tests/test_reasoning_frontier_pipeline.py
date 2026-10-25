@@ -244,3 +244,93 @@ def test_committed_explicit_budget_reports_have_complete_exact_parity():
             else:
                 assert sample["polars_max_intermediate_rows"] is None
     assert matrix == {(backend, shape) for backend in ("lmdb", "pyrex") for shape in ("selective", "sparse")}
+
+
+@pytest.mark.parametrize("shape", ["selective", "sparse", "dense"])
+def test_actual_authenticated_native_method_is_distinct_and_exact(tmp_path, shape, monkeypatch):
+    import benchmarks.reasoning_frontier_pipeline as benchmark
+    pytest.importorskip("pyrex")
+    pytest.importorskip("pyarrow")
+    path = tmp_path / "db"
+    manifest = fixture(path, 12, shape, "pyrex")
+    (tmp_path / "fixture.json").write_text(json.dumps(manifest))
+    reference = worker(path, 12, shape, "indexed-python", "first")
+    def forbidden(*args, **kwargs):
+        pytest.fail("authenticated source used benchmark-only decoder")
+    monkeypatch.setattr(benchmark, "native_evidence", forbidden)
+    native = worker(path, 12, shape, "native-authenticated", "first")
+    warm = worker(path, 12, shape, "native-authenticated", "warm")
+    assert native["source_contract"] == warm["source_contract"] == "authenticated-native-full-history"
+    for sample in (native, warm):
+        assert sample["closure_digest"] == reference["closure_digest"]
+        assert sample["evidence_digest"] == reference["evidence_digest"] == manifest["evidence_digest"]
+        for field in ("native_raw_rows", "native_visible_records", "native_logical_claims", "native_resolved_claims"):
+            assert sample["metrics"][field] == 12
+        assert sample["status"] == "ok" and sample["polars_max_intermediate_rows"] is None
+
+
+def test_timeout_and_error_keep_worker_stage_without_partial_result():
+    code = "import sys,time; print('PIPELINE_PROGRESS {\"stage\":\"extraction\"}',file=sys.stderr,flush=True); time.sleep(5)"
+    result = call_worker([sys.executable, "-c", code], .5)
+    assert result["status"] == "timeout" and result["last_stage"] == "extraction"
+    assert "metrics" not in result and "closure_digest" not in result
+    failed = code.replace("time.sleep(5)", "raise RuntimeError('injected')")
+    result = call_worker([sys.executable, "-c", failed], 5)
+    assert result["status"] == "error" and result["last_stage"] == "extraction"
+
+
+def test_checkpoint_parser_accepts_timeout_bytes_and_ignores_noise():
+    from benchmarks.reasoning_frontier_pipeline import last_checkpoint
+    assert last_checkpoint(None) is None
+    assert last_checkpoint(b'noise\nPIPELINE_PROGRESS {"stage":"extraction"}\nPIPELINE_PROGRESS invalid\n') == "extraction"
+    assert last_checkpoint('PIPELINE_PROGRESS {"stage":1}') is None
+
+
+def test_retained_admitted_native_baseline_includes_the_attributed_100k_timeout():
+    from pathlib import Path
+    root = Path(__file__).parents[1] / "benchmarks/results"
+    for rows, successes in ((1000, 12), (10000, 2), (100000, 1)):
+        report = json.loads((root / f"reasoning-re194-admitted-native-{rows}.json").read_text())
+        assert report["revision"] == "c7011bbe2957903678b5b88e5513403bf9e682ad" and not report["dirty"]
+        assert report["harness_sha256"] == "220d7fc711eed1b79f1db07d7cfb04c9144fd12d5ced661f6e8b618d02f331d5"
+        assert sum(s["status"] == "ok" for s in report["samples"]) == successes
+        for sample in report["samples"]:
+            if sample["status"] == "ok":
+                assert sample["evidence_digest"] == report["fixture"]["evidence_digest"]
+        if rows < 100000:
+            assert report["complete"] and report["all_parity_verified"]
+        else:
+            assert not report["complete"] and not report.get("all_parity_verified", False)
+            timeout = report["samples"][-1]
+            assert timeout["status"] == "timeout" and timeout["last_stage"] == "extraction"
+            assert timeout["method"] == "native-authenticated" and timeout["timeout_s"] == 120
+            assert "metrics" not in timeout and "closure_digest" not in timeout
+
+
+def test_grouped_admitted_native_reports_retain_exact_successful_scale_parity():
+    from collections import Counter
+    from pathlib import Path
+    paths = list((Path(__file__).parents[1] / "benchmarks/results").glob("reasoning-re194-grouped-native-*.json"))
+    assert len(paths) == 5
+    cases, total = set(), 0
+    for path in paths:
+        report = json.loads(path.read_text())
+        assert report["revision"] == "1730fb79d9b1e51eb5e245a3e92434db718a9c32" and not report["dirty"]
+        assert report["harness_sha256"] == "220d7fc711eed1b79f1db07d7cfb04c9144fd12d5ced661f6e8b618d02f331d5"
+        assert report["complete"] and report["all_parity_verified"]
+        config, samples = report["configuration"], report["samples"]
+        cases.add((config["rows"], config["shape"], config["repeats"]))
+        assert config["backend"] == "pyrex" and config["timeout_s"] == 120
+        assert Counter((s["method"], s["cache"]) for s in samples) == {
+            (method, cache): config["repeats"] for method in config["methods"] for cache in config["caches"]}
+        assert len({s["closure_digest"] for s in samples}) == len({s["answer_digest"] for s in samples}) == 1
+        total += len(samples)
+        for sample in samples:
+            assert sample["status"] == "ok" and sample["evidence_digest"] == report["fixture"]["evidence_digest"]
+            assert sample["bytes_copied"] is None and sample["rss_peak_bytes"] > 0
+            if sample["method"] == "native-authenticated":
+                assert sample["source_contract"] == "authenticated-native-full-history"
+                assert sample["metrics"]["native_raw_rows"] == sample["metrics"]["native_visible_records"] == config["rows"]
+                assert sample["metrics"]["native_logical_claims"] == sample["metrics"]["native_resolved_claims"] == config["rows"]
+    assert total == 40 and cases == {(1000, "selective", 3), (10000, "selective", 1),
+                                    (100000, "selective", 1), (100000, "selective", 3), (100000, "sparse", 3)}

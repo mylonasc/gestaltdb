@@ -67,8 +67,8 @@ contiguous prefix is not silently crossed to expose later commits.
 Later commits beyond the pinned prefix do not enter this scan.
 
 Candidate claim histories are collected at the half-open valid-time point.
-The existing canonical ``get_claim_as_of`` selector resolves each complete
-logical history, including corrections and retractions; its result must agree
+The existing canonical grouped ``iter_claims_as_of`` point selector resolves
+complete logical histories, including corrections and retractions; its result must agree
 with the final eligible record in the ordered, fully admitted native history.
 Missing/inconsistent logical-index resolution therefore fails closed rather
 than omitting native evidence. Only then does the shared batched claim policy
@@ -92,8 +92,10 @@ after selection, not as physical predicate/binding pushdown. ``profile.pushdown`
 records that boundary explicitly. The raw snapshot still copies bytes from
 Arrow to Python and point selection still performs canonical index/storage
 reads. Repeated source authentication is retained, not amortized away. This
-correctness baseline makes no speedup, hard RSS or scale claim; the existing
-benchmark-only assertion decoder is not this API.
+correctness baseline makes no native speedup or hard RSS claim; the existing
+benchmark-only assertion decoder is not this API. The actual admitted-source
+measurements below retain the cost of canonical conformance rather than
+presenting the raw Arrow transfer as the whole pipeline.
 
 ``NativeClaimLimits`` bounds raw rows, logical candidate claims, commit horizon,
 native batch rows and batch bytes. All record kinds/worlds/polarities/operations
@@ -121,3 +123,87 @@ iterators but does not close the caller's view or database. Store, serializer,
 native handle and view rebinding are rejected. Inherited evaluation returns a
 complete nonpersisting closure with the existing bounded witness contract, not
 all-support provenance or a publication permit.
+
+Measured grouped-read continuation (#194)
+------------------------------------------
+
+``benchmarks.reasoning_frontier_pipeline`` explicitly names this path
+``native-authenticated``, separately from the older benchmark-only
+``native-decoded`` / ``native-locator`` assertion-fixture shortcuts. Each success
+labels its ``source_contract`` and includes separate native raw/visible/logical/
+resolved row counters. Timeouts/errors preserve the last flushed worker stage;
+that stage is diagnostic, never a successful partial timing or result.
+
+The baseline reports ``benchmarks/results/reasoning-re194-admitted-native-*.json``
+bind clean source ``c7011bbe2957903678b5b88e5513403bf9e682ad``. They retain 12
+parity successes at 1K first/primed (three repeats), two at the single-sample 10K
+first gate, and one 100K reference success plus a **120-second native extraction
+timeout**. Native extraction medians at 1K were 3.290 / 3.269s first/primed,
+versus reference 0.055 / 0.054s. The 10K native sample took 35.462s versus
+0.430s reference. No native 100K baseline timing or closure result exists.
+
+The correction composes native admission with **one existing grouped canonical
+point iterator**, not one point operation per logical ID. This retains canonical
+commit-group validation and exhaustion checks, exact native-history winner
+conformance, complete raw coverage and before/after source verification. Tests
+reject missing, duplicate, stale or malformed canonical results and cap metadata
+reads on 100/200-row single commits. No source integrity check was disabled.
+
+Five grouped reports, ``reasoning-re194-grouped-native-*.json``, bind clean
+source ``1730fb79d9b1e51eb5e245a3e92434db718a9c32`` and retain **40/40 exact
+evidence/analytical complete-closure parity successes**. Both baseline and
+corrected runs share harness SHA256
+``220d7fc711eed1b79f1db07d7cfb04c9144fd12d5ced661f6e8b618d02f331d5``;
+the native-source implementation changed, not the harness. Gates repeat the
+1K/10K/100K ladder, then separately run three repetitions per first/primed/method
+for 100K selective and sparse fixtures. Gate runs with one sample are not tail
+estimates. The repeated 100K closures contain 200028 / 300019 facts respectively.
+
+.. list-table:: Repeated 100K total pipeline seconds: median / nearest-rank P95
+   :header-rows: 1
+
+   * - Fixture/cache
+     - Ordinary indexed source
+     - Admitted native source
+   * - Selective first
+     - 10.756 / 10.979
+     - 16.725 / 17.005
+   * - Selective primed
+     - 7.402 / 7.537
+     - 9.589 / 9.602
+   * - Sparse first
+     - 11.609 / 11.851
+     - 17.189 / 17.251
+   * - Sparse primed
+     - 8.361 / 8.470
+     - 10.555 / 10.693
+
+Both methods evaluate through the unchanged indexed Python engine; the measured
+difference is source admission/composition, not a new inference engine.
+Grouped native extraction medians were 10.7--10.9s first / 7.1--7.4s primed,
+versus ordinary 5.1s. Worker high-water RSS group medians were roughly
+992--1020 decimal MB native versus 634--662 MB ordinary. RSS includes priming,
+mapped pages and parity validation, not isolated query allocations. Copied bytes
+remain uninstrumented, not zero. Native row counters exclude canonical index and
+authentication work, so do not treat them as total work or memory accounting.
+
+These serial PyRex-only fixtures use variable bounded entity IDs, compressible
+32--288-character provenance padding and 1000-write commits. Reports retain full
+runtime/platform/thread metadata (Python 3.13.11, PyRex 0.6.0, Arrow 24.0.0;
+Polars/OMP configured to one). First means reopened handle, **not OS-cold**;
+method order is fixed, cache/host effects remain uncontrolled, and three-sample
+P95 is only the maximum. Ingestion, priming and parity checking are excluded
+from total pipeline time, with separate load/worker-wall metadata retained.
+
+**Decision: no native adoption.** Grouping removes the per-claim composition
+bottleneck and permits successful 100K reads while preserving integrity, but
+the admitted native full scan is slower and uses more worker RSS than ordinary
+extraction here. Prior restricted native decoder results are not transferable
+to this source. Native index-locator admission, transactional source expansion,
+support/publication stage accounting and broader #194 acceptance remain separate.
+
+Reproduce from a clean committed tree, writing output outside the checkout:
+
+.. code-block:: console
+
+   uv run --extra backends --extra arrow --with 'pyrex-rocksdb>=0.5.0' python -m benchmarks.reasoning_frontier_pipeline --rows 100000 --shape selective --backend pyrex --methods indexed-python native-authenticated --caches first warm --repeats 3 --timeout 120 --output /tmp/opencode/native-admitted-selective.json
