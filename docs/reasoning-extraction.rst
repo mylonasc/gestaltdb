@@ -63,9 +63,12 @@ Probed capability matrix (``main`` storage backends):
    * - ``LevelDBStore``
      - ``leveldb-none``
      - index + bulk getters
-   * - ``PyRexStore(transactional=True)``
+   * - ``PyRexStore(transactional=True)`` without native scan entry points (audited 0.5.0)
      - ``pyrex-transaction-snapshot``
      - index + bulk getters
+   * - ``PyRexStore(transactional=True)`` with native scan entry points (audited 0.6.0)
+     - ``pyrex-native-snapshot`` (raw default-family scan horizon)
+     - index + bulk getters + raw ``scan_arrow``; not native claim-source admission
    * - ``PyRexStore`` (default) + ``pyrex-rocksdb>=0.5.0``
      - ``pyrex-native-snapshot``
      - index + bulk getters + ``scan_arrow``
@@ -76,6 +79,9 @@ Probed capability matrix (``main`` storage backends):
 LevelDB's multi-database layout exposes no pinned snapshot, so explicit snapshot
 requests fail closed there; use LMDB, transactional PyRex or a native-scan-capable
 PyRex handle when a pinned horizon is required.
+Native snapshot capability describes raw scan lifetime/isolation, not independent
+authentication of GraphDB visibility, complete evidence or inference correctness.
+The separate :doc:`reasoning-native-claims` adapter still admits only plain PyRex.
 
 Native Arrow scans (``pyrex-rocksdb>=0.5.0``)
 --------------------------------------------------
@@ -96,7 +102,7 @@ audit rather than assumed from the proposal:
   snapshots while fresh scans see them. Snapshots expose an integer
   ``sequence_number`` and ``is_valid()``; release is idempotent. Foreign snapshots
   fail closed with a native error. ``TransactionDB`` (transactional mode) exposes
-  neither entry point in 0.5.0, so native scans require plain handles.
+  neither entry point in 0.5.0, so native scans on that version require plain handles.
 - Re-exporting a stream raises; readers must be consumed once and scans closed
   explicitly. Consumed batches are copied out of Arrow buffers, so rows outlive
   scans, readers, snapshots and database handles.
@@ -112,12 +118,38 @@ KV pairs into facts, mapping predicates and authenticating graph visibility stay
 explicit caller/adapter work; this primitive removes Python row processing from
 KV extraction, not from payload decoding.
 
-Measured at 2000 small rows, the Python iterator is still faster
+The original 2000-small-row measurement found the Python iterator faster
 (~2.4M vs ~1.2M rows/s warm); the native path pays per-batch Arrow overhead that
-only amortizes at larger scans. No throughput speedup is claimed at this scale —
-the value is bounded memory, snapshot sharing across scans and no per-row Python
-work. 100K+ row measurements with variable values and warm/cold caches remain
-explicitly open follow-up work with no performance claim attached.
+must not be assumed to disappear at scale. No throughput speedup is claimed —
+the value is bounded batches and shared snapshot horizons. Python copying and
+payload decoding remain. Subsequent 100K variable-value and authenticated claim
+measurements retain a no-adoption decision; see
+:doc:`reasoning-frontier-benchmarks` and :doc:`reasoning-native-claims`.
+First/primed measurements do not certify an OS-cold cache.
+
+PyRex 0.6.0 upstream re-audit
+----------------------------------------
+
+``TransactionDB`` in 0.6.0 adds ``scan_arrow`` and ``create_snapshot`` with the
+same default-column-family raw schema/range/snapshot contract. Bounded tests in
+``tests/test_reasoning_native_capability_audit.py`` check exact copied rows,
+shared snapshots across subsequent writes, ``[start, stop)`` prefix intersections,
+owned/borrowed lifetime, single-use scans, row limits, commit/rollback visibility
+and isolation of uncommitted transactions. The same test set verifies 0.5.0's
+explicit unsupported transactional result, not an implicit fallback.
+
+In 0.6.0 named ``ColumnFamilyHandle`` values still expose neither entry point.
+Raw TransactionDB scans read the default family only: a same-prefix key in a
+named family does not appear. Passing a named-family handle to the native scan
+adapter fails closed; it is never silently coerced to the default family.
+No arbitrary column-family routing API is introduced here.
+
+This updates the capability matrix, not source or executor admission.
+``PinnedNativeClaimSource`` still rejects transactional handles even when raw
+scans work. No temporal/current/range provenance, publication or all-support
+guarantee follows from raw snapshot sequence/validity. Installed-runtime gates
+remain explicit; these small probes are correctness audits, not performance
+observations or a broad future-version guarantee.
 
 Decoded Evidence handoff
 ----------------------------------------
@@ -134,9 +166,9 @@ from — end-of-scan is always generator exhaustion, since filtered-out tails
 carry no batch. ``iter_locator_keys`` yields keys only for caller
 point-materialization so locator-versus-full-scan tradeoffs can be measured
 per backend (column projection would need upstream support and is documented,
-not assumed). Re-audit note: ``TransactionDB``/column families still expose
-no ``scan_arrow`` in ``pyrex-rocksdb==0.5.0``; the capability matrix above is
-unchanged. The GenerationStore question is settled by the scale decision:
+not assumed). The 0.5.0 audit found no transactional/named-family scans; the
+0.6.0 re-audit above adds raw transactional default-family coverage only.
+The GenerationStore question is settled by the scale decision:
 no bespoke native kernel — recorded defer.
 
 Batched claim source
@@ -204,5 +236,6 @@ per pass; the native scan row shows warm Python-iterator vs native throughput on
 raw KV pairs at the same scale. Batching adds bounded memory and explicit
 verification — not higher throughput. These are small synthetic transfer
 observations, not production-scale, proof-mode or incremental-update claims.
-Persistent generation maintenance and decoded native extraction remain later
-roadmap work.
+Actual source-admitted decoded native extraction and larger corrected measurements
+are described in :doc:`reasoning-native-claims`; persistent generation consumers
+have their separate admission contracts. This raw primitive does not upgrade them.

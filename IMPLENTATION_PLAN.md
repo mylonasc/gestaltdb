@@ -34,6 +34,39 @@ checks are not universal identity admission or concurrent atomic publication.
 
 ## Ordered implementation
 
+### Native upstream capability re-audit (#194)
+
+Dedicated `feature/re-194-native-capability-audit` / `re-194-native-capability-audit`
+on integration `96a9103`. #367 post-merge Ontology `40171463854` / readiness
+`40171463642` passed, following 13 green exact-head checks. Refreshed owner/PR
+audit found no competing implementation; unrelated work preserved.
+
+A bounded probe of installed PyRex 0.6.0 confirmed that TransactionDB now has
+working default-column-family `scan_arrow`/`create_snapshot`, unlike the recorded
+0.5.0 audit. Extend explicit raw snapshot/range/lifetime/transaction visibility
+gates and version-qualified capability notes; verify named column families are
+not silently scanned through the default-family API. Do not promote raw method
+availability to authenticated claim-source admission: the latter still rejects
+transactional handles. Map original #194 acceptance against delivered evidence
+and distinguish genuine remaining requirements from the broader optional
+measurement register. No backend/source default, new kernel or release change.
+
+Raw capability gates added for plain/transactional native snapshots, copied
+prefix/range rows, mutation isolation, owned/borrowed release, single-use/limits,
+uncommitted/committed/rollback visibility and default-vs-named family separation.
+Runtime 0.6.0 focused set initially 100 passed / 3 skipped (serializer extras
+not requested); 0.5.0 with serializer extras **98 passed / 5 skipped** (expected
+unavailable transactional raw contracts, explicit rejection checked). No source
+admission change. Original requirement map in `native-extraction-acceptance.md`
+separates completed larger measurements/re-audit from genuine general
+locator/pushdown gaps and the expanded optional stage register; #194 stays open.
+
+Final audit validation: with serializer extras, focused runtime 0.5.0 **98 passed /
+5 skipped**, 0.6.0 **102 passed / 1 skipped** (unsupported/not-applicable raw
+contracts labelled). Full optional 0.6.0 suite **3,343 passed / 3 skipped**
+(59.75s). Docs/API drift, 8/8 examples, corrected Sphinx `-W`, roadmap and
+whitespace gates passed. No authenticated source/executor admission broadened.
+
 ### Actual admitted native-source measurement continuation (#194)
 
 Dedicated `feature/re-194-native-evidence` / `re-194-native-evidence` based on
