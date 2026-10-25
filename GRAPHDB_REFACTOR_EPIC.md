@@ -13,14 +13,85 @@ without changing observable behavior, storage format, or public imports.
 Success means cohesive, independently understandable capabilities — not merely
 satisfying the 800-line module ceiling.
 
+## Review-driven staged architecture plan
+
+The review in `refactor_help.md` is accepted: file extraction and the initial
+read-only history capability have not resolved GraphDB's SRP violations.
+The review's illustrative line/method counts are not the current inventory.
+Its architectural findings, rather than those counts, drive this plan.
+
+### Acceptance rules for every stage
+
+- A service owns its state and operations, not just a callback to GraphDB.
+  Standalone construction and consumer tests must prove the boundary.
+- Transaction/snapshot children bind their own stores and caches. A generic
+  session is storage coordination only, not a new home for every domain API.
+- Preserve old facade signatures, pickle paths, error/visibility contracts,
+  fault-injection seams, native ingestion and array sampling paths.
+- No blanket transaction decorator: schema changes with post-commit parent
+  updates, temporal publication, and read generators have different semantics.
+- Lazy imports alone are not proof of a cycle: distinguish optional-dependency
+  loading from inward dependencies before changing import topology.
+
+### Stage A — concurrency ownership (first implementation)
+
+Create a dedicated reentrant file-lock abstraction and injectable lock manager.
+Canonical lock-file paths must share a live lock across database handles and
+threads; live waiters/holders keep strong references, but unused registry entries
+must be reclaimable. Use the same abstraction for identity, temporal writers
+and durable-session CAS. Remove duplicated OS-locking logic and avoid a single
+process-wide identity mutex serializing unrelated database paths. Validate
+nesting, canonical-path aliases, exclusion, exceptional cleanup, registry
+reclamation and existing multi-process/backend durability tests.
+
+### Stage B — store-bound session and current-node repository
+
+Introduce a small storage session carrying codec/config/cache and explicit
+transaction coordination. Add a node repository with direct read/write/bulk
+operations; `graph.nodes` and legacy methods delegate to that repository.
+The repository's ordinary write boundary must work without constructing or
+calling GraphDB. Validate real-backend rollback/index updates, transaction-child
+binding, and snapshot-local state. Edge deletion cascades remain a documented
+dependency on current-edge operations, not temporal claims.
+
+### Stage C — current edges, indexes and ingestion
+
+Migrate edge/index repositories to the same scope binding; replace duplicated
+ordinary transaction checks through a session template, not dynamic method-name
+redispatch. Separate DDL's post-commit config updates. Build `graph.ingest` over
+current repositories/native batch capabilities, retaining native fast paths;
+move callers to the narrower interfaces and measure ingestion/sampling parity.
+
+### Stage D — guarded temporal and claim services
+
+Introduce `graph.temporal` owning reader + guarded writer + recovery interfaces.
+Move sequence/publication/transaction orchestration off GraphDB, then migrate
+adapters to these contracts. Never expose the unguarded TemporalCommitter as a
+public replacement. Separate authenticated source identity and lifetime from
+GraphReadView's graph reference. `graph.history` remains read-only and distinct
+from mutable-current snapshots, authenticated evidence and publication rights.
+
+### Stage E — rules/modal and optional consumers
+
+Build `graph.rules` over claim/history/commit protocols, not GraphDB. Move
+Cypher, sampling and visualization clients to minimal structural protocols,
+checking actual method requirements rather than asserting universal executor
+substitution. Keep compatibility wrappers; new code should consume services.
+
+Each stage requires backend tests, architectural dependency tests, docs/API
+checks and the size ratchet. Stage completion means migrated callers and owned
+boundaries, not a smaller facade. No merge, version bump or publication is
+authorized by this plan.
+
 ## Non-goals
 
-- No public API redesign in this epic. `from gestaltdb.graphdb import GraphDB,
-  Node, Edge` keeps working. New capability surfaces (e.g. `graph.claims`)
-  are explicitly deferred until internals stabilize.
+- No breaking public API redesign. `from gestaltdb.graphdb import GraphDB,
+  Node, Edge` keeps working. Additive subsystem accessors are now in scope;
+  old facade methods remain compatibility wrappers.
 - No storage-format, logical-identity, or commit-visibility changes.
-- No “improvements” to transaction, locking, snapshot, or publication
-  semantics during extraction.
+- No change to transaction atomicity, snapshot consistency or publication
+  ordering. Lock ownership/registry reclamation may improve with explicit
+  concurrency tests; do not weaken inter-process coordination.
 - No behavior-preserving-only rewrite of the other seven oversized modules.
   They get their own plans after GraphDB demonstrates the pattern.
 
