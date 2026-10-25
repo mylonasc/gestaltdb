@@ -9,6 +9,7 @@ from . import ingest_edges
 from . import ingest_nodes
 from . import ingest_support
 from . import index_rebuild
+from . import lifecycle
 from . import registry
 from . import sampling
 from . import stored_rules
@@ -57,6 +58,7 @@ __all__ = [
     "ingest_nodes",
     "ingest_support",
     "index_rebuild",
+    "lifecycle",
     "key_to_string",
     "node_key_to_bytes",
     "node_records",

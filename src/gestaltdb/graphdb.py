@@ -9,7 +9,6 @@ import os
 import random
 import shutil
 import threading
-import uuid
 import base64
 from collections.abc import Mapping
 from contextlib import ExitStack, contextmanager
@@ -107,10 +106,12 @@ from ._graph.temporal_indexes import (
     VERSION_INDEX as _TEMPORAL_VERSION_INDEX,
 )
 from ._graph import temporal_keys as _temporal_keys
+from ._graph import lifecycle as _lifecycle
 from ._graph import stored_rules as _stored_rules
 from ._graph import truth_maintenance as _truth_maintenance
 from ._graph.stored_rules import RULE_CATALOG_KEY as _RULE_CATALOG_KEY
 from ._graph.stored_rules import RULE_ENGINE_AGENT as _RULE_ENGINE_AGENT
+from ._graph.lifecycle import MANIFEST_FILENAME, MANIFEST_FORMAT_VERSION
 from ._graph.truth_maintenance import TRUTH_MAINTENANCE_STATE_KEY as _TRUTH_MAINTENANCE_STATE_KEY
 from ._graph import temporal_entity_writes as _temporal_entity_writes
 from ._graph import temporal_reads as _temporal_reads
@@ -155,8 +156,6 @@ _NODE_CONSTRAINTS_METADATA_KEY = b"schema:constraints:nodes"
 _STALE_INDEXES_METADATA_KEY = b"schema:indexes:stale"
 _MANIFEST_METADATA_KEY = b"schema:manifest"
 _DATABASE_ID_METADATA_KEY = b"schema:database_identity:v1"
-MANIFEST_FILENAME = "gestaltdb_manifest.json"
-MANIFEST_FORMAT_VERSION = 1
 _VALID_INDEX_MODES = {IndexMaintenanceMode.MAINTAIN.value, IndexMaintenanceMode.DEFER.value}
 _INDEX_REBUILD_BATCH_SIZE = 100_000
 _TEMPORAL_WRITER_LOCK_FILENAME = ".gestaltdb_temporal_writer.lock"
@@ -420,61 +419,16 @@ class GraphDB:
 
     def _initialize_database_id(self, expected: str | None) -> str:
         """Persist or reconcile the database UUID under a local filesystem lock."""
-        if expected is not None:
-            try:
-                expected = str(uuid.UUID(expected))
-            except (AttributeError, TypeError, ValueError) as exc:
-                raise ValueError("invalid database identity in root manifest") from exc
-        lock_handle = None
-        with _DATABASE_ID_LOCK:
-            if self._store_path is not None:
-                lock_path = self._store_path / ".gestaltdb_identity.lock"
-                lock_handle = lock_path.open("a+b")
-                if os.name == "posix":
-                    import fcntl
-
-                    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
-                elif os.name == "nt":  # pragma: no cover - Windows-only
-                    import msvcrt
-
-                    lock_handle.write(b"\0")
-                    lock_handle.flush()
-                    lock_handle.seek(0)
-                    msvcrt.locking(lock_handle.fileno(), msvcrt.LK_LOCK, 1)
-                else:  # pragma: no cover - unsupported platform
-                    raise RuntimeError("database identity locking is unsupported on this platform")
-            try:
-                return self._initialize_database_id_locked(expected)
-            finally:
-                if lock_handle is not None:
-                    if os.name == "posix":
-                        import fcntl
-
-                        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
-                    elif os.name == "nt":  # pragma: no cover - Windows-only
-                        import msvcrt
-
-                        lock_handle.seek(0)
-                        msvcrt.locking(lock_handle.fileno(), msvcrt.LK_UNLCK, 1)
-                    lock_handle.close()
+        value = _lifecycle.initialize_database_id(
+            self.store, self._store_path, _DATABASE_ID_LOCK,
+            _DATABASE_ID_METADATA_KEY, expected,
+        )
+        self._database_id = value
+        return value
 
     def _initialize_database_id_locked(self, expected: str | None) -> str:
-        try:
-            payload = self.store.get_metadata(_DATABASE_ID_METADATA_KEY)
-        except NotImplementedError as exc:
-            raise ValueError("the configured store cannot persist a database identity") from exc
-        if payload is None:
-            if expected is None and self._store_path is None:
-                raise ValueError("cannot assign a database identity without a managed store path; call save_manifest(path=...)")
-            candidate = expected or str(uuid.uuid4())
-            self.store.put_metadata(_DATABASE_ID_METADATA_KEY, candidate.encode("ascii"))
-            payload = self.store.get_metadata(_DATABASE_ID_METADATA_KEY)
-        try:
-            value = str(uuid.UUID(payload.decode("ascii")))
-        except (AttributeError, UnicodeDecodeError, ValueError) as exc:
-            raise ValueError("invalid persisted database identity") from exc
-        if expected is not None and value != expected:
-            raise ValueError("persisted database identity does not match root manifest")
+        value = _lifecycle.initialize_database_id_locked(
+            self.store, self._store_path, _DATABASE_ID_METADATA_KEY, expected)
         self._database_id = value
         return value
 
@@ -515,27 +469,15 @@ class GraphDB:
 
     @staticmethod
     def _backend_class(name: str):
-        registry = _backend_registry()
-        if name not in registry:
-            allowed = ", ".join(sorted(registry))
-            raise ValueError(f"unknown GestaltDB backend '{name}'. Expected one of: {allowed}")
-        return registry[name]
+        return _lifecycle.backend_class(name)
 
     @staticmethod
     def _serializer_class(name: str):
-        registry = _serializer_registry()
-        if name not in registry:
-            allowed = ", ".join(sorted(registry))
-            raise ValueError(f"unknown GestaltDB serializer '{name}'. Expected one of: {allowed}")
-        return registry[name]
+        return _lifecycle.serializer_class(name)
 
     @staticmethod
     def _read_manifest(path: Path) -> dict:
-        with path.open("r", encoding="utf-8") as handle:
-            manifest = json.load(handle)
-        if manifest.get("format_version") != MANIFEST_FORMAT_VERSION:
-            raise ValueError("unsupported GestaltDB manifest format version")
-        return manifest
+        return _lifecycle.read_manifest_file(path)
 
     def _manifest_from_current(self, *, created_at: str | None = None) -> dict:
         backend_name = self._backend_name or _registry_name_for_instance(self.store, _backend_registry())
