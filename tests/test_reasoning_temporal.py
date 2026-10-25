@@ -4,7 +4,7 @@ import random
 
 import pytest
 
-from gestaltdb.reasoning.equality import EqualityScope, FunctionalProperty, SameAs, canonicalize
+from gestaltdb.reasoning.equality import EqualityScope, FunctionalProperty, SameAs
 from gestaltdb.reasoning.intervals import Interval, IntervalSet
 from gestaltdb.reasoning.model import (
     ReasoningCancelledError,
@@ -20,6 +20,7 @@ from gestaltdb.reasoning.temporal_closure import (
     canonicalize_segments,
     change_segments,
     evaluate_range,
+    verify_closure,
 )
 from gestaltdb.reasoning.typed import GenericEngine, GenericProgram, GenericRule, TypedAtom, TypedFact
 
@@ -116,8 +117,10 @@ def test_temporal_negation_and_budgets_fail_closed():
     facts = [TemporalFact(TypedFact("edge", ["a", "b"]), span(0, 5))]
     negated = GenericProgram([GenericRule("n", [TypedAtom("p", [X])], [], TypedAtom("q", [X]),
                                           [TypedAtom("m", [X])])], closed=["m"])
-    with pytest.raises(ReasoningError, match="negation"):
-        evaluate_range(negated, [], limits=ReasoningLimits())
+    scoped = evaluate_range(negated, [TemporalFact(TypedFact("p", ["a"]), span(0, 5))],
+                            limits=ReasoningLimits())
+    assert scoped.answers(TypedFact("q", ["a"])).intervals == (Interval(0, 5),)
+    assert verify_closure(negated, scoped, limits=ReasoningLimits()).derivations == 1
     with pytest.raises(ReasoningCancelledError):
         evaluate_range(prog, facts, limits=ReasoningLimits(), cancel=lambda: True)
     crowded = [TemporalFact(TypedFact("edge", [f"n{i}"]), span(i, i + 1)) for i in range(4)]

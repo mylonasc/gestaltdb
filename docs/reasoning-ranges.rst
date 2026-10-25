@@ -17,6 +17,19 @@ unchanged rule IDs), or legacy closures without a digest, trigger a full rebuild
 with zero reused segments. Manually constructed unbound closures can still be
 verified by fresh evaluation; they are never admitted as reusable caches.
 
+Stratified negation and aggregates (#393)
+-----------------------------------------
+
+Range evaluation covers the full evaluated fragment, not just positive
+rules. Each segment runs ordinary point evaluation — stratified when the
+program uses negation or closed scopes — so absence holds exactly on the
+segments where the disqualifying fact is inactive, and aggregates group
+exactly the rows active on their segment. Pure-positive programs keep the
+legacy all-supports evidence path; everything else records first-witness
+evidence (premises, scoped absence, aggregate operands) from proof traces.
+``verify_closure`` point-checks with the same engine choice and additionally
+verifies absence probes and aggregate operands on their segments.
+
 .. code-block:: python
 
    from gestaltdb.reasoning import evaluate_range, update_range

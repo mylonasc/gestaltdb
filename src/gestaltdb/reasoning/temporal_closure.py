@@ -9,9 +9,11 @@ per-interval evidence. Point queries over the closure agree with
 independent point evaluation by construction.
 
 Equality is time-scoped: representatives rebuild per segment, so entities
-equal during one interval never merge globally. Temporal negation,
-aggregates and closed scopes fail closed; per-point stratified evaluation
-is the caller's explicit fallback, never a silent mode switch.
+equal during one interval never merge globally. Stratified negation over
+declared closed scopes and nonrecursive aggregates evaluate per segment —
+each segment runs ordinary point evaluation (stratified when needed) over
+its uniform active inputs — with per-interval absence and aggregate
+evidence. Per-point evaluation parity holds by construction.
 """
 
 from __future__ import annotations
@@ -21,9 +23,10 @@ from typing import Callable, Iterable
 
 from .equality import CanonicalMapping, EqualityScope, canonicalize
 from .intervals import Interval, IntervalSet
-from .maintenance import _check_supported, _find_all_supports
+from .maintenance import _find_all_supports
 from .model import ReasoningError, ReasoningLimitError, ReasoningLimits, _text, check_cancelled
 from .typed import GenericEngine, GenericProgram, TypedFact, _sort_key, _TypedIndex
+from .typed_proofs import AbsenceCheck, AggregateDerivation
 
 
 @dataclass(frozen=True)
@@ -44,12 +47,20 @@ class TemporalFact:
 
 @dataclass(frozen=True)
 class TemporalDerivation:
-    """One exact support for a fact on one elementary segment."""
+    """One exact support for a fact on one elementary segment.
+
+    ``absence`` records successful closed-scope probes behind stratified
+    derivations; ``aggregates`` carries the grouped operations with their
+    contributing facts. Aggregate conclusions carry operands instead of
+    positional premises.
+    """
 
     fact: TypedFact
     segment: Interval
     rule_id: str
     premises: tuple[TypedFact, ...]
+    absence: tuple[AbsenceCheck, ...] = ()
+    aggregates: tuple[AggregateDerivation, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.fact, TypedFact):
@@ -57,11 +68,21 @@ class TemporalDerivation:
         if not isinstance(self.segment, Interval):
             raise ReasoningError("segment must be an Interval")
         _text(self.rule_id, "rule_id")
-        if not isinstance(self.premises, (tuple, list)) or not self.premises:
-            raise ReasoningError("premises must be non-empty")
+        if not isinstance(self.premises, (tuple, list)):
+            raise ReasoningError("premises must be a tuple or list")
         if not all(isinstance(item, TypedFact) for item in self.premises):
             raise ReasoningError("premises must contain only TypedFact values")
         object.__setattr__(self, "premises", tuple(sorted(set(self.premises), key=_sort_key)))
+        if not isinstance(self.absence, (tuple, list)) or not all(
+                isinstance(item, AbsenceCheck) for item in self.absence):
+            raise ReasoningError("absence must contain only AbsenceCheck values")
+        object.__setattr__(self, "absence", tuple(self.absence))
+        if not isinstance(self.aggregates, (tuple, list)) or not all(
+                isinstance(item, AggregateDerivation) for item in self.aggregates):
+            raise ReasoningError("aggregates must contain only AggregateDerivation values")
+        object.__setattr__(self, "aggregates", tuple(self.aggregates))
+        if not self.premises and not self.aggregates:
+            raise ReasoningError("premises must be non-empty without aggregate evidence")
 
 
 @dataclass(frozen=True)
@@ -214,14 +235,14 @@ def verify_closure(program: GenericProgram, closure: TemporalClosure, *,
         raise ReasoningError("closure must be a TemporalClosure")
     if not isinstance(limits, ReasoningLimits):
         raise ReasoningError("limits must be ReasoningLimits")
-    _check_supported(program)
     check_cancelled(cancel)
     if closure.program_digest is not None and closure.program_digest != program.digest:
         raise ReasoningError("closure program identity drifted; rematerialize explicitly")
     expected_segments = change_segments(closure.base, max_segments=max(1, len(closure.segments)))
     if expected_segments != closure.segments:
         raise ReasoningError("closure segments drifted from base validity; rematerialize explicitly")
-    rule_ids = {rule.rule_id for rule in program.rules}
+    rule_ids = {rule.rule_id for rule in (*program.rules, *program.aggregates)}
+    use_stratified = bool(program.closed) or any(rule.negated for rule in program.rules)
     points = 0
     # One sample per segment suffices: segments tile maximal constant-active
     # intervals, so every point in a segment shares its active set and closure.
@@ -229,7 +250,11 @@ def verify_closure(program: GenericProgram, closure: TemporalClosure, *,
         check_cancelled(cancel)
         point = _sample(segment)
         active = [item.fact for item in closure.base if point in item.valid]
-        fresh = set(GenericEngine().evaluate(program, active, limits=limits, cancel=cancel).facts)
+        if use_stratified:
+            run = GenericEngine().evaluate_stratified(program, active, limits=limits, cancel=cancel)
+            fresh = set(run.result.facts)
+        else:
+            fresh = set(GenericEngine().evaluate(program, active, limits=limits, cancel=cancel).facts)
         if set(closure.at(point)) != fresh:
             raise ReasoningError("point closure mismatch; rematerialize explicitly")
         points += 1
@@ -238,10 +263,21 @@ def verify_closure(program: GenericProgram, closure: TemporalClosure, *,
             raise ReasoningError("derivation references an unknown segment")
         if derivation.rule_id not in rule_ids:
             raise ReasoningError(f"unknown rule in derivation: {derivation.rule_id!r}")
-        if derivation.fact not in closure.at(_sample(derivation.segment)):
+        covered = closure.at(_sample(derivation.segment))
+        if derivation.fact not in covered:
             raise ReasoningError("derivation fact not covered by its own segment")
-        if any(premise not in closure.at(_sample(derivation.segment)) for premise in derivation.premises):
+        if any(premise not in covered for premise in derivation.premises):
             raise ReasoningError("derivation premises not active on their segment")
+        for probe in derivation.absence:
+            if probe.scope != tuple(sorted(program.closed)):
+                raise ReasoningError("absence scope drifted from the program declaration")
+            if TypedFact(probe.predicate, probe.args) in covered:
+                raise ReasoningError("absence probe is present on its segment")
+        for item in derivation.aggregates:
+            if item.rule_id != derivation.rule_id:
+                raise ReasoningError("aggregate evidence references another rule")
+            if any(operand not in covered for operand in item.operands):
+                raise ReasoningError("aggregate operands not active on their segment")
     for item in closure.base:
         uncovered = item.valid.difference(closure.answers(item.fact))
         if uncovered.intervals:
@@ -255,6 +291,56 @@ def _sample(segment: Interval) -> int:
     if segment.end is not None:
         return segment.end - 1
     return 0
+
+
+def _range_needs_trace(program: GenericProgram) -> bool:
+    """Trace-evidence path for negation, closed scopes and aggregates.
+
+    Pure-positive programs keep the legacy all-supports evidence path
+    byte-identical; everything else records first-witness evidence from
+    proof traces. Both paths evaluate each segment as an independent point
+    closure, so point/range parity holds by construction.
+    """
+    return (bool(program.closed) or bool(program.aggregates)
+            or any(rule.negated for rule in program.rules))
+
+
+def _segment_derivations(program: GenericProgram, active: list[TypedFact], segment: Interval, *,
+                         limits: ReasoningLimits, max_supports: int, work: list,
+                         cancel=None) -> list[TemporalDerivation]:
+    """Per-segment closure with evidence; legacy or trace path by program shape."""
+    use_stratified = bool(program.closed) or any(rule.negated for rule in program.rules)
+    need_trace = _range_needs_trace(program)
+    if use_stratified:
+        run = GenericEngine().evaluate_stratified(program, active, limits=limits,
+                                                  collect_proofs=True, cancel=cancel)
+        result, trace = run.result, run.proofs
+    elif need_trace:
+        result = GenericEngine().evaluate(program, active, limits=limits,
+                                          collect_proofs=True, cancel=cancel)
+        trace = result.proofs
+    else:
+        result = GenericEngine().evaluate(program, active, limits=limits, cancel=cancel)
+        trace = None
+    fresh = set(result.facts) - set(active)
+    if not fresh:
+        return []
+    if not need_trace:
+        full = _TypedIndex(sorted(set(result.facts), key=_sort_key))
+        supports: list = []
+        for target in sorted(fresh, key=_sort_key):
+            _find_all_supports(program, full, target, limits=limits, max_supports=max_supports,
+                               work=work, seen=set(), supports=supports, cancel=cancel)
+        return [TemporalDerivation(support.fact, segment, support.rule_id, support.premises)
+                for support in supports]
+    assert trace is not None
+    derivations = []
+    for node in trace.nodes:
+        if node.rule is None or node.fact not in fresh:
+            continue
+        derivations.append(TemporalDerivation(node.fact, segment, node.rule.rule_id,
+                                              node.premises, node.absence, node.aggregates))
+    return derivations
 
 
 def _scheduled_active(items: list, *, max_rows: int, max_events: int,
@@ -304,7 +390,6 @@ def update_range(program: GenericProgram, closure: TemporalClosure, new_base: It
         raise ReasoningError("limits must be ReasoningLimits")
     if not isinstance(incremental, bool):
         raise ReasoningError("incremental must be a bool")
-    _check_supported(program)
     check_cancelled(cancel)
     try:
         items = list(new_base)
@@ -343,27 +428,21 @@ def update_range(program: GenericProgram, closure: TemporalClosure, new_base: It
         key = frozenset(active)
         if key in old_by_active:
             for derivation in old_by_active[key]:
-                entry = (derivation.fact, segment, derivation.rule_id, derivation.premises)
+                entry = (derivation.fact, segment, derivation.rule_id, derivation.premises,
+                         derivation.absence, derivation.aggregates)
                 if entry not in seen:
                     seen.add(entry)
                     derivations.append(TemporalDerivation(*entry))
             reused += 1
             continue
         recomputed += 1
-        result = GenericEngine().evaluate(program, active, limits=limits, cancel=cancel)
-        fresh = set(result.facts) - set(active)
-        if not fresh:
-            continue
-        full = _TypedIndex(sorted(set(result.facts), key=_sort_key))
-        supports: list = []
-        for target in sorted(fresh, key=_sort_key):
-            _find_all_supports(program, full, target, limits=limits, max_supports=max_supports,
-                                work=work, seen=set(), supports=supports, cancel=cancel)
-        for support in supports:
-            entry = (support.fact, segment, support.rule_id, support.premises)
+        for derivation in _segment_derivations(program, active, segment, limits=limits,
+                                              max_supports=max_supports, work=work, cancel=cancel):
+            entry = (derivation.fact, derivation.segment, derivation.rule_id,
+                     derivation.premises, derivation.absence, derivation.aggregates)
             if entry not in seen:
                 seen.add(entry)
-                derivations.append(TemporalDerivation(*entry))
+                derivations.append(derivation)
                 if len(derivations) > max_supports:
                     raise ReasoningLimitError("range update exceeded max_supports")
     fresh_closure = TemporalClosure(segments, tuple(items), tuple(derivations), program.digest)
@@ -380,9 +459,12 @@ def evaluate_range(program: GenericProgram, facts: Iterable[TemporalFact], *,
                    cancel: Callable[[], bool] | None = None) -> TemporalClosure:
     """Evaluate every change segment; union per-segment closures with evidence.
 
-    Temporal negation, aggregates and closed scopes fail closed: range
-    evaluation covers the positive fragment only, and per-point stratified
-    evaluation is the documented explicit fallback.
+    Each segment runs ordinary point evaluation over its uniform active
+    inputs — stratified when the program uses negation or closed scopes —
+    so stratified negation and nonrecursive aggregates evaluate with
+    per-interval absence and aggregate evidence. Derivations record only
+    what actually fired on their segment: gaps stay gaps, and empty groups
+    infer no zero counts.
 
     Active inputs are scheduled once with an interval event sweep instead of
     scanning every input at every segment: each row contributes add/remove
@@ -397,7 +479,6 @@ def evaluate_range(program: GenericProgram, facts: Iterable[TemporalFact], *,
         raise ReasoningError("limits must be ReasoningLimits")
     if isinstance(max_supports, bool) or not isinstance(max_supports, int) or max_supports < 1:
         raise ReasoningError("max_supports must be a positive integer")
-    _check_supported(program)
     check_cancelled(cancel)
     try:
         items = list(facts)
@@ -414,21 +495,13 @@ def evaluate_range(program: GenericProgram, facts: Iterable[TemporalFact], *,
     work = [0]
     for segment, active in scheduled:
         check_cancelled(cancel)
-        result = GenericEngine().evaluate(program, active, limits=limits, cancel=cancel)
-        fresh = set(result.facts) - set(active)
-        if not fresh:
-            continue
-        full = _TypedIndex(sorted(set(result.facts), key=_sort_key))
-        supports: list = []
-        for target in sorted(fresh, key=_sort_key):
-            _find_all_supports(program, full, target, limits=limits, max_supports=max_supports,
-                                work=work, seen=set(), supports=supports, cancel=cancel)
-        for support in supports:
-            key = (support.fact, segment, support.rule_id, support.premises)
+        for derivation in _segment_derivations(program, active, segment, limits=limits,
+                                              max_supports=max_supports, work=work, cancel=cancel):
+            key = (derivation.fact, derivation.segment, derivation.rule_id,
+                   derivation.premises, derivation.absence, derivation.aggregates)
             if key not in seen:
                 seen.add(key)
-                derivations.append(TemporalDerivation(
-                    support.fact, segment, support.rule_id, support.premises))
+                derivations.append(derivation)
                 if len(derivations) > max_supports:
                     raise ReasoningLimitError("range evaluation exceeded max_supports")
     return TemporalClosure(segments, tuple(items), tuple(derivations), program.digest)
