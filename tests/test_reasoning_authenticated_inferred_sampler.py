@@ -1,9 +1,12 @@
 """Authenticated input/state, independent artifact reconstruction and immutability."""
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 import hashlib
 import json
 from pathlib import Path
+import re
+import subprocess
+import sys
 
 import numpy as np
 import pytest
@@ -81,6 +84,9 @@ def test_exact_pins_fail_without_writing(source, dimension):
     graph, session, binding, path = source
     identity = binding.identity
     kwargs = pins(binding)
+    good = path.parent / "good"
+    build(graph, session, good, **kwargs)
+    before = bytes_of(good)
     if dimension == "session_digest":
         kwargs["expected_session_digest"] = "sha256:" + "0" * 64
     elif dimension in identity.source.__dataclass_fields__:
@@ -92,6 +98,9 @@ def test_exact_pins_fail_without_writing(source, dimension):
         kwargs["expected_generation"] = replace(identity, **{dimension: "other"})
     with pytest.raises(ReasoningError):
         build(graph, session, path, **kwargs)
+    with pytest.raises(ReasoningError):
+        load(graph, session, good, **kwargs)
+    assert bytes_of(good) == before
     assert not path.exists()
 
 
@@ -211,3 +220,189 @@ def test_source_move_after_staging_fails_before_install(source, monkeypatch):
     with pytest.raises(ProvenanceMismatchError, match="horizon moved"):
         build(graph, session, path, **pins(binding))
     assert not path.exists() and not list(path.parent.glob(".artifact.inferred.*"))
+
+
+def test_competing_builder_waits_and_cannot_replace_first_artifact(source, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    import gestaltdb.reasoning.adapters.authenticated_inferred_sampler as adapter
+    graph, session, binding, path = source
+    entered, release, attempted, finished = Event(), Event(), Event(), Event()
+    original = adapter._reconstruct
+    def paused(*args):
+        entered.set()
+        assert release.wait(5)
+        return original(*args)
+    def competitor():
+        attempted.set()
+        try:
+            return build(graph, session, path, **pins(binding))
+        finally:
+            finished.set()
+    monkeypatch.setattr(adapter, "_reconstruct", paused)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(build, graph, session, path, **pins(binding))
+        try:
+            assert entered.wait(5)
+            second = pool.submit(competitor)
+            assert attempted.wait(5) and not finished.wait(0.05)
+        finally:
+            release.set()
+        first.result(timeout=5)
+        before = bytes_of(path)
+        with pytest.raises(ReasoningError, match="already exists"):
+            second.result(timeout=5)
+    assert bytes_of(path) == before
+
+
+def test_projection_and_hydration_cancellation_are_cooperative(source, monkeypatch):
+    from gestaltdb.reasoning.adapters.inferred_sampler import _project_inferred
+    import gestaltdb.reasoning.adapters.authenticated_inferred_sampler as adapter
+    graph, session, binding, path = source
+    seen = []
+    def cancel():
+        seen.append(True)
+        return len(seen) > 2
+    with pytest.raises(ReasoningCancelledError):
+        _project_inferred(session, "person", ("memberOf",), cancel=cancel)
+    build(graph, session, path, **pins(binding))
+    before = bytes_of(path)
+    staged = []
+    original = adapter._reconstruct
+    def ready(*args):
+        result = original(*args)
+        staged.append(True)
+        return result
+    monkeypatch.setattr(adapter, "_reconstruct", ready)
+    with pytest.raises(ReasoningCancelledError):
+        load(graph, session, path, **pins(binding), cancel=lambda: bool(staged))
+    assert bytes_of(path) == before
+
+
+@pytest.mark.parametrize("mutation", ["extra", "symlink", "truncated", "bytes"])
+def test_noncanonical_or_oversized_artifacts_fail_without_repair(source, mutation):
+    graph, session, binding, path = source
+    build(graph, session, path, **pins(binding))
+    kwargs = {}
+    if mutation == "extra":
+        (path / "surprise").write_text("not admitted")
+    elif mutation == "symlink":
+        file = path / "src_int.npy"
+        original = path.parent / "src_int.npy"
+        file.rename(original)
+        file.symlink_to(original)
+    elif mutation == "truncated":
+        (path / "metadata.json").write_bytes(b"{")
+    else:
+        kwargs["limits"] = InferredSnapshotLimits(max_bytes=1)
+    before = bytes_of(path)
+    with pytest.raises(ReasoningError):
+        load(graph, session, path, **pins(binding), **kwargs)
+    assert bytes_of(path) == before
+
+
+def test_failed_install_cleans_only_own_stage(source, monkeypatch):
+    import gestaltdb.reasoning.adapters.authenticated_inferred_sampler as adapter
+    graph, session, binding, path = source
+    user_dir = path.parent / ".artifact.inferred.user"
+    user_dir.mkdir()
+    (user_dir / "keep").write_text("keep")
+    def failed(*args):
+        raise OSError("rename failed")
+    monkeypatch.setattr(adapter.os, "rename", failed)
+    with pytest.raises(OSError, match="rename failed"):
+        build(graph, session, path, **pins(binding))
+    assert not path.exists()
+    assert list(path.parent.glob(".artifact.inferred.*")) == [user_dir]
+    assert (user_dir / "keep").read_text() == "keep"
+
+
+@pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
+def test_hydration_after_independent_process_restart(tmp_path, backend, module):
+    pytest.importorskip(module)
+    from gestaltdb.reasoning.adapters.session_store import save_session
+    graph = GraphDB.create(tmp_path / "db", backend=backend, serializer="json")
+    try:
+        x, y = Variable("x"), Variable("y")
+        program = GenericProgram([GenericRule("r", [TypedAtom("memberOf", [x, y])], [], TypedAtom("person", [x]))])
+        graph.assert_claim(subject="a", predicate="memberOf", object="g", agent="one", polarity="positive", valid=(0, 100))
+        session = start_session(graph, program, catalog_for_typed_program(program),
+            scope=SessionScope("default", 50, ClaimSelection(), ClaimMapping()), limits=ReasoningLimits())
+        binding = bind_session_generation(graph, session)
+        save_session(session, tmp_path / "session.json")
+        build(graph, session, tmp_path / "artifact", **pins(binding))
+    finally:
+        graph.close()
+    code = '''
+import json,sys
+from pathlib import Path
+from gestaltdb.graphdb import GraphDB
+from gestaltdb.reasoning.generation import GenerationIdentity, TemporalSourceIdentity
+from gestaltdb.reasoning.protocols import InputContext
+from gestaltdb.reasoning.adapters.session_store import load_session
+from gestaltdb.reasoning.adapters.authenticated_inferred_sampler import load_authenticated_inferred_snapshot
+root=Path(sys.argv[1]); raw=json.loads(sys.argv[2])
+raw['source']=TemporalSourceIdentity(**raw['source']); raw['context']=InputContext(**raw['context'])
+graph=GraphDB.open(root/'db')
+try:
+    snapshot=load_authenticated_inferred_snapshot(graph, load_session(root/'session.json'), root/'artifact',
+        expected_generation=GenerationIdentity(**raw), expected_session_digest=sys.argv[3])
+    assert snapshot.num_edges == 1
+finally:
+    graph.close()
+'''
+    done = subprocess.run([sys.executable, "-c", code, str(tmp_path), json.dumps(asdict(binding.identity)), binding.session_digest],
+                          capture_output=True, text=True, timeout=20)
+    assert done.returncode == 0, done.stderr
+
+
+def test_authenticated_inferred_documentation_example():
+    pytest.importorskip("lmdb")
+    text = (Path(__file__).resolve().parents[1] / "docs/reasoning-authenticated-inferred.rst").read_text()
+    blocks = re.findall(r"\.\. code-block:: python\n\n((?:   .*\n|\n)+)", text)
+    assert len(blocks) == 1
+    exec("\n".join(line[3:] if line.startswith("   ") else line for line in blocks[0].splitlines()), {})
+
+
+def test_nondefault_source_policy_mapping_and_retraction_remain_exact(source):
+    graph, _, _, path = source
+    x, y = Variable("x"), Variable("y")
+    program = GenericProgram([GenericRule("r", [TypedAtom("link", [x, y])], [], TypedAtom("entity", [x]))])
+    scope = SessionScope("default", 50, ClaimSelection(agents=("one",)), ClaimMapping((("memberOf", "link"),)))
+    session = start_session(graph, program, catalog_for_typed_program(program), scope=scope, limits=ReasoningLimits())
+    binding = bind_session_generation(graph, session)
+    selection = InferredSnapshotSelection("entity", ("link",))
+    first = build(graph, session, path, **pins(binding), selection=selection)
+    metadata = first.metadata["authenticated_reasoning_generation"]
+    assert metadata["scope"]["selection"]["agents"] == ["one"]
+    assert metadata["scope"]["mapping"]["predicate_aliases"] == [["memberOf", "link"]]
+    before = bytes_of(path)
+    versions = [v for v in graph.iter_claim_versions() if v.claim is not None and v.claim.subject == "a" and v.claim.agent == "one"]
+    assert len(versions) == 1
+    v = versions[0]
+    graph.retract_claim(v.logical_id, valid=(0, 100), supersedes_version_id=v.version_id)
+    advanced = advance_session(graph, session, limits=ReasoningLimits()).session
+    new_binding = bind_session_generation(graph, advanced)
+    second = build(graph, advanced, path.parent / "after-retraction", **pins(new_binding), selection=selection)
+    assert first.num_edges == 2 and second.num_edges == 1
+    assert load(graph, session, path, **pins(binding), selection=selection, freshness="historical").num_edges == 2
+    assert bytes_of(path) == before
+
+
+def test_decoder_rebinding_after_reconstruction_fails_before_install(source, monkeypatch):
+    import gestaltdb.reasoning.adapters.authenticated_inferred_sampler as adapter
+    from gestaltdb.serializers import JSONSerializer
+    graph, session, binding, path = source
+    original = adapter._reconstruct
+    serializer = graph.serializer
+    def rebound(*args):
+        result = original(*args)
+        graph.serializer = JSONSerializer()
+        return result
+    monkeypatch.setattr(adapter, "_reconstruct", rebound)
+    try:
+        with pytest.raises((ReasoningError, ProvenanceMismatchError)):
+            build(graph, session, path, **pins(binding))
+    finally:
+        graph.serializer = serializer
+    assert not path.exists()

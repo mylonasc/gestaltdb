@@ -7,7 +7,7 @@ This is deliberately expensive admission, not a fast cache hit or closure proof.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import json
 import os
 from pathlib import Path
@@ -145,7 +145,7 @@ def build_authenticated_inferred_snapshot(graph, session, output_path, *, expect
         binding = _admit(graph, session, expected_generation, expected_session_digest, freshness, admission_limits, cancel)
         with TemporaryDirectory(prefix=f".{target.name}.inferred.", dir=target.parent) as root:
             staged = Path(root) / "snapshot"
-            _reconstruct(session, binding, selection, limits, staged, cancel)
+            snapshot = _reconstruct(session, binding, selection, limits, staged, cancel)
             check_cancelled(cancel)
             binding.source_binding.verify_source(graph, freshness=freshness)
             if graph.store is not store or graph.serializer is not serializer:
@@ -153,7 +153,7 @@ def build_authenticated_inferred_snapshot(graph, session, output_path, *, expect
             if target.exists() or target.is_symlink():
                 raise ReasoningError("output_path appeared during build; use a new path")
             os.rename(staged, target)
-        return SamplerSnapshot.load(target)
+        return replace(snapshot, path=target)
 
 
 def load_authenticated_inferred_snapshot(graph, session, path, *, expected_generation,
@@ -175,11 +175,12 @@ def load_authenticated_inferred_snapshot(graph, session, path, *, expected_gener
         _files(target, limits, cancel)
         with TemporaryDirectory(prefix="gestaltdb-inferred-admission-") as root:
             expected = Path(root) / "snapshot"
-            _reconstruct(session, binding, selection, limits, expected, cancel)
+            snapshot = _reconstruct(session, binding, selection, limits, expected, cancel)
             _compare_files(target, expected, limits, cancel)
-            snapshot = SamplerSnapshot.load(target)
         check_cancelled(cancel)
         binding.source_binding.verify_source(graph, freshness=freshness)
         if graph.store is not store or graph.serializer is not serializer:
             raise ReasoningError("inferred source store/decoder was rebound")
-        return snapshot
+        # Return trusted eager reconstruction, not a second read of caller files
+        # after comparison. The admitted artifact location remains the public path.
+        return replace(snapshot, path=target)
