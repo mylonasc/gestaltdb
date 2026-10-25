@@ -323,12 +323,24 @@ def load_into_graph(
     payload: CdmGraphPayload,
     create_indexes: bool = True,
 ) -> dict:
-    """Write payload nodes/edges and create lookup indexes."""
+    """Write payload nodes/edges and create lookup indexes.
+
+    Prefers the 0.14 ``graph.indexes`` DDL authority when present and falls
+    back to the flat ``GraphDB.create_*_property_index`` wrappers (still
+    valid in 0.14, required on 0.12) so the example runs on both APIs.
+    """
     graph.put_nodes(payload.nodes)
     graph.put_edges_bulk(payload.edges)
     if create_indexes:
-        for prop in ("name", "namespace", "coarse_namespace", "kind", "parser_version"):
-            graph.create_node_property_index(prop)
-        for prop in ("property_name", "parser_version"):
-            graph.create_edge_property_index(prop)
+        indexes = getattr(graph, "indexes", None)
+        if indexes is not None:
+            for prop in ("name", "namespace", "coarse_namespace", "kind", "parser_version"):
+                indexes.create_node_property_index(prop)
+            for prop in ("property_name", "parser_version"):
+                indexes.create_edge_property_index(prop)
+        else:
+            for prop in ("name", "namespace", "coarse_namespace", "kind", "parser_version"):
+                graph.create_node_property_index(prop)
+            for prop in ("property_name", "parser_version"):
+                graph.create_edge_property_index(prop)
     return dict(payload.stats)
