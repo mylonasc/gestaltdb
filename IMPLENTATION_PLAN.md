@@ -51,6 +51,22 @@ versus explicit Polars, first/warm, three repeats, serial workers, 1,000,000-row
 intermediate cap. Require exact evidence and analytical complete-closure parity;
 retain bounded/error/timeout diagnostics. No default/adoption/source-policy change.
 
+Collection completed: four clean-source reports at `b87ef1c`, 48/48 successful
+exact-evidence/analytical-complete-closure parity observations. No bounded/error/
+timeout results in this continuation; historical #342 diagnostics unchanged.
+Polars median total pipeline improvement about 3--17%, with conversion/output
+decode dominating native fixpoint time; no consistent RSS benefit. Conservative
+native peaks 100028 selective / 200019 sparse rows; the chosen cap is physical,
+not a hard memory guarantee or logical identity. Full median/P95/runtime/RSS
+boundaries recorded in `docs/reasoning-frontier-benchmarks.rst` and immutable
+reports. Original #255 acceptance mapped in `executor-admission.md`; indexed
+default unchanged, #194 and broader roadmap gates remain separate.
+
+Final evidence validation: **3,263 passed / 2 skipped** (57.24s), all optional
+backend/oracle requirements; report-matrix invariants included. Sphinx `-W`,
+docs/API drift, 8/8 examples, roadmap and whitespace checks passed. Closure of
+#255 remains gated on exact-head PR and post-merge integration checks.
+
 ### Broader roadmap continuation (2026-10-25)
 
 Child #350 of #249 delivers the current-property-graph demand path on

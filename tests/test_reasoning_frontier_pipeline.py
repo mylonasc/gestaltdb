@@ -185,3 +185,41 @@ def test_committed_measurements_distinguish_parity_from_bounded_outcomes():
                 if sample["method"] != "frontier":
                     assert sample["evidence_digest"] == report["fixture"]["evidence_digest"]
     assert final_reports == 6 and counts == {"ok": 126, "bounded": 18}
+
+
+def test_committed_explicit_budget_reports_have_complete_exact_parity():
+    from collections import Counter
+    from pathlib import Path
+    paths = list((Path(__file__).parents[1] / "benchmarks/results").glob("reasoning-re255-*-100k.json"))
+    assert len(paths) == 4
+    matrix = set()
+    for path in paths:
+        report = json.loads(path.read_text())
+        assert report["schema_version"] == 2 and report["complete"] and report["all_parity_verified"]
+        assert not report["dirty"] and report["revision"] == "b87ef1c035832425349ce3d426b226b3ce1ebde5"
+        assert report["harness_sha256"] == "c09f11c2cc1d817a907caac5ef1fb49590a7af8d542cc42ed68de5f18fc3009d"
+        config = report["configuration"]
+        matrix.add((config["backend"], config["shape"]))
+        assert config["rows"] == 100000 and config["repeats"] == 3
+        assert config["polars_max_intermediate_rows"] == 1000000
+        assert report["threads"] == {"POLARS_MAX_THREADS": "1", "OMP_NUM_THREADS": "1"}
+        samples = report["samples"]
+        assert len(samples) == 12
+        assert Counter((s["method"], s["cache"]) for s in samples) == {
+            (method, cache): 3 for method in ("indexed-python", "polars-prototype") for cache in ("first", "warm")}
+        assert len({s["closure_digest"] for s in samples}) == len({s["answer_digest"] for s in samples}) == 1
+        expected_facts = len(analytical_closure(100000, config["shape"]))
+        for sample in samples:
+            assert sample["status"] == "ok" and sample["evidence_rows"] == 100000
+            assert sample["evidence_digest"] == report["fixture"]["evidence_digest"]
+            assert sample["known_facts"] == expected_facts
+            assert sample["bytes_copied"] is None and sample["rss_peak_bytes"] > 0
+            if sample["method"] == "polars-prototype":
+                metrics = sample["metrics"]
+                assert sample["polars_max_intermediate_rows"] == metrics["polars_max_intermediate_rows"] == 1000000
+                assert metrics["polars_peak_intermediate_rows"] == (100028 if config["shape"] == "selective" else 200019)
+                assert metrics["polars_candidate_rows"] > metrics["polars_peak_intermediate_rows"]
+                assert sample["polars_threads"] == 1
+            else:
+                assert sample["polars_max_intermediate_rows"] is None
+    assert matrix == {(backend, shape) for backend in ("lmdb", "pyrex") for shape in ("selective", "sparse")}

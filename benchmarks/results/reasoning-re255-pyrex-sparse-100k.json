@@ -1,0 +1,911 @@
+{
+  "schema_version": 2,
+  "revision": "b87ef1c035832425349ce3d426b226b3ce1ebde5",
+  "dirty": false,
+  "harness_sha256": "c09f11c2cc1d817a907caac5ef1fb49590a7af8d542cc42ed68de5f18fc3009d",
+  "python": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "dependencies": {
+    "lmdb": "2.2.1",
+    "plyvel": "1.5.1",
+    "pyrex-rocksdb": "0.6.0",
+    "pyarrow": "24.0.0",
+    "polars": "1.41.2"
+  },
+  "cpu_count": 24,
+  "configuration": {
+    "rows": 100000,
+    "shape": "sparse",
+    "backend": "pyrex",
+    "methods": [
+      "indexed-python",
+      "polars-prototype"
+    ],
+    "caches": [
+      "first",
+      "warm"
+    ],
+    "repeats": 3,
+    "timeout_s": 600.0,
+    "proofs": false,
+    "polars_max_intermediate_rows": 1000000
+  },
+  "threads": {
+    "POLARS_MAX_THREADS": "1",
+    "OMP_NUM_THREADS": "1"
+  },
+  "os_cache": "uncontrolled; first is not OS-cold",
+  "samples": [
+    {
+      "status": "ok",
+      "method": "indexed-python",
+      "mode": "closure",
+      "rows": 100000,
+      "shape": "sparse",
+      "cache": "first",
+      "polars_max_intermediate_rows": null,
+      "cache_boundary": "first extraction on reopened handle",
+      "metrics": {
+        "view_open_s": 3.6545026280073216,
+        "extract_decode_verify_s": 5.229070751011022,
+        "prepare_s": 5.00993337482214e-07,
+        "evaluate_convert_s": 2.3419504539924674,
+        "post_verify_s": 0.28919218099326827,
+        "query_pipeline_s": 11.515553692996036,
+        "import_s": 0.26133654700242914,
+        "compile_s": 2.9529997846111655e-05,
+        "reopen_s": 0.23583254699769896,
+        "total_pipeline_s": 12.01275231699401
+      },
+      "answers": 8,
+      "answer_digest": "f0c361577569cb3555387c73cbe6cbc48a15d77d788921e9a0ae00015295f74b",
+      "evidence_rows": 100000,
+      "evidence_digest": "938807282527a271f33d6ce2b8cafa63ceb9f03ee361c685ec43d1ece4049cd1",
+      "scanned_claims_or_raw_rows": 100000,
+      "known_facts": 300019,
+      "scheduler_work": null,
+      "requests": null,
+      "closure_digest": "5c18b99a9a9019ab1d21af3e9f5035d316b701a4b52c06374d4d1314d2c9ca03",
+      "proof_nodes": null,
+      "proof_truncated": null,
+      "polars_threads": null,
+      "rss_peak_bytes": 660099072,
+      "rss_boundary": "worker high-water, includes warmup and parity validation; not query-only RSS",
+      "conversion_boundary": "included in evaluate_convert_s; no zero-copy claim",
+      "bytes_copied": null,
+      "bytes_copied_boundary": "not instrumented, not assumed zero",
+      "worker_wall_s": 12.554093312995974,
+      "repeat": 0
+    },
+    {
+      "status": "ok",
+      "method": "polars-prototype",
+      "mode": "closure",
+      "rows": 100000,
+      "shape": "sparse",
+      "cache": "first",
+      "polars_max_intermediate_rows": 1000000,
+      "cache_boundary": "first extraction on reopened handle",
+      "metrics": {
+        "view_open_s": 3.625378721000743,
+        "extract_decode_verify_s": 5.051682550008991,
+        "prepare_s": 4.949979484081268e-07,
+        "evaluate_convert_s": 1.4282239629974356,
+        "polars_atom_plans": 17,
+        "polars_candidate_rows": 3466861,
+        "polars_conversion_s": 0.35385078701074235,
+        "polars_decode_s": 0.8560282160033239,
+        "polars_dictionary_symbols": 133334,
+        "polars_expression_s": 0.00037896999856457114,
+        "polars_fixpoint_s": 0.1347255840082653,
+        "polars_input_s": 0.029268304002471268,
+        "polars_join_calls": 8,
+        "polars_max_intermediate_rows": 1000000,
+        "polars_operator_s": 0.0930074639909435,
+        "polars_peak_intermediate_rows": 200019,
+        "polars_planning_s": 3.0506998882628977e-05,
+        "polars_preflight_s": 0.040860578970750794,
+        "post_verify_s": 0.2665189490071498,
+        "query_pipeline_s": 10.372657371990499,
+        "import_s": 0.26052105000417214,
+        "compile_s": 3.136199666187167e-05,
+        "reopen_s": 0.015875172990490682,
+        "total_pipeline_s": 10.649084956981824
+      },
+      "answers": 8,
+      "answer_digest": "f0c361577569cb3555387c73cbe6cbc48a15d77d788921e9a0ae00015295f74b",
+      "evidence_rows": 100000,
+      "evidence_digest": "938807282527a271f33d6ce2b8cafa63ceb9f03ee361c685ec43d1ece4049cd1",
+      "scanned_claims_or_raw_rows": 100000,
+      "known_facts": 300019,
+      "scheduler_work": null,
+      "requests": null,
+      "closure_digest": "5c18b99a9a9019ab1d21af3e9f5035d316b701a4b52c06374d4d1314d2c9ca03",
+      "proof_nodes": null,
+      "proof_truncated": null,
+      "polars_threads": 1,
+      "rss_peak_bytes": 667140096,
+      "rss_boundary": "worker high-water, includes warmup and parity validation; not query-only RSS",
+      "conversion_boundary": "included in evaluate_convert_s; no zero-copy claim",
+      "bytes_copied": null,
+      "bytes_copied_boundary": "not instrumented, not assumed zero",
+      "worker_wall_s": 11.223783825989813,
+      "repeat": 0
+    },
+    {
+      "status": "ok",
+      "method": "indexed-python",
+      "mode": "closure",
+      "rows": 100000,
+      "shape": "sparse",
+      "cache": "warm",
+      "polars_max_intermediate_rows": null,
+      "cache_boundary": "same-method primed extraction; OS cache uncontrolled",
+      "metrics": {
+        "view_open_s": 0.27759003300161567,
+        "extract_decode_verify_s": 5.044522197989863,
+        "prepare_s": 9.389914339408278e-07,
+        "evaluate_convert_s": 2.369383101002313,
+        "post_verify_s": 0.27856888600217644,
+        "query_pipeline_s": 7.970895912993001,
+        "import_s": 0.25817507300234865,
+        "compile_s": 2.8929003747180104e-05,
+        "reopen_s": 0.015938633994664997,
+        "total_pipeline_s": 8.245038548993762
+      },
+      "answers": 8,
+      "answer_digest": "f0c361577569cb3555387c73cbe6cbc48a15d77d788921e9a0ae00015295f74b",
+      "evidence_rows": 100000,
+      "evidence_digest": "938807282527a271f33d6ce2b8cafa63ceb9f03ee361c685ec43d1ece4049cd1",
+      "scanned_claims_or_raw_rows": 100000,
+      "known_facts": 300019,
+      "scheduler_work": null,
+      "requests": null,
+      "closure_digest": "5c18b99a9a9019ab1d21af3e9f5035d316b701a4b52c06374d4d1314d2c9ca03",
+      "proof_nodes": null,
+      "proof_truncated": null,
+      "polars_threads": null,
+      "rss_peak_bytes": 664031232,
+      "rss_boundary": "worker high-water, includes warmup and parity validation; not query-only RSS",
+      "conversion_boundary": "included in evaluate_convert_s; no zero-copy claim",
+      "bytes_copied": null,
+      "bytes_copied_boundary": "not instrumented, not assumed zero",
+      "worker_wall_s": 20.17245275300229,
+      "repeat": 0
+    },
+    {
+      "status": "ok",
+      "method": "polars-prototype",
+      "mode": "closure",
+      "rows": 100000,
+      "shape": "sparse",
+      "cache": "warm",
+      "polars_max_intermediate_rows": 1000000,
+      "cache_boundary": "same-method primed extraction; OS cache uncontrolled",
+      "metrics": {
+        "view_open_s": 0.2667607610055711,
+        "extract_decode_verify_s": 4.9741489160078345,
+        "prepare_s": 7.24001438356936e-07,
+        "evaluate_convert_s": 1.3745000700000674,
+        "polars_atom_plans": 17,
+        "polars_candidate_rows": 3466861,
+        "polars_conversion_s": 0.34012219800206367,
+        "polars_decode_s": 0.8494654030073434,
+        "polars_dictionary_symbols": 133334,
+        "polars_expression_s": 0.0003385339805390686,
+        "polars_fixpoint_s": 0.1391023799951654,
+        "polars_input_s": 0.027776026996434666,
+        "polars_join_calls": 8,
+        "polars_max_intermediate_rows": 1000000,
+        "polars_operator_s": 0.09677715500583872,
+        "polars_peak_intermediate_rows": 200019,
+        "polars_planning_s": 2.535100793465972e-05,
+        "polars_preflight_s": 0.041546055988874286,
+        "post_verify_s": 0.2687344820005819,
+        "query_pipeline_s": 6.884987544995965,
+        "import_s": 0.2622339250083314,
+        "compile_s": 3.023700264748186e-05,
+        "reopen_s": 0.016999291998217814,
+        "total_pipeline_s": 7.164250999005162
+      },
+      "answers": 8,
+      "answer_digest": "f0c361577569cb3555387c73cbe6cbc48a15d77d788921e9a0ae00015295f74b",
+      "evidence_rows": 100000,
+      "evidence_digest": "938807282527a271f33d6ce2b8cafa63ceb9f03ee361c685ec43d1ece4049cd1",
+      "scanned_claims_or_raw_rows": 100000,
+      "known_facts": 300019,
+      "scheduler_work": null,
+      "requests": null,
+      "closure_digest": "5c18b99a9a9019ab1d21af3e9f5035d316b701a4b52c06374d4d1314d2c9ca03",
+      "proof_nodes": null,
+      "proof_truncated": null,
+      "polars_threads": 1,
+      "rss_peak_bytes": 663519232,
+      "rss_boundary": "worker high-water, includes warmup and parity validation; not query-only RSS",
+      "conversion_boundary": "included in evaluate_convert_s; no zero-copy claim",
+      "bytes_copied": null,
+      "bytes_copied_boundary": "not instrumented, not assumed zero",
+      "worker_wall_s": 18.138158278001356,
+      "repeat": 0
+    },
+    {
+      "status": "ok",
+      "method": "indexed-python",
+      "mode": "closure",
+      "rows": 100000,
+      "shape": "sparse",
+      "cache": "first",
+      "polars_max_intermediate_rows": null,
+      "cache_boundary": "first extraction on reopened handle",
+      "metrics": {
+        "view_open_s": 3.6248651499918196,
+        "extract_decode_verify_s": 5.092526188993361,
+        "prepare_s": 5.129986675456166e-07,
+        "evaluate_convert_s": 2.3325774039985845,
+        "post_verify_s": 0.26558140901033767,
+        "query_pipeline_s": 11.316419187001884,
+        "import_s": 0.26023012500081677,
+        "compile_s": 2.8399997972883284e-05,
+        "reopen_s": 0.016555078997043893,
+        "total_pipeline_s": 11.593232790997718
+      },
+      "answers": 8,
+      "answer_digest": "f0c361577569cb3555387c73cbe6cbc48a15d77d788921e9a0ae00015295f74b",
+      "evidence_rows": 100000,
+      "evidence_digest": "938807282527a271f33d6ce2b8cafa63ceb9f03ee361c685ec43d1ece4049cd1",
+      "scanned_claims_or_raw_rows": 100000,
+      "known_facts": 300019,
+      "scheduler_work": null,
+      "requests": null,
+      "closure_digest": "5c18b99a9a9019ab1d21af3e9f5035d316b701a4b52c06374d4d1314d2c9ca03",
+      "proof_nodes": null,
+      "proof_truncated": null,
+      "polars_threads": null,
+      "rss_peak_bytes": 661303296,
+      "rss_boundary": "worker high-water, includes warmup and parity validation; not query-only RSS",
+      "conversion_boundary": "included in evaluate_convert_s; no zero-copy claim",
+      "bytes_copied": null,
+      "bytes_copied_boundary": "not instrumented, not assumed zero",
+      "worker_wall_s": 12.14052011599415,
+      "repeat": 1
+    },
+    {
+      "status": "ok",
+      "method": "polars-prototype",
+      "mode": "closure",
+      "rows": 100000,
+      "shape": "sparse",
+      "cache": "first",
+      "polars_max_intermediate_rows": 1000000,
+      "cache_boundary": "first extraction on reopened handle",
+      "metrics": {
+        "view_open_s": 3.6563413410040084,
+        "extract_decode_verify_s": 5.130584423997789,
+        "prepare_s": 5.170004442334175e-07,
+        "evaluate_convert_s": 1.4285219369921833,
+        "polars_atom_plans": 17,
+        "polars_candidate_rows": 3466861,
+        "polars_conversion_s": 0.35369877600169275,
+        "polars_decode_s": 0.851923465001164,
+        "polars_dictionary_symbols": 133334,
+        "polars_expression_s": 0.000356037009623833,
+        "polars_fixpoint_s": 0.13941863800573628,
+        "polars_input_s": 0.029598245993838646,
+        "polars_join_calls": 8,
+        "polars_max_intermediate_rows": 1000000,
+        "polars_operator_s": 0.09758196002803743,
+        "polars_peak_intermediate_rows": 200019,
+        "polars_planning_s": 2.5921995984390378e-05,
+        "polars_preflight_s": 0.041029646003153175,
+        "post_verify_s": 0.2728170100017451,
+        "query_pipeline_s": 10.489176078001037,
+        "import_s": 0.2603310109989252,
+        "compile_s": 3.024500620085746e-05,
+        "reopen_s": 0.01710767499753274,
+        "total_pipeline_s": 10.766645009003696
+      },
+      "answers": 8,
+      "answer_digest": "f0c361577569cb3555387c73cbe6cbc48a15d77d788921e9a0ae00015295f74b",
+      "evidence_rows": 100000,
+      "evidence_digest": "938807282527a271f33d6ce2b8cafa63ceb9f03ee361c685ec43d1ece4049cd1",
+      "scanned_claims_or_raw_rows": 100000,
+      "known_facts": 300019,
+      "scheduler_work": null,
+      "requests": null,
+      "closure_digest": "5c18b99a9a9019ab1d21af3e9f5035d316b701a4b52c06374d4d1314d2c9ca03",
+      "proof_nodes": null,
+      "proof_truncated": null,
+      "polars_threads": 1,
+      "rss_peak_bytes": 679247872,
+      "rss_boundary": "worker high-water, includes warmup and parity validation; not query-only RSS",
+      "conversion_boundary": "included in evaluate_convert_s; no zero-copy claim",
+      "bytes_copied": null,
+      "bytes_copied_boundary": "not instrumented, not assumed zero",
+      "worker_wall_s": 11.33908139000414,
+      "repeat": 1
+    },
+    {
+      "status": "ok",
+      "method": "indexed-python",
+      "mode": "closure",
+      "rows": 100000,
+      "shape": "sparse",
+      "cache": "warm",
+      "polars_max_intermediate_rows": null,
+      "cache_boundary": "same-method primed extraction; OS cache uncontrolled",
+      "metrics": {
+        "view_open_s": 0.2784555249963887,
+        "extract_decode_verify_s": 5.093886218994157,
+        "prepare_s": 6.830086931586266e-07,
+        "evaluate_convert_s": 2.35343357900274,
+        "post_verify_s": 0.2784946549945744,
+        "query_pipeline_s": 8.005098009991343,
+        "import_s": 0.2603649999946356,
+        "compile_s": 3.045100311283022e-05,
+        "reopen_s": 0.01725106401136145,
+        "total_pipeline_s": 8.282744525000453
+      },
+      "answers": 8,
+      "answer_digest": "f0c361577569cb3555387c73cbe6cbc48a15d77d788921e9a0ae00015295f74b",
+      "evidence_rows": 100000,
+      "evidence_digest": "938807282527a271f33d6ce2b8cafa63ceb9f03ee361c685ec43d1ece4049cd1",
+      "scanned_claims_or_raw_rows": 100000,
+      "known_facts": 300019,
+      "scheduler_work": null,
+      "requests": null,
+      "closure_digest": "5c18b99a9a9019ab1d21af3e9f5035d316b701a4b52c06374d4d1314d2c9ca03",
+      "proof_nodes": null,
+      "proof_truncated": null,
+      "polars_threads": null,
+      "rss_peak_bytes": 661884928,
+      "rss_boundary": "worker high-water, includes warmup and parity validation; not query-only RSS",
+      "conversion_boundary": "included in evaluate_convert_s; no zero-copy claim",
+      "bytes_copied": null,
+      "bytes_copied_boundary": "not instrumented, not assumed zero",
+      "worker_wall_s": 20.1126160529966,
+      "repeat": 1
+    },
+    {
+      "status": "ok",
+      "method": "polars-prototype",
+      "mode": "closure",
+      "rows": 100000,
+      "shape": "sparse",
+      "cache": "warm",
+      "polars_max_intermediate_rows": 1000000,
+      "cache_boundary": "same-method primed extraction; OS cache uncontrolled",
+      "metrics": {
+        "view_open_s": 0.2682743110053707,
+        "extract_decode_verify_s": 4.966452691995073,
+        "prepare_s": 5.90996933169663e-07,
+        "evaluate_convert_s": 1.3956042770005297,
+        "polars_atom_plans": 17,
+        "polars_candidate_rows": 3466861,
+        "polars_conversion_s": 0.34756078298960347,
+        "polars_decode_s": 0.8608945680025499,
+        "polars_dictionary_symbols": 133334,
+        "polars_expression_s": 0.0003465370391495526,
+        "polars_fixpoint_s": 0.1412060339935124,
+        "polars_input_s": 0.028227374990819953,
+        "polars_join_calls": 8,
+        "polars_max_intermediate_rows": 1000000,
+        "polars_operator_s": 0.0976289570244262,
+        "polars_peak_intermediate_rows": 200019,
+        "polars_planning_s": 2.71500030066818e-05,
+        "polars_preflight_s": 0.042816899018362164,
+        "post_verify_s": 0.26588907299446873,
+        "query_pipeline_s": 6.897102047005319,
+        "import_s": 0.2584555560024455,
+        "compile_s": 3.1795003451406956e-05,
+        "reopen_s": 0.016001634998247027,
+        "total_pipeline_s": 7.171591033009463
+      },
+      "answers": 8,
+      "answer_digest": "f0c361577569cb3555387c73cbe6cbc48a15d77d788921e9a0ae00015295f74b",
+      "evidence_rows": 100000,
+      "evidence_digest": "938807282527a271f33d6ce2b8cafa63ceb9f03ee361c685ec43d1ece4049cd1",
+      "scanned_claims_or_raw_rows": 100000,
+      "known_facts": 300019,
+      "scheduler_work": null,
+      "requests": null,
+      "closure_digest": "5c18b99a9a9019ab1d21af3e9f5035d316b701a4b52c06374d4d1314d2c9ca03",
+      "proof_nodes": null,
+      "proof_truncated": null,
+      "polars_threads": 1,
+      "rss_peak_bytes": 667713536,
+      "rss_boundary": "worker high-water, includes warmup and parity validation; not query-only RSS",
+      "conversion_boundary": "included in evaluate_convert_s; no zero-copy claim",
+      "bytes_copied": null,
+      "bytes_copied_boundary": "not instrumented, not assumed zero",
+      "worker_wall_s": 18.077838265991886,
+      "repeat": 1
+    },
+    {
+      "status": "ok",
+      "method": "indexed-python",
+      "mode": "closure",
+      "rows": 100000,
+      "shape": "sparse",
+      "cache": "first",
+      "polars_max_intermediate_rows": null,
+      "cache_boundary": "first extraction on reopened handle",
+      "metrics": {
+        "view_open_s": 3.600326971994946,
+        "extract_decode_verify_s": 5.087462905998109,
+        "prepare_s": 4.7299545258283615e-07,
+        "evaluate_convert_s": 2.342594141999143,
+        "post_verify_s": 0.276216451995424,
+        "query_pipeline_s": 11.307429961001617,
+        "import_s": 0.2613391210034024,
+        "compile_s": 2.9816001188009977e-05,
+        "reopen_s": 0.018276794988196343,
+        "total_pipeline_s": 11.587075692994404
+      },
+      "answers": 8,
+      "answer_digest": "f0c361577569cb3555387c73cbe6cbc48a15d77d788921e9a0ae00015295f74b",
+      "evidence_rows": 100000,
+      "evidence_digest": "938807282527a271f33d6ce2b8cafa63ceb9f03ee361c685ec43d1ece4049cd1",
+      "scanned_claims_or_raw_rows": 100000,
+      "known_facts": 300019,
+      "scheduler_work": null,
+      "requests": null,
+      "closure_digest": "5c18b99a9a9019ab1d21af3e9f5035d316b701a4b52c06374d4d1314d2c9ca03",
+      "proof_nodes": null,
+      "proof_truncated": null,
+      "polars_threads": null,
+      "rss_peak_bytes": 661897216,
+      "rss_boundary": "worker high-water, includes warmup and parity validation; not query-only RSS",
+      "conversion_boundary": "included in evaluate_convert_s; no zero-copy claim",
+      "bytes_copied": null,
+      "bytes_copied_boundary": "not instrumented, not assumed zero",
+      "worker_wall_s": 12.13305992000096,
+      "repeat": 2
+    },
+    {
+      "status": "ok",
+      "method": "polars-prototype",
+      "mode": "closure",
+      "rows": 100000,
+      "shape": "sparse",
+      "cache": "first",
+      "polars_max_intermediate_rows": 1000000,
+      "cache_boundary": "first extraction on reopened handle",
+      "metrics": {
+        "view_open_s": 3.6301164220058126,
+        "extract_decode_verify_s": 5.16696893000335,
+        "prepare_s": 3.979948814958334e-07,
+        "evaluate_convert_s": 1.4300107159942854,
+        "polars_atom_plans": 17,
+        "polars_candidate_rows": 3466861,
+        "polars_conversion_s": 0.35542189099942334,
+        "polars_decode_s": 0.8600878809957067,
+        "polars_dictionary_symbols": 133334,
+        "polars_expression_s": 0.00040318102401215583,
+        "polars_fixpoint_s": 0.13074313699326012,
+        "polars_input_s": 0.030050312998355366,
+        "polars_join_calls": 8,
+        "polars_max_intermediate_rows": 1000000,
+        "polars_operator_s": 0.09067756697186269,
+        "polars_peak_intermediate_rows": 200019,
+        "polars_planning_s": 2.910199691541493e-05,
+        "polars_preflight_s": 0.03913374601688702,
+        "post_verify_s": 0.26680538601067383,
+        "query_pipeline_s": 10.494753744991613,
+        "import_s": 0.2593715319962939,
+        "compile_s": 2.8826994821429253e-05,
+        "reopen_s": 0.015767350007081404,
+        "total_pipeline_s": 10.76992145398981
+      },
+      "answers": 8,
+      "answer_digest": "f0c361577569cb3555387c73cbe6cbc48a15d77d788921e9a0ae00015295f74b",
+      "evidence_rows": 100000,
+      "evidence_digest": "938807282527a271f33d6ce2b8cafa63ceb9f03ee361c685ec43d1ece4049cd1",
+      "scanned_claims_or_raw_rows": 100000,
+      "known_facts": 300019,
+      "scheduler_work": null,
+      "requests": null,
+      "closure_digest": "5c18b99a9a9019ab1d21af3e9f5035d316b701a4b52c06374d4d1314d2c9ca03",
+      "proof_nodes": null,
+      "proof_truncated": null,
+      "polars_threads": 1,
+      "rss_peak_bytes": 667123712,
+      "rss_boundary": "worker high-water, includes warmup and parity validation; not query-only RSS",
+      "conversion_boundary": "included in evaluate_convert_s; no zero-copy claim",
+      "bytes_copied": null,
+      "bytes_copied_boundary": "not instrumented, not assumed zero",
+      "worker_wall_s": 11.356176597997546,
+      "repeat": 2
+    },
+    {
+      "status": "ok",
+      "method": "indexed-python",
+      "mode": "closure",
+      "rows": 100000,
+      "shape": "sparse",
+      "cache": "warm",
+      "polars_max_intermediate_rows": null,
+      "cache_boundary": "same-method primed extraction; OS cache uncontrolled",
+      "metrics": {
+        "view_open_s": 0.2778755210019881,
+        "extract_decode_verify_s": 5.209851733990945,
+        "prepare_s": 4.7299545258283615e-07,
+        "evaluate_convert_s": 2.3412810760055436,
+        "post_verify_s": 0.27539162899483927,
+        "query_pipeline_s": 8.105230984001537,
+        "import_s": 0.2584230210050009,
+        "compile_s": 2.94110068352893e-05,
+        "reopen_s": 0.018192955991253257,
+        "total_pipeline_s": 8.381876372004626
+      },
+      "answers": 8,
+      "answer_digest": "f0c361577569cb3555387c73cbe6cbc48a15d77d788921e9a0ae00015295f74b",
+      "evidence_rows": 100000,
+      "evidence_digest": "938807282527a271f33d6ce2b8cafa63ceb9f03ee361c685ec43d1ece4049cd1",
+      "scanned_claims_or_raw_rows": 100000,
+      "known_facts": 300019,
+      "scheduler_work": null,
+      "requests": null,
+      "closure_digest": "5c18b99a9a9019ab1d21af3e9f5035d316b701a4b52c06374d4d1314d2c9ca03",
+      "proof_nodes": null,
+      "proof_truncated": null,
+      "polars_threads": null,
+      "rss_peak_bytes": 660455424,
+      "rss_boundary": "worker high-water, includes warmup and parity validation; not query-only RSS",
+      "conversion_boundary": "included in evaluate_convert_s; no zero-copy claim",
+      "bytes_copied": null,
+      "bytes_copied_boundary": "not instrumented, not assumed zero",
+      "worker_wall_s": 20.52344880599412,
+      "repeat": 2
+    },
+    {
+      "status": "ok",
+      "method": "polars-prototype",
+      "mode": "closure",
+      "rows": 100000,
+      "shape": "sparse",
+      "cache": "warm",
+      "polars_max_intermediate_rows": 1000000,
+      "cache_boundary": "same-method primed extraction; OS cache uncontrolled",
+      "metrics": {
+        "view_open_s": 0.26520898401213344,
+        "extract_decode_verify_s": 4.981023817003006,
+        "prepare_s": 5.629990482702851e-07,
+        "evaluate_convert_s": 1.3638018170022406,
+        "polars_atom_plans": 17,
+        "polars_candidate_rows": 3466861,
+        "polars_conversion_s": 0.3407941299956292,
+        "polars_decode_s": 0.8526426400057971,
+        "polars_dictionary_symbols": 133334,
+        "polars_expression_s": 0.00037447907379828393,
+        "polars_fixpoint_s": 0.12565159700170625,
+        "polars_input_s": 0.027247535006608814,
+        "polars_join_calls": 8,
+        "polars_max_intermediate_rows": 1000000,
+        "polars_operator_s": 0.08633088598435279,
+        "polars_peak_intermediate_rows": 200019,
+        "polars_planning_s": 2.5522997020743787e-05,
+        "polars_preflight_s": 0.038448358987807296,
+        "post_verify_s": 0.2650752299960004,
+        "query_pipeline_s": 6.875956356001552,
+        "import_s": 0.26032950899389107,
+        "compile_s": 3.198599733877927e-05,
+        "reopen_s": 0.018015809007920325,
+        "total_pipeline_s": 7.154333660000702
+      },
+      "answers": 8,
+      "answer_digest": "f0c361577569cb3555387c73cbe6cbc48a15d77d788921e9a0ae00015295f74b",
+      "evidence_rows": 100000,
+      "evidence_digest": "938807282527a271f33d6ce2b8cafa63ceb9f03ee361c685ec43d1ece4049cd1",
+      "scanned_claims_or_raw_rows": 100000,
+      "known_facts": 300019,
+      "scheduler_work": null,
+      "requests": null,
+      "closure_digest": "5c18b99a9a9019ab1d21af3e9f5035d316b701a4b52c06374d4d1314d2c9ca03",
+      "proof_nodes": null,
+      "proof_truncated": null,
+      "polars_threads": 1,
+      "rss_peak_bytes": 675536896,
+      "rss_boundary": "worker high-water, includes warmup and parity validation; not query-only RSS",
+      "conversion_boundary": "included in evaluate_convert_s; no zero-copy claim",
+      "bytes_copied": null,
+      "bytes_copied_boundary": "not instrumented, not assumed zero",
+      "worker_wall_s": 18.099792420005542,
+      "repeat": 2
+    }
+  ],
+  "complete": true,
+  "decision": "no automatic executor/native adoption; workload-specific evidence only",
+  "fixture": {
+    "status": "ok",
+    "evidence_digest": "938807282527a271f33d6ce2b8cafa63ceb9f03ee361c685ec43d1ece4049cd1",
+    "load_s": 19.916844475999824,
+    "rows": 100000,
+    "shape": "sparse",
+    "backend": "pyrex",
+    "backend_options": {},
+    "worker_wall_s": 20.26570000400534
+  },
+  "all_parity_verified": true,
+  "summary": {
+    "indexed-python/first": {
+      "view_open_s": {
+        "p50": 3.6248651499918196,
+        "p95": 3.6545026280073216
+      },
+      "extract_decode_verify_s": {
+        "p50": 5.092526188993361,
+        "p95": 5.229070751011022
+      },
+      "prepare_s": {
+        "p50": 5.00993337482214e-07,
+        "p95": 5.129986675456166e-07
+      },
+      "evaluate_convert_s": {
+        "p50": 2.3419504539924674,
+        "p95": 2.342594141999143
+      },
+      "post_verify_s": {
+        "p50": 0.276216451995424,
+        "p95": 0.28919218099326827
+      },
+      "query_pipeline_s": {
+        "p50": 11.316419187001884,
+        "p95": 11.515553692996036
+      },
+      "import_s": {
+        "p50": 0.26133654700242914,
+        "p95": 0.2613391210034024
+      },
+      "compile_s": {
+        "p50": 2.9529997846111655e-05,
+        "p95": 2.9816001188009977e-05
+      },
+      "reopen_s": {
+        "p50": 0.018276794988196343,
+        "p95": 0.23583254699769896
+      },
+      "total_pipeline_s": {
+        "p50": 11.593232790997718,
+        "p95": 12.01275231699401
+      }
+    },
+    "indexed-python/warm": {
+      "view_open_s": {
+        "p50": 0.2778755210019881,
+        "p95": 0.2784555249963887
+      },
+      "extract_decode_verify_s": {
+        "p50": 5.093886218994157,
+        "p95": 5.209851733990945
+      },
+      "prepare_s": {
+        "p50": 6.830086931586266e-07,
+        "p95": 9.389914339408278e-07
+      },
+      "evaluate_convert_s": {
+        "p50": 2.35343357900274,
+        "p95": 2.369383101002313
+      },
+      "post_verify_s": {
+        "p50": 0.2784946549945744,
+        "p95": 0.27856888600217644
+      },
+      "query_pipeline_s": {
+        "p50": 8.005098009991343,
+        "p95": 8.105230984001537
+      },
+      "import_s": {
+        "p50": 0.2584230210050009,
+        "p95": 0.2603649999946356
+      },
+      "compile_s": {
+        "p50": 2.94110068352893e-05,
+        "p95": 3.045100311283022e-05
+      },
+      "reopen_s": {
+        "p50": 0.01725106401136145,
+        "p95": 0.018192955991253257
+      },
+      "total_pipeline_s": {
+        "p50": 8.282744525000453,
+        "p95": 8.381876372004626
+      }
+    },
+    "polars-prototype/first": {
+      "view_open_s": {
+        "p50": 3.6301164220058126,
+        "p95": 3.6563413410040084
+      },
+      "extract_decode_verify_s": {
+        "p50": 5.130584423997789,
+        "p95": 5.16696893000335
+      },
+      "prepare_s": {
+        "p50": 4.949979484081268e-07,
+        "p95": 5.170004442334175e-07
+      },
+      "evaluate_convert_s": {
+        "p50": 1.4285219369921833,
+        "p95": 1.4300107159942854
+      },
+      "polars_atom_plans": {
+        "p50": 17,
+        "p95": 17
+      },
+      "polars_candidate_rows": {
+        "p50": 3466861,
+        "p95": 3466861
+      },
+      "polars_conversion_s": {
+        "p50": 0.35385078701074235,
+        "p95": 0.35542189099942334
+      },
+      "polars_decode_s": {
+        "p50": 0.8560282160033239,
+        "p95": 0.8600878809957067
+      },
+      "polars_dictionary_symbols": {
+        "p50": 133334,
+        "p95": 133334
+      },
+      "polars_expression_s": {
+        "p50": 0.00037896999856457114,
+        "p95": 0.00040318102401215583
+      },
+      "polars_fixpoint_s": {
+        "p50": 0.1347255840082653,
+        "p95": 0.13941863800573628
+      },
+      "polars_input_s": {
+        "p50": 0.029598245993838646,
+        "p95": 0.030050312998355366
+      },
+      "polars_join_calls": {
+        "p50": 8,
+        "p95": 8
+      },
+      "polars_max_intermediate_rows": {
+        "p50": 1000000,
+        "p95": 1000000
+      },
+      "polars_operator_s": {
+        "p50": 0.0930074639909435,
+        "p95": 0.09758196002803743
+      },
+      "polars_peak_intermediate_rows": {
+        "p50": 200019,
+        "p95": 200019
+      },
+      "polars_planning_s": {
+        "p50": 2.910199691541493e-05,
+        "p95": 3.0506998882628977e-05
+      },
+      "polars_preflight_s": {
+        "p50": 0.040860578970750794,
+        "p95": 0.041029646003153175
+      },
+      "post_verify_s": {
+        "p50": 0.26680538601067383,
+        "p95": 0.2728170100017451
+      },
+      "query_pipeline_s": {
+        "p50": 10.489176078001037,
+        "p95": 10.494753744991613
+      },
+      "import_s": {
+        "p50": 0.2603310109989252,
+        "p95": 0.26052105000417214
+      },
+      "compile_s": {
+        "p50": 3.024500620085746e-05,
+        "p95": 3.136199666187167e-05
+      },
+      "reopen_s": {
+        "p50": 0.015875172990490682,
+        "p95": 0.01710767499753274
+      },
+      "total_pipeline_s": {
+        "p50": 10.766645009003696,
+        "p95": 10.76992145398981
+      }
+    },
+    "polars-prototype/warm": {
+      "view_open_s": {
+        "p50": 0.2667607610055711,
+        "p95": 0.2682743110053707
+      },
+      "extract_decode_verify_s": {
+        "p50": 4.9741489160078345,
+        "p95": 4.981023817003006
+      },
+      "prepare_s": {
+        "p50": 5.90996933169663e-07,
+        "p95": 7.24001438356936e-07
+      },
+      "evaluate_convert_s": {
+        "p50": 1.3745000700000674,
+        "p95": 1.3956042770005297
+      },
+      "polars_atom_plans": {
+        "p50": 17,
+        "p95": 17
+      },
+      "polars_candidate_rows": {
+        "p50": 3466861,
+        "p95": 3466861
+      },
+      "polars_conversion_s": {
+        "p50": 0.3407941299956292,
+        "p95": 0.34756078298960347
+      },
+      "polars_decode_s": {
+        "p50": 0.8526426400057971,
+        "p95": 0.8608945680025499
+      },
+      "polars_dictionary_symbols": {
+        "p50": 133334,
+        "p95": 133334
+      },
+      "polars_expression_s": {
+        "p50": 0.0003465370391495526,
+        "p95": 0.00037447907379828393
+      },
+      "polars_fixpoint_s": {
+        "p50": 0.1391023799951654,
+        "p95": 0.1412060339935124
+      },
+      "polars_input_s": {
+        "p50": 0.027776026996434666,
+        "p95": 0.028227374990819953
+      },
+      "polars_join_calls": {
+        "p50": 8,
+        "p95": 8
+      },
+      "polars_max_intermediate_rows": {
+        "p50": 1000000,
+        "p95": 1000000
+      },
+      "polars_operator_s": {
+        "p50": 0.09677715500583872,
+        "p95": 0.0976289570244262
+      },
+      "polars_peak_intermediate_rows": {
+        "p50": 200019,
+        "p95": 200019
+      },
+      "polars_planning_s": {
+        "p50": 2.5522997020743787e-05,
+        "p95": 2.71500030066818e-05
+      },
+      "polars_preflight_s": {
+        "p50": 0.041546055988874286,
+        "p95": 0.042816899018362164
+      },
+      "post_verify_s": {
+        "p50": 0.26588907299446873,
+        "p95": 0.2687344820005819
+      },
+      "query_pipeline_s": {
+        "p50": 6.884987544995965,
+        "p95": 6.897102047005319
+      },
+      "import_s": {
+        "p50": 0.26032950899389107,
+        "p95": 0.2622339250083314
+      },
+      "compile_s": {
+        "p50": 3.1795003451406956e-05,
+        "p95": 3.198599733877927e-05
+      },
+      "reopen_s": {
+        "p50": 0.016999291998217814,
+        "p95": 0.018015809007920325
+      },
+      "total_pipeline_s": {
+        "p50": 7.164250999005162,
+        "p95": 7.171591033009463
+      }
+    }
+  }
+}
