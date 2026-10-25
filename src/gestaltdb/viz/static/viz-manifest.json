@@ -3,7 +3,7 @@
   "app_version": "0.1.0",
   "bundle_js": "gestaltdb-viz.js",
   "bundle_css": "gestaltdb-viz.css",
-  "bundle_js_sha256": "5dc3a500626d641dae20b74426f8fb0b69e6313becb4db431d0bce14e8215c7a",
+  "bundle_js_sha256": "2343b5c10f9c6cf28f263d92ad705b2310d5467b332adba1b0f011088ef6ae1c",
   "bundle_css_sha256": "dbb72911196e8269368a25a00629420337c5a2d1d6cffddb2d7d5d3c7c13c387",
   "third_party_notices": "third-party-notices.txt",
   "third_party_notices_sha256": "24aaafe76cadbfe658c04d89096ab7398951a4ada03c3592d98a1eb9ded43080",
@@ -21,7 +21,7 @@
     "src/AppearanceControls.tsx": "8e46194d0036fe20d64075dcc80d80b262bde57c512bac12f8f8ecc1c2c66d9f",
     "src/ExplorationControls.tsx": "81494924f33706109d1660b4cc1f64589542180e62a31433dd8c75d20339b64c",
     "src/ExportControls.tsx": "61329848576ecffbcc661b07a349602c5020e808602edccb7cc9a25ae0ace94e",
-    "src/GraphCanvas.tsx": "42ef5715a04d1f59bbbb1b0834911ed7cf71b6851de7d3ef69c0de588455c908",
+    "src/GraphCanvas.tsx": "f15f24c8c200d51998a39b715362f978cb044f371e13564aa91c9470eee5ccd7",
     "src/Inspector.tsx": "1fb5f5f1a698e8d0b8fe96a78afcaa68b4d39a5f0988ce716cc1008888da2638",
     "src/appearance.ts": "da6076bedead269672f3354444782d9a8fc95d58e7f2bc43d227bd1b91ba0e85",
     "src/colors.ts": "48ad243d17671bb5c10b84deff1a0b30c4aedd5d5aaf9ee0f1d52f00bfaa3d33",
@@ -37,12 +37,12 @@
     "tsconfig.json": "5ef18e1e733ca6998c62ab11be2e7a86e71b0e3f66024c9c0d0ed10c684b876b",
     "vite.config.ts": "6bf30658a534f6c0917b89aac7d711ed6e0081d97b86dfb9dc6921605c9dc16a"
   },
-  "source_sha256": "40359ab7e5d883c9975bb0aeac00c90e2f530f572e98cfc45164b11d3dc7a119",
+  "source_sha256": "590c6a65530a93edf426a8557b79129756c5c5f3b62e86edd4adc497ff0d0afb",
   "toolchain": {
     "node": "v24.11.1",
     "npm": "npm/11.6.2 node/v24.11.1 linux x64 workspaces/false",
     "typescript": "5.6.3",
     "vite": "6.4.3"
   },
-  "built_at": "2026-10-25T23:29:55.525Z"
+  "built_at": "2026-10-25T23:35:02.105Z"
 }

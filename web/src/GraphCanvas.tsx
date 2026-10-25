@@ -49,6 +49,10 @@ interface SimLink extends d3.SimulationLinkDatum<SimNode> {
   dash: string | null;
 }
 
+/** Gentle simulation energy for interaction reheats: enough to ease nodes,
+ *  never enough to catapult a layout that sits far from force equilibrium. */
+const GENTLE_ALPHA = 0.08;
+
 /** Deterministic layered coordinates (top-down tree layout).
  *
  * Kahn layering over the given links in sorted uid order: nodes with no
@@ -165,7 +169,7 @@ export function GraphCanvas({
   function wakeSim() {
     const sim = simRef.current;
     if (sim && !settingsRef.current.paused) {
-      sim.alpha(Math.max(sim.alpha(), 0.08)).restart();
+      sim.alpha(Math.max(sim.alpha(), GENTLE_ALPHA)).restart();
     }
   }
 
@@ -387,7 +391,12 @@ export function GraphCanvas({
     const drag = d3
       .drag<SVGGElement, SimNode>()
       .on("start", (event, node) => {
-        if (!event.active && !settingsRef.current.paused) sim.alphaTarget(0.3).restart();
+        // Every mousedown fires drag-start, even a plain click: never reheat
+        // past gentle energy here or released nodes catapult on click.
+        if (!event.active && !settingsRef.current.paused) {
+          const sim = simRef.current;
+          if (sim) sim.alphaTarget(Math.max(sim.alphaTarget(), GENTLE_ALPHA)).restart();
+        }
         node.fx = node.x;
         node.fy = node.y;
       })

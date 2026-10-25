@@ -95,3 +95,39 @@ test("releasing a pinned tree node eases instead of flinging", async ({ page }) 
   expect(peak).toBeLessThan(200);
   expect(Math.hypot(ex - sx, ey - sy)).toBeLessThan(400);
 });
+
+test("dragging with released bystanders never reheats past gentle", async ({ page }) => {
+  await page.getByRole("button", { name: "Resume layout" }).click();
+  const dragged = page.getByRole("button", { name: 'Node ["a","ancestor","c"]' });
+  const bystanders = [
+    page.getByRole("button", { name: 'Node ["a","parent","b"]' }),
+    page.getByRole("button", { name: 'Node ["b","ancestor","c"]' }),
+  ];
+  for (const node of bystanders) {
+    await node.dblclick();
+    await page.waitForTimeout(200);
+  }
+  await page.waitForTimeout(2500);
+  const box = (await dragged.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  let peak = 0;
+  const previous = new Map<string, string | null>();
+  for (const node of bystanders) previous.set(await node.getAttribute("aria-label") ?? "", await node.getAttribute("transform"));
+  for (let i = 0; i < 10; i++) {
+    await page.mouse.move(box.x + i * 8, box.y + i * 6, { steps: 1 });
+    await page.waitForTimeout(150);
+    for (const node of bystanders) {
+      const key = (await node.getAttribute("aria-label")) ?? "";
+      const current = await node.getAttribute("transform");
+      const before = previous.get(key)!;
+      const [px, py] = before!.replace("translate(", "").replace(")", "").split(",").map(Number);
+      const [cx, cy] = current!.replace("translate(", "").replace(")", "").split(",").map(Number);
+      peak = Math.max(peak, Math.hypot(cx - px, cy - py));
+      previous.set(key, current);
+    }
+  }
+  await page.mouse.up();
+  // Every mousedown reheats through the gentle floor only.
+  expect(peak).toBeLessThan(100);
+});
