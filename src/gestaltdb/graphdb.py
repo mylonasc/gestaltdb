@@ -87,6 +87,7 @@ from ._graph import ingest_support as _ingest_support
 from ._graph import sampling as _sampling
 from ._graph import index_lookup as _index_lookup
 from ._graph import index_rebuild as _index_rebuild
+from ._graph import temporal_indexes as _temporal_indexes
 from ._graph import temporal_keys as _temporal_keys
 from ._graph import temporal_sequence as _temporal_sequence
 from ._graph.temporal_keys import (
@@ -2421,95 +2422,42 @@ class GraphDB:
         return _temporal_keys.temporal_instant_index_value(instant)
 
     def _load_temporal_index_state(self) -> dict | None:
-        payload = self.store.get_metadata(_TEMPORAL_INDEX_STATE_KEY)
-        if payload is None:
-            return None
-        try:
-            value = json.loads(payload.decode("utf-8"))
-            if not isinstance(value, dict):
-                raise ValueError
-            if value.get("format_version") in {1, 2, 3, 4}:
-                # Later temporal stages added catalogs and epistemic indexes.
-                # Older derived indexes must be rebuilt before querying.
-                return None
-            if value.get("format_version") != 5:
-                raise ValueError
-            indexed = value["indexed_through_commit"]
-            generation = value["active_generation"]
-            checksum = value["visibility_checksum"]
-            if isinstance(indexed, bool) or not isinstance(indexed, int) or indexed < 0:
-                raise ValueError
-            if isinstance(generation, bool) or not isinstance(generation, int) or generation < 1:
-                raise ValueError
-            if (
-                not isinstance(checksum, str)
-                or len(checksum) != 64
-                or any(character not in "0123456789abcdef" for character in checksum)
-            ):
-                raise ValueError
-            return value
-        except (KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise TemporalCorruptionError("invalid temporal index state") from exc
+        return _temporal_indexes.load_index_state(self.store, _TEMPORAL_INDEX_STATE_KEY)
 
     def _temporal_index_state(self) -> int | None:
-        state = self._load_temporal_index_state()
-        return None if state is None else state["indexed_through_commit"]
+        return _temporal_indexes.index_state_horizon(self.store, _TEMPORAL_INDEX_STATE_KEY)
 
     def _temporal_index_generation(self) -> int:
-        state = self._load_temporal_index_state()
-        return 1 if state is None else state["active_generation"]
+        return _temporal_indexes.index_state_generation(self.store, _TEMPORAL_INDEX_STATE_KEY)
 
     @staticmethod
     def _temporal_index_name(index_name: str, generation: int) -> str:
-        if generation == 0:
-            return index_name
-        return f"{index_name}:g{generation:016x}"
+        return _temporal_indexes.index_name(index_name, generation)
 
     def _temporal_visibility_checksum(
         self, through_commit: int, *, pending_marker=None
     ) -> str:
-        markers = []
-        for commit_id in range(1, through_commit + 1):
-            marker = (
-                pending_marker[1]
-                if pending_marker is not None and pending_marker[0] == commit_id
-                else self.store.get_metadata(self._temporal_visible_key(commit_id))
-            )
-            if marker is not None:
-                markers.append(commit_id.to_bytes(8, "big") + marker)
-        return hashlib.sha256(b"".join(markers)).hexdigest()
+        return _temporal_indexes.visibility_checksum(
+            self.store, through_commit, pending_marker=pending_marker
+        )
 
     def _persist_temporal_index_state(
         self, commit_id: int, generation: int, *, pending_marker=None
     ) -> None:
-        self.store.put_metadata(
-            _TEMPORAL_INDEX_STATE_KEY,
-            canonical_json_bytes({
-                "format_version": 5,
-                "active_generation": generation,
-                "indexed_through_commit": commit_id,
-                "visibility_checksum": self._temporal_visibility_checksum(
-                    commit_id, pending_marker=pending_marker
-                ),
-            }),
+        _temporal_indexes.persist_index_state(
+            self.store, _TEMPORAL_INDEX_STATE_KEY, commit_id, generation,
+            pending_marker=pending_marker,
         )
 
     def _ensure_temporal_indexes(self, horizon: int) -> None:
-        self._ensure_indexes_current("temporal")
-        indexed = self._temporal_index_state()
-        if horizon == 0 and indexed is None:
-            return
-        if indexed is None or indexed < horizon:
-            raise RuntimeError("stale indexes require rebuild before query: temporal")
-        state = self._load_temporal_index_state()
-        if state["visibility_checksum"] != self._temporal_visibility_checksum(indexed):
-            raise TemporalCorruptionError("temporal index generation visibility checksum mismatch")
+        _temporal_indexes.ensure_temporal_indexes(
+            self.store, _TEMPORAL_INDEX_STATE_KEY, _STALE_INDEXES_METADATA_KEY, horizon
+        )
 
     def _has_visible_temporal_history(self) -> bool:
-        last_commit_id, _ = self._temporal_sequence()
-        return any(
-            self.store.get_metadata(self._temporal_visible_key(commit_id)) is not None
-            for commit_id in range(1, last_commit_id + 1)
+        return _temporal_indexes.has_visible_temporal_history(
+            self.store, _TEMPORAL_SEQUENCE_KEY, self._store_path,
+            _TEMPORAL_SEQUENCE_FILENAME,
         )
 
     def _temporal_index_entries(self, version, *, generation=None):

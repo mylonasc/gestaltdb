@@ -11,6 +11,7 @@ from . import ingest_support
 from . import index_rebuild
 from . import registry
 from . import sampling
+from . import temporal_indexes
 from . import temporal_keys
 from . import temporal_sequence
 from .entities import (
@@ -55,6 +56,7 @@ __all__ = [
     "node_records",
     "registry",
     "sampling",
+    "temporal_indexes",
     "temporal_keys",
     "temporal_sequence",
 ]
