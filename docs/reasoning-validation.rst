@@ -76,3 +76,37 @@ general complexity or release-performance guarantee: validation buffers the
 closure, sorts/deduplicates it, and some checks rescan it per constraint or
 conflict. See #200 (D6) for the indexing/cancellation follow-up; callers must
 bound their input independently.
+
+Declarative structural validation (#394)
+----------------------------------------
+
+``gestaltdb.reasoning.structural`` covers shape constraints beyond conflict
+detection: required properties, min/max cardinalities, literal-kind datatype
+restrictions and mutually exclusive / exactly-one-of property groups. Each
+constraint is scoped to one class, and checks run only for entities typed as
+members of an explicitly declared ``closed_classes`` set — everything outside
+that scope keeps open-world silence, so partial exports never flood the
+report with absence assumptions.
+
+.. code-block:: python
+
+   from gestaltdb.reasoning.structural import (
+       ExclusiveGroup, RequiredField, StructuralSuite, validate_structural,
+   )
+   from gestaltdb.reasoning.typed import TypedFact
+
+   facts = [TypedFact("type", ["n", "Trade"])]
+   suite = StructuralSuite("type", closed_classes=["Trade"],
+                           required=[RequiredField("Trade", "tradeId")],
+                           exclusive=[ExclusiveGroup("Trade", ["cash", "physical"])])
+   report = validate_structural(facts, suite)
+   assert [item.kind for item in report.violations] == ["exclusive-violation", "missing-required"]
+
+Like the conflict suite, structural validation is read-only and bounded:
+deterministic canonical order, ``max_violations`` report budget with
+``truncated``, cooperative ``cancel``, and no inferred facts. The profile
+matrix admits ``required-property``, ``cardinality-bounds``,
+``datatype-check`` and ``exclusivity`` as ``validation-only`` rows via
+``reasoning.structural``; the older deferred ``cardinality``,
+``datatype-facets`` and ``shape-constraints`` rows keep their inference-level
+meaning and are unchanged.
