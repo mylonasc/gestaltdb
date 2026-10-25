@@ -589,3 +589,19 @@ Alternatives (universal identity migration, sampler alignment, tutorials and a
 release) remain useful but do not precede repairing the reproduced dispatcher
 defects. Demand pushdown is the next feature because it makes selective ontology
 queries practical without requiring another runtime.
+
+### Tracking sanitation (#156)
+
+Dedicated `feature/re-156-tracking-sanitation` on integration `2ed6ade` (#368).
+No competing implementation; unrelated work preserved.
+
+Sanitation corrects stale GitHub/roadmap display without closing genuine gates
+by child count: close completed RE-E1 #157, keep RE-E2 closed, keep RE-E3/E4
+open with explicit evidence gate #370 (sub-issue of #159) and RE-E5 sequentially
+blocked by #160, keep #200 open with D2-D6 disposition #371, remove stale #194
+blockers from closed #249/#254/#255, and correct the published `v0.13.0rc1`
+release record. Offline snapshot `planning/reasoning-engine/tracking-status.json`
+plus `check_tracking.py` (`--github` drift check) pins expected states and native
+sub-issue/blocked-by edges; `tracking-audit.md` records evidence and remaining
+checklists. Roadmap feature DAG and source hashes unchanged; no new engine,
+main merge, tag or release authorized.

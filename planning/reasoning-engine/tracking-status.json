@@ -1,0 +1,50 @@
+{
+  "reviewed_integration": "2ed6ade764d6af4d27a3fab52bc3fc3d5f5c41e5",
+  "review_date": "2026-10-25",
+  "note": "Explicit status/relationship snapshot for the 2026-10-25 tracking sanitation. Historical roadmap.json feature plan is unchanged; this file is the live GitHub tracking cache.",
+  "phases": {
+    "RE-E1": {"issue": 157, "state": "closed", "disposition": "complete; stale-open corrected after #162-#167 integrated and exit declared at 79e4369"},
+    "RE-E2": {"issue": 158, "state": "closed", "disposition": "complete; verified selected-profile contract at 131f2ce"},
+    "RE-E3": {"issue": 159, "state": "open", "disposition": "open sub-issue #370 carries durable crash/concurrency evidence gate"},
+    "RE-E4": {"issue": 160, "state": "open", "disposition": "blocked by #159, transitively covering #370"},
+    "RE-E5": {"issue": 161, "state": "open", "disposition": "bounded delivery reviewed; sequentially blocked by #160"}
+  },
+  "followups": {
+    "194": {"state": "open"},
+    "200": {"state": "open", "open_sub_issue": 371},
+    "248": {"state": "closed"},
+    "249": {"state": "closed"},
+    "250": {"state": "closed"},
+    "251": {"state": "closed"},
+    "252": {"state": "closed"},
+    "253": {"state": "closed"},
+    "254": {"state": "closed"},
+    "255": {"state": "closed"},
+    "256": {"state": "closed"},
+    "370": {"state": "open", "parent": 159},
+    "371": {"state": "open", "parent": 200}
+  },
+  "expected_sub_issues": {
+    "156": [157, 158, 159, 160, 161],
+    "157": [162, 163, 164, 165, 166, 167],
+    "158": [168, 169, 170, 171, 172, 173, 174],
+    "159": [175, 176, 177, 178, 179, 370],
+    "160": [180, 181, 182, 183],
+    "161": [184, 185, 186, 187, 188],
+    "200": [371]
+  },
+  "expected_blocked_by": {
+    "158": [157],
+    "159": [158],
+    "160": [159],
+    "161": [160],
+    "249": [248],
+    "254": [245],
+    "255": [248, 249, 251]
+  },
+  "removed_stale_blockers": {
+    "249": [194],
+    "254": [194],
+    "255": [194]
+  }
+}
