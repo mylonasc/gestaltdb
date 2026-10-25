@@ -16,6 +16,7 @@ from . import temporal_indexes
 from . import temporal_keys
 from . import temporal_orphans
 from . import temporal_reads
+from . import truth_maintenance
 from . import temporal_writes
 from . import temporal_sequence
 from .entities import (
@@ -65,6 +66,7 @@ __all__ = [
     "temporal_keys",
     "temporal_orphans",
     "temporal_reads",
+    "truth_maintenance",
     "temporal_writes",
     "temporal_sequence",
 ]

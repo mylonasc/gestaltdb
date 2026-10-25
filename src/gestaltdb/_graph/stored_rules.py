@@ -23,17 +23,23 @@ if TYPE_CHECKING:
 from ..epistemic import Claim, ClaimObjectKind, ClaimPolarity
 from ..ingestion import IndexMaintenanceMode
 from ..rules import (
+    ClaimExplanation,
+    ExplanationEdge,
+    ExplanationNode,
     RuleAbsence,
     RuleError,
     RuleEvaluationLimitError,
     RuleJustification,
     RuleRunResult,
     RuleVersion,
+    TruthMaintenanceResult,
+    absence_node_id,
     normalize_rule_definition,
     stratify_rules,
 )
-from ..temporal import TemporalInterval
+from ..temporal import TemporalInstant, TemporalInterval
 from ..versioning import (
+    TemporalCorruptionError,
     ClaimVersion,
     ClaimVersionWrite,
     NodeVersion,
@@ -42,10 +48,11 @@ from ..versioning import (
     normalize_version_id,
 )
 from .temporal_reads import TemporalReader, _UNSET
-from .temporal_sequence import next_temporal_system_time
+from .temporal_sequence import next_temporal_system_time, read_temporal_sequence
 
 RULE_CATALOG_KEY = b"rules:catalog:v1"
 RULE_ENGINE_AGENT = "gestaltdb:rules"
+TRUTH_MAINTENANCE_STATE_KEY = b"rules:truth-maintenance:v1"
 
 
 def load_rule_catalog(store: KVStore) -> tuple[RuleVersion, ...]:
@@ -487,4 +494,3 @@ def run_rules(reader: TemporalReader, commit_fn: Callable, live_store: Callable,
         commit.commit_id,
         commit.versions,
     )
-
