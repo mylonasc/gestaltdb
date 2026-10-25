@@ -11,6 +11,7 @@ from . import ingest_support
 from . import index_rebuild
 from . import registry
 from . import sampling
+from . import stored_rules
 from . import temporal_indexes
 from . import temporal_keys
 from . import temporal_orphans
@@ -59,6 +60,7 @@ __all__ = [
     "node_records",
     "registry",
     "sampling",
+    "stored_rules",
     "temporal_indexes",
     "temporal_keys",
     "temporal_orphans",
