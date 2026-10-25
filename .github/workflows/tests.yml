@@ -79,7 +79,11 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Install LevelDB build dependency
+        run: sudo apt-get update && sudo apt-get install --yes libleveldb-dev
+
       - name: Install package with all optional integrations
+        # Python 3.13 may build Plyvel from source rather than use a wheel.
         run: python -m pip install -e ".[all,coverage]"
 
       - name: Run tests

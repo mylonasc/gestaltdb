@@ -86,3 +86,10 @@ def test_docs_validation_remains_and_pr_builds_do_not_queue_behind_deployment():
     assert "check_docs.py" in text
     assert "check_roadmap.py" in text
     assert "group: pages-${{ github.event.pull_request.number || 'deployment' }}" in text
+
+
+def test_optional_integrations_installs_native_build_prerequisite():
+    text = (WORKFLOWS / "tests.yml").read_text().split("  optional-integrations:", 1)[1]
+    assert "libleveldb-dev" in text
+    assert text.index("libleveldb-dev") < text.index('.[all,coverage]')
+    assert 'python-version: "3.13"' in text
