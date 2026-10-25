@@ -13,6 +13,7 @@ from . import registry
 from . import sampling
 from . import stored_rules
 from . import temporal_indexes
+from . import temporal_entity_writes
 from . import temporal_keys
 from . import temporal_orphans
 from . import temporal_reads
@@ -63,6 +64,7 @@ __all__ = [
     "sampling",
     "stored_rules",
     "temporal_indexes",
+    "temporal_entity_writes",
     "temporal_keys",
     "temporal_orphans",
     "temporal_reads",

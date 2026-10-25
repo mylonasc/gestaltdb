@@ -112,6 +112,7 @@ from ._graph import truth_maintenance as _truth_maintenance
 from ._graph.stored_rules import RULE_CATALOG_KEY as _RULE_CATALOG_KEY
 from ._graph.stored_rules import RULE_ENGINE_AGENT as _RULE_ENGINE_AGENT
 from ._graph.truth_maintenance import TRUTH_MAINTENANCE_STATE_KEY as _TRUTH_MAINTENANCE_STATE_KEY
+from ._graph import temporal_entity_writes as _temporal_entity_writes
 from ._graph import temporal_reads as _temporal_reads
 from ._graph.temporal_reads import _UNSET
 from ._graph import temporal_writes as _temporal_writes
@@ -2670,22 +2671,20 @@ class GraphDB:
         index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> NodeVersion:
         """Append an immutable node assertion without changing the current graph."""
-        commit = self.commit_versions(
-            [NodeVersionWrite.assertion(node, valid, version_id=version_id)],
+        return _temporal_entity_writes.put_node_version(
+            self.commit_versions, node, valid=valid, version_id=version_id,
             metadata=metadata, index_mode=index_mode,
         )
-        return commit.versions[0]  # type: ignore[return-value]
 
     def put_edge_version(
         self, edge: Edge, *, valid, version_id=None, metadata=None,
         index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> EdgeVersion:
         """Append an immutable edge assertion without changing the current graph."""
-        commit = self.commit_versions(
-            [EdgeVersionWrite.assertion(edge, valid, version_id=version_id)],
+        return _temporal_entity_writes.put_edge_version(
+            self.commit_versions, edge, valid=valid, version_id=version_id,
             metadata=metadata, index_mode=index_mode,
         )
-        return commit.versions[0]  # type: ignore[return-value]
 
     def migrate_time_indexed_edges(
         self,
@@ -2714,103 +2713,11 @@ class GraphDB:
             TemporalCorruptionError: If a legacy record cannot be decoded or its
                 timestamp-prefixed key does not match its payload.
         """
-        grouped: dict[str, list[tuple[bytes, TimeIndexedEdge, TemporalInstant]]] = {}
-        for raw_key in self.store.get_edge_keys_generator():
-            try:
-                edge = self.get_edge(raw_key)
-            except Exception as exc:
-                raise TemporalCorruptionError(
-                    f"cannot decode legacy edge record at key {raw_key!r}"
-                ) from exc
-            if not isinstance(edge, TimeIndexedEdge):
-                continue
-            try:
-                instant = normalize_temporal_instant(edge.timestamp_dat)
-                expected_key = edge.get_id_bytes
-            except (TypeError, ValueError, OverflowError, struct.error) as exc:
-                raise TemporalCorruptionError(
-                    f"legacy TimeIndexedEdge '{edge.get_id}' has an invalid timestamp"
-                ) from exc
-            if raw_key != expected_key:
-                raise TemporalCorruptionError(
-                    f"legacy TimeIndexedEdge '{edge.get_id}' key does not match its payload"
-                )
-            grouped.setdefault(edge.get_id, []).append((raw_key, edge, instant))
-
-        existing_migration_versions: dict[str, list[EdgeVersion]] = {}
-        migration_exists = False
-        for commit in self.iter_temporal_commits():
-            if commit.metadata.get("migration") != "TimeIndexedEdge":
-                continue
-            migration_exists = True
-            for version in commit.versions:
-                if isinstance(version, EdgeVersion):
-                    existing_migration_versions.setdefault(version.logical_id, []).append(version)
-
-        unseen_logical_ids = sorted(set(grouped) - set(existing_migration_versions))
-        if migration_exists and unseen_logical_ids:
-            raise TemporalVersionError(
-                "legacy TimeIndexedEdge input contains new logical IDs after migration: "
-                + ", ".join(unseen_logical_ids)
-            )
-
-        writes: list[EdgeVersionWrite] = []
-        migrated_keys: list[bytes] = []
-        for logical_id in sorted(grouped):
-            records = sorted(grouped[logical_id], key=lambda item: (item[2].epoch_microseconds, item[0]))
-            starts = [item[2].epoch_microseconds for item in records]
-            if len(starts) != len(set(starts)):
-                raise TemporalVersionError(
-                    f"legacy TimeIndexedEdge '{logical_id}' has duplicate timestamps"
-                )
-            existing_versions = existing_migration_versions.get(logical_id, [])
-            existing_assertions = [
-                version for version in existing_versions
-                if version.operation is VersionOperation.ASSERT and version.edge is not None
-            ]
-            for index, (raw_key, edge, start) in enumerate(records):
-                end = records[index + 1][2] if index + 1 < len(records) else None
-                plain_edge = Edge(
-                    edge_id=edge.get_id,
-                    source=edge.source,
-                    target=edge.target,
-                    properties=edge.properties,
-                )
-                valid = TemporalInterval(start, end)
-                matching_version = any(
-                    version.operation is VersionOperation.ASSERT
-                    and version.valid.start == start
-                    and version.edge is not None
-                    and version.edge.to_dict() == plain_edge.to_dict()
-                    for version in existing_assertions
-                )
-                if existing_versions and not matching_version:
-                    raise TemporalVersionError(
-                        f"legacy TimeIndexedEdge '{logical_id}' changed after migration"
-                    )
-                if not existing_versions:
-                    writes.append(EdgeVersionWrite.assertion(plain_edge, valid))
-                migrated_keys.append(raw_key)
-
-        versions: tuple[EdgeVersion, ...] = ()
-        if writes:
-            migration_metadata = {
-                "migration": "TimeIndexedEdge",
-                "interval_policy": "successive",
-            }
-            if metadata is not None:
-                migration_metadata["user"] = dict(metadata)
-            commit = self.commit_versions(
-                writes,
-                metadata=migration_metadata,
-                index_mode=index_mode,
-            )
-            versions = tuple(commit.versions)  # type: ignore[assignment]
-
-        if delete_legacy:
-            for raw_key in migrated_keys:
-                self.delete_edge(raw_key)
-        return versions
+        return _temporal_entity_writes.migrate_time_indexed_edges(
+            self.store, self.entity_serializer, self._temporal_reader(),
+            self.commit_versions, self.delete_edge, metadata=metadata,
+            index_mode=index_mode, delete_legacy=delete_legacy,
+        )
 
     def correct_node_version(
         self,
@@ -2823,15 +2730,10 @@ class GraphDB:
         index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> NodeVersion:
         """Append a corrected node payload while preserving the superseded version."""
-        commit = self.commit_versions([
-            NodeVersionWrite.correction(
-                node,
-                supersedes_version_id=supersedes_version_id,
-                valid=valid,
-                version_id=version_id,
-            )
-        ], metadata=metadata, index_mode=index_mode)
-        return commit.versions[0]  # type: ignore[return-value]
+        return _temporal_entity_writes.correct_node_version(
+            self.commit_versions, node, supersedes_version_id=supersedes_version_id,
+            valid=valid, version_id=version_id, metadata=metadata, index_mode=index_mode,
+        )
 
     def correct_edge_version(
         self,
@@ -2844,15 +2746,10 @@ class GraphDB:
         index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> EdgeVersion:
         """Append a corrected edge payload while preserving the superseded version."""
-        commit = self.commit_versions([
-            EdgeVersionWrite.correction(
-                edge,
-                supersedes_version_id=supersedes_version_id,
-                valid=valid,
-                version_id=version_id,
-            )
-        ], metadata=metadata, index_mode=index_mode)
-        return commit.versions[0]  # type: ignore[return-value]
+        return _temporal_entity_writes.correct_edge_version(
+            self.commit_versions, edge, supersedes_version_id=supersedes_version_id,
+            valid=valid, version_id=version_id, metadata=metadata, index_mode=index_mode,
+        )
 
     def retract_node_version(
         self,
@@ -2870,17 +2767,12 @@ class GraphDB:
 
         Raise TemporalVersionError if the node has no asserted temporal history.
         """
-        commit = self.commit_versions([
-            NodeVersionWrite.retraction(
-                logical_id,
-                valid=valid,
-                valid_from=valid_from,
-                supersedes_version_id=supersedes_version_id,
-                reason=reason,
-                version_id=version_id,
-            )
-        ], metadata=metadata, index_mode=index_mode)
-        return commit.versions[0]  # type: ignore[return-value]
+        return _temporal_entity_writes.retract_node_version(
+            self.commit_versions, logical_id, valid=valid,
+            valid_from=valid_from, supersedes_version_id=supersedes_version_id,
+            reason=reason, version_id=version_id, metadata=metadata,
+            index_mode=index_mode,
+        )
 
     def retract_edge_version(
         self,
@@ -2898,17 +2790,12 @@ class GraphDB:
 
         Raise TemporalVersionError if the edge has no asserted temporal history.
         """
-        commit = self.commit_versions([
-            EdgeVersionWrite.retraction(
-                logical_id,
-                valid=valid,
-                valid_from=valid_from,
-                supersedes_version_id=supersedes_version_id,
-                reason=reason,
-                version_id=version_id,
-            )
-        ], metadata=metadata, index_mode=index_mode)
-        return commit.versions[0]  # type: ignore[return-value]
+        return _temporal_entity_writes.retract_edge_version(
+            self.commit_versions, logical_id, valid=valid,
+            valid_from=valid_from, supersedes_version_id=supersedes_version_id,
+            reason=reason, version_id=version_id, metadata=metadata,
+            index_mode=index_mode,
+        )
 
     def assert_claim(
         self,
@@ -2931,26 +2818,14 @@ class GraphDB:
         index_mode=IndexMaintenanceMode.MAINTAIN,
     ) -> ClaimVersion:
         """Append an immutable sourced assertion or denial."""
-        interval = self._claim_valid_interval(valid, valid_from, valid_to, required=True)
-        claim = Claim(
-            subject=subject,
-            predicate=predicate,
-            object=object,
-            object_kind=object_kind,
-            polarity=polarity,
-            agent=agent,
-            source=source,
-            confidence=confidence,
-            world=world,
-            provenance={} if provenance is None else provenance,
-        )
-        commit = self.commit_versions(
-            [ClaimVersionWrite.assertion(claim, interval, version_id=version_id)],
-            metadata=metadata,
+        return _temporal_entity_writes.assert_claim(
+            self.commit_versions, subject=subject, predicate=predicate,
+            object=object, polarity=polarity, agent=agent, source=source,
+            confidence=confidence, world=world, provenance=provenance,
+            object_kind=object_kind, valid=valid, valid_from=valid_from,
+            valid_to=valid_to, version_id=version_id, metadata=metadata,
             index_mode=index_mode,
         )
-        return commit.versions[0]  # type: ignore[return-value]
-
     def assert_world_accessibility(
         self,
         *,
@@ -3044,34 +2919,13 @@ class GraphDB:
         values, or the superseded version's values when given a claim ID.
         Omitted keywords preserve those values; the claim identity cannot change.
         """
-        target = self._get_temporal_version(normalize_version_id(supersedes_version_id))
-        if not isinstance(target, ClaimVersion) or target.claim is None:
-            raise TemporalVersionError("superseded claim version does not exist")
-        if isinstance(claim, Claim):
-            payload = claim.to_dict()
-        else:
-            claim_id = normalize_logical_id(claim)
-            if claim_id != target.logical_id:
-                raise TemporalVersionError("superseded claim version has a different claim ID")
-            payload = target.claim.to_dict()
-        if confidence is not _UNSET:
-            payload["confidence"] = confidence
-        if provenance is not _UNSET:
-            payload["provenance"] = provenance
-        corrected = Claim.from_dict(payload)
-        if corrected.claim_id != target.logical_id:
-            raise TemporalVersionError("claim corrections cannot change epistemic identity")
-        interval = self._claim_valid_interval(valid, valid_from, valid_to, required=False)
-        commit = self.commit_versions([
-            ClaimVersionWrite.correction(
-                corrected,
-                supersedes_version_id=supersedes_version_id,
-                valid=interval,
-                version_id=version_id,
-            )
-        ], metadata=metadata, index_mode=index_mode)
-        return commit.versions[0]  # type: ignore[return-value]
-
+        return _temporal_entity_writes.correct_claim(
+            self._temporal_reader(), self.commit_versions, claim,
+            supersedes_version_id=supersedes_version_id, confidence=confidence,
+            provenance=provenance, valid=valid, valid_from=valid_from,
+            valid_to=valid_to, version_id=version_id, metadata=metadata,
+            index_mode=index_mode,
+        )
     def retract_claim(
         self,
         claim_id,
@@ -3089,19 +2943,12 @@ class GraphDB:
 
         Raise TemporalVersionError if the claim has no asserted temporal history.
         """
-        interval = self._claim_valid_interval(valid, valid_from, valid_to, required=False)
-        commit = self.commit_versions([
-            ClaimVersionWrite.retraction(
-                claim_id,
-                valid=interval,
-                supersedes_version_id=supersedes_version_id,
-                reason=reason,
-                version_id=version_id,
-            )
-        ], metadata=metadata, index_mode=index_mode)
-        return commit.versions[0]  # type: ignore[return-value]
-
-    @staticmethod
+        return _temporal_entity_writes.retract_claim(
+            self.commit_versions, claim_id, valid=valid,
+            valid_from=valid_from, valid_to=valid_to,
+            supersedes_version_id=supersedes_version_id, reason=reason,
+            version_id=version_id, metadata=metadata, index_mode=index_mode,
+        )
     def _claim_valid_interval(valid, valid_from, valid_to, *, required):
         return _temporal_reads.claim_valid_interval(
             valid, valid_from, valid_to, required=required)
