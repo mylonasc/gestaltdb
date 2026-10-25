@@ -227,6 +227,29 @@ Docs drift, all 8 examples, executable Sphinx guide, Sphinx `-W`, roadmap and
 diff checks passed. Authenticated inferred tests: 115 passed across the three
 backends, plus all legacy-consumer regressions in the full suite.
 
+### Original generation-admission acceptance review (#248)
+
+Branch/worktree `feature/re-248-acceptance` / `re-248-acceptance`, from integration
+`6b51545` (#361 exact-head green and merged; post-merge watcher active).
+Reconciled the original acceptance rather than treating child closures as proof:
+all identity dimensions, historical/latest semantics, inward-only core,
+pre-write mismatch evidence, and existing point/current/range/publication/durable/
+inferred consumers now have an explicit evidence map in
+`planning/reasoning-followthrough/generation-contract.md`.
+
+Cache audit distinguishes source-independent specialized programs and pure
+logical segment memoization from durable source-bound state; low-level catalog
+pins and GraphDB decode integrity are not silently promoted to authentication.
+No generic persistent closure cache was found or invented. Legacy entrypoints
+retain explicit compatibility limits. #255, #194 and broader phase acceptance
+are not closed by this reconciliation. Runtime code unchanged; final review and
+post-merge gates are still required before closing #248.
+
+Reconciliation validation: **3,159 passed / 2 skipped** (61.41s), with all
+optional backends/serializers/RDF/Polars/docs/bloom and ontology requirements;
+docs drift, 8/8 examples, Sphinx `-W`, roadmap and whitespace checks passed.
+All 13 referenced acceptance-test paths were checked to exist. Runtime unchanged.
+
 ### Prior ordered follow-through
 
 Native GitHub links established: #338 (identity), #339 (input bounds), #340
