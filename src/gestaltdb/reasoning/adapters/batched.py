@@ -131,6 +131,13 @@ class PinnedBatchedClaimSource:
     def __exit__(self, exc_type, exc, traceback) -> None:
         self.close()
 
+    def _iter_versions(self, query, cancel=None):
+        """Physical candidate provider; policy/evidence validation stays shared."""
+        return self._pinned.iter_claims_as_of(
+            valid_time=self._time, world=self._request.world,
+            polarity=ClaimPolarity.POSITIVE, object_kind=ClaimObjectKind.ENTITY, **query,
+        )
+
     def _filtered(self, cancel=None) -> Iterator[Evidence]:
         request = self._request
         predicates = request.predicates
@@ -155,10 +162,7 @@ class PinnedBatchedClaimSource:
         seen: set[str] = set()
         count = 0
         for query in queries:
-            iterator = iter(self._pinned.iter_claims_as_of(
-                valid_time=self._time, world=request.world,
-                polarity=ClaimPolarity.POSITIVE, object_kind=ClaimObjectKind.ENTITY, **query,
-            ))
+            iterator = iter(self._iter_versions(query, cancel))
             while True:
                 check_cancelled(cancel)
                 self._check_binding()
@@ -239,7 +243,7 @@ class PinnedBatchedClaimSource:
         self.verify_source()
 
         def flattened() -> Iterator[Evidence]:
-            for batch in self.iter_batches():
+            for batch in self.iter_batches(cancel=cancel):
                 yield from batch.evidence
 
         result = DatalogEngine().evaluate(compiled.program, flattened(), limits=limits,

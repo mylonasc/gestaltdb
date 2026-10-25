@@ -1,5 +1,10 @@
 # GestaltDB Examples
 
+For explicit authenticated native temporal-claim extraction with canonical
+correction/retraction selection and exact version parity, see the executable
+example in [`docs/reasoning-native-claims.rst`](docs/reasoning-native-claims.rst).
+This full-scan correctness path does not imply native index pushdown or speedup.
+
 For authenticated complete current-graph projection with generation pins and
 explicit executor admission, see the runnable example in
 [`docs/reasoning-current-admission.rst`](docs/reasoning-current-admission.rst).
