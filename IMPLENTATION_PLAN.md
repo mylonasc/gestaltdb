@@ -167,6 +167,12 @@ commit interruption and explicit nontransactional orphan recovery.
 
 ### Durable-session consumer continuation (#356)
 
+Final local validation: **3,044 passed / 2 skipped** (47.35s), with backends,
+serializers, RDF, Polars, docs, bloom and independent ontology requirements.
+Documentation drift, all 8 executable examples, Sphinx warnings-as-errors,
+roadmap consistency and diff whitespace gates passed. This includes authenticated
+cross-process restarts and exact-state contention/fault regressions.
+
 Baseline `134378c` includes #359/#355; all exact-head and post-merge gates passed.
 Branch `feature/re-356-session-admission`, worktree `re-356-session-admission`.
 Connect existing v1 files to typed-point source admission with exact caller
