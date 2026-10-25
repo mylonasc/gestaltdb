@@ -1643,50 +1643,8 @@ class GraphDB:
         if self._implicit_transaction_required():
             with self.transaction() as tx:
                 return tx.put_nodes(nodes)
-        to_store = {}
-        index_entries = []
-        range_entries = []
-        for n in nodes:
-            old_node = self.get_node(n.get_id_bytes)
-            if old_node is not None:
-                self._delete_node_indexes(old_node)
-            to_store[n.get_id_bytes] = self.entity_serializer.serialize(n, 'Node')
-            for label in n.labels:
-                index_entries.append(("node_label", [label.encode("utf-8")], n.get_id_bytes))
-            for property_name in self.indexed_node_properties:
-                if property_name in n.properties:
-                    property_value = _property_value_to_index_bytes(n.properties[property_name])
-                    index_entries.append((
-                        "node_property",
-                        [property_name.encode("utf-8"), property_value],
-                        n.get_id_bytes,
-                    ))
-                    for label in n.labels:
-                        index_entries.append((
-                            "node_label_property",
-                            [label.encode("utf-8"), property_name.encode("utf-8"), property_value],
-                            n.get_id_bytes,
-                        ))
-                    range_value = _property_value_to_range_index_bytes(n.properties[property_name])
-                    if range_value is not None:
-                        range_entries.append((
-                            "node_property",
-                            [property_name.encode("utf-8")],
-                            range_value,
-                            n.get_id_bytes,
-                        ))
-                        for label in n.labels:
-                            range_entries.append((
-                                "node_label_property",
-                                [label.encode("utf-8"), property_name.encode("utf-8")],
-                                range_value,
-                                n.get_id_bytes,
-                            ))
-        self.store.put_nodes_bulk(to_store)
-        if index_entries:
-            self.store.put_index_entries_bulk(index_entries)
-        if range_entries:
-            self.store.put_range_index_entries_bulk(range_entries)
+        _node_records.put_nodes(
+            self.store, self.entity_serializer, self.indexed_node_properties, nodes)
 
     def ingest_polars(
         self,
@@ -2146,33 +2104,12 @@ class GraphDB:
         Returns a list of node_ids in BFS order starting from `start_node_id`.
         Demonstrates how adjacency is used for graph traversal.
         """
-        visited = set()
-        queue = [start_node_id]
-        result = []
-        while queue:
-            current = queue.pop(0)
-            if current in visited:
-                continue
-            visited.add(current)
-            result.append(current)
-
-            # 1) get adjacency list for current
-            edges_list = self.get_adjacency_list(current, direction = direction)
-            
-            # 2) for each edge in adjacency, find the other node
-            for e_id in edges_list:
-                _ser_edge_key = edge_key_serializer(e_id)
-                edge_obj = self.get_edge(_ser_edge_key)
-                if not edge_obj:
-                    continue
-                _source_node = node_key_serializer(edge_obj.source)
-                neighbor = (
-                    node_key_serializer(edge_obj.target) if _source_node == current else _source_node
-                )
-                if neighbor not in visited:
-                    queue.append(neighbor)
-
-        return result
+        return _edge_records.bfs(
+            self.store, self.entity_serializer, self.serializer,
+            start_node_id, direction=direction,
+            edge_key_serializer=edge_key_serializer,
+            node_key_serializer=node_key_serializer,
+        )
 
     def put_edges_bulk(self, edges: List[Edge], check_existing: bool = True):
         """Store multiple edges and update adjacency indexes in bulk.

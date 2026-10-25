@@ -151,3 +151,36 @@ def remove_edge_from_adjacency(store: KVStore, raw_serializer, node_id: str, edg
             store.delete_adjacency(node_id)
         else:
             put_adjacency_list(store, raw_serializer, node_id, adj_list)
+
+
+def bfs(store, entity_serializer, raw_serializer, start_node_id: bytes,
+        direction: str = 'any', edge_key_serializer=lambda x: x.encode('utf-8'),
+        node_key_serializer=lambda x: x.encode('utf-8')) -> list:
+    """Return node IDs in BFS order over legacy adjacency blobs."""
+    visited = set()
+    queue = [start_node_id]
+    result = []
+    while queue:
+        current = queue.pop(0)
+        if current in visited:
+            continue
+        visited.add(current)
+        result.append(current)
+
+        # 1) get adjacency list for current
+        edges_list = get_adjacency_list(store, raw_serializer, current, direction=direction)
+
+        # 2) for each edge in adjacency, find the other node
+        for e_id in edges_list:
+            _ser_edge_key = edge_key_serializer(e_id)
+            edge_obj = get_edge(store, entity_serializer, _ser_edge_key)
+            if not edge_obj:
+                continue
+            _source_node = node_key_serializer(edge_obj.source)
+            neighbor = (
+                node_key_serializer(edge_obj.target) if _source_node == current else _source_node
+            )
+            if neighbor not in visited:
+                queue.append(neighbor)
+
+    return result
