@@ -16,7 +16,6 @@ import base64
 from collections.abc import Mapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import replace
-from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, List, Optional, Union
 
@@ -82,6 +81,13 @@ from .versioning import (
 )
 from ._graph import adjacency as _adjacency
 from ._graph import index_maintenance as _index_maintenance
+from ._graph.registry import (
+    backend_registry as _backend_registry,
+    gestaltdb_version as _gestaltdb_version,
+    registry_name_for_instance as _registry_name_for_instance,
+    serializer_registry as _serializer_registry,
+    utc_now_iso as _utc_now_iso,
+)
 from ._graph.entities import (
     Edge,
     GraphEntityDictSerializer,
@@ -206,45 +212,6 @@ def _temporal_writer_lock(path: Path) -> _TemporalWriterLock:
             lock = _TemporalWriterLock(canonical / _TEMPORAL_WRITER_LOCK_FILENAME)
             _TEMPORAL_WRITER_LOCKS[key] = lock
         return lock
-
-
-def _utc_now_iso() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def _gestaltdb_version() -> str | None:
-    try:
-        return importlib_metadata.version("gestaltdb")
-    except importlib_metadata.PackageNotFoundError:
-        return None
-
-
-def _backend_registry():
-    from .kvstores import LMDBStore, LevelDBStore, PyRexStore
-
-    return {
-        "lmdb": LMDBStore,
-        "leveldb": LevelDBStore,
-        "pyrex": PyRexStore,
-    }
-
-
-def _serializer_registry():
-    from .serializers import JSONSerializer, MessagePackSerializer, PickleSerializer, ProtobufSerializer
-
-    return {
-        "pickle": PickleSerializer,
-        "json": JSONSerializer,
-        "messagepack": MessagePackSerializer,
-        "protobuf": ProtobufSerializer,
-    }
-
-
-def _registry_name_for_instance(instance, registry: dict[str, type]) -> str | None:
-    for name, cls in registry.items():
-        if isinstance(instance, cls):
-            return name
-    return None
 
 
 class _SimpleProgress:
