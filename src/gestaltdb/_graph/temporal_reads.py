@@ -545,4 +545,3 @@ def claim_valid_interval(valid, valid_from, valid_to, *, required):
         normalize_temporal_instant(valid_from),
         None if valid_to is None else normalize_temporal_instant(valid_to),
     )
-
