@@ -23,3 +23,7 @@ fact, weight ``1.0`` and no hidden rewrite. Generation mismatches and
 non-empty output paths fail closed. Neither probabilistic reasoning nor
 coordination with #127/#128 beyond leaving those interfaces untouched is
 implemented here.
+
+This legacy builder does not independently authenticate its supplied session.
+For exact shared generation/state admission, complete versioned metadata and
+independent artifact hydration, use :doc:`reasoning-authenticated-inferred`.

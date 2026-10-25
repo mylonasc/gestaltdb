@@ -23,6 +23,12 @@ see [`docs/reasoning-authenticated-sessions.rst`](docs/reasoning-authenticated-s
 It preserves v1 artifacts while checking both generation identity and session
 state; raw checksums and horizon-only comparisons are insufficient.
 
+For the existing inferred sampler consumer's authenticated build and complete
+artifact hydration, see [`docs/reasoning-authenticated-inferred.rst`](docs/reasoning-authenticated-inferred.rst).
+Use exact caller generation/state pins and explicit projection selection;
+pass the admitted snapshot directly to `SamplerEngine` rather than reloading
+through the raw, source-unverified loader.
+
 These examples are designed for developers and agents who need working patterns quickly. They use explicit imports from submodules because the package root intentionally exports only selected helpers.
 
 **Filtering and sampling workflows:** [Indexed property lookups](#index-and-lookup-properties) · [Live typed sampling](#traverse-and-sample-typed-relationships) · [Filtered, reusable sampler snapshots](#build-and-use-a-sampler-snapshot). The [sampling guide](https://mylonasc.github.io/gestaltdb/typed-sampling.html) covers all policies; the [filtering guide](https://mylonasc.github.io/gestaltdb/property-filtering.html) explains seed selection versus filtering every sampled hop.

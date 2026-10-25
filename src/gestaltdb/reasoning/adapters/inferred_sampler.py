@@ -27,7 +27,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable, Mapping
 
-from ..model import ReasoningError, _text
+from ..model import ReasoningError, ReasoningLimitError, _text, check_cancelled
 from ..typed import TypedFact, _sort_key
 from ...sampling.snapshot import SamplerSnapshot
 from .sessions import ReasoningSession
@@ -54,7 +54,11 @@ def build_inferred_snapshot(
     edge_predicates: Iterable[str] = ("memberOf",),
     expected_generation: Mapping[str, object] | None = None,
 ) -> SamplerSnapshot:
-    """Build an immutable snapshot from one pinned session's inferred view."""
+    """Legacy unverified builder: partial mapping pins are not source admission.
+
+    For independent source authentication and exact shared generation/state
+    pins use authenticated_inferred_sampler.build_authenticated_inferred_snapshot.
+    """
     if not isinstance(session, ReasoningSession):
         raise ReasoningError("session must be a ReasoningSession")
     node_predicate = _text(node_predicate, "node_predicate")
@@ -73,13 +77,29 @@ def build_inferred_snapshot(
                 raise ReasoningError(
                     f"generation/view mismatch on {key!r}; rebuild from the pinned session explicitly"
                 )
-    inferred_nodes = sorted(
-        {fact.values[0] for fact in session.facts
-         if fact.predicate == node_predicate and len(fact.values) == 1 and isinstance(fact.values[0], str)}
-    )
+    arrays, counts = _project_inferred(session, node_predicate, predicates)
+    target = Path(output_path)
+    if target.exists() and any(target.iterdir()):
+        raise ReasoningError("output_path already holds a snapshot; use a new path per generation")
+    generation = _generation_of(session, node_predicate, predicates)
+    generation.update(counts)
+    return SamplerSnapshot.from_edge_arrays(target, **arrays, metadata={"reasoning_generation": generation})
+
+
+def _project_inferred(session, node_predicate, predicates, *, cancel=None, max_nodes=None, max_edges=None):
+    """One deterministic projection shared by legacy and authenticated consumers."""
+    node_set = set()
+    for fact in session.facts:
+        check_cancelled(cancel)
+        if fact.predicate == node_predicate and len(fact.values) == 1 and isinstance(fact.values[0], str):
+            node_set.add(fact.values[0])
+            if max_nodes is not None and len(node_set) > max_nodes:
+                raise ReasoningLimitError("inferred projection exceeded max_nodes")
+    inferred_nodes = sorted(node_set)
     node_set = set(inferred_nodes)
     selected: list[TypedFact] = []
     for fact in sorted(session.facts, key=_sort_key):
+        check_cancelled(cancel)
         if fact.predicate not in predicates or len(fact.values) != 2:
             continue
         src, dst = fact.values
@@ -88,9 +108,14 @@ def build_inferred_snapshot(
         if src not in node_set:
             continue
         selected.append(fact)
+        if max_edges is not None and len(selected) > max_edges:
+            raise ReasoningLimitError("inferred projection exceeded max_edges")
     endpoints: set[str] = set(inferred_nodes)
     for fact in selected:
+        check_cancelled(cancel)
         endpoints.update(fact.values)  # type: ignore[arg-type]
+        if max_nodes is not None and len(endpoints) > max_nodes:
+            raise ReasoningLimitError("inferred projection exceeded max_nodes")
     external_nodes = sorted(endpoints)
     external_relations = sorted(set(predicates))
     node_to_int = {node: idx for idx, node in enumerate(external_nodes)}
@@ -100,20 +125,8 @@ def build_inferred_snapshot(
     rel_int = [rel_to_int[fact.predicate] for fact in selected]
     external_edges = [f"{fact.values[0]}|{fact.predicate}|{fact.values[1]}#{idx}"  # type: ignore[index]
                       for idx, fact in enumerate(selected)]
-    target = Path(output_path)
-    if target.exists() and any(target.iterdir()):
-        raise ReasoningError("output_path already holds a snapshot; use a new path per generation")
-    generation = _generation_of(session, node_predicate, predicates)
-    generation["inferred_node_count"] = len(inferred_nodes)
-    generation["selected_edge_count"] = len(selected)
-    metadata = {"reasoning_generation": generation}
-    return SamplerSnapshot.from_edge_arrays(
-        target,
-        external_node_ids=external_nodes,
-        external_edge_ids=external_edges,
-        external_relation_ids=external_relations,
-        src_int=src_int,
-        dst_int=dst_int,
-        rel_int=rel_int,
-        metadata=metadata,
-    )
+    check_cancelled(cancel)
+    return ({"external_node_ids": external_nodes, "external_edge_ids": external_edges,
+             "external_relation_ids": external_relations, "src_int": src_int,
+             "dst_int": dst_int, "rel_int": rel_int},
+            {"inferred_node_count": len(inferred_nodes), "selected_edge_count": len(selected)})

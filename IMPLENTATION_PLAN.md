@@ -194,6 +194,39 @@ from independent closure soundness. No new result cache is invented;
 source-independent specialization needs no source invalidation. #357 is the
 remaining existing inferred-artifact consumer before #248 acceptance review.
 
+### Existing inferred-artifact consumer (#357)
+
+Baseline `458f039` integrates #360/#356; all 13 exact-head checks and post-merge
+Ontology `40145400390` / readiness `40145400411` passed. #356 is closed.
+Branch/worktree `feature/re-357-inferred-admission` / `re-357-inferred-admission`.
+
+Connect only the existing inferred sampler consumer to typed-point admission:
+exact caller shared generation and session-state pins, independently admitted
+source (including independent versions), distinct canonical projection selection,
+and versioned complete source/program/catalog/scope/profile/representation/state
+metadata. Keep legacy partial-mapping builder behavior explicitly unverified.
+
+Hydration independently reconstructs the full expected artifact and compares
+every byte/file (metadata, completion, topology, lookup, CSR and policy arrays),
+not merely stored identity/checksums. Self-consistent modified arrays cannot
+pass. This expensive complete-serialization comparison may require explicit
+rebuild for future encoding changes; no silent migration or fast-cache claim.
+New-path staging, cooperating locks, source recheck, cancellation and rename
+failure preserve existing artifacts. No source-authentication-as-closure-proof
+claim, new sampler algorithm, automatic executor change or publication.
+
+Focused validation initially 115 passed, including backend parity, generation
+pin mismatch matrix for build AND hydration, cross-process restart, projection
+selection, alternative evidence, rewritten-checksum tampering, cardinality/byte
+bounds, competing writers and cancellation/fault cleanup. Full validation and
+original #248 acceptance reconciliation follow before closure.
+
+Final validation at `f6475ea`: **3,159 passed / 2 skipped** with all optional
+backends/serializers/RDF/Polars/docs/bloom and independent ontology requirements.
+Docs drift, all 8 examples, executable Sphinx guide, Sphinx `-W`, roadmap and
+diff checks passed. Authenticated inferred tests: 115 passed across the three
+backends, plus all legacy-consumer regressions in the full suite.
+
 ### Prior ordered follow-through
 
 Native GitHub links established: #338 (identity), #339 (input bounds), #340
