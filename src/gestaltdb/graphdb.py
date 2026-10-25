@@ -108,6 +108,7 @@ from ._graph.temporal_indexes import (
 )
 from ._graph import temporal_keys as _temporal_keys
 from ._graph import temporal_reads as _temporal_reads
+from ._graph.temporal_reads import _UNSET
 from ._graph import temporal_writes as _temporal_writes
 from ._graph import temporal_sequence as _temporal_sequence
 from ._graph.temporal_keys import (
@@ -159,7 +160,6 @@ _RULE_ENGINE_AGENT = "gestaltdb:rules"
 _DATABASE_ID_LOCK = threading.Lock()
 _TEMPORAL_WRITER_LOCKS_LOCK = threading.Lock()
 _TEMPORAL_WRITER_LOCKS = {}
-_UNSET = object()
 
 
 class _TemporalWriterLock:
@@ -4235,145 +4235,13 @@ class GraphDB:
         Live-store commit integrity is checked again on successful exhaustion;
         partially consumed iterators are not completed authenticated reads.
         """
-        read_store = self.store
-        instant = normalize_temporal_instant(valid_time)
-        horizon = self._temporal_system_horizon(
-            system_time=system_time, through_commit=through_commit
+        return self._temporal_reader().iter_claims_as_of(
+            valid_time=valid_time, statement_id=statement_id, subject=subject,
+            predicate=predicate, object=object, object_kind=object_kind,
+            agent=agent, source=source, world=world, polarity=polarity,
+            system_time=system_time, through_commit=through_commit,
+            live_store=lambda: self.store,
         )
-        self._ensure_temporal_indexes(horizon)
-        if statement_id is not None:
-            digest = statement_id.removeprefix("statement:") if isinstance(statement_id, str) else ""
-            if (
-                not isinstance(statement_id, str)
-                or not statement_id.startswith("statement:")
-                or len(digest) != 64
-                or any(character not in "0123456789abcdef" for character in digest)
-            ):
-                raise ValueError("statement_id must be a deterministic statement ID")
-        effective_object_kind = (
-            ClaimObjectKind.ENTITY if object_kind is None and object is not _UNSET else object_kind
-        )
-        if object is not _UNSET and statement_id is None and subject is not None and predicate is not None:
-            statement_id = claim_statement_id(
-                subject, predicate, object, object_kind=effective_object_kind
-            )
-        dimension_filters = {
-            "subject": subject,
-            "predicate": predicate,
-            "agent": agent,
-            "world": world,
-            "polarity": None if polarity is None else ClaimPolarity(polarity).value,
-            "object_kind": (
-                None
-                if effective_object_kind is None
-                else ClaimObjectKind(effective_object_kind).value
-            ),
-        }
-        if source is not _UNSET:
-            dimension_filters["source"] = source
-        indexed_filter = next(
-            ((name, value) for name, value in dimension_filters.items() if value is not None),
-            None,
-        )
-        if statement_id is not None:
-            index_name = _TEMPORAL_CLAIM_STATEMENT_INDEX
-            parts = [statement_id.encode("ascii")]
-        elif indexed_filter is not None:
-            name, value = indexed_filter
-            index_name = _TEMPORAL_CLAIM_DIMENSION_INDEX
-            parts = [name.encode("ascii"), canonical_json_bytes(value)]
-        else:
-            index_name = _TEMPORAL_CLAIM_CATALOG_INDEX
-            parts = [b"claims"]
-        # This is an operation-local bulk-read protocol, not admission of live
-        # cache entries as immutable. Every group still takes the existing full
-        # descriptor/marker/envelope validation path. Retain only marker identity
-        # and selected winners, not an unbounded second cache of whole commits.
-        admitted_markers = {}
-
-        def admit_commit(commit_id):
-            if self.store is not read_store:
-                raise TemporalCorruptionError("claim read store changed during iteration")
-            marker = read_store.get_metadata(self._temporal_visible_key(commit_id))
-            if commit_id in admitted_markers and admitted_markers[commit_id] != marker:
-                raise TemporalCorruptionError("claim read commit changed during iteration")
-            commit = self._get_temporal_commit_cached(commit_id, _validate_supersession=False)
-            if marker != read_store.get_metadata(self._temporal_visible_key(commit_id)):
-                raise TemporalCorruptionError("claim read commit changed during validation")
-            admitted_markers[commit_id] = marker
-            return commit
-
-        def read_locators(locators):
-            groups = {}
-            for locator in locators:
-                commit_id, ordinal = self._decode_temporal_locator(locator)
-                if commit_id <= horizon:
-                    groups.setdefault(commit_id, set()).add(ordinal)
-            for commit_id, ordinals in sorted(groups.items()):
-                commit = admit_commit(commit_id)
-                if commit is None:
-                    continue
-                for ordinal in sorted(ordinals):
-                    if ordinal >= len(commit.versions):
-                        raise TemporalCorruptionError("temporal index locator ordinal is out of range")
-                    yield commit.versions[ordinal]
-
-        if horizon:
-            admit_commit(horizon)
-        logical_ids = set()
-        for candidate in read_locators(self._temporal_interval_locators(index_name, parts, instant)):
-            if isinstance(candidate, ClaimVersion) and candidate.commit_id <= horizon:
-                logical_ids.add(candidate.logical_id)
-
-        # Resolve every candidate identity against its complete logical history,
-        # not just the originally selected dimension: a later correction or
-        # retraction must still win. Do not repeatedly recompute/validate the
-        # latest system horizon for each logical ID.
-        def logical_locators():
-            for claim_id in sorted(logical_ids):
-                yield from self._temporal_interval_locators(
-                    _TEMPORAL_LOGICAL_VALID_INDEX, [b"c", claim_id.encode("utf-8")], instant
-                )
-
-        winners = {}
-        for version in read_locators(logical_locators()):
-            if (isinstance(version, ClaimVersion) and version.logical_id in logical_ids
-                    and version.commit_id <= horizon and version.valid.contains(instant)):
-                previous = winners.get(version.logical_id)
-                if previous is None or (version.commit_id, version.commit_ordinal) > (previous.commit_id, previous.commit_ordinal):
-                    winners[version.logical_id] = version
-        for claim_id in sorted(logical_ids):
-            version = winners.get(claim_id)
-            if version is None or version.operation is VersionOperation.RETRACT or version.claim is None:
-                continue
-            claim = version.claim
-            if statement_id is not None and claim.statement_id != statement_id:
-                continue
-            if any(
-                value is not None and getattr(claim, name) != value
-                for name, value in dimension_filters.items()
-            ):
-                continue
-            if source is not _UNSET and claim.source != source:
-                continue
-            if object is not _UNSET and claim.object != Claim(
-                subject=claim.subject,
-                predicate=claim.predicate,
-                object=object,
-                object_kind=effective_object_kind,
-                polarity=claim.polarity,
-                agent=claim.agent,
-                source=claim.source,
-                world=claim.world,
-            ).object:
-                continue
-            yield version
-
-        # No successful complete pass may hide damage/rewrite/removal of an
-        # already touched commit, including an unrelated row in that commit.
-        # Appends beyond the captured horizon do not change these markers.
-        for commit_id in admitted_markers:
-            admit_commit(commit_id)
 
     def claim_status(
         self,
@@ -4390,27 +4258,11 @@ class GraphDB:
         through_commit=None,
     ) -> ClaimStatus:
         """Return supported/refuted/both/unknown under open-world semantics."""
-        polarities = {
-            version.claim.polarity
-            for version in self.iter_claims_as_of(
-                valid_time=valid_time,
-                statement_id=claim_statement_id(
-                    subject, predicate, object, object_kind=object_kind
-                ),
-                agent=agent,
-                source=source,
-                world=world,
-                system_time=system_time,
-                through_commit=through_commit,
-            )
-        }
-        if polarities == {ClaimPolarity.POSITIVE, ClaimPolarity.NEGATIVE}:
-            return ClaimStatus.BOTH
-        if ClaimPolarity.POSITIVE in polarities:
-            return ClaimStatus.SUPPORTED
-        if ClaimPolarity.NEGATIVE in polarities:
-            return ClaimStatus.REFUTED
-        return ClaimStatus.UNKNOWN
+        return self._temporal_reader().claim_status(
+            subject, predicate, object, valid_time=valid_time,
+            object_kind=object_kind, agent=agent, source=source, world=world,
+            system_time=system_time, through_commit=through_commit,
+        )
 
     def iter_nodes_as_of(
         self, *, valid_time, system_time=None, through_commit=None
