@@ -211,6 +211,12 @@ Resolve external IDs with `snapshot.node_int(...)`, `snapshot.edge_int(...)`, an
 
 ## Development Commands
 
+- Lint library correctness: `uv run --extra lint ruff check .`
+- Enforce module-size ratchet: `uv run python scripts/check_code_quality.py`.
+  New library modules are limited to 800 physical lines; existing exceptions
+  cannot grow, and shrinking files must lower/remove their recorded budget.
+  See `docs/code-quality.rst` and `planning/code-quality/graphdb-refactoring.md`.
+
 - Run tests: `uv run pytest`
 - Run a focused test: `uv run pytest tests/test_cypher.py -q`
 - Run the deterministic temporal smoke: `uv run python -m benchmarks temporal --nodes 100 --edges 500 --queries 100`

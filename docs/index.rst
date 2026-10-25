@@ -75,6 +75,7 @@ Filter, Sample, Train
 
    api
    api-workflows
+   code-quality
 
 Quick Example
 -------------

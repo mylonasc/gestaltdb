@@ -2,6 +2,18 @@
 
 ## Next release preparation (#385)
 
+Code quality gate (maintainer request, refactoring follow-up #388): pinned
+correctness-focused Ruff checks for library Python and the new gate/tests;
+800-physical-line ceiling for new library modules; exact shrinking budgets for
+eight existing oversized modules, including 7,113-line graphdb.py. CI runs one
+lightweight Python 3.10 job only for relevant source/config/gate changes. This
+prevents growth rather than claiming the legacy monoliths are already split.
+Staged GraphDB boundaries and compatibility/performance acceptance are recorded
+in planning/code-quality/graphdb-refactoring.md; contributor commands and policy
+limits are documented in docs/code-quality.rst. Ruff, the size gate, 46 focused
+quality/workflow/agent-doc tests, Actionlint, Sphinx -W, and docs drift checks pass.
+No production runtime edits, merge, version bump, tag, or publication.
+
 Docstring usability pass (#387): 22 self-contained workflows cover primary
 database/backend, ingestion/sampling, ontology/reasoning, history/maintenance,
 session/projection, and visualization entry points. Execute them directly from
