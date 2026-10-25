@@ -1,0 +1,153 @@
+"""Edge record orchestration (Phase 3 extraction, records side).
+
+``put_edge``/``delete_edge`` coordinate canonical edge records, legacy
+untyped adjacency blobs, typed adjacency, and secondary indexes. The
+transaction boundary stays on ``GraphDB``: wrappers open a transaction when
+required and delegate the store-bound core here. Everything in this module
+is explicit about its inputs — store, serializers, index configuration,
+and the handle-owned typed-adjacency count cache — so transaction and
+snapshot scopes bind correctly.
+
+``update_edge`` stays on ``GraphDB``: it composes the public
+get/merge/put API and carries no storage logic of its own.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..kvstores import KVStore
+
+from . import adjacency as _adjacency
+from . import index_maintenance as _index_maintenance
+from .entities import node_key_to_bytes
+
+
+def get_edge(store: KVStore, entity_serializer, edge_id):
+    """Return an edge by byte key, or ``None`` when absent."""
+    data = store.get_edge(edge_id)
+    if data:
+        return entity_serializer.deserialize(data, 'Edge')
+    return None
+
+
+def get_adjacency_list(store: KVStore, raw_serializer, node_id: bytes,
+                       direction: str = 'forward', return_raw: bool = False):
+    """Return the legacy adjacency list for a node ID.
+
+    Returns ``[]`` when the node has no stored adjacency, the raw stored
+    mapping when ``return_raw`` is set, and direction-filtered edge IDs
+    otherwise.
+    """
+    raw = store.get_adjacency(node_id)
+    if raw is None:
+        return []
+    adj = raw_serializer.deserialize(raw)
+
+    if return_raw:
+        return adj
+
+    if direction == 'forward':
+        return adj.get('target', [])
+    if direction == 'backward':
+        return adj.get('source', [])
+    if direction == 'any':
+        _s = adj.get('source', [])
+        _t = adj.get('target', [])
+        return list(set(_s).union(set(_t)))
+
+
+def put_adjacency_list(store: KVStore, raw_serializer, node_id: str, edges_list: list[str]) -> None:
+    """Store the legacy adjacency list for a node ID."""
+    raw = raw_serializer.serialize(edges_list)
+    store.put_adjacency(node_id, raw)
+
+
+def put_edge(store: KVStore, entity_serializer, raw_serializer,
+             indexed_edge_properties, adj_cache: dict, edge,
+             update_adjacency: bool = True) -> None:
+    """Store an edge and maintain adjacency and secondary indexes."""
+    old_edge = get_edge(store, entity_serializer, edge.get_id_bytes)
+    if old_edge is not None:
+        _adjacency.delete_typed_adjacency_for_edge(store, adj_cache, old_edge)
+        _index_maintenance.delete_edge_indexes(store, indexed_edge_properties, old_edge)
+        remove_edge_from_endpoint_adjacencies(store, raw_serializer, old_edge)
+    value = entity_serializer.serialize(edge, 'Edge')
+    store.put_edge(edge.get_id_bytes, value)
+    _adjacency.put_typed_adjacency_for_edge(store, adj_cache, edge)
+    _index_maintenance.put_edge_indexes(store, indexed_edge_properties, edge)
+    if update_adjacency:
+        # Get the edge lists from the adjacency store,
+        # and if they exist update them, if they don't exist
+        # create them.
+        for dict_flag, io_node in zip(['source', 'target'], (edge.source, edge.target)):
+            io_node_key = node_key_to_bytes(io_node)
+            adj_list = store.get_adjacency(io_node_key)
+            new_edge_list = {dict_flag: [edge.get_id]}
+            if adj_list is None:
+                serialized_adj_list = entity_serializer.serialize(new_edge_list, 'AdjacencyList')
+                store.put_adjacency(io_node_key, serialized_adj_list)
+            else:
+                adj_edge_list = entity_serializer.deserialize(adj_list, 'AdjacencyList')
+                if edge.get_id not in adj_edge_list.setdefault(dict_flag, []):
+                    adj_edge_list[dict_flag].append(edge.get_id)
+                store.put_adjacency(io_node_key, raw_serializer.serialize(adj_edge_list))
+
+
+def delete_edge(store: KVStore, entity_serializer, raw_serializer,
+                indexed_edge_properties, adj_cache: dict, edge_id) -> None:
+    """Remove an edge, its adjacency records, and its secondary indexes."""
+    e = get_edge(store, entity_serializer, edge_id)
+    if not e:
+        return  # Edge not found
+
+    _adjacency.delete_typed_adjacency_for_edge(store, adj_cache, e)
+    _index_maintenance.delete_edge_indexes(store, indexed_edge_properties, e)
+    remove_edge_from_endpoint_adjacencies(store, raw_serializer, e)
+
+    store.delete_edge(edge_id)
+
+
+def edge_id_variants(edge_id) -> list:
+    """Return string/byte forms used by legacy adjacency records."""
+    variants = [edge_id]
+    if isinstance(edge_id, bytes):
+        try:
+            edge_id_text = edge_id.decode("utf-8")
+        except UnicodeDecodeError:
+            edge_id_text = None
+        if edge_id_text is not None:
+            variants.append(edge_id_text)
+    elif isinstance(edge_id, str):
+        variants.append(edge_id.encode("utf-8"))
+    return variants
+
+
+def remove_edge_from_endpoint_adjacencies(store: KVStore, raw_serializer, edge) -> None:
+    """Remove an edge from the legacy adjacency blobs for its endpoints."""
+    source_id = node_key_to_bytes(edge.source)
+    target_id = node_key_to_bytes(edge.target)
+    remove_edge_from_adjacency(store, raw_serializer, source_id, edge.get_id)
+    remove_edge_from_adjacency(store, raw_serializer, source_id, edge.get_id_bytes)
+    if target_id != source_id:
+        remove_edge_from_adjacency(store, raw_serializer, target_id, edge.get_id)
+        remove_edge_from_adjacency(store, raw_serializer, target_id, edge.get_id_bytes)
+
+
+def remove_edge_from_adjacency(store: KVStore, raw_serializer, node_id: str, edge_id: str) -> None:
+    """Remove an edge ID from a node's stored adjacency lists."""
+    adj_list = get_adjacency_list(store, raw_serializer, node_id, return_raw=True)
+    _changed = False
+    edge_id_variants_set = set(edge_id_variants(edge_id))
+    for _dir in ['source', 'target']:
+        if _dir in adj_list:
+            filtered_edges = [existing_edge_id for existing_edge_id in adj_list[_dir] if existing_edge_id not in edge_id_variants_set]
+            if len(filtered_edges) != len(adj_list[_dir]):
+                adj_list[_dir] = filtered_edges
+                _changed = True
+    if _changed:
+        if not adj_list.get('source') and not adj_list.get('target'):
+            store.delete_adjacency(node_id)
+        else:
+            put_adjacency_list(store, raw_serializer, node_id, adj_list)

@@ -81,6 +81,7 @@ from .versioning import (
 )
 from ._graph import adjacency as _adjacency
 from ._graph import index_maintenance as _index_maintenance
+from ._graph import edge_records as _edge_records
 from ._graph import index_lookup as _index_lookup
 from ._graph import temporal_keys as _temporal_keys
 from ._graph.temporal_keys import (
@@ -1076,32 +1077,7 @@ class GraphDB:
         if self._implicit_transaction_required():
             with self.transaction() as tx:
                 return tx.put_edge(edge, update_adjacency=update_adjacency)
-        # edge_dict = edge.to_dict()
-        old_edge = self.get_edge(edge.get_id_bytes)
-        if old_edge is not None:
-            self._delete_typed_adjacency_for_edge(old_edge)
-            self._delete_edge_indexes(old_edge)
-            self._remove_edge_from_endpoint_adjacencies(old_edge)
-        value = self.entity_serializer.serialize(edge,'Edge')
-        self.store.put_edge(edge.get_id_bytes, value)
-        self._put_typed_adjacency_for_edge(edge)
-        self._put_edge_indexes(edge)
-        if update_adjacency:
-            # Get the edge lists from the adjacency store, 
-            # and if they exist update them, if they don't exist 
-            # create them.
-            for dict_flag, io_node in zip(['source','target'], (edge.source, edge.target)): 
-                io_node_key = self.node_key_to_bytes(io_node)
-                adj_list = self.store.get_adjacency(io_node_key)
-                new_edge_list = {dict_flag : [edge.get_id]}
-                if adj_list is None:
-                    serialized_adj_list = self.entity_serializer.serialize(new_edge_list,'AdjacencyList')
-                    self.store.put_adjacency(io_node_key, serialized_adj_list)
-                else:
-                    adj_edge_list = self.entity_serializer.deserialize(adj_list,'AdjacencyList')
-                    if edge.get_id not in adj_edge_list.setdefault(dict_flag, []):
-                        adj_edge_list[dict_flag].append(edge.get_id)
-                    self.store.put_adjacency(io_node_key, self.serializer.serialize(adj_edge_list))
+        _edge_records.put_edge(self.store, self.entity_serializer, self.serializer, self.indexed_edge_properties, self._typed_adjacency_count_cache, edge, update_adjacency=update_adjacency)
 
     def _put_typed_adjacency_for_edge(self, edge: Edge):
         """Write typed adjacency index records for an edge.
@@ -1900,11 +1876,7 @@ class GraphDB:
         Examples:
             >>> graph_db.get_edge(b"d1-p1")  # doctest: +SKIP
         """
-        data = self.store.get_edge(edge_id)
-        if data:
-            return self.entity_serializer.deserialize(data,'Edge')
-        else:
-            return None
+        return _edge_records.get_edge(self.store, self.entity_serializer, edge_id)
 
     # -----------
     # Example Range Query
@@ -2632,27 +2604,11 @@ class GraphDB:
           return_raw : if this flag is true it will return the data as they are stored (e.g., a dictionary of 'source' and 'target' lists. )
         """
         
-        raw = self.store.get_adjacency(node_id)
-        if raw is None:
-            return []
-        adj = self.serializer.deserialize(raw)
-        
-        if return_raw:
-            return adj
-
-        if direction == 'forward':
-            return adj.get('target',[]) 
-        if direction == 'backward':
-            return adj.get('source',[])
-        if direction == 'any' : 
-            _s = adj.get('source',[])
-            _t = adj.get('target',[])
-            return list(set(_s).union(set(_t)))
+        return _edge_records.get_adjacency_list(self.store, self.serializer, node_id, direction, return_raw)
         
     def put_adjacency_list(self, node_id: str, edges_list: list[str]):
         """Stores the adjacency list for node_id."""
-        raw = self.serializer.serialize(edges_list)
-        self.store.put_adjacency(node_id, raw)
+        _edge_records.put_adjacency_list(self.store, self.serializer, node_id, edges_list)
 
     # -----------------------
     # Deletion (Optional)
@@ -2666,41 +2622,15 @@ class GraphDB:
         if self._implicit_transaction_required():
             with self.transaction() as tx:
                 return tx.delete_edge(edge_id, edge_key_serializer=edge_key_serializer)
-        e = self.get_edge(edge_id)
-        if not e:
-            return  # Edge not found
-
-        self._delete_typed_adjacency_for_edge(e)
-        self._delete_edge_indexes(e)
-        self._remove_edge_from_endpoint_adjacencies(e)
-
-        # If your store had a 'delete_edge' method, you'd call it here.
-        # We'll assume you add that to KVStore if needed, e.g.:
-        self.store.delete_edge(edge_id)
+        _edge_records.delete_edge(self.store, self.entity_serializer, self.serializer, self.indexed_edge_properties, self._typed_adjacency_count_cache, edge_id)
 
     def _edge_id_variants(self, edge_id):
         """Return string/byte forms used by legacy adjacency records."""
-        variants = [edge_id]
-        if isinstance(edge_id, bytes):
-            try:
-                edge_id_text = edge_id.decode("utf-8")
-            except UnicodeDecodeError:
-                edge_id_text = None
-            if edge_id_text is not None:
-                variants.append(edge_id_text)
-        elif isinstance(edge_id, str):
-            variants.append(edge_id.encode("utf-8"))
-        return variants
+        return _edge_records.edge_id_variants(edge_id)
 
     def _remove_edge_from_endpoint_adjacencies(self, edge: Edge):
         """Remove an edge from the legacy adjacency blobs for its endpoints."""
-        source_id = self.node_key_to_bytes(edge.source)
-        target_id = self.node_key_to_bytes(edge.target)
-        self._remove_edge_from_adjacency(source_id, edge.get_id)
-        self._remove_edge_from_adjacency(source_id, edge.get_id_bytes)
-        if target_id != source_id:
-            self._remove_edge_from_adjacency(target_id, edge.get_id)
-            self._remove_edge_from_adjacency(target_id, edge.get_id_bytes)
+        _edge_records.remove_edge_from_endpoint_adjacencies(self.store, self.serializer, edge)
 
     def _remove_edge_from_adjacency(self, node_id: str, edge_id: str):
         """Remove an edge ID from a node's stored adjacency lists.
@@ -2711,20 +2641,7 @@ class GraphDB:
         """
 
         
-        adj_list = self.get_adjacency_list(node_id,return_raw = True)
-        _changed = False
-        edge_id_variants = set(self._edge_id_variants(edge_id))
-        for _dir in ['source', 'target']:
-            if _dir in adj_list:
-                filtered_edges = [existing_edge_id for existing_edge_id in adj_list[_dir] if existing_edge_id not in edge_id_variants]
-                if len(filtered_edges) != len(adj_list[_dir]):
-                    adj_list[_dir] = filtered_edges
-                    _changed = True
-        if _changed:
-            if not adj_list.get('source') and not adj_list.get('target'):
-                self.store.delete_adjacency(node_id)
-            else:
-                self.put_adjacency_list(node_id, adj_list)
+        _edge_records.remove_edge_from_adjacency(self.store, self.serializer, node_id, edge_id)
 
     # -----------------------
     # BFS Example

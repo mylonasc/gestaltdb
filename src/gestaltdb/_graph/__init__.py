@@ -1,6 +1,7 @@
 """Private GraphDB implementation collaborators (no public API)."""
 
 from . import adjacency
+from . import edge_records
 from . import index_lookup
 from . import index_maintenance
 from . import registry
@@ -34,6 +35,7 @@ __all__ = [
     "configure_snapshot_child",
     "configure_transaction_child",
     "datetime_to_bytes",
+    "edge_records",
     "edge_key_to_bytes",
     "index_lookup",
     "index_maintenance",
