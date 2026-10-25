@@ -54,6 +54,24 @@ full authentication cost, imply speedup, or admit transactional/range sources.
 Test correction/retraction/old-prefix/empty binding semantics, corruption and
 resource lifetimes before measuring or reconciling #194 closure.
 
+#368 post-merge Ontology `40172610592` and readiness `40172610589` passed on
+`2ed6ade`. The 17-check count includes the additional four backend compatibility
+matrix checks; all applicable checks were green before the exact-head merge.
+
+Initial implementation: `PinnedNativeLocatorClaimSource` shares policy/context,
+writer guard, rebinding/lifetime/cancellation and evaluation with the full-record
+source. It scans native dimension prefixes and complete logical histories using
+one borrowed snapshot, authenticates expected key/payload membership from all
+pinned commits, then point-materializes versions and retains unfiltered grouped
+canonical conformance. Separate cumulative native-index and authenticated-record
+limits/profiles avoid hiding full catalog work behind selective counters.
+Focused PyRex 0.5.0 validation: **118 passed**, covering historical boundaries,
+old prefixes after appends, mixed-kind/same-commit ordinals, missing retraction
+locators, forged/omitted native rows, canonical omissions/stale results,
+independent/cumulative budgets, scan cancellation/release/retry, writer blocking,
+partial-pass rebinding, interrupted descriptors/gaps, four serializers/restart
+and bounded witness parity. No performance result or #194 closure yet.
+
 ### Native upstream capability re-audit (#194)
 
 Dedicated `feature/re-194-native-capability-audit` / `re-194-native-capability-audit`

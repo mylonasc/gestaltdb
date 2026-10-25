@@ -62,6 +62,8 @@ class PinnedNativeClaimSource(PinnedBatchedClaimSource):
     successful complete read. Close abandoned iterators to release the guard.
     """
 
+    _physical_pushdown = "none; native-full-records; post-selection-filters"
+
     def __init__(self, view, *, native_limits=NativeClaimLimits(), **kwargs):
         if not isinstance(native_limits, NativeClaimLimits):
             raise ReasoningError("native_limits must be NativeClaimLimits")
@@ -212,7 +214,7 @@ class PinnedNativeClaimSource(PinnedBatchedClaimSource):
         try:
             with self._graph._temporal_writer_guard():
                 yield from super().iter_batches(cancel=cancel)
-                self._profile = replace(self._profile, pushdown="none; native-full-records; post-selection-filters")
+                self._profile = replace(self._profile, pushdown=self._physical_pushdown)
                 self._native_profile = self._completed_native_profile
         finally:
             self.__dict__.pop("_native_versions", None)
