@@ -847,6 +847,31 @@ relationships over 1–5 hops. Attribute mappings such as
 `VizOptions(node_size_property="mass", edge_width_property="score")` work in
 both the browser and Python SVG output.
 
+Reasoning traces reuse the same offline viewer with no new dependency.
+Every reasoning node carries a readable `label` property:
+
+```python
+from gestaltdb.reasoning.engine import DatalogEngine
+from gestaltdb.reasoning.model import Atom, Fact, Program, ReasoningLimits, Rule, Variable
+from gestaltdb.viz.api import VizOptions, visualize_proof_explanation
+
+x, y = Variable("X"), Variable("Y")
+program = Program([Rule("parent-ancestor", [Atom(x, "parent", y)], Atom(x, "ancestor", y))])
+result = DatalogEngine().evaluate(
+    program, [Fact("a", "parent", "b")], limits=ReasoningLimits(), collect_proofs=True)
+figure = visualize_proof_explanation(
+    result.explain(Fact("a", "ancestor", "b")),
+    options=VizOptions(node_label_property="label", edge_labels="all"),
+)
+figure.save_svg("/tmp/proof.svg")  # same topology as figure.as_html()
+```
+
+`visualize_claim_explanation(graph.rules.explain(...))`,
+`visualize_inference_audit(export_inference(...))`,
+`visualize_support_set(fact, supports, witness)`, and
+`visualize_ontology(ontology)` follow the same pattern; see
+`docs/visualization.rst` for edge directions and hierarchy mappings.
+
 ## Define Canonical Temporal Values
 
 Temporal values require timezone-aware datetimes, normalize to UTC

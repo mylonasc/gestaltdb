@@ -14,6 +14,16 @@ Entry points (import from `gestaltdb.viz.api`, not the package root):
   (the large-graph path).
 - `visualize_sampler_batch(batch, snapshot)` for ML batches mapped back to
   external IDs via `node_ids_global`.
+- `visualize_claim_explanation(explanation)` for `graph.rules.explain`
+  derivation graphs (claim/rule/absence nodes, root highlighted).
+- `visualize_inference_audit(report)` for `export_inference` audits as a
+  mapping or `InferenceExplanation` (no live database needed).
+- `visualize_proof_explanation(explanation)` for standalone Datalog proof
+  witnesses (`ProofTrace.explain` / `EvaluationResult.explain`) as fact trees.
+- `visualize_support_set(fact, supports, witness=None)` for all alternative
+  typed justifications with the chosen `RankedWitness` highlighted.
+- `visualize_ontology(ontology)` for class/property hierarchies (binary
+  axioms as typed edges; chains/intersections as explicit axiom nodes).
 - `graph.visualize(cypher=...)` or `graph.visualize(seeds=..., pattern=...)`
   as a `GraphDB` method.
 - `VizOptions` for caps (defaults 2000 nodes / 5000 edges), absolute
@@ -29,6 +39,12 @@ Every builder returns a `VizFigure` with `save(path)`, `as_html()`, and
 Jupyter `_repr_html_()`. Caps truncate deterministically with a
 `TruncationWarning` and an on-canvas banner; payloads beyond the absolute
 ceiling raise `VizCapExceededError` naming the sampling alternative.
+Reasoning builders accept the same caps and record `meta["builder"]`
+(`from_claim_explanation`, `from_inference_audit`,
+`from_proof_explanation`, `from_support_set`, `from_ontology`). Every
+reasoning node carries a readable `label` property, so
+`VizOptions(node_label_property="label", edge_labels="all")` is the
+recommended setting for HTML and static SVG alike.
 
 `figure.as_svg()` / `figure.save_svg(path)` produce dependency-free static SVG
 with `layout="circle"` (default), `layout="grid"`, or supplied
@@ -150,4 +166,22 @@ with TemporaryDirectory() as tmpdir:
         assert figure.viz.node_ids == ("alice", "bob")
     finally:
         graph.close()
+```
+
+## Example: visualize a proof trace (no backend required)
+
+```python
+from gestaltdb.reasoning.engine import DatalogEngine
+from gestaltdb.reasoning.model import Atom, Fact, Program, ReasoningLimits, Rule, Variable
+from gestaltdb.viz.api import VizOptions, visualize_proof_explanation
+
+x, y = Variable("X"), Variable("Y")
+program = Program([Rule("parent-ancestor", [Atom(x, "parent", y)], Atom(x, "ancestor", y))])
+result = DatalogEngine().evaluate(
+    program, [Fact("a", "parent", "b")], limits=ReasoningLimits(), collect_proofs=True)
+figure = visualize_proof_explanation(
+    result.explain(Fact("a", "ancestor", "b")),
+    options=VizOptions(node_label_property="label", edge_labels="all"),
+)
+assert "a ancestor b" in figure.as_svg()
 ```

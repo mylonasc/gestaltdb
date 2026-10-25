@@ -54,6 +54,56 @@ Entry Points
    from gestaltdb.viz.api import visualize_sampler_batch
    figure = visualize_sampler_batch(batch, snapshot)
 
+Reasoning Results
+-----------------
+
+Proof trees and derivation graphs reuse the same offline viewer with no
+front-end rebuild. Every reasoning node carries a readable ``label``
+property, so ``VizOptions(node_label_property="label", edge_labels="all")``
+is the recommended setting for both HTML and static SVG:
+
+.. code-block:: python
+
+   from gestaltdb.viz.api import (
+       VizOptions,
+       visualize_claim_explanation,
+       visualize_inference_audit,
+       visualize_ontology,
+       visualize_proof_explanation,
+       visualize_support_set,
+   )
+
+   options = VizOptions(node_label_property="label", edge_labels="all")
+
+   # Graph-rule derivation from historical claim versions.
+   explanation = graph.rules.explain(derived.logical_id, valid_time=50)
+   figure = visualize_claim_explanation(explanation, options=options)
+
+   # Archived audit without a live database handle.
+   from gestaltdb.inference import export_inference
+   figure = visualize_inference_audit(export_inference(explanation), options=options)
+
+   # Standalone Datalog proof witness as a fact tree
+   # (``EvaluationResult.explain`` / ``ProofTrace.explain``).
+   figure = visualize_proof_explanation(proof_explanation, options=options)
+
+   # All alternative justifications for one typed fact, with the chosen
+   # ``RankedWitness`` highlighted instead of hidden.
+   figure = visualize_support_set(fact, supports, witness, options=options)
+
+   # Ontology hierarchy: binary axioms become typed edges, property
+   # chains and intersections become explicit axiom nodes.
+   figure = visualize_ontology(ontology, options=options)
+
+``ClaimExplanation`` edges keep their stored ``derived_by`` (conclusion to
+rule), ``premise`` (rule to premise), and ``absent_premise`` direction, so
+arrows read as "depends on" from the highlighted root outward. Standalone
+proof witnesses collapse each derivation to ``premise to conclusion`` edges
+typed by rule ID, so arrows follow logical support toward the highlighted
+root. Support sets fan out from one conclusion to one node per alternative
+derivation. The builders accept the same caps/ceilings as the graph path
+and record their provenance in ``meta["builder"]``.
+
 Options (``VizOptions``) cover node/edge caps (defaults 2000/5000),
 absolute ceilings (default twice the caps, raising
 ``VizCapExceededError`` with sampling guidance), iframe height, light/dark

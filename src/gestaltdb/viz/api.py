@@ -287,3 +287,130 @@ def visualize_sampler_batch(
         resolved,
         source="visualize_sampler_batch",
     )
+
+
+def _resolve_caps(options: VizOptions | Mapping[str, Any] | None, caps: Mapping[str, Any]) -> VizOptions:
+    if caps:
+        merged = dict(_coerce_options(options).__dict__)
+        merged.update(dict(caps))
+        return VizOptions(**merged)
+    return _coerce_options(options)
+
+
+def visualize_claim_explanation(
+    explanation: Any,
+    *,
+    options: VizOptions | Mapping[str, Any] | None = None,
+    **caps: Any,
+) -> VizFigure:
+    """Visualize a ``ClaimExplanation`` derivation graph from ``graph.rules.explain``.
+
+    Claim, rule, and absence versions become color-grouped nodes; stored
+    ``derived_by`` / ``premise`` / ``absent_premise`` edges read as
+    "depends on" from the highlighted root outward. The inspector carries
+    the statement triple, agent/polarity, rule head, and absence scope.
+    SVG output needs no browser and keeps the same topology.
+    """
+    from .reasoning import claim_explanation_graph
+
+    resolved = _resolve_caps(options, caps)
+    return _finish(
+        claim_explanation_graph(explanation, **_caps_kwargs(resolved)),
+        resolved,
+        source="visualize_claim_explanation",
+    )
+
+
+def visualize_inference_audit(
+    report: Any,
+    *,
+    options: VizOptions | Mapping[str, Any] | None = None,
+    **caps: Any,
+) -> VizFigure:
+    """Visualize an inference-audit document from ``export_inference``.
+
+    Accepts an ``InferenceExplanation`` or its ``to_dict()`` mapping, so
+    archived audits render without a live database handle. Node kinds
+    (``claim``/``model_output``/``rule``/``absence``) become groups and
+    recorded justifications become derivation edges.
+    """
+    from .reasoning import inference_audit_graph
+
+    resolved = _resolve_caps(options, caps)
+    return _finish(
+        inference_audit_graph(report, **_caps_kwargs(resolved)),
+        resolved,
+        source="visualize_inference_audit",
+    )
+
+
+def visualize_proof_explanation(
+    explanation: Any,
+    *,
+    options: VizOptions | Mapping[str, Any] | None = None,
+    **caps: Any,
+) -> VizFigure:
+    """Visualize a standalone Datalog proof witness as a fact tree.
+
+    Each ground fact is one node (``input`` vs ``derived`` groups) and each
+    witness premise is one directed ``premise → conclusion`` edge typed by
+    the deriving rule ID, with the explained root highlighted. Works for
+    ``ProofTrace.explain`` and ``EvaluationResult.explain`` results.
+    """
+    from .reasoning import proof_explanation_graph
+
+    resolved = _resolve_caps(options, caps)
+    return _finish(
+        proof_explanation_graph(explanation, **_caps_kwargs(resolved)),
+        resolved,
+        source="visualize_proof_explanation",
+    )
+
+
+def visualize_support_set(
+    fact: Any,
+    supports: Any,
+    witness: Any | None = None,
+    *,
+    options: VizOptions | Mapping[str, Any] | None = None,
+    **caps: Any,
+) -> VizFigure:
+    """Visualize every alternative support for one typed fact.
+
+    The conclusion fans out to one ``support`` node per derivation, each
+    fanning out to its premises. A supplied ``RankedWitness`` (from
+    ``minimal_witness`` / ``top_k``) highlights the chosen derivation
+    against the full alternative set instead of hiding the alternatives.
+    """
+    from .reasoning import support_set_graph
+
+    resolved = _resolve_caps(options, caps)
+    return _finish(
+        support_set_graph(fact, supports, witness, **_caps_kwargs(resolved)),
+        resolved,
+        source="visualize_support_set",
+    )
+
+
+def visualize_ontology(
+    ontology: Any,
+    *,
+    options: VizOptions | Mapping[str, Any] | None = None,
+    **caps: Any,
+) -> VizFigure:
+    """Visualize an ontology revision as a class/property hierarchy graph.
+
+    Binary axioms become single typed edges (subclass, subproperty,
+    equivalence, domain, range, inverses, characteristics); property
+    chains and intersections become explicit ``axiom`` nodes so n-ary
+    premises are never dropped. Union members each imply the superclass
+    and stay direct edges.
+    """
+    from .reasoning import ontology_graph
+
+    resolved = _resolve_caps(options, caps)
+    return _finish(
+        ontology_graph(ontology, **_caps_kwargs(resolved)),
+        resolved,
+        source="visualize_ontology",
+    )
