@@ -15,10 +15,13 @@ from .model import ReasoningError, _text
 
 
 PROFILE = "positive-binary-entity-v1"
+TYPED_PROFILE = "positive-typed-point-v1"
+TYPED_DICTIONARY = "typed-values-v1"
+TYPED_INDEXED_PYTHON = "typed-indexed-python-v1"
 INDEXED_PYTHON = "indexed-python-v1"
 INDEXED_SCC = "indexed-scc-v1"
 POLARS_PROTOTYPE = "polars-prototype-v1"
-EXECUTORS = (INDEXED_PYTHON, INDEXED_SCC, POLARS_PROTOTYPE)
+EXECUTORS = (INDEXED_PYTHON, INDEXED_SCC, POLARS_PROTOTYPE, TYPED_INDEXED_PYTHON)
 MODES = ("closure", "proofs")
 PREFERENCES = ("default", "indexed-python", "indexed-scc", "polars-prototype")
 
@@ -75,6 +78,13 @@ def select_executor(request: ExecutorRequest) -> ExecutorDecision:
     """
     if not isinstance(request, ExecutorRequest):
         raise ReasoningError("request must be an ExecutorRequest")
+    if request.profile == TYPED_PROFILE:
+        if request.mode != "closure":
+            raise ReasoningError("positive typed execution supports closure only; no witness downgrade")
+        if request.preferred not in ("default", "indexed-python"):
+            raise ReasoningError("positive typed execution requires the typed indexed engine; no implicit recoding")
+        return ExecutorDecision(TYPED_INDEXED_PYTHON,
+                                ("typed-values-require-generic-indexed", "closure-only-no-proofs"))
     if request.profile != PROFILE:
         raise ReasoningError(f"unsupported semantics profile: {request.profile}")
     if request.mode == "proofs":

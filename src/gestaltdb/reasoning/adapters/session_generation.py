@@ -15,6 +15,7 @@ from ...readview import ProvenanceMismatchError
 from ...temporal import TemporalInstant
 from ..catalog import CatalogEntry, RuleCatalog
 from ..generation import GenerationIdentity, TemporalSourceIdentity
+from ..executors import TYPED_PROFILE, TYPED_DICTIONARY
 from ..maintenance import _check_supported
 from ..model import ReasoningError, ReasoningLimitError, check_cancelled
 from ..typed import GenericProgram
@@ -24,8 +25,8 @@ from .session_store import _digest, session_from_dict, session_to_dict
 from .sessions import ReasoningSession, SessionScope, _check_version, _filters, _SkipVersion, _typed_fact
 
 
-TYPED_SESSION_PROFILE = "positive-typed-point-v1"
-TYPED_SESSION_DICTIONARY = "typed-values-v1"
+TYPED_SESSION_PROFILE = TYPED_PROFILE
+TYPED_SESSION_DICTIONARY = TYPED_DICTIONARY
 
 
 @dataclass(frozen=True)

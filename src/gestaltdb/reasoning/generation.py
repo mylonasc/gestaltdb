@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from .model import ReasoningError, _text
 from .protocols import InputContext
 from .relational import CompilationIdentity, _digest
-from .executors import EXECUTORS, INDEXED_PYTHON, INDEXED_SCC, POLARS_PROTOTYPE
+from .executors import (EXECUTORS, INDEXED_PYTHON, INDEXED_SCC, POLARS_PROTOTYPE,
+                        TYPED_INDEXED_PYTHON, TYPED_PROFILE, TYPED_DICTIONARY)
 
 
 @dataclass(frozen=True)
@@ -191,6 +192,12 @@ def admit(generation: GenerationIdentity, request: AdmissionRequest) -> Admissio
         raise ReasoningError("request must be an AdmissionRequest")
     if request.dictionary_id != generation.dictionary_id:
         raise ReasoningError("dictionary mismatch; recode or recompile explicitly")
+    if request.executor == TYPED_INDEXED_PYTHON:
+        if (request.mode != "closure" or generation.semantics_profile != TYPED_PROFILE
+                or generation.dictionary_id != TYPED_DICTIONARY):
+            raise ReasoningError("typed indexed admission requires positive typed closure and typed-values-v1")
+        return Admission(request.mode, request.executor, generation.digest,
+                         ("typed-positive-closure-only", "generation-bound"))
     if request.mode == "proofs":
         if request.executor not in _ADMISSION_INDEXED:
             raise ReasoningError("proofs require an indexed witness engine")
