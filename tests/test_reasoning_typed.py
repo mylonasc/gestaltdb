@@ -80,8 +80,9 @@ def test_literal_terms_match_exactly_and_filters_prune():
 
 def test_witness_rejection_limits_cancellation_and_input_validation():
     rule = GenericRule("copy", [TypedAtom("p", [X])], [], TypedAtom("q", [X]))
-    with pytest.raises(ReasoningError, match="witness"):
-        evaluate([rule], [TypedFact("p", ["a"])], collect_proofs=True)
+    proven = evaluate([rule], [TypedFact("p", ["a"])], collect_proofs=True)
+    assert proven.proofs is not None and not proven.proofs.truncated
+    assert proven.proofs.explain(TypedFact("q", ["a"])).nodes
     with pytest.raises(ReasoningCancelledError):
         GenericEngine().evaluate(GenericProgram([rule]), [TypedFact("p", ["a"])],
                                  limits=ReasoningLimits(), cancel=lambda: True)

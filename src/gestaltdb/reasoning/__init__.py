@@ -49,6 +49,9 @@ from .structural import (
     CardinalityBound, DatatypeConstraint, ExclusiveGroup, RequiredField,
     StructuralReport, StructuralSuite, StructuralViolation, validate_structural,
 )
+from .typed_proofs import (
+    AbsenceCheck, AggregateDerivation, TypedExplanation, TypedFactWitness, TypedProofTrace,
+)
 
 __all__ = [
     "DatalogEngine", "Atom", "EvaluationResult", "Fact", "Program", "ReasoningError",
@@ -63,6 +66,7 @@ __all__ = [
     "Denial", "ValidationReport", "ValidationSuite", "Violation", "find_unsatisfiable", "validate",
     "CardinalityBound", "DatatypeConstraint", "ExclusiveGroup", "RequiredField",
     "StructuralReport", "StructuralSuite", "StructuralViolation", "validate_structural",
+    "AbsenceCheck", "AggregateDerivation", "TypedExplanation", "TypedFactWitness", "TypedProofTrace",
     "BoundGoal", "DemandAnswer", "SpecializationCache", "answer", "specialize",
     "DependencyIndex", "PropagationResult", "Support", "build_index", "propagate_insertions",
     "Materialization", "RetractionResult", "rematerialize", "retract_facts",

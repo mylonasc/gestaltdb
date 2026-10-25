@@ -30,6 +30,33 @@ minimality is combinatorial and explicitly deferred: the contract covers
 bounded one-step witnesses (``max_proof_bytes`` fails closed instead of
 truncating), and exports state their complexity honestly.
 
+Typed derivation tracking (#392)
+----------------------------------------
+
+``GenericEngine.evaluate(..., collect_proofs=True)`` records one
+``TypedFactWitness`` per closure fact: the exact rule, positive premises
+in body order, grounded comparisons that held, successful absence checks
+naming their closed scope (stratified only), and aggregate operations with
+contributing facts. ``evaluate_stratified(..., collect_proofs=True)``
+records the same. ``result.proofs.explain(fact)`` walks the bounded
+derivation DAG; unknown facts explain to an explicitly truncated empty
+result — never an invented derivation. Proof budgets truncate the trace,
+never the closure. A trace is bound to its program digest and input
+horizon: ``trace.is_current_for(program, facts)`` reports whether it still
+describes the live closure, so retracted support is re-explained after
+retract/rematerialize rather than misattributed.
+
+.. code-block:: python
+
+   from gestaltdb.reasoning import ReasoningLimits
+   from gestaltdb.reasoning.typed import GenericEngine
+
+   proven = GenericEngine().evaluate(program, facts, limits=ReasoningLimits(), collect_proofs=True)
+   node = proven.proofs._by_fact[derived]
+   assert node.rule.rule_id and node.premises
+   explanation = proven.proofs.explain(derived)
+   assert not explanation.truncated
+
 Measured cost
 ----------------------------------------
 
