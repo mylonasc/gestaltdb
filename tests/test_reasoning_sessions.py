@@ -169,6 +169,7 @@ def test_retract_then_reassert_resurrects_with_fresh_parity(tmp_path, backend, m
 
 @pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
 def test_overwide_gap_rebuilds_explicitly(tmp_path, backend, module):
+    pytest.importorskip(module)
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
     try:
         assert_member(graph, "a")

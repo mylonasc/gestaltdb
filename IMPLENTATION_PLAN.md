@@ -2,6 +2,14 @@
 
 ## Next release preparation (#385)
 
+Main-target PR #386 exposed a base-install isolation regression: the overwide
+session-gap test constructed all three optional backends without the
+`pytest.importorskip(module)` guard used elsewhere in the same file. Add the
+missing guard; do not add backend dependencies to the deliberately minimal
+CI job. Isolated coverage-only environment: 49 backend tests skip as intended;
+full-backend environment with PyRex 0.6.0: all 49 session tests pass. Preserve
+the failed Python 3.10–3.13 CI runs as pre-fix evidence.
+
 Candidate branch `release/reasoning-next-candidate` starts from `b5d21bd` and
 integrates main `72e320f`, retaining the retired ONTO v1 note deletion. Track
 exact-head gates and bounded release scope in
