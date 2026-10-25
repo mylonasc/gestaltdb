@@ -1,12 +1,12 @@
 {
   "generated_from": {
     "path": "src/gestaltdb/graphdb.py",
-    "sha256": "4ef32c737624aad4f1a57090fb21f5eba9c3c13b8f3ebafccb5fb61babad04f8"
+    "sha256": "7711bb0e0f6dc470954810285215d1772705a0a2fb5c564c1e4994a48b519304"
   },
   "methods": [
     {
       "examples": [],
-      "line": 1802,
+      "line": 1665,
       "name": "bfs",
       "returns": "Demonstrates how adjacency is used for graph traversal.",
       "signature": "bfs(start_node_id: bytes, direction='any', edge_key_serializer=lambda x: x.encode('utf-8'), node_key_serializer=lambda x: x.encode('utf-8'))",
@@ -20,7 +20,7 @@
           "example": 4
         }
       ],
-      "line": 1049,
+      "line": 992,
       "name": "build_sampler_snapshot",
       "returns": "A loaded ``SamplerSnapshot`` instance.",
       "signature": "build_sampler_snapshot(output_path, temporal: bool=False, system_time=None, time_bucket: str | None=None, source_db_reference: bool=True, source_db_path=None, source_db_path_mode: str='relative', read_snapshot: bool | None=None, **kwargs)",
@@ -86,7 +86,7 @@
           "example": 2
         }
       ],
-      "line": 2057,
+      "line": 1920,
       "name": "close",
       "returns": "",
       "signature": "close()",
@@ -95,7 +95,7 @@
     },
     {
       "examples": [],
-      "line": 976,
+      "line": 937,
       "name": "count_edges_by_property",
       "returns": "",
       "signature": "count_edges_by_property(property_name: str, value)",
@@ -104,7 +104,7 @@
     },
     {
       "examples": [],
-      "line": 1000,
+      "line": 961,
       "name": "count_edges_by_property_range",
       "returns": "",
       "signature": "count_edges_by_property_range(property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
@@ -113,7 +113,7 @@
     },
     {
       "examples": [],
-      "line": 941,
+      "line": 902,
       "name": "count_edges_by_type",
       "returns": "",
       "signature": "count_edges_by_type(edge_type: str)",
@@ -122,7 +122,7 @@
     },
     {
       "examples": [],
-      "line": 988,
+      "line": 949,
       "name": "count_edges_by_type_property",
       "returns": "",
       "signature": "count_edges_by_type_property(edge_type: str, property_name: str, value)",
@@ -131,7 +131,7 @@
     },
     {
       "examples": [],
-      "line": 1012,
+      "line": 973,
       "name": "count_edges_by_type_property_range",
       "returns": "",
       "signature": "count_edges_by_type_property_range(edge_type: str, property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
@@ -140,7 +140,7 @@
     },
     {
       "examples": [],
-      "line": 678,
+      "line": 639,
       "name": "count_nodes_by_label",
       "returns": "",
       "signature": "count_nodes_by_label(label: str)",
@@ -149,7 +149,7 @@
     },
     {
       "examples": [],
-      "line": 725,
+      "line": 686,
       "name": "count_nodes_by_label_property",
       "returns": "",
       "signature": "count_nodes_by_label_property(label: str, property_name: str, value)",
@@ -158,7 +158,7 @@
     },
     {
       "examples": [],
-      "line": 749,
+      "line": 710,
       "name": "count_nodes_by_label_property_range",
       "returns": "",
       "signature": "count_nodes_by_label_property_range(label: str, property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
@@ -167,7 +167,7 @@
     },
     {
       "examples": [],
-      "line": 713,
+      "line": 674,
       "name": "count_nodes_by_property",
       "returns": "",
       "signature": "count_nodes_by_property(property_name: str, value)",
@@ -176,7 +176,7 @@
     },
     {
       "examples": [],
-      "line": 737,
+      "line": 698,
       "name": "count_nodes_by_property_range",
       "returns": "",
       "signature": "count_nodes_by_property_range(property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
@@ -185,7 +185,7 @@
     },
     {
       "examples": [],
-      "line": 1173,
+      "line": 1116,
       "name": "count_typed_adjacency",
       "returns": "Number of typed adjacency records matching the node, edge type, and",
       "signature": "count_typed_adjacency(node_id, edge_type: str, direction: str='out')",
@@ -219,7 +219,7 @@
           "example": 4
         }
       ],
-      "line": 259,
+      "line": 257,
       "name": "create",
       "returns": "",
       "signature": "create(path, backend='pyrex', serializer='json', backend_options=None, indexed_node_properties=None, indexed_edge_properties=None, overwrite=False)",
@@ -233,7 +233,7 @@
           "example": 1
         }
       ],
-      "line": 866,
+      "line": 827,
       "name": "create_edge_property_index",
       "returns": "Number of existing edges added to the index.",
       "signature": "create_edge_property_index(property_name: str)",
@@ -255,7 +255,7 @@
           "example": 4
         }
       ],
-      "line": 607,
+      "line": 568,
       "name": "create_node_property_index",
       "returns": "Number of existing nodes added to the index.",
       "signature": "create_node_property_index(property_name: str)",
@@ -264,7 +264,7 @@
     },
     {
       "examples": [],
-      "line": 1124,
+      "line": 1067,
       "name": "current_read_view",
       "returns": "",
       "signature": "current_read_view(require_verifiable: bool=False, capture_provenance: bool=True)",
@@ -273,7 +273,7 @@
     },
     {
       "examples": [],
-      "line": 368,
+      "line": 366,
       "name": "database_id",
       "returns": "",
       "signature": "database_id()",
@@ -282,7 +282,7 @@
     },
     {
       "examples": [],
-      "line": 1791,
+      "line": 1654,
       "name": "delete_edge",
       "returns": "",
       "signature": "delete_edge(edge_id: str, edge_key_serializer=lambda x: x.encode('utf-8'))",
@@ -291,7 +291,7 @@
     },
     {
       "examples": [],
-      "line": 566,
+      "line": 527,
       "name": "delete_node",
       "returns": "",
       "signature": "delete_node(node_id)",
@@ -300,7 +300,7 @@
     },
     {
       "examples": [],
-      "line": 768,
+      "line": 729,
       "name": "edge_key_to_bytes",
       "returns": "UTF-8 encoded bytes.",
       "signature": "edge_key_to_bytes(edge_key)",
@@ -309,7 +309,7 @@
     },
     {
       "examples": [],
-      "line": 798,
+      "line": 759,
       "name": "edge_type",
       "returns": "Edge type string, or ``None``.",
       "signature": "edge_type(edge: Edge)",
@@ -318,7 +318,7 @@
     },
     {
       "examples": [],
-      "line": 817,
+      "line": 778,
       "name": "edges",
       "returns": "",
       "signature": "edges()",
@@ -327,7 +327,7 @@
     },
     {
       "examples": [],
-      "line": 1220,
+      "line": 1163,
       "name": "edges_by_edge_type",
       "returns": "List of edge ID bytes.",
       "signature": "edges_by_edge_type(node_id, edge_type: str, direction: str='out')",
@@ -341,7 +341,7 @@
           "example": 1
         }
       ],
-      "line": 961,
+      "line": 922,
       "name": "edges_by_property",
       "returns": "List of decoded ``Edge`` objects.",
       "signature": "edges_by_property(property_name: str, value)",
@@ -350,7 +350,7 @@
     },
     {
       "examples": [],
-      "line": 996,
+      "line": 957,
       "name": "edges_by_property_range",
       "returns": "",
       "signature": "edges_by_property_range(property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
@@ -359,7 +359,7 @@
     },
     {
       "examples": [],
-      "line": 927,
+      "line": 888,
       "name": "edges_by_type",
       "returns": "List of decoded ``Edge`` objects.",
       "signature": "edges_by_type(edge_type: str)",
@@ -368,7 +368,7 @@
     },
     {
       "examples": [],
-      "line": 984,
+      "line": 945,
       "name": "edges_by_type_property",
       "returns": "",
       "signature": "edges_by_type_property(edge_type: str, property_name: str, value)",
@@ -382,7 +382,7 @@
           "example": 1
         }
       ],
-      "line": 1008,
+      "line": 969,
       "name": "edges_by_type_property_range",
       "returns": "",
       "signature": "edges_by_type_property_range(edge_type: str, property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
@@ -391,7 +391,7 @@
     },
     {
       "examples": [],
-      "line": 1771,
+      "line": 1634,
       "name": "get_adjacency_list",
       "returns": "If none found, returns an empty list.",
       "signature": "get_adjacency_list(node_id: bytes, direction='forward', return_raw=False)",
@@ -405,7 +405,7 @@
           "example": 1
         }
       ],
-      "line": 1357,
+      "line": 1300,
       "name": "get_edge",
       "returns": "The decoded edge, or ``None`` when absent.",
       "signature": "get_edge(edge_id)",
@@ -423,7 +423,7 @@
           "example": 1
         }
       ],
-      "line": 552,
+      "line": 513,
       "name": "get_node",
       "returns": "The decoded node, or ``None`` when absent.",
       "signature": "get_node(node_id)",
@@ -432,7 +432,7 @@
     },
     {
       "examples": [],
-      "line": 1742,
+      "line": 1605,
       "name": "get_node_keys_generator",
       "returns": "Generator of node key bytes.",
       "signature": "get_node_keys_generator(num_nodes=None, key_offset=None)",
@@ -441,7 +441,7 @@
     },
     {
       "examples": [],
-      "line": 1736,
+      "line": 1599,
       "name": "get_nodes",
       "returns": "",
       "signature": "get_nodes(node_ids: list[str])",
@@ -450,7 +450,7 @@
     },
     {
       "examples": [],
-      "line": 1165,
+      "line": 1108,
       "name": "get_typed_adjacency",
       "returns": "",
       "signature": "get_typed_adjacency(node_id, edge_type: str, direction: str='out')",
@@ -464,7 +464,7 @@
           "example": 1
         }
       ],
-      "line": 1016,
+      "line": 977,
       "name": "index_statistics",
       "returns": "",
       "signature": "index_statistics()",
@@ -473,7 +473,7 @@
     },
     {
       "examples": [],
-      "line": 590,
+      "line": 551,
       "name": "indexes",
       "returns": "",
       "signature": "indexes()",
@@ -482,7 +482,7 @@
     },
     {
       "examples": [],
-      "line": 1417,
+      "line": 1360,
       "name": "ingest",
       "returns": "",
       "signature": "ingest()",
@@ -496,7 +496,7 @@
           "example": 1
         }
       ],
-      "line": 1520,
+      "line": 1427,
       "name": "ingest_arrow",
       "returns": "",
       "signature": "ingest_arrow(node_ids, edge_ids, sources, targets, edge_types, ingestion_mode: str | ColumnarIngestionMode=ColumnarIngestionMode.ENTITY_COLUMNS, index_mode: str | IndexMaintenanceMode=IndexMaintenanceMode.DEFER_REBUILD, node_values=None, edge_values=None, labels=None, node_properties: dict[str, object] | None=None, edge_properties: dict[str, object] | None=None, native: bool=True, chunk_size: int=100000, progress: bool=False)",
@@ -505,7 +505,7 @@
     },
     {
       "examples": [],
-      "line": 1828,
+      "line": 1691,
       "name": "ingest_edges_arrow",
       "returns": "Number of ingested edges.",
       "signature": "ingest_edges_arrow(edge_ids, sources, targets, edge_types, edge_values, append_only: bool=True, native: bool=True, chunk_size: int=100000, index_mode: str='maintain', progress: bool=False)",
@@ -514,7 +514,7 @@
     },
     {
       "examples": [],
-      "line": 1924,
+      "line": 1787,
       "name": "ingest_edges_arrow_entities",
       "returns": "",
       "signature": "ingest_edges_arrow_entities(edge_ids, sources, targets, edge_types, properties: dict[str, object] | None=None, append_only: bool=True, native: bool=True, chunk_size: int=100000, index_mode: str='maintain', progress: bool=False)",
@@ -523,7 +523,7 @@
     },
     {
       "examples": [],
-      "line": 1871,
+      "line": 1734,
       "name": "ingest_edges_polars",
       "returns": "",
       "signature": "ingest_edges_polars(df, edge_id: str='edge_id', source: str='source', target: str='target', edge_type: str='edge_type', edge_value: str='edge_value', append_only: bool=True, native: bool=True, chunk_size: int=100000, index_mode: str='maintain', progress: bool=False)",
@@ -532,7 +532,7 @@
     },
     {
       "examples": [],
-      "line": 1897,
+      "line": 1760,
       "name": "ingest_edges_polars_entities",
       "returns": "",
       "signature": "ingest_edges_polars_entities(df, edge_id: str='edge_id', source: str='source', target: str='target', edge_type: str='edge_type', property_columns: list[str] | tuple[str, ...] | None=None, append_only: bool=True, native: bool=True, chunk_size: int=100000, index_mode: str='maintain', progress: bool=False)",
@@ -541,7 +541,7 @@
     },
     {
       "examples": [],
-      "line": 1628,
+      "line": 1491,
       "name": "ingest_nodes_arrow",
       "returns": "Number of ingested nodes.",
       "signature": "ingest_nodes_arrow(node_ids, node_values, native: bool=True, chunk_size: int=100000, append_only: bool=False, index_mode: str='maintain', progress: bool=False)",
@@ -550,7 +550,7 @@
     },
     {
       "examples": [],
-      "line": 1709,
+      "line": 1572,
       "name": "ingest_nodes_arrow_entities",
       "returns": "",
       "signature": "ingest_nodes_arrow_entities(node_ids, labels=None, properties: dict[str, object] | None=None, native: bool=True, chunk_size: int=100000, append_only: bool=False, index_mode: str='maintain', progress: bool=False)",
@@ -559,7 +559,7 @@
     },
     {
       "examples": [],
-      "line": 1662,
+      "line": 1525,
       "name": "ingest_nodes_polars",
       "returns": "",
       "signature": "ingest_nodes_polars(df, node_id: str='node_id', node_value: str='node_value', native: bool=True, chunk_size: int=100000, append_only: bool=False, index_mode: str='maintain', progress: bool=False)",
@@ -568,7 +568,7 @@
     },
     {
       "examples": [],
-      "line": 1685,
+      "line": 1548,
       "name": "ingest_nodes_polars_entities",
       "returns": "",
       "signature": "ingest_nodes_polars_entities(df, node_id: str='node_id', labels: str | list[str] | tuple[str, ...] | None='labels', property_columns: list[str] | tuple[str, ...] | None=None, native: bool=True, chunk_size: int=100000, append_only: bool=False, index_mode: str='maintain', progress: bool=False)",
@@ -586,7 +586,7 @@
           "example": 3
         }
       ],
-      "line": 1423,
+      "line": 1373,
       "name": "ingest_polars",
       "returns": "",
       "signature": "ingest_polars(node_df, edge_df, ingestion_mode: str | ColumnarIngestionMode=ColumnarIngestionMode.ENTITY_COLUMNS, index_mode: str | IndexMaintenanceMode=IndexMaintenanceMode.DEFER_REBUILD, node_id: str='node_id', node_value: str='node_value', labels: str | list[str] | tuple[str, ...] | None='labels', node_property_columns: list[str] | tuple[str, ...] | None=None, edge_id: str='edge_id', source: str='source', target: str='target', edge_type: str='edge_type', edge_value: str='edge_value', edge_property_columns: list[str] | tuple[str, ...] | None=None, native: bool=True, chunk_size: int=100000, progress: bool=False)",
@@ -595,7 +595,7 @@
     },
     {
       "examples": [],
-      "line": 911,
+      "line": 872,
       "name": "iter_edge_ids",
       "returns": "",
       "signature": "iter_edge_ids(num_edges=None, key_offset=None)",
@@ -604,7 +604,7 @@
     },
     {
       "examples": [],
-      "line": 945,
+      "line": 906,
       "name": "iter_edge_ids_by_property",
       "returns": "",
       "signature": "iter_edge_ids_by_property(property_name: str, value)",
@@ -613,7 +613,7 @@
     },
     {
       "examples": [],
-      "line": 992,
+      "line": 953,
       "name": "iter_edge_ids_by_property_range",
       "returns": "",
       "signature": "iter_edge_ids_by_property_range(property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
@@ -622,7 +622,7 @@
     },
     {
       "examples": [],
-      "line": 896,
+      "line": 857,
       "name": "iter_edge_ids_by_type",
       "returns": "",
       "signature": "iter_edge_ids_by_type(edge_type: str)",
@@ -631,7 +631,7 @@
     },
     {
       "examples": [],
-      "line": 980,
+      "line": 941,
       "name": "iter_edge_ids_by_type_property",
       "returns": "",
       "signature": "iter_edge_ids_by_type_property(edge_type: str, property_name: str, value)",
@@ -640,7 +640,7 @@
     },
     {
       "examples": [],
-      "line": 1004,
+      "line": 965,
       "name": "iter_edge_ids_by_type_property_range",
       "returns": "",
       "signature": "iter_edge_ids_by_type_property_range(edge_type: str, property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
@@ -649,7 +649,7 @@
     },
     {
       "examples": [],
-      "line": 649,
+      "line": 610,
       "name": "iter_node_ids_by_label",
       "returns": "",
       "signature": "iter_node_ids_by_label(label: str)",
@@ -658,7 +658,7 @@
     },
     {
       "examples": [],
-      "line": 717,
+      "line": 678,
       "name": "iter_node_ids_by_label_property",
       "returns": "",
       "signature": "iter_node_ids_by_label_property(label: str, property_name: str, value)",
@@ -672,7 +672,7 @@
           "example": 4
         }
       ],
-      "line": 741,
+      "line": 702,
       "name": "iter_node_ids_by_label_property_range",
       "returns": "",
       "signature": "iter_node_ids_by_label_property_range(label: str, property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
@@ -681,7 +681,7 @@
     },
     {
       "examples": [],
-      "line": 682,
+      "line": 643,
       "name": "iter_node_ids_by_property",
       "returns": "",
       "signature": "iter_node_ids_by_property(property_name: str, value)",
@@ -690,7 +690,7 @@
     },
     {
       "examples": [],
-      "line": 729,
+      "line": 690,
       "name": "iter_node_ids_by_property_range",
       "returns": "",
       "signature": "iter_node_ids_by_property_range(property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
@@ -699,7 +699,7 @@
     },
     {
       "examples": [],
-      "line": 1187,
+      "line": 1130,
       "name": "iter_typed_adjacency",
       "returns": "",
       "signature": "iter_typed_adjacency(node_id, edge_type: str, direction: str='out')",
@@ -717,7 +717,7 @@
           "example": 4
         }
       ],
-      "line": 783,
+      "line": 744,
       "name": "key_to_string",
       "returns": "String key.",
       "signature": "key_to_string(key)",
@@ -726,7 +726,7 @@
     },
     {
       "examples": [],
-      "line": 390,
+      "line": 388,
       "name": "manifest",
       "returns": "",
       "signature": "manifest()",
@@ -748,7 +748,7 @@
           "example": 1
         }
       ],
-      "line": 1204,
+      "line": 1147,
       "name": "neighbors_by_edge_type",
       "returns": "List of neighbor ID bytes.",
       "signature": "neighbors_by_edge_type(node_id, edge_type: str, direction: str='out')",
@@ -757,7 +757,7 @@
     },
     {
       "examples": [],
-      "line": 753,
+      "line": 714,
       "name": "node_key_to_bytes",
       "returns": "UTF-8 encoded bytes.",
       "signature": "node_key_to_bytes(node_key)",
@@ -766,7 +766,7 @@
     },
     {
       "examples": [],
-      "line": 523,
+      "line": 484,
       "name": "nodes",
       "returns": "",
       "signature": "nodes()",
@@ -775,7 +775,7 @@
     },
     {
       "examples": [],
-      "line": 664,
+      "line": 625,
       "name": "nodes_by_label",
       "returns": "List of decoded ``Node`` objects.",
       "signature": "nodes_by_label(label: str)",
@@ -784,7 +784,7 @@
     },
     {
       "examples": [],
-      "line": 721,
+      "line": 682,
       "name": "nodes_by_label_property",
       "returns": "",
       "signature": "nodes_by_label_property(label: str, property_name: str, value)",
@@ -798,7 +798,7 @@
           "example": 1
         }
       ],
-      "line": 745,
+      "line": 706,
       "name": "nodes_by_label_property_range",
       "returns": "",
       "signature": "nodes_by_label_property_range(label: str, property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
@@ -816,7 +816,7 @@
           "example": 1
         }
       ],
-      "line": 698,
+      "line": 659,
       "name": "nodes_by_property",
       "returns": "List of decoded ``Node`` objects.",
       "signature": "nodes_by_property(property_name: str, value)",
@@ -825,7 +825,7 @@
     },
     {
       "examples": [],
-      "line": 733,
+      "line": 694,
       "name": "nodes_by_property_range",
       "returns": "",
       "signature": "nodes_by_property_range(property_name: str, start_value=None, end_value=None, include_start: bool=True, include_end: bool=True)",
@@ -839,7 +839,7 @@
           "example": 1
         }
       ],
-      "line": 301,
+      "line": 299,
       "name": "open",
       "returns": "",
       "signature": "open(path, backend_options=None, validate_manifest=True)",
@@ -848,7 +848,7 @@
     },
     {
       "examples": [],
-      "line": 1784,
+      "line": 1647,
       "name": "put_adjacency_list",
       "returns": "",
       "signature": "put_adjacency_list(node_id: str, edges_list: list[str])",
@@ -882,7 +882,7 @@
           "example": 2
         }
       ],
-      "line": 831,
+      "line": 792,
       "name": "put_edge",
       "returns": "",
       "signature": "put_edge(edge: Edge, update_adjacency=True)",
@@ -908,7 +908,7 @@
           "example": 4
         }
       ],
-      "line": 1814,
+      "line": 1677,
       "name": "put_edges_bulk",
       "returns": "",
       "signature": "put_edges_bulk(edges: List[Edge], check_existing: bool=True)",
@@ -930,7 +930,7 @@
           "example": 2
         }
       ],
-      "line": 541,
+      "line": 502,
       "name": "put_node",
       "returns": "",
       "signature": "put_node(node: Node)",
@@ -964,7 +964,7 @@
           "example": 4
         }
       ],
-      "line": 1405,
+      "line": 1348,
       "name": "put_nodes",
       "returns": "",
       "signature": "put_nodes(nodes: list[Node])",
@@ -982,7 +982,7 @@
           "example": 1
         }
       ],
-      "line": 1945,
+      "line": 1808,
       "name": "query",
       "returns": "``gestaltdb.QueryResult`` containing projected records.",
       "signature": "query(cypher: str, parameters: Optional[dict[str, object]]=None, read_snapshot: bool | None=None, label_hierarchy=None, relation_hierarchy=None)",
@@ -991,7 +991,7 @@
     },
     {
       "examples": [],
-      "line": 1375,
+      "line": 1318,
       "name": "range_query_nodes",
       "returns": "",
       "signature": "range_query_nodes(property_name: str, start_val, end_val)",
@@ -1000,7 +1000,7 @@
     },
     {
       "examples": [],
-      "line": 1023,
+      "line": 984,
       "name": "rebuild_deferred_indexes",
       "returns": "Mapping from rebuilt index family/property to entries written.",
       "signature": "rebuild_deferred_indexes()",
@@ -1009,7 +1009,7 @@
     },
     {
       "examples": [],
-      "line": 843,
+      "line": 804,
       "name": "rebuild_edge_indexes",
       "returns": "",
       "signature": "rebuild_edge_indexes(edge_types: bool=True, properties: list[str] | tuple[str, ...] | set[str] | None=None, batch_size: int=_INDEX_REBUILD_BATCH_SIZE)",
@@ -1018,7 +1018,7 @@
     },
     {
       "examples": [],
-      "line": 881,
+      "line": 842,
       "name": "rebuild_edge_property_index",
       "returns": "Number of indexed edge records.",
       "signature": "rebuild_edge_property_index(property_name: str)",
@@ -1027,7 +1027,7 @@
     },
     {
       "examples": [],
-      "line": 637,
+      "line": 598,
       "name": "rebuild_label_index",
       "returns": "Number of label index entries written.",
       "signature": "rebuild_label_index()",
@@ -1036,7 +1036,7 @@
     },
     {
       "examples": [],
-      "line": 596,
+      "line": 557,
       "name": "rebuild_node_indexes",
       "returns": "",
       "signature": "rebuild_node_indexes(labels: bool=True, properties: list[str] | tuple[str, ...] | set[str] | None=None, batch_size: int=_INDEX_REBUILD_BATCH_SIZE)",
@@ -1045,7 +1045,7 @@
     },
     {
       "examples": [],
-      "line": 622,
+      "line": 583,
       "name": "rebuild_node_property_index",
       "returns": "Number of indexed node records.",
       "signature": "rebuild_node_property_index(property_name: str)",
@@ -1054,7 +1054,7 @@
     },
     {
       "examples": [],
-      "line": 854,
+      "line": 815,
       "name": "rebuild_relationship_type_index",
       "returns": "Number of typed edge records indexed.",
       "signature": "rebuild_relationship_type_index()",
@@ -1063,7 +1063,7 @@
     },
     {
       "examples": [],
-      "line": 1346,
+      "line": 1289,
       "name": "rebuild_typed_adjacency",
       "returns": "Number of typed edges indexed.",
       "signature": "rebuild_typed_adjacency()",
@@ -1077,7 +1077,7 @@
           "example": 1
         }
       ],
-      "line": 1274,
+      "line": 1217,
       "name": "sample_neighbors",
       "returns": "List of typed adjacency records.",
       "signature": "sample_neighbors(node_id, edge_type: str, direction: str='out', sample_size: int=10, rng=None, relation_hierarchy=None)",
@@ -1086,7 +1086,7 @@
     },
     {
       "examples": [],
-      "line": 1236,
+      "line": 1179,
       "name": "sample_nodes",
       "returns": "Sampled node IDs as strings, in reservoir order.",
       "signature": "sample_nodes(sample_size: int, label: str | None=None, node_filter: Callable[[Node], bool] | None=None, rng=None)",
@@ -1100,7 +1100,7 @@
           "example": 3
         }
       ],
-      "line": 1301,
+      "line": 1244,
       "name": "sample_typed_paths",
       "returns": "List of dictionaries with ``seed`` and sampled ``path`` records.",
       "signature": "sample_typed_paths(seed_ids, pattern: Union[SamplingPattern, list[dict]], rng=None, relation_hierarchy=None)",
@@ -1114,7 +1114,7 @@
           "example": 3
         }
       ],
-      "line": 1325,
+      "line": 1268,
       "name": "sample_typed_subgraph",
       "returns": "Dictionary with ``nodes``, ``edges``, and ``paths`` entries.",
       "signature": "sample_typed_subgraph(seed_ids, pattern: Union[SamplingPattern, list[dict]], rng=None, relation_hierarchy=None)",
@@ -1123,7 +1123,7 @@
     },
     {
       "examples": [],
-      "line": 397,
+      "line": 395,
       "name": "save_manifest",
       "returns": "",
       "signature": "save_manifest(path=None)",
@@ -1132,7 +1132,7 @@
     },
     {
       "examples": [],
-      "line": 1732,
+      "line": 1595,
       "name": "serialize_edge_value",
       "returns": "",
       "signature": "serialize_edge_value(edge: Edge)",
@@ -1141,7 +1141,7 @@
     },
     {
       "examples": [],
-      "line": 1728,
+      "line": 1591,
       "name": "serialize_node_value",
       "returns": "",
       "signature": "serialize_node_value(node: Node)",
@@ -1150,7 +1150,7 @@
     },
     {
       "examples": [],
-      "line": 509,
+      "line": 470,
       "name": "set_node_constraints",
       "returns": "",
       "signature": "set_node_constraints(constraints: list[dict[str, str]])",
@@ -1159,7 +1159,7 @@
     },
     {
       "examples": [],
-      "line": 468,
+      "line": 454,
       "name": "stale_indexes",
       "returns": "",
       "signature": "stale_indexes()",
@@ -1168,7 +1168,7 @@
     },
     {
       "examples": [],
-      "line": 349,
+      "line": 347,
       "name": "store",
       "returns": "",
       "signature": "store()",
@@ -1177,7 +1177,7 @@
     },
     {
       "examples": [],
-      "line": 354,
+      "line": 352,
       "name": "store",
       "returns": "",
       "signature": "store(value)",
@@ -1186,7 +1186,7 @@
     },
     {
       "examples": [],
-      "line": 2038,
+      "line": 1901,
       "name": "transaction",
       "returns": "",
       "signature": "transaction(**options)",
@@ -1195,7 +1195,7 @@
     },
     {
       "examples": [],
-      "line": 1159,
+      "line": 1102,
       "name": "traversal",
       "returns": "",
       "signature": "traversal()",
@@ -1204,7 +1204,7 @@
     },
     {
       "examples": [],
-      "line": 1395,
+      "line": 1338,
       "name": "update_edge",
       "returns": "",
       "signature": "update_edge(edge_id: str, new_data: dict, merge_func)",
@@ -1213,7 +1213,7 @@
     },
     {
       "examples": [],
-      "line": 1388,
+      "line": 1331,
       "name": "update_node",
       "returns": "",
       "signature": "update_node(node_id: str, new_data: dict, merge_func)",
@@ -1222,7 +1222,7 @@
     },
     {
       "examples": [],
-      "line": 1994,
+      "line": 1857,
       "name": "visualize",
       "returns": "``gestaltdb.viz.api.VizFigure``.",
       "signature": "visualize(cypher=None, seeds=None, pattern=None, parameters=None, options=None, rng=None)",

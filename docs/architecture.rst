@@ -312,8 +312,12 @@ scope, preserving native columnar writes, optimized JSON conversion, transaction
 rollback and typed adjacency without GraphDB redispatch. These low-level loaders
 retain ``maintain``/``defer`` index policy. The existing graph-wide
 ``ingest_arrow``/``ingest_polars`` entry points still coordinate both entity
-families and the aggregate deferred-index rebuild. They now consume the format
-adapters directly. Snapshot views deliberately do not expose ``ingest``.
+families and the aggregate deferred-index rebuild. They now delegate to
+``IngestionCoordinator``, which owns mode dispatch and the optional rebuild over
+the same session. Callers that need cross-family atomicity wrap the coordinator
+in a transaction; temporal staleness/rebuild requires an explicitly supplied
+temporal capability and fails closed otherwise. Snapshot views deliberately do
+not expose ``ingest``.
 
 Live typed traversal and sampling live in ``gestaltdb.traversal``.
 ``graph.traversal`` is a ``TraversalService`` over the current

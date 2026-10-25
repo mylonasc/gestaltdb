@@ -85,3 +85,108 @@ def test_ingestion_transaction_binding_and_snapshot_authority(tmp_path):
                 _ = view.ingest
     finally:
         graph.close()
+
+
+def test_standalone_coordinator_rebuilds_without_facade(tmp_path, monkeypatch):
+    from gestaltdb.ingestion import IndexMaintenanceMode
+    from gestaltdb.ingestion_service import IngestionCoordinator
+    from gestaltdb.indexes import STALE_KEY
+
+    graph = _graph(tmp_path, "lmdb")
+    try:
+        graph.indexes.create_node_property_index("name")
+        coordinator = IngestionCoordinator(StorageSession(graph.store, graph.serializer))
+        for name in ("__init__", "transaction", "ingest_arrow", "rebuild_deferred_indexes",
+                     "rebuild_node_indexes", "rebuild_edge_indexes"):
+            monkeypatch.setattr(GraphDB, name, forbidden)
+        result = coordinator.ingest_arrow(
+            ["a", "b"], ["ab"], ["a"], ["b"], ["T"],
+            labels=[["Person"], ["Person"]],
+            node_properties={"name": ["Alice", "Bob"]},
+            edge_properties={"score": [7]},
+            index_mode=IndexMaintenanceMode.DEFER, native=False)
+        assert result["nodes"] == 2
+        assert result["edges"] == 1
+        assert result["rebuilt_indexes"] == {}
+        assert set(result["stale_indexes"]) == {"node_label", "node_property", "edge_type"}
+        rebuilt = coordinator.rebuild_deferred_indexes()
+        assert rebuilt["node_label"] == 2
+        assert rebuilt["node_property:name"] == 2
+        assert rebuilt["edge_type"] == 1
+        assert coordinator.stale_indexes() == ()
+        assert list(graph.indexes.iter_node_ids_by_property("name", "Alice")) == [b"a"]
+        assert graph.nodes.get(b"a").properties["name"] == "Alice"
+        assert graph.store.get_metadata(STALE_KEY) in (None, b"[]")
+    finally:
+        graph.close()
+
+
+class _FakeTemporal:
+    def __init__(self):
+        self.rebuilds = 0
+
+    def index_horizon(self):
+        return None
+
+    def has_visible_history(self):
+        return True
+
+    def rebuild_temporal_indexes(self):
+        self.rebuilds += 1
+        return {"temporal": 3}
+
+
+def test_coordinator_uses_explicit_temporal_capability(tmp_path):
+    from gestaltdb.ingestion_service import IngestionCoordinator
+
+    graph = _graph(tmp_path, "lmdb")
+    try:
+        session = StorageSession(graph.store, graph.serializer)
+        temporal = _FakeTemporal()
+        coordinator = IngestionCoordinator(session, temporal=temporal)
+        assert coordinator.stale_indexes() == ("temporal",)
+        assert coordinator.rebuild_deferred_indexes() == {"temporal": 3}
+        assert temporal.rebuilds == 1
+    finally:
+        graph.close()
+
+
+def test_coordinator_fails_closed_on_temporal_rebuild_without_capability(tmp_path):
+    from gestaltdb._graph import index_maintenance
+    from gestaltdb.ingestion_service import IngestionCoordinator
+    from gestaltdb.indexes import STALE_KEY
+
+    graph = _graph(tmp_path, "lmdb")
+    try:
+        index_maintenance.persist_stale_indexes(graph.store, STALE_KEY, {"temporal"})
+        coordinator = IngestionCoordinator(StorageSession(graph.store, graph.serializer))
+        with pytest.raises(RuntimeError, match="temporal"):
+            coordinator.rebuild_deferred_indexes()
+    finally:
+        graph.close()
+
+
+def test_high_level_ingestion_rolls_back_both_families(tmp_path, monkeypatch):
+    from gestaltdb._graph.entities import GraphEntityDictSerializer
+
+    pytest.importorskip("lmdb")
+    graph = GraphDB.create(tmp_path / "db", backend="lmdb", serializer="pickle")
+    try:
+        graph.indexes.create_node_property_index("name")
+        original = GraphEntityDictSerializer.serialize
+
+        def broken(self, entity, kind):
+            if kind == "Edge" and entity.get_id == "bad":
+                raise ValueError("injected edge failure")
+            return original(self, entity, kind)
+
+        monkeypatch.setattr(GraphEntityDictSerializer, "serialize", broken)
+        with pytest.raises(ValueError, match="injected"):
+            graph.ingest_arrow(
+                ["a"], ["bad"], ["a"], ["b"], ["T"],
+                node_properties={"name": ["Alice"]}, native=False)
+        assert graph.nodes.get(b"a") is None
+        assert graph.edges.get(b"bad") is None
+        assert list(graph.indexes.iter_node_ids_by_property("name", "Alice")) == []
+    finally:
+        graph.close()

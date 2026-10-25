@@ -77,7 +77,6 @@ from .versioning import (
 )
 from ._graph import index_maintenance as _index_maintenance
 from ._graph import edge_records as _edge_records
-from ._graph import ingest_support as _ingest_support
 from ._graph import index_lookup as _index_lookup
 from ._graph import temporal_indexes as _temporal_indexes
 from ._graph import temporal_orphans as _temporal_orphans
@@ -161,7 +160,6 @@ def _temporal_writer_lock(path: Path) -> _TemporalWriterLock:
 
 
 # Entity/value helpers live in `gestaltdb._graph.entities`; re-exported above.
-_SimpleProgress = _ingest_support.SimpleProgress
 
 
 class GraphDB:
@@ -449,50 +447,13 @@ class GraphDB:
         _lifecycle.validate_backend_manifest(
             self.store, _MANIFEST_METADATA_KEY, self.database_id, root_manifest)
 
-    def _load_stale_indexes(self) -> set[str]:
-        """Load index families known to be stale after deferred bulk ingestion."""
-        return _index_maintenance.load_stale_indexes(self.store, _STALE_INDEXES_METADATA_KEY)
-
-    def _persist_stale_indexes(self, stale_indexes: set[str]) -> None:
-        """Persist stale index metadata."""
-        _index_maintenance.persist_stale_indexes(self.store, _STALE_INDEXES_METADATA_KEY, stale_indexes)
-
     def _mark_indexes_stale(self, *index_names: str) -> None:
         """Mark index families stale after a deferred bulk load."""
         _index_maintenance.mark_indexes_stale(self.store, _STALE_INDEXES_METADATA_KEY, *index_names)
 
-    def _clear_stale_indexes(self, *index_names: str) -> None:
-        """Clear stale markers after rebuilding index families."""
-        _index_maintenance.clear_stale_indexes(self.store, _STALE_INDEXES_METADATA_KEY, *index_names)
-
     def stale_indexes(self) -> tuple[str, ...]:
         """Return index families requiring rebuild after deferred ingestion."""
-        stale = self._load_stale_indexes()
-        if self.temporal.index_horizon() is None and self.temporal.has_visible_history():
-            stale.add("temporal")
-        return tuple(sorted(stale))
-
-    def _validate_index_mode(self, index_mode: str) -> None:
-        """Validate the columnar ingestion index mode."""
-        _ingest_support.validate_index_mode(index_mode)
-
-    def _low_level_index_mode(self, index_mode: str | IndexMaintenanceMode) -> str:
-        """Return the low-level index mode used by primitive ingestion calls."""
-        return _ingest_support.low_level_index_mode(index_mode)
-
-    def _coerce_columnar_ingestion_mode(self, ingestion_mode: str | ColumnarIngestionMode) -> str:
-        """Normalize a high-level columnar ingestion mode."""
-        return _ingest_support.coerce_columnar_ingestion_mode(ingestion_mode)
-
-    def _should_rebuild_after_ingest(self, index_mode: str | IndexMaintenanceMode) -> bool:
-        """Return whether high-level ingestion should rebuild deferred indexes."""
-        return _ingest_support.should_rebuild_after_ingest(index_mode)
-
-    @contextmanager
-    def _ingestion_progress(self, enabled: bool, *, total=None, desc: str):
-        """Return an optional progress reporter for chunked ingestion."""
-        with _ingest_support.ingestion_progress(enabled, total=total, desc=desc) as progress:
-            yield progress
+        return self._ingestion_coordinator.stale_indexes()
 
     def _load_property_index_metadata(self, key: bytes) -> set[str]:
         """Load persisted property index definitions from backend metadata."""
@@ -1026,25 +987,7 @@ class GraphDB:
         Returns:
             Mapping from rebuilt index family/property to entries written.
         """
-        stale = set(self.stale_indexes())
-        rebuilt: dict[str, int] = {}
-        if stale.intersection({"node_label", "node_property"}):
-            rebuilt.update(
-                self.rebuild_node_indexes(
-                    labels="node_label" in stale,
-                    properties=self.indexed_node_properties if "node_property" in stale else set(),
-                )
-            )
-        if stale.intersection({"edge_type", "edge_property"}):
-            rebuilt.update(
-                self.rebuild_edge_indexes(
-                    edge_types="edge_type" in stale,
-                    properties=self.indexed_edge_properties if "edge_property" in stale else set(),
-                )
-            )
-        if "temporal" in stale:
-            rebuilt.update(self.temporal.rebuild_temporal_indexes())
-        return rebuilt
+        return self._ingestion_coordinator.rebuild_deferred_indexes()
 
     def build_sampler_snapshot(
         self,
@@ -1420,6 +1363,13 @@ class GraphDB:
 
         return IngestionService(self.nodes._session)
 
+    @property
+    def _ingestion_coordinator(self):
+        """Graph-wide loading/rebuild coordination for this exact scope."""
+        from .ingestion_service import IngestionCoordinator
+
+        return IngestionCoordinator(self.nodes._session, temporal=self.temporal)
+
     def ingest_polars(
         self,
         node_df,
@@ -1463,59 +1413,16 @@ class GraphDB:
                     edge_property_columns=edge_property_columns,
                     native=native, chunk_size=chunk_size, progress=progress,
                 )
-        mode = self._coerce_columnar_ingestion_mode(ingestion_mode)
-        low_level_index_mode = self._low_level_index_mode(index_mode)
-        if mode == ColumnarIngestionMode.ENTITY_COLUMNS.value:
-            node_count = self.ingest.polars.node_entities(
-                node_df,
-                node_id=node_id,
-                labels=labels,
-                property_columns=node_property_columns,
-                native=native,
-                chunk_size=chunk_size,
-                append_only=True,
-                index_mode=low_level_index_mode,
-                progress=progress,
-            )
-            edge_count = self.ingest.polars.edge_entities(
-                edge_df,
-                edge_id=edge_id,
-                source=source,
-                target=target,
-                edge_type=edge_type,
-                property_columns=edge_property_columns,
-                append_only=True,
-                native=native,
-                chunk_size=chunk_size,
-                index_mode=low_level_index_mode,
-                progress=progress,
-            )
-        else:
-            node_count = self.ingest.polars.nodes(
-                node_df,
-                node_id=node_id,
-                node_value=node_value,
-                native=native,
-                chunk_size=chunk_size,
-                append_only=True,
-                index_mode=low_level_index_mode,
-                progress=progress,
-            )
-            edge_count = self.ingest.polars.edges(
-                edge_df,
-                edge_id=edge_id,
-                source=source,
-                target=target,
-                edge_type=edge_type,
-                edge_value=edge_value,
-                append_only=True,
-                native=native,
-                chunk_size=chunk_size,
-                index_mode=low_level_index_mode,
-                progress=progress,
-            )
-        rebuilt = self.rebuild_deferred_indexes() if self._should_rebuild_after_ingest(index_mode) else {}
-        return {"nodes": node_count, "edges": edge_count, "rebuilt_indexes": rebuilt, "stale_indexes": self.stale_indexes()}
+        return self._ingestion_coordinator.ingest_polars(
+            node_df, edge_df,
+            ingestion_mode=ingestion_mode, index_mode=index_mode,
+            node_id=node_id, node_value=node_value, labels=labels,
+            node_property_columns=node_property_columns,
+            edge_id=edge_id, source=source, target=target,
+            edge_type=edge_type, edge_value=edge_value,
+            edge_property_columns=edge_property_columns,
+            native=native, chunk_size=chunk_size, progress=progress,
+        )
 
     def ingest_arrow(
         self,
@@ -1573,57 +1480,13 @@ class GraphDB:
                     node_properties=node_properties, edge_properties=edge_properties,
                     native=native, chunk_size=chunk_size, progress=progress,
                 )
-        mode = self._coerce_columnar_ingestion_mode(ingestion_mode)
-        low_level_index_mode = self._low_level_index_mode(index_mode)
-        if mode == ColumnarIngestionMode.ENTITY_COLUMNS.value:
-            node_count = self.ingest.arrow.node_entities(
-                node_ids,
-                labels=labels,
-                properties=node_properties,
-                native=native,
-                chunk_size=chunk_size,
-                append_only=True,
-                index_mode=low_level_index_mode,
-                progress=progress,
-            )
-            edge_count = self.ingest.arrow.edge_entities(
-                edge_ids,
-                sources,
-                targets,
-                edge_types,
-                properties=edge_properties,
-                append_only=True,
-                native=native,
-                chunk_size=chunk_size,
-                index_mode=low_level_index_mode,
-                progress=progress,
-            )
-        else:
-            if node_values is None or edge_values is None:
-                raise ValueError("node_values and edge_values are required for serialized payload ingestion")
-            node_count = self.ingest.arrow.nodes(
-                node_ids,
-                node_values,
-                native=native,
-                chunk_size=chunk_size,
-                append_only=True,
-                index_mode=low_level_index_mode,
-                progress=progress,
-            )
-            edge_count = self.ingest.arrow.edges(
-                edge_ids,
-                sources,
-                targets,
-                edge_types,
-                edge_values,
-                append_only=True,
-                native=native,
-                chunk_size=chunk_size,
-                index_mode=low_level_index_mode,
-                progress=progress,
-            )
-        rebuilt = self.rebuild_deferred_indexes() if self._should_rebuild_after_ingest(index_mode) else {}
-        return {"nodes": node_count, "edges": edge_count, "rebuilt_indexes": rebuilt, "stale_indexes": self.stale_indexes()}
+        return self._ingestion_coordinator.ingest_arrow(
+            node_ids, edge_ids, sources, targets, edge_types,
+            ingestion_mode=ingestion_mode, index_mode=index_mode,
+            node_values=node_values, edge_values=edge_values, labels=labels,
+            node_properties=node_properties, edge_properties=edge_properties,
+            native=native, chunk_size=chunk_size, progress=progress,
+        )
 
     def ingest_nodes_arrow(
         self,
