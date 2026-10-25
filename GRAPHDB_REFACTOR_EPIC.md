@@ -1,0 +1,238 @@
+# GraphDB Refactoring Epic (#388)
+
+Tracking issue: https://github.com/mylonasc/gestaltdb/issues/388
+Branch: `feature/graphdb-refactor-388`
+Base: `release/reasoning-next-candidate` at `4bcd071`
+
+## Goal
+
+Decompose the 7,113-line `GraphDB` god class (`src/gestaltdb/graphdb.py`,
+221 methods, 134 public) into smaller classes with well-defined interfaces,
+without changing observable behavior, storage format, or public imports.
+
+Success means cohesive, independently understandable capabilities — not merely
+satisfying the 800-line module ceiling.
+
+## Non-goals
+
+- No public API redesign in this epic. `from gestaltdb.graphdb import GraphDB,
+  Node, Edge` keeps working. New capability surfaces (e.g. `graph.claims`)
+  are explicitly deferred until internals stabilize.
+- No storage-format, logical-identity, or commit-visibility changes.
+- No “improvements” to transaction, locking, snapshot, or publication
+  semantics during extraction.
+- No behavior-preserving-only rewrite of the other seven oversized modules.
+  They get their own plans after GraphDB demonstrates the pattern.
+
+## Constraints (from prior plan + CI)
+
+- Pinned Ruff correctness rules (`E4,E7,E9,F63,F7,F82`) must pass.
+- New library modules ≤800 physical lines; `graphdb.py` has an exact
+  shrinking budget in `planning/code-quality/module-size-baseline.json`.
+  Lower the budget in the same change as every extraction.
+- Lightweight `Lint` workflow (Python 3.10, no backends) runs on relevant
+  changes; full real-backend suites still gate release.
+- Standalone reasoning core must never import storage. Stored-rule
+  implementation may depend on narrow claim/commit interfaces only.
+- Executable docstrings, architecture docs, and the agent API index must
+  stay green; regenerate the index if source locations change.
+
+## Current inventory
+
+Counted from `src/gestaltdb/graphdb.py` at base:
+
+- 221 `GraphDB` methods (134 public, 87 private).
+- Rough responsibility split: temporal/rules/claims ~63, edge/adjacency
+  ~58, node/index ~48, lifecycle/query/misc ~29, ingestion ~10,
+  sampling/views ~4, other ~9.
+- Module-level residents: `Node`, `Edge`, `TimeIndexedEdge`,
+  `GraphEntityDictSerializer`, `_TemporalWriterLock` + global lock table,
+  `_SimpleProgress`, `_normalize_labels`, property-index encoders,
+  datetime helpers, backend/serializer registries, ~30 module constants.
+- External private coupling: `readview.py` reaches into
+  `graph.store`, `graph._temporal_visible_key/_commit_key`,
+  `graph._store_path/_backend_name/_serializer_name/database_id/manifest`;
+  `reasoning/adapters/*` use `graph._temporal_writer_guard`,
+  `graph._get_temporal_commit_cached`, `graph._temporal_record_key`,
+  `graph._database_id`, `_DATABASE_ID_METADATA_KEY`,
+  `_TEMPORAL_RECORD_PREFIX`, `_TEMPORAL_VISIBLE_PREFIX`,
+  `_TemporalWriterLock`; `transaction()` constructs a sibling `GraphDB`;
+  `current_read_view()` shallow-copies `GraphDB` and swaps `store`.
+
+## Target components
+
+Names are provisional. Prefer explicit private collaborators with documented
+state/lock ownership over mixins or multiple inheritance.
+
+1. **Entities / value codecs** — `Node`, `Edge`, `TimeIndexedEdge`,
+   `GraphEntityDictSerializer`, label normalization, property-index
+   encoders, datetime helpers. Pure values; no store access.
+2. **Database lifecycle** — backend/serializer selection, manifests,
+   database identity, handle creation/close, resource ownership.
+3. **Current graph records** — node/edge CRUD, bulk object writes,
+   legacy adjacency blobs, BFS helpers.
+4. **Graph indexes** — label/type/property/range indexes, constraint
+   metadata, freshness checks, rebuild/deferred coordination.
+5. **Typed adjacency** — typed edge adjacency, counts, traversal
+   primitives; owns its count cache.
+6. **Columnar ingestion** — Arrow/Polars entity + serialized-payload
+   paths, chunking, deferred-index coordination, native writer integration.
+7. **Temporal history** — immutable records, commit decode, history
+   selection (`*_as_of`, `iter_*_versions`).
+8. **Temporal commit writer** — write validation, sequence reservation,
+   descriptor/record writes, index publication, visibility markers.
+   Sequence → descriptor → records → indexes → visibility marker is a
+   protected ordering contract.
+9. **Temporal indexes + recovery** — temporal index maintenance/rebuilds,
+   orphan audit/reclaim, sequence/state helpers.
+10. **Claims** — assertion/correction/retraction, claim selection,
+    four-valued status; uses temporal history + commit writer.
+11. **Stored rules + truth maintenance** — catalog, evaluation,
+    supports/absence, reconciliation, explanation. Split further into
+    catalog/selection, evaluation, maintenance, explanation — not one
+    800-line rules module.
+12. **Sampling / read-view / query facades** — thin delegations to
+    existing sampling, Cypher, modal, and viz engines.
+
+## State-ownership design
+
+The central risk is scope binding:
+
+- `transaction()` builds a sibling `GraphDB` on `tx_store` and copies
+  selected config while sharing the writer lock and clock.
+- `current_read_view()` shallow-copies the graph and substitutes a
+  snapshot store, clearing snapshot-local caches.
+
+Rule: **components bind to an explicit store; never retain the parent’s
+live store by accident.**
+
+- Shared: database identity, writer coordination, serializer/backend
+  capabilities, clock (where tests inject it).
+- Store-bound: decoded-record caches, adjacency-count caches,
+  snapshot-local metadata copies, transaction/snapshot handles.
+- Scope-owned: backend transaction/snapshot lifetimes.
+- Config: index/constraint sets (copied per scope, as today).
+
+No giant mutable “context” object. Pass narrow dependencies
+(store, serializer, index config, commit writer, claim reader) to each
+component. Typing protocols only where multiple implementations or
+test doubles justify them.
+
+Stored rules depend on a small surface: selected claims, exact claim
+versions, rule catalog, commit path. They do not receive unrestricted
+`GraphDB` access. Same discipline for claims → temporal history.
+
+## Phases
+
+### Phase 0 — Behavioral contract (in progress)
+
+- Inventory public signatures + private adapter dependencies (this file).
+- Add characterization tests for transaction/snapshot binding and cache
+  isolation: writes via `tx_graph` visible only after commit; rollback
+  discards; snapshot reads pin; snapshot caches don’t leak to live;
+  writer-guard and clock sharing preserved.
+- Record representative fixtures/baselines for ingestion/sampling where
+  hot paths will move.
+- Identify subclassing/monkeypatching/fault-injection seams in tests.
+
+### Phase 1 — Entities + pure codecs (first extraction)
+
+- New `src/gestaltdb/_graph/entities.py` (≤800 lines): `Node`, `Edge`,
+  `TimeIndexedEdge`, `GraphEntityDictSerializer`, `_normalize_labels`,
+  `_property_value_to_{index,range_index}_bytes`, `datetime_to_bytes`,
+  `bytes_to_datetime`.
+- `graphdb.py` re-exports them for `from gestaltdb.graphdb import …`
+  plus `TimeIndexedEdge`, datetime helpers, and keeps pickle streams
+  stable by preserving `__module__ = "gestaltdb.graphdb"` on moved
+  entity classes.
+- Lower `graphdb.py` budget in `module-size-baseline.json` in the same
+  change. No behavior change; AST without docstrings unchanged except
+  imports.
+
+### Phase 2 — Scope-binding mechanism
+
+- Introduce internal store-bound component construction used by
+  `__init__`, `transaction()`, and `current_read_view()`.
+- Keep copy-vs-share semantics identical; add regression tests proving
+  a component can never fall back to the live store.
+- Migrate private adapter dependencies to the new internal interfaces
+  where trivial; otherwise keep compat shims with deprecation notes.
+
+### Phase 3 — Current-graph storage
+
+- Extract typed adjacency, index operations, then record coordination
+  in small steps. Keep node/edge write orchestration together where it
+  enforces record/index/adjacency consistency.
+- Preserve backend integration, constraints, deferred-index behavior,
+  and cache invalidation.
+
+### Phase 4 — Ingestion + sampling coordination
+
+- Move columnar paths onto narrow write/index capabilities; no per-row
+  service calls in hot loops.
+- Preserve append-only adjacency semantics and native bulk paths.
+- Parity tests + measured ingestion/sampling comparisons.
+
+### Phase 5 — Temporal storage
+
+- Codecs/read helpers → temporal indexes/history selection → commit
+  coordination → recovery. Never another single giant temporal module.
+- Preserve sequence/descriptor/visibility ordering, durability
+  fault-injection evidence, and historical conformance.
+
+### Phase 6 — Claims + stored rules
+
+- Claims on temporal interfaces; then rule catalog, evaluation,
+  maintenance, explanation as separate units.
+- Migrate `reasoning/adapters/*` off `graphdb._*` privates.
+- Keep standalone Datalog storage-independent.
+
+### Phase 7 — Facade + docs
+
+- `graphdb.py` becomes thin delegations; remove obsolete forwarding.
+- Update `docs/architecture.rst`, `docs/code-quality.rst`,
+  `docs/api-workflows.rst`, regenerate agent API index, Sphinx/API checks.
+- Lower/remove legacy budget; each new module stays ≤800 lines.
+
+## Per-extraction acceptance
+
+- Public imports, signatures, return shapes, byte/string ID boundaries,
+  and exception behavior stable.
+- No storage-format or logical-identity change.
+- Correct transaction/snapshot binding; no cross-scope work migration.
+- Writer-lock and publication boundaries unchanged.
+- Real LMDB/LevelDB/PyRex + serializer coverage; historical
+  selection/commit conformance; fault-injection tests.
+- Executable docstrings preserved; no unexplained ingestion/sampling
+  regression.
+- New modules ≤800 physical lines; legacy budget lowered in same commit.
+
+## Risks
+
+- Shallow-copy + shared-mutable-state bugs (mitigated by Phase 0 tests
+  and explicit store-bound construction).
+- Pickle compat for moved entity classes (mitigated by `__module__`
+  preservation + round-trip tests).
+- Private-adapter coupling (`graph._*`, constants, lock) — migrate
+  deliberately, keep shims until callers move.
+- 134 public methods + docstrings may not fit an 800-line facade;
+  do not delete docs or generate opaque forwarding. First remove
+  implementation complexity; review any facade-only exception explicitly.
+- Large rewrite temptation — land in small reviewable slices with green
+  real-backend evidence each time.
+
+## Progress log
+
+- 2026-10-25: Epic created; branch `feature/graphdb-refactor-388` from
+  `4bcd071`. Fixed `docs/code-quality.rst` heading underlines (CI
+  `sphinx -W` failure). Phase 0 scope tests + Phase 1 entity extraction
+  in progress.
+- 2026-10-25 (slice 1, landed): Phase 1 entities extracted to
+  `src/gestaltdb/_graph/entities.py` (431 lines) + package init;
+  `graphdb.py` 7113 → 6737 lines, budget lowered in same change.
+  Pickle path preserved via `__module__ = "gestaltdb.graphdb"` with
+  round-trip regression. Phase 0 `tests/test_graphdb_scopes.py` locks
+  tx/snapshot store binding, shared-vs-isolated state, rollback, and
+  cache isolation. Gates: Ruff, size ratchet, 136 backend tests
+  (transactions/snapshots/interfaces/scopes), 67 workflow/agent/policy
+  tests, docs drift + Sphinx `-W` green; API index regenerated.

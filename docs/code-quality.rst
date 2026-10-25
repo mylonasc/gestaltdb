@@ -1,5 +1,5 @@
 Code quality and module boundaries
-=================================
+==================================
 
 Run the lightweight gates before submitting library changes::
 
@@ -12,7 +12,7 @@ on pull requests and pushes to main. It does not install database backends or
 run a Python-version matrix. Prose-only edits do not select it.
 
 Ruff scope and rollout
----------------------
+----------------------
 
 The pinned Ruff version and rule selection live in ``pyproject.toml``. The
 initial scope is all Python under ``src/``, the module-size checker, and its
