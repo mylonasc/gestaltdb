@@ -354,13 +354,14 @@ class CurrentGraphReadView:
         "transaction",
         "update_",
     )
-    _MUTATING_METHODS = {"close", "save_manifest"}
+    _MUTATING_METHODS = {"close", "save_manifest", "ingest"}
 
     def __init__(self, graph, provenance: CurrentReadProvenance | None):
         self._graph = graph
         self._nodes = graph.nodes.reader
         self._edges = graph.edges.reader
         self._indexes = graph.indexes.reader
+        self._traversal = graph.traversal.reader
         self.provenance = provenance
 
     @property
@@ -377,6 +378,11 @@ class CurrentGraphReadView:
     def indexes(self):
         """Current index reads without DDL authority on this snapshot."""
         return self._indexes
+
+    @property
+    def traversal(self):
+        """Typed adjacency reads bound to this snapshot, without rebuilds."""
+        return self._traversal
 
     @property
     def store(self):

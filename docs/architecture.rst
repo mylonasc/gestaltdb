@@ -303,6 +303,28 @@ to the snapshot's index configuration, without DDL methods. Existing current
 lookup names on GraphDB remain integration conveniences; the current-graph
 reasoning frontier consumes the narrow snapshot index reader directly.
 
+Columnar format adapters live in ``gestaltdb.ingestion_service``:
+``graph.ingest.arrow`` (``ArrowIngestor``) and ``graph.ingest.polars``
+(``PolarsIngestor``). Each accepts a ``StorageSession`` for standalone use.
+``nodes``/``edges`` load serialized payloads; ``node_entities``/``edge_entities``
+encode structured columns. Conversion callbacks stay bound to the same write
+scope, preserving native columnar writes, optimized JSON conversion, transaction
+rollback and typed adjacency without GraphDB redispatch. These low-level loaders
+retain ``maintain``/``defer`` index policy. The existing graph-wide
+``ingest_arrow``/``ingest_polars`` entry points still coordinate both entity
+families and the aggregate deferred-index rebuild. They now consume the format
+adapters directly. Snapshot views deliberately do not expose ``ingest``.
+
+Live typed traversal and sampling live in ``gestaltdb.traversal``.
+``graph.traversal`` is a ``TraversalService`` over the current
+``StorageSession``: it owns typed adjacency reads/counts, typed-adjacency
+rebuilds and reservoir sampling of nodes, neighbors, paths and subgraphs.
+``view.traversal`` narrows to ``AdjacencyReader``, so a snapshot can traverse
+its pinned adjacency without exposing rebuild or sampling writes. Sampling
+scans the bound store directly and keeps the label-index freshness check.
+Snapshot construction (``build_sampler_snapshot``) and array-native sampling
+in ``gestaltdb.sampling`` remain separate capabilities.
+
 The decomposition is useful, with four important boundaries:
 
 * ``GraphDB`` is the public integration facade: it owns handle lifecycle,

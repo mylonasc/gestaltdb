@@ -602,6 +602,12 @@ paths = graph.sample_typed_paths(
 
 ## Ingest Arrow Columns
 
+For format-specific loading, use `graph.ingest.arrow.node_entities(...)` and
+`edge_entities(...)`; `nodes(...)` and `edges(...)` accept serialized payloads.
+`graph.ingest.polars` exposes the same operations for DataFrames. These loaders
+use low-level `maintain`/`defer` index policy. The combined graph-loading API
+below also coordinates the final deferred-index rebuild.
+
 ```python
 from tempfile import TemporaryDirectory
 

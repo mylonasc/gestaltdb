@@ -75,15 +75,10 @@ from .versioning import (
     normalize_temporal_interval,
     normalize_version_id,
 )
-from ._graph import adjacency as _adjacency
 from ._graph import index_maintenance as _index_maintenance
 from ._graph import edge_records as _edge_records
-from ._graph import ingest_edges as _ingest_edges
-from ._graph import ingest_nodes as _ingest_nodes
 from ._graph import ingest_support as _ingest_support
-from ._graph import sampling as _sampling
 from ._graph import index_lookup as _index_lookup
-from ._graph import index_rebuild as _index_rebuild
 from ._graph import temporal_indexes as _temporal_indexes
 from ._graph import temporal_orphans as _temporal_orphans
 from ._graph.temporal_indexes import (
@@ -476,10 +471,6 @@ class GraphDB:
         if self.temporal.index_horizon() is None and self.temporal.has_visible_history():
             stale.add("temporal")
         return tuple(sorted(stale))
-
-    def _ensure_indexes_current(self, *index_names: str) -> None:
-        """Prevent stale secondary indexes from silently returning wrong results."""
-        self.indexes.ensure_current(*index_names)
 
     def _validate_index_mode(self, index_mode: str) -> None:
         """Validate the columnar ingestion index mode."""
@@ -1164,14 +1155,20 @@ class GraphDB:
             configure_snapshot_child(self, snapshot_graph)
             yield CurrentGraphReadView(snapshot_graph, provenance)
 
+    @property
+    def traversal(self):
+        """Typed adjacency and live sampling bound to this current store scope."""
+        from .traversal import TraversalService
+
+        return TraversalService(self.nodes._session)
+
     def get_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out'):
         """Return typed adjacency records with clean direction semantics.
 
         `out` means source -> target, `in` means target -> source, and `any`
         returns the union of both directions.
         """
-        return _adjacency.get_typed_adjacency(
-            self.store, _node_key_to_bytes(node_id), edge_type, direction)
+        return self.traversal.get_typed_adjacency(node_id, edge_type, direction)
 
     def count_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out') -> int:
         """Count typed adjacency records without materializing traversal records.
@@ -1185,9 +1182,7 @@ class GraphDB:
             Number of typed adjacency records matching the node, edge type, and
             direction.
         """
-        return _adjacency.count_typed_adjacency(
-            self.store, self._typed_adjacency_count_cache,
-            _node_key_to_bytes(node_id), edge_type, direction)
+        return self.traversal.count_typed_adjacency(node_id, edge_type, direction)
 
     def iter_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out'):
         """Yield typed adjacency records with clean direction semantics.
@@ -1204,8 +1199,7 @@ class GraphDB:
         Examples:
             >>> graph_db.iter_typed_adjacency("drug-1", "drug-to-protein")  # doctest: +SKIP
         """
-        return _adjacency.iter_typed_adjacency(
-            self.store, _node_key_to_bytes(node_id), edge_type, direction)
+        return self.traversal.iter_typed_adjacency(node_id, edge_type, direction)
 
     def neighbors_by_edge_type(self, node_id, edge_type: str, direction: str = 'out'):
         """Return neighbor IDs connected by a specific edge type.
@@ -1221,8 +1215,7 @@ class GraphDB:
         Examples:
             >>> graph_db.neighbors_by_edge_type("drug-1", "drug-to-protein")  # doctest: +SKIP
         """
-        return _adjacency.neighbors_by_edge_type(
-            self.store, _node_key_to_bytes(node_id), edge_type, direction)
+        return self.traversal.neighbors_by_edge_type(node_id, edge_type, direction)
 
     def edges_by_edge_type(self, node_id, edge_type: str, direction: str = 'out'):
         """Return edge IDs connected by a specific edge type.
@@ -1238,8 +1231,7 @@ class GraphDB:
         Examples:
             >>> graph_db.edges_by_edge_type("drug-1", "drug-to-protein")  # doctest: +SKIP
         """
-        return _adjacency.edges_by_edge_type(
-            self.store, _node_key_to_bytes(node_id), edge_type, direction)
+        return self.traversal.edges_by_edge_type(node_id, edge_type, direction)
 
     def sample_nodes(
         self,
@@ -1275,8 +1267,7 @@ class GraphDB:
             >>> graph_db.sample_nodes(5, label="Drug", rng=random.Random(7))  # doctest: +SKIP
             ['drug-3', 'drug-1', 'drug-7', 'drug-2', 'drug-5']
         """
-        return _sampling.sample_nodes(
-            self.store, self.entity_serializer, self._ensure_indexes_current,
+        return self.traversal.sample_nodes(
             sample_size, label=label, node_filter=node_filter, rng=rng,
         )
 
@@ -1302,8 +1293,8 @@ class GraphDB:
         Examples:
             >>> graph_db.sample_neighbors("drug-1", "drug-to-protein", sample_size=2)  # doctest: +SKIP
         """
-        return _sampling.sample_neighbors(
-            self.store, node_id, edge_type, direction=direction,
+        return self.traversal.sample_neighbors(
+            node_id, edge_type, direction=direction,
             sample_size=sample_size, rng=rng, relation_hierarchy=relation_hierarchy,
         )
 
@@ -1327,9 +1318,8 @@ class GraphDB:
             >>> pattern = SamplingPattern([SamplingHop("drug-to-protein", sample_size=2)])
             >>> graph_db.sample_typed_paths(["drug-1"], pattern)  # doctest: +SKIP
         """
-        return _sampling.sample_typed_paths(
-            self.store, seed_ids, pattern, rng=rng,
-            relation_hierarchy=relation_hierarchy,
+        return self.traversal.sample_typed_paths(
+            seed_ids, pattern, rng=rng, relation_hierarchy=relation_hierarchy,
         )
 
     def sample_typed_subgraph(self, seed_ids, pattern: Union[SamplingPattern, list[dict]], rng=None, *, relation_hierarchy=None):
@@ -1349,9 +1339,8 @@ class GraphDB:
             >>> pattern = [{"edge_type": "drug-to-protein", "direction": "out", "sample_size": 2}]
             >>> graph_db.sample_typed_subgraph(["drug-1"], pattern)  # doctest: +SKIP
         """
-        return _sampling.sample_typed_subgraph(
-            self.store, self.entity_serializer, seed_ids, pattern, rng=rng,
-            relation_hierarchy=relation_hierarchy,
+        return self.traversal.sample_typed_subgraph(
+            seed_ids, pattern, rng=rng, relation_hierarchy=relation_hierarchy,
         )
 
     def rebuild_typed_adjacency(self):
@@ -1363,11 +1352,7 @@ class GraphDB:
         Examples:
             >>> graph_db.rebuild_typed_adjacency()  # doctest: +SKIP
         """
-        if self._implicit_transaction_required():
-            with self.transaction() as tx:
-                return tx.rebuild_typed_adjacency()
-        return _adjacency.rebuild_typed_adjacency(
-            self.store, self.entity_serializer, self._typed_adjacency_count_cache)
+        return self.traversal.rebuild_typed_adjacency()
 
     def get_edge(self, edge_id) -> Edge:
         """Return an edge by byte key.
@@ -1428,6 +1413,13 @@ class GraphDB:
         """
         return self.nodes.put_many(nodes)
 
+    @property
+    def ingest(self):
+        """Arrow/Polars ingestion capabilities bound to this current store scope."""
+        from .ingestion_service import IngestionService
+
+        return IngestionService(self.nodes._session)
+
     def ingest_polars(
         self,
         node_df,
@@ -1474,7 +1466,7 @@ class GraphDB:
         mode = self._coerce_columnar_ingestion_mode(ingestion_mode)
         low_level_index_mode = self._low_level_index_mode(index_mode)
         if mode == ColumnarIngestionMode.ENTITY_COLUMNS.value:
-            node_count = self.ingest_nodes_polars_entities(
+            node_count = self.ingest.polars.node_entities(
                 node_df,
                 node_id=node_id,
                 labels=labels,
@@ -1485,7 +1477,7 @@ class GraphDB:
                 index_mode=low_level_index_mode,
                 progress=progress,
             )
-            edge_count = self.ingest_edges_polars_entities(
+            edge_count = self.ingest.polars.edge_entities(
                 edge_df,
                 edge_id=edge_id,
                 source=source,
@@ -1499,7 +1491,7 @@ class GraphDB:
                 progress=progress,
             )
         else:
-            node_count = self.ingest_nodes_polars(
+            node_count = self.ingest.polars.nodes(
                 node_df,
                 node_id=node_id,
                 node_value=node_value,
@@ -1509,7 +1501,7 @@ class GraphDB:
                 index_mode=low_level_index_mode,
                 progress=progress,
             )
-            edge_count = self.ingest_edges_polars(
+            edge_count = self.ingest.polars.edges(
                 edge_df,
                 edge_id=edge_id,
                 source=source,
@@ -1584,7 +1576,7 @@ class GraphDB:
         mode = self._coerce_columnar_ingestion_mode(ingestion_mode)
         low_level_index_mode = self._low_level_index_mode(index_mode)
         if mode == ColumnarIngestionMode.ENTITY_COLUMNS.value:
-            node_count = self.ingest_nodes_arrow_entities(
+            node_count = self.ingest.arrow.node_entities(
                 node_ids,
                 labels=labels,
                 properties=node_properties,
@@ -1594,7 +1586,7 @@ class GraphDB:
                 index_mode=low_level_index_mode,
                 progress=progress,
             )
-            edge_count = self.ingest_edges_arrow_entities(
+            edge_count = self.ingest.arrow.edge_entities(
                 edge_ids,
                 sources,
                 targets,
@@ -1609,7 +1601,7 @@ class GraphDB:
         else:
             if node_values is None or edge_values is None:
                 raise ValueError("node_values and edge_values are required for serialized payload ingestion")
-            node_count = self.ingest_nodes_arrow(
+            node_count = self.ingest.arrow.nodes(
                 node_ids,
                 node_values,
                 native=native,
@@ -1618,7 +1610,7 @@ class GraphDB:
                 index_mode=low_level_index_mode,
                 progress=progress,
             )
-            edge_count = self.ingest_edges_arrow(
+            edge_count = self.ingest.arrow.edges(
                 edge_ids,
                 sources,
                 targets,
@@ -1661,15 +1653,8 @@ class GraphDB:
         Returns:
             Number of ingested nodes.
         """
-        if self._implicit_transaction_required():
-            with self.transaction() as tx:
-                return tx.ingest_nodes_arrow(
-                    node_ids, node_values, native=native, chunk_size=chunk_size,
-                    append_only=append_only, index_mode=index_mode, progress=progress,
-                )
-        return _ingest_nodes.ingest_nodes_arrow(
-            self.store, self.entity_serializer, self.indexed_node_properties,
-            _STALE_INDEXES_METADATA_KEY, node_ids, node_values, native=native,
+        return self.ingest.arrow.nodes(
+            node_ids, node_values, native=native,
             chunk_size=chunk_size, append_only=append_only, index_mode=index_mode,
             progress=progress,
         )
@@ -1691,16 +1676,8 @@ class GraphDB:
         The ``node_value`` column is required and must contain serialized node
         payload bytes compatible with the current ``GraphDB`` serializer.
         """
-        if self._implicit_transaction_required():
-            with self.transaction() as tx:
-                return tx.ingest_nodes_polars(
-                    df, node_id=node_id, node_value=node_value, native=native,
-                    chunk_size=chunk_size, append_only=append_only,
-                    index_mode=index_mode, progress=progress,
-                )
-        return _ingest_nodes.ingest_nodes_polars(
-            self.store, self.entity_serializer, self.indexed_node_properties,
-            _STALE_INDEXES_METADATA_KEY, df, node_id=node_id, node_value=node_value,
+        return self.ingest.polars.nodes(
+            df, node_id=node_id, node_value=node_value,
             native=native, chunk_size=chunk_size, append_only=append_only,
             index_mode=index_mode, progress=progress,
         )
@@ -1723,9 +1700,8 @@ class GraphDB:
         With ``JSONSerializer``, node payloads are built with Polars struct JSON
         encoding. Other serializers fall back to Python ``Node`` serialization.
         """
-        return _ingest_nodes.ingest_nodes_polars_entities(
-            self.store, self.entity_serializer, self.serializer,
-            self.ingest_nodes_arrow, df, node_id=node_id, labels=labels,
+        return self.ingest.polars.node_entities(
+            df, node_id=node_id, labels=labels,
             property_columns=property_columns, native=native, chunk_size=chunk_size,
             append_only=append_only, index_mode=index_mode, progress=progress,
         )
@@ -1743,47 +1719,11 @@ class GraphDB:
         progress: bool = False,
     ):
         """Ingest node entity columns from Arrow-like columns."""
-        return _ingest_nodes.ingest_nodes_arrow_entities(
-            self.store, self.entity_serializer, self.serializer,
-            self.ingest_nodes_arrow, self.ingest_nodes_polars_entities,
+        return self.ingest.arrow.node_entities(
             node_ids, labels=labels, properties=properties, native=native,
             chunk_size=chunk_size, append_only=append_only, index_mode=index_mode,
             progress=progress,
         )
-
-    def _polars_labels_expr(self, pl, df, labels):
-        """Return a Polars expression for node labels."""
-        return _ingest_support.polars_labels_expr(pl, df, labels)
-
-    def _polars_properties_expr(self, pl, property_columns):
-        """Return a Polars expression for an entity properties object."""
-        return _ingest_support.polars_properties_expr(pl, property_columns)
-
-    def _validate_polars_frame(self, pl, df, feature_name: str) -> None:
-        """Validate that input is a Polars eager or lazy frame."""
-        _ingest_support.validate_polars_frame(pl, df, feature_name)
-
-    def _polars_columns(self, pl, df) -> list[str]:
-        """Return column names without collecting LazyFrame data."""
-        return _ingest_support.polars_columns(pl, df)
-
-    def _polars_row_count(self, pl, df):
-        """Return an eager row count, or None for lazy inputs."""
-        return _ingest_support.polars_row_count(pl, df)
-
-    def _iter_polars_chunks(self, pl, df, chunk_size: int):
-        """Yield eager DataFrame chunks from eager or lazy Polars input."""
-        return _ingest_support.iter_polars_chunks(pl, df, chunk_size)
-
-    def _delete_existing_node_indexes_for_columnar_chunk(self, chunk: NodeList) -> None:
-        """Remove stale indexes before opaque columnar node upserts."""
-        _ingest_support.delete_existing_node_indexes_for_columnar_chunk(
-            self.store, self.entity_serializer, self.indexed_node_properties, chunk)
-
-    def _put_node_indexes_for_columnar_chunk(self, chunk: NodeList) -> None:
-        """Maintain label and configured property indexes for columnar nodes."""
-        _ingest_support.put_node_indexes_for_columnar_chunk(
-            self.store, self.entity_serializer, self.indexed_node_properties, chunk)
 
     def serialize_node_value(self, node: Node) -> bytes:
         """Serialize a node for use with columnar node ingestion."""
@@ -1922,16 +1862,7 @@ class GraphDB:
         Returns:
             Number of ingested edges.
         """
-        if self._implicit_transaction_required():
-            with self.transaction() as tx:
-                return tx.ingest_edges_arrow(
-                    edge_ids, sources, targets, edge_types, edge_values,
-                    append_only=append_only, native=native, chunk_size=chunk_size,
-                    index_mode=index_mode, progress=progress,
-                )
-        return _ingest_edges.ingest_edges_arrow(
-            self.store, self.entity_serializer, self.indexed_edge_properties,
-            _STALE_INDEXES_METADATA_KEY, self._typed_adjacency_count_cache,
+        return self.ingest.arrow.edges(
             edge_ids, sources, targets, edge_types, edge_values,
             append_only=append_only, native=native, chunk_size=chunk_size,
             index_mode=index_mode, progress=progress,
@@ -1957,17 +1888,7 @@ class GraphDB:
         The ``edge_value`` column is required and must contain serialized edge
         payload bytes compatible with the current ``GraphDB`` serializer.
         """
-        if self._implicit_transaction_required():
-            with self.transaction() as tx:
-                return tx.ingest_edges_polars(
-                    df, edge_id=edge_id, source=source, target=target,
-                    edge_type=edge_type, edge_value=edge_value,
-                    append_only=append_only, native=native, chunk_size=chunk_size,
-                    index_mode=index_mode, progress=progress,
-                )
-        return _ingest_edges.ingest_edges_polars(
-            self.store, self.entity_serializer, self.indexed_edge_properties,
-            _STALE_INDEXES_METADATA_KEY, self._typed_adjacency_count_cache,
+        return self.ingest.polars.edges(
             df, edge_id=edge_id, source=source, target=target, edge_type=edge_type,
             edge_value=edge_value, append_only=append_only, native=native,
             chunk_size=chunk_size, index_mode=index_mode, progress=progress,
@@ -1993,10 +1914,7 @@ class GraphDB:
         With ``JSONSerializer``, edge payloads are built with Polars struct JSON
         encoding. Other serializers fall back to Python ``Edge`` serialization.
         """
-        return _ingest_edges.ingest_edges_polars_entities(
-            self.store, self.entity_serializer, self.serializer,
-            self.indexed_edge_properties, _STALE_INDEXES_METADATA_KEY,
-            self._typed_adjacency_count_cache, self.ingest_edges_arrow,
+        return self.ingest.polars.edge_entities(
             df, edge_id=edge_id, source=source, target=target, edge_type=edge_type,
             property_columns=property_columns, append_only=append_only,
             native=native, chunk_size=chunk_size, index_mode=index_mode,
@@ -2018,20 +1936,11 @@ class GraphDB:
         progress: bool = False,
     ):
         """Ingest edge entity columns from Arrow-like columns."""
-        return _ingest_edges.ingest_edges_arrow_entities(
-            self.store, self.entity_serializer, self.serializer,
-            self.indexed_edge_properties, _STALE_INDEXES_METADATA_KEY,
-            self._typed_adjacency_count_cache, self.ingest_edges_arrow,
-            self.ingest_edges_polars_entities,
+        return self.ingest.arrow.edge_entities(
             edge_ids, sources, targets, edge_types, properties=properties,
             append_only=append_only, native=native, chunk_size=chunk_size,
             index_mode=index_mode, progress=progress,
         )
-
-    def _put_edge_property_indexes_for_columnar_chunk(self, chunk: EdgeList) -> None:
-        """Maintain configured edge property indexes for columnar edges."""
-        _ingest_edges.put_edge_property_indexes_for_columnar_chunk(
-            self.store, self.entity_serializer, self.indexed_edge_properties, chunk)
 
     def query(
         self,

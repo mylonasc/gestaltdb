@@ -105,13 +105,31 @@ DDL stages configuration and mutates live sets only after successful rebuild
 and metadata commit. Snapshot views expose a narrow `view.indexes` reader;
 the current reasoning frontier consumes it directly. Tests cover standalone
 lookups, failed DDL, freshness-error timing, transaction rollback and snapshot
-catalog isolation. Ingestion and traversal-service extraction remain pending.
+catalog isolation.
 
-Validation for the current edge/index slices: full optional backend/serializer
-suite 3,466 passed / 3 expected skips. Ruff, module-size ratchet, generated API
-index, documentation drift/examples and Sphinx `-W` pass. GraphDB shrank from
-2,235 to 2,154 physical lines; no transaction GraphDB redispatch remains in
-current node/edge CRUD or current index DDL/rebuilds.
+Format-ingestion slice: `IngestionService` composes standalone `ArrowIngestor`
+and `PolarsIngestor` over StorageSession. All eight low-level entity/payload
+loaders now own their backend write scopes and bind conversion callbacks to the
+child session without GraphDB redispatch. Native/JSON fast paths are unchanged;
+snapshot views deny the write capability. Graph-wide Arrow/Polars orchestration
+still coordinates the combined transaction and aggregate deferred-index rebuild,
+calling the format services directly.
+
+Traversal slice: `TraversalService`/`AdjacencyReader` in `gestaltdb.traversal`
+own typed adjacency reads/counts, typed-adjacency rebuilds and live reservoir
+sampling over StorageSession. `graph.traversal` is the handle-bound service;
+`view.traversal` is a read-only reader on the snapshot scope. The label-index
+freshness check, count-cache invalidation and relation-hierarchy expansion are
+unchanged. Snapshot construction and array-native sampling remain separate.
+Tests cover standalone/no-redispatch, cache invalidation, stale-index failure,
+rebuild, and transaction/snapshot isolation.
+
+Validation for the current edge/index/ingestion/traversal slices: full optional
+backend/serializer suite 3,475 passed / 3 expected skips. Ruff, module-size
+ratchet, generated API index, documentation drift/examples and Sphinx `-W`
+pass. GraphDB shrank from 2,235 to 2,067 physical lines; no transaction GraphDB
+redispatch remains in current node/edge CRUD, current index DDL/rebuilds,
+low-level format loaders or live traversal/sampling.
 
 Migrate edge/index repositories to the same scope binding; replace duplicated
 ordinary transaction checks through a session template, not dynamic method-name
