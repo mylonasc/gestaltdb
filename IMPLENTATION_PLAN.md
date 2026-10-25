@@ -1,5 +1,14 @@
 # Ontological reasoning implementation plan
 
+## Next release preparation (#385)
+
+Candidate branch `release/reasoning-next-candidate` starts from `b5d21bd` and
+integrates main `72e320f`, retaining the retired ONTO v1 note deletion. Track
+exact-head gates and bounded release scope in
+`planning/reasoning-engine/next-release-candidate.md`. No version bump,
+main merge, tag, or publication yet. Closed roadmap issues are not a substitute
+for release-candidate validation; known evidence limitations are recorded there.
+
 Review baseline: integration `6e44816`, 2026-10-24. Parent roadmap: #156;
 follow-through review: #200. Implementation PRs target
 `feature/onto-dev-epic-2`, not `main`. The filename is intentional.

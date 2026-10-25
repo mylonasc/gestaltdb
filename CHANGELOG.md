@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Hardened explicit execution admission, bounded input consumption, and exact
+  evidence handoff across binary, prepared, and typed reasoning workflows.
+- Added authenticated durable-session resume, current-graph and finite-range
+  admission, bound interval publication, and inferred-sampler artifact checks.
+  These remain separate opt-in contracts, not transparent engine substitution.
+- Added pinned frontier queries and explicit native full-record claim extraction.
+  Indexed Python remains the default; native/Polars measurements do not imply
+  automatic adoption, universal speedups, or hard RSS limits.
+- Added process-termination and cross-process regression evidence. This does not
+  establish power-loss, torn-page, network-filesystem, or arbitrary
+  mid-publication crash recovery guarantees. See reliability scope record #381.
 - Added explicit authenticated typed-point session admission with exact active
   evidence/catalog checks, shared generation/state pins and bounded cancellation
   controls (#248). This verifies source input, not closure soundness.
@@ -10,7 +21,7 @@
 
 ## 0.13.0rc1 — reasoning engine testing milestone
 
-Prerelease for opt-in user testing; publication is pending release gates. This
+Published prerelease for opt-in user testing (2026-10-23). This
 is a minor feature milestone, not a claim that the reasoning roadmap is complete.
 
 - Added the standalone indexed Python reasoning engine and ontology compiler,
