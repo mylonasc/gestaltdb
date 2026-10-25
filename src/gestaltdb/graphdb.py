@@ -80,6 +80,7 @@ from .versioning import (
     normalize_temporal_interval,
     normalize_version_id,
 )
+from ._graph import adjacency as _adjacency
 from ._graph.entities import (
     Edge,
     GraphEntityDictSerializer,
@@ -90,6 +91,9 @@ from ._graph.entities import (
     _property_value_to_range_index_bytes,
     bytes_to_datetime,
     datetime_to_bytes,
+    edge_key_to_bytes as _edge_key_to_bytes,
+    key_to_string as _key_to_string,
+    node_key_to_bytes as _node_key_to_bytes,
 )
 from ._graph.scopes import configure_snapshot_child, configure_transaction_child
 
@@ -1170,9 +1174,7 @@ class GraphDB:
             >>> GraphDB.node_key_to_bytes(None, "drug-1")
             b'drug-1'
         """
-        if isinstance(node_key, bytes):
-            return node_key
-        return node_key.encode('utf-8')
+        return _node_key_to_bytes(node_key)
 
     def edge_key_to_bytes(self, edge_key):
         """Normalize an edge key to bytes.
@@ -1187,9 +1189,7 @@ class GraphDB:
             >>> GraphDB.edge_key_to_bytes(None, "d1-p1")
             b'd1-p1'
         """
-        if isinstance(edge_key, bytes):
-            return edge_key
-        return edge_key.encode('utf-8')
+        return _edge_key_to_bytes(edge_key)
 
     def key_to_string(self, key):
         """Normalize a key to a string.
@@ -1204,9 +1204,7 @@ class GraphDB:
             >>> GraphDB.key_to_string(None, b"drug-1")
             'drug-1'
         """
-        if isinstance(key, bytes):
-            return key.decode('utf-8')
-        return key
+        return _key_to_string(key)
 
     def edge_type(self, edge: Edge):
         """Return the type used by typed traversal for an edge.
@@ -1867,7 +1865,8 @@ class GraphDB:
         `out` means source -> target, `in` means target -> source, and `any`
         returns the union of both directions.
         """
-        return list(self.iter_typed_adjacency(node_id, edge_type, direction))
+        return _adjacency.get_typed_adjacency(
+            self.store, _node_key_to_bytes(node_id), edge_type, direction)
 
     def count_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out') -> int:
         """Count typed adjacency records without materializing traversal records.
@@ -1881,21 +1880,9 @@ class GraphDB:
             Number of typed adjacency records matching the node, edge type, and
             direction.
         """
-        if direction not in {'out', 'in', 'any'}:
-            raise ValueError("direction must be 'out', 'in', or 'any'")
-
-        node_id_bytes = self.node_key_to_bytes(node_id)
-        if direction == 'any':
-            return self.count_typed_adjacency(node_id_bytes, edge_type, 'out') + self.count_typed_adjacency(node_id_bytes, edge_type, 'in')
-
-        cache_key = (direction, node_id_bytes, edge_type)
-        cached = self._typed_adjacency_count_cache.get(cache_key)
-        if cached is not None:
-            return cached
-
-        count = self.store.count_typed_adjacency(node_id_bytes, edge_type, direction)
-        self._typed_adjacency_count_cache[cache_key] = count
-        return count
+        return _adjacency.count_typed_adjacency(
+            self.store, self._typed_adjacency_count_cache,
+            _node_key_to_bytes(node_id), edge_type, direction)
 
     def iter_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out'):
         """Yield typed adjacency records with clean direction semantics.
@@ -1912,27 +1899,8 @@ class GraphDB:
         Examples:
             >>> graph_db.iter_typed_adjacency("drug-1", "drug-to-protein")  # doctest: +SKIP
         """
-        if direction not in {'out', 'in', 'any'}:
-            raise ValueError("direction must be 'out', 'in', or 'any'")
-
-        node_id_bytes = self.node_key_to_bytes(node_id)
-        directions = ['out', 'in'] if direction == 'any' else [direction]
-        for current_direction in directions:
-            for edge_id, neighbor_id in self.store.iter_typed_adjacency(node_id_bytes, edge_type, current_direction):
-                if current_direction == 'out':
-                    source_id = node_id_bytes
-                    target_id = neighbor_id
-                else:
-                    source_id = neighbor_id
-                    target_id = node_id_bytes
-                yield {
-                    'edge_id': edge_id,
-                    'neighbor_id': neighbor_id,
-                    'source_id': source_id,
-                    'target_id': target_id,
-                    'edge_type': edge_type,
-                    'direction': current_direction,
-                }
+        return _adjacency.iter_typed_adjacency(
+            self.store, _node_key_to_bytes(node_id), edge_type, direction)
 
     def neighbors_by_edge_type(self, node_id, edge_type: str, direction: str = 'out'):
         """Return neighbor IDs connected by a specific edge type.
@@ -1948,7 +1916,8 @@ class GraphDB:
         Examples:
             >>> graph_db.neighbors_by_edge_type("drug-1", "drug-to-protein")  # doctest: +SKIP
         """
-        return [record['neighbor_id'] for record in self.iter_typed_adjacency(node_id, edge_type, direction)]
+        return _adjacency.neighbors_by_edge_type(
+            self.store, _node_key_to_bytes(node_id), edge_type, direction)
 
     def edges_by_edge_type(self, node_id, edge_type: str, direction: str = 'out'):
         """Return edge IDs connected by a specific edge type.
@@ -1964,7 +1933,8 @@ class GraphDB:
         Examples:
             >>> graph_db.edges_by_edge_type("drug-1", "drug-to-protein")  # doctest: +SKIP
         """
-        return [record['edge_id'] for record in self.get_typed_adjacency(node_id, edge_type, direction)]
+        return _adjacency.edges_by_edge_type(
+            self.store, _node_key_to_bytes(node_id), edge_type, direction)
 
     def sample_nodes(
         self,

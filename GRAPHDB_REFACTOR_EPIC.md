@@ -243,3 +243,13 @@ versions, rule catalog, commit path. They do not receive unrestricted
   copies removed. `graphdb.py` 6737 → 6722 lines, budget lowered in same
   change. Added index-config copy-isolation regression. Same gates green
   (Ruff, size ratchet, 164 backend/policy tests, docs drift, Sphinx -W).
+- 2026-10-25 (slice 3, landed): Phase 3 first step — typed-adjacency reads
+  extracted to `src/gestaltdb/_graph/adjacency.py` (104 lines, pure
+  store+bytes+cache functions). `get/count/iter_typed_adjacency`,
+  `neighbors/edges_by_edge_type` delegate after ID normalization; public
+  docstrings and generator-laziness preserved (invalid direction still
+  raises on first `next()`, verified). Key codecs (`node/edge_key_to_bytes`,
+  `key_to_string`) moved to `entities.py`; `GraphDB` keeps thin wrappers
+  so bound/unbound call sites and doctests are unchanged. Write side stays
+  until record/index orchestration moves. `graphdb.py` 6722 → 6692 lines,
+  budget lowered in same change. 175 + 118 backend tests green.

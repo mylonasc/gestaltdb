@@ -52,6 +52,60 @@ def _normalize_labels(labels):
     return tuple(dict.fromkeys(str(label) for label in labels))
 
 
+def node_key_to_bytes(node_key) -> bytes:
+    """Normalize a node key to bytes.
+
+    Args:
+        node_key: String or bytes node key.
+
+    Returns:
+        UTF-8 encoded bytes.
+
+    Examples:
+        >>> node_key_to_bytes("drug-1")
+        b'drug-1'
+    """
+    if isinstance(node_key, bytes):
+        return node_key
+    return node_key.encode('utf-8')
+
+
+def edge_key_to_bytes(edge_key) -> bytes:
+    """Normalize an edge key to bytes.
+
+    Args:
+        edge_key: String or bytes edge key.
+
+    Returns:
+        UTF-8 encoded bytes.
+
+    Examples:
+        >>> edge_key_to_bytes("d1-p1")
+        b'd1-p1'
+    """
+    if isinstance(edge_key, bytes):
+        return edge_key
+    return edge_key.encode('utf-8')
+
+
+def key_to_string(key) -> str:
+    """Normalize a key to a string.
+
+    Args:
+        key: String or UTF-8 bytes key.
+
+    Returns:
+        String key.
+
+    Examples:
+        >>> key_to_string(b"drug-1")
+        'drug-1'
+    """
+    if isinstance(key, bytes):
+        return key.decode('utf-8')
+    return key
+
+
 def _property_value_to_index_bytes(value) -> bytes:
     """Encode a property value for exact-match sorted indexes.
 
