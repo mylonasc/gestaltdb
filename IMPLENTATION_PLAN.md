@@ -34,6 +34,49 @@ checks are not universal identity admission or concurrent atomic publication.
 
 ## Ordered implementation
 
+### Explicit-budget pipeline evidence continuation (#255)
+
+Dedicated `feature/re-255-pipeline-evidence` / `re-255-pipeline-evidence`, based
+on `1860e41` (#364). Post-merge Ontology `40166592538` and readiness
+`40166592546` passed. Ownership/open-PR audit found no competing work.
+The existing real-pipeline harness now forwards an explicit physical Polars
+intermediate cap only to eligible workers, records requested/effective bounds
+and separately prefixed native metrics, and emits schema version 2. Historical
+#342 reports remain immutable and retain their measured harness hash.
+
+Validation before measurement: 22 focused harness tests passed; full optional
+suite **3,262 passed / 2 skipped** (56.24s). Collect reports outside the checkout
+from a clean committed tree: 100K selective/sparse, LMDB/PyRex, indexed Python
+versus explicit Polars, first/warm, three repeats, serial workers, 1,000,000-row
+intermediate cap. Require exact evidence and analytical complete-closure parity;
+retain bounded/error/timeout diagnostics. No default/adoption/source-policy change.
+
+Collection completed: four clean-source reports at `b87ef1c`, 48/48 successful
+exact-evidence/analytical-complete-closure parity observations. No bounded/error/
+timeout results in this continuation; historical #342 diagnostics unchanged.
+Polars median total pipeline improvement about 3--17%, with conversion/output
+decode dominating native fixpoint time; no consistent RSS benefit. Conservative
+native peaks 100028 selective / 200019 sparse rows; the chosen cap is physical,
+not a hard memory guarantee or logical identity. Full median/P95/runtime/RSS
+boundaries recorded in `docs/reasoning-frontier-benchmarks.rst` and immutable
+reports. Original #255 acceptance mapped in `executor-admission.md`; indexed
+default unchanged, #194 and broader roadmap gates remain separate.
+
+Final evidence validation: **3,263 passed / 2 skipped** (57.24s), all optional
+backend/oracle requirements; report-matrix invariants included. Sphinx `-W`,
+docs/API drift, 8/8 examples, roadmap and whitespace checks passed. Closure of
+#255 remains gated on exact-head PR and post-merge integration checks.
+
+PR #365 first CI run exposed a host assumption in the new end-to-end harness
+test: GitHub runners lack `/tmp/opencode`. The orchestrator now prefers that
+root when present and otherwise uses the platform tempfile root, with a
+simulated absent-root regression. This changes only fixture placement; measured
+reports retain their original clean source/hash. Initial watcher also expected
+an inapplicable fuzz workflow; monitor only actual applicable workflows.
+
+Portable-temp correction validation: 24 focused harness tests; full optional
+suite **3,264 passed / 2 skipped** (84.19s). Measured report bytes unchanged.
+
 ### Broader roadmap continuation (2026-10-25)
 
 Child #350 of #249 delivers the current-property-graph demand path on

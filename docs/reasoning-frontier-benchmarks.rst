@@ -119,10 +119,84 @@ concurrent-write and cancellation parity gates. Do not simply skip verification
 or trust an opaque cached digest. Explicit intermediate-cap ownership is now
 available through the dispatcher/current-graph consumer (see
 :doc:`reasoning-executors`); the default remains unchanged, and these original
-bounded failures are retained. Larger successful Polars pipeline measurements
-remain a follow-up: raising the cap alone is not executor admission, a memory
-guarantee or new performance evidence.
-Broader #194/#249/#255 acceptance remains separate from this measurement cut.
+bounded failures are retained. The explicit-budget continuation below measures
+successful larger Polars pipelines; raising the cap alone is not executor
+admission or a memory guarantee. Broader #194/#249 acceptance remains separate.
+
+Explicit-budget continuation: #255
+----------------------------------
+
+Four additional reports, ``benchmarks/results/reasoning-re255-*-100k.json``, bind
+clean source ``b87ef1c035832425349ce3d426b226b3ce1ebde5`` and harness SHA256
+``c09f11c2cc1d817a907caac5ef1fb49590a7af8d542cc42ed68de5f18fc3009d``.
+All 48 observations pass exact assertion-version evidence, goal and analytical
+full-closure parity (200028 selective / 300019 sparse facts). Collection ran
+serially, with three repetitions per method/cache/backend/shape, outside the
+checkout. No bounded/error/timeout observations occurred in this continuation;
+the original 18 default-cap failures and initial diagnostic remain unchanged.
+
+The caller explicitly chose ``polars_max_intermediate_rows=1000000``; the
+production default is still 100000. This is physical configuration, not logical
+generation identity or permission to bypass independent input/fact/cumulative
+candidate limits. Both methods use the real dispatcher and authenticated pinned
+extraction. Reports include Python, platform, dependencies and single-thread
+configuration (Polars 1.41.2, Arrow 24.0.0, PyRex 0.6.0, LMDB 2.2.1).
+
+.. list-table:: Total pipeline seconds: median / nearest-rank P95
+   :header-rows: 1
+
+   * - 100K fixture
+     - Indexed first
+     - Polars first
+     - Indexed primed
+     - Polars primed
+   * - LMDB selective
+     - 7.899 / 8.114
+     - 7.654 / 7.740
+     - 4.596 / 4.849
+     - 4.190 / 4.202
+   * - LMDB sparse
+     - 8.737 / 8.776
+     - 7.839 / 7.900
+     - 5.451 / 5.485
+     - 4.524 / 4.575
+   * - PyRex selective
+     - 10.781 / 11.025
+     - 10.421 / 10.616
+     - 7.356 / 7.545
+     - 6.938 / 7.022
+   * - PyRex sparse
+     - 11.593 / 12.013
+     - 10.767 / 10.770
+     - 8.283 / 8.382
+     - 7.164 / 7.172
+
+Polars total median improvement is approximately 3--17% here. Evaluation with
+conversion takes about 1.04--1.23s selective and 1.37--1.46s sparse, versus
+indexed 1.45--1.48s and 2.34--2.36s respectively. Native metrics make conversion
+cost visible: Polars conversion medians are 0.34--0.41s and output decode
+0.48--0.86s; fixpoint medians are only 0.09--0.14s. These nested native timings
+are not additive to the enclosing evaluation stage. Source extraction and
+authentication still dominate total time, particularly on PyRex.
+
+Conservative native intermediate peaks are 100028 rows selective and 200019
+sparse; cumulative candidate accounting is 2200308 and 3466861 respectively.
+These are Polars operator/preflight accounting units, not Python unifications,
+RSS measurements or an all-work counter. Copied bytes remain uninstrumented.
+Worker high-water RSS (decimal MB) spans about 1569--1616 across individual
+LMDB samples and 627--679 across PyRex samples; there is no consistent memory
+benefit. More precisely, paired group medians are 1575--1595 indexed versus
+1577--1607 Polars on LMDB and 631--662 versus 633--668 on PyRex. RSS includes
+mapped pages, priming and parity validation, not isolated engine allocation.
+
+**Decision remains unchanged:** indexed Python stays the default. Explicit
+closure-only Polars is a measured option for these bounded workloads with a
+caller-owned cap and conversion/runtime prerequisites, not automatic adoption.
+Three-sample P95 is merely the maximum; first is not OS-cold, fixed method order
+and host effects limit ranking, and the matrix is neither a crossover threshold
+search nor a general scale/concurrency/durability certification. Typed proof,
+maintenance and range execution do not become Polars-capable through this data.
+General native historical/correction/concurrent-source admission remains #194.
 
 Reproduction
 ---------------
@@ -138,3 +212,11 @@ versions and harness hashes. For example:
    uv run --extra backends --extra polars python -m benchmarks.reasoning_frontier_pipeline --rows 100000 --backend lmdb --repeats 3 --output /tmp/opencode/re342-lmdb.json
    uv run --extra backends --extra polars python -m benchmarks.reasoning_frontier_pipeline --rows 10000 --backend leveldb --methods frontier indexed-python --repeats 3 --output /tmp/opencode/re342-leveldb.json
    uv run --extra backends --extra polars python -m benchmarks.reasoning_frontier_pipeline --rows 1024 --backend lmdb --methods indexed-python indexed-scc --proofs --repeats 3 --output /tmp/opencode/re342-proofs.json
+
+For the #255 continuation, repeat for ``lmdb`` / ``pyrex`` and
+``selective`` / ``sparse`` from a clean committed tree, keeping all output files
+outside the checkout until collection is finished:
+
+.. code-block:: console
+
+   uv run --extra backends --extra polars --with 'pyrex-rocksdb>=0.5.0' python -m benchmarks.reasoning_frontier_pipeline --rows 100000 --shape sparse --backend pyrex --methods indexed-python polars-prototype --caches first warm --repeats 3 --timeout 600 --polars-max-intermediate-rows 1000000 --output /tmp/opencode/re255-pyrex-sparse.json
