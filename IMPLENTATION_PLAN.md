@@ -70,6 +70,17 @@ version to complete admitted native history and verifying the source before/
 after. Add omission/duplicate/substitution and bounded-read regression gates,
 then repeat the clean-source staged collection; no authentication skip.
 
+Grouped composition implemented: one canonical unfiltered point iterator per
+pass, with exact native-history conformance for every result, no missing active
+candidate, and no duplicate/old/non-version acceptance. The canonical iterator
+retains commit-group integrity checks and successful-exhaustion revalidation;
+before/after source verification is unchanged. Bounded-read regression rejects
+per-claim get operations and caps metadata reads for 100/200-row single commits.
+Validation before new measurements: 95 focused native/harness/counter tests;
+full optional suite **3,333 passed / 2 skipped** (56.66s). Repeat the original
+staged gates first; only after success collect a three-repeat first/primed 100K
+selective/sparse comparison serially. Baseline timeout evidence remains immutable.
+
 ### Authenticated native claim source continuation (#194)
 
 Dedicated `feature/re-194-native-admission` / `re-194-native-admission`, based on

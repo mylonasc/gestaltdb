@@ -67,8 +67,8 @@ contiguous prefix is not silently crossed to expose later commits.
 Later commits beyond the pinned prefix do not enter this scan.
 
 Candidate claim histories are collected at the half-open valid-time point.
-The existing canonical ``get_claim_as_of`` selector resolves each complete
-logical history, including corrections and retractions; its result must agree
+The existing canonical grouped ``iter_claims_as_of`` point selector resolves
+complete logical histories, including corrections and retractions; its result must agree
 with the final eligible record in the ordered, fully admitted native history.
 Missing/inconsistent logical-index resolution therefore fails closed rather
 than omitting native evidence. Only then does the shared batched claim policy

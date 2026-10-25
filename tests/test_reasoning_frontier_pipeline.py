@@ -284,3 +284,24 @@ def test_checkpoint_parser_accepts_timeout_bytes_and_ignores_noise():
     assert last_checkpoint(None) is None
     assert last_checkpoint(b'noise\nPIPELINE_PROGRESS {"stage":"extraction"}\nPIPELINE_PROGRESS invalid\n') == "extraction"
     assert last_checkpoint('PIPELINE_PROGRESS {"stage":1}') is None
+
+
+def test_retained_admitted_native_baseline_includes_the_attributed_100k_timeout():
+    from pathlib import Path
+    root = Path(__file__).parents[1] / "benchmarks/results"
+    for rows, successes in ((1000, 12), (10000, 2), (100000, 1)):
+        report = json.loads((root / f"reasoning-re194-admitted-native-{rows}.json").read_text())
+        assert report["revision"] == "c7011bbe2957903678b5b88e5513403bf9e682ad" and not report["dirty"]
+        assert report["harness_sha256"] == "220d7fc711eed1b79f1db07d7cfb04c9144fd12d5ced661f6e8b618d02f331d5"
+        assert sum(s["status"] == "ok" for s in report["samples"]) == successes
+        for sample in report["samples"]:
+            if sample["status"] == "ok":
+                assert sample["evidence_digest"] == report["fixture"]["evidence_digest"]
+        if rows < 100000:
+            assert report["complete"] and report["all_parity_verified"]
+        else:
+            assert not report["complete"] and not report.get("all_parity_verified", False)
+            timeout = report["samples"][-1]
+            assert timeout["status"] == "timeout" and timeout["last_stage"] == "extraction"
+            assert timeout["method"] == "native-authenticated" and timeout["timeout_s"] == 120
+            assert "metrics" not in timeout and "closure_digest" not in timeout
