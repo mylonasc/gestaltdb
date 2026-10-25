@@ -165,6 +165,35 @@ validity, altered evidence/output, bounded no-write and late cancellation,
 writer exclusion through commit, historical reentrant movement, pre/post-visible
 commit interruption and explicit nontransactional orphan recovery.
 
+### Durable-session consumer continuation (#356)
+
+Final local validation: **3,044 passed / 2 skipped** (47.35s), with backends,
+serializers, RDF, Polars, docs, bloom and independent ontology requirements.
+Documentation drift, all 8 executable examples, Sphinx warnings-as-errors,
+roadmap consistency and diff whitespace gates passed. This includes authenticated
+cross-process restarts and exact-state contention/fault regressions.
+
+Baseline `134378c` includes #359/#355; all exact-head and post-merge gates passed.
+Branch `feature/re-356-session-admission`, worktree `re-356-session-admission`.
+Connect existing v1 files to typed-point source admission with exact caller
+generation AND session-state pins. Explicit historical input admission permits
+advancement of old sessions; the new computed session must always authenticate
+against latest source under the database writer guard before persistence.
+
+Persistence audit: horizon-only comparisons miss same-horizon state changes;
+double reads without mutual exclusion leave a lost-update window, and a PID-only
+temporary filename can collide between threads. Cooperating writers now share
+the existing cross-process lock primitive, use unique temporary files and exact
+state CAS, retain v1 bytes/digests, and actually attempt directory fsync where
+supported. The legacy resume path gains exact-state write comparison but is not
+silently advertised as source-authenticated. No direct filesystem/hardlink/
+hostile-path or universal network-filesystem guarantee is implied.
+
+Source admission remains separate from internal checksum/index consistency and
+from independent closure soundness. No new result cache is invented;
+source-independent specialization needs no source invalidation. #357 is the
+remaining existing inferred-artifact consumer before #248 acceptance review.
+
 ### Prior ordered follow-through
 
 Native GitHub links established: #338 (identity), #339 (input bounds), #340
