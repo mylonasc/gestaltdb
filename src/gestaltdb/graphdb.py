@@ -157,7 +157,6 @@ _NODE_CONSTRAINTS_METADATA_KEY = b"schema:constraints:nodes"
 _STALE_INDEXES_METADATA_KEY = b"schema:indexes:stale"
 _MANIFEST_METADATA_KEY = b"schema:manifest"
 _DATABASE_ID_METADATA_KEY = b"schema:database_identity:v1"
-_VALID_INDEX_MODES = {IndexMaintenanceMode.MAINTAIN.value, IndexMaintenanceMode.DEFER.value}
 _INDEX_REBUILD_BATCH_SIZE = 100_000
 _TEMPORAL_WRITER_LOCK_FILENAME = ".gestaltdb_temporal_writer.lock"
 _DATABASE_ID_LOCK = threading.Lock()
