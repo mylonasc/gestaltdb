@@ -81,6 +81,7 @@ from .versioning import (
 )
 from ._graph import adjacency as _adjacency
 from ._graph import index_maintenance as _index_maintenance
+from ._graph import index_lookup as _index_lookup
 from ._graph.registry import (
     backend_registry as _backend_registry,
     gestaltdb_version as _gestaltdb_version,
@@ -946,8 +947,7 @@ class GraphDB:
             >>> list(graph_db.iter_node_ids_by_label("Drug"))  # doctest: +SKIP
             [b'drug-1']
         """
-        self._ensure_indexes_current("node_label")
-        yield from self.store.iter_index_prefix("node_label", [label.encode("utf-8")])
+        return _index_lookup.iter_node_ids_by_label(self.store, self._ensure_indexes_current, label)
 
     def nodes_by_label(self, label: str):
         """Return nodes with a label using the label index.
@@ -981,11 +981,7 @@ class GraphDB:
             >>> list(graph_db.iter_node_ids_by_property("kind", "drug"))  # doctest: +SKIP
             [b'drug-1']
         """
-        self._ensure_indexes_current("node_property")
-        yield from self.store.iter_index_prefix(
-            "node_property",
-            [property_name.encode("utf-8"), _property_value_to_index_bytes(value)],
-        )
+        return _index_lookup.iter_node_ids_by_property(self.store, self._ensure_indexes_current, property_name, value)
 
     def nodes_by_property(self, property_name: str, value):
         """Return nodes using an exact-match property index.
@@ -1008,11 +1004,7 @@ class GraphDB:
 
     def iter_node_ids_by_label_property(self, label: str, property_name: str, value):
         """Yield node IDs from the composite label/property exact-match index."""
-        self._ensure_indexes_current("node_label", "node_property")
-        yield from self.store.iter_index_prefix(
-            "node_label_property",
-            [label.encode("utf-8"), property_name.encode("utf-8"), _property_value_to_index_bytes(value)],
-        )
+        return _index_lookup.iter_node_ids_by_label_property(self.store, self._ensure_indexes_current, label, property_name, value)
 
     def nodes_by_label_property(self, label: str, property_name: str, value):
         """Return nodes using the composite label/property exact-match index."""
@@ -1024,21 +1016,7 @@ class GraphDB:
 
     def iter_node_ids_by_property_range(self, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Yield node IDs from a scalar property range index."""
-        self._ensure_indexes_current("node_property")
-        start = None if start_value is None else _property_value_to_range_index_bytes(start_value)
-        end = None if end_value is None else _property_value_to_range_index_bytes(end_value)
-        if (start_value is not None and start is None) or (end_value is not None and end is None):
-            return iter(())
-        if start is not None and end is not None and start[:1] != end[:1]:
-            return iter(())
-        return self.store.iter_range_index(
-            "node_property",
-            [property_name.encode("utf-8")],
-            start,
-            end,
-            include_start,
-            include_end,
-        )
+        return _index_lookup.iter_node_ids_by_property_range(self.store, self._ensure_indexes_current, property_name, start_value, end_value, include_start, include_end)
 
     def nodes_by_property_range(self, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Return nodes using a scalar property range index."""
@@ -1050,21 +1028,7 @@ class GraphDB:
 
     def iter_node_ids_by_label_property_range(self, label: str, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Yield node IDs from a composite label/property range index."""
-        self._ensure_indexes_current("node_label", "node_property")
-        start = None if start_value is None else _property_value_to_range_index_bytes(start_value)
-        end = None if end_value is None else _property_value_to_range_index_bytes(end_value)
-        if (start_value is not None and start is None) or (end_value is not None and end is None):
-            return iter(())
-        if start is not None and end is not None and start[:1] != end[:1]:
-            return iter(())
-        return self.store.iter_range_index(
-            "node_label_property",
-            [label.encode("utf-8"), property_name.encode("utf-8")],
-            start,
-            end,
-            include_start,
-            include_end,
-        )
+        return _index_lookup.iter_node_ids_by_label_property_range(self.store, self._ensure_indexes_current, label, property_name, start_value, end_value, include_start, include_end)
 
     def nodes_by_label_property_range(self, label: str, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Return nodes using a composite label/property range index."""
@@ -1332,8 +1296,7 @@ class GraphDB:
             >>> list(graph_db.iter_edge_ids_by_type("drug-to-protein"))  # doctest: +SKIP
             [b'd1-p1']
         """
-        self._ensure_indexes_current("edge_type")
-        yield from self.store.iter_index_prefix("edge_type", [str(edge_type).encode("utf-8")])
+        return _index_lookup.iter_edge_ids_by_type(self.store, self._ensure_indexes_current, edge_type)
 
     def iter_edge_ids(self, num_edges=None, key_offset=None):
         """Yield all canonical edge IDs from the backing store.
@@ -1349,9 +1312,7 @@ class GraphDB:
             >>> list(graph_db.iter_edge_ids())  # doctest: +SKIP
             [b'd1-p1']
         """
-        if num_edges == 0:
-            return
-        yield from self.store.get_edge_keys_generator(num_edges, key_offset)
+        return _index_lookup.iter_edge_ids(self.store, num_edges, key_offset)
 
     def edges_by_type(self, edge_type: str):
         """Return edges using the relationship type catalog.
@@ -1385,11 +1346,7 @@ class GraphDB:
             >>> list(graph_db.iter_edge_ids_by_property("score", 1))  # doctest: +SKIP
             [b'e1']
         """
-        self._ensure_indexes_current("edge_property")
-        yield from self.store.iter_index_prefix(
-            "edge_property",
-            [property_name.encode("utf-8"), _property_value_to_index_bytes(value)],
-        )
+        return _index_lookup.iter_edge_ids_by_property(self.store, self._ensure_indexes_current, property_name, value)
 
     def edges_by_property(self, property_name: str, value):
         """Return edges using an exact-match property index.
@@ -1412,11 +1369,7 @@ class GraphDB:
 
     def iter_edge_ids_by_type_property(self, edge_type: str, property_name: str, value):
         """Yield edge IDs from the composite type/property exact-match index."""
-        self._ensure_indexes_current("edge_type", "edge_property")
-        yield from self.store.iter_index_prefix(
-            "edge_type_property",
-            [str(edge_type).encode("utf-8"), property_name.encode("utf-8"), _property_value_to_index_bytes(value)],
-        )
+        return _index_lookup.iter_edge_ids_by_type_property(self.store, self._ensure_indexes_current, edge_type, property_name, value)
 
     def edges_by_type_property(self, edge_type: str, property_name: str, value):
         """Return edges using the composite type/property exact-match index."""
@@ -1428,21 +1381,7 @@ class GraphDB:
 
     def iter_edge_ids_by_property_range(self, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Yield edge IDs from a scalar property range index."""
-        self._ensure_indexes_current("edge_property")
-        start = None if start_value is None else _property_value_to_range_index_bytes(start_value)
-        end = None if end_value is None else _property_value_to_range_index_bytes(end_value)
-        if (start_value is not None and start is None) or (end_value is not None and end is None):
-            return iter(())
-        if start is not None and end is not None and start[:1] != end[:1]:
-            return iter(())
-        return self.store.iter_range_index(
-            "edge_property",
-            [property_name.encode("utf-8")],
-            start,
-            end,
-            include_start,
-            include_end,
-        )
+        return _index_lookup.iter_edge_ids_by_property_range(self.store, self._ensure_indexes_current, property_name, start_value, end_value, include_start, include_end)
 
     def edges_by_property_range(self, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Return edges using a scalar property range index."""
@@ -1454,21 +1393,7 @@ class GraphDB:
 
     def iter_edge_ids_by_type_property_range(self, edge_type: str, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Yield edge IDs from a composite type/property range index."""
-        self._ensure_indexes_current("edge_type", "edge_property")
-        start = None if start_value is None else _property_value_to_range_index_bytes(start_value)
-        end = None if end_value is None else _property_value_to_range_index_bytes(end_value)
-        if (start_value is not None and start is None) or (end_value is not None and end is None):
-            return iter(())
-        if start is not None and end is not None and start[:1] != end[:1]:
-            return iter(())
-        return self.store.iter_range_index(
-            "edge_type_property",
-            [str(edge_type).encode("utf-8"), property_name.encode("utf-8")],
-            start,
-            end,
-            include_start,
-            include_end,
-        )
+        return _index_lookup.iter_edge_ids_by_type_property_range(self.store, self._ensure_indexes_current, edge_type, property_name, start_value, end_value, include_start, include_end)
 
     def edges_by_type_property_range(self, edge_type: str, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Return edges using a composite type/property range index."""
