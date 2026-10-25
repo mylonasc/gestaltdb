@@ -79,7 +79,7 @@ def test_union_members_compile_to_distinct_origin_bound_rules():
     assert Fact("n", TYPE_PREDICATE, "A") not in result
 
 
-def test_schema_cache_reuses_revisions_and_evicts_fifo():
+def test_schema_cache_reuses_revisions_and_evicts_lru():
     from gestaltdb.ontology import CompiledSchemaCache
 
     with pytest.raises(OntologyError):
@@ -93,6 +93,14 @@ def test_schema_cache_reuses_revisions_and_evicts_fifo():
     assert len(cache) == 2
     assert cache.compile(first) is not second and cache.compile(first).revision_id == first.revision_id
     assert third.program == cache.compile(Ontology("o", [SubClassOf("A", "D")])).program
+    # Hit refresh decides the next eviction (recency, not insertion order).
+    cache.clear()
+    cache.compile(first)
+    cache.compile(Ontology("o", [SubClassOf("A", "C")]))
+    assert cache.compile(first) is cache.compile(Ontology("o", [SubClassOf("A", "B")]))
+    cache.compile(Ontology("o", [SubClassOf("A", "E")]))
+    assert len(cache) == 2
+    assert cache.compile(first).revision_id == first.revision_id
     cache.clear()
     assert len(cache) == 0
     with pytest.raises(OntologyError):

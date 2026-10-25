@@ -119,7 +119,8 @@ class CompiledSchemaCache:
     """Bounded revision-keyed cache of compiled ontologies; no evaluation.
 
     Compilation is deterministic, so a revision hit returns the identical
-    object. Eviction is FIFO once ``maxsize`` is exceeded. The cache performs
+    object. A hit refreshes recency; overflow evicts the least-recently-used
+    entry. The cache performs
     no locking: sharing one instance across threads requires external
     synchronization, or use one cache per thread. Cached plans are immutable
     and safe to share once published.
