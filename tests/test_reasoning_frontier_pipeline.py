@@ -154,6 +154,27 @@ def test_fresh_worker_report_forwards_explicit_budget_only_to_polars(tmp_path):
     assert indexed["closure_digest"] == polars["closure_digest"]
 
 
+def test_orchestrator_supports_hosts_without_opencode_temp_root(tmp_path, monkeypatch):
+    import tempfile
+    from pathlib import Path
+    import benchmarks.reasoning_frontier_pipeline as benchmark
+    original_is_dir = Path.is_dir
+    monkeypatch.setattr(Path, "is_dir", lambda self: False if str(self) == "/tmp/opencode" else original_is_dir(self))
+    original_temporary_directory = tempfile.TemporaryDirectory
+    roots = []
+    def temporary_directory(*args, **kwargs):
+        roots.append(kwargs["dir"])
+        return original_temporary_directory(*args, **kwargs)
+    monkeypatch.setattr(benchmark.tempfile, "TemporaryDirectory", temporary_directory)
+    monkeypatch.setattr(benchmark, "call_worker", lambda *args: {"status": "ok", "metrics": {}})
+    output = tmp_path / "report.json"
+    monkeypatch.setattr(sys, "argv", ["benchmark", "--rows", "1", "--methods", "indexed-python",
+        "--caches", "first", "--repeats", "1", "--output", str(output)])
+    benchmark.main()
+    assert roots == [None]
+    assert json.loads(output.read_text())["complete"]
+
+
 def test_committed_measurements_distinguish_parity_from_bounded_outcomes():
     from collections import Counter
     from pathlib import Path

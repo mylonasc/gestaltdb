@@ -67,6 +67,16 @@ backend/oracle requirements; report-matrix invariants included. Sphinx `-W`,
 docs/API drift, 8/8 examples, roadmap and whitespace checks passed. Closure of
 #255 remains gated on exact-head PR and post-merge integration checks.
 
+PR #365 first CI run exposed a host assumption in the new end-to-end harness
+test: GitHub runners lack `/tmp/opencode`. The orchestrator now prefers that
+root when present and otherwise uses the platform tempfile root, with a
+simulated absent-root regression. This changes only fixture placement; measured
+reports retain their original clean source/hash. Initial watcher also expected
+an inapplicable fuzz workflow; monitor only actual applicable workflows.
+
+Portable-temp correction validation: 24 focused harness tests; full optional
+suite **3,264 passed / 2 skipped** (84.19s). Measured report bytes unchanged.
+
 ### Broader roadmap continuation (2026-10-25)
 
 Child #350 of #249 delivers the current-property-graph demand path on

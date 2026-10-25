@@ -368,7 +368,10 @@ def main():
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(report, indent=2) + "\n")
-    with tempfile.TemporaryDirectory(prefix="re342-", dir="/tmp/opencode") as directory:
+    # Prefer the harness-approved root locally; ordinary CI/users need not have
+    # OpenCode's pre-created directory. Let tempfile honor their normal root.
+    temporary_root = "/tmp/opencode" if Path("/tmp/opencode").is_dir() else None
+    with tempfile.TemporaryDirectory(prefix="re342-", dir=temporary_root) as directory:
         path = Path(directory) / "db"
         common = [sys.executable, "-m", "benchmarks.reasoning_frontier_pipeline", "--fixture", str(path),
                   "--rows", str(args.rows), "--shape", args.shape, "--backend", args.backend]
