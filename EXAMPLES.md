@@ -116,12 +116,13 @@ with TemporaryDirectory() as tmpdir:
     try:
         graph.put_node(Node(node_id="alice", labels=["Person"], properties={"name": "Alice"}))
         graph.put_node(Node(node_id="bob", labels=["Person"], properties={"name": "Bob"}))
-        graph.put_edge(Edge(
+        graph.edges.put(Edge(
             edge_id="alice-knows-bob",
             source="alice",
             target="bob",
             properties={"type": "knows", "since": 2024},
         ))
+        assert graph.edges.reader.get(b"alice-knows-bob").target == "bob"
 
         result = graph.query(
             'MATCH (a:Person {name: "Alice"}) '

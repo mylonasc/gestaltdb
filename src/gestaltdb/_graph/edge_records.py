@@ -2,14 +2,14 @@
 
 ``put_edge``/``delete_edge`` coordinate canonical edge records, legacy
 untyped adjacency blobs, typed adjacency, and secondary indexes. The
-transaction boundary stays on ``GraphDB``: wrappers open a transaction when
-required and delegate the store-bound core here. Everything in this module
+transaction boundary lives on ``EdgeRepository``/``StorageSession``; the
+store-bound core stays here. Everything in this module
 is explicit about its inputs — store, serializers, index configuration,
 and the handle-owned typed-adjacency count cache — so transaction and
 snapshot scopes bind correctly.
 
-``update_edge`` stays on ``GraphDB``: it composes the public
-get/merge/put API and carries no storage logic of its own.
+``EdgeRepository.update`` composes read/merge/write without changing the
+legacy read-modify-write boundary.
 """
 
 from __future__ import annotations

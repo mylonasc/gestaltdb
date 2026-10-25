@@ -367,6 +367,7 @@ class GraphDB:
         self.epistemic = self.epistemic.rebound(self.temporal)
         self.rules = self.rules.rebound(self.temporal)
         self._node_repository = None
+        self._edge_repository = None
 
     @property
     def database_id(self) -> str:
@@ -832,6 +833,21 @@ class GraphDB:
     # -----------
     # Edge Methods
     # -----------
+    @property
+    def edges(self):
+        """Current-edge repository bound to this handle's store and lifetime."""
+        from .current import bind_edges
+
+        self._edge_repository = bind_edges(getattr(self, "_edge_repository", None),
+            self.store, self.serializer, entity_serializer=self.entity_serializer,
+            indexed_node_properties=self.indexed_node_properties,
+            indexed_edge_properties=self.indexed_edge_properties,
+            adjacency_counts=self._typed_adjacency_count_cache,
+            transaction_bound=self.temporal.is_transaction_bound,
+            write_guard=lambda: self.temporal.write_guard(), lock_manager=self._lock_manager,
+        )
+        return self._edge_repository
+
     def put_edge(self, edge: Edge, update_adjacency = True):
         """Store an edge and update adjacency indexes.
 
@@ -842,38 +858,7 @@ class GraphDB:
         Examples:
             >>> graph_db.put_edge(Edge(source="drug-1", target="protein-1"))  # doctest: +SKIP
         """
-        if self._implicit_transaction_required():
-            with self.transaction() as tx:
-                return tx.put_edge(edge, update_adjacency=update_adjacency)
-        _edge_records.put_edge(self.store, self.entity_serializer, self.serializer, self.indexed_edge_properties, self._typed_adjacency_count_cache, edge, update_adjacency=update_adjacency)
-
-    def _put_typed_adjacency_for_edge(self, edge: Edge):
-        """Write typed adjacency index records for an edge.
-
-        Args:
-            edge: Edge whose ``properties["type"]`` determines the typed index.
-        """
-        _adjacency.put_typed_adjacency_for_edge(self.store, self._typed_adjacency_count_cache, edge)
-
-    def _delete_typed_adjacency_for_edge(self, edge: Edge):
-        """Remove typed adjacency index records for an edge.
-
-        Args:
-            edge: Edge whose current source, target, type, and ID identify records.
-        """
-        _adjacency.delete_typed_adjacency_for_edge(self.store, self._typed_adjacency_count_cache, edge)
-
-    def _update_typed_adjacency_count_cache(self, records, delta: int) -> None:
-        """Update cached typed adjacency counts for writes made by this graph handle."""
-        _adjacency.update_count_cache(self._typed_adjacency_count_cache, records, delta)
-
-    def _put_edge_indexes(self, edge: Edge):
-        """Maintain relationship type and configured property indexes."""
-        _index_maintenance.put_edge_indexes(self.store, self.indexed_edge_properties, edge)
-
-    def _delete_edge_indexes(self, edge: Edge):
-        """Remove relationship type and configured property indexes."""
-        _index_maintenance.delete_edge_indexes(self.store, self.indexed_edge_properties, edge)
+        return self.edges.put(edge, update_adjacency=update_adjacency)
 
     def rebuild_edge_indexes(
         self,
@@ -1425,7 +1410,7 @@ class GraphDB:
         Examples:
             >>> graph_db.get_edge(b"d1-p1")  # doctest: +SKIP
         """
-        return _edge_records.get_edge(self.store, self.entity_serializer, edge_id)
+        return self.edges.get(edge_id)
 
     # -----------
     # Example Range Query
@@ -1456,14 +1441,7 @@ class GraphDB:
         Similar approach for edges. The new_data might include new properties,
         or you might also allow changing source/target if that makes sense.
         """
-        old_edge = self.get_edge(edge_id)
-        if old_edge is None:
-            # treat as new or handle differently
-            old_edge = Edge(edge_id=edge_id, source=None, target=None, properties={})
-        merged_props = merge_func(old_edge.properties, new_data)
-        old_edge.properties = merged_props
-        self.put_edge(old_edge)
-        return old_edge
+        return self.edges.update(edge_id, new_data, merge_func)
 
     # --------------------------------
     # Bulk put of nodes
@@ -1905,29 +1883,7 @@ class GraphDB:
         of both source and target nodes. If either node doesn't exist,
         we skip gracefully.
         """
-        if self._implicit_transaction_required():
-            with self.transaction() as tx:
-                return tx.delete_edge(edge_id, edge_key_serializer=edge_key_serializer)
-        _edge_records.delete_edge(self.store, self.entity_serializer, self.serializer, self.indexed_edge_properties, self._typed_adjacency_count_cache, edge_id)
-
-    def _edge_id_variants(self, edge_id):
-        """Return string/byte forms used by legacy adjacency records."""
-        return _edge_records.edge_id_variants(edge_id)
-
-    def _remove_edge_from_endpoint_adjacencies(self, edge: Edge):
-        """Remove an edge from the legacy adjacency blobs for its endpoints."""
-        _edge_records.remove_edge_from_endpoint_adjacencies(self.store, self.serializer, edge)
-
-    def _remove_edge_from_adjacency(self, node_id: str, edge_id: str):
-        """Remove an edge ID from a node's stored adjacency lists.
-
-        Args:
-            node_id: Node key whose adjacency list should be updated.
-            edge_id: Edge key to remove.
-        """
-
-
-        _edge_records.remove_edge_from_adjacency(self.store, self.serializer, node_id, edge_id)
+        return self.edges.delete(edge_id)
 
     # -----------------------
     # BFS Example
@@ -1956,14 +1912,7 @@ class GraphDB:
         Examples:
             >>> graph_db.put_edges_bulk([Edge(source="drug-1", target="protein-1")], check_existing=False)  # doctest: +SKIP
         """
-        if self._implicit_transaction_required():
-            with self.transaction() as tx:
-                return tx.put_edges_bulk(edges, check_existing=check_existing)
-        _ingest_edges.put_edges_bulk(
-            self.store, self.entity_serializer, self.serializer,
-            self.indexed_edge_properties, self._typed_adjacency_count_cache,
-            edges, check_existing=check_existing,
-        )
+        return self.edges.put_many(edges, check_existing=check_existing)
 
     def ingest_edges_arrow(
         self,
@@ -2232,4 +2181,3 @@ class GraphDB:
             >>> graph_db.close()  # doctest: +SKIP
         """
         self.store.close()
-

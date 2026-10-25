@@ -283,6 +283,16 @@ was already transaction-bound. For example::
         finally:
             graph.close()
 
+Current-edge consumers can accept ``graph.edges`` or construct
+``EdgeRepository(StorageSession(store, serializer))`` from ``gestaltdb.current``.
+The repository owns object and batched writes, replacement cleanup, typed and
+legacy adjacency, and configured secondary indexes. It does not construct or
+redispatch through GraphDB. ``graph.edges.reader`` and ``view.edges`` expose
+only current-edge reads; transaction/snapshot children bind their own store.
+As with nodes, ``update`` is not an atomic read-modify-write outside an explicit
+transaction. Independently constructed sessions own independent adjacency-count
+caches: use handle-bound repositories when sharing a handle's cached reads.
+
 The decomposition is useful, with four important boundaries:
 
 * ``GraphDB`` is the public integration facade: it owns handle lifecycle,

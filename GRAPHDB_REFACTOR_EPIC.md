@@ -86,6 +86,17 @@ Ruff, size gate, API-index drift, docs checks and Sphinx `-W` all green.
 
 ### Stage C — current edges, indexes and ingestion
 
+Current-edge slice: `EdgeRepository`/`EdgeReader` now use `StorageSession`,
+parallel to nodes. `graph.edges` owns current CRUD and batched object writes
+without constructing transaction GraphDB children. The native/batched writer
+is retained, as are the legacy update and key semantics. Handle-bound sessions
+share the adjacency-count cache; independent sessions do not invalidate other
+handles' caches. Snapshot views expose `view.edges` as a narrow reader, while
+legacy `view.get_edge` retains the copied-facade seam. Scope rebinding clears
+both repository caches. Real-backend tests cover standalone/no-redispatch,
+topology/type/property replacement, atomic bulk rollback, cache invalidation,
+current-only deletion, and transaction/snapshot isolation.
+
 Migrate edge/index repositories to the same scope binding; replace duplicated
 ordinary transaction checks through a session template, not dynamic method-name
 redispatch. Separate DDL's post-commit config updates. Build `graph.ingest` over

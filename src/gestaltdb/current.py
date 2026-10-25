@@ -1,7 +1,7 @@
-"""Store-bound current-graph sessions and node repositories.
+"""Store-bound current-graph sessions and node/edge repositories.
 
 These operations concern mutable graph records, not temporal claims/history.
-Use ``graph.nodes`` or construct ``NodeRepository(StorageSession(store, codec))``.
+Use ``graph.nodes``/``graph.edges`` or construct repositories over StorageSession.
 See ``docs/architecture.rst`` for a complete example and lifetime boundaries.
 """
 
@@ -11,8 +11,8 @@ from contextlib import contextmanager
 from pathlib import Path
 import threading
 
-from ._graph import node_records
-from ._graph.entities import GraphEntityDictSerializer, Node
+from ._graph import edge_records, ingest_edges, node_records
+from ._graph.entities import Edge, GraphEntityDictSerializer, Node
 from ._graph.index_maintenance import load_property_index_metadata
 from .concurrency import DEFAULT_LOCK_MANAGER
 
@@ -154,7 +154,76 @@ class NodeRepository(NodeReader):
             )
 
 
-def bind_nodes(previous, store, serializer, **configuration):
+class EdgeReader:
+    """Current-edge read authority over an existing store scope."""
+
+    def __init__(self, session: StorageSession):
+        self._session = session
+
+    def get(self, edge_id):
+        """Read a decoded current edge, or None, using its stored byte key."""
+        return edge_records.get_edge(
+            self._session.store, self._session.entity_serializer, edge_id)
+
+    def keys(self, num_edges=None, key_offset=None):
+        """Iterate current edge keys in backend order."""
+        yield from self._session.store.get_edge_keys_generator(num_edges, key_offset)
+
+
+class EdgeRepository(EdgeReader):
+    """Current-edge CRUD, adjacency and indexes over a borrowed storage session.
+
+    Temporal history and schema DDL are separate capabilities. Replacement
+    removes the old edge's indexes and adjacency before publishing the new
+    record in the same backend transaction, when supported.
+    """
+
+    @property
+    def reader(self):
+        """Narrow this repository to read-only authority on the same scope."""
+        return EdgeReader(self._session)
+
+    def put(self, edge, update_adjacency=True):
+        """Store a current edge; optionally omit legacy adjacency blobs."""
+        with self._session.write_scope() as session:
+            edge_records.put_edge(
+                session.store, session.entity_serializer, session.serializer,
+                session.indexed_edge_properties, session.adjacency_counts,
+                edge, update_adjacency=update_adjacency)
+
+    def put_many(self, edges, check_existing=True):
+        """Bulk-store edges, maintaining typed adjacency and secondary indexes.
+
+        Set ``check_existing=False`` only for append-only IDs. This retains
+        the existing batched writer rather than looping over object writes.
+        """
+        with self._session.write_scope() as session:
+            ingest_edges.put_edges_bulk(
+                session.store, session.entity_serializer, session.serializer,
+                session.indexed_edge_properties, session.adjacency_counts,
+                edges, check_existing=check_existing)
+
+    def update(self, edge_id, new_data, merge_func):
+        """Merge properties then put, preserving the legacy read/merge boundary.
+
+        Read-modify-write is atomic only inside a caller-owned transaction.
+        """
+        edge = self.get(edge_id)
+        if edge is None:
+            edge = Edge(edge_id=edge_id, source=None, target=None, properties={})
+        edge.properties = merge_func(edge.properties, new_data)
+        self.put(edge)
+        return edge
+
+    def delete(self, edge_id):
+        """Remove a current edge and both adjacency/index representations."""
+        with self._session.write_scope() as session:
+            edge_records.delete_edge(
+                session.store, session.entity_serializer, session.serializer,
+                session.indexed_edge_properties, session.adjacency_counts, edge_id)
+
+
+def _bind_repository(repository_type, previous, store, serializer, configuration):
     """Reuse a repository only while every store-bound dependency is identical.
 
     The facade supplies a late-bound writer guard, so monkeypatches remain
@@ -167,6 +236,16 @@ def bind_nodes(previous, store, serializer, **configuration):
     )), configuration["transaction_bound"])
     if previous is not None and previous._binding_key == key:
         return previous
-    repository = NodeRepository(StorageSession(store, serializer, **configuration))
+    repository = repository_type(StorageSession(store, serializer, **configuration))
     repository._binding_key = key
     return repository
+
+
+def bind_nodes(previous, store, serializer, **configuration):
+    """Bind current-node operations to an exact backend/configuration scope."""
+    return _bind_repository(NodeRepository, previous, store, serializer, configuration)
+
+
+def bind_edges(previous, store, serializer, **configuration):
+    """Bind current-edge operations to an exact backend/configuration scope."""
+    return _bind_repository(EdgeRepository, previous, store, serializer, configuration)

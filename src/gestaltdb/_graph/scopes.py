@@ -48,6 +48,7 @@ def configure_transaction_child(parent: GraphDB, child: GraphDB) -> None:
     child._database_id = parent._database_id
     child._lock_manager = parent._lock_manager
     child._node_repository = None
+    child._edge_repository = None
     child.temporal = parent.temporal.spawn_transaction_scope(child.store)
     child.epistemic = parent.epistemic.spawn_transaction_scope(child.temporal)
     child.rules = parent.rules.spawn_transaction_scope(child.temporal)
@@ -76,6 +77,7 @@ def configure_snapshot_child(parent: GraphDB, child: GraphDB) -> None:
     child.node_constraints = child._load_node_constraint_metadata()
     child._typed_adjacency_count_cache = {}
     child._node_repository = None
+    child._edge_repository = None
     child.temporal = child.temporal.rebound(
         child.store, store_path=child._store_path)
     child.epistemic = child.epistemic.rebound(child.temporal)
