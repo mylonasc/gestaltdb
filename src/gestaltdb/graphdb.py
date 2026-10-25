@@ -8,9 +8,7 @@ import copy
 import os
 import random
 import shutil
-import sys
 import threading
-import time
 import uuid
 import base64
 from collections.abc import Mapping
@@ -83,6 +81,7 @@ from ._graph import adjacency as _adjacency
 from ._graph import index_maintenance as _index_maintenance
 from ._graph import edge_records as _edge_records
 from ._graph import node_records as _node_records
+from ._graph import ingest_support as _ingest_support
 from ._graph import sampling as _sampling
 from ._graph import index_lookup as _index_lookup
 from ._graph import index_rebuild as _index_rebuild
@@ -222,28 +221,8 @@ def _temporal_writer_lock(path: Path) -> _TemporalWriterLock:
         return lock
 
 
-class _SimpleProgress:
-    """Small stderr progress fallback used when tqdm is unavailable."""
-
-    def __init__(self, *, total=None, desc: str = "ingest", unit: str = "rows"):
-        self.total = total
-        self.desc = desc
-        self.unit = unit
-        self.current = 0
-        self.started_at = time.perf_counter()
-
-    def update(self, count: int) -> None:
-        self.current += count
-        elapsed = max(time.perf_counter() - self.started_at, 1e-9)
-        rate = self.current / elapsed
-        total = "?" if self.total is None else str(self.total)
-        print(f"{self.desc}: {self.current}/{total} {self.unit} ({rate:,.0f} {self.unit}/s)", file=sys.stderr)
-
-    def close(self) -> None:
-        pass
-
-
 # Entity/value helpers live in `gestaltdb._graph.entities`; re-exported above.
+_SimpleProgress = _ingest_support.SimpleProgress
 
 
 class GraphDB:
@@ -633,52 +612,25 @@ class GraphDB:
 
     def _validate_index_mode(self, index_mode: str) -> None:
         """Validate the columnar ingestion index mode."""
-        if isinstance(index_mode, IndexMaintenanceMode):
-            index_mode = index_mode.value
-        if index_mode not in _VALID_INDEX_MODES:
-            allowed = ", ".join(sorted(_VALID_INDEX_MODES))
-            raise ValueError(f"index_mode must be one of: {allowed}")
+        _ingest_support.validate_index_mode(index_mode)
 
     def _low_level_index_mode(self, index_mode: str | IndexMaintenanceMode) -> str:
         """Return the low-level index mode used by primitive ingestion calls."""
-        if isinstance(index_mode, IndexMaintenanceMode):
-            index_mode = index_mode.value
-        if index_mode == IndexMaintenanceMode.DEFER_REBUILD.value:
-            return IndexMaintenanceMode.DEFER.value
-        self._validate_index_mode(index_mode)
-        index_mode = index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode
-        return index_mode
+        return _ingest_support.low_level_index_mode(index_mode)
 
     def _coerce_columnar_ingestion_mode(self, ingestion_mode: str | ColumnarIngestionMode) -> str:
         """Normalize a high-level columnar ingestion mode."""
-        if isinstance(ingestion_mode, ColumnarIngestionMode):
-            return ingestion_mode.value
-        values = {mode.value for mode in ColumnarIngestionMode}
-        if ingestion_mode not in values:
-            allowed = ", ".join(sorted(values))
-            raise ValueError(f"ingestion_mode must be one of: {allowed}")
-        return ingestion_mode
+        return _ingest_support.coerce_columnar_ingestion_mode(ingestion_mode)
 
     def _should_rebuild_after_ingest(self, index_mode: str | IndexMaintenanceMode) -> bool:
         """Return whether high-level ingestion should rebuild deferred indexes."""
-        return (index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode) == IndexMaintenanceMode.DEFER_REBUILD.value
+        return _ingest_support.should_rebuild_after_ingest(index_mode)
 
     @contextmanager
     def _ingestion_progress(self, enabled: bool, *, total=None, desc: str):
         """Return an optional progress reporter for chunked ingestion."""
-        if not enabled:
-            yield None
-            return
-        try:
-            from tqdm.auto import tqdm
-        except ImportError:
-            progress = _SimpleProgress(total=total, desc=desc)
-        else:
-            progress = tqdm(total=total, desc=desc, unit="rows", unit_scale=True)
-        try:
+        with _ingest_support.ingestion_progress(enabled, total=total, desc=desc) as progress:
             yield progress
-        finally:
-            progress.close()
 
     def _load_property_index_metadata(self, key: bytes) -> set[str]:
         """Load persisted property index definitions from backend metadata."""
@@ -2246,99 +2198,37 @@ class GraphDB:
 
     def _polars_labels_expr(self, pl, df, labels):
         """Return a Polars expression for node labels."""
-        if labels is None:
-            return pl.lit([])
-        if isinstance(labels, str):
-            return pl.col(labels) if labels in df.columns else pl.lit([])
-        return pl.lit(list(labels))
+        return _ingest_support.polars_labels_expr(pl, df, labels)
 
     def _polars_properties_expr(self, pl, property_columns):
         """Return a Polars expression for an entity properties object."""
-        if not property_columns:
-            return pl.lit({})
-        return pl.struct(list(property_columns))
+        return _ingest_support.polars_properties_expr(pl, property_columns)
 
     def _validate_polars_frame(self, pl, df, feature_name: str) -> None:
         """Validate that input is a Polars eager or lazy frame."""
-        if not isinstance(df, (pl.DataFrame, pl.LazyFrame)):
-            raise TypeError(f"df must be a polars.DataFrame or polars.LazyFrame for {feature_name}")
+        _ingest_support.validate_polars_frame(pl, df, feature_name)
 
     def _polars_columns(self, pl, df) -> list[str]:
         """Return column names without collecting LazyFrame data."""
-        if isinstance(df, pl.LazyFrame):
-            return df.collect_schema().names()
-        return df.columns
+        return _ingest_support.polars_columns(pl, df)
 
     def _polars_row_count(self, pl, df):
         """Return an eager row count, or None for lazy inputs."""
-        if isinstance(df, pl.DataFrame):
-            return df.height
-        return None
+        return _ingest_support.polars_row_count(pl, df)
 
     def _iter_polars_chunks(self, pl, df, chunk_size: int):
         """Yield eager DataFrame chunks from eager or lazy Polars input."""
-        if chunk_size <= 0:
-            raise ValueError("chunk_size must be positive")
-        if isinstance(df, pl.DataFrame):
-            for start in range(0, df.height, chunk_size):
-                yield df.slice(start, chunk_size)
-            return
-
-        if hasattr(df, "collect_batches"):
-            for chunk in df.collect_batches(chunk_size=chunk_size):
-                if chunk.height:
-                    yield chunk
-            return
-
-        offset = 0
-        while True:
-            chunk = df.slice(offset, chunk_size).collect()
-            if chunk.height == 0:
-                break
-            yield chunk
-            if chunk.height < chunk_size:
-                break
-            offset += chunk_size
+        return _ingest_support.iter_polars_chunks(pl, df, chunk_size)
 
     def _delete_existing_node_indexes_for_columnar_chunk(self, chunk: NodeList) -> None:
         """Remove stale indexes before opaque columnar node upserts."""
-        for node_id in chunk.node_ids:
-            old_node = self.get_node(node_id)
-            if old_node is not None:
-                self._delete_node_indexes(old_node)
+        _ingest_support.delete_existing_node_indexes_for_columnar_chunk(
+            self.store, self.entity_serializer, self.indexed_node_properties, chunk)
 
     def _put_node_indexes_for_columnar_chunk(self, chunk: NodeList) -> None:
         """Maintain label and configured property indexes for columnar nodes."""
-        entries = []
-        range_entries = []
-        for node_value in chunk.node_values:
-            node = self.entity_serializer.deserialize(node_value, "Node")
-            for label in node.labels:
-                entries.append(("node_label", [label.encode("utf-8")], node.get_id_bytes))
-            for property_name in self.indexed_node_properties:
-                if property_name in node.properties:
-                    raw_value = node.properties[property_name]
-                    property_value = _property_value_to_index_bytes(raw_value)
-                    entries.append((
-                        "node_property",
-                        [property_name.encode("utf-8"), property_value],
-                        node.get_id_bytes,
-                    ))
-                    for label in node.labels:
-                        entries.append((
-                            "node_label_property",
-                            [label.encode("utf-8"), property_name.encode("utf-8"), property_value],
-                            node.get_id_bytes,
-                        ))
-                    range_value = _property_value_to_range_index_bytes(raw_value)
-                    if range_value is not None:
-                        range_entries.append(("node_property", [property_name.encode("utf-8")], range_value, node.get_id_bytes))
-                        for label in node.labels:
-                            range_entries.append(("node_label_property", [label.encode("utf-8"), property_name.encode("utf-8")], range_value, node.get_id_bytes))
-        if entries:
-            self.store.put_index_entries_bulk(entries)
-        if range_entries:
-            self.store.put_range_index_entries_bulk(range_entries)
+        _ingest_support.put_node_indexes_for_columnar_chunk(
+            self.store, self.entity_serializer, self.indexed_node_properties, chunk)
 
     def serialize_node_value(self, node: Node) -> bytes:
         """Serialize a node for use with columnar node ingestion."""
