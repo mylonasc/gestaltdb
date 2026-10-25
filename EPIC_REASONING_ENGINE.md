@@ -14,12 +14,12 @@ not automatically close their phase epics. Current phase disposition:
 | Phase | Status | Remaining gate |
 |---|---|---|
 | RE-E1 [#157](https://github.com/mylonasc/gestaltdb/issues/157) | Complete; stale-open issue corrected | Explicit executor/measurement/limits/install-isolation gate verified; optional #194 does not block E1. |
-| RE-E2 [#158](https://github.com/mylonasc/gestaltdb/issues/158) | Complete | Verified selected-profile contract; broader review accounting remains #371. |
-| RE-E3 [#159](https://github.com/mylonasc/gestaltdb/issues/159) | Open | Durable crash/concurrency evidence reconciliation #370. |
-| RE-E4 [#160](https://github.com/mylonasc/gestaltdb/issues/160) | Open | #159 and the shared bounded interval-publication evidence gate #370. |
-| RE-E5 [#161](https://github.com/mylonasc/gestaltdb/issues/161) | Own bounded/defer deliverables reviewed; blocked | Original sequential prerequisite #160 remains open; not missing full OWL DL or a new native engine. |
+| RE-E2 [#158](https://github.com/mylonasc/gestaltdb/issues/158) | Complete | Verified selected-profile contract; broader review accounting closed with #371. |
+| RE-E3 [#159](https://github.com/mylonasc/gestaltdb/issues/159) | Complete (closed 2026-10-25) | Durable crash/concurrency evidence reconciled in #370 (closed). |
+| RE-E4 [#160](https://github.com/mylonasc/gestaltdb/issues/160) | Complete (closed 2026-10-25) | Bounded interval-publication evidence gate reconciled in #370 (closed). |
+| RE-E5 [#161](https://github.com/mylonasc/gestaltdb/issues/161) | Complete (closed 2026-10-25) | Sequential prerequisite #160 closed; not missing full OWL DL or a new native engine. |
 
-Review #200 remains open for explicitly tracked D2–D6 dispositions in #371;
+Review #200 is closed; D2–D6 dispositions were reconciled in #371 (closed);
 #248–#256 are all closed against their scoped acceptance. #194 is the separate
 open native-extraction follow-up; PR #369 is not integrated in this audit.
 See [tracking-audit.md](planning/reasoning-engine/tracking-audit.md) for evidence,
@@ -28,8 +28,11 @@ remaining checklists and corrected native issue relationships. Run
 status/relationship drift without changing GitHub.
 
 **Release history:** `0.13.0rc1` was published on 2026-10-23 via #307 and trusted
-Publish `39936450890`. Later integration commits are not automatically released.
-No new main merge, tag or release is authorized by this sanitation.
+Publish `39936450890`. `0.14.0rc1` was published on 2026-10-25 via #389
+(GraphDB service decomposition plus post-rc1 reasoning work). The sanitation
+authorization below is superseded for that release; later integration commits
+are still not automatically released. No new main merge, tag or release is
+authorized by this sanitation.
 
 ## Historical priority: release readiness and early user testing (2026-10-23)
 
