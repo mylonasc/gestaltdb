@@ -132,13 +132,21 @@ unchanged. Snapshot construction and array-native sampling remain separate.
 Tests cover standalone/no-redispatch, cache invalidation, stale-index failure,
 rebuild, and transaction/snapshot isolation.
 
-Validation for the current edge/index/ingestion/traversal/coordinator slices:
-full optional backend/serializer suite 3,492 passed / 3 expected skips. Ruff,
-module-size ratchet, generated API index, documentation drift/examples and
-Sphinx `-W` pass. GraphDB shrank from 2,235 to 1,926 physical lines; no
-transaction GraphDB redispatch remains in current node/edge CRUD, current index
-DDL/rebuilds, low-level format loaders, graph-wide ingestion coordination or
-live traversal/sampling.
+Lookup slice: `EntityLookup` in `gestaltdb.lookups` composes `IndexReader`
+with the current node/edge readers for all `nodes_by_*`/`edges_by_*`/`count_*`
+queries plus the legacy `range_query_nodes` stub (exact raw key format kept).
+`graph.lookup` serves the handle scope; `view.lookup` reads the pinned
+snapshot. The facade keeps only thin delegating wrappers; `iter_edge_ids`
+moved onto `IndexReader`. Tests cover standalone/no-redispatch across all
+lookup families, stub key-format parity, and transaction/snapshot isolation.
+
+Validation for the current edge/index/ingestion/traversal/coordinator/lookup
+slices: full optional backend/serializer suite 3,496 passed / 3 expected
+skips. Ruff, module-size ratchet, generated API index, documentation
+drift/examples and Sphinx `-W` pass. GraphDB shrank from 2,235 to 1,914
+physical lines; no transaction GraphDB redispatch remains in current node/edge
+CRUD, current index DDL/rebuilds, low-level format loaders, graph-wide
+ingestion coordination, live traversal/sampling or decoded entity lookups.
 
 Migrate edge/index repositories to the same scope binding; replace duplicated
 ordinary transaction checks through a session template, not dynamic method-name

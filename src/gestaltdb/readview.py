@@ -362,6 +362,7 @@ class CurrentGraphReadView:
         self._edges = graph.edges.reader
         self._indexes = graph.indexes.reader
         self._traversal = graph.traversal.reader
+        self._lookup = graph.lookup
         self.provenance = provenance
 
     @property
@@ -383,6 +384,11 @@ class CurrentGraphReadView:
     def traversal(self):
         """Typed adjacency reads bound to this snapshot, without rebuilds."""
         return self._traversal
+
+    @property
+    def lookup(self):
+        """Index-backed decoded entity reads bound to this snapshot."""
+        return self._lookup
 
     @property
     def store(self):

@@ -2,13 +2,9 @@
 
 These functions maintain label/type and configured property/range indexes
 for node and edge writes. They are pure given an explicit backend store, the
-configured index-property sets, and the record being written or removed; all
-write orchestration (deciding *when* to call them) stays on ``GraphDB``.
-
-``GraphDB._put/_delete_{node,edge}_indexes`` and
-``_flush_index_rebuild_batches`` remain as thin private wrappers so existing
-call sites in record writes, deletes, rebuilds, and columnar ingestion are
-untouched.
+configured index-property sets, and the record being written or removed; write
+orchestration lives in the scope-owned current repositories and services
+(``NodeRepository``/``EdgeRepository``/``IndexService``/columnar loaders).
 """
 
 from __future__ import annotations

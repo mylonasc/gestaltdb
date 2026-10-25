@@ -48,6 +48,10 @@ class IndexReader:
             self._session.store, self.ensure_current, label, property_name,
             start_value, end_value, include_start, include_end)
 
+    def iter_edge_ids(self, num_edges=None, key_offset=None):
+        """Yield all canonical edge IDs in backend key order."""
+        return lookup.iter_edge_ids(self._session.store, num_edges, key_offset)
+
     def iter_edge_ids_by_type(self, edge_type):
         return lookup.iter_edge_ids_by_type(self._session.store, self.ensure_current, edge_type)
 

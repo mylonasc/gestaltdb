@@ -77,7 +77,6 @@ from .versioning import (
 )
 from ._graph import index_maintenance as _index_maintenance
 from ._graph import edge_records as _edge_records
-from ._graph import index_lookup as _index_lookup
 from ._graph import temporal_indexes as _temporal_indexes
 from ._graph import temporal_orphans as _temporal_orphans
 from ._graph.temporal_indexes import (
@@ -535,17 +534,12 @@ class GraphDB:
         """
         return self.nodes.delete(node_id)
 
-    def _put_node_indexes(self, node: Node):
-        """Maintain label and configured property indexes for a node."""
-        _index_maintenance.put_node_indexes(self.store, self.indexed_node_properties, node)
+    @property
+    def lookup(self):
+        """Index-backed decoded node/edge reads bound to this store scope."""
+        from .lookups import EntityLookup
 
-    def _delete_node_indexes(self, node: Node):
-        """Remove label and configured property indexes for a node."""
-        _index_maintenance.delete_node_indexes(self.store, self.indexed_node_properties, node)
-
-    def _flush_index_rebuild_batches(self, entries: list, range_entries: list) -> None:
-        """Write accumulated rebuild entries and clear the buffers."""
-        _index_maintenance.flush_index_rebuild_batches(self.store, entries, range_entries)
+        return EntityLookup(self.nodes._session)
 
     @property
     def indexes(self):
@@ -634,11 +628,11 @@ class GraphDB:
         Examples:
             >>> graph_db.nodes_by_label("Drug")  # doctest: +SKIP
         """
-        return [self.get_node(node_id) for node_id in self.iter_node_ids_by_label(label)]
+        return self.lookup.nodes_by_label(label)
 
     def count_nodes_by_label(self, label: str) -> int:
         """Return the number of nodes currently indexed for a label."""
-        return sum(1 for _ in self.iter_node_ids_by_label(label))
+        return self.lookup.count_nodes_by_label(label)
 
     def iter_node_ids_by_property(self, property_name: str, value):
         """Yield node IDs from an exact-match property index.
@@ -669,11 +663,11 @@ class GraphDB:
         Examples:
             >>> graph_db.nodes_by_property("kind", "drug")  # doctest: +SKIP
         """
-        return [self.get_node(node_id) for node_id in self.iter_node_ids_by_property(property_name, value)]
+        return self.lookup.nodes_by_property(property_name, value)
 
     def count_nodes_by_property(self, property_name: str, value) -> int:
         """Return the number of nodes currently indexed for an exact property value."""
-        return sum(1 for _ in self.iter_node_ids_by_property(property_name, value))
+        return self.lookup.count_nodes_by_property(property_name, value)
 
     def iter_node_ids_by_label_property(self, label: str, property_name: str, value):
         """Yield node IDs from the composite label/property exact-match index."""
@@ -681,11 +675,11 @@ class GraphDB:
 
     def nodes_by_label_property(self, label: str, property_name: str, value):
         """Return nodes using the composite label/property exact-match index."""
-        return [self.get_node(node_id) for node_id in self.iter_node_ids_by_label_property(label, property_name, value)]
+        return self.lookup.nodes_by_label_property(label, property_name, value)
 
     def count_nodes_by_label_property(self, label: str, property_name: str, value) -> int:
         """Return the number of nodes indexed for a label and exact property value."""
-        return sum(1 for _ in self.iter_node_ids_by_label_property(label, property_name, value))
+        return self.lookup.count_nodes_by_label_property(label, property_name, value)
 
     def iter_node_ids_by_property_range(self, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Yield node IDs from a scalar property range index."""
@@ -693,11 +687,11 @@ class GraphDB:
 
     def nodes_by_property_range(self, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Return nodes using a scalar property range index."""
-        return [self.get_node(node_id) for node_id in self.iter_node_ids_by_property_range(property_name, start_value, end_value, include_start, include_end)]
+        return self.lookup.nodes_by_property_range(property_name, start_value, end_value, include_start, include_end)
 
     def count_nodes_by_property_range(self, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True) -> int:
         """Return the number of nodes indexed in a scalar property range."""
-        return sum(1 for _ in self.iter_node_ids_by_property_range(property_name, start_value, end_value, include_start, include_end))
+        return self.lookup.count_nodes_by_property_range(property_name, start_value, end_value, include_start, include_end)
 
     def iter_node_ids_by_label_property_range(self, label: str, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Yield node IDs from a composite label/property range index."""
@@ -705,11 +699,11 @@ class GraphDB:
 
     def nodes_by_label_property_range(self, label: str, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Return nodes using a composite label/property range index."""
-        return [self.get_node(node_id) for node_id in self.iter_node_ids_by_label_property_range(label, property_name, start_value, end_value, include_start, include_end)]
+        return self.lookup.nodes_by_label_property_range(label, property_name, start_value, end_value, include_start, include_end)
 
     def count_nodes_by_label_property_range(self, label: str, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True) -> int:
         """Return the number of nodes indexed for a label/property range."""
-        return sum(1 for _ in self.iter_node_ids_by_label_property_range(label, property_name, start_value, end_value, include_start, include_end))
+        return self.lookup.count_nodes_by_label_property_range(label, property_name, start_value, end_value, include_start, include_end)
 
     def node_key_to_bytes(self, node_key):
         """Normalize a node key to bytes.
@@ -883,7 +877,7 @@ class GraphDB:
             >>> list(graph_db.iter_edge_ids())  # doctest: +SKIP
             [b'd1-p1']
         """
-        return _index_lookup.iter_edge_ids(self.store, num_edges, key_offset)
+        return self.indexes.iter_edge_ids(num_edges, key_offset)
 
     def edges_by_type(self, edge_type: str):
         """Return edges using the relationship type catalog.
@@ -897,11 +891,11 @@ class GraphDB:
         Examples:
             >>> graph_db.edges_by_type("drug-to-protein")  # doctest: +SKIP
         """
-        return [self.get_edge(edge_id) for edge_id in self.iter_edge_ids_by_type(edge_type)]
+        return self.lookup.edges_by_type(edge_type)
 
     def count_edges_by_type(self, edge_type: str) -> int:
         """Return the number of edges currently indexed for a relationship type."""
-        return sum(1 for _ in self.iter_edge_ids_by_type(edge_type))
+        return self.lookup.count_edges_by_type(edge_type)
 
     def iter_edge_ids_by_property(self, property_name: str, value):
         """Yield edge IDs from an exact-match edge property index.
@@ -932,11 +926,11 @@ class GraphDB:
         Examples:
             >>> graph_db.edges_by_property("score", 1)  # doctest: +SKIP
         """
-        return [self.get_edge(edge_id) for edge_id in self.iter_edge_ids_by_property(property_name, value)]
+        return self.lookup.edges_by_property(property_name, value)
 
     def count_edges_by_property(self, property_name: str, value) -> int:
         """Return the number of edges currently indexed for an exact property value."""
-        return sum(1 for _ in self.iter_edge_ids_by_property(property_name, value))
+        return self.lookup.count_edges_by_property(property_name, value)
 
     def iter_edge_ids_by_type_property(self, edge_type: str, property_name: str, value):
         """Yield edge IDs from the composite type/property exact-match index."""
@@ -944,11 +938,11 @@ class GraphDB:
 
     def edges_by_type_property(self, edge_type: str, property_name: str, value):
         """Return edges using the composite type/property exact-match index."""
-        return [self.get_edge(edge_id) for edge_id in self.iter_edge_ids_by_type_property(edge_type, property_name, value)]
+        return self.lookup.edges_by_type_property(edge_type, property_name, value)
 
     def count_edges_by_type_property(self, edge_type: str, property_name: str, value) -> int:
         """Return the number of edges indexed for a type and exact property value."""
-        return sum(1 for _ in self.iter_edge_ids_by_type_property(edge_type, property_name, value))
+        return self.lookup.count_edges_by_type_property(edge_type, property_name, value)
 
     def iter_edge_ids_by_property_range(self, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Yield edge IDs from a scalar property range index."""
@@ -956,11 +950,11 @@ class GraphDB:
 
     def edges_by_property_range(self, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Return edges using a scalar property range index."""
-        return [self.get_edge(edge_id) for edge_id in self.iter_edge_ids_by_property_range(property_name, start_value, end_value, include_start, include_end)]
+        return self.lookup.edges_by_property_range(property_name, start_value, end_value, include_start, include_end)
 
     def count_edges_by_property_range(self, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True) -> int:
         """Return the number of edges indexed in a scalar property range."""
-        return sum(1 for _ in self.iter_edge_ids_by_property_range(property_name, start_value, end_value, include_start, include_end))
+        return self.lookup.count_edges_by_property_range(property_name, start_value, end_value, include_start, include_end)
 
     def iter_edge_ids_by_type_property_range(self, edge_type: str, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Yield edge IDs from a composite type/property range index."""
@@ -968,11 +962,11 @@ class GraphDB:
 
     def edges_by_type_property_range(self, edge_type: str, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True):
         """Return edges using a composite type/property range index."""
-        return [self.get_edge(edge_id) for edge_id in self.iter_edge_ids_by_type_property_range(edge_type, property_name, start_value, end_value, include_start, include_end)]
+        return self.lookup.edges_by_type_property_range(edge_type, property_name, start_value, end_value, include_start, include_end)
 
     def count_edges_by_type_property_range(self, edge_type: str, property_name: str, start_value=None, end_value=None, include_start: bool = True, include_end: bool = True) -> int:
         """Return the number of edges indexed for a type/property range."""
-        return sum(1 for _ in self.iter_edge_ids_by_type_property_range(edge_type, property_name, start_value, end_value, include_start, include_end))
+        return self.lookup.count_edges_by_type_property_range(edge_type, property_name, start_value, end_value, include_start, include_end)
 
     def index_statistics(self) -> dict[str, object]:
         """Return persisted index definitions visible to the query planner."""
@@ -1317,13 +1311,7 @@ class GraphDB:
     # -----------
     def range_query_nodes(self, property_name: str, start_val, end_val):
         """Example stub: You might rely on the underlying store to handle indexing for nodes."""
-        start_key = f"IDX:N:{property_name}:{start_val}:".encode('utf-8')
-        end_key = f"IDX:N:{property_name}:{end_val}:\xff".encode('utf-8')
-        for k, v in self.store.range_iter(start_key, end_key):
-            # parse node id from k, retrieve node
-            parts = k.decode('utf-8').split(':')
-            node_id = parts[-1]
-            yield self.get_node(node_id)
+        return self.lookup.range_query_nodes(property_name, start_val, end_val)
 
     # --------------------------------
     # Merge-based update (single node)

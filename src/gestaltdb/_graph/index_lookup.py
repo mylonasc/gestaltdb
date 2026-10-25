@@ -7,8 +7,9 @@ point as before — deferred to first iteration for generator lookups,
 eagerly for range lookups — so stale-index failures keep their exact
 timing. IndexReader owns the guard without GraphDB callbacks.
 
-Entity-mapping wrappers (``nodes_by_*``, ``edges_by_*``, ``count_*``) stay
-on ``GraphDB``; they compose these iterators with ``get_node/get_edge``.
+Entity-mapping wrappers (``nodes_by_*``, ``edges_by_*``, ``count_*``) live in
+``gestaltdb.lookups.EntityLookup``; they compose these iterators with the
+current readers.
 """
 
 from __future__ import annotations

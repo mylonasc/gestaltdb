@@ -329,6 +329,13 @@ scans the bound store directly and keeps the label-index freshness check.
 Snapshot construction (``build_sampler_snapshot``) and array-native sampling
 in ``gestaltdb.sampling`` remain separate capabilities.
 
+Index-backed decoded reads live in ``gestaltdb.lookups``. ``graph.lookup`` is
+an ``EntityLookup`` over the current ``StorageSession``: it composes the index
+reader with the current node/edge readers to serve ``nodes_by_*``,
+``edges_by_*`` and ``count_*`` queries without touching ``GraphDB``.
+``view.lookup`` serves the same reads from the snapshot scope. The legacy
+``range_query_nodes`` stub keeps its exact raw key format and iteration order.
+
 The decomposition is useful, with four important boundaries:
 
 * ``GraphDB`` is the public integration facade: it owns handle lifecycle,
