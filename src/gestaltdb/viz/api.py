@@ -417,3 +417,33 @@ def visualize_ontology(
         resolved,
         source="visualize_ontology",
     )
+
+
+def visualize_inference_chain(
+    nodes: Any,
+    edges: Any,
+    explanation: Any | None = None,
+    ontology: Any | None = None,
+    *,
+    link_layers: bool = True,
+    options: VizOptions | Mapping[str, Any] | None = None,
+    **caps: Any,
+) -> VizFigure:
+    """Visualize the whole inference chain in one figure.
+
+    Circles mark the data layer (property-graph nodes plus asserted/input
+    facts), triangles mark inferred conclusions, and squares mark schema
+    (rules, absences, axiom nodes, ontology terms). Stored and structural
+    edges are solid; inference steps are dotted. With ``link_layers=True``,
+    statements link to graph nodes they mention and to ontology properties
+    they instantiate, both by exact ID equality only.
+    """
+    from .chain import inference_chain_graph
+
+    resolved = _resolve_caps(options, caps)
+    return _finish(
+        inference_chain_graph(nodes, edges, explanation, ontology,
+                              link_layers=link_layers, **_caps_kwargs(resolved)),
+        resolved,
+        source="visualize_inference_chain",
+    )

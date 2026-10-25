@@ -3,7 +3,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from gestaltdb.viz.api import VizOptions, visualize_nodes_edges
+from gestaltdb.viz.api import VizFigure, VizOptions, visualize_nodes_edges
 
 NS = {"s": "http://www.w3.org/2000/svg"}
 
@@ -124,3 +124,26 @@ def test_static_labels_use_readable_font_size():
     sizes = {element.attrib["font-size"]
              for element in ET.fromstring(figure().as_svg()).findall(".//s:text", NS)}
     assert sizes == {"13"}
+
+
+def test_static_shapes_and_dashes_match_vocabulary():
+    from gestaltdb.viz.ir import VizGraph
+
+    viz = VizGraph.from_nodes_edges(
+        [{"id": "fact", "labels": ["derived"], "shape": "triangle"},
+         {"id": "rule", "labels": ["rule"], "shape": "square"},
+         {"id": "node", "labels": ["Person"]}],
+        [{"id": "d1", "source": "fact", "target": "rule", "properties": {"type": "derived_by"}, "dash": "6 4"},
+         {"id": "s1", "source": "rule", "target": "node", "properties": {"type": "premise"}}])
+    root = ET.fromstring(VizFigure_for(viz).as_svg())
+    assert len(root.findall("s:g/s:polygon", NS)) == 1
+    assert len(root.findall("s:g/s:rect", NS)) == 1
+    assert len(root.findall("s:g/s:circle", NS)) == 1
+    dashed = [path.attrib.get("stroke-dasharray") for path in root.findall("s:g/s:path", NS)]
+    assert dashed == ["6 4", None]
+    assert ET.fromstring(VizFigure_for(viz).as_svg()).findall("s:g/s:polygon", NS)[0].find("s:title", NS) is not None
+
+
+def VizFigure_for(viz):
+    return VizFigure(viz=viz)
+

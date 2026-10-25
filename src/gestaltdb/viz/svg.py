@@ -110,6 +110,23 @@ def _tree_coords(node_ids: list[str], edges: Any) -> dict[str, tuple[float, floa
     return coords
 
 
+def _shape_element(parent: Any, shape: str, x: float, y: float, radius: float,
+                   fill: str, stroke: str) -> Any:
+    """Draw a node marker and return it; triangles read as inferred, squares as schema."""
+    if shape == "triangle":
+        points = (f"{x},{y - radius} {x + radius * 0.95},{y + radius * 0.75} "
+                  f"{x - radius * 0.95},{y + radius * 0.75}")
+        return SubElement(parent, "polygon", {"points": points, "fill": fill,
+                         "stroke": stroke, "stroke-width": "1.5"})
+    if shape == "square":
+        half = radius * 0.9
+        return SubElement(parent, "rect", {"x": str(x - half), "y": str(y - half),
+                         "width": str(half * 2), "height": str(half * 2), "fill": fill,
+                         "stroke": stroke, "stroke-width": "1.5"})
+    return SubElement(parent, "circle", {"cx": str(x), "cy": str(y), "r": str(radius),
+                         "fill": fill, "stroke": stroke, "stroke-width": "1.5"})
+
+
 def render_svg(viz: Any, options: Any, *, width: int = 1200, height: int = 800,
                layout: str = "circle", positions: Mapping[str, tuple[float, float]] | None = None,
                background: bool = True) -> str:
@@ -206,8 +223,11 @@ def render_svg(viz: Any, options: Any, *, width: int = 1200, height: int = 800,
             bounds.extend(((sx, sy), (cx, cy), (ex, ey)))
         key = edge.type or "(untyped)"
         color = _color(_category(edge, options.edge_color_property, key))
-        element = SubElement(drawing, "path", {"d": path, "fill": "none", "stroke": color,
-                            "stroke-width": str(widths[edge.id]), "marker-end": f"url(#{markers[color]})"})
+        path_attrs = {"d": path, "fill": "none", "stroke": color,
+                      "stroke-width": str(widths[edge.id]), "marker-end": f"url(#{markers[color]})"}
+        if edge.dash:
+            path_attrs["stroke-dasharray"] = edge.dash
+        element = SubElement(drawing, "path", path_attrs)
         SubElement(element, "title").text = f"{edge.id} ({key})"
         if options.edge_labels == "all":
             label_layer.append((lx, ly - 4, _label(edge, options.edge_label_property, edge.type or edge.id, options.label_max_length), "middle"))
@@ -215,9 +235,9 @@ def render_svg(viz: Any, options: Any, *, width: int = 1200, height: int = 800,
         x, y = coords[node.id]
         radius = radii[node.id]
         bounds.extend(((x - radius - 1, y - radius - 1), (x + radius + 1, y + radius + 1)))
-        element = SubElement(drawing, "circle", {"cx": str(x), "cy": str(y), "r": str(radius),
-                            "fill": _color(_category(node, options.node_color_property, node.group or "(unlabeled)")), "stroke": fg, "stroke-width": "1.5"})
-        SubElement(element, "title").text = node.id
+        marker = _shape_element(drawing, node.shape, x, y, radius,
+                       _color(_category(node, options.node_color_property, node.group or "(unlabeled)")), fg)
+        SubElement(marker, "title").text = node.id
         if options.show_labels:
             label_layer.append((x + radius + 3, y + 4, _label(node, options.node_label_property, node.id, options.label_max_length), "start"))
     for x, y, text, anchor in label_layer:

@@ -95,6 +95,33 @@ is the recommended setting for both HTML and static SVG:
    # chains and intersections become explicit axiom nodes.
    figure = visualize_ontology(ontology, options=options)
 
+   # The whole inference chain: property graph + proof + ontology in one
+   # figure, linked by exact ID equality only.
+   figure = visualize_inference_chain(nodes, edges, explanation, ontology, options=options)
+
+Shape Vocabulary and the Inference Chain
+----------------------------------------
+
+Reasoning figures use one shape vocabulary in static SVG, the viewer, and
+browser exports: **circles** mark the data layer (property-graph nodes,
+asserted claims, input facts), **triangles** mark inferred conclusions
+(derived claims and facts), and **squares** mark schema (rules, absence
+checks, axiom nodes, ontology terms). Stored, structural, and lookup edges
+are solid; inference steps that derive a conclusion are **dotted**
+(``stroke-dasharray="6 4"``).
+
+``visualize_inference_chain(nodes, edges, explanation, ontology)`` composes
+all three layers into one figure: the property graph, one proof or claim
+explanation, and one ontology revision. With ``link_layers=True`` (the
+default), exact-equality cross-links join the layers without inventing
+mappings — a statement whose subject or object equals a graph node ID gains
+a solid ``mentions`` edge (the same convention as the current-graph
+projection, which uses node IDs as fact subjects and objects), and a
+statement whose predicate equals an ontology property term gains a solid
+``typed_as`` edge. Pass ``link_layers=False`` to render the layers side by
+side. Each layer is capped independently, so sample the graph layer first
+for very large databases.
+
 ``ClaimExplanation`` edges keep their stored ``derived_by`` (conclusion to
 rule), ``premise`` (rule to premise), and ``absent_premise`` direction, so
 arrows read as "depends on" from the highlighted root outward. Standalone

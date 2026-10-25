@@ -871,6 +871,9 @@ figure.save_svg("/tmp/proof.svg")  # layered tree by default, no force layout in
 `visualize_support_set(fact, supports, witness)`, and
 `visualize_ontology(ontology)` follow the same pattern; see
 `docs/visualization.rst` for edge directions and hierarchy mappings.
+`visualize_inference_chain(nodes, edges, explanation, ontology)` composes
+graph, proof, and ontology layers into one figure (circles = data,
+triangles = inferred, squares = schema, dotted = inference).
 
 ## Define Canonical Temporal Values
 

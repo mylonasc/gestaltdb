@@ -229,3 +229,85 @@ def test_reasoning_figures_reject_bad_inputs():
         support_set_graph(TypedFact("p", ["a"]), [])
     with pytest.raises(TypeError):
         ontology_graph(object())
+
+
+def test_reasoning_shapes_follow_data_inferred_schema_vocabulary():
+    from collections import Counter
+
+    graph, explanation, _, _ = _rule_graph()
+    try:
+        viz = claim_explanation_graph(explanation)
+        shapes = {node.id: node.shape for node in viz.nodes}
+        assert set(shapes.values()) == {"circle", "triangle", "square"}
+        assert shapes[explanation.root_version_id] == "triangle"
+        assert {edge.dash for edge in viz.edges} == {"6 4", None}
+        proof_viz = proof_explanation_graph(_proof_fixture())
+        kinds = {node.id: (node.shape, node.labels[0]) for node in proof_viz.nodes}
+        assert {shape for shape, _ in kinds.values()} == {"circle", "triangle"}
+        assert all(edge.dash == "6 4" for edge in proof_viz.edges)
+        assert Counter(node.shape for node in proof_viz.nodes)["triangle"] == 3
+    finally:
+        graph.close()
+
+
+def _chain_fixture():
+    from gestaltdb.ontology.model import Ontology, SubClassOf, SubPropertyOf
+
+    nodes = [{"id": "a", "labels": ["Person"]}, {"id": "b", "labels": ["Person"]},
+             {"id": "c", "labels": ["Person"]}]
+    edges = [{"id": "p1", "source": "a", "target": "b", "properties": {"type": "parent"}},
+             {"id": "p2", "source": "b", "target": "c", "properties": {"type": "parent"}}]
+    ontology = Ontology("fam", [SubClassOf("Person", "Agent"), SubPropertyOf("parent", "ancestor")])
+    return nodes, edges, ontology
+
+
+def test_inference_chain_composes_graph_proof_and_ontology():
+    from collections import Counter
+
+    from gestaltdb.viz import visualize_inference_chain
+    from gestaltdb.viz.chain import inference_chain_graph
+
+    nodes, edges, ontology = _chain_fixture()
+    explanation = _proof_fixture()
+    viz = inference_chain_graph(nodes, edges, explanation, ontology)
+    assert viz.meta["builder"] == "from_inference_chain"
+    assert viz.meta["suggested_layout"] == "tree"
+    assert viz.meta["link_layers"] is True
+    assert viz.meta["cross_links"] > 0
+    assert Counter(node.shape for node in viz.nodes) == {"circle": 5, "triangle": 3, "square": 4}
+    types = {(edge.type, edge.dash) for edge in viz.edges}
+    assert ("mentions", None) in types and ("typed_as", None) in types
+    assert ("parent-ancestor", "6 4") in types and ("parent", None) in types
+    assert viz.highlight_nodes == (proof_root_id(explanation),)
+    figure = visualize_inference_chain(nodes, edges, explanation, ontology,
+                                       options=VizOptions(node_label_property="label", edge_labels="all"))
+    assert figure.viz.to_json() == viz.to_json()
+    assert "polygon" in figure.as_svg() and "stroke-dasharray" in figure.as_svg()
+
+
+def proof_root_id(explanation):
+    from gestaltdb.viz.reasoning import _binary_fact_id
+
+    root = explanation.root
+    return _binary_fact_id(str(root.subject), str(root.predicate), str(root.object))
+
+
+def test_inference_chain_without_links_and_without_layers():
+    from gestaltdb.viz.chain import inference_chain_graph
+
+    nodes, edges, ontology = _chain_fixture()
+    explanation = _proof_fixture()
+    unlinked = inference_chain_graph(nodes, edges, explanation, ontology, link_layers=False)
+    assert unlinked.meta["cross_links"] == 0
+    assert {(edge.type, edge.dash) for edge in unlinked.edges} <= {
+        ("parent", None), ("parent-ancestor", "6 4"), ("transitive", "6 4"),
+        ("rdfs:subClassOf", None), ("rdfs:subPropertyOf", None)}
+    graph_only = inference_chain_graph(nodes, edges, None, ontology)
+    assert graph_only.meta["layer_node_counts"] == [3, 4]
+    assert graph_only.meta["cross_links"] == 0
+    with pytest.raises(ValueError, match="explanation or an ontology"):
+        inference_chain_graph(nodes, edges)
+    with pytest.raises(ValueError, match="link_layers"):
+        inference_chain_graph(nodes, edges, explanation, link_layers="yes")
+    with pytest.raises(TypeError, match="ClaimExplanation"):
+        inference_chain_graph(nodes, edges, object())

@@ -203,3 +203,34 @@ def test_ir_module_has_no_third_party_runtime_dependency():
 
 def test_default_caps_match_epic():
     assert (DEFAULT_MAX_NODES, DEFAULT_MAX_EDGES) == (2000, 5000)
+
+
+def test_node_shapes_and_edge_dashes_round_trip():
+    from gestaltdb.viz.ir import VizEdge, VizNode
+
+    viz = VizGraph.from_nodes_edges(
+        [{"id": "a", "shape": "triangle"}, {"id": "b", "shape": "square"}, {"id": "c"}],
+        [{"id": "e1", "source": "a", "target": "b", "dash": "6 4"}, {"id": "e2", "source": "b", "target": "c"}])
+    by_id = {node.id: node for node in viz.nodes}
+    assert (by_id["a"].shape, by_id["b"].shape, by_id["c"].shape) == ("triangle", "square", "circle")
+    by_edge = {edge.id: edge for edge in viz.edges}
+    assert by_edge["e1"].dash == "6 4" and by_edge["e2"].dash is None
+    payload = viz.to_dict()
+    assert [node["shape"] for node in payload["nodes"]] == ["triangle", "square", "circle"]
+    assert [edge["dash"] for edge in payload["edges"]] == ["6 4", None]
+    assert VizNode(id="x", shape="triangle").shape == "triangle"
+    assert VizEdge(id="e", source="x", target="x").dash is None
+
+
+def test_invalid_shapes_and_dashes_fail_closed():
+    from gestaltdb.viz.ir import VizEdge, VizNode
+
+    with pytest.raises(ValueError, match="shape"):
+        VizGraph.from_nodes_edges([{"id": "a", "shape": "hexagon"}], [])
+    with pytest.raises(ValueError, match="dash"):
+        VizGraph.from_nodes_edges([{"id": "a"}, {"id": "b"}],
+                                  [{"id": "e", "source": "a", "target": "b", "dash": ""}])
+    with pytest.raises(ValueError, match="shape"):
+        VizNode(id="x", shape="star")
+    with pytest.raises(ValueError, match="dash"):
+        VizEdge(id="e", source="x", target="x", dash=42)

@@ -83,3 +83,4 @@ test("view state validates topology, complete coordinates, settings and identity
   const settings = saved(); (settings.settings as unknown as Record<string, unknown>).showLabels = "yes";
   expect(() => parseViewState(settings, payload)).toThrow("boolean");
 });
+

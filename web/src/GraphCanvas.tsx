@@ -40,11 +40,13 @@ interface SimNode extends d3.SimulationNodeDatum {
   uid: string;
   group: string;
   radius: number;
+  shape: "circle" | "triangle" | "square";
 }
 
 interface SimLink extends d3.SimulationLinkDatum<SimNode> {
   uid: string;
   etype: string;
+  dash: string | null;
 }
 
 /** Deterministic layered coordinates (top-down tree layout).
@@ -251,6 +253,7 @@ export function GraphCanvas({
         uid: node.id,
         group: groupKey(node),
         radius: scalesRef.current.radius(node),
+        shape: node.shape ?? "circle",
         x: Math.cos(angle) * radius,
         y: Math.sin(angle) * radius,
       });
@@ -261,7 +264,7 @@ export function GraphCanvas({
       const source = byId.get(edge.source);
       const target = byId.get(edge.target);
       if (!source || !target) continue;
-      links.push({ uid: edge.id, source, target, etype: typeKey(edge) });
+      links.push({ uid: edge.id, source, target, etype: typeKey(edge), dash: edge.dash ?? null });
     }
     nodesRef.current = nodes;
     linksRef.current = links;
@@ -323,6 +326,7 @@ export function GraphCanvas({
       .attr("class", "edge")
       .attr("fill", "none")
       .attr("stroke-width", 1.2)
+      .attr("stroke-dasharray", (link) => link.dash)
       .attr("stroke-opacity", 0.7);
     edgeSelRef.current = edgeSel;
 
@@ -407,11 +411,12 @@ export function GraphCanvas({
         renderPositions(); notifyPins();
       });
     nodeSel
-      .append("circle")
-      .attr("r", node => node.radius)
-      .attr("stroke", "currentColor")
-      .attr("stroke-width", 1.2);
-    nodeSel.append("title").text((node) => node.uid);
+      .each(function (node) {
+        const shape = node.shape === "triangle" ? "polygon" : node.shape === "square" ? "rect" : "circle";
+        d3.select(this).append(shape).attr("class", "node-shape");
+      })
+      .append("title")
+      .text((node) => node.uid);
     nodeSelRef.current = nodeSel;
 
     const labelSel = labelLayer
@@ -460,6 +465,30 @@ export function GraphCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload]);
 
+  // Paint every node marker from its shape: circles for data, triangles for
+  // inferred conclusions, squares for schema. Geometry refreshes here so
+  // attribute-driven radius changes reshape triangles and squares too.
+  function paintNodeShapes() {
+    nodeSelRef.current
+      ?.selectAll<SVGElement, SimNode>(".node-shape")
+      .each(function (node) {
+        const element = d3.select(this);
+        element
+          .attr("fill", scalesRef.current.nodeColor(nodeEntities.get(node.uid)!))
+          .attr("stroke", "currentColor")
+          .attr("stroke-width", 1.5);
+        if (node.shape === "triangle") {
+          const radius = node.radius;
+          element.attr("points", `0,${-radius} ${radius * 0.95},${radius * 0.75} ${-radius * 0.95},${radius * 0.75}`);
+        } else if (node.shape === "square") {
+          const half = node.radius * 0.9;
+          element.attr("x", -half).attr("y", -half).attr("width", half * 2).attr("height", half * 2);
+        } else {
+          element.attr("r", node.radius);
+        }
+      });
+  }
+
   function applyView() {
     const view = viewRef.current;
     const hiddenNodeSet = new Set(view.hiddenNodes);
@@ -468,12 +497,11 @@ export function GraphCanvas({
     const dimEdgeSet = new Set(view.dimEdges);
     const selected = view.selection;
     for (const node of nodesRef.current) node.radius = scalesRef.current.radius(nodeEntities.get(node.uid)!);
+    paintNodeShapes();
     nodeSelRef.current
       ?.attr("display", (node) => (hiddenNodeSet.has(node.uid) ? "none" : null))
       .attr("opacity", (node) => selected?.kind === "node" && selected.id === node.uid ? 1 : (dimNodeSet.has(node.uid) ? 0.15 : 1))
       .classed("selected", (node) => selected?.kind === "node" && selected.id === node.uid);
-    nodeSelRef.current?.select("circle").attr("r", node => node.radius)
-      .attr("fill", node => scalesRef.current.nodeColor(nodeEntities.get(node.uid)!));
     labelSelRef.current
       ?.text((node) => {
         const entity = nodeEntities.get(node.uid)!;

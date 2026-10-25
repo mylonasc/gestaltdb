@@ -37,6 +37,13 @@ test("reasoning artifacts open in a deterministic pinned tree without force layo
   const premiseY = yOf(await page.getByRole("button", { name: premise }).getAttribute("transform"));
   // SVG y grows downward: inputs on top rows, the conclusion at the bottom.
   expect(premiseY).toBeLessThan(conclusionY);
+  // Shape vocabulary: input facts are circles, derived facts are triangles,
+  // and every inference step renders dotted.
+  await expect(page.locator(".node polygon")).toHaveCount(3);
+  await expect(page.locator(".node circle")).toHaveCount(2);
+  const dashes = await page.locator(".edge").evaluateAll(edges => edges.map(edge => edge.getAttribute("stroke-dasharray")));
+  expect(dashes).toHaveLength(4);
+  expect(dashes.every(dash => dash === "6 4")).toBe(true);
   // Reset layout hands control back to the force simulation (unpinned, reseeded).
   await page.getByRole("button", { name: "Reset layout" }).click();
   await page.waitForTimeout(300);

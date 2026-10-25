@@ -24,6 +24,10 @@ Entry points (import from `gestaltdb.viz.api`, not the package root):
   typed justifications with the chosen `RankedWitness` highlighted.
 - `visualize_ontology(ontology)` for class/property hierarchies (binary
   axioms as typed edges; chains/intersections as explicit axiom nodes).
+- `visualize_inference_chain(nodes, edges, explanation, ontology)` for the
+  whole chain in one figure: graph + proof/claim explanation + ontology,
+  linked by exact ID equality (`mentions`/`typed_as`) unless
+  `link_layers=False`.
 - `graph.visualize(cypher=...)` or `graph.visualize(seeds=..., pattern=...)`
   as a `GraphDB` method.
 - `VizOptions` for caps (defaults 2000 nodes / 5000 edges), absolute
@@ -41,13 +45,15 @@ Jupyter `_repr_html_()`. Caps truncate deterministically with a
 ceiling raise `VizCapExceededError` naming the sampling alternative.
 Reasoning builders accept the same caps and record `meta["builder"]`
 (`from_claim_explanation`, `from_inference_audit`,
-`from_proof_explanation`, `from_support_set`, `from_ontology`) plus
-`meta["suggested_layout"] = "tree"`. Every reasoning node carries a
-readable `label` property, so
+`from_proof_explanation`, `from_support_set`, `from_ontology`,
+`from_inference_chain`) plus `meta["suggested_layout"] = "tree"`. Every
+reasoning node carries a readable `label` property, so
 `VizOptions(node_label_property="label", edge_labels="all")` is the
-recommended setting for HTML and static SVG alike. The viewer opens
-reasoning artifacts pre-arranged (and pinned) as a layered tree; the Tree
-layout button re-applies it and Reset layout returns to force-directed.
+recommended setting for HTML and static SVG alike. Shapes encode the layer:
+circles for data, triangles for inferred conclusions, squares for schema;
+dotted edges mark inference steps. The viewer opens reasoning artifacts
+pre-arranged (and pinned) as a layered tree; the Tree layout button
+re-applies it and Reset layout returns to force-directed.
 
 `figure.as_svg()` / `figure.save_svg(path)` produce dependency-free static SVG
 with `layout="circle"` (default for graph figures), `layout="grid"`,

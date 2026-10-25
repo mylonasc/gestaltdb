@@ -6,35 +6,31 @@ packaged offline D3/React viewer, Jupyter ``_repr_html_`` iframe, and
 dependency-free SVG renderer with no new runtime dependency and no
 front-end rebuild.
 
-Covered inputs (all read-only, all duck-typed so callers never need to
-import reasoning internals for type checks):
-
-- ``ClaimExplanation`` from ``graph.rules.explain`` — claim/rule/absence
-  derivation graphs with ``derived_by`` / ``premise`` / ``absent_premise``
-  relationships and the root version highlighted.
-- ``InferenceExplanation`` audit documents from
-  ``gestaltdb.inference.export_inference`` (object or ``to_dict()`` form) —
-  the same derivation graph rebuilt from plain JSON-safe data.
-- ``Explanation`` / ``ProofTrace.explain`` witnesses from the standalone
-  Datalog layer (``reasoning.proofs`` / ``EvaluationResult.explain``) —
-  collapsed fact-to-fact proof trees whose edge types are rule IDs.
-- Typed support sets (``reasoning.maintenance.DependencyIndex`` supports
-  plus an optional ``RankedWitness``) — all alternative justifications for
-  one fact, with the chosen witness highlighted when supplied.
-- ``Ontology`` revisions (``ontology.model``) — class/property hierarchy
-  graphs where binary axioms become typed edges and n-ary axioms
-  (property chains, intersections) become explicit axiom nodes.
-
-Standard library only. Every builder sorts IDs and edges deterministically
-and funnels through ``VizGraph.from_nodes_edges`` so caps, absolute
-ceilings, truncation accounting, and ``meta["builder"]`` provenance behave
+Covered inputs (all read-only and duck-typed): ``ClaimExplanation``
+derivation graphs, ``InferenceExplanation`` audit documents, standalone
+``Explanation`` proof witnesses, typed support sets with an optional
+``RankedWitness``, and ``Ontology`` revisions. Every builder sorts IDs and
+edges deterministically and funnels through ``VizGraph.from_nodes_edges``
+so caps, truncation accounting, and ``meta["builder"]`` provenance behave
 exactly like the graph builders.
+
+Shape vocabulary (shared with the static SVG renderer and the viewer):
+circles mark concrete data (graph nodes, asserted claims, input facts),
+triangles mark inferred conclusions (derived claims and facts), and squares
+mark schema (rules, absence checks, axiom nodes, ontology terms). Solid
+edges mark stored, structural, and lookup relationships; dotted edges
+(INFERENCE_DASH) mark inference steps that derive a conclusion.
 """
 
 from __future__ import annotations
 
 import json
 from typing import Any, Mapping
+
+
+#: SVG dash pattern marking inference steps (conclusion-from-rule derivations).
+#: Lookup, grounding, and hierarchy edges stay solid.
+INFERENCE_DASH = "6 4"
 
 
 def _short_digest(value: str, length: int = 12) -> str:
@@ -114,6 +110,10 @@ def claim_explanation_graph(
     root_version_id = str(getattr(explanation, "root_version_id", ""))
     claim_id = str(getattr(explanation, "claim_id", ""))
     source_truncated = bool(getattr(explanation, "truncated", False))
+    # Conclusions of a derivation step render as triangles; asserted premises
+    # stay circles. The edge pass below reuses the same dotted convention.
+    derived = {str(getattr(edge, "source_id", "")) for edge in (edges or ())
+               if str(getattr(edge, "relationship", "")) == "derived_by"}
 
     node_values: list[dict[str, Any]] = []
     for node in nodes:
@@ -150,6 +150,7 @@ def claim_explanation_graph(
                     properties[key] = enum_value if isinstance(enum_value, (str, int)) else str(enum_value)
             properties["label"] = properties["statement"]
             labels = ("claim",)
+            shape = "triangle" if node_id in derived else "circle"
         elif kind == "rule":
             rule_id = str(getattr(value, "rule_id", node_id))
             then = getattr(value, "then", None)
@@ -170,6 +171,7 @@ def claim_explanation_graph(
                 except TypeError:
                     pass
             labels = ("rule",)
+            shape = "square"
         elif kind == "absence":
             properties = {
                 "kind": "absence",
@@ -185,9 +187,11 @@ def claim_explanation_graph(
                 f"¬{properties['predicate']}({properties['subject']},{properties['object']})"
             )
             labels = ("absence",)
+            shape = "square"
         else:  # pragma: no cover - fail closed on unknown future kinds
             raise TypeError(f"unknown explanation node kind: {kind!r}")
-        node_values.append({"id": node_id, "labels": list(labels), "properties": properties})
+        node_values.append({"id": node_id, "labels": list(labels),
+                            "properties": properties, "shape": shape})
 
     edge_values: list[dict[str, Any]] = []
     for edge in edges:
@@ -198,12 +202,15 @@ def claim_explanation_graph(
         properties: dict[str, Any] = {"relationship": relationship}
         if ordinal is not None:
             properties["premise_ordinal"] = ordinal
-        edge_values.append({
+        entry: dict[str, Any] = {
             "id": f"{source} | {relationship} | {target} | {ordinal}",
             "source": source,
             "target": target,
             "properties": {"type": relationship, **properties},
-        })
+        }
+        if relationship == "derived_by":
+            entry["dash"] = INFERENCE_DASH
+        edge_values.append(entry)
 
     payload_meta = dict(meta or {})
     payload_meta["builder"] = "from_claim_explanation"
@@ -258,12 +265,17 @@ def inference_audit_graph(
 
     root_version_id = str(document.get("root_version_id", ""))
     source_truncated = bool(document.get("truncated", False))
+    # Conclusions of a recorded justification render as triangles; asserted
+    # premises stay circles, matching claim_explanation_graph.
+    derived = {str(support.get("conclusion", "")) for support in document.get("justifications", ())
+               if isinstance(support, Mapping) and support.get("conclusion") and support.get("rule")}
     node_values: list[dict[str, Any]] = []
     for entry in document.get("nodes", ()):
         if not isinstance(entry, Mapping):
             continue
         node_id = str(entry.get("id", ""))
         kind = str(entry.get("kind", ""))
+        shape = "square" if kind in ("rule", "absence") else "circle"
         properties: dict[str, Any] = {"kind": kind or "claim"}
         if kind in ("claim", "model_output"):
             claim = entry.get("claim", {})
@@ -281,6 +293,7 @@ def inference_audit_graph(
                 if entry.get(key) is not None:
                     properties[key] = entry[key]
             properties.setdefault("label", properties.get("statement", node_id))
+            shape = "triangle" if node_id in derived else "circle"
         elif kind == "rule":
             value = entry.get("value", {})
             if isinstance(value, Mapping):
@@ -303,7 +316,8 @@ def inference_audit_graph(
         else:
             properties["kind"] = kind or "claim"
         labels = (kind or "claim",)
-        node_values.append({"id": node_id, "labels": list(labels), "properties": properties})
+        node_values.append({"id": node_id, "labels": list(labels),
+                            "properties": properties, "shape": shape})
 
     edge_values: list[dict[str, Any]] = []
     for support in document.get("justifications", ()):
@@ -319,6 +333,7 @@ def inference_audit_graph(
                 "source": conclusion,
                 "target": rule,
                 "properties": {"type": "derived_by", "relationship": "derived_by"},
+                "dash": INFERENCE_DASH,
             })
         for ordinal, premise in enumerate(premises or ()):
             premise_id = str(premise)
@@ -419,7 +434,8 @@ def proof_explanation_graph(
                 evidence_items = []
             if evidence_items:
                 properties["evidence"] = evidence_items
-            node_values.append({"id": fact_id, "labels": [properties["kind"]], "properties": properties})
+            node_values.append({"id": fact_id, "labels": [properties["kind"]], "properties": properties,
+                                "shape": "triangle" if rule is not None else "circle"})
         for premise in getattr(witness, "premises", ()) or ():
             p_subject, p_predicate, p_obj = fact_parts(premise)
             premise_id = _binary_fact_id(p_subject, p_predicate, p_obj)
@@ -428,6 +444,7 @@ def proof_explanation_graph(
                 node_values.append({
                     "id": premise_id,
                     "labels": ["input"],
+                    "shape": "circle",
                     "properties": {
                         "kind": "input",
                         "statement": _fact_label([p_subject, p_predicate, p_obj]),
@@ -441,7 +458,11 @@ def proof_explanation_graph(
                 "id": f"{premise_id} | {rule_id or 'supports'} | {fact_id}",
                 "source": premise_id,
                 "target": fact_id,
-                "properties": {"type": rule_id or "supports", "rule_id": rule_id or "supports"},
+                "properties": {
+                    "type": rule_id or "supports",
+                    "rule_id": rule_id or "supports"
+                },
+                "dash": INFERENCE_DASH,
             })
 
     payload_meta = dict(meta or {})
@@ -509,6 +530,7 @@ def support_set_graph(
     node_values = [{
         "id": conclusion_id,
         "labels": ["conclusion"],
+        "shape": "triangle",
         "properties": {"kind": "conclusion", "statement": conclusion_label,
                        "label": conclusion_label, "predicate": str(predicate)},
     }]
@@ -539,6 +561,7 @@ def support_set_graph(
         node_values.append({
             "id": support_id,
             "labels": ["support"],
+            "shape": "square",
             "properties": {"kind": "support", "rule_id": rule_id, "label": rule_id,
                            "digest": _short_digest(getattr(support, "digest", support_id))},
         })
@@ -547,12 +570,14 @@ def support_set_graph(
             "source": conclusion_id,
             "target": support_id,
             "properties": {"type": "derived_by", "rule_id": rule_id},
+            "dash": INFERENCE_DASH,
         })
         for ordinal, premise in enumerate(premises_of(support)):
             premise_id = premise_ids[ordinal]
             node_values.append({
                 "id": premise_id,
                 "labels": ["premise"],
+                "shape": "circle",
                 "properties": {
                     "kind": "premise",
                     "statement": _typed_fact_label(
@@ -694,6 +719,7 @@ def ontology_graph(
             axiom_id = str(getattr(axiom, "axiom_id", f"chain:{first}+{second}=>{result}"))
             node_values[axiom_id] = {
                 "id": axiom_id, "labels": ["axiom"],
+                "shape": "square",
                 "properties": {"kind": "axiom", "axiom": name,
                                "statement": f"{first} ∘ {second} ⇒ {result}",
                                "label": f"{first} ∘ {second} ⇒ {result}"},
@@ -710,6 +736,7 @@ def ontology_graph(
             axiom_id = str(getattr(axiom, "axiom_id", f"intersection:{'+'.join(sorted(members))}=>{sup}"))
             node_values[axiom_id] = {
                 "id": axiom_id, "labels": ["axiom"],
+                "shape": "square",
                 "properties": {"kind": "axiom", "axiom": name,
                                "statement": f"{' ⊓ '.join(sorted(members))} ⇒ {sup}",
                                "label": f"{' ⊓ '.join(sorted(members))} ⇒ {sup}"},
@@ -732,6 +759,7 @@ def ontology_graph(
         label = next(iter(kinds)) if len(kinds) == 1 else "term"
         node_values.setdefault(term, {
             "id": term, "labels": [label],
+            "shape": "square",
             "properties": {"kind": label, "term": term, "label": term},
         })
         if len(kinds) > 1:
