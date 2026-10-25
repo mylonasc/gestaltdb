@@ -633,3 +633,15 @@ both targeting `feature/onto-dev-epic-2`, no main merge or release.
   `planning/reasoning-engine/overlap-dispositions.md` records unify-vs-keep
   for 10 areas with the D2 rule (no grand rewrite, no digest/round-count
   change); PR #377 pending.
+
+### Durability gate and phase exits (#370, #381, RE-E3/E4/E5)
+
+Maintainer-approved defer recorded in #381
+(`tech-debt`/`enhancement`/`reliability-hardening`, created and closed
+2026-10-25, sub-issue of #370): implemented SIGKILL/cross-process evidence
+(PR #379 at `bb81ca6`, `tests/test_reasoning_crash_evidence.py` 7/7) versus
+seven explicitly deferred power-loss/hardware items. #370 closed with the
+four acceptance items linked; phase epics #159/#160/#161 closed as
+completed with evidence comments (children all closed, gates met, broader
+non-deliveries kept explicit). Remaining open: #194 (optional native
+follow-up), #200/#371 (design accounting). No main merge, tag, or release.
