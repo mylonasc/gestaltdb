@@ -34,6 +34,29 @@ checks are not universal identity admission or concurrent atomic publication.
 
 ## Ordered implementation
 
+### Actual admitted native-source measurement continuation (#194)
+
+Dedicated `feature/re-194-native-evidence` / `re-194-native-evidence` based on
+`3ab78ab` (#366 merged after 13 exact-head checks; post-merge watcher active).
+Refreshed owner/open-PR audit found no competing implementation. Add separately
+named `native-authenticated` real-pipeline method; preserve old assertion-only
+benchmark methods and explicitly label their different source contracts. Record
+native row/candidate profiles and flushed worker-stage checkpoints so timeouts
+remain attributable without presenting partial work as successful timings.
+Small exact evidence/analytical recursive closure smoke precedes staged clean
+committed-source measurements. Retain canonical point authentication costs,
+bounded/timeout evidence and no-adoption decision; do not infer the new source's
+performance from older restricted benchmark decoder results.
+
+#366 post-merge gates passed: Ontology `40169585486` / readiness `40169585473`.
+Harness extension validation: **29 focused passed**, full optional suite
+**3,327 passed / 2 skipped** (67.21s). Planned serial staged collection from a
+clean committed tree, output outside checkout: PyRex selective 1K first/primed
+three repeats, then a 10K first-read gate (120-second worker limit), then a
+100K first-read gate only if the 10K comparison completes. Retain failures and
+stop escalation rather than spending a large matrix on a demonstrably slow
+correctness baseline. No current measurement or performance result presumed.
+
 ### Authenticated native claim source continuation (#194)
 
 Dedicated `feature/re-194-native-admission` / `re-194-native-admission`, based on

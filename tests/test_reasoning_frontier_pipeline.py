@@ -244,3 +244,43 @@ def test_committed_explicit_budget_reports_have_complete_exact_parity():
             else:
                 assert sample["polars_max_intermediate_rows"] is None
     assert matrix == {(backend, shape) for backend in ("lmdb", "pyrex") for shape in ("selective", "sparse")}
+
+
+@pytest.mark.parametrize("shape", ["selective", "sparse", "dense"])
+def test_actual_authenticated_native_method_is_distinct_and_exact(tmp_path, shape, monkeypatch):
+    import benchmarks.reasoning_frontier_pipeline as benchmark
+    pytest.importorskip("pyrex")
+    pytest.importorskip("pyarrow")
+    path = tmp_path / "db"
+    manifest = fixture(path, 12, shape, "pyrex")
+    (tmp_path / "fixture.json").write_text(json.dumps(manifest))
+    reference = worker(path, 12, shape, "indexed-python", "first")
+    def forbidden(*args, **kwargs):
+        pytest.fail("authenticated source used benchmark-only decoder")
+    monkeypatch.setattr(benchmark, "native_evidence", forbidden)
+    native = worker(path, 12, shape, "native-authenticated", "first")
+    warm = worker(path, 12, shape, "native-authenticated", "warm")
+    assert native["source_contract"] == warm["source_contract"] == "authenticated-native-full-history"
+    for sample in (native, warm):
+        assert sample["closure_digest"] == reference["closure_digest"]
+        assert sample["evidence_digest"] == reference["evidence_digest"] == manifest["evidence_digest"]
+        for field in ("native_raw_rows", "native_visible_records", "native_logical_claims", "native_resolved_claims"):
+            assert sample["metrics"][field] == 12
+        assert sample["status"] == "ok" and sample["polars_max_intermediate_rows"] is None
+
+
+def test_timeout_and_error_keep_worker_stage_without_partial_result():
+    code = "import sys,time; print('PIPELINE_PROGRESS {\"stage\":\"extraction\"}',file=sys.stderr,flush=True); time.sleep(5)"
+    result = call_worker([sys.executable, "-c", code], .5)
+    assert result["status"] == "timeout" and result["last_stage"] == "extraction"
+    assert "metrics" not in result and "closure_digest" not in result
+    failed = code.replace("time.sleep(5)", "raise RuntimeError('injected')")
+    result = call_worker([sys.executable, "-c", failed], 5)
+    assert result["status"] == "error" and result["last_stage"] == "extraction"
+
+
+def test_checkpoint_parser_accepts_timeout_bytes_and_ignores_noise():
+    from benchmarks.reasoning_frontier_pipeline import last_checkpoint
+    assert last_checkpoint(None) is None
+    assert last_checkpoint(b'noise\nPIPELINE_PROGRESS {"stage":"extraction"}\nPIPELINE_PROGRESS invalid\n') == "extraction"
+    assert last_checkpoint('PIPELINE_PROGRESS {"stage":1}') is None
