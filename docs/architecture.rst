@@ -236,6 +236,13 @@ For example, pass only read authority to an application component::
         finally:
             graph.close()
 
+File coordination lives in ``gestaltdb.concurrency`` rather than in GraphDB.
+The shared default ``LockManager`` maintains canonical identity only for live
+locks (holders and waiters retain strong references); unused paths are
+reclaimed. Identity initialization, temporal writers and durable-session CAS
+use the same reentrant file-lock abstraction. Lock files themselves are never
+unlinked, and independent processes still coordinate through OS file locks.
+
 The decomposition is useful, with four important boundaries:
 
 * ``GraphDB`` is the public integration facade: it owns handle lifecycle,

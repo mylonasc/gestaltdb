@@ -5,7 +5,6 @@ import pickle
 import json
 import hashlib
 import copy
-import os
 import random
 import shutil
 import threading
@@ -148,6 +147,7 @@ from ._graph.entities import (
     node_key_to_bytes as _node_key_to_bytes,
 )
 from ._graph.scopes import configure_snapshot_child, configure_transaction_child
+from .concurrency import DEFAULT_LOCK_MANAGER, ReentrantFileLock as _TemporalWriterLock
 
 
 
@@ -159,76 +159,8 @@ _MANIFEST_METADATA_KEY = b"schema:manifest"
 _DATABASE_ID_METADATA_KEY = b"schema:database_identity:v1"
 _INDEX_REBUILD_BATCH_SIZE = 100_000
 _TEMPORAL_WRITER_LOCK_FILENAME = ".gestaltdb_temporal_writer.lock"
-_DATABASE_ID_LOCK = threading.Lock()
-_TEMPORAL_WRITER_LOCKS_LOCK = threading.Lock()
-_TEMPORAL_WRITER_LOCKS = {}
-
-
-class _TemporalWriterLock:
-    def __init__(self, path: Path):
-        self.path = path
-        self._lock = threading.RLock()
-        self._depth = 0
-        self._handle = None
-
-    def __enter__(self):
-        self._lock.acquire()
-        try:
-            if self._depth == 0:
-                handle = self.path.open("a+b")
-                try:
-                    if os.name == "posix":
-                        import fcntl
-
-                        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-                    elif os.name == "nt":  # pragma: no cover - Windows-only
-                        import msvcrt
-
-                        handle.write(b"\0")
-                        handle.flush()
-                        handle.seek(0)
-                        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-                    else:  # pragma: no cover - unsupported platform
-                        raise RuntimeError("temporal writer locking is unsupported on this platform")
-                except Exception:
-                    handle.close()
-                    raise
-                self._handle = handle
-            self._depth += 1
-            return self
-        except Exception:
-            self._lock.release()
-            raise
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self._depth -= 1
-        try:
-            if self._depth == 0:
-                handle = self._handle
-                self._handle = None
-                if os.name == "posix":
-                    import fcntl
-
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-                elif os.name == "nt":  # pragma: no cover - Windows-only
-                    import msvcrt
-
-                    handle.seek(0)
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-                handle.close()
-        finally:
-            self._lock.release()
-
-
 def _temporal_writer_lock(path: Path) -> _TemporalWriterLock:
-    canonical = path.resolve()
-    key = str(canonical)
-    with _TEMPORAL_WRITER_LOCKS_LOCK:
-        lock = _TEMPORAL_WRITER_LOCKS.get(key)
-        if lock is None:
-            lock = _TemporalWriterLock(canonical / _TEMPORAL_WRITER_LOCK_FILENAME)
-            _TEMPORAL_WRITER_LOCKS[key] = lock
-        return lock
+    return DEFAULT_LOCK_MANAGER.for_path(path / _TEMPORAL_WRITER_LOCK_FILENAME)
 
 
 # Entity/value helpers live in `gestaltdb._graph.entities`; re-exported above.
@@ -299,6 +231,7 @@ class GraphDB:
         self._manifest: dict | None = None
         self._database_id: str | None = None
         self._temporal_write_lock = threading.RLock()
+        self._lock_manager = DEFAULT_LOCK_MANAGER
         self._temporal_transaction_bound = False
         self._temporal_clock = lambda: datetime.datetime.now(datetime.timezone.utc)
         self.entity_serializer = GraphEntityDictSerializer(
@@ -420,7 +353,7 @@ class GraphDB:
     def _initialize_database_id(self, expected: str | None) -> str:
         """Persist or reconcile the database UUID under a local filesystem lock."""
         value = _lifecycle.initialize_database_id(
-            self.store, self._store_path, _DATABASE_ID_LOCK,
+            self.store, self._store_path, self._lock_manager,
             _DATABASE_ID_METADATA_KEY, expected,
         )
         self._database_id = value
@@ -2270,7 +2203,7 @@ class GraphDB:
                 yield
             return
         self.database_id
-        with _temporal_writer_lock(self._store_path):
+        with self._lock_manager.for_path(self._store_path / _TEMPORAL_WRITER_LOCK_FILENAME):
             yield
 
     @staticmethod

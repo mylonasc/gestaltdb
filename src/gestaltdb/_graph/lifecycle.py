@@ -10,9 +10,8 @@ class resolution. ``MANIFEST_FILENAME`` and friends are re-exported from
 from __future__ import annotations
 
 import json
-import os
-import threading
 import uuid
+from contextlib import nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -24,9 +23,6 @@ from .registry import backend_registry, gestaltdb_version, serializer_registry, 
 MANIFEST_FILENAME = "gestaltdb_manifest.json"
 MANIFEST_FORMAT_VERSION = 1
 MANIFEST_METADATA_KEY = b"schema:manifest"
-
-DATABASE_ID_LOCK = threading.Lock()
-
 
 def backend_class(name: str):
     """Return the backend store class for a manifest name."""
@@ -56,7 +52,7 @@ def read_manifest_file(path: Path) -> dict:
 
 
 def initialize_database_id(store: KVStore, store_path: Path | None,
-                            process_lock: threading.Lock,
+                            lock_manager,
                             database_id_key: bytes, expected: str | None) -> str:
     """Persist or reconcile the database UUID under a filesystem lock."""
     if expected is not None:
@@ -64,38 +60,10 @@ def initialize_database_id(store: KVStore, store_path: Path | None,
             expected = str(uuid.UUID(expected))
         except (AttributeError, TypeError, ValueError) as exc:
             raise ValueError("invalid database identity in root manifest") from exc
-    lock_handle = None
-    with process_lock:
-        if store_path is not None:
-            lock_path = store_path / ".gestaltdb_identity.lock"
-            lock_handle = lock_path.open("a+b")
-            if os.name == "posix":
-                import fcntl
-
-                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
-            elif os.name == "nt":  # pragma: no cover - Windows-only
-                import msvcrt
-
-                lock_handle.write(b"\0")
-                lock_handle.flush()
-                lock_handle.seek(0)
-                msvcrt.locking(lock_handle.fileno(), msvcrt.LK_LOCK, 1)
-            else:  # pragma: no cover - unsupported platform
-                raise RuntimeError("database identity locking is unsupported on this platform")
-        try:
-            return initialize_database_id_locked(store, store_path, database_id_key, expected)
-        finally:
-            if lock_handle is not None:
-                if os.name == "posix":
-                    import fcntl
-
-                    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
-                elif os.name == "nt":  # pragma: no cover - Windows-only
-                    import msvcrt
-
-                    lock_handle.seek(0)
-                    msvcrt.locking(lock_handle.fileno(), msvcrt.LK_UNLCK, 1)
-                lock_handle.close()
+    guard = (nullcontext() if store_path is None else
+             lock_manager.for_path(store_path / ".gestaltdb_identity.lock"))
+    with guard:
+        return initialize_database_id_locked(store, store_path, database_id_key, expected)
 
 
 def initialize_database_id_locked(store: KVStore, store_path: Path | None,

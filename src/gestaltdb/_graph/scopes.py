@@ -46,6 +46,7 @@ def configure_transaction_child(parent: GraphDB, child: GraphDB) -> None:
     child._manifest = parent._manifest
     child._database_id = parent._database_id
     child._temporal_write_lock = parent._temporal_write_lock
+    child._lock_manager = parent._lock_manager
     child._temporal_transaction_bound = True
     child._temporal_clock = parent._temporal_clock
 

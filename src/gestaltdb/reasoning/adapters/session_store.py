@@ -31,10 +31,10 @@ import json
 import os
 from pathlib import Path
 import tempfile
-import threading
 from typing import Callable
 
-from ...graphdb import GraphDB, _TemporalWriterLock
+from ...graphdb import GraphDB
+from ...concurrency import DEFAULT_LOCK_MANAGER
 from ..catalog import RuleCatalog
 from ..evidence_ledger import AssertionVersion, EvidenceLedger
 from ..maintenance import DependencyIndex, Support
@@ -60,8 +60,6 @@ from .sessions import (
 
 SESSION_FORMAT = "gestaltdb-reasoning-session-v1"
 SESSION_FORMAT_VERSION = 1
-_SESSION_FILE_LOCKS = {}
-_SESSION_FILE_LOCKS_GUARD = threading.Lock()
 
 
 def _digest(payload: object) -> str:
@@ -409,8 +407,7 @@ def _session_file_guard(path):
     target = Path(path).resolve()
     target.parent.mkdir(parents=True, exist_ok=True)
     lock_path = target.with_name(f".{target.name}.session.lock")
-    with _SESSION_FILE_LOCKS_GUARD:
-        return _SESSION_FILE_LOCKS.setdefault(str(lock_path), _TemporalWriterLock(lock_path))
+    return DEFAULT_LOCK_MANAGER.for_path(lock_path)
 
 
 def _read_state(path: Path, max_bytes: int):

@@ -54,6 +54,16 @@ calling GraphDB. Validate real-backend rollback/index updates, transaction-child
 binding, and snapshot-local state. Edge deletion cascades remain a documented
 dependency on current-edge operations, not temporal claims.
 
+Stage A implemented: `gestaltdb.concurrency.LockManager` owns canonical weak
+lock identities and `ReentrantFileLock` owns OS/thread locking. Database
+identity, temporal writers and durable-session CAS now share this abstraction;
+transaction children inherit their owner's manager. GraphDB retains only the
+historical private lock-class alias/helper for compatibility. Six new tests
+cover live identity, nested exceptions, failed acquisition, live waiters,
+unrelated paths and actual process exclusion. Focused concurrency/durability/
+scope/interface suites: 213 passed. Windows branches retain the existing
+platform algorithm; validation so far is on Linux, not a Windows claim.
+
 ### Stage C — current edges, indexes and ingestion
 
 Migrate edge/index repositories to the same scope binding; replace duplicated
