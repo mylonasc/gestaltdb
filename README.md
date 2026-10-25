@@ -4,28 +4,67 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mylonasc/gestaltdb/badge)](https://scorecard.dev/viewer/?uri=github.com/mylonasc/gestaltdb)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://mylonasc.github.io/gestaltdb/)
 
-GestaltDB is an embedded property-graph toolkit with **high-performance graph sampling** and **indexed property-graph filtering**. Store attributed nodes and edges in LMDB, LevelDB, or RocksDB/PyRex; select the graph you need with labels, relationship types, properties, and Cypher; then sample live neighborhoods or reuse compact NumPy snapshots for ML training.
+**An embedded graph database toolkit for Python, combining fast ingestion and sampling with graph querying, knowledge representation, and logical reasoning.**
+
+GestaltDB brings together persistent property graphs, **fast Arrow/Polars bulk ingestion**, **high-performance graph sampling**, and **indexed property-graph filtering**. Store attributed nodes and edges in LMDB, LevelDB, or RocksDB/PyRex; select the graph you need with labels, relationship types, properties, and Cypher; then reuse compact NumPy snapshots for ML training.
+
+Ontology and reasoning components add semantic classification, temporal evidence, explanations, and maintenance of supported conclusions. Use these components independently or connect them through explicit application workflows.
 
 Documentation: https://mylonasc.github.io/gestaltdb/
 
-**Ontology reasoning:** compile immutable class/property axioms into bounded,
-read-only Datalog closure, with optional witness explanations and an explicit
-pinned temporal-claims adapter. No new solver dependency or JVM is required.
-This is the selected `gestalt-core-v1` fragment, not full OWL or automatic query/
-sampling expansion. See [the guide](docs/ontology.rst) and
-[measured solver trade-offs](docs/ontology-benchmarks.rst).
-Optional, explicit adapters add strict offline RDF import (`gestaltdb[rdf]`),
-[current-graph projection and inferred-neighbor fanout](docs/ontology-graph.rst),
-and [point-only publication/reconciliation](docs/ontology-publication.rst).
-These do not implicitly change Cypher or sampler results.
+**Release status:** `0.13.0rc1` is a published testing prerelease. This branch
+also contains post-rc1 work under review in [PR #386](https://github.com/mylonasc/gestaltdb/pull/386).
+See the [testing guide](docs/reasoning-testing.rst) for compatibility boundaries.
 
-**Reasoning engine testing milestone (0.13.0rc1 candidate):** standalone typed
-rules, selective demand queries, scoped negation/validation/equality, explicit
-incremental sessions and positive temporal range workflows are available for
-release testing. Indexed Python stays the default; experimental paths and
-unsupported combinations remain explicit. See the
-[testing guide and compatibility boundaries](docs/reasoning-testing.rst).
-The candidate version is not available from PyPI until its prerelease is published.
+## Components and Applications
+
+| Component | Interface and application value |
+| --- | --- |
+| **GraphDB and ingestion** | Load Python objects or Arrow/Polars columns, maintain indexes, and manage persistent entities and relationships. Useful for data integration, dependency graphs, and graph-backed applications. [Operations](docs/operations.rst) · [Bulk ingestion](#arrow-ingestion-example) |
+| **KV backends and serializers** | Choose LMDB, LevelDB, or RocksDB/PyRex and an independent payload encoding. The nontransactional PyRex path provides native columnar writes for fast bulk loading. [Backends](docs/storage-backends.rst) · [Serializers](docs/serializers.rst) |
+| **Cypher and graph exploration** | Query and mutate the property graph, filter application cohorts, and inspect results visually. [Cypher](docs/cypher.rst) · [Filtering](docs/property-filtering.rst) · [Visualization](docs/visualization.rst) |
+| **Sampling engine** | Build a `SamplerSnapshot` once and reuse `SamplerEngine` for weighted/heterogeneous neighborhoods, walks, temporal sampling, and positive/negative examples for external ML frameworks. [Sampling guide](docs/typed-sampling.rst) |
+| **Temporal and epistemic storage** | Record versioned graphs and sourced claims, with valid time, system time, knowledge worlds, and conflicting evidence. Useful for historical analysis and scientific evidence tracking. [Bitemporal history](docs/temporal-versioning.rst) · [Epistemic and modal queries](docs/modal-epistemic.rst) |
+| **Ontology model and compiler** | Compile selected class/property axioms into rules with axiom origins, for semantic classification and relationship enrichment. [Ontology](docs/ontology.rst) · [Supported profiles](docs/reasoning-profiles.rst) |
+| **Standalone reasoning and temporal reasoning** | Evaluate Datalog, selective goals, validation, and interval closure. Explicit support indexes maintain conclusions as evidence changes. [Typed rules](docs/reasoning-typed.rst) · [Temporal closure](docs/reasoning-temporal.rst) · [Maintenance](docs/reasoning-maintenance.rst) |
+| **Reasoning adapters and saved state** | Map stored graph/claim data to facts; resume reasoning state, verify its source, publish inferred claims, or build derived sampling snapshots. [Sessions](docs/reasoning-sessions.rst) · [Range publication](docs/reasoning-bound-range-publication.rst) · [Inferred snapshots](docs/reasoning-authenticated-inferred.rst) |
+
+```mermaid
+flowchart TB
+    App["Python application"] --> G["GraphDB: records, indexes, ingestion"]
+    App --> Q["Cypher engine"]
+    Q --> G
+    G --> KV["KV backends: LMDB / LevelDB / PyRex"]
+    G --> Ser["Serializers: Pickle / JSON / MessagePack / Protobuf"]
+    G --> V["Current read views / Temporal history and claims"]
+    G -->|"Build filtered snapshot"| S["SamplerSnapshot: compact IDs and CSR arrays"]
+    V -->|"Historical snapshot"| S
+    S --> E["SamplerEngine"]
+    E --> B["Sample batches for external ML frameworks"]
+    V --> A["Explicit source, execution and publication adapters"]
+    O["Ontology model and compiler"] -->|"Program and axiom origins"| R["Standalone reasoning"]
+    App --> O
+    App --> R
+    A --> R
+    A --> T["Temporal interval reasoning"]
+    T --> R
+    R --> M["Maintenance, validation and explanations"]
+    A -->|"Controlled publication"| G
+    A -->|"Derived graph projection"| S
+```
+
+Arrows show selected API calls and data handoffs, not automatic synchronization.
+`GraphDB` is the integration hub; sampling and standalone reasoning have separate
+execution interfaces. Read the [component and application architecture](docs/architecture.rst)
+for the full decomposition, workflows, code links, and modularity boundaries.
+
+### Scope and Caveats
+
+- **Performance is workload-dependent.** Fast ingestion and repeated array-native sampling are key strengths. Account separately for index rebuilds, snapshot construction, loading, and inference. [Performance guidance](docs/performance.rst)
+- **Semantics are explicit.** Selected ontology/rule fragments support classification, validation, and maintenance. Conflicting evidence can coexist; truth maintenance preserves supported conclusions rather than automatically resolving contradictions. [Profiles](docs/reasoning-profiles.rst)
+- **History is recorded deliberately.** Historical queries use temporal versions and claims; ordinary mutable graph updates are a separate path. [Temporal versioning](docs/temporal-versioning.rst)
+- **Source verification has a specific meaning.** An “authenticated” artifact is checked against expected database history and application-held identities. It is source/state verification, not login authentication or a guarantee that assertions are true. [Saved reasoning state](docs/reasoning-authenticated-sessions.rst)
+- **Integration stays application-controlled.** Snapshots are rebuilt explicitly; reasoning and publication are explicit operations, and some changes require recomputation. ML training uses external frameworks; probabilistic rules and an automated feedback loop remain [#124](https://github.com/mylonasc/gestaltdb/issues/124) and [#128](https://github.com/mylonasc/gestaltdb/issues/128). Operational hardening scope is recorded in [#381](https://github.com/mylonasc/gestaltdb/issues/381).
 
 ## Filter, Sample, Train
 

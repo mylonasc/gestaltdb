@@ -1,10 +1,16 @@
 Authenticated inferred sampler artifacts
 ============================================================
 
-``gestaltdb.reasoning.adapters.authenticated_inferred_sampler`` aligns the
-existing inferred sampler consumer with :doc:`reasoning-generation-identity`.
-It does not add sampling algorithms, execute reasoning automatically, publish
-claims, or change the default executor.
+An **inferred sampler artifact** is a reusable sampling snapshot built from
+derived relationships. **Authenticated** means source-verified: its contents
+are checked against the expected database history, saved reasoning state, and
+explicit projection selection. This lets applications feed inferred graph
+structure into repeated sampling for external ML training.
+
+``gestaltdb.reasoning.adapters.authenticated_inferred_sampler`` connects this
+consumer to :doc:`reasoning-generation-identity`. Applications explicitly build
+and load the snapshot, then use the existing ``SamplerEngine`` APIs. See
+:doc:`architecture` for the handoffs from reasoning to sampling.
 
 .. code-block:: python
 

@@ -1,10 +1,18 @@
 Authenticated durable-session resume
 ============================================================
 
+In this guide, a **session** is saved reasoning state: the selected rules,
+source scope and commit horizon, active evidence, facts, and support index.
+Resuming it lets an application maintain conclusions as committed evidence
+changes. **Authenticated** means source-verified: checked against expected
+database history and application-held state identities.
+
 ``gestaltdb.reasoning.adapters.authenticated_sessions`` connects existing v1
 session files to :doc:`reasoning-generation-identity` admission. Callers provide
 both an exact shared ``GenerationIdentity`` and ``expected_session_digest``
 from trusted application state. The file's own checksum is not that authority.
+
+See :doc:`architecture` for the database, evaluator, and persistence boundaries.
 
 .. code-block:: python
 

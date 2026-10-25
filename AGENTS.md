@@ -6,6 +6,7 @@ Use this file when you are an agent trying to understand or modify the library w
 
 ## Start Here
 
+- Component/application map and integration boundaries: `docs/architecture.rst`.
 - Core package: `src/gestaltdb/`
 - Public graph model and database: `src/gestaltdb/graphdb.py`
 - Storage backends: `src/gestaltdb/kvstores.py`

@@ -1,6 +1,10 @@
 Temporal Version History
 ========================
 
+For historical-analysis and evidence-audit workflows, the
+:doc:`architecture` guide distinguishes this storage layer from temporal
+inference, current read views, and reusable sampling snapshots.
+
 GestaltDB can append immutable node and edge versions alongside its existing
 mutable graph. Temporal versions use two distinct time dimensions:
 

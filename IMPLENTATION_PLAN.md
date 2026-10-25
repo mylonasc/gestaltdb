@@ -2,6 +2,21 @@
 
 ## Next release preparation (#385)
 
+Pre-merge documentation finishing pass: README component/application overview
+and Mermaid map; `docs/architecture.rst` with a rendered SVG component diagram,
+interfaces, application workflows, bitemporal examples, and explicit modularity
+boundaries. Link from the docs landing page and temporal/ontology guides.
+Clarify source verification and saved reasoning state in the two reviewed
+authenticated-consumer guides. Retain fast ingestion/sampling positioning and
+separate caveats. No merge, version bump, tag, or publication.
+
+Validation of that documentation slice: 556 focused interface/Cypher/sampling/
+README-example/release-doc/session/artifact tests passed with actual backends;
+8/8 modular examples passed; docs/API drift and Sphinx warnings-as-errors passed.
+Checked local README/Sphinx links, SVG XML, and the rendered figure; reviewed a
+PNG preview generated from the same checked-in Graphviz source. Sphinx consumes
+the committed SVG and needs no Graphviz or Mermaid runtime dependency.
+
 Backend coverage hardening: release CI now requires actual imports and real
 write/reopen/retraction checks for all 12 backend/serializer combinations,
 without skip or mock fallback, before running pytest on Python 3.10–3.13.

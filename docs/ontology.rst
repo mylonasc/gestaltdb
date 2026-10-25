@@ -105,6 +105,9 @@ are not supported. Domain/range infer memberships rather than validate missing d
 Read-only temporal claims
 --------------------------------
 
+The :doc:`architecture` guide maps ontology compilation, source extraction,
+and rule evaluation to entity-classification and knowledge-enrichment workflows.
+
 This source adapter never writes claims. The separate explicit, point-only
 publication operation is documented in :doc:`ontology-publication`.
 
