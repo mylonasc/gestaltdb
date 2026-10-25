@@ -13,7 +13,7 @@ from gestaltdb.reasoning.executors import (
     ExecutorRequest,
 )
 from gestaltdb.reasoning.generation import AdmissionRequest, GenerationIdentity, TemporalSourceIdentity
-from gestaltdb.reasoning.model import ReasoningError
+from gestaltdb.reasoning.model import ReasoningError, ReasoningLimitError
 from gestaltdb.reasoning.plans import PreparedProgram
 from gestaltdb.reasoning.protocols import InputContext
 from gestaltdb.reasoning.relational import CompilationIdentity
@@ -82,6 +82,69 @@ def test_polars_runs_only_on_explicit_available_request_with_context():
     assert {f.predicate for f in outcome.result.facts} == {"edge", "noise", "reach"}
     indexed = execute_closure(program(), facts(), limits=ReasoningLimits())
     assert set(outcome.result.facts) == set(indexed.result.facts)
+    assert indexed.polars_run is None
+    assert outcome.polars_run.result is outcome.result
+    assert outcome.polars_run.metrics["max_intermediate_rows"] == 100_000
+
+
+@pytest.mark.parametrize("value", [0, -1, True, 1.5, "100", {}])
+def test_invalid_physical_budget_rejected_before_input(value):
+    def forbidden():
+        pytest.fail("input consumed before option validation")
+        yield
+    with pytest.raises(ReasoningError, match="positive integer"):
+        execute_closure(program(), forbidden(), context=CONTEXT, limits=ReasoningLimits(),
+                        executor_request=ExecutorRequest(preferred="polars-prototype", polars_available=True),
+                        polars_max_intermediate_rows=value)
+
+
+@pytest.mark.parametrize("preferred", ["default", "indexed-python", "indexed-scc"])
+def test_polars_option_cannot_silently_change_or_apply_to_indexed_executor(preferred):
+    def forbidden():
+        pytest.fail("input consumed before irrelevant option rejection")
+        yield
+    with pytest.raises(ReasoningError, match="requires explicit polars"):
+        execute_closure(program(), forbidden(), context=CONTEXT, limits=ReasoningLimits(),
+                        executor_request=ExecutorRequest(preferred=preferred), polars_max_intermediate_rows=1000)
+
+
+def test_physical_budget_does_not_change_logical_generation_or_weaken_other_limits():
+    pytest.importorskip("polars")
+    request = ExecutorRequest(preferred="polars-prototype", polars_available=True)
+    options = dict(executor_request=request, context=CONTEXT, generation=generation(),
+                   admission_request=AdmissionRequest(executor=POLARS_PROTOTYPE))
+    for budget in (10, 1000):
+        outcome = execute_closure(program(), facts(), limits=ReasoningLimits(),
+                                  polars_max_intermediate_rows=budget, **options)
+        assert outcome.telemetry.admission_digest == generation().digest
+        assert outcome.polars_run.metrics["max_intermediate_rows"] == budget
+        assert outcome.polars_run.metrics["peak_intermediate_rows"] <= budget
+        assert outcome.polars_run.metrics["candidate_rows"] > 0
+    with pytest.raises(ReasoningLimitError, match="max_intermediate_rows"):
+        execute_closure(program(), facts(), limits=ReasoningLimits(), polars_max_intermediate_rows=1, **options)
+    with pytest.raises(ReasoningLimitError, match="max_candidate_rows"):
+        execute_closure(program(), facts(), limits=ReasoningLimits(max_candidate_rows=1),
+                        polars_max_intermediate_rows=1000, **options)
+    with pytest.raises(ReasoningLimitError, match="max_facts"):
+        execute_closure(program(), facts(), limits=ReasoningLimits(max_facts=3),
+                        polars_max_intermediate_rows=1000, **options)
+
+
+def test_explicit_dispatcher_budget_admits_over_100k_rows_with_complete_reference_parity():
+    pytest.importorskip("polars")
+    count = 100_001
+    inputs = [Fact(f"n{i}", "edge", "target") for i in range(count)]
+    request = ExecutorRequest(preferred="polars-prototype", polars_available=True)
+    limits = ReasoningLimits(max_input_facts=110_000, max_facts=220_000, max_candidate_rows=5_000_000)
+    with pytest.raises(ReasoningLimitError, match="max_intermediate_rows"):
+        execute_closure(program(), inputs, context=CONTEXT, executor_request=request, limits=limits)
+    result = execute_closure(program(), inputs, context=CONTEXT, executor_request=request,
+                             polars_max_intermediate_rows=220_000, limits=limits)
+    reference = execute_closure(program(), inputs, limits=limits)
+    assert set(result.result.facts) == set(reference.result.facts)
+    assert len(result.result.facts) == count * 2
+    assert result.polars_run.metrics["peak_intermediate_rows"] > 100_000
+    assert result.polars_run.metrics["max_intermediate_rows"] == 220_000
 
 
 def test_polars_unavailable_or_missing_context_fails_closed():

@@ -86,6 +86,17 @@ class ExecutionOutcome:
 
     result: EvaluationResult
     telemetry: StageTelemetry
+    polars_run: PolarsRun | None = None
+
+
+def _polars_intermediate_limit(executor: str, value: int | None) -> int | None:
+    """Validate physical options before consuming source records; never recode."""
+    if value is not None:
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ReasoningError("polars_max_intermediate_rows must be a positive integer or None")
+        if executor != POLARS_PROTOTYPE:
+            raise ReasoningError("polars_max_intermediate_rows requires explicit polars-prototype execution")
+    return (100_000 if value is None else value) if executor == POLARS_PROTOTYPE else None
 
 
 def _telemetry(executor: str, mode: str, rationale: tuple[str, ...], admission_digest: str | None,
@@ -102,6 +113,7 @@ def execute_closure(program: Program, facts: Iterable[Fact | Evidence], *,
                     plan: PreparedProgram | None = None,
                     context: InputContext | None = None,
                     limits: ReasoningLimits, collect_proofs: bool = False,
+                    polars_max_intermediate_rows: int | None = None,
                     cancel: Callable[[], bool] | None = None) -> ExecutionOutcome:
     """Evaluate one binary closure through an explicitly decided executor.
 
@@ -111,6 +123,9 @@ def execute_closure(program: Program, facts: Iterable[Fact | Evidence], *,
     supply the matching ``PreparedProgram``; Polars execution requires an
     explicit ``InputContext`` and a truly available runtime. Omitting the
     preference keeps the indexed reference even when Polars is installed.
+    ``polars_max_intermediate_rows`` explicitly configures the prototype's
+    physical row bound (default 100,000), separately from logical identity and
+    cumulative ``limits.max_candidate_rows``. Non-Polars requests reject it.
     """
     if not isinstance(program, Program):
         raise ReasoningError("Program required")
@@ -133,6 +148,7 @@ def execute_closure(program: Program, facts: Iterable[Fact | Evidence], *,
     if executor_request.mode != mode:
         raise ReasoningError("executor request mode must match the requested proof behavior")
     decision = select_executor(executor_request)
+    intermediate_limit = _polars_intermediate_limit(decision.kind, polars_max_intermediate_rows)
     if len(program.rules) > limits.max_rules:
         raise ReasoningLimitError("max_rules exceeded")
     if decision.kind == INDEXED_SCC and plan is None:
@@ -177,9 +193,10 @@ def execute_closure(program: Program, facts: Iterable[Fact | Evidence], *,
     if context is None:
         raise ReasoningError("polars execution requires an explicit InputContext")
     run_polars: PolarsRun = PolarsDatalogPrototype().evaluate(
-        program, inputs, context=context, limits=limits, cancel=cancel)
+        program, inputs, context=context, limits=limits,
+        max_intermediate_rows=intermediate_limit, cancel=cancel)
     return ExecutionOutcome(run_polars.result, _telemetry(decision.kind, mode, rationale, admission_digest,
-                                                          None, len(inputs), run_polars.result, False))
+                                                          None, len(inputs), run_polars.result, False), run_polars)
 
 
 def _materialize_inputs(facts: Iterable[Fact | Evidence], *, limits: ReasoningLimits,
