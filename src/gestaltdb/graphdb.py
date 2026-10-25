@@ -1270,13 +1270,7 @@ class GraphDB:
         Args:
             edge: Edge whose ``properties["type"]`` determines the typed index.
         """
-        edge_type = self.edge_type(edge)
-        if edge_type is None:
-            return
-        source_id = self.node_key_to_bytes(edge.source)
-        target_id = self.node_key_to_bytes(edge.target)
-        self.store.put_typed_adjacency(source_id, target_id, edge_type, edge.get_id_bytes)
-        self._update_typed_adjacency_count_cache([(source_id, target_id, edge_type, edge.get_id_bytes)], 1)
+        _adjacency.put_typed_adjacency_for_edge(self.store, self._typed_adjacency_count_cache, edge)
 
     def _delete_typed_adjacency_for_edge(self, edge: Edge):
         """Remove typed adjacency index records for an edge.
@@ -1284,27 +1278,11 @@ class GraphDB:
         Args:
             edge: Edge whose current source, target, type, and ID identify records.
         """
-        edge_type = self.edge_type(edge)
-        if edge_type is None:
-            return
-        source_id = self.node_key_to_bytes(edge.source)
-        target_id = self.node_key_to_bytes(edge.target)
-        self.store.delete_typed_adjacency(source_id, target_id, edge_type, edge.get_id_bytes)
-        self._update_typed_adjacency_count_cache([(source_id, target_id, edge_type, edge.get_id_bytes)], -1)
+        _adjacency.delete_typed_adjacency_for_edge(self.store, self._typed_adjacency_count_cache, edge)
 
     def _update_typed_adjacency_count_cache(self, records, delta: int) -> None:
         """Update cached typed adjacency counts for writes made by this graph handle."""
-        out_deltas: dict[tuple[str, bytes, str], int] = {}
-        invalidated_in: set[tuple[str, bytes, str]] = set()
-        for source_id, target_id, edge_type, _ in records:
-            out_key = ("out", source_id, edge_type)
-            out_deltas[out_key] = out_deltas.get(out_key, 0) + delta
-            invalidated_in.add(("in", target_id, edge_type))
-        for out_key, out_delta in out_deltas.items():
-            current = self._typed_adjacency_count_cache.get(out_key, 0)
-            self._typed_adjacency_count_cache[out_key] = max(0, current + out_delta)
-        for in_key in invalidated_in:
-            self._typed_adjacency_count_cache.pop(in_key, None)
+        _adjacency.update_count_cache(self._typed_adjacency_count_cache, records, delta)
 
     def _put_edge_indexes(self, edge: Edge):
         """Maintain relationship type and configured property indexes."""

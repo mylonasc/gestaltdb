@@ -102,3 +102,53 @@ def edges_by_edge_type(store: KVStore, node_id_bytes: bytes, edge_type: str,
     """Return edge IDs connected by a specific edge type."""
     return [record['edge_id']
             for record in get_typed_adjacency(store, node_id_bytes, edge_type, direction)]
+
+
+def update_count_cache(cache: dict, records, delta: int) -> None:
+    """Update cached typed-adjacency counts for writes made by one handle.
+
+    ``cache`` is owned by the calling graph handle (fresh per
+    transaction/snapshot scope). ``records`` are
+    ``(source_id, target_id, edge_type, edge_id)`` tuples.
+    """
+    out_deltas: dict[tuple[str, bytes, str], int] = {}
+    invalidated_in: set[tuple[str, bytes, str]] = set()
+    for source_id, target_id, edge_type, _ in records:
+        out_key = ("out", source_id, edge_type)
+        out_deltas[out_key] = out_deltas.get(out_key, 0) + delta
+        invalidated_in.add(("in", target_id, edge_type))
+    for out_key, out_delta in out_deltas.items():
+        current = cache.get(out_key, 0)
+        cache[out_key] = max(0, current + out_delta)
+    for in_key in invalidated_in:
+        cache.pop(in_key, None)
+
+
+def put_typed_adjacency_for_edge(store: KVStore, cache: dict, edge) -> None:
+    """Write typed adjacency index records for an edge.
+
+    Edges without ``properties["type"]`` are skipped, matching the
+    long-standing write path.
+    """
+    from .entities import node_key_to_bytes
+
+    edge_type = edge.get_type
+    if edge_type is None:
+        return
+    source_id = node_key_to_bytes(edge.source)
+    target_id = node_key_to_bytes(edge.target)
+    store.put_typed_adjacency(source_id, target_id, edge_type, edge.get_id_bytes)
+    update_count_cache(cache, [(source_id, target_id, edge_type, edge.get_id_bytes)], 1)
+
+
+def delete_typed_adjacency_for_edge(store: KVStore, cache: dict, edge) -> None:
+    """Remove typed adjacency index records for an edge."""
+    from .entities import node_key_to_bytes
+
+    edge_type = edge.get_type
+    if edge_type is None:
+        return
+    source_id = node_key_to_bytes(edge.source)
+    target_id = node_key_to_bytes(edge.target)
+    store.delete_typed_adjacency(source_id, target_id, edge_type, edge.get_id_bytes)
+    update_count_cache(cache, [(source_id, target_id, edge_type, edge.get_id_bytes)], -1)
