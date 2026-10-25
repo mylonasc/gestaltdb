@@ -57,6 +57,19 @@ three repeats, then a 10K first-read gate (120-second worker limit), then a
 stop escalation rather than spending a large matrix on a demonstrably slow
 correctness baseline. No current measurement or performance result presumed.
 
+Baseline clean-source `c7011bb` collection retained: 12/12 parity successes at
+1K first/primed (three repeats), 2/2 at the single-sample 10K first gate, and
+one 100K reference success plus a **120s native extraction timeout**. No native
+100K timing/closure result is claimed. Native extraction medians 3.290/3.269s
+at 1K first/primed versus reference 0.055/0.054s; 10K single samples 35.462s
+native versus 0.430s reference. These expose retained per-claim canonical point
+revalidation, not native scan throughput. Preserve reports before correcting
+that composition: replace N canonical point operations with the existing
+grouped canonical point iterator once per pass, still comparing every selected
+version to complete admitted native history and verifying the source before/
+after. Add omission/duplicate/substitution and bounded-read regression gates,
+then repeat the clean-source staged collection; no authentication skip.
+
 ### Authenticated native claim source continuation (#194)
 
 Dedicated `feature/re-194-native-admission` / `re-194-native-admission`, based on
