@@ -42,7 +42,9 @@ def create_legacy(path):
         graph.put_node(Node(node_id="a", labels=["Person"], properties={"name": "Alice"}))
         graph.put_node(Node(node_id="b", labels=["Group"], properties={}))
         graph.put_edge(Edge(edge_id="e", source="a", target="b", properties={"type": "MEMBER"}))
-        graph.epistemic.assert_claim(subject="a", predicate="memberOf", object="b", agent="registry",
+        # Baseline-only API: this fixture runs under the published baseline
+        # wheel, which predates the epistemic engine service.
+        graph.assert_claim(subject="a", predicate="memberOf", object="b", agent="registry",
                            polarity="positive", valid=(0, 100))
     finally:
         graph.close()
