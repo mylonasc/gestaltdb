@@ -280,6 +280,37 @@ optional backends/serializers/RDF/Polars/docs/bloom and ontology requirements.
 Docs drift, 8/8 examples, executable executor guide, Sphinx `-W`, roadmap and
 whitespace checks passed. Default cap and indexed executor selection unchanged.
 
+### Positive typed application pipeline (#255)
+
+Branch/worktree `feature/re-255-typed-pipeline` / `re-255-typed-pipeline`, based
+on integration `694b5dc` (#363 exact-head green and merged; post-merge Ontology
+`40165662298` / readiness `40165662268` passed). Owner/open-PR audit refreshed.
+Connect the existing GenericEngine to central ExecutorRequest selection, exact
+shared generation admission and common StageTelemetry under a distinct typed
+executor identity. Binary defaults stay unchanged; unsupported typed proof,
+SCC/Polars and negative/aggregate/closed-scope combinations fail closed rather
+than recode or silently weaken semantics.
+
+Actual application consumer independently re-admits exact caller source/state
+pins, retains independent active assertion versions, executes only complete base
+input, compares fresh complete closure to supplied session state, and rechecks
+source/decoder under the writer guard. Internally consistent forged closure is
+not trusted as input. No supports/proofs/publication/durable writes claimed;
+same-engine recomputation is not independent verification. Original typed-point
+source policy remains positive entity claims; literal/n-ary derived values stay
+typed, with arbitrary typed source values available only through the raw API.
+
+Initial focused suite: 250 passed before expanded fault/negative-mode tests.
+Full validation and executable docs follow. Broader #255/#194 acceptance remains
+open pending its own capability/measurement reconciliation.
+
+Final typed-pipeline validation: **3,251 passed / 2 skipped** (54.26s) with all
+optional backend/serializer/RDF/Polars/docs/bloom and ontology requirements.
+Docs drift, 8/8 examples, both executable typed examples, Sphinx `-W`, roadmap
+and whitespace gates passed. Focused compatibility/integration set: 264 passed.
+Typed generation admission explicitly rejects current/range source identities,
+not just mismatched profile/dictionary strings. Point/session digests unchanged.
+
 ### Prior ordered follow-through
 
 Native GitHub links established: #338 (identity), #339 (input bounds), #340

@@ -21,6 +21,7 @@ from ..executors import (
     POLARS_PROTOTYPE,
     ExecutorRequest,
     select_executor,
+    PROFILE, TYPED_PROFILE, TYPED_DICTIONARY, TYPED_INDEXED_PYTHON,
 )
 from ..generation import AdmissionRequest, GenerationIdentity, admit
 from ..model import (
@@ -36,6 +37,7 @@ from ..model import (
 from ..plans import PlannedDatalogEngine, PlannedRun, PreparedProgram
 from ..protocols import Evidence, InputContext
 from ..relational import CompilationIdentity
+from ..typed import GenericEngine, GenericProgram, GenericResult, TypedFact
 from .polars import PolarsDatalogPrototype, PolarsRun, _polars
 
 
@@ -148,6 +150,8 @@ def execute_closure(program: Program, facts: Iterable[Fact | Evidence], *,
     if executor_request.mode != mode:
         raise ReasoningError("executor request mode must match the requested proof behavior")
     decision = select_executor(executor_request)
+    if executor_request.profile != PROFILE:
+        raise ReasoningError("binary execute_closure requires the binary profile; use execute_typed_closure")
     intermediate_limit = _polars_intermediate_limit(decision.kind, polars_max_intermediate_rows)
     if len(program.rules) > limits.max_rules:
         raise ReasoningLimitError("max_rules exceeded")
@@ -220,3 +224,67 @@ def _materialize_inputs(facts: Iterable[Fact | Evidence], *, limits: ReasoningLi
             raise ReasoningError("facts must contain only Fact or Evidence values")
         out.append(value)
     return out
+
+
+@dataclass(frozen=True)
+class TypedExecutionOutcome:
+    """Complete positive typed closure with the same common stage schema."""
+
+    result: GenericResult
+    telemetry: StageTelemetry
+
+
+def execute_typed_closure(program: GenericProgram, facts: Iterable[TypedFact], *,
+        limits: ReasoningLimits, context: InputContext | None = None,
+        executor_request: ExecutorRequest = ExecutorRequest(profile=TYPED_PROFILE),
+        generation: GenerationIdentity | None = None,
+        admission_request: AdmissionRequest | None = None,
+        cancel: Callable[[], bool] | None = None) -> TypedExecutionOutcome:
+    """Explicit positive typed dispatch; no binary conversion, proofs or recoding.
+
+    Compatibility metadata does not authenticate caller facts. Database session
+    input is independently admitted by typed_execution.execute_authenticated_session.
+    Negative/aggregate/closed-scope programs require their separate explicit APIs.
+    """
+    if not isinstance(program, GenericProgram) or not isinstance(limits, ReasoningLimits):
+        raise ReasoningError("GenericProgram and ReasoningLimits required")
+    decision = select_executor(executor_request)
+    if decision.kind != TYPED_INDEXED_PYTHON:
+        raise ReasoningError("execute_typed_closure requires the positive typed profile")
+    if program.aggregates or program.closed or any(rule.negated for rule in program.rules):
+        raise ReasoningError("positive typed dispatch does not admit negation, aggregates or closed scopes")
+    if len(program.rules) > limits.max_rules:
+        raise ReasoningLimitError("max_rules exceeded")
+    if context is not None and not isinstance(context, InputContext):
+        raise ReasoningError("context must be an InputContext or None")
+    check_cancelled(cancel)
+    admitted_digest = None
+    if generation is not None or admission_request is not None:
+        if (not isinstance(generation, GenerationIdentity) or not isinstance(admission_request, AdmissionRequest)
+                or context is None):
+            raise ReasoningError("generation, AdmissionRequest and explicit InputContext required together")
+        if admission_request.mode != "closure" or admission_request.executor != decision.kind:
+            raise ReasoningError("admission mode/executor must match positive typed closure")
+        identity = CompilationIdentity(program.digest, context, TYPED_DICTIONARY, TYPED_PROFILE, decision.kind)
+        generation.require_compilation(identity)
+        admitted_digest = admit(generation, admission_request).generation_digest
+    try:
+        iterator = iter(facts)
+    except TypeError as exc:
+        raise ReasoningError("facts must be iterable TypedFact values") from exc
+    inputs = []
+    while True:
+        check_cancelled(cancel)
+        try:
+            value = next(iterator)
+        except StopIteration:
+            break
+        check_cancelled(cancel)
+        if len(inputs) >= limits.max_input_facts:
+            raise ReasoningLimitError("max_input_facts exceeded")
+        if not isinstance(value, TypedFact):
+            raise ReasoningError("facts must contain only TypedFact values; no implicit binary conversion")
+        inputs.append(value)
+    result = GenericEngine().evaluate(program, inputs, limits=limits, cancel=cancel)
+    return TypedExecutionOutcome(result, StageTelemetry(decision.kind, "closure", decision.rationale,
+        admitted_digest, None, len(inputs), len(result.facts), False))

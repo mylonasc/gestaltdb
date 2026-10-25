@@ -14,6 +14,11 @@ An authenticated complete mutable-graph consumer is available via
 :doc:`reasoning-current-admission`; it owns source projection and exact
 generation binding before calling the explicit dispatcher.
 
+Positive typed application execution uses the distinct existing GenericEngine
+kind, ``typed-indexed-python-v1``, with the same common telemetry and explicit
+source-session admission. See :doc:`reasoning-typed-execution`. The binary
+defaults and the measured optional-engine adoption decision below are unchanged.
+
 .. code-block:: python
 
    from gestaltdb.reasoning import ExecutorRequest, select_executor

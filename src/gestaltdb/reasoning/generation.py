@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from .model import ReasoningError, _text
 from .protocols import InputContext
 from .relational import CompilationIdentity, _digest
-from .executors import EXECUTORS, INDEXED_PYTHON, INDEXED_SCC, POLARS_PROTOTYPE
+from .executors import (EXECUTORS, INDEXED_PYTHON, INDEXED_SCC, POLARS_PROTOTYPE,
+                        TYPED_INDEXED_PYTHON, TYPED_PROFILE, TYPED_DICTIONARY)
 
 
 @dataclass(frozen=True)
@@ -182,8 +183,10 @@ def admit(generation: GenerationIdentity, request: AdmissionRequest) -> Admissio
     Dictionary identity must match exactly: a generation computed under one
     dictionary cannot be consumed through another without explicit recoding.
     Witness-bearing and stateful modes (proofs, maintenance supports,
-    temporal closure) are indexed-engine only; the Polars prototype stays
-    closure-only. Unknown combinations raise instead of falling back.
+    temporal closure) are binary indexed-engine only; the Polars prototype stays
+    closure-only. The typed indexed row additionally requires the exact positive
+    typed profile/representation and supports closure only. Unknown combinations
+    raise instead of falling back.
     """
     if not isinstance(generation, GenerationIdentity):
         raise ReasoningError("generation must be a GenerationIdentity")
@@ -191,6 +194,13 @@ def admit(generation: GenerationIdentity, request: AdmissionRequest) -> Admissio
         raise ReasoningError("request must be an AdmissionRequest")
     if request.dictionary_id != generation.dictionary_id:
         raise ReasoningError("dictionary mismatch; recode or recompile explicitly")
+    if request.executor == TYPED_INDEXED_PYTHON:
+        if (request.mode != "closure" or generation.semantics_profile != TYPED_PROFILE
+                or generation.dictionary_id != TYPED_DICTIONARY
+                or not isinstance(generation.source, TemporalSourceIdentity)):
+            raise ReasoningError("typed indexed admission requires positive typed point closure and typed-values-v1")
+        return Admission(request.mode, request.executor, generation.digest,
+                         ("typed-positive-closure-only", "generation-bound"))
     if request.mode == "proofs":
         if request.executor not in _ADMISSION_INDEXED:
             raise ReasoningError("proofs require an indexed witness engine")

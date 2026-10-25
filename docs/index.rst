@@ -55,6 +55,7 @@ Filter, Sample, Train
    reasoning-bound-range-publication
    reasoning-authenticated-sessions
    reasoning-authenticated-inferred
+   reasoning-typed-execution
    ontology-benchmarks
    ontology-publication
    cypher

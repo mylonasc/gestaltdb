@@ -35,6 +35,11 @@ The explicit dispatcher/current-graph execution paths accept
 the default cap and indexed reference remain unchanged, and physical row
 budgets are not logical identity or hard memory bounds.
 
+For positive typed dispatcher execution and source-authenticated session input,
+see [`docs/reasoning-typed-execution.rst`](docs/reasoning-typed-execution.rst).
+The typed executor retains strict literals/n-ary values and rejects unsupported
+proof/physical-engine requests rather than converting them to binary facts.
+
 These examples are designed for developers and agents who need working patterns quickly. They use explicit imports from submodules because the package root intentionally exports only selected helpers.
 
 **Filtering and sampling workflows:** [Indexed property lookups](#index-and-lookup-properties) · [Live typed sampling](#traverse-and-sample-typed-relationships) · [Filtered, reusable sampler snapshots](#build-and-use-a-sampler-snapshot). The [sampling guide](https://mylonasc.github.io/gestaltdb/typed-sampling.html) covers all policies; the [filtering guide](https://mylonasc.github.io/gestaltdb/property-filtering.html) explains seed selection versus filtering every sampled hop.
