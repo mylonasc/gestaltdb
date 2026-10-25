@@ -16,6 +16,8 @@ _TEMPORAL_PREFIX = b"temporal:v1:"
 _TEMPORAL_COMMIT_PREFIX = _TEMPORAL_PREFIX + b"commit:"
 _TEMPORAL_RECORD_PREFIX = _TEMPORAL_PREFIX + b"record:"
 _TEMPORAL_VISIBLE_PREFIX = _TEMPORAL_PREFIX + b"visible:"
+_TEMPORAL_SEQUENCE_KEY = _TEMPORAL_PREFIX + b"sequence"
+_TEMPORAL_SEQUENCE_FILENAME = ".gestaltdb_temporal_sequence"
 
 
 def temporal_commit_key(commit_id: int) -> bytes:

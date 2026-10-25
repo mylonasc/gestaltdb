@@ -8,6 +8,7 @@ from . import index_maintenance
 from . import index_rebuild
 from . import registry
 from . import temporal_keys
+from . import temporal_sequence
 from .entities import (
     Edge,
     GraphEntityDictSerializer,
@@ -47,4 +48,5 @@ __all__ = [
     "node_records",
     "registry",
     "temporal_keys",
+    "temporal_sequence",
 ]
