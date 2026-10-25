@@ -221,6 +221,12 @@ selection, alternative evidence, rewritten-checksum tampering, cardinality/byte
 bounds, competing writers and cancellation/fault cleanup. Full validation and
 original #248 acceptance reconciliation follow before closure.
 
+Final validation at `f6475ea`: **3,159 passed / 2 skipped** with all optional
+backends/serializers/RDF/Polars/docs/bloom and independent ontology requirements.
+Docs drift, all 8 examples, executable Sphinx guide, Sphinx `-W`, roadmap and
+diff checks passed. Authenticated inferred tests: 115 passed across the three
+backends, plus all legacy-consumer regressions in the full suite.
+
 ### Prior ordered follow-through
 
 Native GitHub links established: #338 (identity), #339 (input bounds), #340
