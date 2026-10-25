@@ -107,6 +107,7 @@ from ._graph.temporal_indexes import (
 )
 from ._graph import temporal_keys as _temporal_keys
 from ._graph import temporal_reads as _temporal_reads
+from ._graph import temporal_writes as _temporal_writes
 from ._graph import temporal_sequence as _temporal_sequence
 from ._graph.temporal_keys import (
     _TEMPORAL_COMMIT_PREFIX,
@@ -3969,211 +3970,18 @@ class GraphDB:
             self.rebuild_temporal_indexes()
         return result
 
-    def _commit_versions_direct(self, writes, metadata, index_mode) -> TemporalCommit:
-        prepared_inputs = []
-        batch_version_ids = set()
-        known_identities = set()
-        retraction_identities = set()
-        for ordinal, write in enumerate(writes):
-            if ordinal >= 1 << 32:
-                raise TemporalVersionError("temporal commit contains too many versions")
-            if not isinstance(write, (NodeVersionWrite, EdgeVersionWrite, ClaimVersionWrite)):
-                raise TypeError(
-                    "writes must contain NodeVersionWrite, EdgeVersionWrite, or ClaimVersionWrite values"
-                )
-            if not isinstance(write.operation, VersionOperation):
-                raise TemporalVersionError("temporal version operation is invalid")
-            valid_input = write.valid
-            if valid_input is not None:
-                try:
-                    valid_input = normalize_temporal_interval(valid_input)
-                except (TypeError, ValueError) as exc:
-                    raise TemporalVersionError("temporal version validity interval is invalid") from exc
-            version_id = normalize_version_id(write.version_id)
-            if version_id in batch_version_ids or self._temporal_version_id_exists(version_id):
-                raise TemporalVersionError(f"temporal version ID already exists: {version_id}")
-            batch_version_ids.add(version_id)
-            logical_id = normalize_logical_id(write.logical_id)
-            target = None
-            supersedes_version_id = None
-            if write.supersedes_version_id is not None:
-                supersedes_version_id = normalize_version_id(write.supersedes_version_id)
-                target = self._get_temporal_version(supersedes_version_id)
-                if target is None:
-                    raise TemporalVersionError("superseded temporal version does not exist")
-                expected_type = {
-                    NodeVersionWrite: NodeVersion,
-                    EdgeVersionWrite: EdgeVersion,
-                    ClaimVersionWrite: ClaimVersion,
-                }[type(write)]
-                if not isinstance(target, expected_type) or target.logical_id != logical_id:
-                    raise TemporalVersionError("superseded temporal version has a different kind or logical ID")
-            if write.operation is VersionOperation.ASSERT and write.supersedes_version_id is not None:
-                raise TemporalVersionError("assertions cannot supersede another version")
-            if write.operation is not VersionOperation.RETRACT and write.reason is not None:
-                raise TemporalVersionError("only retractions may include a reason")
-            if write.reason is not None and (not isinstance(write.reason, str) or not write.reason):
-                raise TemporalVersionError("retraction reason must be a non-empty string")
-            if write.operation is VersionOperation.CORRECT and target is None:
-                raise TemporalVersionError("corrections require a superseded version")
-            valid = valid_input or (target.valid if target is not None else None)
-            if valid is None:
-                raise TemporalVersionError("a validity interval or superseded version is required")
-
-            if isinstance(write, NodeVersionWrite):
-                entity_kind = "node"
-                entity = write.node
-                if write.operation is not VersionOperation.RETRACT and not isinstance(entity, Node):
-                    raise TemporalVersionError("node assertions and corrections require a Node payload")
-                if entity is not None and entity.get_id != logical_id:
-                    raise TemporalVersionError("node payload ID does not match logical ID")
-                payload = b"" if entity is None else self.entity_serializer.serialize(entity, "Node")
-                entity_type = "Node"
-            elif isinstance(write, EdgeVersionWrite):
-                entity_kind = "edge"
-                entity = write.edge
-                if write.operation is not VersionOperation.RETRACT and not isinstance(entity, Edge):
-                    raise TemporalVersionError("edge assertions and corrections require an Edge payload")
-                if entity is not None and entity.get_id != logical_id:
-                    raise TemporalVersionError("edge payload ID does not match logical ID")
-                payload = b"" if entity is None else self.entity_serializer.serialize(entity, "Edge")
-                entity_type = "Edge"
-            else:
-                entity_kind = "claim"
-                entity = write.claim
-                if write.operation is not VersionOperation.RETRACT and not isinstance(entity, Claim):
-                    raise TemporalVersionError("claim assertions and corrections require a Claim payload")
-                if entity is not None and entity.claim_id != logical_id:
-                    raise TemporalVersionError("claim payload ID does not match logical ID")
-                payload = b"" if entity is None else canonical_json_bytes(entity.to_dict())
-                entity_type = "Claim"
-            if write.operation is VersionOperation.RETRACT and entity is not None:
-                raise TemporalVersionError("retractions cannot contain entity payloads")
-            if not isinstance(payload, bytes):
-                raise TemporalVersionError("the configured serializer must return bytes")
-            if write.operation is not VersionOperation.RETRACT:
-                if not payload:
-                    raise TemporalVersionError("temporal entity payload cannot be empty")
-                if entity_type == "Claim":
-                    try:
-                        decoded_entity = Claim.from_dict(json.loads(payload.decode("utf-8")))
-                    except (UnicodeDecodeError, json.JSONDecodeError, TemporalVersionError) as exc:
-                        raise TemporalVersionError("cannot decode temporal claim payload") from exc
-                    if decoded_entity.claim_id != logical_id:
-                        raise TemporalVersionError("serialized temporal payload changed its logical ID")
-                else:
-                    try:
-                        decoded_entity = self.entity_serializer.deserialize(payload, entity_type)
-                    except Exception as exc:
-                        raise TemporalVersionError(
-                            "the configured serializer cannot decode its temporal payload"
-                        ) from exc
-                    expected_type = Node if entity_type == "Node" else Edge
-                    if not isinstance(decoded_entity, expected_type) or decoded_entity.get_id != logical_id:
-                        raise TemporalVersionError("serialized temporal payload changed its logical ID")
-
-            prepared_inputs.append((
-                entity_kind,
-                version_id,
-                logical_id,
-                valid,
-                write.operation,
-                supersedes_version_id,
-                write.reason,
-                payload,
-            ))
-
-            identity = (entity_kind, logical_id)
-            if write.operation is not VersionOperation.RETRACT or (
-                target is not None and target.operation is not VersionOperation.RETRACT
-            ):
-                known_identities.add(identity)
-            elif identity not in known_identities:
-                retraction_identities.add(identity)
-
-        self._require_temporal_retraction_identities(retraction_identities)
-        commit_id, system_time = self._reserve_temporal_sequence()
-        previous_commit_id = commit_id - 1
-        prepared = []
-        for ordinal, (
-            entity_kind,
-            version_id,
-            logical_id,
-            valid,
-            operation,
-            supersedes_version_id,
-            reason,
-            payload,
-        ) in enumerate(prepared_inputs):
-            header = {
-                "entity_kind": entity_kind,
-                "version_id": version_id,
-                "logical_id": logical_id,
-                "valid_from_us": valid.start.epoch_microseconds,
-                "valid_to_us": None if valid.end is None else valid.end.epoch_microseconds,
-                "commit_id": commit_id,
-                "commit_ordinal": ordinal,
-                "system_time_us": system_time.epoch_microseconds,
-                "operation": operation.value,
-                "supersedes_version_id": supersedes_version_id,
-                "reason": reason,
-            }
-            prepared.append((version_id, encode_version_envelope(header, payload)))
-
-        sequence = canonical_json_bytes({
-            "commit_id": commit_id,
-            "system_time_us": system_time.epoch_microseconds,
-        })
-        record_digests = [hashlib.sha256(envelope).hexdigest() for _, envelope in prepared]
-        descriptor = commit_descriptor_bytes(
-            commit_id,
-            system_time,
-            metadata,
-            [version_id for version_id, _ in prepared],
-            record_digests,
+    def _temporal_committer(self) -> _temporal_writes.TemporalCommitter:
+        """Bind the temporal write capability to this handle's scope."""
+        return _temporal_writes.TemporalCommitter(
+            store=self.store,
+            entity_serializer=self.entity_serializer,
+            reader=self._temporal_reader(),
+            clock=self._temporal_clock,
+            require_retraction_fn=self._require_temporal_retraction_identities,
         )
 
-        if self.store.get_metadata(self._temporal_commit_key(commit_id)) is not None:
-            raise TemporalCorruptionError("temporal sequence would overwrite an existing commit")
-        if self.store.get_metadata(self._temporal_visible_key(commit_id)) is not None:
-            raise TemporalCorruptionError("temporal sequence would overwrite an existing marker")
-        for ordinal in range(len(prepared)):
-            if self.store.get_metadata(self._temporal_record_key(commit_id, ordinal)) is not None:
-                raise TemporalCorruptionError("temporal sequence would overwrite an existing record")
-
-        # The sequence reserves the ID. The visibility marker is always written last.
-        if self._store_path is not None:
-            self.store.put_metadata(_TEMPORAL_SEQUENCE_KEY, sequence)
-        self.store.put_metadata(self._temporal_commit_key(commit_id), descriptor)
-        for ordinal, (_, envelope) in enumerate(prepared):
-            self.store.put_metadata(self._temporal_record_key(commit_id, ordinal), envelope)
-        indexes_publishable = False
-        if index_mode == IndexMaintenanceMode.DEFER.value:
-            self._mark_indexes_stale("temporal")
-        else:
-            prior_visible = False
-            if previous_commit_id > 0 and self._temporal_index_state() is None:
-                prior_visible = any(
-                    self.get_temporal_commit(candidate, _validate_supersession=False) is not None
-                    for candidate in range(1, commit_id)
-                )
-            if prior_visible:
-                self._mark_indexes_stale("temporal")
-            indexes_publishable = not prior_visible
-            indexed_versions = [self._decode_temporal_version(envelope) for _, envelope in prepared]
-            self._write_temporal_indexes(indexed_versions, commit_id)
-        marker = hashlib.sha256(descriptor).digest()
-        if indexes_publishable:
-            self._persist_temporal_index_state(
-                commit_id,
-                self._temporal_index_generation(),
-                pending_marker=(commit_id, marker),
-            )
-        self.store.put_metadata(self._temporal_visible_key(commit_id), marker)
-        commit = self.get_temporal_commit(commit_id)
-        if commit is None:
-            raise TemporalCorruptionError("new temporal commit was not visible after publication")
-        return commit
+    def _commit_versions_direct(self, writes, metadata, index_mode) -> TemporalCommit:
+        return self._temporal_committer().commit_direct(writes, metadata, index_mode)
 
     def _require_temporal_retraction_identities(self, identities) -> None:
         """Validate against published history, independently of deferred indexes.
@@ -4182,56 +3990,10 @@ class GraphDB:
         Scan once for all unresolved identities in the batch; unpublished records
         and prior retraction-only history cannot establish an identity.
         """
-        missing = set(identities)
-        if not missing:
-            return
-        last_commit_id, _ = self._temporal_sequence()
-        for commit_id in range(1, last_commit_id + 1):
-            commit = self.get_temporal_commit(commit_id, _validate_supersession=False)
-            if commit is None:
-                continue
-            for version in commit.versions:
-                if version.operation is VersionOperation.RETRACT:
-                    continue
-                kind = "node" if isinstance(version, NodeVersion) else (
-                    "edge" if isinstance(version, EdgeVersion) else "claim"
-                )
-                missing.discard((kind, version.logical_id))
-            if not missing:
-                return
-        kind, logical_id = sorted(missing)[0]
-        raise TemporalVersionError(
-            f"cannot retract nonexistent {kind} identity: {logical_id}"
-        )
+        _temporal_writes.require_retraction_identities(self._temporal_reader(), identities)
 
     def _temporal_version_id_exists(self, version_id: str) -> bool:
-        version_id = normalize_version_id(version_id)
-        if self._temporal_index_state() is not None:
-            # Indexes are current, so the version index answers in O(1).
-            # It is written for every commit in MAINTAIN mode and covers
-            # all visible history once the index state exists.
-            for _ in self.store.iter_index_prefix(
-                self._temporal_index_name(_TEMPORAL_VERSION_INDEX, self._temporal_index_generation()),
-                [version_id.encode("ascii")],
-            ):
-                return True
-            return False
-        # Stale or absent indexes (e.g. DEFER bulk loads): fall back to a
-        # descriptor scan. Slower, but correct in every index mode.
-        last_commit_id, _ = self._temporal_sequence()
-        for commit_id in range(1, last_commit_id + 1):
-            descriptor_payload = self.store.get_metadata(self._temporal_commit_key(commit_id))
-            if descriptor_payload is None:
-                continue
-            try:
-                descriptor = json.loads(descriptor_payload.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                continue
-            if not isinstance(descriptor, dict):
-                raise TemporalCorruptionError("invalid temporal commit descriptor")
-            if version_id in descriptor.get("version_ids", []):
-                return True
-        return False
+        return self._temporal_committer().version_id_exists(version_id)
 
     def _temporal_reader(self) -> _temporal_reads.TemporalReader:
         """Bind the historical read capability to this handle's scope."""
