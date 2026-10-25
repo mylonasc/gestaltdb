@@ -15,7 +15,7 @@ export interface ViewState {
   layout: LayoutState;
   settings: ViewerSettings;
   filters: {
-    query: string; hiddenGroups: string[]; hiddenTypes: string[]; requiredLabel: string;
+    query: string; hiddenGroups: string[]; hiddenTypes: string[]; hiddenShapes: string[]; requiredLabel: string;
     focusNodeId: string | null; focusDirection: "in" | "out" | "both"; focusHops: number;
     searchProperties: boolean; highlightOn: boolean;
   };
@@ -50,6 +50,10 @@ function choice<T extends string>(value: unknown, allowed: readonly T[]): T {
 function strings(value: unknown): string[] {
   if (!Array.isArray(value)) throw new Error("Expected a view-state list");
   return value.map(text);
+}
+function optionalStrings(value: unknown): string[] {
+  if (value === undefined) return [];
+  return strings(value);
 }
 function property(value: unknown): string | null {
   if (value === null || value === undefined) return null;
@@ -116,6 +120,7 @@ export function parseViewState(value: unknown, payload: VizPayload): ViewState {
       edgeWidthProperty: property(settings.edgeWidthProperty), edgeColorProperty: property(settings.edgeColorProperty),
     },
     filters: { query: text(filters.query), hiddenGroups: strings(filters.hiddenGroups), hiddenTypes: strings(filters.hiddenTypes),
+      hiddenShapes: optionalStrings(filters.hiddenShapes),
       requiredLabel: text(filters.requiredLabel), focusNodeId, focusDirection: choice(filters.focusDirection, ["in", "out", "both"]),
       focusHops, searchProperties: flag(filters.searchProperties), highlightOn: flag(filters.highlightOn) },
   };

@@ -27,8 +27,8 @@ function numericScale(entities: Entity[], property: string | null, range: [numbe
 }
 export function appearanceScales(payload: VizPayload, options: AppearanceOptions) {
   return {
-    radius: numericScale(payload.nodes, options.nodeSizeProperty, [4, 24], 7),
-    width: numericScale(payload.edges, options.edgeWidthProperty, [0.5, 6], 1.2),
+    radius: numericScale(payload.nodes, options.nodeSizeProperty, [8, 32], 12),
+    width: numericScale(payload.edges, options.edgeWidthProperty, [1, 7], 2),
     nodeColor: (node: VizPayloadNode) => colorFor(category(propertyValue(node, options.nodeColorProperty), groupKey(node))),
     edgeColor: (edge: VizPayloadEdge) => colorFor(category(propertyValue(edge, options.edgeColorProperty), typeKey(edge))),
   };

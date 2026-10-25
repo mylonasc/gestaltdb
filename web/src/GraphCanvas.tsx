@@ -14,6 +14,8 @@ export interface CanvasHandle {
   restore: (state: LayoutState) => void;
   togglePin: (id: string) => void;
   relayout: (visibleOnly: boolean) => void;
+  /** Pin every node at deterministic layered (tree) coordinates. */
+  treeLayout: () => void;
 }
 
 interface Props {
@@ -38,14 +40,77 @@ interface SimNode extends d3.SimulationNodeDatum {
   uid: string;
   group: string;
   radius: number;
+  shape: "circle" | "triangle" | "square";
 }
 
 interface SimLink extends d3.SimulationLinkDatum<SimNode> {
   uid: string;
   etype: string;
+  dash: string | null;
 }
 
-const NODE_RADIUS = 7;
+/** Gentle simulation energy for interaction reheats: enough to ease nodes,
+ *  never enough to catapult a layout that sits far from force equilibrium. */
+const GENTLE_ALPHA = 0.08;
+
+/** Deterministic layered coordinates (top-down tree layout).
+ *
+ * Kahn layering over the given links in sorted uid order: nodes with no
+ * incoming link form the top row and every other node sits below its
+ * predecessors, so proof trees, derivation graphs, and hierarchies read
+ * top-down. Nodes on purely cyclic paths take trailing rows in uid order
+ * instead of collapsing onto one row. Mirrors the Python SVG "tree" layout
+ * so static exports and the viewer agree byte-for-byte on layering.
+ */
+export function treeCoordinates<Node extends { uid: string }, Link extends { source: string | number | Node; target: string | number | Node }>(
+  nodes: Node[], links: Link[],
+): Map<string, { x: number; y: number }> {
+  const ids = nodes.map(node => node.uid);
+  const members = new Set(ids);
+  const children = new Map<string, Set<string>>(ids.map(id => [id, new Set()]));
+  const indegree = new Map<string, number>(ids.map(id => [id, 0]));
+  const endpoint = (value: string | number | Node): string => typeof value === "object" ? value.uid : String(value);
+  for (const link of links) {
+    const source = endpoint(link.source), target = endpoint(link.target);
+    if (source === target || !members.has(source) || !members.has(target)) continue;
+    if (!children.get(source)!.has(target)) {
+      children.get(source)!.add(target);
+      indegree.set(target, (indegree.get(target) ?? 0) + 1);
+    }
+  }
+  const depth = new Map<string, number>();
+  let current = ids.filter(id => (indegree.get(id) ?? 0) === 0).sort();
+  let layer = 0;
+  while (current.length > 0) {
+    const upcoming: string[] = [];
+    for (const id of current) {
+      depth.set(id, layer);
+      for (const child of [...children.get(id)!].sort()) {
+        indegree.set(child, (indegree.get(child) ?? 0) - 1);
+        if (indegree.get(child) === 0) upcoming.push(child);
+      }
+    }
+    current = [...new Set(upcoming)].sort();
+    layer += 1;
+  }
+  for (const id of [...members].sort()) {
+    if (!depth.has(id)) { depth.set(id, layer); layer += 1; }
+  }
+  const rows = new Map<number, string[]>();
+  for (const id of ids) {
+    const row = depth.get(id)!;
+    if (!rows.has(row)) rows.set(row, []);
+    rows.get(row)!.push(id);
+  }
+  const positions = new Map<string, { x: number; y: number }>();
+  for (const row of [...rows.keys()].sort((a, b) => a - b)) {
+    const rowMembers = rows.get(row)!.sort();
+    rowMembers.forEach((id, index) => {
+      positions.set(id, { x: (index - (rowMembers.length - 1) / 2) * 200, y: row * 160 });
+    });
+  }
+  return positions;
+}
 
 export function GraphCanvas({
   canvasRef,
@@ -96,6 +161,43 @@ export function GraphCanvas({
     pinsChangeRef.current(nodesRef.current.filter(node => node.fx != null).map(node => node.uid));
   }
 
+  // Reheat a stopped simulation gently: releasing a pin far from force
+  // equilibrium (e.g. one tree node among pinned anchors) must ease it
+  // there, never catapult it across the canvas. Hotter running states keep
+  // their energy. Arrange paths always cool the sim to zero first, so a
+  // stopped diagram never resumes at a stale hot alpha.
+  function wakeSim() {
+    const sim = simRef.current;
+    if (sim && !settingsRef.current.paused) {
+      sim.alpha(Math.max(sim.alpha(), GENTLE_ALPHA)).restart();
+    }
+  }
+
+  // Deterministic layered arrangement: pin every node at its tree
+  // coordinates and stop the force simulation there. Unpinning (or Reset
+  // layout) hands control back to the force-directed layout.
+  function arrangeTree() {
+    const positions = treeCoordinates(nodesRef.current, linksRef.current);
+    // Center the rows on the simulation origin so the center force stays
+    // balanced; otherwise the first released node gets yanked toward it.
+    let top = Infinity, bottom = -Infinity;
+    for (const point of positions.values()) {
+      if (point.y < top) top = point.y;
+      if (point.y > bottom) bottom = point.y;
+    }
+    const shift = (top + bottom) / 2;
+    const sim = simRef.current;
+    // Cool to zero: a stopped diagram must never resume at a stale hot alpha.
+    sim?.alpha(0);
+    sim?.stop();
+    for (const node of nodesRef.current) {
+      const point = positions.get(node.uid)!;
+      node.x = point.x; node.y = point.y - shift; node.vx = 0; node.vy = 0;
+      node.fx = node.x; node.fy = node.y;
+    }
+    renderRef.current(); notifyPins(); fitViewport();
+  }
+
   useImperativeHandle(controllerRef, () => ({
     snapshot: () => {
       const zoom = svgRef.current ? d3.zoomTransform(svgRef.current) : d3.zoomIdentity;
@@ -124,7 +226,7 @@ export function GraphCanvas({
         d3.select(svgRef.current).interrupt().call(zoomRef.current.transform,
           d3.zoomIdentity.translate(state.zoom.x, state.zoom.y).scale(state.zoom.k));
       }
-      if (!settingsRef.current.paused) simRef.current?.alpha(0.3).restart();
+      wakeSim();
     },
     togglePin: id => {
       const node = nodesRef.current.find(item => item.uid === id);
@@ -132,7 +234,7 @@ export function GraphCanvas({
       const pinned = node.fx != null;
       node.fx = pinned ? null : node.x; node.fy = pinned ? null : node.y;
       renderRef.current(); notifyPins();
-      if (!settingsRef.current.paused) simRef.current?.alpha(0.3).restart();
+      wakeSim();
     },
     relayout: visibleOnly => {
       const hidden = new Set(viewRef.current.hiddenNodes);
@@ -155,6 +257,9 @@ export function GraphCanvas({
       else sim?.restart();
       renderRef.current(); notifyPins(); fitViewport();
     },
+    treeLayout: () => {
+      arrangeTree();
+    },
   }), []);
 
   // Build (or rebuild) the simulation whenever the payload identity changes.
@@ -174,6 +279,7 @@ export function GraphCanvas({
         uid: node.id,
         group: groupKey(node),
         radius: scalesRef.current.radius(node),
+        shape: node.shape ?? "circle",
         x: Math.cos(angle) * radius,
         y: Math.sin(angle) * radius,
       });
@@ -184,7 +290,7 @@ export function GraphCanvas({
       const source = byId.get(edge.source);
       const target = byId.get(edge.target);
       if (!source || !target) continue;
-      links.push({ uid: edge.id, source, target, etype: typeKey(edge) });
+      links.push({ uid: edge.id, source, target, etype: typeKey(edge), dash: edge.dash ?? null });
     }
     nodesRef.current = nodes;
     linksRef.current = links;
@@ -246,6 +352,7 @@ export function GraphCanvas({
       .attr("class", "edge")
       .attr("fill", "none")
       .attr("stroke-width", 1.2)
+      .attr("stroke-dasharray", (link) => link.dash)
       .attr("stroke-opacity", 0.7);
     edgeSelRef.current = edgeSel;
 
@@ -284,7 +391,12 @@ export function GraphCanvas({
     const drag = d3
       .drag<SVGGElement, SimNode>()
       .on("start", (event, node) => {
-        if (!event.active && !settingsRef.current.paused) sim.alphaTarget(0.3).restart();
+        // Every mousedown fires drag-start, even a plain click: never reheat
+        // past gentle energy here or released nodes catapult on click.
+        if (!event.active && !settingsRef.current.paused) {
+          const sim = simRef.current;
+          if (sim) sim.alphaTarget(Math.max(sim.alphaTarget(), GENTLE_ALPHA)).restart();
+        }
         node.fx = node.x;
         node.fy = node.y;
       })
@@ -326,15 +438,16 @@ export function GraphCanvas({
         event.stopPropagation();
         node.fx = null;
         node.fy = null;
-        if (!settingsRef.current.paused) sim.alpha(0.3).restart();
+        wakeSim();
         renderPositions(); notifyPins();
       });
     nodeSel
-      .append("circle")
-      .attr("r", node => node.radius)
-      .attr("stroke", "currentColor")
-      .attr("stroke-width", 1.2);
-    nodeSel.append("title").text((node) => node.uid);
+      .each(function (node) {
+        const shape = node.shape === "triangle" ? "polygon" : node.shape === "square" ? "rect" : "circle";
+        d3.select(this).append(shape).attr("class", "node-shape");
+      })
+      .append("title")
+      .text((node) => node.uid);
     nodeSelRef.current = nodeSel;
 
     const labelSel = labelLayer
@@ -342,7 +455,7 @@ export function GraphCanvas({
       .data(nodes, (node) => node.uid)
       .join("text")
       .attr("class", "node-label")
-      .attr("dx", NODE_RADIUS + 3)
+      .attr("dx", (node) => node.radius + 3)
       .attr("dy", 4)
       .text((node) => node.uid);
     labelSel.attr("display", settingsRef.current.showLabels ? null : "none");
@@ -364,6 +477,10 @@ export function GraphCanvas({
     applyView();
     // Initial fit once geometry exists.
     fitViewport();
+    // Reasoning artifacts opt into a deterministic tree arrangement via
+    // payload meta: pin the layered positions so the first paint is already
+    // the final layout instead of a force-simulation lottery.
+    if (payload.meta["suggested_layout"] === "tree") arrangeTree();
 
     return () => {
       sim.stop();
@@ -379,6 +496,30 @@ export function GraphCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload]);
 
+  // Paint every node marker from its shape: circles for data, triangles for
+  // inferred conclusions, squares for schema. Geometry refreshes here so
+  // attribute-driven radius changes reshape triangles and squares too.
+  function paintNodeShapes() {
+    nodeSelRef.current
+      ?.selectAll<SVGElement, SimNode>(".node-shape")
+      .each(function (node) {
+        const element = d3.select(this);
+        element
+          .attr("fill", scalesRef.current.nodeColor(nodeEntities.get(node.uid)!))
+          .attr("stroke", "currentColor")
+          .attr("stroke-width", 1.5);
+        if (node.shape === "triangle") {
+          const radius = node.radius;
+          element.attr("points", `0,${-radius} ${radius * 0.95},${radius * 0.75} ${-radius * 0.95},${radius * 0.75}`);
+        } else if (node.shape === "square") {
+          const half = node.radius * 0.9;
+          element.attr("x", -half).attr("y", -half).attr("width", half * 2).attr("height", half * 2);
+        } else {
+          element.attr("r", node.radius);
+        }
+      });
+  }
+
   function applyView() {
     const view = viewRef.current;
     const hiddenNodeSet = new Set(view.hiddenNodes);
@@ -387,12 +528,11 @@ export function GraphCanvas({
     const dimEdgeSet = new Set(view.dimEdges);
     const selected = view.selection;
     for (const node of nodesRef.current) node.radius = scalesRef.current.radius(nodeEntities.get(node.uid)!);
+    paintNodeShapes();
     nodeSelRef.current
       ?.attr("display", (node) => (hiddenNodeSet.has(node.uid) ? "none" : null))
       .attr("opacity", (node) => selected?.kind === "node" && selected.id === node.uid ? 1 : (dimNodeSet.has(node.uid) ? 0.15 : 1))
       .classed("selected", (node) => selected?.kind === "node" && selected.id === node.uid);
-    nodeSelRef.current?.select("circle").attr("r", node => node.radius)
-      .attr("fill", node => scalesRef.current.nodeColor(nodeEntities.get(node.uid)!));
     labelSelRef.current
       ?.text((node) => {
         const entity = nodeEntities.get(node.uid)!;
@@ -471,14 +611,15 @@ export function GraphCanvas({
     if (!settingsRef.current.paused) simRef.current?.alpha(0.3).restart();
   }, [settings.nodeSizeProperty]);
 
-  // Pause / resume.
+  // Pause / resume. Resuming reheats gently like any other unpin path so a
+  // static tree never catapults when the simulation takes over.
   useEffect(() => {
     const sim = simRef.current;
     if (!sim) return;
     if (settings.paused) {
       sim.stop();
     } else {
-      sim.alpha(0.3).restart();
+      wakeSim();
     }
   }, [settings.paused]);
 
@@ -523,8 +664,7 @@ export function GraphCanvas({
       node.fy = null;
     }
     renderRef.current(); notifyPins();
-    const sim = simRef.current;
-    if (sim && !settingsRef.current.paused) sim.alpha(0.3).restart();
+    wakeSim();
   }, [unpinSignal]);
 
   return (

@@ -54,6 +54,93 @@ Entry Points
    from gestaltdb.viz.api import visualize_sampler_batch
    figure = visualize_sampler_batch(batch, snapshot)
 
+Reasoning Results
+-----------------
+
+Proof trees and derivation graphs reuse the same offline viewer with no
+front-end rebuild. Every reasoning node carries a readable ``label``
+property, so ``VizOptions(node_label_property="label", edge_labels="all")``
+is the recommended setting for both HTML and static SVG:
+
+.. code-block:: python
+
+   from gestaltdb.viz.api import (
+       VizOptions,
+       visualize_claim_explanation,
+       visualize_inference_audit,
+       visualize_ontology,
+       visualize_proof_explanation,
+       visualize_support_set,
+   )
+
+   options = VizOptions(node_label_property="label", edge_labels="all")
+
+   # Graph-rule derivation from historical claim versions.
+   explanation = graph.rules.explain(derived.logical_id, valid_time=50)
+   figure = visualize_claim_explanation(explanation, options=options)
+
+   # Archived audit without a live database handle.
+   from gestaltdb.inference import export_inference
+   figure = visualize_inference_audit(export_inference(explanation), options=options)
+
+   # Standalone Datalog proof witness as a fact tree
+   # (``EvaluationResult.explain`` / ``ProofTrace.explain``).
+   figure = visualize_proof_explanation(proof_explanation, options=options)
+
+   # All alternative justifications for one typed fact, with the chosen
+   # ``RankedWitness`` highlighted instead of hidden.
+   figure = visualize_support_set(fact, supports, witness, options=options)
+
+   # Ontology hierarchy: binary axioms become typed edges, property
+   # chains and intersections become explicit axiom nodes.
+   figure = visualize_ontology(ontology, options=options)
+
+   # The whole inference chain: property graph + proof + ontology in one
+   # figure, linked by exact ID equality only.
+   figure = visualize_inference_chain(nodes, edges, explanation, ontology, options=options)
+
+Shape Vocabulary and the Inference Chain
+----------------------------------------
+
+Reasoning figures use one shape vocabulary in static SVG, the viewer, and
+browser exports: **circles** mark the data layer (property-graph nodes,
+asserted claims, input facts), **triangles** mark inferred conclusions
+(derived claims and facts), and **squares** mark schema (rules, absence
+checks, axiom nodes, ontology terms). Stored, structural, and lookup edges
+are solid; inference steps that derive a conclusion are **dotted**
+(``stroke-dasharray="6 4"``).
+
+``visualize_inference_chain(nodes, edges, explanation, ontology)`` composes
+all three layers into one figure: the property graph, one proof or claim
+explanation, and one ontology revision. With ``link_layers=True`` (the
+default), exact-equality cross-links join the layers without inventing
+mappings — a statement whose subject or object equals a graph node ID gains
+a solid ``mentions`` edge (the same convention as the current-graph
+projection, which uses node IDs as fact subjects and objects), and a
+statement whose predicate equals an ontology property term gains a solid
+``typed_as`` edge. Pass ``link_layers=False`` to render the layers side by
+side. Each layer is capped independently, so sample the graph layer first
+for very large databases.
+
+``ClaimExplanation`` edges keep their stored ``derived_by`` (conclusion to
+rule), ``premise`` (rule to premise), and ``absent_premise`` direction, so
+arrows read as "depends on" from the highlighted root outward. Standalone
+proof witnesses collapse each derivation to ``premise to conclusion`` edges
+typed by rule ID, so arrows follow logical support toward the highlighted
+root. Support sets fan out from one conclusion to one node per alternative
+derivation. The builders accept the same caps/ceilings as the graph path
+and record their provenance in ``meta["builder"]``.
+
+Reasoning figures render in a deterministic layered tree by default: static
+``as_svg()`` uses ``layout="tree"`` unless overridden, and the interactive
+viewer opens these artifacts already arranged (and pinned) as a tree via the
+payload's ``suggested_layout`` hint, with no force-simulation lottery. The
+``Tree layout`` toolbar button re-applies the arrangement on demand, while
+``Reset layout`` hands control back to the force-directed simulation. The
+layering is longest-path-free Kahn ordering (predecessor-free nodes on top,
+cyclic leftovers in trailing rows), shared by the Python renderer and the
+viewer so both agree. Pass an explicit ``layout="circle"`` to opt out.
+
 Options (``VizOptions``) cover node/edge caps (defaults 2000/5000),
 absolute ceilings (default twice the caps, raising
 ``VizCapExceededError`` with sampling guidance), iframe height, light/dark
@@ -80,9 +167,12 @@ Direct SVG Output
 -----------------
 
 SVG generation from Python requires no browser, JavaScript runtime, or additional
-dependency. It uses a deterministic circle or grid layout, or supplied node
-coordinates. Coordinates must cover every displayed node and are uniformly
-scaled into the output viewport.
+dependency. It uses a deterministic circle, grid, or layered tree layout, or
+supplied node coordinates. Coordinates must cover every displayed node and
+are uniformly scaled into the output viewport. Static labels render at 13px
+with node radii 8–32 (fallback 12) and edge widths 1–7 (fallback 2), up from
+the earlier 10px / 4–24 / 0.5–6 defaults, so exports stay legible without
+zooming.
 
 .. code-block:: python
 
@@ -102,8 +192,12 @@ scaled into the output viewport.
    with TemporaryDirectory() as tmpdir:
        figure.save_svg(Path(tmpdir) / "graph.svg", layout="grid", background=False)
 
-``as_svg()`` and ``save_svg()`` render the Python payload and options, not the
-current iframe's force layout, selection, filters, or manually dragged positions.
+``as_svg()`` defaults to ``layout="circle"`` for graph figures and to the
+payload's suggested layout for reasoning figures (``"tree"``); pass an
+explicit ``layout="circle"|"grid"|"tree"`` to override. ``save_svg()`` and
+``as_svg()`` render the Python payload and options, not the
+current iframe's force layout, selection, filters, or manually dragged
+positions.
 For static relationship labels, set ``edge_labels="all"``; static output has no
 hover or selection state. ``positions={"alice": (0, 0), "bob": (1, 0)}`` can be
 passed to either method. ``save()`` continues to write interactive HTML.
@@ -170,7 +264,15 @@ Canvas Features
 ---------------
 
 - D3 force layout with drag-to-pin, double-click release, pan/zoom, refit,
-  pause, and tunable charge/link distance.
+  pause, and tunable charge/link distance. Labels render at 13px with node
+  radii 8–32 and edge widths 1–7 (same scale as static SVG).
+- Deterministic tree arrangement: reasoning artifacts open pre-arranged (and
+  pinned) in a layered top-down tree with the simulation paused; press
+  Resume layout to run the force simulation. The Tree layout button
+  re-applies the arrangement on demand and Reset layout returns to force.
+  Releasing a pin eases the node into the live simulation instead of
+  flinging it: arrange paths cool the simulation first and unpin paths
+  reheat gently.
 - Dragging also works while paused; fit-visible includes displayed geometry
   and labels. The viewer refits when its container is resized.
 - Explicit pin/unpin actions and dashed pin indicators, full-layout reset, and

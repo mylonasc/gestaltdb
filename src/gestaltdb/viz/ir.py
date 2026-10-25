@@ -131,6 +131,44 @@ def _split_extra(properties: Mapping[str, Any]) -> tuple[dict[str, Any], dict[st
     return regular, extra
 
 
+#: Node shapes honored by the static SVG renderer and the interactive viewer.
+#: ``circle`` marks concrete data (graph nodes, asserted claims, input facts),
+#: ``triangle`` marks inferred conclusions (derived facts and claims), and
+#: ``square`` marks schema (rules, axioms, and ontology terms).
+NODE_SHAPES = ("circle", "triangle", "square")
+
+
+def _node_shape(raw: Any) -> str:
+    """Return the validated node shape for a Node object or node-shaped dict."""
+    if isinstance(raw, Mapping) and not hasattr(raw, "labels"):
+        shape = raw.get("shape", "circle")
+    else:
+        shape = getattr(raw, "shape", "circle")
+    if shape is None:
+        return "circle"
+    if not isinstance(shape, str) or shape not in NODE_SHAPES:
+        raise ValueError(
+            f"unknown node shape {shape!r}; expected one of {', '.join(NODE_SHAPES)}")
+    return shape
+
+
+def _edge_dash(raw: Any) -> str | None:
+    """Return the validated dash pattern for an Edge object or edge-shaped dict.
+
+    The value becomes the SVG ``stroke-dasharray`` (e.g. ``"6 4"`` for the
+    dotted inference-step style); ``None`` renders a solid relationship.
+    """
+    if isinstance(raw, Mapping) and not hasattr(raw, "source"):
+        dash = raw.get("dash", None)
+    else:
+        dash = getattr(raw, "dash", None)
+    if dash is None:
+        return None
+    if not isinstance(dash, str) or not dash.strip():
+        raise ValueError(f"edge dash must be a nonempty SVG dash-list string, got {dash!r}")
+    return dash
+
+
 def _entity_id(raw: Any) -> str | None:
     """Return the stable entity ID for Node/Edge-like objects or dicts."""
     get_id = getattr(raw, "get_id", None)
@@ -216,6 +254,12 @@ class VizNode:
     labels: tuple[str, ...] = ()
     properties: dict[str, Any] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
+    shape: str = "circle"
+
+    def __post_init__(self) -> None:
+        if self.shape not in NODE_SHAPES:
+            raise ValueError(
+                f"unknown node shape {self.shape!r}; expected one of {', '.join(NODE_SHAPES)}")
 
     @property
     def group(self) -> str:
@@ -230,6 +274,7 @@ class VizNode:
             "group": self.group,
             "properties": dict(self.properties),
             "extra": dict(self.extra),
+            "shape": self.shape,
         }
 
 
@@ -243,6 +288,11 @@ class VizEdge:
     type: str = ""
     properties: dict[str, Any] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
+    dash: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.dash is not None and (not isinstance(self.dash, str) or not self.dash.strip()):
+            raise ValueError(f"edge dash must be a nonempty SVG dash-list string, got {self.dash!r}")
 
     def to_dict(self) -> dict[str, Any]:
         """Return the JSON-safe edge payload."""
@@ -253,6 +303,7 @@ class VizEdge:
             "type": self.type,
             "properties": dict(self.properties),
             "extra": dict(self.extra),
+            "dash": self.dash,
         }
 
 
@@ -369,7 +420,8 @@ class VizGraph:
                 continue
             node_id, labels, properties, extra = parts
             if node_id not in node_map:
-                node_map[node_id] = VizNode(id=node_id, labels=labels, properties=properties, extra=extra)
+                node_map[node_id] = VizNode(id=node_id, labels=labels, properties=properties,
+                                            extra=extra, shape=_node_shape(raw))
 
         ordered_node_ids = sorted(node_map)
         ceiling_nodes = absolute_max_nodes if absolute_max_nodes is not None else max_nodes * DEFAULT_ABSOLUTE_CEILING_MULTIPLIER
@@ -397,6 +449,7 @@ class VizGraph:
                 type=edge_type if isinstance(edge_type, str) else "",
                 properties=properties,
                 extra=extra,
+                dash=_edge_dash(raw),
             )
 
         ordered_edges = sorted(edge_map.values(), key=lambda edge: (edge.source, edge.target, edge.id))

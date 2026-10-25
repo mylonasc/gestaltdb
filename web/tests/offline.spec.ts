@@ -186,11 +186,11 @@ test("property search, secondary labels, directed focus and styling are usable o
   await expect(page.locator(".node:visible")).toHaveCount(2);
   await page.getByText("Labels and attribute styling", { exact: true }).click();
   await page.getByLabel("Node size property", { exact: true }).selectOption("mass");
-  await expect(page.getByRole("button", { name: "Node a", exact: true }).locator("circle")).toHaveAttribute("r", "4");
-  await expect(page.getByRole("button", { name: "Node b", exact: true }).locator("circle")).toHaveAttribute("r", "24");
+  await expect(page.getByRole("button", { name: "Node a", exact: true }).locator("circle")).toHaveAttribute("r", "8");
+  await expect(page.getByRole("button", { name: "Node b", exact: true }).locator("circle")).toHaveAttribute("r", "32");
   await page.getByLabel("Edge width property", { exact: true }).selectOption("score");
   const widths = await page.locator(".edge").evaluateAll(edges => edges.map(edge => Number(edge.getAttribute("stroke-width"))));
-  expect(widths).toContain(6);
+  expect(widths).toContain(7);
   await page.setViewportSize({ width: 500, height: 800 });
   await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
   await expect(page.getByRole("complementary")).toHaveCount(0);
