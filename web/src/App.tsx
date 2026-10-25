@@ -93,6 +93,7 @@ export function App({ payload, initial = {} }: { payload: VizPayload; initial?: 
         <button onClick={() => setUnpinSignal(value => value + 1)}>Unpin all</button>
         <button onClick={() => controllerRef.current?.relayout(false)}>Reset layout</button>
         <button onClick={() => controllerRef.current?.relayout(true)}>Relayout visible graph</button>
+        <button onClick={() => controllerRef.current?.treeLayout()}>Tree layout</button>
         <label>Charge<input type="range" min={-1000} max={-10} step={10} value={settings.charge} onChange={event => setSettings({ ...settings, charge: Number(event.target.value) })} /></label>
         <label>Link distance<input type="range" min={10} max={200} step={5} value={settings.linkDistance} onChange={event => setSettings({ ...settings, linkDistance: Number(event.target.value) })} /></label>
         <label><input type="checkbox" checked={settings.showLabels} onChange={event => setSettings({ ...settings, showLabels: event.target.checked })} />Node labels</label>

@@ -207,6 +207,7 @@ def claim_explanation_graph(
 
     payload_meta = dict(meta or {})
     payload_meta["builder"] = "from_claim_explanation"
+    payload_meta["suggested_layout"] = "tree"
     payload_meta["claim_id"] = claim_id
     payload_meta["root_version_id"] = root_version_id
     if source_truncated:
@@ -341,6 +342,7 @@ def inference_audit_graph(
 
     payload_meta = dict(meta or {})
     payload_meta["builder"] = "from_inference_audit"
+    payload_meta["suggested_layout"] = "tree"
     payload_meta["claim_id"] = str(document.get("claim_id", ""))
     payload_meta["root_version_id"] = root_version_id
     if source_truncated:
@@ -444,6 +446,7 @@ def proof_explanation_graph(
 
     payload_meta = dict(meta or {})
     payload_meta["builder"] = "from_proof_explanation"
+    payload_meta["suggested_layout"] = "tree"
     payload_meta["root"] = _fact_label(list(fact_parts(root))) if root is not None else ""
     if source_truncated:
         payload_meta["source_truncated"] = True
@@ -570,6 +573,7 @@ def support_set_graph(
 
     payload_meta = dict(meta or {})
     payload_meta["builder"] = "from_support_set"
+    payload_meta["suggested_layout"] = "tree"
     payload_meta["fact"] = conclusion_label
     payload_meta["support_count"] = len(items)
     if witness is not None:
@@ -735,6 +739,7 @@ def ontology_graph(
 
     payload_meta = dict(meta or {})
     payload_meta["builder"] = "from_ontology"
+    payload_meta["suggested_layout"] = "tree"
     payload_meta["ontology_id"] = str(getattr(ontology, "ontology_id", ""))
     revision = getattr(ontology, "revision_id", None)
     if revision is not None:

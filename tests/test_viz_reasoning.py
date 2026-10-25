@@ -202,6 +202,22 @@ def test_ontology_graph_hierarchy_and_reification():
     assert "Cat" in svg and "rdfs:subClassOf" in svg
 
 
+def test_reasoning_figures_default_to_tree_svg_layout():
+    explanation = _proof_fixture()
+    figure = visualize_proof_explanation(
+        explanation, options=VizOptions(node_label_property="label", edge_labels="all"))
+    assert figure.viz.meta["suggested_layout"] == "tree"
+    assert figure.as_svg() == figure.as_svg(layout="tree")
+    assert figure.as_svg() != figure.as_svg(layout="circle")
+    graph, claim_explanation, _, _ = _rule_graph()
+    try:
+        claim_figure = visualize_claim_explanation(
+            claim_explanation, options=VizOptions(node_label_property="label"))
+        assert claim_figure.as_svg() == claim_figure.as_svg(layout="tree")
+    finally:
+        graph.close()
+
+
 def test_reasoning_figures_reject_bad_inputs():
     with pytest.raises(TypeError):
         claim_explanation_graph(object())

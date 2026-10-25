@@ -64,21 +64,72 @@ def _numeric_sizes(entities: Any, name: str | None, low: float, high: float, fal
             for entity in entities}
 
 
+def _tree_coords(node_ids: list[str], edges: Any) -> dict[str, tuple[float, float]]:
+    """Assign deterministic layered coordinates (top-down tree layout).
+
+    Nodes with no incoming edges form layer 0; every other node sits one
+    layer below its earliest-available predecessor (Kahn's algorithm in
+    sorted order, so repeated builds are byte-identical). Nodes on purely
+    cyclic paths, which have no predecessor-free entry point, take trailing
+    layers in ID order instead of collapsing onto one row. Within a layer,
+    nodes spread by sorted ID. Self-loops never affect layering.
+    """
+    children: dict[str, set[str]] = {node_id: set() for node_id in node_ids}
+    indegree: dict[str, int] = {node_id: 0 for node_id in node_ids}
+    for edge in edges:
+        source, target = edge.source, edge.target
+        if source == target or source not in children or target not in children:
+            continue
+        if target not in children[source]:
+            children[source].add(target)
+            indegree[target] += 1
+    depth: dict[str, int] = {}
+    current = sorted(node_id for node_id in node_ids if indegree[node_id] == 0)
+    layer = 0
+    while current:
+        upcoming: list[str] = []
+        for node_id in current:
+            depth[node_id] = layer
+            for child in sorted(children[node_id]):
+                indegree[child] -= 1
+                if indegree[child] == 0:
+                    upcoming.append(child)
+        current = sorted(set(upcoming))
+        layer += 1
+    for node_id in sorted(set(node_ids) - set(depth)):
+        depth[node_id] = layer
+        layer += 1
+    layers: dict[int, list[str]] = {}
+    for node_id in node_ids:
+        layers.setdefault(depth[node_id], []).append(node_id)
+    coords: dict[str, tuple[float, float]] = {}
+    for layer_index in sorted(layers):
+        row = sorted(layers[layer_index])
+        for position, node_id in enumerate(row):
+            coords[node_id] = (position - (len(row) - 1) / 2, float(layer_index))
+    return coords
+
+
 def render_svg(viz: Any, options: Any, *, width: int = 1200, height: int = 800,
                layout: str = "circle", positions: Mapping[str, tuple[float, float]] | None = None,
                background: bool = True) -> str:
-    """Render a circle/grid layout or explicit coordinates fitted to the image.
+    """Render a circle/grid/tree layout or explicit coordinates fitted to the image.
 
+    ``tree`` is a deterministic layered layout: predecessor-free nodes sit on
+    the top row and every other node sits below its predecessors, so proof
+    trees, derivation graphs, and hierarchies read top-down with no force
+    simulation involved. Cyclic leftovers take trailing rows in ID order.
     Coordinates must cover every node and are normalized uniformly into the
     output viewport. Static edge labels appear only for ``edge_labels='all'``:
     static figures have no selection or hover state.
     """
     if any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 for value in (width, height)):
         raise ValueError("width and height must be positive integers")
-    if layout not in ("circle", "grid"):
-        raise ValueError("layout must be 'circle' or 'grid'")
+    if layout not in ("circle", "grid", "tree"):
+        raise ValueError("layout must be 'circle', 'grid', or 'tree'")
     ids = [node.id for node in viz.nodes]
     count = len(ids)
+    tree_coords = _tree_coords(ids, list(viz.edges)) if layout == "tree" and positions is None else {}
     coords: dict[str, tuple[float, float]] = {}
     for index, node_id in enumerate(ids):
         if positions is not None:
@@ -91,6 +142,8 @@ def render_svg(viz: Any, options: Any, *, width: int = 1200, height: int = 800,
         elif layout == "grid":
             columns = math.ceil(math.sqrt(count))
             x, y = float(index % columns), float(index // columns)
+        elif layout == "tree":
+            x, y = tree_coords[node_id]
         else:
             angle = 2 * math.pi * index / max(count, 1) - math.pi / 2
             x, y = math.cos(angle), math.sin(angle)
@@ -113,12 +166,12 @@ def render_svg(viz: Any, options: Any, *, width: int = 1200, height: int = 800,
     if background:
         SubElement(root, "rect", {"width": "100%", "height": "100%", "fill": bg})
     defs = SubElement(root, "defs")
-    radii = _numeric_sizes(viz.nodes, options.node_size_property, 4, 24, 7)
-    widths = _numeric_sizes(viz.edges, options.edge_width_property, 0.5, 6, 1.2)
+    radii = _numeric_sizes(viz.nodes, options.node_size_property, 8, 32, 12)
+    widths = _numeric_sizes(viz.edges, options.edge_width_property, 1, 7, 2)
     markers = {color: f"arrow-{index}" for index, color in enumerate(PALETTE)}
     for color, marker_id in markers.items():
         marker = SubElement(defs, "marker", {"id": marker_id, "viewBox": "0 -5 10 10", "refX": "10",
-                            "markerWidth": "7", "markerHeight": "7", "orient": "auto", "markerUnits": "userSpaceOnUse"})
+                            "markerWidth": "8", "markerHeight": "8", "orient": "auto", "markerUnits": "userSpaceOnUse"})
         SubElement(marker, "path", {"d": "M0,-5L10,0L0,5", "fill": color})
     groups: dict[tuple[str, str], list[Any]] = defaultdict(list)
     for edge in viz.edges:
@@ -163,18 +216,19 @@ def render_svg(viz: Any, options: Any, *, width: int = 1200, height: int = 800,
         radius = radii[node.id]
         bounds.extend(((x - radius - 1, y - radius - 1), (x + radius + 1, y + radius + 1)))
         element = SubElement(drawing, "circle", {"cx": str(x), "cy": str(y), "r": str(radius),
-                            "fill": _color(_category(node, options.node_color_property, node.group or "(unlabeled)")), "stroke": fg, "stroke-width": "1.2"})
+                            "fill": _color(_category(node, options.node_color_property, node.group or "(unlabeled)")), "stroke": fg, "stroke-width": "1.5"})
         SubElement(element, "title").text = node.id
         if options.show_labels:
             label_layer.append((x + radius + 3, y + 4, _label(node, options.node_label_property, node.id, options.label_max_length), "start"))
     for x, y, text, anchor in label_layer:
         # Conservative system-font bounds; no font or text-metrics dependency.
-        text_width = len(text) * 10
+        # Average glyph width tracks ~0.6x the 13px label font size.
+        text_width = len(text) * 8
         left = x - text_width / 2 if anchor == "middle" else x
-        bounds.extend(((left - 2, y - 12), (left + text_width + 2, y + 4)))
+        bounds.extend(((left - 2, y - 15), (left + text_width + 2, y + 5)))
         SubElement(drawing, "text", {"x": str(x), "y": str(y), "fill": fg, "stroke": bg,
                    "stroke-width": "3", "paint-order": "stroke", "text-anchor": anchor,
-                   "font-family": "sans-serif", "font-size": "10"}).text = text
+                   "font-family": "sans-serif", "font-size": "13"}).text = text
     if bounds:
         xs, ys = zip(*bounds)
         padding = min(20, width / 4, height / 4)
@@ -185,6 +239,6 @@ def render_svg(viz: Any, options: Any, *, width: int = 1200, height: int = 800,
         ty = (height - footer) / 2 - scale * (min(ys) + max(ys)) / 2
         drawing.set("transform", f"translate({tx} {ty}) scale({scale})")
     if viz.truncation.truncated:
-        SubElement(root, "text", {"x": "10", "y": str(height - 10), "fill": fg, "font-size": "12"}).text = (
+        SubElement(root, "text", {"x": "10", "y": str(height - 10), "fill": fg, "font-size": "13"}).text = (
             f"Capped graph: {viz.truncation.nodes_dropped} nodes / {viz.truncation.edges_dropped} edges dropped")
     return tostring(root, encoding="unicode")

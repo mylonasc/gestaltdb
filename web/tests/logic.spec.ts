@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { computeView } from "../src/view";
 import { appearanceScales } from "../src/appearance";
+import { treeCoordinates } from "../src/GraphCanvas";
 import { graphIdentity, parseViewState, type ViewState } from "../src/session";
 import { DEFAULT_SETTINGS, type VizPayload } from "../src/viz-types";
 import { entityLabel } from "../src/labels";
@@ -43,13 +44,27 @@ test("bounded directed focus respects relationship and native-label filters", ()
 
 test("attribute scales exclude booleans and missing values and retain global ranges", () => {
   const scales = appearanceScales(payload, { ...DEFAULT_SETTINGS, nodeSizeProperty: "mass", edgeWidthProperty: "score", nodeColorProperty: "kind" });
-  expect(payload.nodes.map(scales.radius)).toEqual([4, 24, 7]);
-  expect(payload.edges.map(scales.width)).toEqual([0.5, 6]);
+  expect(payload.nodes.map(scales.radius)).toEqual([8, 32, 12]);
+  expect(payload.edges.map(scales.width)).toEqual([1, 7]);
   expect(scales.nodeColor(payload.nodes[0])).toBe(scales.nodeColor(payload.nodes[1]));
   const extreme = { ...payload, nodes: payload.nodes.map((node, index) => ({ ...node, properties: { mass: index ? 1e308 : -1e308 } })) };
   const bounded = appearanceScales(extreme, { ...DEFAULT_SETTINGS, nodeSizeProperty: "mass" });
-  expect(extreme.nodes.map(bounded.radius)).toEqual([4, 24, 24]);
+  expect(extreme.nodes.map(bounded.radius)).toEqual([8, 32, 32]);
   expect(entityLabel(payload.nodes[0], "constructor", "fallback", 40)).toBe("fallback");
+});
+
+test("layered tree coordinates are deterministic and top-down", () => {
+  const nodes = [{ uid: "a" }, { uid: "b" }, { uid: "c" }];
+  const links = [{ source: "a", target: "b" }, { source: "b", target: "c" }];
+  const positions = treeCoordinates(nodes, links);
+  expect(positions.get("a")!.y).toBeLessThan(positions.get("b")!.y);
+  expect(positions.get("b")!.y).toBeLessThan(positions.get("c")!.y);
+  expect(positions.get("a")!.x).toBe(0);
+  expect([...positions.entries()]).toEqual([...treeCoordinates(nodes, links).entries()]);
+  // Cyclic leftovers take trailing rows in uid order instead of collapsing.
+  const cyclic = treeCoordinates([{ uid: "a" }, { uid: "b" }],
+    [{ source: "a", target: "b" }, { source: "b", target: "a" }]);
+  expect(cyclic.get("a")!.y).toBeLessThan(cyclic.get("b")!.y);
 });
 
 test("view state validates topology, complete coordinates, settings and identity before restoration", () => {

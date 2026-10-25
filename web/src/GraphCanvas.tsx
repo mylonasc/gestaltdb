@@ -14,6 +14,8 @@ export interface CanvasHandle {
   restore: (state: LayoutState) => void;
   togglePin: (id: string) => void;
   relayout: (visibleOnly: boolean) => void;
+  /** Pin every node at deterministic layered (tree) coordinates. */
+  treeLayout: () => void;
 }
 
 interface Props {
@@ -45,7 +47,64 @@ interface SimLink extends d3.SimulationLinkDatum<SimNode> {
   etype: string;
 }
 
-const NODE_RADIUS = 7;
+/** Deterministic layered coordinates (top-down tree layout).
+ *
+ * Kahn layering over the given links in sorted uid order: nodes with no
+ * incoming link form the top row and every other node sits below its
+ * predecessors, so proof trees, derivation graphs, and hierarchies read
+ * top-down. Nodes on purely cyclic paths take trailing rows in uid order
+ * instead of collapsing onto one row. Mirrors the Python SVG "tree" layout
+ * so static exports and the viewer agree byte-for-byte on layering.
+ */
+export function treeCoordinates<Node extends { uid: string }, Link extends { source: string | number | Node; target: string | number | Node }>(
+  nodes: Node[], links: Link[],
+): Map<string, { x: number; y: number }> {
+  const ids = nodes.map(node => node.uid);
+  const members = new Set(ids);
+  const children = new Map<string, Set<string>>(ids.map(id => [id, new Set()]));
+  const indegree = new Map<string, number>(ids.map(id => [id, 0]));
+  const endpoint = (value: string | number | Node): string => typeof value === "object" ? value.uid : String(value);
+  for (const link of links) {
+    const source = endpoint(link.source), target = endpoint(link.target);
+    if (source === target || !members.has(source) || !members.has(target)) continue;
+    if (!children.get(source)!.has(target)) {
+      children.get(source)!.add(target);
+      indegree.set(target, (indegree.get(target) ?? 0) + 1);
+    }
+  }
+  const depth = new Map<string, number>();
+  let current = ids.filter(id => (indegree.get(id) ?? 0) === 0).sort();
+  let layer = 0;
+  while (current.length > 0) {
+    const upcoming: string[] = [];
+    for (const id of current) {
+      depth.set(id, layer);
+      for (const child of [...children.get(id)!].sort()) {
+        indegree.set(child, (indegree.get(child) ?? 0) - 1);
+        if (indegree.get(child) === 0) upcoming.push(child);
+      }
+    }
+    current = [...new Set(upcoming)].sort();
+    layer += 1;
+  }
+  for (const id of [...members].sort()) {
+    if (!depth.has(id)) { depth.set(id, layer); layer += 1; }
+  }
+  const rows = new Map<number, string[]>();
+  for (const id of ids) {
+    const row = depth.get(id)!;
+    if (!rows.has(row)) rows.set(row, []);
+    rows.get(row)!.push(id);
+  }
+  const positions = new Map<string, { x: number; y: number }>();
+  for (const row of [...rows.keys()].sort((a, b) => a - b)) {
+    const rowMembers = rows.get(row)!.sort();
+    rowMembers.forEach((id, index) => {
+      positions.set(id, { x: (index - (rowMembers.length - 1) / 2) * 200, y: row * 160 });
+    });
+  }
+  return positions;
+}
 
 export function GraphCanvas({
   canvasRef,
@@ -94,6 +153,21 @@ export function GraphCanvas({
 
   function notifyPins() {
     pinsChangeRef.current(nodesRef.current.filter(node => node.fx != null).map(node => node.uid));
+  }
+
+  // Deterministic layered arrangement: pin every node at its tree
+  // coordinates and stop the force simulation there. Unpinning (or Reset
+  // layout) hands control back to the force-directed layout.
+  function arrangeTree() {
+    const positions = treeCoordinates(nodesRef.current, linksRef.current);
+    const sim = simRef.current;
+    sim?.stop();
+    for (const node of nodesRef.current) {
+      const point = positions.get(node.uid)!;
+      node.x = point.x; node.y = point.y; node.vx = 0; node.vy = 0;
+      node.fx = point.x; node.fy = point.y;
+    }
+    renderRef.current(); notifyPins(); fitViewport();
   }
 
   useImperativeHandle(controllerRef, () => ({
@@ -154,6 +228,9 @@ export function GraphCanvas({
       if (settingsRef.current.paused) sim?.tick(100);
       else sim?.restart();
       renderRef.current(); notifyPins(); fitViewport();
+    },
+    treeLayout: () => {
+      arrangeTree();
     },
   }), []);
 
@@ -342,7 +419,7 @@ export function GraphCanvas({
       .data(nodes, (node) => node.uid)
       .join("text")
       .attr("class", "node-label")
-      .attr("dx", NODE_RADIUS + 3)
+      .attr("dx", (node) => node.radius + 3)
       .attr("dy", 4)
       .text((node) => node.uid);
     labelSel.attr("display", settingsRef.current.showLabels ? null : "none");
@@ -364,6 +441,10 @@ export function GraphCanvas({
     applyView();
     // Initial fit once geometry exists.
     fitViewport();
+    // Reasoning artifacts opt into a deterministic tree arrangement via
+    // payload meta: pin the layered positions so the first paint is already
+    // the final layout instead of a force-simulation lottery.
+    if (payload.meta["suggested_layout"] === "tree") arrangeTree();
 
     return () => {
       sim.stop();

@@ -104,6 +104,16 @@ root. Support sets fan out from one conclusion to one node per alternative
 derivation. The builders accept the same caps/ceilings as the graph path
 and record their provenance in ``meta["builder"]``.
 
+Reasoning figures render in a deterministic layered tree by default: static
+``as_svg()`` uses ``layout="tree"`` unless overridden, and the interactive
+viewer opens these artifacts already arranged (and pinned) as a tree via the
+payload's ``suggested_layout`` hint, with no force-simulation lottery. The
+``Tree layout`` toolbar button re-applies the arrangement on demand, while
+``Reset layout`` hands control back to the force-directed simulation. The
+layering is longest-path-free Kahn ordering (predecessor-free nodes on top,
+cyclic leftovers in trailing rows), shared by the Python renderer and the
+viewer so both agree. Pass an explicit ``layout="circle"`` to opt out.
+
 Options (``VizOptions``) cover node/edge caps (defaults 2000/5000),
 absolute ceilings (default twice the caps, raising
 ``VizCapExceededError`` with sampling guidance), iframe height, light/dark
@@ -130,9 +140,12 @@ Direct SVG Output
 -----------------
 
 SVG generation from Python requires no browser, JavaScript runtime, or additional
-dependency. It uses a deterministic circle or grid layout, or supplied node
-coordinates. Coordinates must cover every displayed node and are uniformly
-scaled into the output viewport.
+dependency. It uses a deterministic circle, grid, or layered tree layout, or
+supplied node coordinates. Coordinates must cover every displayed node and
+are uniformly scaled into the output viewport. Static labels render at 13px
+with node radii 8–32 (fallback 12) and edge widths 1–7 (fallback 2), up from
+the earlier 10px / 4–24 / 0.5–6 defaults, so exports stay legible without
+zooming.
 
 .. code-block:: python
 
@@ -152,8 +165,12 @@ scaled into the output viewport.
    with TemporaryDirectory() as tmpdir:
        figure.save_svg(Path(tmpdir) / "graph.svg", layout="grid", background=False)
 
-``as_svg()`` and ``save_svg()`` render the Python payload and options, not the
-current iframe's force layout, selection, filters, or manually dragged positions.
+``as_svg()`` defaults to ``layout="circle"`` for graph figures and to the
+payload's suggested layout for reasoning figures (``"tree"``); pass an
+explicit ``layout="circle"|"grid"|"tree"`` to override. ``save_svg()`` and
+``as_svg()`` render the Python payload and options, not the
+current iframe's force layout, selection, filters, or manually dragged
+positions.
 For static relationship labels, set ``edge_labels="all"``; static output has no
 hover or selection state. ``positions={"alice": (0, 0), "bob": (1, 0)}`` can be
 passed to either method. ``save()`` continues to write interactive HTML.
@@ -220,7 +237,11 @@ Canvas Features
 ---------------
 
 - D3 force layout with drag-to-pin, double-click release, pan/zoom, refit,
-  pause, and tunable charge/link distance.
+  pause, and tunable charge/link distance. Labels render at 13px with node
+  radii 8–32 and edge widths 1–7 (same scale as static SVG).
+- Deterministic tree arrangement: reasoning artifacts open pre-arranged (and
+  pinned) in a layered top-down tree; the Tree layout button re-applies it
+  on demand and Reset layout returns to the force simulation.
 - Dragging also works while paused; fit-visible includes displayed geometry
   and labels. The viewer refits when its container is resized.
 - Explicit pin/unpin actions and dashed pin indicators, full-layout reset, and

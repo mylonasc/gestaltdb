@@ -75,10 +75,10 @@ def test_static_attribute_styles_have_bounded_sizes_and_consistent_colors():
                            edge_width_property="score", edge_color_property="color"))
     root = ET.fromstring(fig.as_svg())
     circles = root.findall("s:g/s:circle", NS)
-    assert [float(circle.attrib["r"]) for circle in circles] == [4, 24, 7]
+    assert [float(circle.attrib["r"]) for circle in circles] == [8, 32, 12]
     assert circles[0].attrib["fill"] == circles[1].attrib["fill"]
     paths = root.findall("s:g/s:path", NS)
-    assert [float(path.attrib["stroke-width"]) for path in paths] == [0.5, 6]
+    assert [float(path.attrib["stroke-width"]) for path in paths] == [1, 7]
     assert paths[0].attrib["stroke"] == paths[1].attrib["stroke"]
     assert paths[0].attrib["marker-end"] == paths[1].attrib["marker-end"]
 
@@ -88,6 +88,39 @@ def test_numeric_styles_remain_finite_for_extreme_property_values():
         [{"id": "a", "properties": {"mass": -1e308}}, {"id": "b", "properties": {"mass": 1e308}},
          {"id": "c", "properties": {"mass": 10 ** 1000}}], [], options=VizOptions(node_size_property="mass"))
     circles = ET.fromstring(fig.as_svg()).findall("s:g/s:circle", NS)
-    assert [float(circle.attrib["r"]) for circle in circles] == [4, 24, 7]
+    assert [float(circle.attrib["r"]) for circle in circles] == [8, 32, 12]
     svg = fig.as_svg(positions={"a": (-1e308, 0), "b": (1e308, 0), "c": (0, 0)})
     assert "nan" not in svg.lower() and "inf" not in svg.lower()
+
+
+def test_tree_layout_layers_predecessors_above_dependents():
+    fig = visualize_nodes_edges(
+        [{"id": "a"}, {"id": "b"}, {"id": "c"}],
+        [{"id": "ab", "source": "a", "target": "b"},
+         {"id": "bc", "source": "b", "target": "c"}])
+    circles = ET.fromstring(fig.as_svg(layout="tree")).findall("s:g/s:circle", NS)
+    cy = {}
+    for circle, node_id in zip(circles, ("a", "b", "c")):
+        title = circle.find("s:title", NS)
+        assert title is not None and title.text == node_id
+        cy[node_id] = float(circle.attrib["cy"])
+    assert cy["a"] < cy["b"] < cy["c"]
+    assert fig.as_svg(layout="tree") == fig.as_svg(layout="tree")
+    assert fig.as_svg(layout="tree") != fig.as_svg(layout="circle")
+
+
+def test_tree_layout_degrades_gracefully_on_cycles_and_self_loops():
+    fig = visualize_nodes_edges(
+        [{"id": "a"}, {"id": "b"}],
+        [{"id": "ab", "source": "a", "target": "b"},
+         {"id": "ba", "source": "b", "target": "a"},
+         {"id": "aa", "source": "a", "target": "a"}])
+    circles = ET.fromstring(fig.as_svg(layout="tree")).findall("s:g/s:circle", NS)
+    assert len(circles) == 2
+    assert float(circles[0].attrib["cy"]) != float(circles[1].attrib["cy"])
+
+
+def test_static_labels_use_readable_font_size():
+    sizes = {element.attrib["font-size"]
+             for element in ET.fromstring(figure().as_svg()).findall(".//s:text", NS)}
+    assert sizes == {"13"}

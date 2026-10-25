@@ -123,17 +123,20 @@ class VizFigure:
             'title="GestaltDB graph visualization"></iframe>'
         )
 
-    def as_svg(self, *, width: int = 1200, height: int = 800, layout: str = "circle",
+    def as_svg(self, *, width: int = 1200, height: int = 800, layout: str | None = None,
                positions: Mapping[str, tuple[float, float]] | None = None, background: bool = True) -> str:
         """Return dependency-free SVG using a static layout or supplied coordinates.
 
         This renders the Python graph, not the current notebook iframe state.
         Set ``edge_labels='all'`` to include relationship labels in static output.
+        ``layout`` defaults to the payload's suggested layout (reasoning figures
+        suggest ``"tree"``; everything else defaults to ``"circle"``).
         """
         from .svg import render_svg
 
+        resolved = layout or self.viz.meta.get("suggested_layout", "circle")
         return render_svg(self.viz, self.options, width=width, height=height,
-                          layout=layout, positions=positions, background=background)
+                          layout=resolved, positions=positions, background=background)
 
     def save_svg(self, path: str | Path, **kwargs: Any) -> Path:
         """Write :meth:`as_svg` output and return the resolved destination."""

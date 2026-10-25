@@ -863,7 +863,7 @@ figure = visualize_proof_explanation(
     result.explain(Fact("a", "ancestor", "b")),
     options=VizOptions(node_label_property="label", edge_labels="all"),
 )
-figure.save_svg("/tmp/proof.svg")  # same topology as figure.as_html()
+figure.save_svg("/tmp/proof.svg")  # layered tree by default, no force layout involved
 ```
 
 `visualize_claim_explanation(graph.rules.explain(...))`,

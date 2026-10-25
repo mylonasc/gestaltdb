@@ -41,14 +41,18 @@ Jupyter `_repr_html_()`. Caps truncate deterministically with a
 ceiling raise `VizCapExceededError` naming the sampling alternative.
 Reasoning builders accept the same caps and record `meta["builder"]`
 (`from_claim_explanation`, `from_inference_audit`,
-`from_proof_explanation`, `from_support_set`, `from_ontology`). Every
-reasoning node carries a readable `label` property, so
+`from_proof_explanation`, `from_support_set`, `from_ontology`) plus
+`meta["suggested_layout"] = "tree"`. Every reasoning node carries a
+readable `label` property, so
 `VizOptions(node_label_property="label", edge_labels="all")` is the
-recommended setting for HTML and static SVG alike.
+recommended setting for HTML and static SVG alike. The viewer opens
+reasoning artifacts pre-arranged (and pinned) as a layered tree; the Tree
+layout button re-applies it and Reset layout returns to force-directed.
 
 `figure.as_svg()` / `figure.save_svg(path)` produce dependency-free static SVG
-with `layout="circle"` (default), `layout="grid"`, or supplied
-`positions={node_id: (x, y)}`. Coordinates must cover every node and are fitted
+with `layout="circle"` (default for graph figures), `layout="grid"`,
+`layout="tree"` (layered top-down; the default for reasoning figures), or
+supplied `positions={node_id: (x, y)}`. Coordinates must cover every node and are fitted
 uniformly to `width`/`height`. Static SVG renders Python data/options, not the
 interactive iframe state. Use `edge_labels="all"` for static relationship labels.
 Browser SVG/PNG exports capture the current viewport or all visible content,
