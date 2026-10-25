@@ -1626,8 +1626,9 @@ class PyRexStore(KVStore):
         """Return whether this PyRex runtime exposes native Arrow scans.
 
         Requires ``scan_arrow`` plus ``create_snapshot`` on the underlying
-        handle. Transactional handles do not expose them in 0.5.0; only the
-        plain non-transactional handle does.
+        handle. Transactional handles do not expose them in 0.5.0; 0.6.0 adds
+        native committed-state scans of the default column family. This probe
+        is not authenticated claim-source or named-column-family admission.
         """
         return hasattr(self.db, "scan_arrow") and hasattr(self.db, "create_snapshot")
 
