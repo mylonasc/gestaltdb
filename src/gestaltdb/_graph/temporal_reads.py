@@ -38,6 +38,7 @@ from ..versioning import (
     immutable_metadata,
     normalize_logical_id,
     normalize_temporal_instant,
+    normalize_temporal_interval,
     normalize_version_id,
 )
 from . import temporal_indexes as _temporal_indexes
@@ -398,3 +399,150 @@ class TemporalReader:
         """Return a visible epistemic claim version by UUID."""
         return self._version_by_id(version_id, ClaimVersion, system_time=system_time,
                                    through_commit=through_commit)
+
+
+    # -- point-in-time selection ------------------------------------------
+
+    def interval_locators(self, index_name, parts, instant):
+        """Return index locators started but not yet ended at an instant."""
+        generation = _temporal_indexes.index_state_generation(self.store, self.state_key)
+        encoded = temporal_instant_index_value(instant)
+        started = set(self.store.iter_range_index(
+            _temporal_indexes.index_name(index_name, generation),
+            parts,
+            None,
+            encoded,
+            True,
+            True,
+        ))
+        if not started:
+            return ()
+        unexpired = set(self.store.iter_range_index(
+            _temporal_indexes.index_name(_temporal_indexes.VALID_END_INDEX, generation),
+            [index_name.encode("ascii"), *parts],
+            encoded,
+            None,
+            False,
+            True,
+        ))
+        return tuple(sorted(started.intersection(unexpired)))
+
+    def entity_as_of(self, kind, logical_id, *, valid_time, system_time=None,
+                     through_commit=None, hydrate=None):
+        """Resolve one logical node/edge/claim version at a valid time.
+
+        ``hydrate`` decodes one locator; callers pass the facade hook so
+        instrumentation of version hydration keeps working.
+        """
+        hydrate = hydrate or self.get_version_at
+        logical_id = normalize_logical_id(logical_id)
+        instant = normalize_temporal_instant(valid_time)
+        horizon = self.system_horizon(system_time=system_time, through_commit=through_commit)
+        _temporal_indexes.ensure_temporal_indexes(
+            self.store, self.state_key, self.stale_key, horizon)
+        kind_bytes = {"node": b"n", "edge": b"e", "claim": b"c"}[kind]
+        locators = self.interval_locators(
+            _temporal_indexes.LOGICAL_VALID_INDEX,
+            [kind_bytes, logical_id.encode("utf-8")],
+            instant,
+        )
+        winner = None
+        for locator in locators:
+            version = hydrate(locator)
+            if version is not None and version.commit_id <= horizon and version.valid.contains(instant):
+                if winner is None or (version.commit_id, version.commit_ordinal) > (winner.commit_id, winner.commit_ordinal):
+                    winner = version
+        if winner is None or winner.operation is VersionOperation.RETRACT:
+            return None
+        return winner
+
+    def iter_nodes_as_of(self, *, valid_time, system_time=None, through_commit=None,
+                           hydrate=None):
+        """Iterate node versions visible at one valid and system-time point."""
+        hydrate = hydrate or self.get_version_at
+        instant = normalize_temporal_instant(valid_time)
+        horizon = self.system_horizon(system_time=system_time, through_commit=through_commit)
+        _temporal_indexes.ensure_temporal_indexes(
+            self.store, self.state_key, self.stale_key, horizon)
+        logical_ids = set()
+        for locator in self.interval_locators(
+            _temporal_indexes.NODE_CATALOG_INDEX, [b"nodes"], instant
+        ):
+            candidate = hydrate(locator)
+            if isinstance(candidate, NodeVersion) and candidate.commit_id <= horizon:
+                logical_ids.add(candidate.logical_id)
+        for logical_id in sorted(logical_ids):
+            version = self.entity_as_of(
+                "node", logical_id, valid_time=instant, through_commit=horizon,
+                hydrate=hydrate,
+            )
+            if version is not None:
+                yield version
+
+    def iter_edges_as_of(self, *, edge_type=None, direction="out", source=None,
+                         target=None, valid_time, system_time=None,
+                         through_commit=None, hydrate=None):
+        """Iterate endpoint edges visible at valid time and a system horizon."""
+        hydrate = hydrate or self.get_version_at
+        if direction not in {"out", "in"}:
+            raise ValueError("direction must be 'out' or 'in'")
+        if direction == "out" and (source is None or target is not None):
+            raise ValueError("outgoing traversal requires source and rejects target")
+        if direction == "in" and (target is None or source is not None):
+            raise ValueError("incoming traversal requires target and rejects source")
+        if edge_type is not None and (not isinstance(edge_type, str) or not edge_type):
+            raise ValueError("edge_type must be a non-empty string or None")
+        horizon = self.system_horizon(system_time=system_time, through_commit=through_commit)
+        _temporal_indexes.ensure_temporal_indexes(
+            self.store, self.state_key, self.stale_key, horizon)
+        node_id = source if direction == "out" else target
+        if edge_type is None:
+            index_name = (
+                _temporal_indexes.EDGE_OUT_CATALOG_INDEX
+                if direction == "out"
+                else _temporal_indexes.EDGE_IN_CATALOG_INDEX
+            )
+            parts = [str(node_id).encode("utf-8")]
+        else:
+            index_name = _temporal_indexes.EDGE_OUT_INDEX if direction == "out" else _temporal_indexes.EDGE_IN_INDEX
+            parts = [str(node_id).encode("utf-8"), edge_type.encode("utf-8")]
+        instant = normalize_temporal_instant(valid_time)
+        locators = self.interval_locators(index_name, parts, instant)
+        logical_ids = set()
+        for locator in locators:
+            candidate = hydrate(locator)
+            if candidate is not None and candidate.commit_id <= horizon:
+                logical_ids.add(candidate.logical_id)
+        for logical_id in sorted(logical_ids):
+            version = self.entity_as_of(
+                "edge", logical_id, valid_time=valid_time, through_commit=horizon,
+                hydrate=hydrate,
+            )
+            if version is None or (
+                edge_type is not None and version.edge.properties.get("type") != edge_type
+            ):
+                continue
+            if direction == "out" and str(version.edge.source) != str(source):
+                continue
+            if direction == "in" and str(version.edge.target) != str(target):
+                continue
+            yield version
+
+
+def claim_valid_interval(valid, valid_from, valid_to, *, required):
+    """Normalize claim validity inputs to at most one half-open interval."""
+    if valid is not None and (valid_from is not None or valid_to is not None):
+        raise TemporalVersionError("provide either valid or valid_from/valid_to, not both")
+    if valid is not None:
+        return normalize_temporal_interval(valid)
+    if valid_from is None:
+        if valid_to is not None:
+            raise TemporalVersionError("valid_to requires valid_from")
+        if required:
+            raise TemporalVersionError("claim assertion requires valid or valid_from")
+        return None
+    return TemporalInterval(
+        normalize_temporal_instant(valid_from),
+        None if valid_to is None else normalize_temporal_instant(valid_to),
+    )
+

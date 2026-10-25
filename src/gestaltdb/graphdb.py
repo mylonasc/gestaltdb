@@ -3932,20 +3932,8 @@ class GraphDB:
 
     @staticmethod
     def _claim_valid_interval(valid, valid_from, valid_to, *, required):
-        if valid is not None and (valid_from is not None or valid_to is not None):
-            raise TemporalVersionError("provide either valid or valid_from/valid_to, not both")
-        if valid is not None:
-            return normalize_temporal_interval(valid)
-        if valid_from is None:
-            if valid_to is not None:
-                raise TemporalVersionError("valid_to requires valid_from")
-            if required:
-                raise TemporalVersionError("claim assertion requires valid or valid_from")
-            return None
-        return TemporalInterval(
-            normalize_temporal_instant(valid_from),
-            None if valid_to is None else normalize_temporal_instant(valid_to),
-        )
+        return _temporal_reads.claim_valid_interval(
+            valid, valid_from, valid_to, required=required)
 
     def commit_versions(
         self, writes, *, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN
@@ -4187,87 +4175,41 @@ class GraphDB:
             system_time=system_time, through_commit=through_commit)
 
     def _temporal_interval_locators(self, index_name, parts, instant):
-        generation = self._temporal_index_generation()
-        encoded = self._temporal_instant_index_value(instant)
-        started = set(self.store.iter_range_index(
-            self._temporal_index_name(index_name, generation),
-            parts,
-            None,
-            encoded,
-            True,
-            True,
-        ))
-        if not started:
-            return ()
-        unexpired = set(self.store.iter_range_index(
-            self._temporal_index_name(_TEMPORAL_VALID_END_INDEX, generation),
-            [index_name.encode("ascii"), *parts],
-            encoded,
-            None,
-            False,
-            True,
-        ))
-        return tuple(sorted(started.intersection(unexpired)))
+        return self._temporal_reader().interval_locators(index_name, parts, instant)
 
     def _temporal_entity_as_of(
         self, kind, logical_id, *, valid_time, system_time=None, through_commit=None
     ):
-        logical_id = normalize_logical_id(logical_id)
-        instant = normalize_temporal_instant(valid_time)
-        horizon = self._temporal_system_horizon(
-            system_time=system_time, through_commit=through_commit
+        return self._temporal_reader().entity_as_of(
+            kind, logical_id, valid_time=valid_time, system_time=system_time,
+            through_commit=through_commit,
         )
-        self._ensure_temporal_indexes(horizon)
-        kind_bytes = {"node": b"n", "edge": b"e", "claim": b"c"}[kind]
-        locators = self._temporal_interval_locators(
-            _TEMPORAL_LOGICAL_VALID_INDEX,
-            [kind_bytes, logical_id.encode("utf-8")],
-            instant,
-        )
-        winner = None
-        for locator in locators:
-            version = self._get_temporal_version_at(locator)
-            if version is not None and version.commit_id <= horizon and version.valid.contains(instant):
-                if winner is None or (version.commit_id, version.commit_ordinal) > (winner.commit_id, winner.commit_ordinal):
-                    winner = version
-        if winner is None or winner.operation is VersionOperation.RETRACT:
-            return None
-        return winner
 
     def get_node_as_of(
         self, logical_id, *, valid_time, system_time=None, through_commit=None
     ) -> NodeVersion | None:
         """Resolve a logical node at valid time and an optional system horizon."""
-        return self._temporal_entity_as_of(
-            "node",
-            logical_id,
-            valid_time=valid_time,
-            system_time=system_time,
-            through_commit=through_commit,
+        return self._temporal_reader().entity_as_of(
+            "node", logical_id, valid_time=valid_time, system_time=system_time,
+            through_commit=through_commit, hydrate=self._get_temporal_version_at,
         )
 
     def get_edge_as_of(
         self, logical_id, *, valid_time, system_time=None, through_commit=None
     ) -> EdgeVersion | None:
         """Resolve a logical edge at valid time and an optional system horizon."""
-        return self._temporal_entity_as_of(
-            "edge",
-            logical_id,
-            valid_time=valid_time,
-            system_time=system_time,
-            through_commit=through_commit,
+        return self._temporal_reader().entity_as_of(
+            "edge", logical_id, valid_time=valid_time, system_time=system_time,
+            through_commit=through_commit, hydrate=self._get_temporal_version_at,
         )
 
     def get_claim_as_of(
         self, claim_id, *, valid_time, system_time=None, through_commit=None
     ) -> ClaimVersion | None:
         """Resolve one claim identity at valid time and an optional system horizon."""
-        return self._temporal_entity_as_of(
-            "claim",
-            claim_id,
-            valid_time=valid_time,
-            system_time=system_time,
-            through_commit=through_commit,
+        return self._temporal_reader().entity_as_of(
+            "claim", claim_id, valid_time=valid_time, system_time=system_time,
+            through_commit=through_commit, hydrate=self._get_temporal_version_at,
         )
 
     def iter_claims_as_of(
@@ -4474,24 +4416,11 @@ class GraphDB:
         self, *, valid_time, system_time=None, through_commit=None
     ):
         """Iterate node versions visible at one valid and system-time point."""
-        instant = normalize_temporal_instant(valid_time)
-        horizon = self._temporal_system_horizon(
-            system_time=system_time, through_commit=through_commit
+        return self._temporal_reader().iter_nodes_as_of(
+            valid_time=valid_time, system_time=system_time,
+            through_commit=through_commit,
+            hydrate=self._get_temporal_version_at,
         )
-        self._ensure_temporal_indexes(horizon)
-        logical_ids = set()
-        for locator in self._temporal_interval_locators(
-            _TEMPORAL_NODE_CATALOG_INDEX, [b"nodes"], instant
-        ):
-            candidate = self._get_temporal_version_at(locator)
-            if isinstance(candidate, NodeVersion) and candidate.commit_id <= horizon:
-                logical_ids.add(candidate.logical_id)
-        for logical_id in sorted(logical_ids):
-            version = self.get_node_as_of(
-                logical_id, valid_time=instant, through_commit=horizon
-            )
-            if version is not None:
-                yield version
 
     def iter_edges_as_of(
         self,
@@ -4505,51 +4434,12 @@ class GraphDB:
         through_commit=None,
     ):
         """Iterate endpoint edges visible at valid time and a system horizon."""
-        if direction not in {"out", "in"}:
-            raise ValueError("direction must be 'out' or 'in'")
-        if direction == "out" and (source is None or target is not None):
-            raise ValueError("outgoing traversal requires source and rejects target")
-        if direction == "in" and (target is None or source is not None):
-            raise ValueError("incoming traversal requires target and rejects source")
-        if edge_type is not None and (not isinstance(edge_type, str) or not edge_type):
-            raise ValueError("edge_type must be a non-empty string or None")
-        horizon = self._temporal_system_horizon(
-            system_time=system_time, through_commit=through_commit
+        return self._temporal_reader().iter_edges_as_of(
+            valid_time=valid_time, system_time=system_time,
+            through_commit=through_commit, edge_type=edge_type,
+            direction=direction, source=source, target=target,
+            hydrate=self._get_temporal_version_at,
         )
-        self._ensure_temporal_indexes(horizon)
-        node_id = source if direction == "out" else target
-        if edge_type is None:
-            index_name = (
-                _TEMPORAL_EDGE_OUT_CATALOG_INDEX
-                if direction == "out"
-                else _TEMPORAL_EDGE_IN_CATALOG_INDEX
-            )
-            parts = [str(node_id).encode("utf-8")]
-        else:
-            index_name = _TEMPORAL_EDGE_OUT_INDEX if direction == "out" else _TEMPORAL_EDGE_IN_INDEX
-            parts = [str(node_id).encode("utf-8"), edge_type.encode("utf-8")]
-        instant = normalize_temporal_instant(valid_time)
-        locators = self._temporal_interval_locators(
-            index_name, parts, instant
-        )
-        logical_ids = set()
-        for locator in locators:
-            candidate = self._get_temporal_version_at(locator)
-            if candidate is not None and candidate.commit_id <= horizon:
-                logical_ids.add(candidate.logical_id)
-        for logical_id in sorted(logical_ids):
-            version = self.get_edge_as_of(
-                logical_id, valid_time=valid_time, through_commit=horizon
-            )
-            if version is None or (
-                edge_type is not None and version.edge.properties.get("type") != edge_type
-            ):
-                continue
-            if direction == "out" and str(version.edge.source) != str(source):
-                continue
-            if direction == "in" and str(version.edge.target) != str(target):
-                continue
-            yield version
 
     def rebuild_temporal_indexes(self, *, through_commit=None) -> dict[str, int]:
         """Rebuild all derived temporal indexes from visible canonical history."""
