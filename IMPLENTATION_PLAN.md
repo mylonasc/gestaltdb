@@ -605,3 +605,31 @@ plus `check_tracking.py` (`--github` drift check) pins expected states and nativ
 sub-issue/blocked-by edges; `tracking-audit.md` records evidence and remaining
 checklists. Roadmap feature DAG and source hashes unchanged; no new engine,
 main merge, tag or release authorized.
+
+### Reasoning overlap review follow-through (#373, #374)
+
+Review of `src/gestaltdb/reasoning/` + `adapters/` for duplicated logic and
+semantic drift produced two issue-indexed slices on integration `6dc4e06`,
+both targeting `feature/onto-dev-epic-2`, no main merge or release.
+
+- #374 (bug, sub-issue of #160): four reported gaps triaged by evidence.
+  Two were real and fixed: store/serializer identity pin added to
+  `PinnedClaimSource`/`PinnedBatchedClaimSource` `_check_binding`
+  (mirrors `graph.py`/`range_generation.py`/native precedent), merged via
+  #375 at `9473497` with `tests/test_reasoning_gap374.py` (rebind rejection,
+  error-contract pin, memo reuse/resegment, exhaustive point agreement).
+  Two were narrowed as sound and locked with tests/comments instead of
+  changed logic: range memo reuse (pure set function over maximal
+  constant-active segments, re-segmented) and `verify_closure` one-sample
+  per segment (sufficiency holds by the same tiling argument).
+  Rule/Modal vs ReasoningError documented as `ValueError` siblings with a
+  unified `(ReasoningError, TemporalVersionError)` catch idiom pinned by
+  test; no cross-layer hierarchy change. PR #375: full suite 3.10-3.13,
+  installed artifacts, Ontology, PR-address all green.
+- #373 (techdebt, sub-issue of #200): mechanical slice merged via #376 at
+  `b395e99` (dead code in `intervals._advance_past`, duplicated `active`
+  computation in maintenance propagation, stale sweep docstring; 35 focused
+  tests green). Follow-up dispositions doc
+  `planning/reasoning-engine/overlap-dispositions.md` records unify-vs-keep
+  for 10 areas with the D2 rule (no grand rewrite, no digest/round-count
+  change); PR #377 pending.
