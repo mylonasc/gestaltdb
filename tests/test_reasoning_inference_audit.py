@@ -25,7 +25,7 @@ def graph(request, tmp_path):
 
 
 def prediction(graph, subject="alice", *, provenance=None):
-    return graph.assert_claim(
+    return graph.epistemic.assert_claim(
         subject=subject, predicate="PREDICTED_RISK", object="high",
         polarity="positive", agent="risk-model", confidence=0.8,
         provenance=provenance if provenance is not None else {
@@ -34,10 +34,10 @@ def prediction(graph, subject="alice", *, provenance=None):
 
 
 def derive(graph):
-    rule = graph.create_rule("review", when=[("?s", "PREDICTED_RISK", "high")],
+    rule = graph.rules.create_rule("review", when=[("?s", "PREDICTED_RISK", "high")],
                              then=("?s", "REQUIRES_REVIEW", "yes"))
-    graph.run_rules(as_of=10)
-    conclusions = {v.claim.subject: v for v in graph.iter_claims_as_of(
+    graph.rules.run(as_of=10)
+    conclusions = {v.claim.subject: v for v in graph.epistemic.iter_claims_as_of(
         valid_time=10, predicate="REQUIRES_REVIEW")}
     return rule, conclusions
 
@@ -68,8 +68,8 @@ def test_shared_rule_keeps_premise_groups_separate(graph):
     # Combine two legacy graphs sharing the same rule node: grouped exports
     # must not mistake all outgoing rule edges for each conclusion's proof.
     from dataclasses import replace
-    first = graph.explain_claim(conclusions["alice"].logical_id, valid_time=10)
-    second = graph.explain_claim(conclusions["bob"].logical_id, valid_time=10)
+    first = graph.rules.explain(conclusions["alice"].logical_id, valid_time=10)
+    second = graph.rules.explain(conclusions["bob"].logical_id, valid_time=10)
     nodes = {n.node_id: n for n in (*first.nodes, *second.nodes)}
     both = replace(first, nodes=tuple(nodes.values()), edges=(*first.edges, *second.edges))
     groups = export_inference(both).to_dict()["justifications"]
@@ -106,8 +106,8 @@ def test_explicit_model_tag_and_safe_rendering(graph):
 
 def test_history_and_missing_roots(graph):
     original = prediction(graph)
-    before = graph.get_temporal_commit(original.commit_id).system_time
-    graph.retract_claim(original.logical_id, valid=(0, 100))
+    before = graph.temporal.get_temporal_commit(original.commit_id).system_time
+    graph.epistemic.retract_claim(original.logical_id, valid=(0, 100))
     assert explain_inference(graph, original.logical_id, valid_time=10) is None
     historical = explain_inference(graph, original.logical_id, valid_time=10, system_time=before)
     assert historical.to_dict()["root_version_id"] == original.version_id
@@ -116,10 +116,10 @@ def test_history_and_missing_roots(graph):
 def test_alternative_supports_and_exact_old_prediction(graph):
     original = prediction(graph)
     _, conclusions = derive(graph)
-    graph.create_rule("second-review", when=[("?s", "PREDICTED_RISK", "high")],
+    graph.rules.create_rule("second-review", when=[("?s", "PREDICTED_RISK", "high")],
                       then=("?s", "REQUIRES_REVIEW", "yes"))
-    graph.run_rules(as_of=10)
-    graph.retract_claim(original.logical_id, valid=(0, 100))
+    graph.rules.run(as_of=10)
+    graph.epistemic.retract_claim(original.logical_id, valid=(0, 100))
     # No truth-maintenance pass was requested: the persisted conclusion's
     # old evidence must remain inspectable, never substituted with current data.
     report = explain_inference(graph, conclusions["alice"].logical_id, valid_time=10)

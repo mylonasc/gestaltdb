@@ -198,8 +198,8 @@ class ExtractionCapability:
         elif "pyrex" in namespace or "rocksdb" in namespace:
             if native:
                 kind = "pyrex-native-snapshot"
-                notes = ("native Snapshot/create_snapshot pins one shared horizon on plain handles; "
-                         "transactional handles use transaction snapshots instead",)
+                notes = ("native Snapshot/create_snapshot pins one shared default-column-family horizon "
+                         "on this runtime; raw scan capability is not authenticated claim-source admission",)
             elif pinned:
                 kind, notes = "pyrex-transaction-snapshot", ("transactional snapshots only; handles without native scans cannot pin reads otherwise",)
             else:

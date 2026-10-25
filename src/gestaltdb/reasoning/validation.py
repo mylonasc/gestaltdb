@@ -160,6 +160,21 @@ def validate(facts: Iterable[TypedFact], suite: ValidationSuite, *,
     Facts stream in canonical order; violations are deterministic for identical
     inputs. ``max_violations`` bounds the report — hitting it sets
     ``truncated`` instead of failing. Cancellation raises without a report.
+
+    Examples:
+        Report a functional-property conflict without changing the facts::
+
+            >>> from gestaltdb.reasoning.typed import TypedFact
+            >>> from gestaltdb.reasoning.validation import ValidationSuite, validate
+            >>> facts = [TypedFact("manager", ["alice", "bob"]), TypedFact("manager", ["alice", "carol"])]
+            >>> report = validate(facts, ValidationSuite(membership="type", functional=["manager"]))
+            >>> assert not report.clean
+            >>> assert report.violations[0].kind == "functional-conflict"
+            >>> assert len(facts) == 2
+
+    Source labels identify generated constraints, not historical claim-version
+    evidence. Input is buffered and sorted; ``max_violations`` limits the report
+    rather than input memory. See the reasoning-validation guide for those bounds.
     """
     if not isinstance(suite, ValidationSuite):
         raise ReasoningError("suite must be a ValidationSuite")
@@ -175,14 +190,10 @@ def validate(facts: Iterable[TypedFact], suite: ValidationSuite, *,
     ordered = sorted(set(items), key=_sort_key)
     violations: list[Violation] = []
     truncated = False
-    by_subject_predicate: dict[tuple, list[TypedFact]] = {}
     members: dict[object, set[str]] = {}
     for index, fact in enumerate(ordered):
         if index % 1024 == 0:
             check_cancelled(cancel)
-        if len(fact.values) >= 1:
-            key = (fact.predicate, fact.values[0])
-            by_subject_predicate.setdefault(key, []).append(fact)
         if fact.predicate == suite.membership and len(fact.values) == 2 and isinstance(fact.values[1], str):
             members.setdefault(fact.values[0], set()).add(fact.values[1])
     for denial in suite.denials:

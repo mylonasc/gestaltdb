@@ -223,6 +223,8 @@ def verify_closure(program: GenericProgram, closure: TemporalClosure, *,
         raise ReasoningError("closure segments drifted from base validity; rematerialize explicitly")
     rule_ids = {rule.rule_id for rule in program.rules}
     points = 0
+    # One sample per segment suffices: segments tile maximal constant-active
+    # intervals, so every point in a segment shares its active set and closure.
     for segment in closure.segments:
         check_cancelled(cancel)
         point = _sample(segment)
@@ -255,9 +257,30 @@ def _sample(segment: Interval) -> int:
     return 0
 
 
+def _scheduled_active(items: list, *, max_rows: int, max_events: int,
+                      max_segments: int, max_memberships: int,
+                      cancel=None) -> list[tuple[Interval, list]]:
+    """Schedule active base facts per segment with one interval event sweep.
+
+    Returns ``(segment, facts)`` pairs where ``facts`` holds one entry per
+    active input row, preserving overlapping-assertion multiplicity exactly
+    like a per-segment validity scan. Segments tile the same change points
+    ``change_segments`` emits, so ``verify_closure`` keeps independently
+    checking segment identity through its own scan path.
+    """
+    from .temporal_sweep import active_segments
+
+    return [(scheduled.interval, [items[row].fact for row in scheduled.rows])
+            for scheduled in active_segments(items, max_rows=max_rows, max_events=max_events,
+                                             max_segments=max_segments,
+                                             max_memberships=max_memberships, cancel=cancel)]
+
+
 def update_range(program: GenericProgram, closure: TemporalClosure, new_base: Iterable[TemporalFact], *,
                  limits: ReasoningLimits, max_segments: int = 10_000,
                  max_supports: int = 100_000, incremental: bool = True,
+                 max_sweep_rows: int = 100_000, max_sweep_events: int = 200_000,
+                 max_sweep_memberships: int = 1_000_000,
                  cancel: Callable[[], bool] | None = None) -> RangeUpdate:
     """Propagate changed validity ranges with segment memoization.
 
@@ -269,6 +292,9 @@ def update_range(program: GenericProgram, closure: TemporalClosure, new_base: It
     the update falls back to a full ``evaluate_range`` instead of degrading.
     Point/range parity holds by construction: reused and recomputed segments
     use the same engine over the same active inputs.
+
+    Active inputs on the new base are scheduled once with an interval event
+    sweep (see ``evaluate_range``); segment memoization keys are unchanged.
     """
     if not isinstance(program, GenericProgram):
         raise ReasoningError("program must be a GenericProgram")
@@ -288,12 +314,21 @@ def update_range(program: GenericProgram, closure: TemporalClosure, new_base: It
         raise ReasoningError("new_base must contain only TemporalFact values")
     if not incremental or closure.program_digest != program.digest:
         fresh = evaluate_range(program, items, limits=limits, max_segments=max_segments,
-                               max_supports=max_supports, cancel=cancel)
+                               max_supports=max_supports,
+                               max_sweep_rows=max_sweep_rows, max_sweep_events=max_sweep_events,
+                               max_sweep_memberships=max_sweep_memberships, cancel=cancel)
         old_all = {item.fact for item in closure.base} | {item.fact for item in closure.derivations}
         new_all = {item.fact for item in fresh.base} | {item.fact for item in fresh.derivations}
         return RangeUpdate(fresh, 0, len(fresh.segments),
                            tuple(new_all - old_all), tuple(old_all - new_all), 0)
-    segments = change_segments(items, max_segments=max_segments)
+    scheduled = _scheduled_active(items, max_rows=max_sweep_rows, max_events=max_sweep_events,
+                                  max_segments=max_segments, max_memberships=max_sweep_memberships,
+                                  cancel=cancel)
+    segments = tuple(interval for interval, _ in scheduled)
+    # Memo key is sound: segments tile maximal constant-active intervals, and
+    # closure evaluation is a pure set function of (program, active facts).
+    # Reused derivations are re-segmented to the new interval (entry carries
+    # `segment`), so equal active sets share fact/rule/premise content only.
     old_by_active: dict[frozenset, list[TemporalDerivation]] = {}
     for derivation in closure.derivations:
         sample = _sample(derivation.segment)
@@ -303,10 +338,8 @@ def update_range(program: GenericProgram, closure: TemporalClosure, new_base: It
     seen: set[tuple] = set()
     work = [0]
     reused = recomputed = 0
-    for segment in segments:
+    for segment, active in scheduled:
         check_cancelled(cancel)
-        point = _sample(segment)
-        active = [item.fact for item in items if point in item.valid]
         key = frozenset(active)
         if key in old_by_active:
             for derivation in old_by_active[key]:
@@ -342,13 +375,40 @@ def update_range(program: GenericProgram, closure: TemporalClosure, new_base: It
 
 def evaluate_range(program: GenericProgram, facts: Iterable[TemporalFact], *,
                    limits: ReasoningLimits, max_segments: int = 10_000,
-                   max_supports: int = 100_000,
+                   max_supports: int = 100_000, max_sweep_rows: int = 100_000,
+                   max_sweep_events: int = 200_000, max_sweep_memberships: int = 1_000_000,
                    cancel: Callable[[], bool] | None = None) -> TemporalClosure:
     """Evaluate every change segment; union per-segment closures with evidence.
 
     Temporal negation, aggregates and closed scopes fail closed: range
     evaluation covers the positive fragment only, and per-point stratified
     evaluation is the documented explicit fallback.
+
+    Active inputs are scheduled once with an interval event sweep instead of
+    scanning every input at every segment: each row contributes add/remove
+    events at its half-open bounds (multiplicity preserved for overlapping
+    assertions), and segments tile exactly the change points
+    ``change_segments`` would emit. Per-segment evaluation, support
+    discovery and evidence identity are unchanged.
+
+    Examples:
+        Derive eligibility only during the premise's half-open validity::
+
+            >>> from gestaltdb.reasoning.model import ReasoningLimits, Variable
+            >>> from gestaltdb.reasoning.typed import GenericProgram, GenericRule, TypedAtom, TypedFact
+            >>> from gestaltdb.reasoning.intervals import Interval, IntervalSet
+            >>> from gestaltdb.reasoning.temporal_closure import TemporalFact, evaluate_range, verify_closure
+            >>> x = Variable("x")
+            >>> program = GenericProgram([GenericRule("r", [TypedAtom("member", [x])], [], TypedAtom("eligible", [x]))])
+            >>> base = [TemporalFact(TypedFact("member", ["alice"]), IntervalSet([Interval(0, 10)]))]
+            >>> closure = evaluate_range(program, base, limits=ReasoningLimits())
+            >>> assert TypedFact("eligible", ["alice"]) in closure.at(5)
+            >>> assert TypedFact("eligible", ["alice"]) not in closure.at(10)
+            >>> assert verify_closure(program, closure, limits=ReasoningLimits()).points_checked == 1
+
+    Times here are integer microseconds, not database commit IDs. Database-backed
+    extraction and publication require the separate range adapters; see the
+    reasoning-range-admission and reasoning-bound-range-publication guides.
     """
     if not isinstance(program, GenericProgram):
         raise ReasoningError("program must be a GenericProgram")
@@ -364,14 +424,15 @@ def evaluate_range(program: GenericProgram, facts: Iterable[TemporalFact], *,
         raise ReasoningError("facts must be iterable") from exc
     if not all(isinstance(item, TemporalFact) for item in items):
         raise ReasoningError("facts must contain only TemporalFact values")
-    segments = change_segments(items, max_segments=max_segments)
+    scheduled = _scheduled_active(items, max_rows=max_sweep_rows, max_events=max_sweep_events,
+                                  max_segments=max_segments, max_memberships=max_sweep_memberships,
+                                  cancel=cancel)
+    segments = tuple(interval for interval, _ in scheduled)
     derivations: list[TemporalDerivation] = []
     seen: set[tuple] = set()
     work = [0]
-    for segment in segments:
+    for segment, active in scheduled:
         check_cancelled(cancel)
-        point = _sample(segment)
-        active = [item.fact for item in items if point in item.valid]
         result = GenericEngine().evaluate(program, active, limits=limits, cancel=cancel)
         fresh = set(result.facts) - set(active)
         if not fresh:

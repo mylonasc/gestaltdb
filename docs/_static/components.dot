@@ -1,0 +1,45 @@
+// Regenerate: dot -Tsvg docs/_static/components.dot -o docs/_static/components.svg
+digraph Components {
+  graph [rankdir=TB, bgcolor="white", pad="0.25", nodesep="0.35", ranksep="0.6",
+         label="GestaltDB: application interfaces and data handoffs", labelloc=t,
+         fontname="sans-serif", fontsize=19];
+  node [shape=box, style="rounded,filled", fillcolor="#eef4fb", color="#38516b",
+        fontname="sans-serif", fontsize=12, margin="0.14"];
+  edge [color="#52677c", fontname="sans-serif", fontsize=10];
+
+  app [label="Python application", fillcolor="#fff0d6"];
+  subgraph cluster_database {
+    label="Database integration"; fontname="sans-serif"; color="#9eb4cb";
+    q [label="Cypher engine\nParse / plan / execute"];
+    g [label="GraphDB\nRecords / indexes / ingestion\nStored claims, rules and history"];
+    v [label="Read views\nCurrent snapshots / temporal prefix"];
+    kv [label="KV backends\nLMDB / LevelDB / PyRex"];
+    ser [label="Serializers\nPickle / JSON / MessagePack / Protobuf"];
+    q -> g; g -> v; g -> kv; g -> ser;
+  }
+  a [label="Explicit reasoning adapters\nExtract / map / verify / execute\nSaved state / publication / projection", fillcolor="#f3edfa"];
+  subgraph cluster_logic {
+    label="Storage-independent knowledge components"; fontname="sans-serif"; color="#9eb4cb";
+    o [label="Ontology model / compiler\nAxioms to programs and origins"];
+    r [label="Standalone reasoning\nBinary / prepared / typed evaluators"];
+    t [label="Temporal reasoning\nInterval closure / range updates"];
+    m [label="Maintenance and inspection\nSupports / validation / equality\nWitnesses and explanations"];
+    o -> r; t -> r; r -> m; t -> m;
+  }
+  subgraph cluster_sampling {
+    label="Sampling and training inputs"; fontname="sans-serif"; color="#9eb4cb";
+    s [label="Snapshot construction\nFilters / compact IDs / CSR arrays"];
+    e [label="SamplerEngine\nNeighbors / layers / walks\nWeighted / temporal / negative sampling"];
+    b [label="Sample batches\nArrays / ID mapping / framework conversion"];
+    s -> e -> b;
+  }
+  ml [label="External ML frameworks", fillcolor="#fff0d6"];
+  app -> g; app -> q; app -> o; app -> r; app -> a;
+  g -> s [label="build snapshot"];
+  v -> s [label="historical snapshot"];
+  v -> a [label="selected source"];
+  a -> r; a -> t;
+  a -> g [label="controlled publication", constraint=false];
+  a -> s [label="derived projection"];
+  b -> ml;
+}

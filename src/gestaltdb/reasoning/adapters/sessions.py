@@ -10,7 +10,8 @@ dependency index. Unknown history (a delta referencing versions the session
 never observed) rebuilds explicitly from a full scan instead of guessing.
 
 This first milestone advances in memory with an explicit rebuild fallback.
-Durable cross-process persistence of session state is out of scope: a session
+Durable cross-process persistence of session state lives in
+``gestaltdb.reasoning.adapters.session_store``: a session
 is a value, and ``advance_session`` returns the next value. Callers persist
 it if they need resumes across restarts.
 """
@@ -148,7 +149,7 @@ def _full_scan(graph: GraphDB, scope: SessionScope, horizon: int, *,
     instant = TemporalInstant(scope.valid_time_us)
     agents, sources = _filters(scope)
     seen: dict[str, tuple[str, TypedFact]] = {}
-    with graph.read_view(valid_time=instant) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=instant) as view:
         iterator = iter(view.iter_claims_as_of(world=scope.world, polarity=ClaimPolarity.POSITIVE,
                                                object_kind=ClaimObjectKind.ENTITY))
         count = 0
@@ -185,7 +186,46 @@ def _materialize_session(program: GenericProgram, catalog: RuleCatalog, scope: S
 def start_session(graph: GraphDB, program: GenericProgram, catalog: RuleCatalog, *,
                   scope: SessionScope, limits: ReasoningLimits, max_versions: int = 100_000,
                   cancel: Callable[[], bool] | None = None) -> ReasoningSession:
-    """Pin the current horizon and materialize one session from a full scan."""
+    """Pin the current horizon and materialize one session from a full scan.
+
+    A session is reasoning state, not a connection: it fixes a valid-time point,
+    world, program/catalog, and commit horizon. ``advance_session`` returns new
+    state; it does not mutate the original or publish inferred claims.
+
+    Examples:
+        Advance and persist a classification after new evidence (requires LMDB)::
+
+            >>> from tempfile import TemporaryDirectory
+            >>> from gestaltdb.graphdb import GraphDB
+            >>> from gestaltdb.reasoning.model import ReasoningLimits, Variable
+            >>> from gestaltdb.reasoning.typed import GenericProgram, GenericRule, TypedAtom, TypedFact
+            >>> from gestaltdb.reasoning.adapters.claims import ClaimMapping, ClaimSelection
+            >>> from gestaltdb.reasoning.adapters.sessions import SessionScope, start_session, advance_session
+            >>> from gestaltdb.reasoning.adapters.session_generation import catalog_for_typed_program
+            >>> from gestaltdb.reasoning.adapters.session_store import save_session, load_session
+            >>> x, y = Variable("x"), Variable("y")
+            >>> program = GenericProgram([GenericRule("r", [TypedAtom("member", [x, y])], [], TypedAtom("person", [x]))])
+            >>> scope = SessionScope("default", 50, ClaimSelection(), ClaimMapping())
+            >>> with TemporaryDirectory() as root:
+            ...     graph = GraphDB.create(root + "/db", backend="lmdb", serializer="json")
+            ...     try:
+            ...         _ = graph.epistemic.assert_claim(subject="alice", predicate="member", object="team",
+            ...             agent="registry", polarity="positive", valid=(0, 100))
+            ...         session = start_session(graph, program, catalog_for_typed_program(program),
+            ...             scope=scope, limits=ReasoningLimits())
+            ...         digest = save_session(session, root + "/session.json")
+            ...         _ = graph.epistemic.assert_claim(subject="bob", predicate="member", object="team",
+            ...             agent="registry", polarity="positive", valid=(0, 100))
+            ...         moved = advance_session(graph, session, limits=ReasoningLimits())
+            ...         _ = save_session(moved.session, root + "/session.json", expected_session_digest=digest)
+            ...         assert TypedFact("person", ["bob"]) in load_session(root + "/session.json").facts
+            ...     finally:
+            ...         graph.close()
+
+    This demonstrates persistence and exact-file-state comparison. Source-verified
+    durable resume additionally requires caller-held generation/state pins; see
+    the reasoning-authenticated-sessions guide for the complete trusted-pin flow.
+    """
     if not isinstance(graph, GraphDB):
         raise ReasoningError("GraphDB is required")
     if not isinstance(program, GenericProgram) or not isinstance(catalog, RuleCatalog):
@@ -200,7 +240,7 @@ def start_session(graph: GraphDB, program: GenericProgram, catalog: RuleCatalog,
     if missing:
         raise ReasoningError(f"catalog does not cover program rules: {sorted(missing)}")
     instant = TemporalInstant(scope.valid_time_us)
-    with graph.read_view(valid_time=instant) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=instant) as view:
         database_id = view.provenance.database_id
         horizon = view.provenance.commit_horizon
     seen = _full_scan(graph, scope, horizon, max_versions=max_versions, cancel=cancel)
@@ -222,7 +262,7 @@ def advance_session(graph: GraphDB, session: ReasoningSession, *, limits: Reason
             raise ReasoningError(f"{name} must be a positive integer")
     scope = session.scope
     instant = TemporalInstant(scope.valid_time_us)
-    with graph.read_view(valid_time=instant) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=instant) as view:
         if view.provenance.database_id != session.database_id:
             raise ReasoningError("session belongs to a different database")
         current = view.provenance.commit_horizon
@@ -238,7 +278,7 @@ def advance_session(graph: GraphDB, session: ReasoningSession, *, limits: Reason
     logical_of = dict(session.version_logical)
     for commit_id in range(session.commit_horizon + 1, current + 1):
         check_cancelled(cancel)
-        commit = graph.get_temporal_commit(commit_id, _validate_supersession=False)
+        commit = graph.temporal.get_temporal_commit(commit_id, _validate_supersession=False)
         if commit is None:
             return _rebuild(graph, session, current, limits=limits, max_versions=max_versions, cancel=cancel)
         for version in commit.versions:
@@ -246,6 +286,10 @@ def advance_session(graph: GraphDB, session: ReasoningSession, *, limits: Reason
             if not isinstance(version, ClaimVersion):
                 continue
             if version.operation == VersionOperation.RETRACT:
+                # A retraction only wins at points inside its half-open valid
+                # interval. Outside it, the pinned assertion remains active.
+                if not version.valid.contains(instant):
+                    continue
                 # Retractions are logical: they retire every active version of
                 # the named claim, however the retraction names it. Naming an
                 # unobserved version or an unknown logical ID means foreign or

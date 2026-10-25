@@ -64,7 +64,7 @@ class ClaimGenerationBinding:
             raise ReasoningError("freshness must be latest or historical")
         _verify_graph(self.provenance, graph)
         if freshness == "latest":
-            with graph.read_view(valid_time=self.provenance.valid_time_us) as view:
+            with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=self.provenance.valid_time_us) as view:
                 if view.provenance.commit_horizon != self.provenance.commit_horizon:
                     raise ProvenanceMismatchError("generation source horizon moved; rebind explicitly")
 

@@ -39,18 +39,18 @@ score rather than requiring a training framework.
    with TemporaryDirectory() as directory:
        graph = GraphDB.create(Path(directory) / "db", backend="lmdb", serializer="json")
        try:
-           prediction = graph.assert_claim(
+           prediction = graph.epistemic.assert_claim(
                subject="supplier-1", predicate="PREDICTED_RISK", object="high",
                polarity="positive", agent="gnn-risk", confidence=0.8, valid=(0, 100),
                provenance={"model_output": {
                    "model_id": "supplier-risk-gnn", "model_version": "weights-7"}},
            )
-           graph.create_rule(
+           graph.rules.create_rule(
                "review-predictions", when=[("?s", "PREDICTED_RISK", "high")],
                then=("?s", "REQUIRES_REVIEW", "yes"),
            )
-           graph.run_rules(as_of=10)
-           conclusion = next(graph.iter_claims_as_of(
+           graph.rules.run(as_of=10)
+           conclusion = next(graph.epistemic.iter_claims_as_of(
                valid_time=10, subject="supplier-1", predicate="REQUIRES_REVIEW"))
            report = explain_inference(graph, conclusion.logical_id, valid_time=10)
            assert any(node["kind"] == "model_output" for node in report.to_dict()["nodes"])

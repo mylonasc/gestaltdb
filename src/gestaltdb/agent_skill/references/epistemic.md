@@ -11,6 +11,7 @@ valid/system time, or distinguishing contradictory evidence from uncertainty.
 - Objects are entity IDs by default. Use `object_kind="literal"` for canonical JSON-compatible literals.
 - Claims append to temporal history and do not create current-state graph edges or participate in Cypher matching.
 - Use `get_claim_as_of` for one claim identity and `iter_claims_as_of` for indexed statement/source/agent/world/polarity lookup.
+- Claim iteration buffers winners and groups full commit integrity checks. Exhaust the iterator and discard partial output on error; early close is not authenticated completion. This does not create a backend snapshot or impose a hard memory bound.
 - Use `correct_claim` to revise confidence or provenance and `retract_claim` to withdraw a claim over a valid interval. Both preserve history.
 - `correct_claim` accepts a `Claim` or its ID. Explicit confidence/provenance keywords override the object/superseded values; omitted keywords preserve them. Use `confidence=None` or `provenance={}` to clear a value.
 - `retract_claim` rejects unknown identities, including with an explicit validity interval. Published assertions (or earlier assertions in the same commit batch) establish identity; a retraction-only history does not. Use `iter_claim_versions` to inspect retraction history.
@@ -38,43 +39,43 @@ from gestaltdb.graphdb import GraphDB
 with TemporaryDirectory() as tmpdir:
     graph = GraphDB.create(tmpdir, backend="leveldb", serializer="json")
     try:
-        positive = graph.assert_claim(
+        positive = graph.epistemic.assert_claim(
             subject="alice", predicate="WORKS_FOR", object="acme",
             polarity="positive", agent="source:hr", source="hr.csv",
             confidence=0.97, world="reported",
             valid_from="2024-01-01T00:00:00Z",
         )
-        graph.assert_claim(
+        graph.epistemic.assert_claim(
             subject="alice", predicate="WORKS_FOR", object="acme",
             polarity="negative", agent="source:audit", confidence=0.7,
             world="reported", valid_from="2024-01-01T00:00:00Z",
         )
-        assert graph.claim_status(
+        assert graph.epistemic.claim_status(
             "alice", "WORKS_FOR", "acme",
             valid_time="2024-06-01T00:00:00Z", world="reported",
         ) is ClaimStatus.BOTH
 
-        graph.correct_claim(
+        graph.epistemic.correct_claim(
             positive.logical_id,
             supersedes_version_id=positive.version_id,
             confidence=0.99,
             provenance={"reviewed": True},
         )
 
-        graph.assert_claim(
+        graph.epistemic.assert_claim(
             subject="acme", predicate="MEMBER_OF", object="industry",
             polarity="positive", agent="source:registry", world="reported",
             valid_from="2024-03-01T00:00:00Z",
         )
-        graph.create_rule(
+        graph.rules.create_rule(
             "employment-implies-affiliation",
             when=[("?p", "WORKS_FOR", "?c"), ("?c", "MEMBER_OF", "?g")],
             then=("?p", "AFFILIATED_WITH", "?g"),
         )
-        result = graph.run_rules(as_of="2024-06-01T00:00:00Z")
+        result = graph.rules.run(as_of="2024-06-01T00:00:00Z")
         assert result.derived_count == 1
         derived = result.versions[0]
-        explanation = graph.explain_claim(
+        explanation = graph.rules.explain(
             derived.logical_id, valid_time="2024-06-01T00:00:00Z"
         )
         assert explanation.root_version_id == derived.version_id

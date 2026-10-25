@@ -346,7 +346,7 @@ adapter layer depends on GraphDB and temporal/provenance records; the standalone
 core and ontology compiler never import it.
 
 The caller first obtains a temporal ``GraphReadView`` through the existing
-``graph.read_view(valid_time=..., system_time=...)`` context manager. Database
+``graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=..., system_time=...)`` context manager. Database
 creation/opening and any identity initialization happen outside extraction.
 The adapter requires an already initialized, verifiable source, and does not
 initialize identity, rebuild stale indexes or write any records or claims.

@@ -137,11 +137,11 @@ assert not any(name.startswith(('gestaltdb','numpy','pyarrow','polars')) for nam
 
 
 def _seed(graph):
-    graph.assert_claim(subject="alice", predicate="knows", object="bob",
+    graph.epistemic.assert_claim(subject="alice", predicate="knows", object="bob",
                        agent="registry", polarity="positive", valid=(0, 100))
-    graph.assert_claim(subject="bob", predicate="knows", object="carol",
+    graph.epistemic.assert_claim(subject="bob", predicate="knows", object="carol",
                        agent="registry", polarity="positive", valid=(0, 100))
-    graph.assert_claim(subject="alice", predicate="likes", object="carol",
+    graph.epistemic.assert_claim(subject="alice", predicate="likes", object="carol",
                        agent="other", polarity="positive", valid=(0, 100))
 
 
@@ -159,7 +159,7 @@ def test_batched_matches_single_pass_evidence_and_reports_profile(tmp_path, back
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
     try:
         _seed(graph)
-        with graph.read_view(valid_time=50) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             expected = PinnedClaimSource(view, world="default", ontology_revision="rev-1",
                                          selection=ClaimSelection(), mapping=ClaimMapping())
             with expected:
@@ -198,7 +198,7 @@ def test_predicate_and_binding_pushdown_narrows_scans(tmp_path, backend, module)
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
     try:
         _seed(graph)
-        with graph.read_view(valid_time=50) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             request = ExtractionRequest(world="default", predicates=["knows"],
                                         subject="alice", batch_rows=100, max_rows=100)
             with _batched(graph, view, request) as source:
@@ -218,6 +218,174 @@ def test_predicate_and_binding_pushdown_narrows_scans(tmp_path, backend, module)
         graph.close()
 
 
+@pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
+def test_multi_predicate_pushdown_matches_full_scan_and_narrows_scans(tmp_path, backend, module):
+    pytest.importorskip(module)
+    from gestaltdb.graphdb import GraphDB
+
+    graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
+    try:
+        graph.epistemic.assert_claim(subject="a", predicate="edge", object="b",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="b", predicate="edge", object="c",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="a", predicate="reach", object="seeded",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="n", predicate="noise", object="unused",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
+            full_request = ExtractionRequest(world="default", batch_rows=100, max_rows=100)
+            with _batched(graph, view, full_request) as source:
+                full = [e for b in source.iter_batches() for e in b.evidence]
+                full_profile = source.profile
+            assert full_profile.pushdown == "none"
+            selective_request = ExtractionRequest(world="default", predicates=["edge", "reach"],
+                                                  batch_rows=100, max_rows=100)
+            with _batched(graph, view, selective_request) as source:
+                batches = list(source.iter_batches())
+                selective = [e for b in batches for e in b.evidence]
+                selective_profile = source.profile
+            assert selective_profile.pushdown == "predicates"
+            wanted = {e.reference_id for e in full if e.fact.predicate in ("edge", "reach")}
+            assert {e.reference_id for e in selective} == wanted
+            assert len(selective) == 3
+            assert selective_profile.scanned == 3 < full_profile.scanned == 4
+            # Repeat passes are deterministic.
+            with _batched(graph, view, selective_request) as source:
+                repeat = [e for b in source.iter_batches() for e in b.evidence]
+            assert repeat == selective
+            # Subject binding composes with the multi-predicate union.
+            bound_request = ExtractionRequest(world="default", predicates=["edge", "reach"],
+                                              subject="a", batch_rows=100, max_rows=100)
+            with _batched(graph, view, bound_request) as source:
+                bound = [e for b in source.iter_batches() for e in b.evidence]
+                assert source.profile.pushdown == "predicates+subject"
+            assert {(e.fact.subject, e.fact.predicate) for e in bound} == {("a", "edge"), ("a", "reach")}
+    finally:
+        graph.close()
+
+
+@pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
+def test_selective_extraction_preserves_demand_closure(tmp_path, backend, module):
+    pytest.importorskip(module)
+    from gestaltdb.graphdb import GraphDB
+    from gestaltdb.reasoning.demand import BoundGoal, answer, required_predicates
+    from gestaltdb.reasoning.typed import GenericEngine, GenericProgram, GenericRule, TypedAtom, TypedFact
+    from gestaltdb.reasoning.model import Variable
+
+    x, y, z = Variable("x"), Variable("y"), Variable("z")
+    program = GenericProgram([
+        GenericRule("base", [TypedAtom("edge", [x, y])], [], TypedAtom("reach", [x, y])),
+        GenericRule("step", [TypedAtom("reach", [x, y]), TypedAtom("edge", [y, z])], [],
+                    TypedAtom("reach", [x, z])),
+        GenericRule("unrelated", [TypedAtom("noise", [x])], [], TypedAtom("ignored", [x])),
+    ])
+    goal = BoundGoal("reach", ["a", y])
+    plan = required_predicates(program, goal)
+    assert plan == ("edge", "reach")
+    graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
+    try:
+        graph.epistemic.assert_claim(subject="a", predicate="edge", object="b",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="b", predicate="edge", object="c",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="a", predicate="reach", object="asserted",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="n", predicate="noise", object="unused",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
+            full_request = ExtractionRequest(world="default", batch_rows=100, max_rows=100)
+            with _batched(graph, view, full_request) as source:
+                full_facts = [TypedFact(e.fact.predicate, (e.fact.subject, e.fact.object))
+                              for b in source.iter_batches() for e in b.evidence]
+            selective_request = ExtractionRequest(world="default", predicates=list(plan),
+                                                  batch_rows=100, max_rows=100)
+            with _batched(graph, view, selective_request) as source:
+                selective_facts = [TypedFact(e.fact.predicate, (e.fact.subject, e.fact.object))
+                                   for b in source.iter_batches() for e in b.evidence]
+                assert source.profile.pushdown == "predicates"
+        expected = answer(program, full_facts, goal, limits=ReasoningLimits()).facts
+        assert answer(program, selective_facts, goal, limits=ReasoningLimits()).facts == expected
+        # Recursive frontier beyond the seed and asserted headed facts survive.
+        assert TypedFact("reach", ["a", "c"]) in expected
+        assert TypedFact("reach", ["a", "asserted"]) in expected
+        assert not any(f.predicate in ("noise", "ignored") for f in expected)
+        assert GenericEngine().evaluate(program, selective_facts, limits=ReasoningLimits()) == \
+            GenericEngine().evaluate(program, [f for f in full_facts if f.predicate in plan],
+                                     limits=ReasoningLimits())
+    finally:
+        graph.close()
+
+
+def test_mapping_storage_predicates_inverts_exactly():
+    aliased = ClaimMapping((("worksFor", "memberOf"), ("employedBy", "memberOf"), ("edge", "linked")))
+    assert aliased.storage_predicates(["memberOf"]) == ("employedBy", "memberOf", "worksFor")
+    assert aliased.storage_predicates(["linked"]) == ("edge", "linked")
+    assert aliased.storage_predicates(["plain"]) == ("plain",)
+    # "edge" is itself an aliased source, so it can never surface as logical "edge".
+    assert aliased.storage_predicates(["edge"]) == ()
+    assert aliased.storage_predicates([]) == ()
+    assert ClaimMapping().storage_predicates(["p", "p"]) == ("p",)
+    with pytest.raises(ReasoningError, match="predicates must be an explicit collection"):
+        aliased.storage_predicates("memberOf")
+
+
+@pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
+def test_aliased_selective_extraction_matches_full_closure(tmp_path, backend, module):
+    pytest.importorskip(module)
+    from gestaltdb.graphdb import GraphDB
+    from gestaltdb.reasoning.demand import BoundGoal, answer, required_predicates
+    from gestaltdb.reasoning.typed import GenericEngine, GenericProgram, GenericRule, TypedAtom, TypedFact
+    from gestaltdb.reasoning.model import Variable
+
+    x, y, z = Variable("x"), Variable("y"), Variable("z")
+    program = GenericProgram([
+        GenericRule("base", [TypedAtom("memberOf", [x, y])], [], TypedAtom("person", [x])),
+        GenericRule("step", [TypedAtom("person", [x]), TypedAtom("memberOf", [x, y])], [],
+                    TypedAtom("veteran", [x])),
+    ])
+    goal = BoundGoal("veteran", [x])
+    plan = required_predicates(program, goal)
+    assert plan == ("memberOf", "person", "veteran")
+    mapping = ClaimMapping((("worksFor", "memberOf"), ("employedBy", "memberOf")))
+    assert mapping.storage_predicates(list(plan)) == ("employedBy", "memberOf", "person", "veteran", "worksFor")
+    graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
+    try:
+        graph.epistemic.assert_claim(subject="a", predicate="worksFor", object="g1",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="b", predicate="employedBy", object="g1",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="n", predicate="noise", object="unused",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
+            # Without inversion the logical plan matches nothing at storage level.
+            naive_request = ExtractionRequest(world="default", predicates=list(plan),
+                                              batch_rows=100, max_rows=100)
+            with _batched(graph, view, naive_request, mapping=mapping) as source:
+                assert [e for b in source.iter_batches() for e in b.evidence] == []
+            selective_request = ExtractionRequest(
+                world="default", predicates=mapping.storage_predicates(list(plan)),
+                batch_rows=100, max_rows=100)
+            with _batched(graph, view, selective_request, mapping=mapping) as source:
+                selective = [e for b in source.iter_batches() for e in b.evidence]
+                assert source.profile.pushdown == "predicates"
+            full_request = ExtractionRequest(world="default", batch_rows=100, max_rows=100)
+            with _batched(graph, view, full_request, mapping=mapping) as source:
+                full = [e for b in source.iter_batches() for e in b.evidence]
+        to_fact = lambda e: TypedFact(e.fact.predicate, (e.fact.subject, e.fact.object))
+        selective_facts = [to_fact(e) for e in selective]
+        assert {e.reference_id for e in selective} == {
+            e.reference_id for e in full if e.fact.predicate == "memberOf"}
+        assert answer(program, selective_facts, goal, limits=ReasoningLimits()).facts == \
+            answer(program, [to_fact(e) for e in full], goal, limits=ReasoningLimits()).facts == \
+            (TypedFact("veteran", ["a"]), TypedFact("veteran", ["b"]))
+        assert GenericEngine().evaluate(program, selective_facts, limits=ReasoningLimits()) == \
+            GenericEngine().evaluate(program, [to_fact(e) for e in full
+                                               if to_fact(e).predicate in plan], limits=ReasoningLimits())
+    finally:
+        graph.close()
+
+
 @pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel")])
 def test_batched_limits_rebinding_and_evaluation_parity(tmp_path, backend, module):
     pytest.importorskip(module)
@@ -227,7 +395,7 @@ def test_batched_limits_rebinding_and_evaluation_parity(tmp_path, backend, modul
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
     try:
         _seed(graph)
-        with graph.read_view(valid_time=50) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             request = ExtractionRequest(world="default", batch_rows=1, max_rows=2)
             with _batched(graph, view, request) as source:
                 with pytest.raises(ReasoningLimitError, match="max_rows"):

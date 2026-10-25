@@ -288,10 +288,6 @@ def propagate_insertions(program: GenericProgram, closure: Iterable[TypedFact], 
             break
         rounds += 1
         check_cancelled(cancel)
-        active = [(rule, position) for predicate in sorted(delta.by_predicate)
-                  for rule, position in by_predicate.get(predicate, ())]
-        if not active:
-            break
         derived: set[TypedFact] = set()
         for rule, pivot in active:
             for bindings, premises in _match_with_premises(rule, pivot, full, delta):
@@ -468,6 +464,25 @@ def rematerialize(program: GenericProgram, base_facts: Iterable[TypedFact], *,
     Every derived fact gets every support, so later incremental deletions are
     exact. Changed programs simply rematerialize under the new digest; the old
     index is never incrementally repaired across a ruleset change.
+
+    Examples:
+        Build supports and retract the only premise of a derived fact::
+
+            >>> from gestaltdb.reasoning.model import ReasoningLimits, Variable
+            >>> from gestaltdb.reasoning.typed import GenericProgram, GenericRule, TypedAtom, TypedFact
+            >>> from gestaltdb.reasoning.maintenance import rematerialize, retract_facts
+            >>> x = Variable("x")
+            >>> program = GenericProgram([GenericRule("r", [TypedAtom("member", [x])], [], TypedAtom("person", [x]))])
+            >>> base = TypedFact("member", ["alice"])
+            >>> material = rematerialize(program, [base], limits=ReasoningLimits())
+            >>> assert TypedFact("person", ["alice"]) in material.facts
+            >>> changed = retract_facts(program, material.facts, [base],
+            ...     limits=ReasoningLimits(), index=material.index)
+            >>> assert TypedFact("person", ["alice"]) not in changed.facts
+
+    Carry the returned facts and dependency index together between updates.
+    Negation, aggregate, and equality-change combinations have separate rebuild
+    boundaries; consult the reasoning-maintenance guide before composing them.
     """
     if not isinstance(program, GenericProgram):
         raise ReasoningError("program must be a GenericProgram")

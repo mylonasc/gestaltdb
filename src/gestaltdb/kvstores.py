@@ -448,7 +448,20 @@ class LMDBStore(KVStore):
     """LMDB implementation of the GestaltDB key-value store.
 
     Examples:
-        >>> store = LMDBStore(path="/tmp/example_graph_lmdb")  # doctest: +SKIP
+        Work with raw bytes in a disposable store (requires ``lmdb``)::
+
+            >>> from tempfile import TemporaryDirectory
+            >>> from gestaltdb.kvstores import LMDBStore
+            >>> with TemporaryDirectory() as root:
+            ...     store = LMDBStore(path=root + "/db")
+            ...     try:
+            ...         store.put_node(b"n", b"payload")
+            ...         assert store.get_node(b"n") == b"payload"
+            ...     finally:
+            ...         store.close()
+
+        Most applications use ``GraphDB.create(..., backend="lmdb")`` to add
+        serialization, indexes, and graph semantics above this byte interface.
     """
 
     supports_transactions = True
@@ -1168,7 +1181,20 @@ class LevelDBStore(KVStore):
         path: Directory that will contain the LevelDB sub-databases.
 
     Examples:
-        >>> store = LevelDBStore(path="/tmp/example_graph_leveldb")  # doctest: +SKIP
+        Work with raw bytes in a disposable store (requires ``plyvel``)::
+
+            >>> from tempfile import TemporaryDirectory
+            >>> from gestaltdb.kvstores import LevelDBStore
+            >>> with TemporaryDirectory() as root:
+            ...     store = LevelDBStore(path=root + "/db")
+            ...     try:
+            ...         store.put_node(b"n", b"payload")
+            ...         assert store.get_node(b"n") == b"payload"
+            ...     finally:
+            ...         store.close()
+
+        Most applications use ``GraphDB.create(..., backend="leveldb")``;
+        see the storage-backends guide for snapshot/transaction capabilities.
     """
 
     @staticmethod
@@ -1499,7 +1525,21 @@ class PyRexStore(KVStore):
             durable ingestion benchmarks.
 
     Examples:
-        >>> store = PyRexStore(path="/tmp/example_graph_rocksdb")  # doctest: +SKIP
+        Work with raw bytes in a disposable store (requires ``pyrex-rocksdb``)::
+
+            >>> from tempfile import TemporaryDirectory
+            >>> from gestaltdb.kvstores import PyRexStore
+            >>> with TemporaryDirectory() as root:
+            ...     store = PyRexStore(path=root + "/db")
+            ...     try:
+            ...         store.put_node(b"n", b"payload")
+            ...         assert store.get_node(b"n") == b"payload"
+            ...     finally:
+            ...         store.close()
+
+        ``GraphDB.create(..., backend="pyrex")`` adds graph semantics. Plain
+        and transactional PyRex have different ingestion/snapshot capabilities;
+        see the storage-backends guide before selecting transaction mode.
     """
 
     _SEP = b"\x1f"
@@ -1626,8 +1666,9 @@ class PyRexStore(KVStore):
         """Return whether this PyRex runtime exposes native Arrow scans.
 
         Requires ``scan_arrow`` plus ``create_snapshot`` on the underlying
-        handle. Transactional handles do not expose them in 0.5.0; only the
-        plain non-transactional handle does.
+        handle. Transactional handles do not expose them in 0.5.0; 0.6.0 adds
+        native committed-state scans of the default column family. This probe
+        is not authenticated claim-source or named-column-family admission.
         """
         return hasattr(self.db, "scan_arrow") and hasattr(self.db, "create_snapshot")
 

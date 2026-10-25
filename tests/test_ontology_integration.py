@@ -20,7 +20,7 @@ def test_import_project_query_sample_publish_and_reconcile(tmp_path):
     try:
         graph.put_nodes([Node("a"), Node("b")])
         graph.put_edge(Edge("ab", "a", "b", {"type": "P"}))
-        base = graph.assert_claim(subject="a", predicate="urn:p", object="b", agent="input",
+        base = graph.epistemic.assert_claim(subject="a", predicate="urn:p", object="b", agent="input",
                                   polarity="positive", valid=(0, 100))
         with graph.current_read_view(require_verifiable=True) as view:
             with PinnedGraphSource(view, mapping=GraphMapping(edge_types=[("P", "urn:p")])) as source:
@@ -34,13 +34,13 @@ def test_import_project_query_sample_publish_and_reconcile(tmp_path):
         assert receipt.asserted == 2
         assert reconcile_point(graph, plan, **params).commit_id is None
         assert not graph.query("MATCH ()-[r:related]->() RETURN r").records
-        graph.retract_claim(base.logical_id, supersedes_version_id=base.version_id)
+        graph.epistemic.retract_claim(base.logical_id, supersedes_version_id=base.version_id)
         assert reconcile_point(graph, plan, **params).retracted == 2
-        assert not list(graph.iter_claims_as_of(world="published", valid_time=50))
+        assert not list(graph.epistemic.iter_claims_as_of(world="published", valid_time=50))
         # Claims reconciliation leaves mutable graph and prior result untouched.
         assert graph.get_edge(graph.edge_key_to_bytes("ab")) is not None
         assert current.match(predicate="urn:q")
-        graph.assert_claim(subject="a", predicate="urn:p", object="b", agent="input",
+        graph.epistemic.assert_claim(subject="a", predicate="urn:p", object="b", agent="input",
                            polarity="positive", valid=(0, 100))
         assert reconcile_point(graph, plan, **params).asserted == 2
         assert reconcile_point(graph, plan, **params).commit_id is None

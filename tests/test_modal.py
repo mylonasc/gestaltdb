@@ -24,7 +24,7 @@ def graph():
 
 
 def _claim(graph, *, world, polarity="positive", confidence=None, valid=(0, 100)):
-    return graph.assert_claim(
+    return graph.epistemic.assert_claim(
         subject="bob",
         predicate="LOCATED_IN",
         object="paris",
@@ -37,7 +37,7 @@ def _claim(graph, *, world, polarity="positive", confidence=None, valid=(0, 100)
 
 
 def _access(graph, kind, target, *, agent="alice", from_world="actual", valid=(0, 100)):
-    return graph.assert_world_accessibility(
+    return graph.epistemic.assert_world_accessibility(
         agent=agent,
         from_world=from_world,
         to_world=target,
@@ -47,6 +47,20 @@ def _access(graph, kind, target, *, agent="alice", from_world="actual", valid=(0
 
 
 PROPOSITION = {"subject": "bob", "predicate": "LOCATED_IN", "object": "paris"}
+
+
+def _entails(graph, agent, proposition, mode, *, world, valid_time,
+             system_time=None, through_commit=None, max_depth=4, max_states=1_000):
+    """Pin a read view and evaluate one modal proposition via the epistemic engine."""
+    with graph.temporal.open_read_view(
+        graph, manifest=graph.manifest, database_id=graph.database_id,
+        valid_time=valid_time, system_time=system_time,
+        through_commit=through_commit,
+    ) as view:
+        return graph.epistemic.entails(
+            view, agent, proposition, mode, world=world,
+            max_depth=max_depth, max_states=max_states,
+        )
 
 
 @pytest.mark.parametrize(
@@ -63,7 +77,7 @@ def test_belief_returns_all_four_values_with_temporal_evidence(graph, polarities
     for polarity in polarities:
         _claim(graph, world="believed", polarity=polarity, confidence=0.8)
 
-    result = graph.entails(
+    result = _entails(graph,
         "alice", PROPOSITION, "BELIEVES", world="actual", valid_time=50
     )
 
@@ -81,9 +95,9 @@ def test_knowledge_and_belief_use_distinct_agent_frames(graph):
     _claim(graph, world="rumor", polarity="positive")
     _claim(graph, world="verified", polarity="negative")
 
-    belief = graph.entails("alice", PROPOSITION, "BELIEVES", world="actual", valid_time=10)
-    knowledge = graph.entails("alice", PROPOSITION, "KNOWS", world="actual", valid_time=10)
-    other_agent = graph.entails("charlie", PROPOSITION, "BELIEVES", world="actual", valid_time=10)
+    belief = _entails(graph, "alice", PROPOSITION, "BELIEVES", world="actual", valid_time=10)
+    knowledge = _entails(graph, "alice", PROPOSITION, "KNOWS", world="actual", valid_time=10)
+    other_agent = _entails(graph, "charlie", PROPOSITION, "BELIEVES", world="actual", valid_time=10)
 
     assert belief.status is ClaimStatus.SUPPORTED
     assert knowledge.status is ClaimStatus.REFUTED
@@ -96,8 +110,8 @@ def test_possible_and_necessary_apply_paraconsistent_world_aggregation(graph):
     _claim(graph, world="one", polarity="positive", confidence=0.9)
     _claim(graph, world="two", polarity="negative", confidence=0.7)
 
-    possible = graph.entails("alice", PROPOSITION, "POSSIBLE", world="actual", valid_time=10)
-    necessary = graph.entails("alice", PROPOSITION, "NECESSARY", world="actual", valid_time=10)
+    possible = _entails(graph, "alice", PROPOSITION, "POSSIBLE", world="actual", valid_time=10)
+    necessary = _entails(graph, "alice", PROPOSITION, "NECESSARY", world="actual", valid_time=10)
 
     assert possible.status is ClaimStatus.SUPPORTED
     assert possible.confidence == 0.9
@@ -119,9 +133,9 @@ def test_nested_connectives_do_not_explode_and_explanations_are_deterministic(gr
         },
     }
 
-    first = graph.entails("alice", nested, "BELIEVES", world="actual", valid_time=10)
-    second = graph.entails("alice", nested, "BELIEVES", world="actual", valid_time=10)
-    unrelated = graph.entails(
+    first = _entails(graph, "alice", nested, "BELIEVES", world="actual", valid_time=10)
+    second = _entails(graph, "alice", nested, "BELIEVES", world="actual", valid_time=10)
+    unrelated = _entails(graph,
         "alice",
         {"subject": "bob", "predicate": "IS_MAYOR_OF", "object": "paris"},
         "BELIEVES",
@@ -140,25 +154,25 @@ def test_temporal_and_system_horizons_pin_accessibility_and_claims(graph):
         datetime.datetime(2025, 1, 2, tzinfo=datetime.timezone.utc),
         datetime.datetime(2025, 1, 3, tzinfo=datetime.timezone.utc),
     ])
-    graph._temporal_clock = lambda: next(times)
+    graph.temporal._clock = lambda: next(times)
     access = _access(graph, "belief", "rumor", valid=(0, 20))
     claim = _claim(graph, world="rumor", valid=(0, 20))
-    graph.retract_claim(
+    graph.epistemic.retract_claim(
         claim.logical_id,
         supersedes_version_id=claim.version_id,
         valid=(0, 20),
     )
 
-    historical = graph.entails(
+    historical = _entails(graph,
         "alice", PROPOSITION, "BELIEVES", world="actual", valid_time=10,
         through_commit=claim.commit_id,
     )
-    current = graph.entails("alice", PROPOSITION, "BELIEVES", world="actual", valid_time=10)
-    known_at_claim = graph.entails(
+    current = _entails(graph, "alice", PROPOSITION, "BELIEVES", world="actual", valid_time=10)
+    known_at_claim = _entails(graph,
         "alice", PROPOSITION, "BELIEVES", world="actual", valid_time=10,
         system_time=claim.system_time,
     )
-    expired = graph.entails(
+    expired = _entails(graph,
         "alice", PROPOSITION, "BELIEVES", world="actual", valid_time=20,
         through_commit=claim.commit_id,
     )
@@ -175,9 +189,9 @@ def test_modal_facts_support_pre_epoch_and_open_validity(graph):
     _access(graph, "knowledge", "verified", valid=(-10, None))
     _claim(graph, world="verified", valid=(-10, None))
 
-    before = graph.entails("alice", PROPOSITION, "KNOWS", world="actual", valid_time=-11)
-    at_start = graph.entails("alice", PROPOSITION, "KNOWS", world="actual", valid_time=-10)
-    later = graph.entails("alice", PROPOSITION, "KNOWS", world="actual", valid_time=10_000)
+    before = _entails(graph, "alice", PROPOSITION, "KNOWS", world="actual", valid_time=-11)
+    at_start = _entails(graph, "alice", PROPOSITION, "KNOWS", world="actual", valid_time=-10)
+    later = _entails(graph, "alice", PROPOSITION, "KNOWS", world="actual", valid_time=10_000)
 
     assert before.status is ClaimStatus.UNKNOWN
     assert at_start.status is ClaimStatus.SUPPORTED
@@ -189,43 +203,43 @@ def test_formula_validation_and_resource_limits_fail_closed(graph):
     _claim(graph, world="rumor")
 
     with pytest.raises(ModalEvaluationLimitError, match="max_depth"):
-        graph.entails(
+        _entails(graph,
             "alice",
             {"operator": "BELIEVES", "agent": "alice", "formula": PROPOSITION},
             "BELIEVES", world="actual", valid_time=10, max_depth=1,
         )
     with pytest.raises(ModalEvaluationLimitError, match="max_states"):
-        graph.entails(
+        _entails(graph,
             "alice", PROPOSITION, "BELIEVES", world="actual", valid_time=10,
             max_states=1,
         )
     with pytest.raises(ModalError, match="unsupported fields"):
-        graph.entails(
+        _entails(graph,
             "alice", {**PROPOSITION, "unsafe": True}, "BELIEVES",
             world="actual", valid_time=10,
         )
     cyclic = {"operator": "NOT"}
     cyclic["formula"] = cyclic
     with pytest.raises(ModalError, match="finite"):
-        graph.entails("alice", cyclic, "BELIEVES", world="actual", valid_time=10)
+        _entails(graph, "alice", cyclic, "BELIEVES", world="actual", valid_time=10)
     with pytest.raises(ModalError, match="at least two"):
         ModalExpression(ModalOperator.AND, operands=(ModalExpression.from_value(PROPOSITION),))
 
 
 def test_explanation_preserves_rule_derivation_provenance(graph):
     _access(graph, "knowledge", "verified")
-    graph.assert_claim(
+    graph.epistemic.assert_claim(
         subject="bob", predicate="VISITS", object="paris", polarity="positive",
         agent="source", world="verified", valid=(0, 100),
     )
-    graph.create_rule(
+    graph.rules.create_rule(
         "visits-implies-location",
         when=[("?person", "VISITS", "?place")],
         then=("?person", "LOCATED_IN", "?place"),
     )
-    graph.run_rules(as_of=10, world="verified")
+    graph.rules.run(as_of=10, world="verified")
 
-    result = graph.entails("alice", PROPOSITION, "KNOWS", world="actual", valid_time=10)
+    result = _entails(graph, "alice", PROPOSITION, "KNOWS", world="actual", valid_time=10)
     evidence = result.explanation["evaluation"]["children"][0]["evidence"]
 
     assert result.status is ClaimStatus.SUPPORTED

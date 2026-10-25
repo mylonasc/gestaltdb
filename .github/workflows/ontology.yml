@@ -11,19 +11,9 @@ on:
       - "benchmarks/reasoning_batches.py"
       - "benchmarks/reasoning_extraction.py"
       - "benchmarks/reasoning_typed.py"
-      - "planning/reasoning-engine/**"
-      - "gestaltdb_reasoning_feature_tracker.xlsx"
-      - "EPIC_REASONING_ENGINE.md"
-      - "docs/reasoning-execution.rst"
-      - "docs/reasoning-batches.rst"
-      - "docs/reasoning-polars.rst"
-      - "docs/reasoning-plans.rst"
-      - "docs/reasoning-extraction.rst"
-      - "docs/reasoning-executors.rst"
-      - "docs/reasoning-typed.rst"
+      - "planning/reasoning-engine/**/*.py"
       - "benchmarks/ontology-requirements.txt"
       - "benchmarks/cli.py"
-      - "docs/ontology-contract.rst"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/ontology.yml"
@@ -37,25 +27,19 @@ on:
       - "benchmarks/reasoning_batches.py"
       - "benchmarks/reasoning_extraction.py"
       - "benchmarks/reasoning_typed.py"
-      - "planning/reasoning-engine/**"
-      - "gestaltdb_reasoning_feature_tracker.xlsx"
-      - "EPIC_REASONING_ENGINE.md"
-      - "docs/reasoning-execution.rst"
-      - "docs/reasoning-batches.rst"
-      - "docs/reasoning-polars.rst"
-      - "docs/reasoning-plans.rst"
-      - "docs/reasoning-extraction.rst"
-      - "docs/reasoning-executors.rst"
-      - "docs/reasoning-typed.rst"
+      - "planning/reasoning-engine/**/*.py"
       - "benchmarks/ontology-requirements.txt"
       - "benchmarks/cli.py"
-      - "docs/ontology-contract.rst"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/ontology.yml"
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   ontology:
@@ -65,7 +49,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.10", "3.13"]' || '["3.10", "3.11", "3.12", "3.13"]') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

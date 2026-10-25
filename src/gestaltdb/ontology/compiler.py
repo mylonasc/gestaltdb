@@ -62,7 +62,27 @@ class CompiledOntology:
 
 
 def compile_ontology(ontology: Ontology) -> CompiledOntology:
-    """Compile without evaluating facts or modifying any external rule catalog."""
+    """Compile semantic axioms into a program with exact axiom origins.
+
+    Examples:
+        Classify an employee and retain a bounded witness for the conclusion::
+
+            >>> from gestaltdb.ontology import Ontology, SubClassOf, compile_ontology
+            >>> from gestaltdb.reasoning.engine import DatalogEngine
+            >>> from gestaltdb.reasoning.model import Fact, ReasoningLimits
+            >>> from gestaltdb.ontology.model import TYPE_PREDICATE
+            >>> compiled = compile_ontology(Ontology("people", [SubClassOf("Employee", "Person")]))
+            >>> result = DatalogEngine().evaluate(compiled.program,
+            ...     [Fact("alice", TYPE_PREDICATE, "Employee")],
+            ...     limits=ReasoningLimits(), collect_proofs=True)
+            >>> conclusion = Fact("alice", TYPE_PREDICATE, "Person")
+            >>> assert conclusion in result
+            >>> assert not result.explain(conclusion).truncated
+
+    Compilation needs no database and does not evaluate facts or modify a rule
+    catalog. ``compiled.origins`` connects rules to source axioms; the ontology
+    guide documents the selected fragment and explicit graph/claim adapters.
+    """
     if type(ontology) is not Ontology:
         raise OntologyError("ontology must be an Ontology")
     rules = []
@@ -119,7 +139,8 @@ class CompiledSchemaCache:
     """Bounded revision-keyed cache of compiled ontologies; no evaluation.
 
     Compilation is deterministic, so a revision hit returns the identical
-    object. Eviction is FIFO once ``maxsize`` is exceeded. The cache performs
+    object. A hit refreshes recency; overflow evicts the least-recently-used
+    entry. The cache performs
     no locking: sharing one instance across threads requires external
     synchronization, or use one cache per thread. Cached plans are immutable
     and safe to share once published.

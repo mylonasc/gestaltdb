@@ -1,6 +1,10 @@
 Temporal Version History
 ========================
 
+For historical-analysis and evidence-audit workflows, the
+:doc:`architecture` guide distinguishes this storage layer from temporal
+inference, current read views, and reusable sampling snapshots.
+
 GestaltDB can append immutable node and edge versions alongside its existing
 mutable graph. Temporal versions use two distinct time dimensions:
 
@@ -25,6 +29,25 @@ cache avoids repeated decoding, not all backend I/O. Separate snapshot/store
 objects never share cache admission even when their GraphDB wrappers share the
 cache dictionary.
 
+Claim enumeration groups temporal locators by commit, amortizing these full
+checks over each group rather than each selected row. It resolves corrections
+and retractions against complete logical histories at one captured horizon,
+buffers the selected immutable winners, and revalidates all touched commits
+before successful iterator exhaustion. Marker removal, historical rewrites and
+record corruption during iteration fail the completed read; appends beyond its
+horizon do not change its answers. Consumers must exhaust the iterator and
+discard partial output on error. Closing an iterator early is not successful
+authenticated completion.
+
+This is an operation-local grouped-read protocol, not a backend snapshot or a
+change to cache trust. Full descriptor/marker/envelope validation remains in
+place on live stores, including unrelated records in touched commits. Validation
+I/O is proportional to selected locators plus the sizes of touched commits, with a
+constant number of full checks per touched commit. Selected locators/winners
+are buffered in Python; no hard RSS bound or per-row I/O guarantee is implied.
+LMDB/LevelDB/plain and transactional PyRex retain their existing distinct snapshot
+capabilities. Individual version/commit reads keep their existing validation.
+
 Assertions, Corrections, and Retractions
 ----------------------------------------
 
@@ -33,18 +56,18 @@ Assertions, Corrections, and Retractions
    from gestaltdb.graphdb import Edge, Node
    from gestaltdb.temporal import TemporalInterval
 
-   alice = graph.put_node_version(
+   alice = graph.temporal.put_node_version(
        Node(node_id="alice", labels=["Person"], properties={"name": "Alice"}),
        valid=TemporalInterval.parse("2020-01-01T00:00:00Z"),
        metadata={"source": "people-import"},
    )
 
-   corrected = graph.correct_node_version(
+   corrected = graph.temporal.correct_node_version(
        Node(node_id="alice", labels=["Person"], properties={"name": "Alicia"}),
        supersedes_version_id=alice.version_id,
    )
 
-   graph.retract_node_version(
+   graph.temporal.retract_node_version(
        "alice",
        valid_from="2030-01-01T00:00:00Z",
        supersedes_version_id=corrected.version_id,
@@ -65,7 +88,7 @@ versions under one commit ID:
 
    from gestaltdb.versioning import EdgeVersionWrite, NodeVersionWrite
 
-   commit = graph.commit_versions([
+   commit = graph.temporal.commit_versions([
        NodeVersionWrite.assertion(Node(node_id="acme"), (0, None)),
        EdgeVersionWrite.assertion(
            Edge(
@@ -117,13 +140,13 @@ payload; a newest retraction returns ``None``.
 
 .. code-block:: python
 
-   historical = graph.get_node_as_of(
+   historical = graph.temporal.get_node_as_of(
        "alice",
        valid_time="2025-01-01T00:00:00Z",
        system_time=corrected.system_time,
    )
 
-   edges = list(graph.iter_edges_as_of(
+   edges = list(graph.temporal.iter_edges_as_of(
        source="alice",
        edge_type="WORKS_FOR",
        valid_time="2025-01-01T00:00:00Z",
@@ -144,7 +167,7 @@ graph handle.
 
 .. code-block:: python
 
-   with graph.read_view(valid_time="2025-01-01T00:00:00Z") as view:
+   with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time="2025-01-01T00:00:00Z") as view:
        alice = view.get_node_as_of("alice")
        snapshot = view.build_sampler_snapshot("snapshots/2025-01-01")
        token = view.provenance.token
@@ -177,7 +200,7 @@ A production workflow can keep one graph fact aligned across each read layer:
    from gestaltdb import ClaimStatus, SamplerEngine, TemporalContext, TemporalInstant
 
    # Append node and edge versions, then query the same valid instant through Cypher.
-   graph.put_edge_version(employment_edge, valid=(0, None))
+   graph.temporal.put_edge_version(employment_edge, valid=(0, None))
    rows = graph.query(
        "MATCH (a {id: 'alice'})-[:WORKS_FOR]->(b) "
        "FOR VALID_TIME AS OF datetime($at) RETURN b.id AS company",
@@ -195,24 +218,29 @@ A production workflow can keep one graph fact aligned across each read layer:
    )
 
    # Claims remain sourced; rules derive claims; modal evaluation returns evidence.
-   graph.assert_claim(
+   graph.epistemic.assert_claim(
        subject="alice", predicate="WORKS_FOR", object="acme",
        polarity="positive", agent="source:hr", world="verified", valid=(0, None),
    )
-   graph.create_rule(
+   graph.rules.create_rule(
        "employment-implies-affiliation",
        when=[("?p", "WORKS_FOR", "?c")], then=("?p", "AFFILIATED_WITH", "?c"),
    )
-   graph.run_rules(as_of=0, world="verified")
-   graph.assert_world_accessibility(
+   graph.rules.run(as_of=0, world="verified")
+   graph.epistemic.assert_world_accessibility(
        agent="auditor", from_world="actual", to_world="verified",
        kind="knowledge", valid=(0, None),
    )
-   result = graph.entails(
-       "auditor",
-       {"subject": "alice", "predicate": "AFFILIATED_WITH", "object": "acme"},
-       "KNOWS", world="actual", valid_time=0, max_depth=4, max_states=100,
-   )
+   with graph.temporal.open_read_view(
+       graph, manifest=graph.manifest, database_id=graph.database_id,
+       valid_time=0,
+   ) as view:
+       result = graph.epistemic.entails(
+           view,
+           "auditor",
+           {"subject": "alice", "predicate": "AFFILIATED_WITH", "object": "acme"},
+           "KNOWS", world="actual", max_depth=4, max_states=100,
+       )
    assert result.status is ClaimStatus.SUPPORTED
 
 Temporal snapshots contain graph history, not claims. Claims, rule conclusions,
@@ -271,19 +299,19 @@ JSON-compatible literal value.
 
    from gestaltdb import ClaimStatus
 
-   reported = graph.assert_claim(
+   reported = graph.epistemic.assert_claim(
        subject="alice", predicate="WORKS_FOR", object="acme",
        polarity="positive", agent="source:hr-feed", source="hr-2024.csv",
        confidence=0.97, world="reported", provenance={"row": 42},
        valid_from="2024-01-01T00:00:00Z",
    )
-   graph.assert_claim(
+   graph.epistemic.assert_claim(
        subject="alice", predicate="WORKS_FOR", object="acme",
        polarity="negative", agent="source:investigator", source="interview-7",
        confidence=0.6, world="reported",
        valid_from="2024-01-01T00:00:00Z",
    )
-   assert graph.claim_status(
+   assert graph.epistemic.claim_status(
        "alice", "WORKS_FOR", "acme",
        valid_time="2024-06-01T00:00:00Z", world="reported",
    ) is ClaimStatus.BOTH
@@ -307,13 +335,13 @@ intervals. Corrections and retractions append history:
 
 .. code-block:: python
 
-   reviewed = graph.correct_claim(
+   reviewed = graph.epistemic.correct_claim(
        reported.logical_id,
        supersedes_version_id=reported.version_id,
        confidence=0.99,
        provenance={"row": 42, "reviewed": True},
    )
-   graph.retract_claim(
+   graph.epistemic.retract_claim(
        reported.logical_id,
        supersedes_version_id=reviewed.version_id,
        valid_from="2025-01-01T00:00:00Z",
@@ -337,12 +365,12 @@ catalog changes. Reusing a rule name creates a new version; ``get_rule`` and
 
 .. code-block:: python
 
-   rule = graph.create_rule(
+   rule = graph.rules.create_rule(
        "employment-implies-affiliation",
        when=[("?p", "WORKS_FOR", "?c"), ("?c", "MEMBER_OF", "?g")],
        then=("?p", "AFFILIATED_WITH", "?g"),
    )
-   result = graph.run_rules(
+   result = graph.rules.run(
        as_of="2024-06-01T00:00:00Z",
        max_iterations=100,
        max_derivations=10_000,
@@ -402,28 +430,28 @@ not a closed-world default for undocumented predicates.
    with TemporaryDirectory() as directory:
        graph = GraphDB.create(Path(directory) / "db", backend="lmdb", serializer="json")
        try:
-           graph.assert_claim(
+           graph.epistemic.assert_claim(
                subject="supplier-1", predicate="SHIPS", object="widgets",
                polarity="positive", agent="erp", valid=(0, 100),
            )
-           graph.create_rule(
+           graph.rules.create_rule(
                "review-uncertified",
                when=[("?s", "SHIPS", "?goods")],
                then=("?s", "REQUIRES_SAFETY_REVIEW", "yes"),
                not_when=[("?s", "CERTIFIED", "iso9001")],
                closed_world=["CERTIFIED"],
            )
-           graph.run_rules(as_of=10)
-           flagged = next(graph.iter_claims_as_of(
+           graph.rules.run(as_of=10)
+           flagged = next(graph.epistemic.iter_claims_as_of(
                valid_time=10, predicate="REQUIRES_SAFETY_REVIEW"))
            assert flagged.claim.subject == "supplier-1"
 
-           graph.assert_claim(
+           graph.epistemic.assert_claim(
                subject="supplier-1", predicate="CERTIFIED", object="iso9001",
                polarity="positive", agent="audit", valid=(0, 100),
            )
-           assert graph.maintain_truth(as_of=10).retracted_count == 1
-           assert list(graph.iter_claims_as_of(
+           assert graph.rules.maintain(as_of=10).retracted_count == 1
+           assert list(graph.epistemic.iter_claims_as_of(
                valid_time=10, predicate="REQUIRES_SAFETY_REVIEW")) == []
        finally:
            graph.close()
@@ -441,12 +469,12 @@ cycles terminate instead of sustaining themselves.
 
 .. code-block:: python
 
-   graph.retract_claim(
+   graph.epistemic.retract_claim(
        reported.logical_id,
        supersedes_version_id=reviewed.version_id,
        reason="source correction",
    )
-   maintained = graph.maintain_truth(
+   maintained = graph.rules.maintain(
        as_of="2024-06-01T00:00:00Z",
        max_iterations=100,
        max_derivations=10_000,
@@ -473,7 +501,7 @@ bounds; ``truncated`` reports a reached bound. The unified audit export in
 
 .. code-block:: python
 
-   explanation = graph.explain_claim(
+   explanation = graph.rules.explain(
        derived.logical_id,
        valid_time="2024-06-01T00:00:00Z",
        system_time=derived.system_time,

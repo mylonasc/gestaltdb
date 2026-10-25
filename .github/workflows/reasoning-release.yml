@@ -4,27 +4,39 @@ on:
   pull_request:
     branches: [main, feature/onto-dev-epic-2]
     paths:
-      - 'src/**'
+      - 'src/**/*.py'
+      - 'src/gestaltdb/viz/static/**'
       - 'tests/**'
-      - 'docs/**'
+      - 'benchmarks/**/*.py'
+      - 'benchmarks/*requirements*.txt'
+      - 'planning/**/*.py'
       - 'pyproject.toml'
       - 'uv.lock'
       - 'scripts/reasoning_release_smoke.py'
+      - 'scripts/check_release_backends.py'
       - '.github/workflows/reasoning-release.yml'
   push:
     branches: [main, feature/onto-dev-epic-2]
     paths:
-      - 'src/**'
+      - 'src/**/*.py'
+      - 'src/gestaltdb/viz/static/**'
       - 'tests/**'
-      - 'docs/**'
+      - 'benchmarks/**/*.py'
+      - 'benchmarks/*requirements*.txt'
+      - 'planning/**/*.py'
       - 'pyproject.toml'
       - 'uv.lock'
       - 'scripts/reasoning_release_smoke.py'
+      - 'scripts/check_release_backends.py'
       - '.github/workflows/reasoning-release.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   full-suite:
@@ -34,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ['3.10', '3.11', '3.12', '3.13']
+        python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.10", "3.13"]' || '["3.10", "3.11", "3.12", "3.13"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -45,7 +57,16 @@ jobs:
         run: >-
           python -m pip install -e '.[coverage,backends,serializers,rdf,polars,bloom,docs]'
           'pyrex-rocksdb>=0.5.0' -r benchmarks/ontology-requirements.txt
-      - run: python -m pytest -q
+      - name: Require real backend and serializer persistence (no skips)
+        run: python scripts/check_release_backends.py
+      - run: python -m pytest -q -ra --junitxml=release-tests.xml
+      - name: Preserve test execution and skip evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-tests-python-${{ matrix.python }}
+          path: release-tests.xml
+          if-no-files-found: warn
       - run: python planning/reasoning-engine/check_roadmap.py
       - run: python .opencode/skills/gestaltdb-docs-maintainer/scripts/check_docs.py
       - run: python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py test-examples
@@ -58,7 +79,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ['3.10', '3.11', '3.12', '3.13']
+        python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.10", "3.13"]' || '["3.10", "3.11", "3.12", "3.13"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0

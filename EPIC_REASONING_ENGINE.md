@@ -6,7 +6,36 @@ Planning/integration branch: **`feature/onto-dev-epic-2`**, inherited from that
 baseline, not `main`. This is a plan, not an implementation or release claim.
 Parent roadmap: [#156](https://github.com/mylonasc/gestaltdb/issues/156).
 
-## Current priority: release readiness and early user testing
+## Current status — tracking audit 2026-10-25
+
+The original RE-01–RE-27 feature issues are integrated and closed; that does
+not automatically close their phase epics. Current phase disposition:
+
+| Phase | Status | Remaining gate |
+|---|---|---|
+| RE-E1 [#157](https://github.com/mylonasc/gestaltdb/issues/157) | Complete; stale-open issue corrected | Explicit executor/measurement/limits/install-isolation gate verified; optional #194 does not block E1. |
+| RE-E2 [#158](https://github.com/mylonasc/gestaltdb/issues/158) | Complete | Verified selected-profile contract; broader review accounting remains #371. |
+| RE-E3 [#159](https://github.com/mylonasc/gestaltdb/issues/159) | Open | Durable crash/concurrency evidence reconciliation #370. |
+| RE-E4 [#160](https://github.com/mylonasc/gestaltdb/issues/160) | Open | #159 and the shared bounded interval-publication evidence gate #370. |
+| RE-E5 [#161](https://github.com/mylonasc/gestaltdb/issues/161) | Own bounded/defer deliverables reviewed; blocked | Original sequential prerequisite #160 remains open; not missing full OWL DL or a new native engine. |
+
+Review #200 remains open for explicitly tracked D2–D6 dispositions in #371;
+#248–#256 are all closed against their scoped acceptance. #194 is the separate
+open native-extraction follow-up; PR #369 is not integrated in this audit.
+See [tracking-audit.md](planning/reasoning-engine/tracking-audit.md) for evidence,
+remaining checklists and corrected native issue relationships. Run
+`python planning/reasoning-engine/check_tracking.py --github` to detect live
+status/relationship drift without changing GitHub.
+
+**Release history:** `0.13.0rc1` was published on 2026-10-23 via #307 and trusted
+Publish `39936450890`. Later integration commits are not automatically released.
+No new main merge, tag or release is authorized by this sanitation.
+
+## Historical priority: release readiness and early user testing (2026-10-23)
+
+The policy below explains the already-published prerelease's bounded scope;
+future-tense candidate wording is historical, not a current release checklist.
+The dated status above and release register supersede its delivery-status claims.
 
 Priority update: **2026-10-23**. Focus subsequent work on #156-related
 release blockers and phase acceptance evidence, not on expanding the feature
@@ -16,11 +45,11 @@ sampling-feature-roadmap work is scheduled by this update.
 
 ### Why release soon
 
-The integration branch already contains the original RE-01–RE-27 deliveries;
-their child issues are closed, and RE-E2 (#158) has been verified and closed.
-Other phase epics still require evidence reconciliation: closed child issues
-alone do not certify their exit gates. Review follow-ups under #200 also remain
-authoritative, including partially delivered issues whose broader scope is open.
+The integration branch contains the original RE-01–RE-27 deliveries. RE-E1 and
+RE-E2 are complete; RE-E3/E4 evidence and RE-E5's sequential gate are explicit
+above. Closed child issues alone do not certify phase exits. Original review
+findings retain a disposition ledger under #200/#371, distinct from the now-
+closed #248–#256 follow-through implementations.
 
 The branch now contains hundreds of commits beyond `main`. At this review,
 `origin/main` was an ancestor of the integration branch, with no main-only
@@ -727,3 +756,35 @@ capability-matrix re-audit (TransactionDB still unscanned in
 pyrex-rocksdb==0.5.0); GenerationStore question settled by the RE-26
 no-bespoke-kernel decision. The 100K-row measurement box stays explicitly
 open: no performance claim is made.
+
+### Measurement continuation: #194 / PR #313
+
+Preserves the unfinished #262 harness in a dedicated continuation branch/worktree
+(`feature/onto-194-benchmark-matrix`, `gestaltdb-onto-194-matrix`) refreshed from
+integration `54eb114`. Clean-source `4bd5a6d` produced 102 successful exact-parity
+samples and two retained 100K authenticated-extraction timeouts. Evidence and
+precise boundaries: [pipeline-benchmarks.md](planning/reasoning-followthrough/pipeline-benchmarks.md)
+and `benchmarks/results/reasoning-194-*.json`. The native 100K experiment is
+synthetic KV only and demonstrates no acceleration; it is not a real native
+claims adapter. The larger claims matrix remains open, with repeated full-commit
+integrity-read costs tracked separately in [#314](https://github.com/mylonasc/gestaltdb/issues/314).
+No validation bypass, production cache change, #194 closure, main merge or release
+is part of this measurement slice.
+
+### Integrity-preserving grouped claim reads: #314 / PR #315
+
+Dedicated branch/worktree `feature/onto-314-bounded-validation` /
+`gestaltdb-onto-314`, based on integration `f6342d5`. Candidate/history locators
+are grouped by commit with full existing validation and final touched-commit
+revalidation on exhaustion; no live-cache trust bypass or new backend snapshot.
+Deterministic work/corruption/history tests and **120 exact-parity measurement
+samples** cover the previously blocked 1K/10K/100K first/primed reads and 100K
+variable provenance payloads. Evidence and boundaries:
+[bounded-claim-validation.md](planning/reasoning-followthrough/bounded-claim-validation.md).
+#194 remains open for native-claims/recursive/support/publication integration.
+
+Completion review also reconciled #252/#253: merged #266/#267 already deliver
+head-bound support discovery and immutable dependency lookup reuse, with budget,
+alternative-support/literal and randomized deletion regression coverage. Their
+scoped issues are closed; this is not a claim that dependent session/executor or
+phase crash/durability acceptance is complete.

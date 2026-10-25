@@ -1,4 +1,4 @@
-"""Bounded event-sweep prototype, not yet wired into temporal closure reuse.
+"""Bounded event-sweep scheduler for temporal closure reuse.
 
 Row ordinals preserve overlapping assertion membership within this exact input
 tuple. They are not authenticated evidence IDs or durable version locators.

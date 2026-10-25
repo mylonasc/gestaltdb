@@ -21,6 +21,7 @@ from .ast import (
     Variable,
 )
 from .expr import _boolean_value, _cypher_equals, evaluate_expression, project_value
+from .procedures import procedure_rows as _procedure_rows
 from .temporal import normalize_parameter, temporal_compare_key
 from .plan import Aggregate as LogicalAggregate
 from .plan import (
@@ -400,52 +401,6 @@ def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, obj
     if not projected or stream is None:
         raise TypeError("Logical plan does not contain a projection")
     return [dict(row.values) for row in stream]
-
-
-def _procedure_rows(source: ProcedureSource, context: QueryContext) -> Iterator[BindingRow]:
-    """Seed binding rows from an allowlisted procedure call."""
-    if isinstance(source.query, EntailsCall):
-        agent = evaluate_expression(source.query.agent, {}, context)
-        proposition = evaluate_expression(source.query.proposition, {}, context)
-        mode = evaluate_expression(source.query.mode, {}, context)
-        options = evaluate_expression(source.query.options, {}, context)
-        if not isinstance(options, dict):
-            raise ValueError("kg.entails options must be a map")
-        allowed_options = {"world", "validTime", "systemTime", "throughCommit", "maxDepth", "maxStates"}
-        unknown = sorted(set(options) - allowed_options)
-        if unknown:
-            raise ValueError(f"kg.entails unsupported option: {unknown[0]}")
-        if "world" not in options or "validTime" not in options:
-            raise ValueError("kg.entails options require world and validTime")
-        result = context.graph.entails(
-            agent,
-            proposition,
-            mode,
-            world=options["world"],
-            valid_time=options["validTime"],
-            system_time=options.get("systemTime"),
-            through_commit=options.get("throughCommit"),
-            max_depth=options.get("maxDepth", 4),
-            max_states=options.get("maxStates", 1_000),
-        )
-        values = {
-            "status": result.status.value,
-            "confidence": result.confidence,
-            "explanation": dict(result.explanation),
-        }
-        bindings = {alias: values[field] for field, alias in source.query.yields}
-        return iter((BindingRow(bindings=bindings),))
-    seed_ids = context.resolve(source.query.seed_ids)
-    pattern = context.resolve(source.query.pattern)
-    if not isinstance(seed_ids, list) or not all(isinstance(seed_id, str) for seed_id in seed_ids):
-        raise ValueError("pg.sample_typed_paths seed IDs must be a list of strings")
-    if not isinstance(pattern, list) or not all(isinstance(hop, dict) for hop in pattern):
-        raise ValueError("pg.sample_typed_paths pattern must be a list of dictionaries")
-    paths = context.graph.sample_typed_paths(seed_ids, pattern)
-    return (
-        BindingRow(bindings={source.query.output_name: path})
-        for path in paths
-    )
 
 
 def _execute_union(union: Union, context: QueryContext) -> list[dict[str, object]]:

@@ -81,18 +81,22 @@ class SamplerSnapshot:
         relation_lookup_ids: External relation IDs in sorted lookup order.
 
     Examples:
-        Build from already compact arrays and sample with ``SamplerEngine``::
+        Persist and reload compact arrays without an embedded backend::
 
-            snapshot = SamplerSnapshot.from_edge_arrays(
-                "snapshot",
-                external_node_ids=["drug-1", "protein-1"],
-                external_edge_ids=["edge-1"],
-                external_relation_ids=["binds"],
-                src_int=[0],
-                dst_int=[1],
-                rel_int=[0],
-                node_type_values=["drug", "protein"],
-            )
+            >>> from tempfile import TemporaryDirectory
+            >>> from gestaltdb.sampling import SamplerSnapshot
+            >>> with TemporaryDirectory() as root:
+            ...     snapshot = SamplerSnapshot.from_edge_arrays(
+            ...         root + "/snapshot", external_node_ids=["drug-1", "protein-1"],
+            ...         external_edge_ids=["edge-1"], external_relation_ids=["binds"],
+            ...         src_int=[0], dst_int=[1], rel_int=[0],
+            ...         node_type_values=["drug", "protein"])
+            ...     loaded = SamplerSnapshot.load(snapshot.path)
+            ...     assert loaded.external_node_id(loaded.node_int("drug-1")) == "drug-1"
+            ...     assert loaded.num_edges == 1
+
+        Use a fresh output directory for each immutable snapshot. The
+        ``SamplerEngine`` class example continues from construction to sampling.
     """
 
     path: Path
@@ -1451,7 +1455,7 @@ class SamplerSnapshot:
                     source.verify_snapshot_store(view)
                     return view.get_node(self.external_node_id(node_int).encode("utf-8"))
             source.verify_source(graph)
-            version = graph.get_node_as_of(
+            version = graph.temporal.get_node_as_of(
                 self.external_node_id(node_int),
                 valid_time=source.valid_time_us,
                 through_commit=source.commit_horizon,
@@ -1472,12 +1476,12 @@ class SamplerSnapshot:
                     return view.get_edge(self.external_edge_id(edge_int).encode("utf-8"))
             source.verify_source(graph)
             if self.temporal:
-                version = graph.get_edge_version(
+                version = graph.temporal.get_edge_version(
                     str(self.edge_version_ids[int(edge_int)]),
                     through_commit=source.commit_horizon,
                 )
             else:
-                version = graph.get_edge_as_of(
+                version = graph.temporal.get_edge_as_of(
                     self.external_edge_id(edge_int),
                     valid_time=source.valid_time_us,
                     through_commit=source.commit_horizon,

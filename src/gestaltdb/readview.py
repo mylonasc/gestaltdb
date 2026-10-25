@@ -170,21 +170,21 @@ class ReadViewProvenance:
             if self.visibility_sha256 != expected:
                 raise ProvenanceMismatchError("source visibility digest mismatch")
             return
-        commit = graph.get_temporal_commit(self.commit_horizon)
+        commit = graph.temporal.get_temporal_commit(self.commit_horizon)
         if commit is None:
             raise ProvenanceMismatchError("source temporal commit is no longer visible")
-        marker = graph.store.get_metadata(graph._temporal_visible_key(self.commit_horizon))
+        marker = graph.store.get_metadata(graph.temporal.visible_key(self.commit_horizon))
         if marker is None or marker.hex() != self.commit_marker_sha256:
             raise ProvenanceMismatchError("source temporal commit marker mismatch")
         if commit.system_time.epoch_microseconds != self.commit_system_time_us:
             raise ProvenanceMismatchError("source temporal commit time mismatch")
         markers = []
         for commit_id in range(1, self.commit_horizon + 1):
-            if graph.get_temporal_commit(commit_id, _validate_supersession=False) is None:
-                if graph.store.get_metadata(graph._temporal_commit_key(commit_id)) is None:
+            if graph.temporal.get_temporal_commit(commit_id, _validate_supersession=False) is None:
+                if graph.store.get_metadata(graph.temporal.commit_key(commit_id)) is None:
                     continue
                 raise ProvenanceMismatchError("source visible commit prefix mismatch")
-            commit_marker = graph.store.get_metadata(graph._temporal_visible_key(commit_id))
+            commit_marker = graph.store.get_metadata(graph.temporal.visible_key(commit_id))
             markers.append(commit_id.to_bytes(8, "big") + commit_marker)
         if hashlib.sha256(b"".join(markers)).hexdigest() != self.visibility_sha256:
             raise ProvenanceMismatchError("source visibility digest mismatch")
@@ -354,11 +354,41 @@ class CurrentGraphReadView:
         "transaction",
         "update_",
     )
-    _MUTATING_METHODS = {"close", "save_manifest"}
+    _MUTATING_METHODS = {"close", "save_manifest", "ingest"}
 
     def __init__(self, graph, provenance: CurrentReadProvenance | None):
         self._graph = graph
+        self._nodes = graph.nodes.reader
+        self._edges = graph.edges.reader
+        self._indexes = graph.indexes.reader
+        self._traversal = graph.traversal.reader
+        self._lookup = graph.lookup
         self.provenance = provenance
+
+    @property
+    def nodes(self):
+        """Read-only node capabilities bound to this view's snapshot."""
+        return self._nodes
+
+    @property
+    def edges(self):
+        """Read-only edge capabilities bound to this view's snapshot."""
+        return self._edges
+
+    @property
+    def indexes(self):
+        """Current index reads without DDL authority on this snapshot."""
+        return self._indexes
+
+    @property
+    def traversal(self):
+        """Typed adjacency reads bound to this snapshot, without rebuilds."""
+        return self._traversal
+
+    @property
+    def lookup(self):
+        """Index-backed decoded entity reads bound to this snapshot."""
+        return self._lookup
 
     @property
     def store(self):
@@ -402,6 +432,10 @@ class GraphReadView:
 
     def __init__(self, graph, provenance: ReadViewProvenance):
         self._graph = graph
+        self._history = graph.temporal.history()
+        # Legacy instance-level stream instrumentation remains an explicit seam.
+        # Ordinary reads use the capability, not a GraphDB method round trip.
+        self._claim_overrides = vars(graph)
         self.provenance = provenance
         self.valid_time = TemporalInstant(provenance.valid_time_us)
 
@@ -410,53 +444,55 @@ class GraphReadView:
         return self.provenance.commit_horizon
 
     def get_node_version(self, version_id):
-        return self._graph.get_node_version(version_id, through_commit=self.commit_horizon)
+        return self._history.get_node_version(version_id, through_commit=self.commit_horizon)
 
     def get_edge_version(self, version_id):
-        return self._graph.get_edge_version(version_id, through_commit=self.commit_horizon)
+        return self._history.get_edge_version(version_id, through_commit=self.commit_horizon)
 
     def get_claim_version(self, version_id):
-        return self._graph.get_claim_version(version_id, through_commit=self.commit_horizon)
+        return self._history.get_claim_version(version_id, through_commit=self.commit_horizon)
 
     def iter_node_versions(self, logical_id=None):
-        return self._graph.iter_node_versions(logical_id, through_commit=self.commit_horizon)
+        return self._history.iter_node_versions(logical_id, through_commit=self.commit_horizon)
 
     def iter_edge_versions(self, logical_id=None):
-        return self._graph.iter_edge_versions(logical_id, through_commit=self.commit_horizon)
+        return self._history.iter_edge_versions(logical_id, through_commit=self.commit_horizon)
 
     def iter_claim_versions(self, claim_id=None):
-        return self._graph.iter_claim_versions(claim_id, through_commit=self.commit_horizon)
+        return self._history.iter_claim_versions(claim_id, through_commit=self.commit_horizon)
 
     def get_node_as_of(self, logical_id, *, valid_time=None):
-        return self._graph.get_node_as_of(
+        return self._history.get_node_as_of(
             logical_id,
             valid_time=self.valid_time if valid_time is None else valid_time,
             through_commit=self.commit_horizon,
         )
 
     def get_edge_as_of(self, logical_id, *, valid_time=None):
-        return self._graph.get_edge_as_of(
+        return self._history.get_edge_as_of(
             logical_id,
             valid_time=self.valid_time if valid_time is None else valid_time,
             through_commit=self.commit_horizon,
         )
 
     def get_claim_as_of(self, claim_id, *, valid_time=None):
-        return self._graph.get_claim_as_of(
+        return self._history.get_claim_as_of(
             claim_id,
             valid_time=self.valid_time if valid_time is None else valid_time,
             through_commit=self.commit_horizon,
         )
 
     def iter_claims_as_of(self, *, valid_time=None, **kwargs):
-        return self._graph.iter_claims_as_of(
+        iterator = self._claim_overrides.get(
+            "iter_claims_as_of", self._history.iter_claims_as_of)
+        return iterator(
             valid_time=self.valid_time if valid_time is None else valid_time,
             through_commit=self.commit_horizon,
             **kwargs,
         )
 
     def claim_status(self, subject, predicate, object, *, valid_time=None, **kwargs):
-        return self._graph.claim_status(
+        return self._history.claim_status(
             subject,
             predicate,
             object,
@@ -474,14 +510,14 @@ class GraphReadView:
         )
 
     def iter_edges_as_of(self, *, valid_time=None, **kwargs):
-        return self._graph.iter_edges_as_of(
+        return self._history.iter_edges_as_of(
             valid_time=self.valid_time if valid_time is None else valid_time,
             through_commit=self.commit_horizon,
             **kwargs,
         )
 
     def iter_nodes_as_of(self, *, valid_time=None):
-        return self._graph.iter_nodes_as_of(
+        return self._history.iter_nodes_as_of(
             valid_time=self.valid_time if valid_time is None else valid_time,
             through_commit=self.commit_horizon,
         )

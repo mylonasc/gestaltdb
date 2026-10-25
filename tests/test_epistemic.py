@@ -34,7 +34,7 @@ def _assert_employment(graph, **kwargs):
         "valid": (0, 100),
     }
     values.update(kwargs)
-    return graph.assert_claim(**values)
+    return graph.epistemic.assert_claim(**values)
 
 
 def test_claim_identity_is_deterministic_and_payload_is_immutable():
@@ -91,51 +91,51 @@ def test_contradictory_sources_coexist_and_produce_four_valued_status(graph):
 
     assert positive.claim.statement_id == negative.claim.statement_id
     assert positive.logical_id != negative.logical_id
-    assert graph.claim_status(
+    assert graph.epistemic.claim_status(
         "alice", "WORKS_FOR", "acme", valid_time=50, world="reported"
     ) is ClaimStatus.BOTH
-    assert graph.claim_status(
+    assert graph.epistemic.claim_status(
         "alice", "WORKS_FOR", "acme", valid_time=50, source="hr-feed.csv"
     ) is ClaimStatus.SUPPORTED
-    assert graph.claim_status(
+    assert graph.epistemic.claim_status(
         "alice", "WORKS_FOR", "other", valid_time=50
     ) is ClaimStatus.UNKNOWN
-    assert [item.version_id for item in graph.iter_claims_as_of(
+    assert [item.version_id for item in graph.epistemic.iter_claims_as_of(
         valid_time=50, polarity="negative", agent="source:investigator"
     )] == [negative.version_id]
 
 
 def test_claim_boundaries_corrections_retractions_and_system_time(graph):
     asserted = _assert_employment(graph, confidence=0.4, valid=(10, 30))
-    corrected = graph.correct_claim(
+    corrected = graph.epistemic.correct_claim(
         asserted.logical_id,
         supersedes_version_id=asserted.version_id,
         confidence=0.9,
         provenance={"reviewed": True},
         valid=(15, 25),
     )
-    retracted = graph.retract_claim(
+    retracted = graph.epistemic.retract_claim(
         asserted.logical_id,
         supersedes_version_id=corrected.version_id,
         valid=(20, 22),
         reason="withdrawn",
     )
 
-    assert graph.get_claim_as_of(asserted.logical_id, valid_time=9) is None
-    assert graph.get_claim_as_of(asserted.logical_id, valid_time=10).version_id == asserted.version_id
-    assert graph.get_claim_as_of(asserted.logical_id, valid_time=16).claim.confidence == 0.9
-    assert graph.get_claim_as_of(asserted.logical_id, valid_time=20) is None
-    assert graph.get_claim_as_of(asserted.logical_id, valid_time=22).version_id == corrected.version_id
-    assert graph.get_claim_as_of(asserted.logical_id, valid_time=25).version_id == asserted.version_id
-    assert graph.get_claim_as_of(asserted.logical_id, valid_time=30) is None
-    assert graph.get_claim_as_of(
+    assert graph.epistemic.get_claim_as_of(asserted.logical_id, valid_time=9) is None
+    assert graph.epistemic.get_claim_as_of(asserted.logical_id, valid_time=10).version_id == asserted.version_id
+    assert graph.epistemic.get_claim_as_of(asserted.logical_id, valid_time=16).claim.confidence == 0.9
+    assert graph.epistemic.get_claim_as_of(asserted.logical_id, valid_time=20) is None
+    assert graph.epistemic.get_claim_as_of(asserted.logical_id, valid_time=22).version_id == corrected.version_id
+    assert graph.epistemic.get_claim_as_of(asserted.logical_id, valid_time=25).version_id == asserted.version_id
+    assert graph.epistemic.get_claim_as_of(asserted.logical_id, valid_time=30) is None
+    assert graph.epistemic.get_claim_as_of(
         asserted.logical_id, valid_time=20, through_commit=corrected.commit_id
     ).version_id == corrected.version_id
-    assert graph.get_claim_as_of(
+    assert graph.epistemic.get_claim_as_of(
         asserted.logical_id, valid_time=16, system_time=asserted.system_time
     ).version_id == asserted.version_id
     assert retracted.reason == "withdrawn"
-    assert [version.version_id for version in graph.iter_claim_versions(asserted.logical_id)] == [
+    assert [version.version_id for version in graph.epistemic.iter_claim_versions(asserted.logical_id)] == [
         asserted.version_id,
         corrected.version_id,
         retracted.version_id,
@@ -153,7 +153,7 @@ def test_claim_boundaries_corrections_retractions_and_system_time(graph):
 def test_correct_claim_applies_explicit_metadata_overrides(graph_db, as_object, overrides):
     asserted = _assert_employment(graph_db, confidence=0.4, provenance={"original": True})
     original = asserted.claim.to_dict()
-    corrected = graph_db.correct_claim(
+    corrected = graph_db.epistemic.correct_claim(
         asserted.claim if as_object else asserted.logical_id,
         supersedes_version_id=asserted.version_id,
         **overrides,
@@ -161,8 +161,8 @@ def test_correct_claim_applies_explicit_metadata_overrides(graph_db, as_object, 
     expected = dict(original, **overrides)
     assert corrected.claim.to_dict() == expected
     assert corrected.valid == asserted.valid
-    assert graph_db.get_claim_as_of(asserted.logical_id, valid_time=50).claim.to_dict() == expected
-    assert graph_db.get_claim_version(asserted.version_id).claim.to_dict() == original
+    assert graph_db.epistemic.get_claim_as_of(asserted.logical_id, valid_time=50).claim.to_dict() == expected
+    assert graph_db.epistemic.get_claim_version(asserted.version_id).claim.to_dict() == original
     assert asserted.claim.to_dict() == original
 
 
@@ -171,7 +171,7 @@ def test_correct_claim_uses_supplied_object_and_rejects_identity_changes(graph):
     payload = asserted.claim.to_dict()
     payload.update(confidence=0.7, provenance={"from_object": True})
     supplied = Claim.from_dict(payload)
-    corrected = graph.correct_claim(
+    corrected = graph.epistemic.correct_claim(
         supplied, supersedes_version_id=asserted.version_id, confidence=0.9,
     )
     assert corrected.claim.confidence == 0.9
@@ -180,10 +180,10 @@ def test_correct_claim_uses_supplied_object_and_rejects_identity_changes(graph):
 
     other = _assert_employment(graph, subject="bob")
     with pytest.raises(TemporalVersionError, match="identity"):
-        graph.correct_claim(
+        graph.epistemic.correct_claim(
             other.claim, supersedes_version_id=corrected.version_id, confidence=0.8,
         )
-    assert len(list(graph.iter_claim_versions(asserted.logical_id))) == 2
+    assert len(list(graph.epistemic.iter_claim_versions(asserted.logical_id))) == 2
 
 
 @pytest.mark.parametrize("as_object", [False, True], ids=["id", "claim"])
@@ -193,24 +193,24 @@ def test_correct_claim_uses_supplied_object_and_rejects_identity_changes(graph):
 def test_correct_claim_validates_overrides_before_writing(graph, as_object, overrides):
     asserted = _assert_employment(graph)
     with pytest.raises(TemporalVersionError, match="confidence|provenance"):
-        graph.correct_claim(
+        graph.epistemic.correct_claim(
             asserted.claim if as_object else asserted.logical_id,
             supersedes_version_id=asserted.version_id,
             **overrides,
         )
-    assert [version.version_id for version in graph.iter_claim_versions(asserted.logical_id)] == [
+    assert [version.version_id for version in graph.epistemic.iter_claim_versions(asserted.logical_id)] == [
         asserted.version_id,
     ]
 
 
 def test_claims_support_pre_epoch_and_reject_cross_kind_corrections(graph):
     claim = _assert_employment(graph, valid=(-10, 0))
-    node = graph.put_node_version(Node(claim.logical_id), valid=(-10, 0))
+    node = graph.temporal.put_node_version(Node(claim.logical_id), valid=(-10, 0))
 
-    assert graph.get_claim_as_of(claim.logical_id, valid_time=-10).version_id == claim.version_id
-    assert graph.get_claim_as_of(claim.logical_id, valid_time=0) is None
+    assert graph.epistemic.get_claim_as_of(claim.logical_id, valid_time=-10).version_id == claim.version_id
+    assert graph.epistemic.get_claim_as_of(claim.logical_id, valid_time=0) is None
     with pytest.raises(TemporalVersionError, match="claim version"):
-        graph.correct_claim(
+        graph.epistemic.correct_claim(
             claim.logical_id,
             supersedes_version_id=node.version_id,
             confidence=0.5,
@@ -222,30 +222,30 @@ def test_read_view_pins_claim_lookup_and_status(graph):
     graph._serializer_name = "json"
     graph._database_id = "00000000-0000-0000-0000-000000000001"
     positive = _assert_employment(graph, valid=(0, None))
-    with graph.read_view(valid_time=10) as view:
-        graph.retract_claim(
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=10) as view:
+        graph.epistemic.retract_claim(
             positive.logical_id,
             supersedes_version_id=positive.version_id,
             valid=(0, None),
         )
         assert view.get_claim_as_of(positive.logical_id).version_id == positive.version_id
         assert view.claim_status("alice", "WORKS_FOR", "acme") is ClaimStatus.SUPPORTED
-    assert graph.get_claim_as_of(positive.logical_id, valid_time=10) is None
+    assert graph.epistemic.get_claim_as_of(positive.logical_id, valid_time=10) is None
 
 
 def test_deferred_claim_indexes_fail_closed_and_rebuild_deterministically(graph):
     version = _assert_employment(graph, index_mode="defer")
     with pytest.raises(RuntimeError, match="temporal"):
-        list(graph.iter_claims_as_of(valid_time=1))
+        list(graph.epistemic.iter_claims_as_of(valid_time=1))
 
-    counts = graph.rebuild_temporal_indexes()
+    counts = graph.temporal.rebuild_temporal_indexes()
 
     assert counts["temporal_exact"] == 1
-    assert graph.get_claim_as_of(version.logical_id, valid_time=1).version_id == version.version_id
-    assert [item.logical_id for item in graph.iter_claims_as_of(
+    assert graph.epistemic.get_claim_as_of(version.logical_id, valid_time=1).version_id == version.version_id
+    assert [item.logical_id for item in graph.epistemic.iter_claims_as_of(
         valid_time=1, source="hr-feed.csv", world="reported"
     )] == [version.logical_id]
-    assert graph.rebuild_temporal_indexes() == counts
+    assert graph.temporal.rebuild_temporal_indexes() == counts
 
 
 @pytest.mark.parametrize(
@@ -261,7 +261,7 @@ def test_claim_payload_is_serializer_neutral(serializer):
         provenance={"record": [1, 2]},
     )
 
-    loaded = graph.get_claim_version(version.version_id)
+    loaded = graph.epistemic.get_claim_version(version.version_id)
 
     assert loaded.claim.to_dict() == version.claim.to_dict()
     assert loaded.payload_hash == version.payload_hash
@@ -270,7 +270,7 @@ def test_claim_payload_is_serializer_neutral(serializer):
 def test_claim_indexes_work_on_available_backends(graph_db):
     version = _assert_employment(graph_db, valid=(0, None))
 
-    loaded = list(graph_db.iter_claims_as_of(
+    loaded = list(graph_db.epistemic.iter_claims_as_of(
         valid_time=0,
         statement_id=version.claim.statement_id,
         source="hr-feed.csv",

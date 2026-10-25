@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from .model import ReasoningError, _text
 from .protocols import InputContext
 from .relational import CompilationIdentity, _digest
-from .executors import EXECUTORS, INDEXED_PYTHON, INDEXED_SCC, POLARS_PROTOTYPE
+from .executors import (EXECUTORS, INDEXED_PYTHON, INDEXED_SCC, POLARS_PROTOTYPE,
+                        TYPED_INDEXED_PYTHON, TYPED_PROFILE, TYPED_DICTIONARY)
 
 
 @dataclass(frozen=True)
@@ -35,10 +36,51 @@ class TemporalSourceIdentity:
 
 
 @dataclass(frozen=True)
+class CurrentSourceIdentity:
+    """One adapter-verified mutable snapshot, never a temporal commit horizon.
+
+    The provenance token includes state, backend, serializer and snapshot kind.
+    This value alone authenticates nothing and cannot reopen an expired view.
+    """
+
+    database_id: str
+    snapshot_sequence: int
+    provenance_token: str
+
+    def __post_init__(self) -> None:
+        _text(self.database_id, "database_id")
+        _text(self.provenance_token, "provenance_token")
+        if (isinstance(self.snapshot_sequence, bool) or not isinstance(self.snapshot_sequence, int)
+                or self.snapshot_sequence < 0):
+            raise ReasoningError("snapshot_sequence must be a non-negative integer")
+
+
+@dataclass(frozen=True)
+class TemporalRangeSourceIdentity:
+    """One authenticated temporal prefix and a finite half-open valid range."""
+
+    database_id: str
+    commit_horizon: int
+    provenance_token: str
+    valid_start_us: int
+    valid_end_us: int
+
+    def __post_init__(self) -> None:
+        _text(self.database_id, "database_id")
+        _text(self.provenance_token, "provenance_token")
+        for name in ("commit_horizon", "valid_start_us", "valid_end_us"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ReasoningError(f"{name} must be an integer")
+        if self.commit_horizon < 0 or self.valid_start_us >= self.valid_end_us:
+            raise ReasoningError("range requires non-negative horizon and start < end")
+
+
+@dataclass(frozen=True)
 class GenerationIdentity:
     """Exact logical reuse identity; physical executor/batch settings stay separate."""
 
-    source: TemporalSourceIdentity
+    source: TemporalSourceIdentity | CurrentSourceIdentity | TemporalRangeSourceIdentity
     context: InputContext
     program_digest: str
     catalog_digest: str
@@ -46,16 +88,28 @@ class GenerationIdentity:
     dictionary_id: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.source, TemporalSourceIdentity) or not isinstance(self.context, InputContext):
-            raise ReasoningError("TemporalSourceIdentity and InputContext required")
+        if (not isinstance(self.source, (TemporalSourceIdentity, CurrentSourceIdentity, TemporalRangeSourceIdentity))
+                or not isinstance(self.context, InputContext)):
+            raise ReasoningError("point/current/range source identity and InputContext required")
         for name in ("program_digest", "catalog_digest", "semantics_profile", "dictionary_id"):
             _text(getattr(self, name), name)
 
     @property
     def digest(self) -> str:
         context, source = self.context, self.source
-        return _digest(["gestaltdb-generation-identity-v1",
-                        [source.database_id, source.commit_horizon, source.provenance_token, source.valid_time_us],
+        # Preserve every existing temporal digest byte-for-byte. Current-state
+        # identities get a separate domain, not fake temporal sentinel fields.
+        if isinstance(source, TemporalSourceIdentity):
+            domain = "gestaltdb-generation-identity-v1"
+            fields = [source.database_id, source.commit_horizon, source.provenance_token, source.valid_time_us]
+        elif isinstance(source, CurrentSourceIdentity):
+            domain = "gestaltdb-current-generation-identity-v1"
+            fields = [source.database_id, source.snapshot_sequence, source.provenance_token]
+        else:
+            domain = "gestaltdb-range-generation-identity-v1"
+            fields = [source.database_id, source.commit_horizon, source.provenance_token,
+                      source.valid_start_us, source.valid_end_us]
+        return _digest([domain, fields,
                         [context.context_id, context.world, context.ontology_revision,
                          context.source_policy_id, context.mapping_id],
                         self.program_digest, self.catalog_digest, self.semantics_profile, self.dictionary_id])
@@ -129,8 +183,10 @@ def admit(generation: GenerationIdentity, request: AdmissionRequest) -> Admissio
     Dictionary identity must match exactly: a generation computed under one
     dictionary cannot be consumed through another without explicit recoding.
     Witness-bearing and stateful modes (proofs, maintenance supports,
-    temporal closure) are indexed-engine only; the Polars prototype stays
-    closure-only. Unknown combinations raise instead of falling back.
+    temporal closure) are binary indexed-engine only; the Polars prototype stays
+    closure-only. The typed indexed row additionally requires the exact positive
+    typed profile/representation and supports closure only. Unknown combinations
+    raise instead of falling back.
     """
     if not isinstance(generation, GenerationIdentity):
         raise ReasoningError("generation must be a GenerationIdentity")
@@ -138,6 +194,13 @@ def admit(generation: GenerationIdentity, request: AdmissionRequest) -> Admissio
         raise ReasoningError("request must be an AdmissionRequest")
     if request.dictionary_id != generation.dictionary_id:
         raise ReasoningError("dictionary mismatch; recode or recompile explicitly")
+    if request.executor == TYPED_INDEXED_PYTHON:
+        if (request.mode != "closure" or generation.semantics_profile != TYPED_PROFILE
+                or generation.dictionary_id != TYPED_DICTIONARY
+                or not isinstance(generation.source, TemporalSourceIdentity)):
+            raise ReasoningError("typed indexed admission requires positive typed point closure and typed-values-v1")
+        return Admission(request.mode, request.executor, generation.digest,
+                         ("typed-positive-closure-only", "generation-bound"))
     if request.mode == "proofs":
         if request.executor not in _ADMISSION_INDEXED:
             raise ReasoningError("proofs require an indexed witness engine")

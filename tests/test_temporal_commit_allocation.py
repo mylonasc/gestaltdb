@@ -34,7 +34,7 @@ def _commit_temporal_versions(path, worker, count, start, results):
         start.wait()
         commit_ids = []
         for ordinal in range(count):
-            version = graph.put_node_version(
+            version = graph.temporal.put_node_version(
                 Node(f"worker-{worker}-{ordinal}"), valid=(0, None)
             )
             commit_ids.append(version.commit_id)
@@ -55,14 +55,14 @@ def test_rolled_back_temporal_reservations_are_not_reused(backend, tmp_path):
     try:
         with pytest.raises(RuntimeError):
             with graph.transaction() as transaction:
-                rolled_back.append(transaction.put_node_version(Node("first"), valid=(0, None)))
-                rolled_back.append(transaction.put_node_version(Node("second"), valid=(0, None)))
+                rolled_back.append(transaction.temporal.put_node_version(Node("first"), valid=(0, None)))
+                rolled_back.append(transaction.temporal.put_node_version(Node("second"), valid=(0, None)))
                 raise RuntimeError("rollback")
 
-        committed = graph.put_node_version(Node("committed"), valid=(0, None))
+        committed = graph.temporal.put_node_version(Node("committed"), valid=(0, None))
         assert committed.commit_id > max(version.commit_id for version in rolled_back)
-        assert list(graph.iter_node_versions("first")) == []
-        assert list(graph.iter_node_versions("second")) == []
+        assert list(graph.temporal.iter_node_versions("first")) == []
+        assert list(graph.temporal.iter_node_versions("second")) == []
     finally:
         graph.close()
 
@@ -96,6 +96,6 @@ def test_temporal_writers_are_serialized_across_processes(tmp_path):
 
     reopened = GraphDB.open(path)
     try:
-        assert [commit.commit_id for commit in reopened.iter_temporal_commits()] == list(range(1, 13))
+        assert [commit.commit_id for commit in reopened.temporal.iter_temporal_commits()] == list(range(1, 13))
     finally:
         reopened.close()

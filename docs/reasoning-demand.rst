@@ -1,5 +1,9 @@
 :orphan:
 
+For opt-in interleaved temporal claim reads over positive binary entity rules,
+see :doc:`reasoning-frontier`. The ordinary demand API below still receives
+already-extracted facts; frontier queries use a separate explicit entry point.
+
 Goal-directed queries and demand specialization
 ============================================================
 

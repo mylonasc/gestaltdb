@@ -1,5 +1,50 @@
 # GestaltDB Examples
 
+For explicit authenticated native temporal-claim extraction with canonical
+correction/retraction selection and exact version parity, see the executable
+example in [`docs/reasoning-native-claims.rst`](docs/reasoning-native-claims.rst).
+This full-scan correctness path does not imply native index pushdown or speedup.
+
+For authenticated complete current-graph projection with generation pins and
+explicit executor admission, see the runnable example in
+[`docs/reasoning-current-admission.rst`](docs/reasoning-current-admission.rst).
+It uses `reasoning.adapters.graph_execution` and keeps current snapshot identity
+distinct from temporal claim horizons; partial frontier answers are not closure
+inputs.
+
+For authenticated temporal-range evaluation and explicit source/closure
+re-admission, see the executable example in
+[`docs/reasoning-range-admission.rst`](docs/reasoning-range-admission.rst).
+Range identities are distinct from point/current tokens and do not authorize
+caller-derived range publication.
+
+For a computation-owned, guarded interval-batch publisher, see
+[`docs/reasoning-bound-range-publication.rst`](docs/reasoning-bound-range-publication.rst).
+It re-admits the range and compares target versions/history before one logical
+commit; the legacy caller-derived `stage_range` API is not silently upgraded.
+
+For source-authenticated durable-session load/advance with exact caller pins,
+see [`docs/reasoning-authenticated-sessions.rst`](docs/reasoning-authenticated-sessions.rst).
+It preserves v1 artifacts while checking both generation identity and session
+state; raw checksums and horizon-only comparisons are insufficient.
+
+For the existing inferred sampler consumer's authenticated build and complete
+artifact hydration, see [`docs/reasoning-authenticated-inferred.rst`](docs/reasoning-authenticated-inferred.rst).
+Use exact caller generation/state pins and explicit projection selection;
+pass the admitted snapshot directly to `SamplerEngine` rather than reloading
+through the raw, source-unverified loader.
+
+The explicit dispatcher/current-graph execution paths accept
+`polars_max_intermediate_rows` only with an explicit Polars request. See
+[`docs/reasoning-executors.rst`](docs/reasoning-executors.rst) for a tested example;
+the default cap and indexed reference remain unchanged, and physical row
+budgets are not logical identity or hard memory bounds.
+
+For positive typed dispatcher execution and source-authenticated session input,
+see [`docs/reasoning-typed-execution.rst`](docs/reasoning-typed-execution.rst).
+The typed executor retains strict literals/n-ary values and rejects unsupported
+proof/physical-engine requests rather than converting them to binary facts.
+
 These examples are designed for developers and agents who need working patterns quickly. They use explicit imports from submodules because the package root intentionally exports only selected helpers.
 
 **Filtering and sampling workflows:** [Indexed property lookups](#index-and-lookup-properties) · [Live typed sampling](#traverse-and-sample-typed-relationships) · [Filtered, reusable sampler snapshots](#build-and-use-a-sampler-snapshot). The [sampling guide](https://mylonasc.github.io/gestaltdb/typed-sampling.html) covers all policies; the [filtering guide](https://mylonasc.github.io/gestaltdb/property-filtering.html) explains seed selection versus filtering every sampled hop.
@@ -22,6 +67,41 @@ This selected positive fragment is not full OWL. Inference is read-only and proo
 truncation is distinct from inference failure. See `docs/ontology.rst` for the
 explicit pinned-claims adapter and `docs/ontology-benchmarks.rst` for cost bounds.
 
+## Authenticate a Typed Point Session
+
+This opt-in scan verifies active input evidence, not the soundness of closure.
+It needs an installed backend; the example uses LevelDB.
+
+```python
+from tempfile import TemporaryDirectory
+from gestaltdb.graphdb import GraphDB
+from gestaltdb.reasoning.adapters.claims import ClaimMapping, ClaimSelection
+from gestaltdb.reasoning.adapters.sessions import SessionScope, start_session
+from gestaltdb.reasoning.adapters.session_generation import bind_session_generation, catalog_for_typed_program
+from gestaltdb.reasoning.model import ReasoningLimits, Variable
+from gestaltdb.reasoning.typed import GenericProgram, GenericRule, TypedAtom
+
+x, y = Variable("x"), Variable("y")
+program = GenericProgram([GenericRule("person", [TypedAtom("worksFor", [x, y])], [], TypedAtom("Person", [x]))])
+with TemporaryDirectory() as directory:
+    graph = GraphDB.create(directory, backend="leveldb", serializer="json")
+    try:
+        graph.epistemic.assert_claim(subject="alice", predicate="worksFor", object="acme",
+                           agent="registry", polarity="positive", valid=(0, 100))
+        session = start_session(graph, program, catalog_for_typed_program(program),
+                                scope=SessionScope("default", 50, ClaimSelection(), ClaimMapping()),
+                                limits=ReasoningLimits())
+        binding = bind_session_generation(graph, session)
+        binding.verify(graph, session)
+        assert binding.identity.program_digest == program.digest
+    finally:
+        graph.close()
+```
+
+Latest admission rejects source movement; old-prefix evaluation requires explicit
+`freshness="historical"`. See `docs/reasoning-generation-identity.rst` for bounds
+and unsupported range/current-graph profiles.
+
 ## Create, Query, and Close a Graph
 
 ```python
@@ -36,12 +116,15 @@ with TemporaryDirectory() as tmpdir:
     try:
         graph.put_node(Node(node_id="alice", labels=["Person"], properties={"name": "Alice"}))
         graph.put_node(Node(node_id="bob", labels=["Person"], properties={"name": "Bob"}))
-        graph.put_edge(Edge(
+        graph.edges.put(Edge(
             edge_id="alice-knows-bob",
             source="alice",
             target="bob",
             properties={"type": "knows", "since": 2024},
         ))
+        assert graph.edges.reader.get(b"alice-knows-bob").target == "bob"
+        graph.indexes.create_edge_property_index("since")
+        assert list(graph.indexes.iter_edge_ids_by_type_property("knows", "since", 2024)) == [b"alice-knows-bob"]
 
         result = graph.query(
             'MATCH (a:Person {name: "Alice"}) '
@@ -71,29 +154,29 @@ from gestaltdb.serializers import JSONSerializer
 with TemporaryDirectory() as tmpdir:
     graph = GraphDB(LevelDBStore(path=f"{tmpdir}/graph"), JSONSerializer())
     try:
-        positive = graph.assert_claim(
+        positive = graph.epistemic.assert_claim(
             subject="alice", predicate="WORKS_FOR", object="acme",
             polarity="positive", agent="source:hr-feed", source="hr.csv",
             confidence=0.97, world="reported", provenance={"row": 42},
             valid_from="2024-01-01T00:00:00Z",
         )
-        graph.assert_claim(
+        graph.epistemic.assert_claim(
             subject="alice", predicate="WORKS_FOR", object="acme",
             polarity="negative", agent="source:investigator", confidence=0.6,
             world="reported", valid_from="2024-01-01T00:00:00Z",
         )
-        assert graph.claim_status(
+        assert graph.epistemic.claim_status(
             "alice", "WORKS_FOR", "acme",
             valid_time="2024-06-01T00:00:00Z", world="reported",
         ) is ClaimStatus.BOTH
 
-        reviewed = graph.correct_claim(
+        reviewed = graph.epistemic.correct_claim(
             positive.logical_id,
             supersedes_version_id=positive.version_id,
             confidence=0.99,
             provenance={"row": 42, "reviewed": True},
         )
-        graph.retract_claim(
+        graph.epistemic.retract_claim(
             positive.logical_id,
             supersedes_version_id=reviewed.version_id,
             valid_from="2025-01-01T00:00:00Z",
@@ -117,23 +200,23 @@ from gestaltdb.graphdb import GraphDB
 with TemporaryDirectory() as tmpdir:
     graph = GraphDB.create(f"{tmpdir}/graph", backend="leveldb", serializer="json")
     try:
-        employment = graph.assert_claim(
+        employment = graph.epistemic.assert_claim(
             subject="alice", predicate="WORKS_FOR", object="acme",
             polarity="positive", agent="source:hr", world="reported",
             valid_from="2024-01-01T00:00:00Z",
         )
-        graph.assert_claim(
+        graph.epistemic.assert_claim(
             subject="acme", predicate="MEMBER_OF", object="industry",
             polarity="positive", agent="source:registry", world="reported",
             valid_from="2024-03-01T00:00:00Z",
         )
-        graph.create_rule(
+        graph.rules.create_rule(
             "employment-implies-affiliation",
             when=[("?p", "WORKS_FOR", "?c"), ("?c", "MEMBER_OF", "?g")],
             then=("?p", "AFFILIATED_WITH", "?g"),
         )
 
-        result = graph.run_rules(
+        result = graph.rules.run(
             as_of="2024-06-01T00:00:00Z",
             max_iterations=100,
             max_derivations=10_000,
@@ -144,20 +227,20 @@ with TemporaryDirectory() as tmpdir:
         assert derived.claim.object == "industry"
         assert len(derived.claim.provenance["justifications"]) == 1
 
-        explanation = graph.explain_claim(
+        explanation = graph.rules.explain(
             derived.logical_id,
             valid_time="2024-06-01T00:00:00Z",
         )
         assert explanation.root_version_id == derived.version_id
 
-        graph.retract_claim(
+        graph.epistemic.retract_claim(
             employment.logical_id,
             supersedes_version_id=employment.version_id,
             reason="source correction",
         )
-        maintained = graph.maintain_truth()
+        maintained = graph.rules.maintain()
         assert maintained.retracted_count == 1
-        assert graph.get_claim_as_of(
+        assert graph.epistemic.get_claim_as_of(
             derived.logical_id,
             valid_time="2024-06-01T00:00:00Z",
         ) is None
@@ -180,31 +263,31 @@ from gestaltdb.graphdb import GraphDB
 with TemporaryDirectory() as tmpdir:
     graph = GraphDB.create(f"{tmpdir}/graph", backend="leveldb", serializer="json")
     try:
-        graph.assert_claim(
+        graph.epistemic.assert_claim(
             subject="supplier-1", predicate="SHIPS", object="widgets",
             polarity="positive", agent="erp", valid=(0, 100),
         )
-        graph.create_rule(
+        graph.rules.create_rule(
             "review-uncertified",
             when=[("?s", "SHIPS", "?goods")],
             then=("?s", "REQUIRES_SAFETY_REVIEW", "yes"),
             not_when=[("?s", "CERTIFIED", "iso9001")],
             closed_world=["CERTIFIED"],
         )
-        graph.run_rules(as_of=10)
-        flagged = next(graph.iter_claims_as_of(
+        graph.rules.run(as_of=10)
+        flagged = next(graph.epistemic.iter_claims_as_of(
             valid_time=10, predicate="REQUIRES_SAFETY_REVIEW"))
         assert flagged.claim.subject == "supplier-1"
 
-        explanation = graph.explain_claim(flagged.logical_id, valid_time=10)
+        explanation = graph.rules.explain(flagged.logical_id, valid_time=10)
         assert any(node.kind == "absence" for node in explanation.nodes)
 
-        graph.assert_claim(
+        graph.epistemic.assert_claim(
             subject="supplier-1", predicate="CERTIFIED", object="iso9001",
             polarity="positive", agent="audit", valid=(0, 100),
         )
-        assert graph.maintain_truth(as_of=10).retracted_count == 1
-        assert list(graph.iter_claims_as_of(
+        assert graph.rules.maintain(as_of=10).retracted_count == 1
+        assert list(graph.epistemic.iter_claims_as_of(
             valid_time=10, predicate="REQUIRES_SAFETY_REVIEW")) == []
     finally:
         graph.close()
@@ -224,24 +307,28 @@ from gestaltdb.graphdb import GraphDB
 with TemporaryDirectory() as tmpdir:
     graph = GraphDB.create(f"{tmpdir}/graph", backend="leveldb", serializer="json")
     try:
-        graph.assert_world_accessibility(
+        graph.epistemic.assert_world_accessibility(
             agent="alice", from_world="actual", to_world="alice-belief",
             kind="belief", valid_from="2025-01-01T00:00:00Z",
         )
-        graph.assert_claim(
+        graph.epistemic.assert_claim(
             subject="bob", predicate="LOCATED_IN", object="paris",
             polarity="positive", agent="source:registry", world="alice-belief",
             confidence=0.9, valid_from="2025-01-01T00:00:00Z",
         )
-        result = graph.entails(
-            "alice",
-            {"subject": "bob", "predicate": "LOCATED_IN", "object": "paris"},
-            "BELIEVES",
-            world="actual",
+        with graph.temporal.open_read_view(
+            graph, manifest=graph.manifest, database_id=graph.database_id,
             valid_time="2025-06-01T00:00:00Z",
-            max_depth=4,
-            max_states=1000,
-        )
+        ) as view:
+            result = graph.epistemic.entails(
+                view,
+                "alice",
+                {"subject": "bob", "predicate": "LOCATED_IN", "object": "paris"},
+                "BELIEVES",
+                world="actual",
+                max_depth=4,
+                max_states=1000,
+            )
         assert result.status is ClaimStatus.SUPPORTED
 
         cypher = graph.query(
@@ -514,6 +601,12 @@ paths = graph.sample_typed_paths(
 ```
 
 ## Ingest Arrow Columns
+
+For format-specific loading, use `graph.ingest.arrow.node_entities(...)` and
+`edge_entities(...)`; `nodes(...)` and `edges(...)` accept serialized payloads.
+`graph.ingest.polars` exposes the same operations for DataFrames. These loaders
+use low-level `maintain`/`defer` index policy. The combined graph-loading API
+below also coordinates the final deferred-index rebuild.
 
 ```python
 from tempfile import TemporaryDirectory
@@ -798,29 +891,29 @@ from gestaltdb.temporal import TemporalInterval
 with TemporaryDirectory() as tmpdir:
     graph = GraphDB(LevelDBStore(path=f"{tmpdir}/graph"), JSONSerializer())
     try:
-        asserted = graph.put_node_version(
+        asserted = graph.temporal.put_node_version(
             Node(node_id="alice", labels=["Person"], properties={"name": "Alice"}),
             valid=TemporalInterval.parse("2020-01-01T00:00:00Z"),
             metadata={"source": "people-import"},
         )
-        corrected = graph.correct_node_version(
+        corrected = graph.temporal.correct_node_version(
             Node(node_id="alice", labels=["Person"], properties={"name": "Alicia"}),
             supersedes_version_id=asserted.version_id,
         )
-        graph.retract_node_version(
+        graph.temporal.retract_node_version(
             "alice",
             valid_from="2030-01-01T00:00:00Z",
             supersedes_version_id=corrected.version_id,
             reason="source withdrew the assertion",
         )
 
-        history = list(graph.iter_node_versions("alice"))
+        history = list(graph.temporal.iter_node_versions("alice"))
         assert [version.operation.value for version in history] == [
             "assert", "correct", "retract"
         ]
         assert graph.get_node(b"alice") is None
 
-        at_2025 = graph.get_node_as_of(
+        at_2025 = graph.temporal.get_node_as_of(
             "alice", valid_time="2025-01-01T00:00:00Z"
         )
         assert at_2025.node.properties["name"] == "Alicia"
@@ -857,14 +950,14 @@ with TemporaryDirectory() as tmpdir:
             properties={"type": "WORKS_FOR", "revision": 2},
         ), update_adjacency=False)
 
-        migrated = graph.migrate_time_indexed_edges(delete_legacy=False)
+        migrated = graph.temporal.migrate_time_indexed_edges(delete_legacy=False)
         assert len(migrated) == 2
-        assert graph.get_edge_as_of(
+        assert graph.temporal.get_edge_as_of(
             "employment", valid_time="2024-01-15T00:00:00Z"
         ).edge.properties["revision"] == 1
 
-        assert graph.migrate_time_indexed_edges(delete_legacy=True) == ()
-        assert len(list(graph.iter_edge_versions("employment"))) == 2
+        assert graph.temporal.migrate_time_indexed_edges(delete_legacy=True) == ()
+        assert len(list(graph.temporal.iter_edge_versions("employment"))) == 2
     finally:
         graph.close()
 ```

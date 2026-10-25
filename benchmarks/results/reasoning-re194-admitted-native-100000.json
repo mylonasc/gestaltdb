@@ -1,0 +1,101 @@
+{
+  "schema_version": 2,
+  "revision": "c7011bbe2957903678b5b88e5513403bf9e682ad",
+  "dirty": false,
+  "harness_sha256": "220d7fc711eed1b79f1db07d7cfb04c9144fd12d5ced661f6e8b618d02f331d5",
+  "python": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "dependencies": {
+    "lmdb": "2.2.1",
+    "plyvel": "1.5.1",
+    "pyrex-rocksdb": "0.6.0",
+    "pyarrow": "24.0.0",
+    "polars": "1.41.2"
+  },
+  "cpu_count": 24,
+  "configuration": {
+    "rows": 100000,
+    "shape": "selective",
+    "backend": "pyrex",
+    "methods": [
+      "indexed-python",
+      "native-authenticated"
+    ],
+    "caches": [
+      "first"
+    ],
+    "repeats": 1,
+    "timeout_s": 120.0,
+    "proofs": false,
+    "polars_max_intermediate_rows": null
+  },
+  "threads": {
+    "POLARS_MAX_THREADS": "1",
+    "OMP_NUM_THREADS": "1"
+  },
+  "os_cache": "uncontrolled; first is not OS-cold",
+  "samples": [
+    {
+      "status": "ok",
+      "method": "indexed-python",
+      "mode": "closure",
+      "source_contract": "authenticated-pinned-claims",
+      "rows": 100000,
+      "shape": "selective",
+      "cache": "first",
+      "polars_max_intermediate_rows": null,
+      "cache_boundary": "first extraction on reopened handle",
+      "metrics": {
+        "view_open_s": 3.634306102001574,
+        "extract_decode_verify_s": 5.148532642007922,
+        "prepare_s": 1.6100239008665085e-07,
+        "evaluate_convert_s": 1.4435733950085705,
+        "post_verify_s": 0.27080723700055387,
+        "query_pipeline_s": 10.498058981000213,
+        "import_s": 0.2605059740017168,
+        "compile_s": 2.9890987207181752e-05,
+        "reopen_s": 0.28820405900478363,
+        "total_pipeline_s": 11.04679890499392
+      },
+      "answers": 8,
+      "answer_digest": "f0c361577569cb3555387c73cbe6cbc48a15d77d788921e9a0ae00015295f74b",
+      "evidence_rows": 100000,
+      "evidence_digest": "ab07a3caaecd40b2898f5c33252fee28e2274d9877935c894fdbd649590b1a7b",
+      "scanned_claims_or_raw_rows": 100000,
+      "known_facts": 200028,
+      "scheduler_work": null,
+      "requests": null,
+      "closure_digest": "004b0eb49a503ce6babda2621613fe7b1c36a9e867890981ecb7195fb1c12f1c",
+      "proof_nodes": null,
+      "proof_truncated": null,
+      "polars_threads": null,
+      "rss_peak_bytes": 629899264,
+      "rss_boundary": "worker high-water, includes warmup and parity validation; not query-only RSS",
+      "conversion_boundary": "included in evaluate_convert_s; no zero-copy claim",
+      "bytes_copied": null,
+      "bytes_copied_boundary": "not instrumented, not assumed zero",
+      "worker_wall_s": 11.552090915996814,
+      "repeat": 0
+    },
+    {
+      "status": "timeout",
+      "timeout_s": 120.0,
+      "last_stage": "extraction",
+      "repeat": 0,
+      "method": "native-authenticated",
+      "cache": "first"
+    }
+  ],
+  "complete": false,
+  "decision": "no automatic executor/native adoption; workload-specific evidence only",
+  "fixture": {
+    "status": "ok",
+    "evidence_digest": "ab07a3caaecd40b2898f5c33252fee28e2274d9877935c894fdbd649590b1a7b",
+    "load_s": 19.982599819995812,
+    "rows": 100000,
+    "shape": "selective",
+    "backend": "pyrex",
+    "backend_options": {},
+    "worker_wall_s": 20.334096744001727
+  }
+}

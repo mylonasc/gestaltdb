@@ -14,10 +14,10 @@ def test_scanned_candidates_are_not_output_rows_and_reset_per_pass(tmp_path, age
     graph = GraphDB.create(tmp_path / "db", backend="lmdb", serializer="json")
     try:
         for index in range(10):
-            graph.assert_claim(subject=str(index), predicate="p", object="b",
+            graph.epistemic.assert_claim(subject=str(index), predicate="p", object="b",
                                agent="chosen" if index == 0 else "other",
                                polarity="positive", valid=(0, 100))
-        with graph.read_view(valid_time=50) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             with PinnedBatchedClaimSource(
                 view, request=ExtractionRequest(world="default", batch_rows=1),
                 ontology_revision="rev", selection=ClaimSelection(agents=agents), mapping=ClaimMapping(),

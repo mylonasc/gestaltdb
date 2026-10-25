@@ -14,7 +14,7 @@ def graph(tmp_path):
     graph.put_edge(Edge("ab", "a", "b", {"type": "knows"}))
     graph.put_edge(Edge("ab2", "a", "b", {"type": "knows"}))
     graph.put_edge(Edge("bc", "b", "c", {"type": "knows"}))
-    graph.assert_claim(subject="x", predicate="knows", object="y", agent="other", polarity="positive", valid=(0, 100))
+    graph.epistemic.assert_claim(subject="x", predicate="knows", object="y", agent="other", polarity="positive", valid=(0, 100))
     yield graph
     graph.close()
 
@@ -74,7 +74,7 @@ def test_rebinding_and_closed_backend_snapshot_fail(graph):
 
 
 def test_temporal_views_are_not_current_graph_sources(graph):
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         with pytest.raises(ReasoningError, match="CurrentGraphReadView"):
             PinnedGraphSource(view, mapping=GraphMapping())
 

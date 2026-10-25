@@ -23,7 +23,7 @@ def graph(request, tmp_path):
 
 
 def claim(graph, subject, predicate, object="yes", *, world="default", valid=(0, None)):
-    return graph.assert_claim(
+    return graph.epistemic.assert_claim(
         subject=subject,
         predicate=predicate,
         object=object,
@@ -35,7 +35,7 @@ def claim(graph, subject, predicate, object="yes", *, world="default", valid=(0,
 
 
 def compliance_rule(graph):
-    return graph.create_rule(
+    return graph.rules.create_rule(
         "missing-certification",
         when=[("?s", "SHIPS", "?goods")],
         then=("?s", "REQUIRES_SAFETY_REVIEW", "yes"),
@@ -45,21 +45,21 @@ def compliance_rule(graph):
 
 
 def flags(graph, *, world=None):
-    return list(graph.iter_claims_as_of(
+    return list(graph.epistemic.iter_claims_as_of(
         valid_time=10, predicate="REQUIRES_SAFETY_REVIEW", world=world
     ))
 
 
 def test_negation_requires_closed_scope_and_bound_variables(graph):
     with pytest.raises(RuleError, match="closed-world"):
-        graph.create_rule(
+        graph.rules.create_rule(
             "undeclared",
             when=[("?s", "SHIPS", "?g")],
             then=("?s", "REVIEW", "yes"),
             not_when=[("?s", "CERTIFIED", "iso9001")],
         )
     with pytest.raises(RuleError, match="unsafe negated"):
-        graph.create_rule(
+        graph.rules.create_rule(
             "unbound",
             when=[("?s", "SHIPS", "?g")],
             then=("?s", "REVIEW", "yes"),
@@ -67,49 +67,49 @@ def test_negation_requires_closed_scope_and_bound_variables(graph):
             closed_world=["CERTIFIED"],
         )
     with pytest.raises(RuleError, match="closed-world scope"):
-        graph.create_rule(
+        graph.rules.create_rule(
             "string-scope",
             when=[("?s", "SHIPS", "?g")],
             then=("?s", "REVIEW", "yes"),
             not_when=[("?s", "CERTIFIED", "iso9001")],
             closed_world="CERTIFIED",
         )
-    assert graph._load_rule_catalog() == ()
+    assert graph.rules.load_catalog() == ()
 
 
 def test_negative_cycle_is_rejected_before_catalog_activation(graph):
-    graph.create_rule(
+    graph.rules.create_rule(
         "a-rule",
         when=[("?x", "BASE", "?y")],
         then=("?x", "A", "?y"),
         not_when=[("?x", "B", "?y")],
         closed_world=["B"],
     )
-    before = graph._load_rule_catalog()
+    before = graph.rules.load_catalog()
     with pytest.raises(RuleError, match="negative dependency cycle"):
-        graph.create_rule(
+        graph.rules.create_rule(
             "b-rule", when=[("?x", "A", "?y")], then=("?x", "B", "?y")
         )
-    assert graph._load_rule_catalog() == before
+    assert graph.rules.load_catalog() == before
 
 
 def test_compliance_flag_and_truth_maintenance_retraction(graph):
     claim(graph, "supplier-1", "SHIPS", "widgets")
     compliance_rule(graph)
-    first = graph.run_rules(as_of=10)
+    first = graph.rules.run(as_of=10)
     assert first.derived_count == 1
     derived = flags(graph)
     assert [item.claim.subject for item in derived] == ["supplier-1"]
 
     certification = claim(graph, "supplier-1", "CERTIFIED", "iso9001")
-    retracted = graph.maintain_truth(as_of=10)
+    retracted = graph.rules.maintain(as_of=10)
     assert retracted.retracted_count == 1
     assert flags(graph) == []
 
-    graph.retract_claim(
+    graph.epistemic.retract_claim(
         certification.logical_id, valid=certification.valid, reason="certificate withdrawn"
     )
-    restored = graph.maintain_truth(as_of=10)
+    restored = graph.rules.maintain(as_of=10)
     assert restored.asserted_count == 1
     assert [item.claim.subject for item in flags(graph)] == ["supplier-1"]
 
@@ -117,10 +117,10 @@ def test_compliance_flag_and_truth_maintenance_retraction(graph):
 def test_absence_evidence_is_recorded_in_explanations_and_audit(graph):
     claim(graph, "supplier-1", "SHIPS", "widgets")
     rule = compliance_rule(graph)
-    graph.run_rules(as_of=10)
+    graph.rules.run(as_of=10)
     derived = flags(graph)[0]
 
-    explanation = graph.explain_claim(derived.logical_id, valid_time=10)
+    explanation = graph.rules.explain(derived.logical_id, valid_time=10)
     absences = [node for node in explanation.nodes if node.kind == "absence"]
     assert len(absences) == 1
     evidence = absences[0].value
@@ -157,7 +157,7 @@ def test_absence_evidence_is_recorded_in_explanations_and_audit(graph):
     assert justification["rule"] == rule.version_id
     assert justification["premises"] == [
         version.version_id
-        for version in graph.iter_claims_as_of(
+        for version in graph.epistemic.iter_claims_as_of(
             valid_time=10, subject="supplier-1", predicate="SHIPS"
         )
     ]
@@ -168,22 +168,22 @@ def test_negation_reads_completed_lower_strata(graph):
     claim(graph, "audited-co", "AUDIT_PASS", "ok")
     claim(graph, "audited-co", "SHIPS", "widgets")
     claim(graph, "unaudited-co", "SHIPS", "widgets")
-    graph.create_rule(
+    graph.rules.create_rule(
         "audit-summary",
         when=[("?s", "AUDIT_PASS", "ok")],
         then=("?s", "AUDITED", "ok"),
     )
-    graph.create_rule(
+    graph.rules.create_rule(
         "clear-shippers",
         when=[("?s", "SHIPS", "?goods")],
         then=("?s", "CLEAR_TO_SHIP", "yes"),
         not_when=[("?s", "AUDITED", "ok")],
         closed_world=["AUDITED"],
     )
-    graph.run_rules(as_of=10)
+    graph.rules.run(as_of=10)
     cleared = {
         version.claim.subject
-        for version in graph.iter_claims_as_of(valid_time=10, predicate="CLEAR_TO_SHIP")
+        for version in graph.epistemic.iter_claims_as_of(valid_time=10, predicate="CLEAR_TO_SHIP")
     }
     assert cleared == {"unaudited-co"}
 
@@ -195,7 +195,7 @@ def test_partial_negative_overlap_blocks_the_whole_derivation(graph):
     claim(graph, "supplier-1", "SHIPS", "widgets", valid=(0, 100))
     claim(graph, "supplier-1", "CERTIFIED", "iso9001", valid=(10, 20))
     compliance_rule(graph)
-    graph.run_rules(as_of=10)
+    graph.rules.run(as_of=10)
     assert flags(graph) == []
 
 
@@ -203,19 +203,19 @@ def test_negation_is_world_local(graph):
     claim(graph, "supplier-1", "SHIPS", "widgets", world="w1")
     claim(graph, "supplier-1", "CERTIFIED", "iso9001", world="w2")
     compliance_rule(graph)
-    graph.run_rules(as_of=10, world="w1")
+    graph.rules.run(as_of=10, world="w1")
     assert [item.claim.world for item in flags(graph, world="w1")] == ["w1"]
 
 
 def test_repeated_run_and_maintenance_are_idempotent(graph):
     claim(graph, "supplier-1", "SHIPS", "widgets")
     compliance_rule(graph)
-    graph.run_rules(as_of=10)
-    second = graph.run_rules(as_of=10)
+    graph.rules.run(as_of=10)
+    second = graph.rules.run(as_of=10)
     assert second.derived_count == 0
     assert flags(graph)
 
-    maintained = graph.maintain_truth(as_of=10)
+    maintained = graph.rules.maintain(as_of=10)
     assert maintained.asserted_count == 0
     assert maintained.corrected_count == 0
     assert maintained.retracted_count == 0
@@ -228,7 +228,7 @@ def test_new_version_without_closed_scope_fails_closed_at_catalog_time(graph):
     # Re-versioning the same rule without the closed-world declaration makes
     # the still-active negation undeclared; the run must fail, not assume empty.
     with pytest.raises(RuleError, match="closed-world"):
-        graph.create_rule(
+        graph.rules.create_rule(
             "missing-certification",
             when=[("?s", "SHIPS", "?goods")],
             then=("?s", "REQUIRES_SAFETY_REVIEW", "yes"),
@@ -239,28 +239,28 @@ def test_new_version_without_closed_scope_fails_closed_at_catalog_time(graph):
 def test_stale_derived_fact_does_not_block_absence_after_retraction(graph):
     audit = claim(graph, "audited-co", "AUDIT_PASS", "ok")
     claim(graph, "audited-co", "SHIPS", "widgets")
-    graph.create_rule(
+    graph.rules.create_rule(
         "audit-summary",
         when=[("?s", "AUDIT_PASS", "ok")],
         then=("?s", "AUDITED", "ok"),
     )
-    graph.create_rule(
+    graph.rules.create_rule(
         "clear-shippers",
         when=[("?s", "SHIPS", "?goods")],
         then=("?s", "CLEAR_TO_SHIP", "yes"),
         not_when=[("?s", "AUDITED", "ok")],
         closed_world=["AUDITED"],
     )
-    graph.run_rules(as_of=10)
-    assert list(graph.iter_claims_as_of(valid_time=10, predicate="CLEAR_TO_SHIP")) == []
+    graph.rules.run(as_of=10)
+    assert list(graph.epistemic.iter_claims_as_of(valid_time=10, predicate="CLEAR_TO_SHIP")) == []
 
-    graph.retract_claim(audit.logical_id, valid=audit.valid)
-    graph.run_rules(as_of=10)
+    graph.epistemic.retract_claim(audit.logical_id, valid=audit.valid)
+    graph.rules.run(as_of=10)
     cleared = {
         version.claim.subject
-        for version in graph.iter_claims_as_of(valid_time=10, predicate="CLEAR_TO_SHIP")
+        for version in graph.epistemic.iter_claims_as_of(valid_time=10, predicate="CLEAR_TO_SHIP")
     }
     # The stale AUDITED claim remains visible history, but it is not
     # authoritative input for the stratified closure.
     assert cleared == {"audited-co"}
-    assert list(graph.iter_claims_as_of(valid_time=10, predicate="AUDITED"))
+    assert list(graph.epistemic.iter_claims_as_of(valid_time=10, predicate="AUDITED"))

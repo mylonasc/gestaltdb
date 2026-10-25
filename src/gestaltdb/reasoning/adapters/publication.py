@@ -20,7 +20,9 @@ from ...temporal import TemporalInstant, TemporalInterval
 from ...versioning import ClaimVersionWrite, normalize_temporal_instant
 from ..model import ReasoningError, ReasoningLimitError, ReasoningLimits, _text
 from ..protocols import InputContext
+from ..generation import GenerationIdentity, TemporalSourceIdentity
 from .claims import ClaimMapping, ClaimSelection, ClaimSourceLimits, PinnedClaimSource, _digest
+from .generation import ClaimGenerationBinding, catalog_for_ontology
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,7 @@ class StagedPointPublication:
     desired: tuple[tuple[str, str, str], ...]
     base_fingerprint: str
     source_provenance: ReadViewProvenance | None = None
+    generation_binding: ClaimGenerationBinding | None = None
 
     def __post_init__(self):
         for name in ("namespace", "publication_key", "source_world", "target_world",
@@ -84,6 +87,22 @@ class StagedPointPublication:
             if provenance.database_id != self.database_id or provenance.valid_time_us != self.valid_point_us:
                 raise ReasoningError("source provenance does not match the staged database/time")
             object.__setattr__(self, "source_provenance", provenance)
+        if self.generation_binding is not None:
+            binding = self.generation_binding
+            if not isinstance(binding, ClaimGenerationBinding):
+                raise ReasoningError("generation_binding must be ClaimGenerationBinding")
+            if self.source_provenance is None:
+                raise ReasoningError("source provenance required for generation binding")
+            context = binding.identity.context
+            if (binding.provenance != self.source_provenance
+                    or context.context_id != self.input_context_id
+                    or context.world != self.source_world
+                    or context.ontology_revision != self.ontology_revision
+                    or binding.selection.policy_id != self.policy_id
+                    or binding.mapping.mapping_id != self.mapping_id
+                    or binding.identity.semantics_profile != "positive-binary-entity-v1"
+                    or binding.identity.dictionary_id != "external-strings-v1"):
+                raise ReasoningError("staged generation binding mismatch")
 
 
 def _stage_fingerprint(entries: Iterable[tuple[str, str]]) -> str:
@@ -115,7 +134,7 @@ def stage_point(
     instant = normalize_temporal_instant(valid_time)
     interval = (instant, TemporalInstant(instant.epoch_microseconds + 1))
     namespace = "ontology-publication:" + _digest([publication_key, source_world, target_world, instant.epoch_microseconds]).split(":")[1]
-    with graph.read_view(valid_time=instant) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=instant) as view:
         with PinnedClaimSource(view, world=source_world, ontology_revision=compiled.revision_id,
                                selection=selection, mapping=mapping, limits=source_limits) as source:
             evidence = []
@@ -128,6 +147,13 @@ def stage_point(
             result = DatalogEngine().evaluate(compiled.program, evidence, limits=limits)
             source.verify_source()
             context = source.context
+            provenance = view.provenance
+            identity = GenerationIdentity(
+                TemporalSourceIdentity(provenance.database_id, provenance.commit_horizon,
+                                       provenance.token, provenance.valid_time_us),
+                context, compiled.program.digest, catalog_for_ontology(compiled).digest,
+                "positive-binary-entity-v1", "external-strings-v1")
+            binding = ClaimGenerationBinding(identity, provenance, selection, mapping)
         generation = _digest([
             "ontology-point-publication-v1", view.provenance.database_id, namespace,
             compiled.revision_id, selection.policy_id, mapping.mapping_id,
@@ -146,18 +172,22 @@ def stage_point(
     return StagedPointPublication(namespace, publication_key, source_world, target_world,
                                   instant.epoch_microseconds, generation, context.context_id,
                                   compiled.revision_id, selection.policy_id, mapping.mapping_id,
-                                  database_id, desired, _stage_fingerprint(base), view.provenance)
+                                   database_id, desired, _stage_fingerprint(base), view.provenance, binding)
 
 
 def publish_staged(
     graph: GraphDB, staged: StagedPointPublication, *, max_target_claims: int = 100_000,
-    freshness: str = "latest",
+    freshness: str = "latest", expected_generation: GenerationIdentity | None = None,
 ) -> PublicationResult:
     """Compare the staged base fingerprint and publish exactly once on match.
 
     Holds the writer guard only for orphan audit, target comparison and one
     logical commit. Any namespace movement raises ``GenerationStaleError``;
     callers retry by re-staging explicitly. No stale closure is published.
+
+    An optional expected generation pins the caller's source/program/catalog
+    and semantic policy. It is a compatibility check, not authentication or a
+    substitute for the guarded source and target checks below.
     """
     if not isinstance(staged, StagedPointPublication):
         raise ReasoningError("a StagedPointPublication is required")
@@ -169,18 +199,34 @@ def publish_staged(
         raise ReasoningError("freshness must be latest or historical")
     if staged.source_provenance is None:
         raise ReasoningError("staged source provenance is required; re-stage explicitly")
+    if expected_generation is not None:
+        if not isinstance(expected_generation, GenerationIdentity):
+            raise ReasoningError("expected_generation must be GenerationIdentity or None")
+        if staged.generation_binding is None:
+            raise ReasoningError("expected_generation requires a shared generation binding; re-stage explicitly")
+        expected_generation.require_compatible(staged.generation_binding.identity)
+    generation_metadata = {}
+    if staged.generation_binding is not None:
+        identity = staged.generation_binding.identity
+        generation_metadata = {"reasoning_generation": identity.digest,
+                               "program_digest": identity.program_digest,
+                               "catalog_digest": identity.catalog_digest}
     instant = TemporalInstant(staged.valid_point_us)
     interval = (instant, TemporalInstant(instant.epoch_microseconds + 1))
-    with graph._temporal_writer_guard():
-        if any(item.kind == "incomplete_commit" for item in graph.list_temporal_orphans().artifacts):
+    with graph.temporal.write_guard():
+        if any(item.kind == "incomplete_commit" for item in graph.temporal.list_temporal_orphans().artifacts):
             raise ReasoningError("unreclaimed temporal publication requires explicit orphan recovery")
-        with graph.read_view(valid_time=instant) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=instant) as view:
             if view.provenance.database_id != staged.database_id:
                 raise ReasoningError("staged generation belongs to a different database")
             staged.source_provenance.verify_source(graph)
             if freshness == "latest" and (
                     view.provenance.commit_horizon != staged.source_provenance.commit_horizon):
                 raise GenerationStaleError("source horizon moved since staging; re-stage and retry")
+            if staged.generation_binding is not None:
+                # The guard remains held until commit; the binding alone is
+                # deliberately not a compare-and-publish authorization.
+                staged.generation_binding.verify_source(graph, freshness=freshness)
             current = {}
             for version in view.iter_claims_as_of(world=staged.target_world, agent="gestaltdb:ontology",
                                                   source=staged.namespace):
@@ -205,7 +251,8 @@ def publish_staged(
                                    "valid_point_us": staged.valid_point_us,
                                    "source_commit_horizon": staged.source_provenance.commit_horizon,
                                    "source_provenance_token": staged.source_provenance.token,
-                                   "publication_freshness": freshness,
+                                    "publication_freshness": freshness,
+                                    **generation_metadata,
                               })
                 desired[claim.claim_id] = claim
             writes = []
@@ -229,10 +276,11 @@ def publish_staged(
                                    staged.ontology_revision, "explicit-staged-generation-v1", staged.mapping_id)
         commit = None
         if writes:
-            commit = graph.commit_versions(writes, metadata={"engine": "gestaltdb.ontology", "generation": staged.generation,
+            commit = graph.temporal.commit_versions(writes, metadata={"engine": "gestaltdb.ontology", "generation": staged.generation,
                                                              "input_context": staged.input_context_id,
-                                                             "source_commit_horizon": staged.source_provenance.commit_horizon,
-                                                             "publication_freshness": freshness})
+                                                              "source_commit_horizon": staged.source_provenance.commit_horizon,
+                                                              "publication_freshness": freshness,
+                                                              **generation_metadata})
         return PublicationResult(context, staged.generation, None if commit is None else commit.commit_id,
                                  asserted, corrected, retracted, unchanged)
 
@@ -241,7 +289,7 @@ def audit_publication_orphans(graph: GraphDB, *, through_commit=None):
     """Read-only orphan inventory; never mutates or repairs."""
     if not isinstance(graph, GraphDB):
         raise ReasoningError("GraphDB is required")
-    return graph.list_temporal_orphans(through_commit=through_commit)
+    return graph.temporal.list_temporal_orphans(through_commit=through_commit)
 
 
 def reclaim_publication_orphans(graph: GraphDB, *, through_commit: int, consent: bool = False):
@@ -256,7 +304,7 @@ def reclaim_publication_orphans(graph: GraphDB, *, through_commit: int, consent:
         raise ReasoningError("through_commit must be a non-negative integer")
     if not isinstance(graph, GraphDB):
         raise ReasoningError("GraphDB is required")
-    return graph.reclaim_temporal_orphans(through_commit=through_commit)
+    return graph.temporal.reclaim_temporal_orphans(through_commit=through_commit)
 
 
 @dataclass(frozen=True)
@@ -285,6 +333,7 @@ class StagedRangePublication:
     database_id: str
     desired: tuple[tuple[str, str, str], ...]
     base_fingerprint: str
+    source_provenance: ReadViewProvenance | None = None
 
     def __post_init__(self):
         for name in ("namespace", "publication_key", "source_world", "target_world",
@@ -305,6 +354,13 @@ class StagedRangePublication:
                 raise ReasoningError("desired triples must be (subject, predicate, object)")
             cleaned.append((_text(triple[0], "subject"), _text(triple[1], "predicate"), _text(triple[2], "object")))
         object.__setattr__(self, "desired", tuple(sorted(set(cleaned))))
+        if self.source_provenance is not None:
+            if not isinstance(self.source_provenance, ReadViewProvenance):
+                raise ReasoningError("source provenance must be ReadViewProvenance")
+            provenance = ReadViewProvenance.from_dict(self.source_provenance.to_dict())
+            if provenance.database_id != self.database_id or provenance.valid_time_us != self.valid_start_us:
+                raise ReasoningError("source provenance does not match the staged database/time")
+            object.__setattr__(self, "source_provenance", provenance)
 
 
 def _range_namespace(publication_key: str, source_world: str, target_world: str,
@@ -330,6 +386,10 @@ def stage_range(graph: GraphDB, desired: Iterable[tuple[str, str, str]], *, vali
     compiled revision id). It is validated, bound into the generation
     digest, and published into each claim's provenance. There is no
     default: callers must state the revision explicitly.
+
+    Captured source provenance authenticates this staging prefix only. The
+    caller supplies already-derived triples: no check binds their computation
+    to that prefix or independently verifies the evidence digest/derivation.
     """
     if not isinstance(graph, GraphDB):
         raise ReasoningError("GraphDB is required")
@@ -354,7 +414,7 @@ def stage_range(graph: GraphDB, desired: Iterable[tuple[str, str, str]], *, vali
         raise ReasoningError("valid_end_us must be None or greater than valid_start_us")
     namespace = _range_namespace(publication_key, source_world, target_world, valid_start_us, valid_end_us)
     sample = TemporalInstant(valid_start_us)
-    with graph.read_view(valid_time=sample) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=sample) as view:
         base = []
         for version in view.iter_claims_as_of(world=target_world, agent="gestaltdb:ontology", source=namespace):
             claim = version.claim
@@ -365,6 +425,7 @@ def stage_range(graph: GraphDB, desired: Iterable[tuple[str, str, str]], *, vali
                 raise ReasoningError("publication namespace contains unmanaged claims")
             base.append((claim.claim_id, str(claim.provenance.get("generation", ""))))
         database_id = view.provenance.database_id
+        source_provenance = view.provenance
     generation = _digest(["ontology-range-publication-v1", database_id, namespace, evidence_id,
                           ontology_revision, selection.policy_id, mapping.mapping_id,
                           sorted(set(triples))])
@@ -376,16 +437,24 @@ def stage_range(graph: GraphDB, desired: Iterable[tuple[str, str, str]], *, vali
                                   ontology_revision=ontology_revision,
                                   policy_id=selection.policy_id, mapping_id=mapping.mapping_id,
                                   database_id=database_id, desired=tuple(sorted(set(triples))),
-                                  base_fingerprint=_stage_fingerprint(base))
+                                  base_fingerprint=_stage_fingerprint(base),
+                                  source_provenance=source_provenance)
 
 
 def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
-                         max_target_claims: int = 100_000) -> PublicationResult:
+                         max_target_claims: int = 100_000,
+                         freshness: str = "latest") -> PublicationResult:
     """Compare the staged base fingerprint and publish exactly once on match.
 
     Holds the writer guard only for orphan audit, target comparison and one
     logical commit. Namespace movement raises ``GenerationStaleError``;
     callers re-stage explicitly. Validity is published exactly as staged.
+
+    The captured staging prefix is verified under the same guard: the
+    default ``freshness="latest"`` additionally requires the current commit
+    horizon to match the staged source horizon, rejecting movement between
+    staging and publication (not a stale computation before staging). Explicit
+    ``freshness="historical"`` verifies the original pinned prefix instead.
     """
     if not isinstance(staged, StagedRangePublication):
         raise ReasoningError("a StagedRangePublication is required")
@@ -393,14 +462,22 @@ def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
         raise ReasoningError("max_target_claims must be a positive integer")
     if not isinstance(graph, GraphDB):
         raise ReasoningError("GraphDB is required")
+    if freshness not in ("latest", "historical"):
+        raise ReasoningError("freshness must be latest or historical")
+    if staged.source_provenance is None:
+        raise ReasoningError("staged source provenance is required; re-stage explicitly")
     interval = TemporalInterval(TemporalInstant(staged.valid_start_us),
                                 None if staged.valid_end_us is None else TemporalInstant(staged.valid_end_us))
-    with graph._temporal_writer_guard():
-        if any(item.kind == "incomplete_commit" for item in graph.list_temporal_orphans().artifacts):
+    with graph.temporal.write_guard():
+        if any(item.kind == "incomplete_commit" for item in graph.temporal.list_temporal_orphans().artifacts):
             raise ReasoningError("unreclaimed temporal publication requires explicit orphan recovery")
-        with graph.read_view(valid_time=TemporalInstant(staged.valid_start_us)) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=TemporalInstant(staged.valid_start_us)) as view:
             if view.provenance.database_id != staged.database_id:
                 raise ReasoningError("staged generation belongs to a different database")
+            staged.source_provenance.verify_source(graph)
+            if freshness == "latest" and (
+                    view.provenance.commit_horizon != staged.source_provenance.commit_horizon):
+                raise GenerationStaleError("source horizon moved since staging; re-stage and retry")
             current = {}
             for version in view.iter_claims_as_of(world=staged.target_world, agent="gestaltdb:ontology",
                                                   source=staged.namespace):
@@ -425,6 +502,9 @@ def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
                                   "ontology_revision": staged.ontology_revision,
                                   "valid_start_us": staged.valid_start_us,
                                   "valid_end_us": staged.valid_end_us,
+                                  "source_commit_horizon": staged.source_provenance.commit_horizon,
+                                  "source_provenance_token": staged.source_provenance.token,
+                                  "publication_freshness": freshness,
                               })
                 desired[claim.claim_id] = claim
             writes = []
@@ -449,8 +529,10 @@ def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
                                    staged.ontology_revision, "explicit-staged-range-v1", staged.mapping_id)
         commit = None
         if writes:
-            commit = graph.commit_versions(writes, metadata={"engine": "gestaltdb.ontology", "generation": staged.generation,
-                                                             "input_context": staged.input_context_id})
+            commit = graph.temporal.commit_versions(writes, metadata={"engine": "gestaltdb.ontology", "generation": staged.generation,
+                                                             "input_context": staged.input_context_id,
+                                                             "source_commit_horizon": staged.source_provenance.commit_horizon,
+                                                             "publication_freshness": freshness})
         return PublicationResult(context, staged.generation, None if commit is None else commit.commit_id,
                                  asserted, corrected, retracted, unchanged)
 
@@ -492,10 +574,10 @@ def reconcile_point(
     namespace = "ontology-publication:" + _digest([publication_key, source_world, target_world, instant.epoch_microseconds]).split(":")[1]
     # Private lock access is deliberately confined to this persistence adapter.
     # It is shared with every temporal writer, including other GraphDB handles.
-    with graph._temporal_writer_guard():
-        if any(item.kind == "incomplete_commit" for item in graph.list_temporal_orphans().artifacts):
+    with graph.temporal.write_guard():
+        if any(item.kind == "incomplete_commit" for item in graph.temporal.list_temporal_orphans().artifacts):
             raise ReasoningError("unreclaimed temporal publication requires explicit orphan recovery")
-        with graph.read_view(valid_time=instant) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=instant) as view:
             with PinnedClaimSource(view, world=source_world, ontology_revision=compiled.revision_id,
                                    selection=selection, mapping=mapping, limits=source_limits) as source:
                 # Exact input references, not a single proof witness, identify this
@@ -554,7 +636,7 @@ def reconcile_point(
                     retracted += 1
         commit = None
         if writes:
-            commit = graph.commit_versions(writes, metadata={"engine": "gestaltdb.ontology", "generation": generation,
+            commit = graph.temporal.commit_versions(writes, metadata={"engine": "gestaltdb.ontology", "generation": generation,
                                                            "input_context": context.context_id})
         return PublicationResult(context, generation, None if commit is None else commit.commit_id,
                                  asserted, corrected, retracted, unchanged)

@@ -9,8 +9,16 @@ deltas to the exact-version evidence ledger and maintenance support indexes.
 mapping scope and source commit horizon, then materializes the closure from
 one full scan. ``advance_session`` consumes the exact versions committed
 since the pinned horizon: assertions become typed facts through an explicit
-claim mapping, corrections retire their superseded version atomically, and
-retractions retire the named versions. Logical insertions propagate through
+claim mapping, corrections retire active versions of their logical claim
+atomically, and retractions retire that logical claim's observed versions.
+Only changes whose half-open valid interval contains the session's pinned
+valid-time point affect its active evidence. For a point at ``50``, retractions
+over ``[0,50)`` or ``[51,100)`` leave evidence intact; ``[50,51)`` retracts it.
+The same rule applies when resuming a persisted session. A later re-assertion
+of the same logical claim resurrects exactly its facts under fresh evidence
+versions; rebind the generation identity after any advance, since state
+digests change with horizons and version maps.
+Logical insertions propagate through
 existing supports; logical retractions use DRed against the pinned dependency
 index. Every advance is verified against the pinned database identity, and a
 backwards-moving horizon fails closed.
@@ -22,7 +30,23 @@ fact survive single retractions; the fact disappears only with its final
 active version.
 
 This milestone advances sessions in memory; the returned session value is the
-resumable state. Durable cross-process persistence of that value is not
-implemented. Sessions do not publish; publication stays with the managed
-generation APIs. Identity strings and ledger records alone do not authenticate
-data — the session verifies its database on every advance.
+resumable state. ``gestaltdb.reasoning.adapters.session_store`` adds durable
+cross-process persistence for that value: ``save_session`` writes one versioned
+JSON document atomically (temporary file plus rename, so readers observe the
+old or the new session, never a partial write), ``load_session`` verifies the
+embedded digest, program/catalog digests, index binding and ledger consistency,
+and ``advance_persisted_session`` resumes a file in a new process, advances
+through live commit deltas (or explicit rebuild) and re-persists with a
+horizon compare. A concurrent writer changing the file between load and
+persist fails closed; callers reload and retry. Sessions do not publish;
+publication stays with the managed generation APIs. Identity strings and
+ledger records alone do not authenticate data — every resume re-verifies the
+live database identity and horizon.
+
+For source-verified reuse, explicitly admit a session with
+``bind_session_generation`` from
+``gestaltdb.reasoning.adapters.session_generation``. This compares exact active
+version/fact/logical-ID evidence against the authenticated historical prefix
+and checks catalog content, rather than trusting a persisted digest alone.
+See :doc:`reasoning-generation-identity` for limits, freshness and unsupported
+profiles. The returned binding is not a proof of closure soundness.

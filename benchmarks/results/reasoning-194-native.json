@@ -1,0 +1,549 @@
+{
+  "all_available": true,
+  "batch_rows": 256,
+  "cache_note": "OS cache uncontrolled; no privileged cache eviction",
+  "cases": [
+    {
+      "configuration": {
+        "backend": "pyrex-native",
+        "cache": "first",
+        "payload": "fixed",
+        "rows": 1000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 1000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "37700412654b11d41a1843db0a838d2bb5550fb7e3f175a0f75b783ed5f8f246",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.0030212929705157876,
+            "native_copy_decode_filter_s": 0.0029513250337913632,
+            "native_locator_s": 0.0009577349992468953,
+            "python_copy_decode_filter_s": 0.002129219996277243
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 88420,
+          "rss_peak_bytes": 97591296,
+          "scanned": 1000,
+          "status": "ok"
+        },
+        {
+          "accepted": 1000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "37700412654b11d41a1843db0a838d2bb5550fb7e3f175a0f75b783ed5f8f246",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.003161835018545389,
+            "native_copy_decode_filter_s": 0.003005970036610961,
+            "native_locator_s": 0.0009589889668859541,
+            "python_copy_decode_filter_s": 0.0021290340228006244
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 88420,
+          "rss_peak_bytes": 97103872,
+          "scanned": 1000,
+          "status": "ok"
+        },
+        {
+          "accepted": 1000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "37700412654b11d41a1843db0a838d2bb5550fb7e3f175a0f75b783ed5f8f246",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.003010449989233166,
+            "native_copy_decode_filter_s": 0.0029492690227925777,
+            "native_locator_s": 0.0010103690437972546,
+            "python_copy_decode_filter_s": 0.002221742004621774
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 88420,
+          "rss_peak_bytes": 96706560,
+          "scanned": 1000,
+          "status": "ok"
+        }
+      ],
+      "summary": {
+        "load_s": {
+          "n": 3,
+          "p50": 0.0030212929705157876,
+          "p95": 0.003161835018545389
+        },
+        "native_copy_decode_filter_s": {
+          "n": 3,
+          "p50": 0.0029513250337913632,
+          "p95": 0.003005970036610961
+        },
+        "native_locator_s": {
+          "n": 3,
+          "p50": 0.0009589889668859541,
+          "p95": 0.0010103690437972546
+        },
+        "python_copy_decode_filter_s": {
+          "n": 3,
+          "p50": 0.002129219996277243,
+          "p95": 0.002221742004621774
+        }
+      }
+    },
+    {
+      "configuration": {
+        "backend": "pyrex-native",
+        "cache": "first",
+        "payload": "variable",
+        "rows": 1000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 1000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "37700412654b11d41a1843db0a838d2bb5550fb7e3f175a0f75b783ed5f8f246",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.007838805031497031,
+            "native_copy_decode_filter_s": 0.0051621709717437625,
+            "native_locator_s": 0.001460311992559582,
+            "python_copy_decode_filter_s": 0.0036326469853520393
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 2108920,
+          "rss_peak_bytes": 100679680,
+          "scanned": 1000,
+          "status": "ok"
+        },
+        {
+          "accepted": 1000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "37700412654b11d41a1843db0a838d2bb5550fb7e3f175a0f75b783ed5f8f246",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.007951616018544883,
+            "native_copy_decode_filter_s": 0.0051589939976111054,
+            "native_locator_s": 0.0014601119910366833,
+            "python_copy_decode_filter_s": 0.0036567809875123203
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 2108920,
+          "rss_peak_bytes": 100708352,
+          "scanned": 1000,
+          "status": "ok"
+        },
+        {
+          "accepted": 1000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "37700412654b11d41a1843db0a838d2bb5550fb7e3f175a0f75b783ed5f8f246",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.0077824179898016155,
+            "native_copy_decode_filter_s": 0.005082251969724894,
+            "native_locator_s": 0.0015601420309394598,
+            "python_copy_decode_filter_s": 0.0036301150103099644
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 2108920,
+          "rss_peak_bytes": 101076992,
+          "scanned": 1000,
+          "status": "ok"
+        }
+      ],
+      "summary": {
+        "load_s": {
+          "n": 3,
+          "p50": 0.007838805031497031,
+          "p95": 0.007951616018544883
+        },
+        "native_copy_decode_filter_s": {
+          "n": 3,
+          "p50": 0.0051589939976111054,
+          "p95": 0.0051621709717437625
+        },
+        "native_locator_s": {
+          "n": 3,
+          "p50": 0.001460311992559582,
+          "p95": 0.0015601420309394598
+        },
+        "python_copy_decode_filter_s": {
+          "n": 3,
+          "p50": 0.0036326469853520393,
+          "p95": 0.0036567809875123203
+        }
+      }
+    },
+    {
+      "configuration": {
+        "backend": "pyrex-native",
+        "cache": "first",
+        "payload": "fixed",
+        "rows": 10000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 10000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "a10a82679865a51dda82d0f772bff322764700c39208b7f9b7772e0a1e15fc4d",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.030005617009010166,
+            "native_copy_decode_filter_s": 0.026753359998110682,
+            "native_locator_s": 0.008797202026471496,
+            "python_copy_decode_filter_s": 0.023889887030236423
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 914170,
+          "rss_peak_bytes": 105328640,
+          "scanned": 10000,
+          "status": "ok"
+        },
+        {
+          "accepted": 10000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "a10a82679865a51dda82d0f772bff322764700c39208b7f9b7772e0a1e15fc4d",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.030062957026530057,
+            "native_copy_decode_filter_s": 0.02657267200993374,
+            "native_locator_s": 0.008748831984121352,
+            "python_copy_decode_filter_s": 0.02405751298647374
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 914170,
+          "rss_peak_bytes": 105750528,
+          "scanned": 10000,
+          "status": "ok"
+        },
+        {
+          "accepted": 10000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "a10a82679865a51dda82d0f772bff322764700c39208b7f9b7772e0a1e15fc4d",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.02901279501384124,
+            "native_copy_decode_filter_s": 0.026644498051609844,
+            "native_locator_s": 0.008989472989924252,
+            "python_copy_decode_filter_s": 0.02395791298476979
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 914170,
+          "rss_peak_bytes": 106405888,
+          "scanned": 10000,
+          "status": "ok"
+        }
+      ],
+      "summary": {
+        "load_s": {
+          "n": 3,
+          "p50": 0.030005617009010166,
+          "p95": 0.030062957026530057
+        },
+        "native_copy_decode_filter_s": {
+          "n": 3,
+          "p50": 0.026644498051609844,
+          "p95": 0.026753359998110682
+        },
+        "native_locator_s": {
+          "n": 3,
+          "p50": 0.008797202026471496,
+          "p95": 0.008989472989924252
+        },
+        "python_copy_decode_filter_s": {
+          "n": 3,
+          "p50": 0.02395791298476979,
+          "p95": 0.02405751298647374
+        }
+      }
+    },
+    {
+      "configuration": {
+        "backend": "pyrex-native",
+        "cache": "first",
+        "payload": "variable",
+        "rows": 10000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 10000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "a10a82679865a51dda82d0f772bff322764700c39208b7f9b7772e0a1e15fc4d",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.07809816702501848,
+            "native_copy_decode_filter_s": 0.04670548398280516,
+            "native_locator_s": 0.015114023990463465,
+            "python_copy_decode_filter_s": 0.03964489698410034
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 21230965,
+          "rss_peak_bytes": 126763008,
+          "scanned": 10000,
+          "status": "ok"
+        },
+        {
+          "accepted": 10000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "a10a82679865a51dda82d0f772bff322764700c39208b7f9b7772e0a1e15fc4d",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.07885299000190571,
+            "native_copy_decode_filter_s": 0.04642945295199752,
+            "native_locator_s": 0.014600040973164141,
+            "python_copy_decode_filter_s": 0.039222550054546446
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 21230965,
+          "rss_peak_bytes": 127561728,
+          "scanned": 10000,
+          "status": "ok"
+        },
+        {
+          "accepted": 10000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "a10a82679865a51dda82d0f772bff322764700c39208b7f9b7772e0a1e15fc4d",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.08797387196682394,
+            "native_copy_decode_filter_s": 0.046716426964849234,
+            "native_locator_s": 0.014620645029935986,
+            "python_copy_decode_filter_s": 0.03932068502763286
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 21230965,
+          "rss_peak_bytes": 126763008,
+          "scanned": 10000,
+          "status": "ok"
+        }
+      ],
+      "summary": {
+        "load_s": {
+          "n": 3,
+          "p50": 0.07885299000190571,
+          "p95": 0.08797387196682394
+        },
+        "native_copy_decode_filter_s": {
+          "n": 3,
+          "p50": 0.04670548398280516,
+          "p95": 0.046716426964849234
+        },
+        "native_locator_s": {
+          "n": 3,
+          "p50": 0.014620645029935986,
+          "p95": 0.015114023990463465
+        },
+        "python_copy_decode_filter_s": {
+          "n": 3,
+          "p50": 0.03932068502763286,
+          "p95": 0.03964489698410034
+        }
+      }
+    },
+    {
+      "configuration": {
+        "backend": "pyrex-native",
+        "cache": "first",
+        "payload": "fixed",
+        "rows": 100000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 100000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "cdd470d40b8fb5c3894a31ded4e99dff1926d9cf01a018d83f2342578aaba704",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.2992688520462252,
+            "native_copy_decode_filter_s": 0.2792028379626572,
+            "native_locator_s": 0.0871254060184583,
+            "python_copy_decode_filter_s": 0.24125121702672914
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 9441670,
+          "rss_peak_bytes": 204902400,
+          "scanned": 100000,
+          "status": "ok"
+        },
+        {
+          "accepted": 100000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "cdd470d40b8fb5c3894a31ded4e99dff1926d9cf01a018d83f2342578aaba704",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.2890706679900177,
+            "native_copy_decode_filter_s": 0.27640907699242234,
+            "native_locator_s": 0.08659751998493448,
+            "python_copy_decode_filter_s": 0.24071310099679977
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 9441670,
+          "rss_peak_bytes": 204787712,
+          "scanned": 100000,
+          "status": "ok"
+        },
+        {
+          "accepted": 100000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "cdd470d40b8fb5c3894a31ded4e99dff1926d9cf01a018d83f2342578aaba704",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.2947260130313225,
+            "native_copy_decode_filter_s": 0.2762437100172974,
+            "native_locator_s": 0.08670389902545139,
+            "python_copy_decode_filter_s": 0.24263728398364037
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 9441670,
+          "rss_peak_bytes": 203223040,
+          "scanned": 100000,
+          "status": "ok"
+        }
+      ],
+      "summary": {
+        "load_s": {
+          "n": 3,
+          "p50": 0.2947260130313225,
+          "p95": 0.2992688520462252
+        },
+        "native_copy_decode_filter_s": {
+          "n": 3,
+          "p50": 0.27640907699242234,
+          "p95": 0.2792028379626572
+        },
+        "native_locator_s": {
+          "n": 3,
+          "p50": 0.08670389902545139,
+          "p95": 0.0871254060184583
+        },
+        "python_copy_decode_filter_s": {
+          "n": 3,
+          "p50": 0.24125121702672914,
+          "p95": 0.24263728398364037
+        }
+      }
+    },
+    {
+      "configuration": {
+        "backend": "pyrex-native",
+        "cache": "first",
+        "payload": "variable",
+        "rows": 100000,
+        "selection": "all"
+      },
+      "samples": [
+        {
+          "accepted": 100000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "cdd470d40b8fb5c3894a31ded4e99dff1926d9cf01a018d83f2342578aaba704",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.7607917370041832,
+            "native_copy_decode_filter_s": 0.5518717719824053,
+            "native_locator_s": 0.21544833399821073,
+            "python_copy_decode_filter_s": 0.5156323270057328
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 212642890,
+          "rss_peak_bytes": 242630656,
+          "scanned": 100000,
+          "status": "ok"
+        },
+        {
+          "accepted": 100000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "cdd470d40b8fb5c3894a31ded4e99dff1926d9cf01a018d83f2342578aaba704",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.7647201410145499,
+            "native_copy_decode_filter_s": 0.5603038879926316,
+            "native_locator_s": 0.22124482598155737,
+            "python_copy_decode_filter_s": 0.5168917769915424
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 212642890,
+          "rss_peak_bytes": 241483776,
+          "scanned": 100000,
+          "status": "ok"
+        },
+        {
+          "accepted": 100000,
+          "cache_state": "first native scan after load",
+          "evidence_digest": "cdd470d40b8fb5c3894a31ded4e99dff1926d9cf01a018d83f2342578aaba704",
+          "locator_note": "copies values too; measured after decoded/reference scans, warm",
+          "metrics": {
+            "load_s": 0.7681654379703104,
+            "native_copy_decode_filter_s": 0.5560420140391216,
+            "native_locator_s": 0.21489887597272173,
+            "python_copy_decode_filter_s": 0.5110965059720911
+          },
+          "mode": "synthetic KV only; no authenticated claims or inference",
+          "pushdown": "row prefix only; predicate/subject are post-decode filters",
+          "raw_key_value_bytes": 212642890,
+          "rss_peak_bytes": 240955392,
+          "scanned": 100000,
+          "status": "ok"
+        }
+      ],
+      "summary": {
+        "load_s": {
+          "n": 3,
+          "p50": 0.7647201410145499,
+          "p95": 0.7681654379703104
+        },
+        "native_copy_decode_filter_s": {
+          "n": 3,
+          "p50": 0.5560420140391216,
+          "p95": 0.5603038879926316
+        },
+        "native_locator_s": {
+          "n": 3,
+          "p50": 0.21544833399821073,
+          "p95": 0.22124482598155737
+        },
+        "python_copy_decode_filter_s": {
+          "n": 3,
+          "p50": 0.5156323270057328,
+          "p95": 0.5168917769915424
+        }
+      }
+    }
+  ],
+  "complete": true,
+  "git_revision": "4bd5a6d6853303bc16b415c7442c5930bcb8fc83",
+  "packages": {
+    "lmdb": "2.2.1",
+    "numpy": "2.5.2",
+    "plyvel": "1.5.1",
+    "pyarrow": "24.0.0",
+    "pyrex-rocksdb": "0.5.0"
+  },
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "python": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
+  "repeats": 3,
+  "rss_note": "whole worker high-water mark, including load and reference verification; not engine-only",
+  "schema_version": 1,
+  "source_sha256": {
+    "reasoning_matrix.py": "d8e973509267cd358fabe07bff9f1c5dd8e2e205129866108b664f2b02532516",
+    "reasoning_pipeline.py": "b749651f16f398da8204d1e7f667c88de30c530bccf501f2039ac553b6f3f113"
+  },
+  "timeout_s": 300,
+  "working_tree_dirty": false
+}
