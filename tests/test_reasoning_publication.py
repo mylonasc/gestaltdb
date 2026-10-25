@@ -73,20 +73,20 @@ def test_revision_changes_and_unrelated_target_claims(graph):
 
 def test_failures_before_commit_and_after_visibility_are_retry_safe(graph, monkeypatch):
     assertion(graph)
-    commit = graph.commit_versions
+    commit = graph.temporal.commit_versions
     def before(*args, **kwargs):
         raise RuntimeError("interrupted before publication")
-    monkeypatch.setattr(graph, "commit_versions", before)
+    monkeypatch.setattr(graph.temporal, "commit_versions", before)
     with pytest.raises(RuntimeError):
         publish(graph)
     assert not outputs(graph)
     def after(*args, **kwargs):
         commit(*args, **kwargs)
         raise RuntimeError("interrupted after publication")
-    monkeypatch.setattr(graph, "commit_versions", after)
+    monkeypatch.setattr(graph.temporal, "commit_versions", after)
     with pytest.raises(RuntimeError):
         publish(graph)
-    monkeypatch.setattr(graph, "commit_versions", commit)
+    monkeypatch.setattr(graph.temporal, "commit_versions", commit)
     assert publish(graph).commit_id is None
     assert len(outputs(graph)) == 2
 

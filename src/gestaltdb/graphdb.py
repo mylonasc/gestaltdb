@@ -2257,8 +2257,7 @@ class GraphDB:
         Unstratifiable programs are rejected before the catalog changes.
         """
         return _stored_rules.create_rule(
-            self.store, self._temporal_write_lock, self._temporal_clock,
-            rule_id, when=when, then=then, not_when=not_when,
+            self.temporal, rule_id, when=when, then=then, not_when=not_when,
             closed_world=closed_world, version_id=version_id,
         )
 
@@ -2345,8 +2344,7 @@ class GraphDB:
         that evaluator to database sources and publication.
         """
         return _stored_rules.run_rules(
-            self._temporal_reader(), self.commit_versions,
-            lambda: self.store, as_of=as_of, system_time=system_time,
+            self.temporal, as_of=as_of, system_time=system_time,
             world=world, max_iterations=max_iterations,
             max_derivations=max_derivations,
             max_justifications=max_justifications, index_mode=index_mode,
@@ -2354,7 +2352,7 @@ class GraphDB:
 
     def _last_truth_maintenance_instant(self) -> TemporalInstant | None:
         return _truth_maintenance.last_truth_maintenance_instant(
-            self.store, self._temporal_reader(), _TRUTH_MAINTENANCE_STATE_KEY)
+            self.temporal, _TRUTH_MAINTENANCE_STATE_KEY)
 
     def maintain_truth(
         self,
@@ -2376,8 +2374,7 @@ class GraphDB:
         rule run or maintenance pass is resumed.
         """
         return _truth_maintenance.maintain_truth(
-            self._temporal_reader(), self.commit_versions, lambda: self.store,
-            self._temporal_write_lock, _TRUTH_MAINTENANCE_STATE_KEY, as_of=as_of,
+            self.temporal, _TRUTH_MAINTENANCE_STATE_KEY, as_of=as_of,
             system_time=system_time, world=world, max_iterations=max_iterations,
             max_derivations=max_derivations, max_justifications=max_justifications,
             index_mode=index_mode,
@@ -2394,7 +2391,7 @@ class GraphDB:
     ) -> ClaimExplanation | None:
         """Return a finite derivation graph for a visible historical claim."""
         return _truth_maintenance.explain_claim(
-            self._temporal_reader(), self.store, claim_id=claim_id,
+            self.temporal, claim_id=claim_id,
             valid_time=valid_time, system_time=system_time,
             max_depth=max_depth, max_nodes=max_nodes,
         )

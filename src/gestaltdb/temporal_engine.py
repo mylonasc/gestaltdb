@@ -38,6 +38,11 @@ from ._graph import temporal_sequence as _temporal_sequence
 from ._graph.temporal_keys import (
     _TEMPORAL_SEQUENCE_FILENAME,
     _TEMPORAL_SEQUENCE_KEY,
+    decode_temporal_locator,
+    temporal_commit_key,
+    temporal_locator,
+    temporal_record_key,
+    temporal_visible_key,
 )
 from ._graph import temporal_entity_writes as _temporal_entity_writes
 from ._graph.temporal_selection import _UNSET
@@ -120,6 +125,11 @@ class TemporalEngine:
         child._transaction_bound = True
         return child
 
+    @property
+    def store(self):
+        """The bound backend store; scope-owned, borrowed for this handle's lifetime."""
+        return self._store
+
     def reader(self):
         """Return the store-bound historical read capability for this scope."""
         return _temporal_reads.TemporalReader(
@@ -173,6 +183,31 @@ class TemporalEngine:
     def decode_sequence(payload):
         """Decode a sequence payload into ``(commit_id, system_time)``."""
         return _temporal_sequence.decode_temporal_sequence(payload)
+
+    @staticmethod
+    def commit_key(commit_id):
+        """Return the metadata key for a commit descriptor."""
+        return temporal_commit_key(commit_id)
+
+    @staticmethod
+    def visible_key(commit_id):
+        """Return the metadata key for a commit visibility marker."""
+        return temporal_visible_key(commit_id)
+
+    @staticmethod
+    def record_key(commit_id, ordinal):
+        """Return the metadata key for one version record in a commit."""
+        return temporal_record_key(commit_id, ordinal)
+
+    @staticmethod
+    def locator(commit_id, ordinal):
+        """Return the opaque index locator for a version record."""
+        return temporal_locator(commit_id, ordinal)
+
+    @staticmethod
+    def decode_locator(locator):
+        """Decode an opaque index locator into ``(commit_id, ordinal)``."""
+        return decode_temporal_locator(locator)
 
     def sequence(self):
         """Return the latest durable ``(commit_id, system_time)`` pair."""

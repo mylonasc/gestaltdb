@@ -145,7 +145,7 @@ def build_authenticated_inferred_snapshot(graph, session, output_path, *, expect
     _validate(graph, expected_generation, expected_session_digest, admission_limits, freshness, cancel)
     target = Path(output_path)
     store, serializer = graph.store, graph.serializer
-    with graph._temporal_writer_guard(), _session_file_guard(target):
+    with graph.temporal.write_guard(), _session_file_guard(target):
         if target.exists() or target.is_symlink():
             raise ReasoningError("output_path already exists; use a new path per generation")
         binding = _admit(graph, session, expected_generation, expected_session_digest, freshness, admission_limits, cancel)
@@ -176,7 +176,7 @@ def load_authenticated_inferred_snapshot(graph, session, path, *, expected_gener
     _validate(graph, expected_generation, expected_session_digest, admission_limits, freshness, cancel)
     target = Path(path)
     store, serializer = graph.store, graph.serializer
-    with graph._temporal_writer_guard():
+    with graph.temporal.write_guard():
         binding = _admit(graph, session, expected_generation, expected_session_digest, freshness, admission_limits, cancel)
         _files(target, limits, cancel)
         with TemporaryDirectory(prefix="gestaltdb-inferred-admission-") as root:

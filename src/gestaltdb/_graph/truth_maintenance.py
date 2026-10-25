@@ -3,19 +3,14 @@
 ``maintain_truth`` revalidates derived claims against the current fixpoint
 after base evidence changes, retracting a conclusion only when its final
 independent support disappears. ``explain_claim`` builds the bounded
-derivation graph. Both compose the catalog/program helpers from
-``stored_rules``; the transaction boundary stays on ``GraphDB``.
+derivation graph. Both consume one temporal engine, so selection, commits
+and state stay scope-consistent by construction.
 """
 
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Callable
-
-if TYPE_CHECKING:
-    from ..kvstores import KVStore
-
 from ..epistemic import Claim, ClaimObjectKind, ClaimPolarity
 from ..ingestion import IndexMaintenanceMode
 from ..rules import (
@@ -44,15 +39,14 @@ from .stored_rules import (
     rule_program,
     rule_scope,
 )
-from .temporal_reads import TemporalReader
-from .temporal_selection import _UNSET, entity_as_of, iter_claims_as_of
-from .temporal_sequence import read_temporal_sequence
+from .temporal_selection import _UNSET
 
 TRUTH_MAINTENANCE_STATE_KEY = b"rules:truth-maintenance:v1"
 
 
-def last_truth_maintenance_instant(store, reader: "TemporalReader", state_key: bytes) -> object:
+def last_truth_maintenance_instant(temporal, state_key: bytes) -> object:
     """Return the valid time of the most recent rule run or maintenance pass."""
+    store, reader = temporal.store, temporal.reader()
     payload = store.get_metadata(state_key)
     state_instant = None
     state_horizon = -1
@@ -67,10 +61,9 @@ def last_truth_maintenance_instant(store, reader: "TemporalReader", state_key: b
         except (AttributeError, KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
             state_instant = None
             state_horizon = -1
-    last_commit_id, _ = read_temporal_sequence(
-    reader.store, reader.sequence_key, reader.store_path, reader.sequence_filename)
+    last_commit_id, _ = temporal.sequence()
     for commit_id in range(last_commit_id, 0, -1):
-        commit = reader.get_commit(commit_id)
+        commit = temporal.reader().get_commit(commit_id)
         if commit is None:
             continue
         for name in ("truth_maintenance", "rule_run"):
@@ -82,7 +75,7 @@ def last_truth_maintenance_instant(store, reader: "TemporalReader", state_key: b
     return state_instant
 
 
-def maintain_truth(reader: TemporalReader, commit_fn, live_store, write_lock, truth_state_key: bytes, *,
+def maintain_truth(temporal, truth_state_key: bytes, *,
                  as_of=None, system_time=None, world=None,
                  max_iterations=100, max_derivations=10_000, max_justifications=100_000,
                  index_mode=IndexMaintenanceMode.MAINTAIN):
@@ -90,8 +83,8 @@ def maintain_truth(reader: TemporalReader, commit_fn, live_store, write_lock, tr
 
     The authoritative base excludes claims emitted by the rule engine, so a
     cycle cannot preserve itself after its final independent support is
-    removed. ``commit_fn`` is the transaction-aware commit wrapper;
-    ``live_store`` preserves the grouped-read store tripwire.
+    removed. Selection, guarded commits and state go through one temporal
+    engine, so maintenance cannot mix scopes.
     """
     limits = {
         "max_iterations": max_iterations,
@@ -106,13 +99,13 @@ def maintain_truth(reader: TemporalReader, commit_fn, live_store, write_lock, tr
     mode = index_mode.value if isinstance(index_mode, IndexMaintenanceMode) else index_mode
     if mode not in {item.value for item in IndexMaintenanceMode}:
         raise ValueError("index_mode must be a valid IndexMaintenanceMode")
-    instant = last_truth_maintenance_instant(reader.store, reader, truth_state_key) if as_of is None else normalize_temporal_instant(as_of)
+    instant = last_truth_maintenance_instant(temporal, truth_state_key) if as_of is None else normalize_temporal_instant(as_of)
     if instant is None:
         raise ValueError("as_of is required for the first truth-maintenance pass")
 
-    with write_lock:
-        input_horizon = reader.system_horizon(system_time=system_time)
-        rules, strata = rule_program(reader.store, system_time=system_time)
+    with temporal.write_guard():
+        input_horizon = temporal.system_horizon(system_time=system_time)
+        rules, strata = rule_program(temporal.store, system_time=system_time)
         scope = rule_scope(rules)
 
         facts = []
@@ -135,12 +128,12 @@ def maintain_truth(reader: TemporalReader, commit_fn, live_store, write_lock, tr
             facts_by_predicate.setdefault(predicate, []).append(fact)
             return fact
 
-        for version in iter_claims_as_of(reader,
+        for version in temporal.iter_claims_as_of(
             valid_time=instant,
             polarity=ClaimPolarity.POSITIVE,
             world=world,
             through_commit=input_horizon,
-            live_store=live_store,
+            live_store=lambda: temporal.store,
         ):
             claim = version.claim
             if claim is None or claim.object_kind is not ClaimObjectKind.ENTITY:
@@ -276,7 +269,7 @@ def maintain_truth(reader: TemporalReader, commit_fn, live_store, write_lock, tr
                 delta = {fact["ref"] for fact in added}
 
         def semantic_premise(version_id):
-            premise = reader.get_claim_version(version_id, through_commit=input_horizon)
+            premise = temporal.get_claim_version(version_id, through_commit=input_horizon)
             if (
                 premise is not None
                 and premise.claim is not None
@@ -413,7 +406,7 @@ def maintain_truth(reader: TemporalReader, commit_fn, live_store, write_lock, tr
 
         commit = None
         if writes:
-            commit = commit_fn(
+            commit = temporal.commit_versions(
                 writes,
                 metadata={
                     "truth_maintenance": {
@@ -442,7 +435,7 @@ def maintain_truth(reader: TemporalReader, commit_fn, live_store, write_lock, tr
                 for premise_id in justification["premise_version_ids"]:
                     premise_dependents.setdefault(premise_id, set()).add(claim.claim_id)
         state_horizon = commit.commit_id if commit is not None else input_horizon
-        reader.store.put_metadata(truth_state_key, canonical_json_bytes({
+        temporal.store.put_metadata(truth_state_key, canonical_json_bytes({
             "format_version": 1,
             "valid_time_us": instant.epoch_microseconds,
             "through_commit": state_horizon,
@@ -466,7 +459,7 @@ def maintain_truth(reader: TemporalReader, commit_fn, live_store, write_lock, tr
         )
 
 
-def explain_claim(reader: TemporalReader, store, *, claim_id, valid_time,
+def explain_claim(temporal, *, claim_id, valid_time,
                 system_time=None, max_depth=100, max_nodes=10_000):
     """Return a finite derivation graph for a visible historical claim."""
     if isinstance(max_depth, bool) or not isinstance(max_depth, int) or max_depth < 0:
@@ -474,14 +467,14 @@ def explain_claim(reader: TemporalReader, store, *, claim_id, valid_time,
     if isinstance(max_nodes, bool) or not isinstance(max_nodes, int) or max_nodes < 1:
         raise ValueError("max_nodes must be a positive integer")
     instant = normalize_temporal_instant(valid_time)
-    horizon = reader.system_horizon(system_time=system_time)
-    root = entity_as_of(reader, "claim", claim_id, valid_time=instant, through_commit=horizon, hydrate=reader.get_version_at)
+    horizon = temporal.system_horizon(system_time=system_time)
+    root = temporal.entity_as_of("claim", claim_id, valid_time=instant, through_commit=horizon)
     if root is None:
         return None
-    commit = reader.get_commit(horizon)
+    commit = temporal.get_temporal_commit(horizon)
     if commit is None:
         raise TemporalCorruptionError("explanation horizon has no visible commit")
-    rules = {rule.version_id: rule for rule in iter_rule_versions(store)}
+    rules = {rule.version_id: rule for rule in iter_rule_versions(temporal.store)}
     nodes = {}
     edges = set()
     expanded = set()
@@ -519,7 +512,7 @@ def explain_claim(reader: TemporalReader, store, *, claim_id, valid_time,
                 continue
             edges.add(ExplanationEdge(version.version_id, rule_id, "derived_by"))
             for ordinal, premise_id in enumerate(premise_ids):
-                premise = reader.get_claim_version(premise_id, through_commit=horizon)
+                premise = temporal.get_claim_version(premise_id, through_commit=horizon)
                 if premise is None:
                     truncated = True
                     continue

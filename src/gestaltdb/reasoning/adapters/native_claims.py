@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from ...epistemic import ClaimObjectKind, ClaimPolarity
-from ...graphdb import _TEMPORAL_RECORD_PREFIX
+from ..._graph.temporal_keys import _TEMPORAL_RECORD_PREFIX
 from ...kvstores import PyRexStore
 from ...readview import ProvenanceMismatchError
 from ...versioning import ClaimVersion, VersionOperation
@@ -103,7 +103,7 @@ class PinnedNativeClaimSource(PinnedBatchedClaimSource):
         for commit_id in range(1, horizon + 1):
             check_cancelled(cancel)
             self._check_binding()
-            commit = graph._get_temporal_commit_cached(commit_id)
+            commit = graph.temporal.get_commit_cached(commit_id)
             if commit is not None:
                 expected[commit_id] = len(commit.versions)
         coverage = dict.fromkeys(expected, 0)
@@ -113,7 +113,7 @@ class PinnedNativeClaimSource(PinnedBatchedClaimSource):
         previous_key = None
         current_id, current_commit = None, None
         if horizon:
-            stop = self._native_store._key(b"M", graph._temporal_record_key(horizon + 1, 0))
+            stop = self._native_store._key(b"M", graph.temporal.record_key(horizon + 1, 0))
             with NativeKeyScan(self._native_store, prefix=prefix, stop=stop,
                     batch_rows=limits.batch_rows, max_batch_bytes=limits.max_batch_bytes,
                     max_rows=limits.max_raw_rows) as scan:
@@ -138,13 +138,13 @@ class PinnedNativeClaimSource(PinnedBatchedClaimSource):
                             continue
                         if commit_id != current_id:
                             current_id = commit_id
-                            current_commit = graph._get_temporal_commit_cached(commit_id)
+                            current_commit = graph.temporal.get_commit_cached(commit_id)
                         if current_commit is None or ordinal >= len(current_commit.versions):
                             raise ProvenanceMismatchError("native record is not an authenticated commit member")
                         # Compare exact serialized bytes, not Node/Edge payload
                         # object identity. Canonical admission already decoded
                         # and authenticated every member of this commit.
-                        if value != self._native_store.get_metadata(graph._temporal_record_key(commit_id, ordinal)):
+                        if value != self._native_store.get_metadata(graph.temporal.record_key(commit_id, ordinal)):
                             raise ProvenanceMismatchError("native record differs from authenticated commit")
                         version = current_commit.versions[ordinal]
                         if version.commit_id != commit_id or version.commit_ordinal != ordinal:
@@ -216,7 +216,7 @@ class PinnedNativeClaimSource(PinnedBatchedClaimSource):
         self._native_profile = None
         self.__dict__.pop("_profile", None)
         try:
-            with self._graph._temporal_writer_guard():
+            with self._graph.temporal.write_guard():
                 yield from super().iter_batches(cancel=cancel)
                 self._profile = replace(self._profile, pushdown="none; native-full-records; post-selection-filters")
                 self._native_profile = self._completed_native_profile

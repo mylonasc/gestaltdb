@@ -178,7 +178,7 @@ def test_expected_pin_rejects_before_guard_and_source_scan(source, monkeypatch):
     wrong = replace(staged.result.binding.identity, catalog_digest="wrong")
     def forbidden():
         pytest.fail("entered writer guard before exact pin rejection")
-    monkeypatch.setattr(graph, "_temporal_writer_guard", forbidden)
+    monkeypatch.setattr(graph.temporal, "write_guard", forbidden)
     with pytest.raises(ReasoningError, match="catalog_digest"):
         publish(graph, staged, expected_generation=wrong)
 
@@ -200,21 +200,21 @@ def test_stale_computation_cannot_be_laundered_through_new_staging(source):
 def test_commit_failure_before_and_after_visibility_is_retry_safe(source, monkeypatch):
     graph, _, _ = source
     staged = stage(graph)
-    commit = graph.commit_versions
+    commit = graph.temporal.commit_versions
     def before(*args, **kwargs):
         raise RuntimeError("before commit")
-    monkeypatch.setattr(graph, "commit_versions", before)
+    monkeypatch.setattr(graph.temporal, "commit_versions", before)
     with pytest.raises(RuntimeError, match="before"):
         publish(graph, staged)
     assert not visible(graph, 10)
     def after(*args, **kwargs):
         commit(*args, **kwargs)
         raise RuntimeError("after visibility")
-    monkeypatch.setattr(graph, "commit_versions", after)
+    monkeypatch.setattr(graph.temporal, "commit_versions", after)
     with pytest.raises(RuntimeError, match="after"):
         publish(graph, staged)
     assert visible(graph, 10)
-    monkeypatch.setattr(graph, "commit_versions", commit)
+    monkeypatch.setattr(graph.temporal, "commit_versions", commit)
     assert publish(graph, stage(graph)).commit_id is None
 
 

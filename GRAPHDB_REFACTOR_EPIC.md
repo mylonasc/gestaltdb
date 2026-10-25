@@ -111,9 +111,14 @@ now use the same scope helper as production; intent unchanged.
 
 Stage D validation (2026-10-26): full optional suite 3,442 passed / 3 expected
 skips with zero behavior change; the API index and module budgets were
-refreshed (`graphdb.py` 3103 -> 3055, new `temporal_engine.py` 562 lines and
-therefore outside the legacy-exception baseline). Ruff, size gate, API-index
-drift, docs checks and Sphinx `-W` green.
+refreshed (`graphdb.py` 3103 -> 3052, new `temporal_engine.py` 562 lines and
+therefore outside the legacy-exception baseline). Internal callers
+(`readview`, reasoning adapters, stored rules, truth maintenance) now
+consume `graph.temporal` directly; commit-failure and guard-ordering
+fault-injection tests were migrated to the engine boundary with intent
+unchanged. Ruff, size gate, API-index drift, docs checks and Sphinx `-W`
+green. No subclass was introduced: composition keeps consumers off the
+god-class surface instead of inheriting it.
 
 ### Stage E — rules/modal and optional consumers
 

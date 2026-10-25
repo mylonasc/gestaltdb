@@ -5,17 +5,15 @@
 entity claims in one world and persists deduplicated conclusions with
 positive premise and absence evidence.
 
-The transaction boundary stays on ``GraphDB``: evaluation takes an explicit
-``commit_fn`` (the transaction-aware ``commit_versions`` wrapper) and a
-``live_store`` callable preserving the grouped-read store tripwire.
-``maintain_truth`` and ``explain_claim`` follow in the next slice.
+Evaluation consumes a temporal engine: history selection, guarded commits
+and the live-store tripwire stay scope-consistent by construction.
 """
 
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..kvstores import KVStore
@@ -47,9 +45,7 @@ from ..versioning import (
     normalize_temporal_instant,
     normalize_version_id,
 )
-from .temporal_reads import TemporalReader
-from .temporal_selection import _UNSET, iter_claims_as_of
-from .temporal_sequence import next_temporal_system_time, read_temporal_sequence
+from .temporal_selection import _UNSET
 
 RULE_CATALOG_KEY = b"rules:catalog:v1"
 RULE_ENGINE_AGENT = "gestaltdb:rules"
@@ -75,16 +71,17 @@ def load_rule_catalog(store: KVStore) -> tuple[RuleVersion, ...]:
         raise RuleError("invalid rule catalog") from exc
 
 
-def create_rule(store: KVStore, write_lock, clock, rule_id, *, when, then,
+def create_rule(temporal, rule_id, *, when, then,
                 not_when=(), closed_world=(), version_id=None) -> RuleVersion:
     """Validate and append one immutable version of a Horn rule."""
-    with write_lock:
+    store = temporal.store
+    with temporal.write_guard():
         catalog = load_rule_catalog(store)
         normalized_version_id = normalize_version_id(version_id)
         if any(item.version_id == normalized_version_id for item in catalog):
             raise RuleError(f"rule version ID already exists: {normalized_version_id}")
         previous_time = catalog[-1].system_time if catalog else None
-        system_time = next_temporal_system_time(clock, previous_time)
+        system_time = temporal.next_system_time(previous_time)
         rule = normalize_rule_definition(
             rule_id,
             when,
@@ -207,7 +204,7 @@ def absence_checks(rule, bindings, valid, world, facts_by_predicate, scope):
     return tuple(checks)
 
 
-def run_rules(reader: TemporalReader, commit_fn: Callable, live_store: Callable, *,
+def run_rules(temporal, *,
               as_of, system_time=None, world=None,
               max_iterations=100, max_derivations=10_000, max_justifications=100_000,
               index_mode=IndexMaintenanceMode.MAINTAIN) -> RuleRunResult:
@@ -216,8 +213,8 @@ def run_rules(reader: TemporalReader, commit_fn: Callable, live_store: Callable,
     Positive components run in stratification order. Only positive
     entity-object claims participate; ``not_when`` atoms are closed-world
     absence checks against completed lower strata, not negative claims.
-    ``commit_fn`` is the transaction-aware commit wrapper; ``live_store``
-    preserves the grouped-read store tripwire.
+    History selection and guarded commits go through one temporal engine,
+    so evaluation cannot mix scopes.
     """
 
     limits = {
@@ -235,8 +232,8 @@ def run_rules(reader: TemporalReader, commit_fn: Callable, live_store: Callable,
         raise ValueError("index_mode must be a valid IndexMaintenanceMode")
 
     instant = normalize_temporal_instant(as_of)
-    horizon = reader.system_horizon(system_time=system_time)
-    rules, strata = rule_program(reader.store, system_time=system_time)
+    horizon = temporal.system_horizon(system_time=system_time)
+    rules, strata = rule_program(temporal.store, system_time=system_time)
     if not rules:
         return RuleRunResult(0, 0, 0, None, ())
     scope = rule_scope(rules)
@@ -270,12 +267,12 @@ def run_rules(reader: TemporalReader, commit_fn: Callable, live_store: Callable,
         return fact
 
     has_negation = any(rule.not_when for rule in rules)
-    for version in iter_claims_as_of(reader,
+    for version in temporal.iter_claims_as_of(
         valid_time=instant,
         polarity=ClaimPolarity.POSITIVE,
         world=world,
         through_commit=horizon,
-        live_store=live_store,
+        live_store=lambda: temporal.store,
     ):
         claim = version.claim
         if claim is None or claim.object_kind is not ClaimObjectKind.ENTITY:
@@ -477,7 +474,7 @@ def run_rules(reader: TemporalReader, commit_fn: Callable, live_store: Callable,
 
     if not writes:
         return RuleRunResult(iterations, 0, len(generated_justifications), None, ())
-    commit = commit_fn(
+    commit = temporal.commit_versions(
         writes,
         metadata={
             "rule_run": {

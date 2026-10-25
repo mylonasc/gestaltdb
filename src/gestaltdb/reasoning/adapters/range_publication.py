@@ -272,9 +272,9 @@ def publish_range_generation(graph: GraphDB, staged: StagedRangeGeneration, *, l
     if len(staged.desired) > publication_limits.max_outputs:
         raise ReasoningLimitError("range publication exceeded max_outputs")
     check_cancelled(cancel)
-    with graph._temporal_writer_guard():
+    with graph.temporal.write_guard():
         check_binding()
-        if any(item.kind == "incomplete_commit" for item in graph.list_temporal_orphans().artifacts):
+        if any(item.kind == "incomplete_commit" for item in graph.temporal.list_temporal_orphans().artifacts):
             raise ReasoningError("unreclaimed temporal publication requires explicit orphan recovery")
         binding.verify_source(graph, freshness=freshness)
         with graph.read_view(valid_time=identity.source.valid_start_us,
@@ -340,6 +340,6 @@ def publish_range_generation(graph: GraphDB, staged: StagedRangeGeneration, *, l
         with graph.read_view(valid_time=identity.source.valid_start_us) as final:
             if final.commit_horizon != horizon:
                 raise GenerationStaleError("source/target moved while preparing publication")
-        commit = graph.commit_versions(writes, metadata=metadata) if writes else None
+        commit = graph.temporal.commit_versions(writes, metadata=metadata) if writes else None
         return PublicationResult(identity.context, staged.content_id, None if commit is None else commit.commit_id,
                                  asserted, corrected, retracted, unchanged)

@@ -170,21 +170,21 @@ class ReadViewProvenance:
             if self.visibility_sha256 != expected:
                 raise ProvenanceMismatchError("source visibility digest mismatch")
             return
-        commit = graph.get_temporal_commit(self.commit_horizon)
+        commit = graph.temporal.get_temporal_commit(self.commit_horizon)
         if commit is None:
             raise ProvenanceMismatchError("source temporal commit is no longer visible")
-        marker = graph.store.get_metadata(graph._temporal_visible_key(self.commit_horizon))
+        marker = graph.store.get_metadata(graph.temporal.visible_key(self.commit_horizon))
         if marker is None or marker.hex() != self.commit_marker_sha256:
             raise ProvenanceMismatchError("source temporal commit marker mismatch")
         if commit.system_time.epoch_microseconds != self.commit_system_time_us:
             raise ProvenanceMismatchError("source temporal commit time mismatch")
         markers = []
         for commit_id in range(1, self.commit_horizon + 1):
-            if graph.get_temporal_commit(commit_id, _validate_supersession=False) is None:
-                if graph.store.get_metadata(graph._temporal_commit_key(commit_id)) is None:
+            if graph.temporal.get_temporal_commit(commit_id, _validate_supersession=False) is None:
+                if graph.store.get_metadata(graph.temporal.commit_key(commit_id)) is None:
                     continue
                 raise ProvenanceMismatchError("source visible commit prefix mismatch")
-            commit_marker = graph.store.get_metadata(graph._temporal_visible_key(commit_id))
+            commit_marker = graph.store.get_metadata(graph.temporal.visible_key(commit_id))
             markers.append(commit_id.to_bytes(8, "big") + commit_marker)
         if hashlib.sha256(b"".join(markers)).hexdigest() != self.visibility_sha256:
             raise ProvenanceMismatchError("source visibility digest mismatch")

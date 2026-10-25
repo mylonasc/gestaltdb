@@ -100,7 +100,7 @@ def advance_authenticated_session(graph: GraphDB, path, *, expected_generation: 
         check_cancelled(cancel)
         if graph.store is not store or graph.serializer is not serializer:
             raise ReasoningError("session source store/decoder was rebound")
-    with graph._temporal_writer_guard(), _session_file_guard(path):
+    with graph.temporal.write_guard(), _session_file_guard(path):
         check()
         loaded = _load(graph, path, expected_generation, expected_session_digest,
                        admission_limits, max_bytes, freshness, cancel)

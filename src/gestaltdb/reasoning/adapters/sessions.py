@@ -278,7 +278,7 @@ def advance_session(graph: GraphDB, session: ReasoningSession, *, limits: Reason
     logical_of = dict(session.version_logical)
     for commit_id in range(session.commit_horizon + 1, current + 1):
         check_cancelled(cancel)
-        commit = graph.get_temporal_commit(commit_id, _validate_supersession=False)
+        commit = graph.temporal.get_temporal_commit(commit_id, _validate_supersession=False)
         if commit is None:
             return _rebuild(graph, session, current, limits=limits, max_versions=max_versions, cancel=cancel)
         for version in commit.versions:
