@@ -4,6 +4,9 @@ For explicit authenticated native temporal-claim extraction with canonical
 correction/retraction selection and exact version parity, see the executable
 example in [`docs/reasoning-native-claims.rst`](docs/reasoning-native-claims.rst).
 This full-scan correctness path does not imply native index pushdown or speedup.
+The separate historical locator source has its own executable example in
+[`docs/reasoning-native-locator-claims.rst`](docs/reasoning-native-locator-claims.rst);
+native prefix transfer remains distinct from full source authentication cost.
 
 For authenticated complete current-graph projection with generation pins and
 explicit executor admission, see the runnable example in

@@ -72,6 +72,16 @@ independent/cumulative budgets, scan cancellation/release/retry, writer blocking
 partial-pass rebinding, interrupted descriptors/gaps, four serializers/restart
 and bounded witness parity. No performance result or #194 closure yet.
 
+Final locator-source validation: **3,377 passed / 3 skipped** (67.76s) with full
+optional requirements on PyRex 0.6.0; focused source/extraction tests **119 passed**
+on 0.6.0 (118 passed on 0.5.0 before the additional executable-guide test).
+Executable locator guide, docs/API drift, 8/8 existing examples, Sphinx `-W`,
+roadmap and whitespace gates passed. Documentation explicitly separates native
+prefix transfer from full catalog/canonical decoding, independent physical
+budget units and output policy filters. Integration and actual-adapter
+measurement/decision review remain gates; earlier benchmark-only locator and
+full-record measurements are not relabelled. #194 remains open.
+
 ### Native upstream capability re-audit (#194)
 
 Dedicated `feature/re-194-native-capability-audit` / `re-194-native-capability-audit`

@@ -334,3 +334,15 @@ def test_inherited_rebinding_checks_invalidate_partial_locator_pass(graph, rebou
         finally:
             iterator.close()
             view.provenance, graph.serializer = original_provenance, original_serializer
+
+
+def test_locator_documentation_example():
+    from pathlib import Path
+    import re
+    pytest.importorskip("pyrex")
+    pytest.importorskip("pyarrow")
+    text = (Path(__file__).parents[1] / "docs/reasoning-native-locator-claims.rst").read_text()
+    blocks = re.findall(r"\.\. code-block:: python\n\n((?:   .*\n|\n)+)", text)
+    assert len(blocks) == 1
+    for block in blocks:
+        exec("\n".join(line[3:] if line.startswith("   ") else line for line in block.splitlines()), {})
