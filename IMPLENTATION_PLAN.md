@@ -2,6 +2,14 @@
 
 ## Next release preparation (#385)
 
+Backend coverage hardening: release CI now requires actual imports and real
+write/reopen/retraction checks for all 12 backend/serializer combinations,
+without skip or mock fallback, before running pytest on Python 3.10–3.13.
+`scripts/check_release_backends.py` prints dependency versions and module paths.
+The full-suite job retains JUnit results and explicit skip reasons. The
+base-install job remains intentionally backend-free. Local persistence smoke
+passed all 12 combinations (LMDB/Plyvel/PyRex with Pickle/JSON/MessagePack/Protobuf).
+
 Main-target PR #386 exposed a base-install isolation regression: the overwide
 session-gap test constructed all three optional backends without the
 `pytest.importorskip(module)` guard used elsewhere in the same file. Add the
