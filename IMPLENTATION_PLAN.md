@@ -275,6 +275,11 @@ hard RSS claim; original benchmark failures stay recorded. Broader typed/common
 pipeline integration and #194 native historical/concurrent-source admission
 remain open, not presumed delivered by configuring one physical bound.
 
+Final physical-budget validation: **3,176 passed / 2 skipped** (57.08s), with
+optional backends/serializers/RDF/Polars/docs/bloom and ontology requirements.
+Docs drift, 8/8 examples, executable executor guide, Sphinx `-W`, roadmap and
+whitespace checks passed. Default cap and indexed executor selection unchanged.
+
 ### Prior ordered follow-through
 
 Native GitHub links established: #338 (identity), #339 (input bounds), #340
