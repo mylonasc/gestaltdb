@@ -53,8 +53,8 @@ Optional raw typed generation admission requires ``generation``,
 ``admission_request`` and independently supplied ``context`` together. Before
 input iteration, the dispatcher checks the actual program/context/profile/
 representation, selected executor and closure mode. The representation is
-exactly ``typed-values-v1``. Shared ``admit`` has an explicit typed closure row;
-it rejects other modes, profiles and representations for the typed executor.
+exactly ``typed-values-v1``. Shared ``admit`` has an explicit typed point closure row;
+it rejects other modes, profiles, current/range sources and representations for the typed executor.
 Legacy binary compatibility rows are unchanged. Raw typed facts and caller
 identity strings are **not** independently authenticated by this API.
 

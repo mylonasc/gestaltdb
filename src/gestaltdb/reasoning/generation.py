@@ -196,8 +196,9 @@ def admit(generation: GenerationIdentity, request: AdmissionRequest) -> Admissio
         raise ReasoningError("dictionary mismatch; recode or recompile explicitly")
     if request.executor == TYPED_INDEXED_PYTHON:
         if (request.mode != "closure" or generation.semantics_profile != TYPED_PROFILE
-                or generation.dictionary_id != TYPED_DICTIONARY):
-            raise ReasoningError("typed indexed admission requires positive typed closure and typed-values-v1")
+                or generation.dictionary_id != TYPED_DICTIONARY
+                or not isinstance(generation.source, TemporalSourceIdentity)):
+            raise ReasoningError("typed indexed admission requires positive typed point closure and typed-values-v1")
         return Admission(request.mode, request.executor, generation.digest,
                          ("typed-positive-closure-only", "generation-bound"))
     if request.mode == "proofs":

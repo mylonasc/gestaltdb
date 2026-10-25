@@ -14,7 +14,7 @@ from gestaltdb.reasoning.adapters.sessions import SessionScope, start_session, a
 from gestaltdb.reasoning.adapters.typed_execution import execute_authenticated_session
 from gestaltdb.reasoning.evidence_ledger import EvidenceLedger
 from gestaltdb.reasoning.executors import ExecutorRequest, TYPED_PROFILE, TYPED_DICTIONARY, TYPED_INDEXED_PYTHON, select_executor
-from gestaltdb.reasoning.generation import AdmissionRequest, GenerationIdentity, TemporalSourceIdentity, admit
+from gestaltdb.reasoning.generation import AdmissionRequest, GenerationIdentity, TemporalSourceIdentity, CurrentSourceIdentity, TemporalRangeSourceIdentity, admit
 from gestaltdb.reasoning.maintenance import build_index
 from gestaltdb.reasoning.model import ReasoningError, ReasoningLimitError, ReasoningCancelledError, ReasoningLimits, Variable, Program, Fact
 from gestaltdb.reasoning.protocols import InputContext
@@ -94,6 +94,9 @@ def test_typed_generation_admission_exact_context_program_and_representation_bef
         context=context, admission_request=request)
     assert outcome.telemetry.admission_digest == identity.digest
     assert admit(identity, request).generation_digest == identity.digest
+    for source in (CurrentSourceIdentity("db", 1, "token"), TemporalRangeSourceIdentity("db", 1, "token", 0, 100)):
+        with pytest.raises(ReasoningError, match="typed indexed"):
+            admit(replace(identity, source=source), request)
     for mode in ("proofs", "maintenance-supports", "temporal-closure"):
         with pytest.raises(ReasoningError, match="typed indexed"):
             admit(identity, AdmissionRequest(mode, TYPED_INDEXED_PYTHON, TYPED_DICTIONARY))

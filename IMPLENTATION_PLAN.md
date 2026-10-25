@@ -304,6 +304,13 @@ Initial focused suite: 250 passed before expanded fault/negative-mode tests.
 Full validation and executable docs follow. Broader #255/#194 acceptance remains
 open pending its own capability/measurement reconciliation.
 
+Final typed-pipeline validation: **3,251 passed / 2 skipped** (54.26s) with all
+optional backend/serializer/RDF/Polars/docs/bloom and ontology requirements.
+Docs drift, 8/8 examples, both executable typed examples, Sphinx `-W`, roadmap
+and whitespace gates passed. Focused compatibility/integration set: 264 passed.
+Typed generation admission explicitly rejects current/range source identities,
+not just mismatched profile/dictionary strings. Point/session digests unchanged.
+
 ### Prior ordered follow-through
 
 Native GitHub links established: #338 (identity), #339 (input bounds), #340
