@@ -7,8 +7,14 @@ from pathlib import Path
 import pytest
 
 from gestaltdb.reasoning.model import (
-    Atom, EvaluationResult, Fact, Program, ReasoningError, ReasoningLimits,
-    Rule, Variable,
+    Atom,
+    EvaluationResult,
+    Fact,
+    Program,
+    ReasoningError,
+    ReasoningLimits,
+    Rule,
+    Variable,
 )
 from gestaltdb.reasoning.protocols import Evidence, InputContext
 
@@ -121,6 +127,6 @@ def test_core_implementation_imports_only_stdlib_and_inward_contracts():
             if isinstance(node, ast.Import):
                 assert all(alias.name.split(".")[0] in allowed for alias in node.names)
             elif isinstance(node, ast.ImportFrom):
-                assert (node.level == 1 and node.module in {"model", "protocols", "proofs", "engine", "relational", "batches", "plans", "extraction", "executors", "terms", "typed", "validation", "equality", "demand", "maintenance", "catalog", "intervals", "temporal_closure", "temporal_sweep", "profiles", "el", "scopes", "scale", "explanations"}) or (
+                assert (node.level == 1 and node.module in {"model", "protocols", "proofs", "engine", "relational", "batches", "plans", "extraction", "executors", "terms", "typed", "validation", "structural", "equality", "demand", "maintenance", "catalog", "intervals", "temporal_closure", "temporal_sweep", "profiles", "el", "scopes", "scale", "explanations"}) or (
                     node.level == 0 and node.module.split(".")[0] in allowed
                 ), (path, ast.dump(node))
