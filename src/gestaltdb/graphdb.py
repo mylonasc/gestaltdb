@@ -88,7 +88,25 @@ from ._graph import sampling as _sampling
 from ._graph import index_lookup as _index_lookup
 from ._graph import index_rebuild as _index_rebuild
 from ._graph import temporal_indexes as _temporal_indexes
+from ._graph.temporal_indexes import (
+    CLAIM_CATALOG_INDEX as _TEMPORAL_CLAIM_CATALOG_INDEX,
+    CLAIM_DIMENSION_INDEX as _TEMPORAL_CLAIM_DIMENSION_INDEX,
+    CLAIM_STATEMENT_INDEX as _TEMPORAL_CLAIM_STATEMENT_INDEX,
+    EDGE_IN_CATALOG_INDEX as _TEMPORAL_EDGE_IN_CATALOG_INDEX,
+    EDGE_IN_INDEX as _TEMPORAL_EDGE_IN_INDEX,
+    EDGE_OUT_CATALOG_INDEX as _TEMPORAL_EDGE_OUT_CATALOG_INDEX,
+    EDGE_OUT_INDEX as _TEMPORAL_EDGE_OUT_INDEX,
+    INDEX_STATE_KEY as _TEMPORAL_INDEX_STATE_KEY,
+    LOGICAL_COMMIT_INDEX as _TEMPORAL_LOGICAL_COMMIT_INDEX,
+    LOGICAL_VALID_INDEX as _TEMPORAL_LOGICAL_VALID_INDEX,
+    NODE_CATALOG_INDEX as _TEMPORAL_NODE_CATALOG_INDEX,
+    OPEN_END as _TEMPORAL_OPEN_END,
+    SYSTEM_INDEX as _TEMPORAL_SYSTEM_INDEX,
+    VALID_END_INDEX as _TEMPORAL_VALID_END_INDEX,
+    VERSION_INDEX as _TEMPORAL_VERSION_INDEX,
+)
 from ._graph import temporal_keys as _temporal_keys
+from ._graph import temporal_reads as _temporal_reads
 from ._graph import temporal_sequence as _temporal_sequence
 from ._graph.temporal_keys import (
     _TEMPORAL_COMMIT_PREFIX,
@@ -132,21 +150,6 @@ MANIFEST_FILENAME = "gestaltdb_manifest.json"
 MANIFEST_FORMAT_VERSION = 1
 _VALID_INDEX_MODES = {IndexMaintenanceMode.MAINTAIN.value, IndexMaintenanceMode.DEFER.value}
 _INDEX_REBUILD_BATCH_SIZE = 100_000
-_TEMPORAL_INDEX_STATE_KEY = b"temporal:indexes:v1:state"
-_TEMPORAL_VERSION_INDEX = "temporal_v1_version"
-_TEMPORAL_LOGICAL_COMMIT_INDEX = "temporal_v1_logical_commit"
-_TEMPORAL_LOGICAL_VALID_INDEX = "temporal_v1_logical_valid"
-_TEMPORAL_VALID_END_INDEX = "temporal_v1_valid_end"
-_TEMPORAL_OPEN_END = b"g" * 16
-_TEMPORAL_SYSTEM_INDEX = "temporal_v1_system_commit"
-_TEMPORAL_EDGE_OUT_INDEX = "temporal_v1_edge_out"
-_TEMPORAL_EDGE_IN_INDEX = "temporal_v1_edge_in"
-_TEMPORAL_NODE_CATALOG_INDEX = "temporal_v1_node_catalog"
-_TEMPORAL_EDGE_OUT_CATALOG_INDEX = "temporal_v1_edge_out_catalog"
-_TEMPORAL_EDGE_IN_CATALOG_INDEX = "temporal_v1_edge_in_catalog"
-_TEMPORAL_CLAIM_CATALOG_INDEX = "temporal_v1_claim_catalog"
-_TEMPORAL_CLAIM_STATEMENT_INDEX = "temporal_v1_claim_statement"
-_TEMPORAL_CLAIM_DIMENSION_INDEX = "temporal_v1_claim_dimension"
 _TEMPORAL_WRITER_LOCK_FILENAME = ".gestaltdb_temporal_writer.lock"
 _RULE_CATALOG_KEY = b"rules:catalog:v1"
 _TRUTH_MAINTENANCE_STATE_KEY = b"rules:truth-maintenance:v1"
@@ -4355,6 +4358,19 @@ class GraphDB:
                 return True
         return False
 
+    def _temporal_reader(self) -> _temporal_reads.TemporalReader:
+        """Bind the historical read capability to this handle's scope."""
+        return _temporal_reads.TemporalReader(
+            store=self.store,
+            entity_serializer=self.entity_serializer,
+            commit_cache=self._temporal_commit_cache,
+            sequence_key=_TEMPORAL_SEQUENCE_KEY,
+            store_path=self._store_path,
+            sequence_filename=_TEMPORAL_SEQUENCE_FILENAME,
+            state_key=_TEMPORAL_INDEX_STATE_KEY,
+            stale_key=_STALE_INDEXES_METADATA_KEY,
+        )
+
     def get_temporal_commit(
         self, commit_id: int, *, _validate_supersession: bool = True
     ) -> TemporalCommit | None:
@@ -4364,217 +4380,25 @@ class GraphDB:
         verifiable read snapshots can reuse validated records directly;
         live/unverifiable stores recheck descriptor, marker and envelopes.
         """
-        commit = self._get_temporal_commit_cached(commit_id, _validate_supersession=_validate_supersession)
-        if commit is None:
-            return None
-        return replace(commit, versions=tuple(self._copy_temporal_payload(v) for v in commit.versions))
+        return self._temporal_reader().get_commit(
+            commit_id, _validate_supersession=_validate_supersession)
 
     @staticmethod
     def _copy_temporal_payload(version):
-        if isinstance(version, NodeVersion) and version.node is not None:
-            return replace(version, node=copy.deepcopy(version.node))
-        if isinstance(version, EdgeVersion) and version.edge is not None:
-            return replace(version, edge=copy.deepcopy(version.edge))
-        # Claim and its recursively frozen provenance are immutable values.
-        return version
+        return _temporal_reads.TemporalReader.copy_payload(version)
 
     def _get_temporal_commit_cached(
         self, commit_id: int, *, _validate_supersession: bool = True
     ) -> TemporalCommit | None:
-        if isinstance(commit_id, bool) or not isinstance(commit_id, int) or commit_id < 1:
-            raise ValueError("commit_id must be a positive integer")
-        cache_key = (id(self.store), commit_id, bool(_validate_supersession))
-        cached = self._temporal_commit_cache.get(cache_key)
-        identity = getattr(self.store, "snapshot_identity", None)
-        if cached is not None and identity is not None and identity.verifiable and identity.sequence is not None:
-            return cached[3]
-        descriptor_payload = self.store.get_metadata(self._temporal_commit_key(commit_id))
-        marker = self.store.get_metadata(self._temporal_visible_key(commit_id))
-        if marker is None:
-            self._temporal_commit_cache.pop(cache_key, None)
-            return None
-        if descriptor_payload is None or marker != hashlib.sha256(descriptor_payload).digest():
-            raise TemporalCorruptionError("temporal commit marker does not match its descriptor")
-        if cached is not None and cached[1] == descriptor_payload:
-            envelopes = tuple(self.store.get_metadata(self._temporal_record_key(commit_id, ordinal))
-                              for ordinal in range(len(cached[2])))
-            if envelopes != cached[2]:
-                raise TemporalCorruptionError("temporal commit record is missing or corrupt")
-            # Supersession targets can change on mutable stores too. Only
-            # reuse the non-supersession validation result in this path.
-            if not _validate_supersession or not any(v.supersedes_version_id for v in cached[3].versions):
-                return cached[3]
-        try:
-            descriptor = json.loads(descriptor_payload.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise TemporalCorruptionError("invalid temporal commit descriptor") from exc
-        if not isinstance(descriptor, dict):
-            raise TemporalCorruptionError("temporal commit descriptor must be an object")
-        if descriptor.get("format_version") != 1 or descriptor.get("commit_id") != commit_id:
-            raise TemporalCorruptionError("invalid temporal commit descriptor")
-        version_ids = descriptor.get("version_ids")
-        record_digests = descriptor.get("record_digests")
-        if not isinstance(version_ids, list) or not isinstance(record_digests, list) or len(version_ids) != len(record_digests):
-            raise TemporalCorruptionError("invalid temporal commit record catalog")
-        if not version_ids:
-            raise TemporalCorruptionError("temporal commit contains no versions")
-        if not all(isinstance(value, str) for value in version_ids):
-            raise TemporalCorruptionError("temporal commit contains an invalid version ID")
-        if len(set(version_ids)) != len(version_ids):
-            raise TemporalCorruptionError("temporal commit contains duplicate version IDs")
-        try:
-            normalized_version_ids = [normalize_version_id(value) for value in version_ids]
-        except (TypeError, ValueError) as exc:
-            raise TemporalCorruptionError("temporal commit contains an invalid version ID") from exc
-        if normalized_version_ids != version_ids:
-            raise TemporalCorruptionError("temporal commit contains a non-canonical version ID")
-        if not all(
-            isinstance(value, str)
-            and len(value) == 64
-            and all(character in "0123456789abcdef" for character in value)
-            for value in record_digests
-        ):
-            raise TemporalCorruptionError("temporal commit contains an invalid record digest")
-        try:
-            system_time_us = descriptor["system_time_us"]
-            descriptor_metadata = descriptor.get("metadata", {})
-            if isinstance(system_time_us, bool) or not isinstance(system_time_us, int):
-                raise TypeError
-            if not isinstance(descriptor_metadata, dict):
-                raise TypeError
-            system_time = TemporalInstant(system_time_us)
-            metadata = immutable_metadata(descriptor_metadata)
-        except (KeyError, TypeError, ValueError) as exc:
-            raise TemporalCorruptionError("invalid temporal commit metadata") from exc
-        versions = []
-        envelopes = []
-        for ordinal, (version_id, expected_digest) in enumerate(zip(version_ids, record_digests)):
-            envelope = self.store.get_metadata(self._temporal_record_key(commit_id, ordinal))
-            if envelope is None or hashlib.sha256(envelope).hexdigest() != expected_digest:
-                raise TemporalCorruptionError("temporal commit record is missing or corrupt")
-            envelopes.append(envelope)
-            version = self._decode_temporal_version(envelope)
-            if version.version_id != version_id or version.commit_id != commit_id or version.commit_ordinal != ordinal:
-                raise TemporalCorruptionError("temporal commit record does not match its descriptor")
-            if version.system_time != system_time:
-                raise TemporalCorruptionError("temporal version system time does not match its commit")
-            versions.append(version)
-        if _validate_supersession:
-            for version in versions:
-                if version.supersedes_version_id is None:
-                    continue
-                target = self._get_temporal_version_through(
-                    version.supersedes_version_id, commit_id - 1
-                )
-                if target is None:
-                    raise TemporalCorruptionError("temporal version supersedes a missing version")
-                if type(target) is not type(version) or target.logical_id != version.logical_id:
-                    raise TemporalCorruptionError("temporal supersession kind or logical ID mismatch")
-        commit = TemporalCommit(commit_id, system_time, metadata, tuple(versions))
-        if len(self._temporal_commit_cache) >= 256:
-            # Drop the oldest half; commits are immutable so eviction only
-            # costs a future re-decode, never correctness.
-            for old_key in list(self._temporal_commit_cache)[:128]:
-                del self._temporal_commit_cache[old_key]
-        self._temporal_commit_cache[cache_key] = (self.store, descriptor_payload, tuple(envelopes), commit)
-        return commit
+        return self._temporal_reader().get_commit_cached(
+            commit_id, _validate_supersession=_validate_supersession)
 
     def _decode_temporal_version(self, envelope: bytes):
-        header, payload = decode_version_envelope(envelope)
-        required = {
-            "entity_kind", "version_id", "logical_id", "valid_from_us", "valid_to_us",
-            "commit_id", "commit_ordinal", "system_time_us", "operation",
-        }
-        if not required.issubset(header):
-            raise TemporalCorruptionError("temporal version header is incomplete")
-        try:
-            integer_fields = (
-                header["valid_from_us"],
-                header["commit_id"],
-                header["commit_ordinal"],
-                header["system_time_us"],
-            )
-            if any(isinstance(value, bool) or not isinstance(value, int) for value in integer_fields):
-                raise TypeError
-            if header["valid_to_us"] is not None and (
-                isinstance(header["valid_to_us"], bool) or not isinstance(header["valid_to_us"], int)
-            ):
-                raise TypeError
-            valid = TemporalInterval.from_values(header["valid_from_us"], header["valid_to_us"])
-            common = {
-                "version_id": normalize_version_id(header["version_id"]),
-                "logical_id": normalize_logical_id(header["logical_id"]),
-                "valid": valid,
-                "commit_id": header["commit_id"],
-                "commit_ordinal": header["commit_ordinal"],
-                "system_time": TemporalInstant(header["system_time_us"]),
-                "operation": VersionOperation(header["operation"]),
-                "payload_hash": header["payload_hash"],
-                "supersedes_version_id": (
-                    None
-                    if header.get("supersedes_version_id") is None
-                    else normalize_version_id(header["supersedes_version_id"])
-                ),
-                "reason": header.get("reason"),
-            }
-        except (KeyError, TypeError, ValueError) as exc:
-            raise TemporalCorruptionError("invalid temporal version header values") from exc
-        if not isinstance(common["payload_hash"], str):
-            raise TemporalCorruptionError("temporal version payload hash is invalid")
-        operation = common["operation"]
-        if operation is VersionOperation.ASSERT and common["supersedes_version_id"] is not None:
-            raise TemporalCorruptionError("temporal assertion unexpectedly supersedes another version")
-        if operation is VersionOperation.CORRECT and common["supersedes_version_id"] is None:
-            raise TemporalCorruptionError("temporal correction has no superseded version")
-        if operation is not VersionOperation.RETRACT and common["reason"] is not None:
-            raise TemporalCorruptionError("non-retraction temporal version has a reason")
-        if common["reason"] is not None and (
-            not isinstance(common["reason"], str) or not common["reason"]
-        ):
-            raise TemporalCorruptionError("temporal retraction reason is invalid")
-        if operation is VersionOperation.RETRACT:
-            if payload:
-                raise TemporalCorruptionError("temporal retraction unexpectedly contains a payload")
-            entity = None
-        elif not payload:
-            raise TemporalCorruptionError("temporal assertion or correction has no payload")
-        elif header["entity_kind"] == "node":
-            try:
-                entity = self.entity_serializer.deserialize(payload, "Node")
-            except Exception as exc:
-                raise TemporalCorruptionError("cannot decode temporal node payload") from exc
-        elif header["entity_kind"] == "edge":
-            try:
-                entity = self.entity_serializer.deserialize(payload, "Edge")
-            except Exception as exc:
-                raise TemporalCorruptionError("cannot decode temporal edge payload") from exc
-        elif header["entity_kind"] == "claim":
-            try:
-                entity = Claim.from_dict(json.loads(payload.decode("utf-8")))
-            except (UnicodeDecodeError, json.JSONDecodeError, TemporalVersionError) as exc:
-                raise TemporalCorruptionError("cannot decode temporal claim payload") from exc
-        else:
-            raise TemporalCorruptionError("unknown temporal entity kind")
-        if entity is not None:
-            entity_id = entity.claim_id if isinstance(entity, Claim) else entity.get_id
-            if entity_id != common["logical_id"]:
-                raise TemporalCorruptionError("temporal payload ID does not match its logical ID")
-        if header["entity_kind"] == "node":
-            return NodeVersion(**common, node=entity)
-        if header["entity_kind"] == "edge":
-            return EdgeVersion(**common, edge=entity)
-        if header["entity_kind"] == "claim":
-            return ClaimVersion(**common, claim=entity)
-        raise TemporalCorruptionError("unknown temporal entity kind")
+        return self._temporal_reader().decode_version(envelope)
 
     def iter_temporal_commits(self, *, through_commit=None):
         """Iterate visible commits in commit order, skipping incomplete commits."""
-        last_commit_id, _ = self._temporal_sequence()
-        limit = last_commit_id if through_commit is None else min(last_commit_id, through_commit)
-        for commit_id in range(1, limit + 1):
-            commit = self.get_temporal_commit(commit_id)
-            if commit is not None:
-                yield commit
+        return self._temporal_reader().iter_commits(through_commit=through_commit)
 
     def _temporal_orphan_details(self, commit_id: int, descriptor_payload: bytes):
         try:
@@ -4747,79 +4571,34 @@ class GraphDB:
         )
 
     def _get_temporal_version(self, version_id: str):
-        last_commit_id, _ = self._temporal_sequence()
-        return self._get_temporal_version_through(version_id, last_commit_id)
+        return self._temporal_reader().get_version(version_id)
 
     def _get_temporal_version_at(self, locator: bytes):
-        commit_id, ordinal = self._decode_temporal_locator(locator)
-        commit = self._get_temporal_commit_cached(commit_id, _validate_supersession=False)
-        if commit is None:
-            return None
-        if ordinal >= len(commit.versions):
-            raise TemporalCorruptionError("temporal index locator ordinal is out of range")
-        return self._copy_temporal_payload(commit.versions[ordinal])
+        return self._temporal_reader().get_version_at(locator)
 
     def _get_temporal_version_through(self, version_id: str, through_commit: int):
-        version_id = normalize_version_id(version_id)
-        for commit_id in range(1, through_commit + 1):
-            commit = self._get_temporal_commit_cached(commit_id, _validate_supersession=False)
-            if commit is None:
-                continue
-            for version in commit.versions:
-                if version.version_id == version_id:
-                    return self._copy_temporal_payload(version)
-        return None
+        return self._temporal_reader().get_version_through(version_id, through_commit)
 
     def get_node_version(
         self, version_id: str, *, system_time=None, through_commit=None
     ) -> NodeVersion | None:
         """Return a visible node version by UUID using the temporal index."""
-        horizon = self._temporal_system_horizon(
-            system_time=system_time, through_commit=through_commit
-        )
-        self._ensure_temporal_indexes(horizon)
-        locators = list(self.store.iter_index_prefix(
-            self._temporal_index_name(_TEMPORAL_VERSION_INDEX, self._temporal_index_generation()),
-            [normalize_version_id(version_id).encode("ascii")]
-        ))
-        version = self._get_temporal_version_at(locators[-1]) if locators else None
-        if version is not None and version.commit_id > horizon:
-            return None
-        return version if isinstance(version, NodeVersion) else None
+        return self._temporal_reader().get_node_version(
+            version_id, system_time=system_time, through_commit=through_commit)
 
     def get_edge_version(
         self, version_id: str, *, system_time=None, through_commit=None
     ) -> EdgeVersion | None:
         """Return a visible edge version by UUID using the temporal index."""
-        horizon = self._temporal_system_horizon(
-            system_time=system_time, through_commit=through_commit
-        )
-        self._ensure_temporal_indexes(horizon)
-        locators = list(self.store.iter_index_prefix(
-            self._temporal_index_name(_TEMPORAL_VERSION_INDEX, self._temporal_index_generation()),
-            [normalize_version_id(version_id).encode("ascii")]
-        ))
-        version = self._get_temporal_version_at(locators[-1]) if locators else None
-        if version is not None and version.commit_id > horizon:
-            return None
-        return version if isinstance(version, EdgeVersion) else None
+        return self._temporal_reader().get_edge_version(
+            version_id, system_time=system_time, through_commit=through_commit)
 
     def get_claim_version(
         self, version_id: str, *, system_time=None, through_commit=None
     ) -> ClaimVersion | None:
         """Return a visible epistemic claim version by UUID."""
-        horizon = self._temporal_system_horizon(
-            system_time=system_time, through_commit=through_commit
-        )
-        self._ensure_temporal_indexes(horizon)
-        locators = list(self.store.iter_index_prefix(
-            self._temporal_index_name(_TEMPORAL_VERSION_INDEX, self._temporal_index_generation()),
-            [normalize_version_id(version_id).encode("ascii")]
-        ))
-        version = self._get_temporal_version_at(locators[-1]) if locators else None
-        if version is not None and version.commit_id > horizon:
-            return None
-        return version if isinstance(version, ClaimVersion) else None
+        return self._temporal_reader().get_claim_version(
+            version_id, system_time=system_time, through_commit=through_commit)
 
     def iter_node_versions(self, logical_id=None, *, system_time=None, through_commit=None):
         """Iterate node versions, using the logical-history index when filtered."""
@@ -4907,42 +4686,8 @@ class GraphDB:
                     yield version
 
     def _temporal_system_horizon(self, *, system_time=None, through_commit=None) -> int:
-        if system_time is not None and through_commit is not None:
-            raise ValueError("provide either system_time or through_commit, not both")
-        last_commit_id, _ = self._temporal_sequence()
-        latest_visible = last_commit_id
-        while latest_visible > 0 and self.get_temporal_commit(
-            latest_visible, _validate_supersession=False
-        ) is None:
-            latest_visible -= 1
-        if through_commit is not None:
-            if isinstance(through_commit, bool) or not isinstance(through_commit, int) or through_commit < 0:
-                raise ValueError("through_commit must be a non-negative integer")
-            return min(latest_visible, through_commit)
-        if system_time is None:
-            return latest_visible
-        requested = normalize_temporal_instant(system_time)
-        self._ensure_temporal_indexes(latest_visible)
-        for encoded_commit_id in self.store.iter_range_index(
-            self._temporal_index_name(
-                _TEMPORAL_SYSTEM_INDEX, self._temporal_index_generation()
-            ),
-            [b"commit"],
-            None,
-            self._temporal_instant_index_value(requested),
-            True,
-            True,
-            reverse=True,
-        ):
-            try:
-                commit_id = int(encoded_commit_id, 16)
-            except (TypeError, ValueError) as exc:
-                raise TemporalCorruptionError("invalid temporal system index value") from exc
-            if commit_id <= latest_visible and self.get_temporal_commit(
-                commit_id, _validate_supersession=False
-            ) is not None:
-                return commit_id
-        return 0
+        return self._temporal_reader().system_horizon(
+            system_time=system_time, through_commit=through_commit)
 
     def _temporal_interval_locators(self, index_name, parts, instant):
         generation = self._temporal_index_generation()

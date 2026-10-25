@@ -13,6 +13,7 @@ from . import registry
 from . import sampling
 from . import temporal_indexes
 from . import temporal_keys
+from . import temporal_reads
 from . import temporal_sequence
 from .entities import (
     Edge,
@@ -58,5 +59,6 @@ __all__ = [
     "sampling",
     "temporal_indexes",
     "temporal_keys",
+    "temporal_reads",
     "temporal_sequence",
 ]
