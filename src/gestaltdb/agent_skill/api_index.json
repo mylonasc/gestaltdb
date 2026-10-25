@@ -1,7 +1,7 @@
 {
   "generated_from": {
     "path": "src/gestaltdb/graphdb.py",
-    "sha256": "e47e522f176b93239f4e45fa8720becc4d804bb795c3996ddedf400099a784ad"
+    "sha256": "50031b7d9116cac8e4b4e8545202d28033d476098651af6c84e19cd97a094973"
   },
   "methods": [
     {
@@ -11,7 +11,7 @@
           "example": 1
         }
       ],
-      "line": 3865,
+      "line": 3740,
       "name": "assert_claim",
       "returns": "",
       "signature": "assert_claim(subject, predicate, object, polarity, agent, source=None, confidence=None, world='default', provenance=None, object_kind=ClaimObjectKind.ENTITY, valid=None, valid_from=None, valid_to=None, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -20,7 +20,7 @@
     },
     {
       "examples": [],
-      "line": 3906,
+      "line": 3781,
       "name": "assert_world_accessibility",
       "returns": "",
       "signature": "assert_world_accessibility(agent, from_world, to_world, kind, valid=None, valid_from=None, valid_to=None, source=None, provenance=None, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -57,7 +57,7 @@
           "example": 1
         }
       ],
-      "line": 4939,
+      "line": 4814,
       "name": "claim_status",
       "returns": "",
       "signature": "claim_status(subject, predicate, object, valid_time, object_kind=ClaimObjectKind.ENTITY, agent=None, source=_UNSET, world=None, system_time=None, through_commit=None)",
@@ -123,7 +123,7 @@
           "example": 2
         }
       ],
-      "line": 5210,
+      "line": 5085,
       "name": "close",
       "returns": "",
       "signature": "close()",
@@ -132,7 +132,7 @@
     },
     {
       "examples": [],
-      "line": 4073,
+      "line": 3948,
       "name": "commit_versions",
       "returns": "",
       "signature": "commit_versions(writes, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -146,7 +146,7 @@
           "example": 1
         }
       ],
-      "line": 3979,
+      "line": 3854,
       "name": "correct_claim",
       "returns": "",
       "signature": "correct_claim(claim, supersedes_version_id, confidence=_UNSET, provenance=_UNSET, valid=None, valid_from=None, valid_to=None, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -155,7 +155,7 @@
     },
     {
       "examples": [],
-      "line": 3788,
+      "line": 3663,
       "name": "correct_edge_version",
       "returns": "",
       "signature": "correct_edge_version(edge: Edge, supersedes_version_id: str, valid=None, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -164,7 +164,7 @@
     },
     {
       "examples": [],
-      "line": 3767,
+      "line": 3642,
       "name": "correct_node_version",
       "returns": "",
       "signature": "correct_node_version(node: Node, supersedes_version_id: str, valid=None, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -347,7 +347,7 @@
           "example": 1
         }
       ],
-      "line": 2650,
+      "line": 2525,
       "name": "create_rule",
       "returns": "",
       "signature": "create_rule(rule_id, when, then, not_when=(), closed_world=(), version_id=None)",
@@ -474,7 +474,7 @@
     },
     {
       "examples": [],
-      "line": 3944,
+      "line": 3819,
       "name": "entails",
       "returns": "",
       "signature": "entails(agent, proposition, mode, world, valid_time, system_time=None, through_commit=None, max_depth=4, max_states=1000)",
@@ -488,7 +488,7 @@
           "example": 1
         }
       ],
-      "line": 3523,
+      "line": 3398,
       "name": "explain_claim",
       "returns": "",
       "signature": "explain_claim(claim_id, valid_time, system_time=None, max_depth=100, max_nodes=10000)",
@@ -506,7 +506,7 @@
     },
     {
       "examples": [],
-      "line": 4764,
+      "line": 4639,
       "name": "get_claim_as_of",
       "returns": "",
       "signature": "get_claim_as_of(claim_id, valid_time, system_time=None, through_commit=None)",
@@ -515,7 +515,7 @@
     },
     {
       "examples": [],
-      "line": 4596,
+      "line": 4471,
       "name": "get_claim_version",
       "returns": "",
       "signature": "get_claim_version(version_id: str, system_time=None, through_commit=None)",
@@ -543,7 +543,7 @@
           "example": 1
         }
       ],
-      "line": 4752,
+      "line": 4627,
       "name": "get_edge_as_of",
       "returns": "",
       "signature": "get_edge_as_of(logical_id, valid_time, system_time=None, through_commit=None)",
@@ -552,7 +552,7 @@
     },
     {
       "examples": [],
-      "line": 4589,
+      "line": 4464,
       "name": "get_edge_version",
       "returns": "",
       "signature": "get_edge_version(version_id: str, system_time=None, through_commit=None)",
@@ -579,7 +579,7 @@
     },
     {
       "examples": [],
-      "line": 4740,
+      "line": 4615,
       "name": "get_node_as_of",
       "returns": "",
       "signature": "get_node_as_of(logical_id, valid_time, system_time=None, through_commit=None)",
@@ -597,7 +597,7 @@
     },
     {
       "examples": [],
-      "line": 4582,
+      "line": 4457,
       "name": "get_node_version",
       "returns": "",
       "signature": "get_node_version(version_id: str, system_time=None, through_commit=None)",
@@ -615,7 +615,7 @@
     },
     {
       "examples": [],
-      "line": 2702,
+      "line": 2577,
       "name": "get_rule",
       "returns": "",
       "signature": "get_rule(rule_id, system_time=None)",
@@ -624,7 +624,7 @@
     },
     {
       "examples": [],
-      "line": 4374,
+      "line": 4249,
       "name": "get_temporal_commit",
       "returns": "",
       "signature": "get_temporal_commit(commit_id: int, _validate_supersession: bool=True)",
@@ -760,7 +760,7 @@
     },
     {
       "examples": [],
-      "line": 4657,
+      "line": 4532,
       "name": "iter_claim_versions",
       "returns": "",
       "signature": "iter_claim_versions(claim_id=None, system_time=None, through_commit=None)",
@@ -769,7 +769,7 @@
     },
     {
       "examples": [],
-      "line": 4776,
+      "line": 4651,
       "name": "iter_claims_as_of",
       "returns": "",
       "signature": "iter_claims_as_of(valid_time, statement_id=None, subject=None, predicate=None, object=_UNSET, object_kind=None, agent=None, source=_UNSET, world=None, polarity=None, system_time=None, through_commit=None)",
@@ -832,7 +832,7 @@
     },
     {
       "examples": [],
-      "line": 4630,
+      "line": 4505,
       "name": "iter_edge_versions",
       "returns": "",
       "signature": "iter_edge_versions(logical_id=None, system_time=None, through_commit=None)",
@@ -841,7 +841,7 @@
     },
     {
       "examples": [],
-      "line": 4999,
+      "line": 4874,
       "name": "iter_edges_as_of",
       "returns": "",
       "signature": "iter_edges_as_of(edge_type=None, direction='out', source=None, target=None, valid_time, system_time=None, through_commit=None)",
@@ -900,7 +900,7 @@
     },
     {
       "examples": [],
-      "line": 4603,
+      "line": 4478,
       "name": "iter_node_versions",
       "returns": "",
       "signature": "iter_node_versions(logical_id=None, system_time=None, through_commit=None)",
@@ -909,7 +909,7 @@
     },
     {
       "examples": [],
-      "line": 4976,
+      "line": 4851,
       "name": "iter_nodes_as_of",
       "returns": "",
       "signature": "iter_nodes_as_of(valid_time, system_time=None, through_commit=None)",
@@ -918,7 +918,7 @@
     },
     {
       "examples": [],
-      "line": 2691,
+      "line": 2566,
       "name": "iter_rule_versions",
       "returns": "",
       "signature": "iter_rule_versions(rule_id=None, system_time=None)",
@@ -927,7 +927,7 @@
     },
     {
       "examples": [],
-      "line": 4399,
+      "line": 4274,
       "name": "iter_temporal_commits",
       "returns": "",
       "signature": "iter_temporal_commits(through_commit=None)",
@@ -963,7 +963,7 @@
     },
     {
       "examples": [],
-      "line": 4499,
+      "line": 4374,
       "name": "list_temporal_orphans",
       "returns": "",
       "signature": "list_temporal_orphans(through_commit=None)",
@@ -972,7 +972,7 @@
     },
     {
       "examples": [],
-      "line": 3133,
+      "line": 3008,
       "name": "maintain_truth",
       "returns": "",
       "signature": "maintain_truth(as_of=None, system_time=None, world=None, max_iterations=100, max_derivations=10000, max_justifications=100000, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -995,7 +995,7 @@
           "example": 1
         }
       ],
-      "line": 3642,
+      "line": 3517,
       "name": "migrate_time_indexed_edges",
       "returns": "Newly appended edge versions in migration order.",
       "signature": "migrate_time_indexed_edges(delete_legacy: bool=False, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -1151,7 +1151,7 @@
     },
     {
       "examples": [],
-      "line": 3631,
+      "line": 3506,
       "name": "put_edge_version",
       "returns": "",
       "signature": "put_edge_version(edge: Edge, valid, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -1208,7 +1208,7 @@
     },
     {
       "examples": [],
-      "line": 3620,
+      "line": 3495,
       "name": "put_node_version",
       "returns": "",
       "signature": "put_node_version(node: Node, valid, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -1260,7 +1260,7 @@
           "example": 1
         }
       ],
-      "line": 5098,
+      "line": 4973,
       "name": "query",
       "returns": "``gestaltdb.QueryResult`` containing projected records.",
       "signature": "query(cypher: str, parameters: Optional[dict[str, object]]=None, read_snapshot: bool | None=None, label_hierarchy=None, relation_hierarchy=None)",
@@ -1350,7 +1350,7 @@
     },
     {
       "examples": [],
-      "line": 5057,
+      "line": 4932,
       "name": "rebuild_temporal_indexes",
       "returns": "",
       "signature": "rebuild_temporal_indexes(through_commit=None)",
@@ -1368,7 +1368,7 @@
     },
     {
       "examples": [],
-      "line": 4504,
+      "line": 4379,
       "name": "reclaim_temporal_orphans",
       "returns": "",
       "signature": "reclaim_temporal_orphans(through_commit: int)",
@@ -1377,7 +1377,7 @@
     },
     {
       "examples": [],
-      "line": 4027,
+      "line": 3902,
       "name": "retract_claim",
       "returns": "",
       "signature": "retract_claim(claim_id, valid=None, valid_from=None, valid_to=None, supersedes_version_id=None, reason=None, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -1386,7 +1386,7 @@
     },
     {
       "examples": [],
-      "line": 3837,
+      "line": 3712,
       "name": "retract_edge_version",
       "returns": "",
       "signature": "retract_edge_version(logical_id: str, valid=None, valid_from=None, supersedes_version_id=None, reason=None, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -1395,7 +1395,7 @@
     },
     {
       "examples": [],
-      "line": 3809,
+      "line": 3684,
       "name": "retract_node_version",
       "returns": "",
       "signature": "retract_node_version(logical_id: str, valid=None, valid_from=None, supersedes_version_id=None, reason=None, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -1409,7 +1409,7 @@
           "example": 1
         }
       ],
-      "line": 2784,
+      "line": 2659,
       "name": "run_rules",
       "returns": "that evaluator to database sources and publication.",
       "signature": "run_rules(as_of, system_time=None, world=None, max_iterations=100, max_derivations=10000, max_justifications=100000, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -1514,7 +1514,7 @@
     },
     {
       "examples": [],
-      "line": 5191,
+      "line": 5066,
       "name": "transaction",
       "returns": "",
       "signature": "transaction(**options)",
@@ -1541,7 +1541,7 @@
     },
     {
       "examples": [],
-      "line": 5147,
+      "line": 5022,
       "name": "visualize",
       "returns": "``gestaltdb.viz.api.VizFigure``.",
       "signature": "visualize(cypher=None, seeds=None, pattern=None, parameters=None, options=None, rng=None)",

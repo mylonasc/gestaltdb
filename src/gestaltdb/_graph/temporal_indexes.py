@@ -16,9 +16,15 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..kvstores import KVStore
 
-from ..versioning import TemporalCorruptionError, canonical_json_bytes
+from ..versioning import (
+    ClaimVersion,
+    EdgeVersion,
+    NodeVersion,
+    TemporalCorruptionError,
+    canonical_json_bytes,
+)
 from . import index_maintenance as _index_maintenance
-from .temporal_keys import temporal_visible_key
+from .temporal_keys import temporal_instant_index_value, temporal_locator, temporal_visible_key
 from .temporal_sequence import read_temporal_sequence
 
 INDEX_STATE_KEY = b"temporal:indexes:v1:state"
@@ -143,3 +149,139 @@ def has_visible_temporal_history(store: KVStore, sequence_key: bytes,
         store.get_metadata(temporal_visible_key(commit_id)) is not None
         for commit_id in range(1, last_commit_id + 1)
     )
+
+
+def temporal_index_entries(version, *, generation) -> tuple[list, list]:
+    """Encode the exact and range index entries for one version record."""
+    if isinstance(version, NodeVersion):
+        kind = b"n"
+    elif isinstance(version, EdgeVersion):
+        kind = b"e"
+    else:
+        kind = b"c"
+    locator = temporal_locator(version.commit_id, version.commit_ordinal)
+    exact = [(VERSION_INDEX, [version.version_id.encode("ascii")], locator)]
+    ranges = [
+        (LOGICAL_COMMIT_INDEX, [kind, version.logical_id.encode("utf-8")], locator, locator),
+        (
+            LOGICAL_VALID_INDEX,
+            [kind, version.logical_id.encode("utf-8")],
+            temporal_instant_index_value(version.valid.start),
+            locator,
+        ),
+    ]
+    if isinstance(version, NodeVersion):
+        ranges.append(
+            (
+                NODE_CATALOG_INDEX,
+                [b"nodes"],
+                temporal_instant_index_value(version.valid.start),
+                locator,
+            )
+        )
+    if isinstance(version, EdgeVersion) and version.edge is not None:
+        ranges.extend([
+            (
+                EDGE_OUT_CATALOG_INDEX,
+                [str(version.edge.source).encode("utf-8")],
+                temporal_instant_index_value(version.valid.start),
+                locator,
+            ),
+            (
+                EDGE_IN_CATALOG_INDEX,
+                [str(version.edge.target).encode("utf-8")],
+                temporal_instant_index_value(version.valid.start),
+                locator,
+            ),
+        ])
+        edge_type = version.edge.properties.get("type")
+        if edge_type is not None:
+            ranges.extend([
+                (
+                    EDGE_OUT_INDEX,
+                    [str(version.edge.source).encode("utf-8"), str(edge_type).encode("utf-8")],
+                    temporal_instant_index_value(version.valid.start),
+                    locator,
+                ),
+                (
+                    EDGE_IN_INDEX,
+                    [str(version.edge.target).encode("utf-8"), str(edge_type).encode("utf-8")],
+                    temporal_instant_index_value(version.valid.start),
+                    locator,
+                ),
+            ])
+    if isinstance(version, ClaimVersion) and version.claim is not None:
+        claim = version.claim
+        start = temporal_instant_index_value(version.valid.start)
+        ranges.extend([
+            (CLAIM_CATALOG_INDEX, [b"claims"], start, locator),
+            (
+                CLAIM_STATEMENT_INDEX,
+                [claim.statement_id.encode("ascii")],
+                start,
+                locator,
+            ),
+        ])
+        dimensions = {
+            "subject": claim.subject,
+            "predicate": claim.predicate,
+            "agent": claim.agent,
+            "source": claim.source,
+            "world": claim.world,
+            "polarity": claim.polarity.value,
+            "object_kind": claim.object_kind.value,
+        }
+        for name, value in dimensions.items():
+            ranges.append((
+                CLAIM_DIMENSION_INDEX,
+                [name.encode("ascii"), canonical_json_bytes(value)],
+                start,
+                locator,
+            ))
+    interval_ranges = ranges[1:]
+    valid_end = (
+        OPEN_END
+        if version.valid.end is None
+        else temporal_instant_index_value(version.valid.end)
+    )
+    ranges.extend(
+        (
+            VALID_END_INDEX,
+            [family.encode("ascii"), *parts],
+            valid_end,
+            value,
+        )
+        for family, parts, _, value in interval_ranges
+    )
+    exact = [
+        (index_name(name, generation), parts, value)
+        for name, parts, value in exact
+    ]
+    ranges = [
+        (index_name(name, generation), parts, range_value, value)
+        for name, parts, range_value, value in ranges
+    ]
+    return exact, ranges
+
+
+def write_temporal_indexes(store, versions, commit_id: int, *, generation) -> dict[str, int]:
+    """Write temporal exact/range index entries for committed versions."""
+    exact_entries = []
+    range_entries = []
+    for version in versions:
+        exact, ranges = temporal_index_entries(version, generation=generation)
+        exact_entries.extend(exact)
+        range_entries.extend(ranges)
+    if exact_entries:
+        store.put_index_entries_bulk(exact_entries)
+    if range_entries:
+        store.put_range_index_entries_bulk(range_entries)
+    commit = versions[0] if versions else None
+    if commit is not None:
+        store.put_range_index_entry(
+            index_name(SYSTEM_INDEX, generation),
+            [b"commit"],
+            temporal_instant_index_value(commit.system_time),
+            f"{commit_id:016x}".encode("ascii"),
+        )
+    return {"temporal_exact": len(exact_entries), "temporal_range": len(range_entries) + (1 if commit else 0)}
