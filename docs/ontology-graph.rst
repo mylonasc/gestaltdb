@@ -67,3 +67,45 @@ IDs as seeds for a separate asserted-graph sampler, but that sampler's next hop
 does not automatically use inferred relations. There is no implicit multi-hop,
 weighted sampling or Cypher clause rewrite. This explicit semantic boundary is
 the integration point for the broader hierarchical-sampling work in issue #127.
+
+Typed n-ary projection (#396)
+----------------------------------------
+
+``gestaltdb.reasoning.adapters.typed_graph`` projects the same snapshot
+contract to ``TypedFact`` values for the generic engine. Beyond the v1
+entity-only fields, ``TypedGraphMapping`` coerces scalar attributes to
+``Literal`` values (``str``/``int``/``float``/``bool``; anything else fails
+closed), expands list values element-wise under ``TypedSourceLimits``
+(one fact per element; overruns fail closed, never truncate), and projects
+edge attributes as n-ary ``predicate(source, target, value)`` facts.
+``node_identity=[(label, property)]`` renames node subjects to a property
+value; edge endpoints resolve through the same identity map inside
+``PinnedTypedGraphSource``. Every projected fact carries a readable
+``typed:<kind>:<record>:<field>[:<index>]`` reference, and
+``source.context(revision)`` pins the v2 ``mapping_id`` so a mapping change
+yields a new generation token and stale caches cannot match.
+
+.. code-block:: python
+
+   from gestaltdb.graphdb import GraphDB, Node, Edge
+   from gestaltdb.reasoning import ReasoningLimits
+   from gestaltdb.reasoning.adapters.typed_graph import PinnedTypedGraphSource, TypedGraphMapping
+   from gestaltdb.reasoning.terms import Literal
+   from gestaltdb.reasoning.typed import TypedFact
+   from tempfile import TemporaryDirectory
+
+   mapping = TypedGraphMapping(node_attributes=[("age", "age")],
+                               edge_attributes=[("amount", "amount")])
+   with TemporaryDirectory() as directory:
+       graph = GraphDB.create(directory, backend="lmdb", serializer="json")
+       try:
+           graph.put_nodes([Node("a", properties={"age": 30})])
+           graph.put_edge(Edge("ab", "a", "b", {"type": "PAYS", "amount": 5}))
+           with graph.current_read_view(require_verifiable=True) as view:
+               with PinnedTypedGraphSource(view, mapping=mapping) as source:
+                   evidence = list(source.iter_evidence())
+           facts = [item.fact for item in evidence]
+           assert TypedFact("age", ["a", Literal("integer", 30)]) in facts
+           assert TypedFact("amount", ["a", "b", Literal("integer", 5)]) in facts
+       finally:
+           graph.close()
