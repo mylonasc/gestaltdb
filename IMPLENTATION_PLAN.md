@@ -245,6 +245,11 @@ retain explicit compatibility limits. #255, #194 and broader phase acceptance
 are not closed by this reconciliation. Runtime code unchanged; final review and
 post-merge gates are still required before closing #248.
 
+Reconciliation validation: **3,159 passed / 2 skipped** (61.41s), with all
+optional backends/serializers/RDF/Polars/docs/bloom and ontology requirements;
+docs drift, 8/8 examples, Sphinx `-W`, roadmap and whitespace checks passed.
+All 13 referenced acceptance-test paths were checked to exist. Runtime unchanged.
+
 ### Prior ordered follow-through
 
 Native GitHub links established: #338 (identity), #339 (input bounds), #340
