@@ -1,7 +1,7 @@
 {
-  "reviewed_integration": "22a8aa823d3c4fd088610e0f18feff0530f56a83",
+  "reviewed_integration": "bb81ca6183123f02fe16fc690dc87a01ff63e14f",
   "review_date": "2026-10-25",
-  "note": "Update 1: overlap-review follow-through. Adds #373 (techdebt, sub-issue of #200, open) and #374 (correctness gaps, sub-issue of #160, closed as completed via #375 at 9473497). Historical roadmap.json feature plan unchanged.",
+  "note": "Update 2: #370 SIGKILL/cross-process evidence merged at bb81ca6 (#379, 7 tests). #373 closed as completed; #374 closed as completed. Historical roadmap.json feature plan unchanged.",
   "phases": {
     "RE-E1": {
       "issue": 157,
@@ -73,7 +73,7 @@
       "parent": 200
     },
     "373": {
-      "state": "open",
+      "state": "closed",
       "parent": 200
     },
     "374": {
