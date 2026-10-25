@@ -18,6 +18,7 @@ from . import temporal_entity_writes
 from . import temporal_keys
 from . import temporal_orphans
 from . import temporal_reads
+from . import temporal_selection
 from . import truth_maintenance
 from . import temporal_writes
 from . import temporal_sequence
@@ -70,6 +71,7 @@ __all__ = [
     "temporal_keys",
     "temporal_orphans",
     "temporal_reads",
+    "temporal_selection",
     "truth_maintenance",
     "temporal_writes",
     "temporal_sequence",

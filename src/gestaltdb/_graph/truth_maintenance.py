@@ -35,7 +35,6 @@ from ..versioning import (
     normalize_temporal_instant,
     normalize_version_id,
 )
-from .temporal_reads import TemporalReader, _UNSET
 from .stored_rules import (
     RULE_ENGINE_AGENT,
     absence_checks,
@@ -46,6 +45,7 @@ from .stored_rules import (
     rule_scope,
 )
 from .temporal_reads import TemporalReader
+from .temporal_selection import _UNSET, entity_as_of, iter_claims_as_of
 from .temporal_sequence import read_temporal_sequence
 
 TRUTH_MAINTENANCE_STATE_KEY = b"rules:truth-maintenance:v1"
@@ -135,7 +135,7 @@ def maintain_truth(reader: TemporalReader, commit_fn, live_store, write_lock, tr
             facts_by_predicate.setdefault(predicate, []).append(fact)
             return fact
 
-        for version in reader.iter_claims_as_of(
+        for version in iter_claims_as_of(reader,
             valid_time=instant,
             polarity=ClaimPolarity.POSITIVE,
             world=world,
@@ -475,7 +475,7 @@ def explain_claim(reader: TemporalReader, store, *, claim_id, valid_time,
         raise ValueError("max_nodes must be a positive integer")
     instant = normalize_temporal_instant(valid_time)
     horizon = reader.system_horizon(system_time=system_time)
-    root = reader.entity_as_of("claim", claim_id, valid_time=instant, through_commit=horizon, hydrate=reader.get_version_at)
+    root = entity_as_of(reader, "claim", claim_id, valid_time=instant, through_commit=horizon, hydrate=reader.get_version_at)
     if root is None:
         return None
     commit = reader.get_commit(horizon)
@@ -555,5 +555,3 @@ def explain_claim(reader: TemporalReader, store, *, claim_id, valid_time,
         ordered_edges,
         truncated,
     )
-
-

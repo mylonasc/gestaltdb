@@ -47,7 +47,8 @@ from ..versioning import (
     normalize_temporal_instant,
     normalize_version_id,
 )
-from .temporal_reads import TemporalReader, _UNSET
+from .temporal_reads import TemporalReader
+from .temporal_selection import _UNSET, iter_claims_as_of
 from .temporal_sequence import next_temporal_system_time, read_temporal_sequence
 
 RULE_CATALOG_KEY = b"rules:catalog:v1"
@@ -269,7 +270,7 @@ def run_rules(reader: TemporalReader, commit_fn: Callable, live_store: Callable,
         return fact
 
     has_negation = any(rule.not_when for rule in rules)
-    for version in reader.iter_claims_as_of(
+    for version in iter_claims_as_of(reader,
         valid_time=instant,
         polarity=ClaimPolarity.POSITIVE,
         world=world,

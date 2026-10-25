@@ -34,7 +34,8 @@ from ..versioning import (
 )
 from .edge_records import get_edge
 from .entities import Edge, Node, TimeIndexedEdge
-from .temporal_reads import TemporalReader, _UNSET, claim_valid_interval
+from .temporal_reads import TemporalReader, claim_valid_interval
+from .temporal_selection import _UNSET
 
 
 def put_node_version(commit_fn, node: Node, *, valid,
