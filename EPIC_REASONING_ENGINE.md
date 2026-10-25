@@ -34,6 +34,20 @@ authorization below is superseded for that release; later integration commits
 are still not automatically released. No new main merge, tag or release is
 authorized by this sanitation.
 
+## Follow-on ontology extensions (2026-10-26)
+
+Composability follow-ups — typed derivation explanations, temporal negation
+and aggregates, structural validation, reasoning-aware graph queries, richer
+graph-to-fact mappings — are tracked in
+[#391](https://github.com/mylonasc/gestaltdb/issues/391) and recorded in
+`EPIC_ONTOLOGY_EXTENSIONS_251026.md` (children
+[#392](https://github.com/mylonasc/gestaltdb/issues/392),
+[#393](https://github.com/mylonasc/gestaltdb/issues/393),
+[#394](https://github.com/mylonasc/gestaltdb/issues/394),
+[#395](https://github.com/mylonasc/gestaltdb/issues/395),
+[#396](https://github.com/mylonasc/gestaltdb/issues/396)).
+They sit outside the closed RE-01…RE-27 index; that table is unchanged.
+
 ## Historical priority: release readiness and early user testing (2026-10-23)
 
 The policy below explains the already-published prerelease's bounded scope;
