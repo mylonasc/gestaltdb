@@ -83,6 +83,7 @@ from ._graph import adjacency as _adjacency
 from ._graph import index_maintenance as _index_maintenance
 from ._graph import edge_records as _edge_records
 from ._graph import node_records as _node_records
+from ._graph import sampling as _sampling
 from ._graph import index_lookup as _index_lookup
 from ._graph import index_rebuild as _index_rebuild
 from ._graph import temporal_keys as _temporal_keys
@@ -1561,37 +1562,10 @@ class GraphDB:
             >>> graph_db.sample_nodes(5, label="Drug", rng=random.Random(7))  # doctest: +SKIP
             ['drug-3', 'drug-1', 'drug-7', 'drug-2', 'drug-5']
         """
-        if (
-            isinstance(sample_size, bool)
-            or not isinstance(sample_size, int)
-            or sample_size < 0
-        ):
-            raise ValueError("sample_size must be a non-negative integer")
-        if node_filter is not None and not callable(node_filter):
-            raise TypeError("node_filter must be callable")
-        if sample_size == 0:
-            return []
-        rng = rng or random
-        keys = (
-            self.get_node_keys_generator()
-            if label is None
-            else self.iter_node_ids_by_label(label)
+        return _sampling.sample_nodes(
+            self.store, self.entity_serializer, self._ensure_indexes_current,
+            sample_size, label=label, node_filter=node_filter, rng=rng,
         )
-        sample: list[str] = []
-        seen = 0
-        for key in keys:
-            if node_filter is not None:
-                node = self.get_node(key)
-                if node is None or not node_filter(node):
-                    continue
-            seen += 1
-            if len(sample) < sample_size:
-                sample.append(self.key_to_string(key))
-                continue
-            replacement_idx = rng.randrange(seen)
-            if replacement_idx < sample_size:
-                sample[replacement_idx] = self.key_to_string(key)
-        return sample
 
     def sample_neighbors(self, node_id, edge_type: str, direction: str = 'out', sample_size: int = 10, rng=None, *, relation_hierarchy=None):
         """Sample typed neighbors using reservoir sampling.
@@ -1615,25 +1589,10 @@ class GraphDB:
         Examples:
             >>> graph_db.sample_neighbors("drug-1", "drug-to-protein", sample_size=2)  # doctest: +SKIP
         """
-        rng = rng or random
-        if relation_hierarchy is None:
-            edge_types = (edge_type,)
-        else:
-            if not isinstance(relation_hierarchy, RelationHierarchy):
-                raise ValueError("relation_hierarchy must be a RelationHierarchy")
-            edge_types = relation_hierarchy.closure(edge_type)
-        sample = []
-        seen = 0
-        for current_type in edge_types:
-            for record in self.iter_typed_adjacency(node_id, current_type, direction):
-                seen += 1
-                if len(sample) < sample_size:
-                    sample.append(record)
-                    continue
-                replacement_idx = rng.randrange(seen)
-                if replacement_idx < sample_size:
-                    sample[replacement_idx] = record
-        return sample
+        return _sampling.sample_neighbors(
+            self.store, node_id, edge_type, direction=direction,
+            sample_size=sample_size, rng=rng, relation_hierarchy=relation_hierarchy,
+        )
 
     def sample_typed_paths(self, seed_ids, pattern: Union[SamplingPattern, list[dict]], rng=None, *, relation_hierarchy=None):
         """Sample paths that follow an ordered typed edge pattern.
@@ -1655,43 +1614,10 @@ class GraphDB:
             >>> pattern = SamplingPattern([SamplingHop("drug-to-protein", sample_size=2)])
             >>> graph_db.sample_typed_paths(["drug-1"], pattern)  # doctest: +SKIP
         """
-        rng = rng or random
-        if relation_hierarchy is not None and not isinstance(
-            relation_hierarchy, RelationHierarchy
-        ):
-            raise ValueError("relation_hierarchy must be a RelationHierarchy")
-        pattern = as_sampling_pattern(pattern)
-        paths = []
-
-        for seed_id in seed_ids:
-            seed_id_bytes = self.node_key_to_bytes(seed_id)
-            frontier = [{'seed': seed_id_bytes, 'path': [], 'current_node_id': seed_id_bytes}]
-            for hop in pattern:
-                next_frontier = []
-                edge_type = hop.edge_type
-                direction = hop.direction
-                sample_size = hop.sample_size
-                for partial in frontier:
-                    sampled_records = self.sample_neighbors(
-                        partial['current_node_id'],
-                        edge_type,
-                        direction=direction,
-                        sample_size=sample_size,
-                        rng=rng,
-                        relation_hierarchy=relation_hierarchy,
-                    )
-                    for record in sampled_records:
-                        next_frontier.append({
-                            'seed': partial['seed'],
-                            'path': partial['path'] + [record],
-                            'current_node_id': record['neighbor_id'],
-                        })
-                frontier = next_frontier
-                if not frontier:
-                    break
-            for partial in frontier:
-                paths.append({'seed': partial['seed'], 'path': partial['path']})
-        return paths
+        return _sampling.sample_typed_paths(
+            self.store, seed_ids, pattern, rng=rng,
+            relation_hierarchy=relation_hierarchy,
+        )
 
     def sample_typed_subgraph(self, seed_ids, pattern: Union[SamplingPattern, list[dict]], rng=None, *, relation_hierarchy=None):
         """Sample and materialize a typed subgraph around seed nodes.
@@ -1710,26 +1636,10 @@ class GraphDB:
             >>> pattern = [{"edge_type": "drug-to-protein", "direction": "out", "sample_size": 2}]
             >>> graph_db.sample_typed_subgraph(["drug-1"], pattern)  # doctest: +SKIP
         """
-        paths = self.sample_typed_paths(
-            seed_ids,
-            pattern,
-            rng=rng,
+        return _sampling.sample_typed_subgraph(
+            self.store, self.entity_serializer, seed_ids, pattern, rng=rng,
             relation_hierarchy=relation_hierarchy,
         )
-        node_ids = {self.node_key_to_bytes(seed_id) for seed_id in seed_ids}
-        edge_ids = set()
-        for sampled_path in paths:
-            node_ids.add(sampled_path['seed'])
-            for hop in sampled_path['path']:
-                node_ids.add(hop['source_id'])
-                node_ids.add(hop['target_id'])
-                edge_ids.add(hop['edge_id'])
-
-        return {
-            'nodes': {node_id: self.get_node(node_id) for node_id in node_ids},
-            'edges': {edge_id: self.get_edge(edge_id) for edge_id in edge_ids},
-            'paths': paths,
-        }
 
     def rebuild_typed_adjacency(self):
         """Rebuild typed adjacency indexes from stored edge records.

@@ -7,6 +7,7 @@ from . import index_lookup
 from . import index_maintenance
 from . import index_rebuild
 from . import registry
+from . import sampling
 from . import temporal_keys
 from . import temporal_sequence
 from .entities import (
@@ -47,6 +48,7 @@ __all__ = [
     "node_key_to_bytes",
     "node_records",
     "registry",
+    "sampling",
     "temporal_keys",
     "temporal_sequence",
 ]
