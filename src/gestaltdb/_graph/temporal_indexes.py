@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..kvstores import KVStore
+    from .temporal_reads import TemporalReader
 
 from ..versioning import (
     ClaimVersion,
@@ -285,3 +286,55 @@ def write_temporal_indexes(store, versions, commit_id: int, *, generation) -> di
             f"{commit_id:016x}".encode("ascii"),
         )
     return {"temporal_exact": len(exact_entries), "temporal_range": len(range_entries) + (1 if commit else 0)}
+
+
+def rebuild_temporal_indexes(store, reader: "TemporalReader", state_key: bytes, stale_key: bytes, *,
+                             write_indexes_fn, through_commit=None) -> dict[str, int]:
+    """Rebuild all derived temporal indexes from visible canonical history.
+
+    The writer guard stays on the caller. A fresh index generation is
+    published; the previous generation is removed once the new state covers
+    the latest horizon. ``write_indexes_fn`` is the facade's bound index
+    writer: fault-injection tests replace it to simulate interrupted
+    rebuilds, so this path must route through it rather than calling the
+    module implementation directly.
+    """
+    prior_state = load_index_state(store, state_key)
+    prior_generation = 0 if prior_state is None else prior_state["active_generation"]
+    generation = max(1, prior_generation + 1)
+    if prior_state is None:
+        _index_maintenance.mark_indexes_stale(store, stale_key, "temporal")
+    latest_horizon = reader.system_horizon()
+    horizon = reader.system_horizon(through_commit=through_commit)
+    counts = {"temporal_exact": 0, "temporal_range": 0}
+    for commit in reader.iter_commits(through_commit=horizon):
+        written = write_indexes_fn(commit.versions, commit.commit_id,
+                                   generation=generation)
+        counts["temporal_exact"] += written["temporal_exact"]
+        counts["temporal_range"] += written["temporal_range"]
+    persist_index_state(store, state_key, horizon, generation)
+    if horizon >= latest_horizon:
+        _index_maintenance.clear_stale_indexes(store, stale_key, "temporal")
+    if prior_generation != generation:
+        delete_temporal_index_generation(store, reader, prior_generation, latest_horizon)
+    return counts
+
+
+def delete_temporal_index_generation(store, reader: "TemporalReader", generation: int,
+                                     through_commit: int) -> None:
+    """Delete one superseded temporal index generation."""
+    for commit in reader.iter_commits(through_commit=through_commit):
+        for version in commit.versions:
+            exact_entries, range_entries = temporal_index_entries(
+                version, generation=generation
+            )
+            for name, parts, value in exact_entries:
+                store.delete_index_entry(name, parts, value)
+            for name, parts, range_value, value in range_entries:
+                store.delete_range_index_entry(name, parts, range_value, value)
+        store.delete_range_index_entry(
+            index_name(SYSTEM_INDEX, generation),
+            [b"commit"],
+            temporal_instant_index_value(commit.system_time),
+            f"{commit.commit_id:016x}".encode("ascii"),
+        )

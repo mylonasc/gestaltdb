@@ -4554,43 +4554,16 @@ class GraphDB:
     def rebuild_temporal_indexes(self, *, through_commit=None) -> dict[str, int]:
         """Rebuild all derived temporal indexes from visible canonical history."""
         with self._temporal_writer_guard():
-            prior_state = self._load_temporal_index_state()
-            prior_generation = 0 if prior_state is None else prior_state["active_generation"]
-            generation = max(1, prior_generation + 1)
-            if prior_state is None:
-                self._mark_indexes_stale("temporal")
-            latest_horizon = self._temporal_system_horizon()
-            horizon = self._temporal_system_horizon(through_commit=through_commit)
-            counts = {"temporal_exact": 0, "temporal_range": 0}
-            for commit in self.iter_temporal_commits(through_commit=horizon):
-                written = self._write_temporal_indexes(
-                    commit.versions, commit.commit_id, generation=generation
-                )
-                counts["temporal_exact"] += written["temporal_exact"]
-                counts["temporal_range"] += written["temporal_range"]
-            self._persist_temporal_index_state(horizon, generation)
-            if horizon >= latest_horizon:
-                self._clear_stale_indexes("temporal")
-            if prior_generation != generation:
-                self._delete_temporal_index_generation(prior_generation, latest_horizon)
-            return counts
+            return _temporal_indexes.rebuild_temporal_indexes(
+                self.store, self._temporal_reader(), _TEMPORAL_INDEX_STATE_KEY,
+                _STALE_INDEXES_METADATA_KEY,
+                write_indexes_fn=self._write_temporal_indexes,
+                through_commit=through_commit,
+            )
 
     def _delete_temporal_index_generation(self, generation: int, through_commit: int) -> None:
-        for commit in self.iter_temporal_commits(through_commit=through_commit):
-            for version in commit.versions:
-                exact_entries, range_entries = self._temporal_index_entries(
-                    version, generation=generation
-                )
-                for index_name, parts, value in exact_entries:
-                    self.store.delete_index_entry(index_name, parts, value)
-                for index_name, parts, range_value, value in range_entries:
-                    self.store.delete_range_index_entry(index_name, parts, range_value, value)
-            self.store.delete_range_index_entry(
-                self._temporal_index_name(_TEMPORAL_SYSTEM_INDEX, generation),
-                [b"commit"],
-                self._temporal_instant_index_value(commit.system_time),
-                f"{commit.commit_id:016x}".encode("ascii"),
-            )
+        _temporal_indexes.delete_temporal_index_generation(
+            self.store, self._temporal_reader(), generation, through_commit)
 
     def query(
         self,
