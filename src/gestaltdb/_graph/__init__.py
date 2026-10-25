@@ -5,6 +5,7 @@ from . import edge_records
 from . import node_records
 from . import index_lookup
 from . import index_maintenance
+from . import ingest_edges
 from . import ingest_nodes
 from . import ingest_support
 from . import index_rebuild
@@ -45,6 +46,7 @@ __all__ = [
     "edge_key_to_bytes",
     "index_lookup",
     "index_maintenance",
+    "ingest_edges",
     "ingest_nodes",
     "ingest_support",
     "index_rebuild",
