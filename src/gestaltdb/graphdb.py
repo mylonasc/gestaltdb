@@ -468,6 +468,7 @@ class GraphDB:
         return dict(manifest)
 
     @staticmethod
+    @staticmethod
     def _backend_class(name: str):
         return _lifecycle.backend_class(name)
 
@@ -482,59 +483,17 @@ class GraphDB:
     def _manifest_from_current(self, *, created_at: str | None = None) -> dict:
         backend_name = self._backend_name or _registry_name_for_instance(self.store, _backend_registry())
         serializer_name = self._serializer_name or _registry_name_for_instance(self.serializer, _serializer_registry())
-        if backend_name is None or serializer_name is None:
-            raise ValueError("cannot build manifest for unknown backend or serializer")
-        backend_cls = self._backend_class(backend_name)
-        serializer_cls = self._serializer_class(serializer_name)
-        backend_options = {}
-        if backend_name == "pyrex" and getattr(self.store, "transactional", False):
-            backend_options["transactional"] = True
-        return {
-            "format_version": MANIFEST_FORMAT_VERSION,
-            "database_id": self.database_id,
-            "gestaltdb_version": _gestaltdb_version(),
-            "backend": {
-                "name": backend_name,
-                "class": f"{backend_cls.__module__}.{backend_cls.__name__}",
-                "layout_version": 1,
-                "options": backend_options,
-            },
-            "serializer": {
-                "name": serializer_name,
-                "class": f"{serializer_cls.__module__}.{serializer_cls.__name__}",
-                "format_version": 1,
-            },
-            "graph": {
-                "node_count": None,
-                "edge_count": None,
-                "indexed_node_properties": list(sorted(self.indexed_node_properties)),
-                "indexed_edge_properties": list(sorted(self.indexed_edge_properties)),
-                "temporal_versions_format": 1,
-            },
-            "created_at": created_at or _utc_now_iso(),
-        }
+        return _lifecycle.manifest_from_current(
+            self.store, backend_name=backend_name, serializer_name=serializer_name,
+            database_id=self.database_id,
+            indexed_node_properties=self.indexed_node_properties,
+            indexed_edge_properties=self.indexed_edge_properties,
+            created_at=created_at,
+        )
 
     def _validate_backend_manifest(self, root_manifest: dict) -> None:
-        try:
-            payload = self.store.get_metadata(_MANIFEST_METADATA_KEY)
-        except NotImplementedError:
-            return
-        if not payload:
-            return
-        backend_manifest = json.loads(payload.decode("utf-8"))
-        if backend_manifest.get("backend", {}).get("name") != root_manifest.get("backend", {}).get("name"):
-            raise ValueError("GestaltDB manifest/backend metadata mismatch for backend name")
-        if backend_manifest.get("serializer", {}).get("name") != root_manifest.get("serializer", {}).get("name"):
-            raise ValueError("GestaltDB manifest/backend metadata mismatch for serializer name")
-        root_database_id = root_manifest.get("database_id")
-        backend_database_id = backend_manifest.get("database_id")
-        if root_database_id is not None and backend_database_id is not None and root_database_id != backend_database_id:
-            raise ValueError("GestaltDB manifest/backend metadata mismatch for database identity")
-        actual_database_id = self.database_id
-        if root_database_id is not None and root_database_id != actual_database_id:
-            raise ValueError("root manifest does not match persisted database identity")
-        if backend_database_id is not None and backend_database_id != actual_database_id:
-            raise ValueError("backend manifest does not match persisted database identity")
+        _lifecycle.validate_backend_manifest(
+            self.store, _MANIFEST_METADATA_KEY, self.database_id, root_manifest)
 
     def _load_stale_indexes(self) -> set[str]:
         """Load index families known to be stale after deferred bulk ingestion."""

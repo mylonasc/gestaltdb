@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..kvstores import KVStore
 
-from .registry import backend_registry, serializer_registry
+from .registry import backend_registry, gestaltdb_version, serializer_registry, utc_now_iso
 
 MANIFEST_FILENAME = "gestaltdb_manifest.json"
 MANIFEST_FORMAT_VERSION = 1
@@ -119,3 +119,82 @@ def initialize_database_id_locked(store: KVStore, store_path: Path | None,
     if expected is not None and value != expected:
         raise ValueError("persisted database identity does not match root manifest")
     return value
+
+
+def backend_class(name: str):
+    """Return the backend store class for a manifest name."""
+    registry = backend_registry()
+    if name not in registry:
+        allowed = ", ".join(sorted(registry))
+        raise ValueError(f"unknown GestaltDB backend '{name}'. Expected one of: {allowed}")
+    return registry[name]
+
+
+def serializer_class(name: str):
+    """Return the serializer class for a manifest name."""
+    registry = serializer_registry()
+    if name not in registry:
+        allowed = ", ".join(sorted(registry))
+        raise ValueError(f"unknown GestaltDB serializer '{name}'. Expected one of: {allowed}")
+    return registry[name]
+
+
+def manifest_from_current(store, *, backend_name, serializer_name, database_id,
+                          indexed_node_properties, indexed_edge_properties,
+                          created_at=None):
+    """Assemble the self-describing manifest for the current configuration."""
+    if backend_name is None or serializer_name is None:
+        raise ValueError("cannot build manifest for unknown backend or serializer")
+    backend_cls = backend_class(backend_name)
+    serializer_cls = serializer_class(serializer_name)
+    backend_options = {}
+    if backend_name == "pyrex" and getattr(store, "transactional", False):
+        backend_options["transactional"] = True
+    return {
+        "format_version": MANIFEST_FORMAT_VERSION,
+        "database_id": database_id,
+        "gestaltdb_version": gestaltdb_version(),
+        "backend": {
+            "name": backend_name,
+            "class": f"{backend_cls.__module__}.{backend_cls.__name__}",
+            "layout_version": 1,
+            "options": backend_options,
+        },
+        "serializer": {
+            "name": serializer_name,
+            "class": f"{serializer_cls.__module__}.{serializer_cls.__name__}",
+            "format_version": 1,
+        },
+        "graph": {
+            "node_count": None,
+            "edge_count": None,
+            "indexed_node_properties": list(sorted(indexed_node_properties)),
+            "indexed_edge_properties": list(sorted(indexed_edge_properties)),
+            "temporal_versions_format": 1,
+        },
+        "created_at": created_at or utc_now_iso(),
+    }
+
+
+def validate_backend_manifest(store, manifest_key: bytes, database_id: str | None,
+                              root_manifest: dict) -> None:
+    """Check backend metadata against the root manifest identity."""
+    try:
+        payload = store.get_metadata(manifest_key)
+    except NotImplementedError:
+        return
+    if not payload:
+        return
+    backend_manifest = json.loads(payload.decode("utf-8"))
+    if backend_manifest.get("backend", {}).get("name") != root_manifest.get("backend", {}).get("name"):
+        raise ValueError("GestaltDB manifest/backend metadata mismatch for backend name")
+    if backend_manifest.get("serializer", {}).get("name") != root_manifest.get("serializer", {}).get("name"):
+        raise ValueError("GestaltDB manifest/backend metadata mismatch for serializer name")
+    root_database_id = root_manifest.get("database_id")
+    backend_database_id = backend_manifest.get("database_id")
+    if root_database_id is not None and backend_database_id is not None and root_database_id != backend_database_id:
+        raise ValueError("GestaltDB manifest/backend metadata mismatch for database identity")
+    if root_database_id is not None and root_database_id != database_id:
+        raise ValueError("root manifest does not match persisted database identity")
+    if backend_database_id is not None and backend_database_id != database_id:
+        raise ValueError("backend manifest does not match persisted database identity")
