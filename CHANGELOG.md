@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## 0.14.0rc1 — GraphDB service decomposition testing milestone
+
+Published prerelease for opt-in user testing (2026-10-25). Public behavior and
+signatures are unchanged: this milestone decomposes the `GraphDB` facade into
+scope-owned services without altering storage, transaction, or query semantics.
+
+- Split temporal, epistemic, and Horn-rule operations out of the facade into
+  `graph.temporal`, `graph.epistemic`, and `graph.rules` engine services (#388).
+  Internal callers (read views, reasoning adapters, stored rules, Cypher
+  `kg.entails`) consume the engines directly; `GraphDB` keeps no wrapper methods.
+- Moved current-graph node/edge CRUD and batched writes into `NodeRepository`/
+  `EdgeRepository` over explicit `StorageSession` scopes (`graph.nodes`,
+  `graph.edges`), with ordinary transaction coordination and no facade
+  redispatch (#388).
+- Moved current secondary-index lookup, rebuilds, and property-index DDL into
+  `IndexService`/`IndexReader` (`graph.indexes`); configuration publishes only
+  after successful commit. Snapshot views expose a read-only `view.indexes` (#388).
+- Moved columnar ingestion into `ArrowIngestor`/`PolarsIngestor`
+  (`graph.ingest.*`) plus a graph-wide `IngestionCoordinator` for mode dispatch
+  and deferred-index rebuilds; native/JSON fast paths and rollback semantics
+  are unchanged (#388).
+- Moved live typed-adjacency traversal and reservoir sampling into
+  `TraversalService`/`AdjacencyReader` (`graph.traversal`, read-only
+  `view.traversal`) and decoded index-backed reads into `EntityLookup`
+  (`graph.lookup`, `view.lookup`) (#388).
 - Hardened explicit execution admission, bounded input consumption, and exact
   evidence handoff across binary, prepared, and typed reasoning workflows.
 - Added authenticated durable-session resume, current-graph and finite-range
