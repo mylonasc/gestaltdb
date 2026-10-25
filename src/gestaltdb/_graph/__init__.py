@@ -1,6 +1,7 @@
 """Private GraphDB implementation collaborators (no public API)."""
 
 from . import adjacency
+from . import index_maintenance
 from .entities import (
     Edge,
     GraphEntityDictSerializer,
@@ -31,6 +32,7 @@ __all__ = [
     "configure_transaction_child",
     "datetime_to_bytes",
     "edge_key_to_bytes",
+    "index_maintenance",
     "key_to_string",
     "node_key_to_bytes",
 ]

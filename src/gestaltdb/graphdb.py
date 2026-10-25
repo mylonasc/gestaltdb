@@ -81,6 +81,7 @@ from .versioning import (
     normalize_version_id,
 )
 from ._graph import adjacency as _adjacency
+from ._graph import index_maintenance as _index_maintenance
 from ._graph.entities import (
     Edge,
     GraphEntityDictSerializer,
@@ -841,70 +842,15 @@ class GraphDB:
 
     def _put_node_indexes(self, node: Node):
         """Maintain label and configured property indexes for a node."""
-        entries = []
-        range_entries = []
-        node_id = node.get_id_bytes
-        for label in node.labels:
-            entries.append(("node_label", [label.encode("utf-8")], node_id))
-        for property_name in self.indexed_node_properties:
-            if property_name in node.properties:
-                raw_value = node.properties[property_name]
-                property_value = _property_value_to_index_bytes(raw_value)
-                entries.append((
-                    "node_property",
-                    [property_name.encode("utf-8"), property_value],
-                    node_id,
-                ))
-                for label in node.labels:
-                    entries.append((
-                        "node_label_property",
-                        [label.encode("utf-8"), property_name.encode("utf-8"), property_value],
-                        node_id,
-                    ))
-                range_value = _property_value_to_range_index_bytes(raw_value)
-                if range_value is not None:
-                    range_entries.append(("node_property", [property_name.encode("utf-8")], range_value, node_id))
-                    for label in node.labels:
-                        range_entries.append(("node_label_property", [label.encode("utf-8"), property_name.encode("utf-8")], range_value, node_id))
-        if entries:
-            self.store.put_index_entries_bulk(entries)
-        if range_entries:
-            self.store.put_range_index_entries_bulk(range_entries)
+        _index_maintenance.put_node_indexes(self.store, self.indexed_node_properties, node)
 
     def _delete_node_indexes(self, node: Node):
         """Remove label and configured property indexes for a node."""
-        node_id = node.get_id_bytes
-        for label in node.labels:
-            self.store.delete_index_entry("node_label", [label.encode("utf-8")], node_id)
-        for property_name in self.indexed_node_properties:
-            if property_name in node.properties:
-                raw_value = node.properties[property_name]
-                property_value = _property_value_to_index_bytes(raw_value)
-                self.store.delete_index_entry(
-                    "node_property",
-                    [property_name.encode("utf-8"), property_value],
-                    node_id,
-                )
-                for label in node.labels:
-                    self.store.delete_index_entry(
-                        "node_label_property",
-                        [label.encode("utf-8"), property_name.encode("utf-8"), property_value],
-                        node_id,
-                    )
-                range_value = _property_value_to_range_index_bytes(raw_value)
-                if range_value is not None:
-                    self.store.delete_range_index_entry("node_property", [property_name.encode("utf-8")], range_value, node_id)
-                    for label in node.labels:
-                        self.store.delete_range_index_entry("node_label_property", [label.encode("utf-8"), property_name.encode("utf-8")], range_value, node_id)
+        _index_maintenance.delete_node_indexes(self.store, self.indexed_node_properties, node)
 
     def _flush_index_rebuild_batches(self, entries: list, range_entries: list) -> None:
         """Write accumulated rebuild entries and clear the buffers."""
-        if entries:
-            self.store.put_index_entries_bulk(entries)
-            entries.clear()
-        if range_entries:
-            self.store.put_range_index_entries_bulk(range_entries)
-            range_entries.clear()
+        _index_maintenance.flush_index_rebuild_batches(self.store, entries, range_entries)
 
     def rebuild_node_indexes(
         self,
@@ -1286,63 +1232,11 @@ class GraphDB:
 
     def _put_edge_indexes(self, edge: Edge):
         """Maintain relationship type and configured property indexes."""
-        entries = []
-        range_entries = []
-        edge_type = self.edge_type(edge)
-        edge_id = edge.get_id_bytes
-        if edge_type is not None:
-            entries.append(("edge_type", [str(edge_type).encode("utf-8")], edge_id))
-        for property_name in self.indexed_edge_properties:
-            if property_name in edge.properties:
-                raw_value = edge.properties[property_name]
-                property_value = _property_value_to_index_bytes(raw_value)
-                entries.append((
-                    "edge_property",
-                    [property_name.encode("utf-8"), property_value],
-                    edge_id,
-                ))
-                if edge_type is not None:
-                    entries.append((
-                        "edge_type_property",
-                        [str(edge_type).encode("utf-8"), property_name.encode("utf-8"), property_value],
-                        edge_id,
-                    ))
-                range_value = _property_value_to_range_index_bytes(raw_value)
-                if range_value is not None:
-                    range_entries.append(("edge_property", [property_name.encode("utf-8")], range_value, edge_id))
-                    if edge_type is not None:
-                        range_entries.append(("edge_type_property", [str(edge_type).encode("utf-8"), property_name.encode("utf-8")], range_value, edge_id))
-        if entries:
-            self.store.put_index_entries_bulk(entries)
-        if range_entries:
-            self.store.put_range_index_entries_bulk(range_entries)
+        _index_maintenance.put_edge_indexes(self.store, self.indexed_edge_properties, edge)
 
     def _delete_edge_indexes(self, edge: Edge):
         """Remove relationship type and configured property indexes."""
-        edge_type = self.edge_type(edge)
-        edge_id = edge.get_id_bytes
-        if edge_type is not None:
-            self.store.delete_index_entry("edge_type", [str(edge_type).encode("utf-8")], edge_id)
-        for property_name in self.indexed_edge_properties:
-            if property_name in edge.properties:
-                raw_value = edge.properties[property_name]
-                property_value = _property_value_to_index_bytes(raw_value)
-                self.store.delete_index_entry(
-                    "edge_property",
-                    [property_name.encode("utf-8"), property_value],
-                    edge_id,
-                )
-                if edge_type is not None:
-                    self.store.delete_index_entry(
-                        "edge_type_property",
-                        [str(edge_type).encode("utf-8"), property_name.encode("utf-8"), property_value],
-                        edge_id,
-                    )
-                range_value = _property_value_to_range_index_bytes(raw_value)
-                if range_value is not None:
-                    self.store.delete_range_index_entry("edge_property", [property_name.encode("utf-8")], range_value, edge_id)
-                    if edge_type is not None:
-                        self.store.delete_range_index_entry("edge_type_property", [str(edge_type).encode("utf-8"), property_name.encode("utf-8")], range_value, edge_id)
+        _index_maintenance.delete_edge_indexes(self.store, self.indexed_edge_properties, edge)
 
     def rebuild_edge_indexes(
         self,

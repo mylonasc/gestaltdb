@@ -254,3 +254,4 @@ versions, rule catalog, commit path. They do not receive unrestricted
   until record/index orchestration moves. `graphdb.py` 6722 → 6692 lines,
   budget lowered in same change. 175 + 118 backend tests green.
 - 2026-10-25 (slice 4, landed): adjacency write side moved into `adjacency.py` (`put/delete_typed_adjacency_for_edge`, `update_count_cache`; module now 154 lines). GraphDB private writers delegate with unchanged signatures, so all `put_edge`/delete/columnar/rebuild call sites are untouched. `graphdb.py` 6692 -> 6670 lines, budget lowered in same change. 175 + 109 backend tests green.
+- 2026-10-25 (slice 5, landed): secondary-index maintenance writers moved to `index_maintenance.py` (put/delete node+edge indexes, rebuild-batch flush as store+config+record functions). GraphDB private writers delegate; all put/delete/rebuild/columnar call sites untouched. `graphdb.py` 6670 -> 6564 lines, budget lowered in same change. 395 backend tests green.
