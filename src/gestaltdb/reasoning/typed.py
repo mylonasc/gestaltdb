@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 import itertools
-from typing import Callable, Iterable
+from typing import Callable, Iterable, TYPE_CHECKING
 
 from .model import (
     ReasoningError,
@@ -25,6 +25,9 @@ from .model import (
 )
 from .protocols import Evidence
 from .terms import Literal, compare, equal
+
+if TYPE_CHECKING:
+    from .typed_proofs import TypedProofTrace
 
 
 def _ground(value: object, name: str) -> str | Literal:
@@ -583,6 +586,7 @@ class GenericResult:
     facts: tuple[TypedFact, ...]
     iterations: int
     program_digest: str
+    proofs: TypedProofTrace | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.facts, (tuple, list)):
@@ -593,6 +597,20 @@ class GenericResult:
             raise ReasoningError("iterations must be a non-negative integer")
         _text(self.program_digest, "program_digest")
         object.__setattr__(self, "facts", tuple(sorted(set(self.facts), key=_sort_key)))
+        if self.proofs is not None:
+            from .typed_proofs import TypedProofTrace
+
+            if not isinstance(self.proofs, TypedProofTrace):
+                raise ReasoningError("proofs must be a TypedProofTrace or None")
+            if self.proofs.program.digest != self.program_digest:
+                raise ReasoningError("proof program does not match the result")
+            if any(node.fact not in self or any(premise not in self for premise in node.premises)
+                   or any(operand not in self for derivation in node.aggregates
+                          for operand in derivation.operands)
+                   for node in self.proofs.nodes):
+                raise ReasoningError("proof facts must belong to the result closure")
+            if not self.proofs.truncated and len(self.proofs.nodes) != len(self.facts):
+                raise ReasoningError("untruncated proofs must cover the result closure")
 
     def __contains__(self, fact: object) -> bool:
         return isinstance(fact, TypedFact) and fact in set(self.facts)
@@ -647,6 +665,7 @@ class StratifiedRun:
     component_rounds: tuple[int, ...]
     witnesses: tuple[NegationWitness, ...]
     truncated: bool
+    proofs: TypedProofTrace | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, GenericResult):
@@ -670,6 +689,20 @@ class StratifiedRun:
         object.__setattr__(self, "witnesses", tuple(self.witnesses))
         if not isinstance(self.truncated, bool):
             raise ReasoningError("truncated must be a bool")
+        if self.proofs is not None:
+            from .typed_proofs import TypedProofTrace
+
+            if not isinstance(self.proofs, TypedProofTrace):
+                raise ReasoningError("proofs must be a TypedProofTrace or None")
+            if self.proofs.program.digest != self.result.program_digest:
+                raise ReasoningError("proof program does not match the result")
+            if any(node.fact not in self.result or any(premise not in self.result for premise in node.premises)
+                   or any(operand not in self.result for derivation in node.aggregates
+                          for operand in derivation.operands)
+                   for node in self.proofs.nodes):
+                raise ReasoningError("proof facts must belong to the result closure")
+            if not self.proofs.truncated and len(self.proofs.nodes) != len(self.result.facts):
+                raise ReasoningError("untruncated proofs must cover the result closure")
 
 
 class _TypedIndex:
@@ -756,7 +789,8 @@ class GenericEngine:
     Each synchronous round joins at least one delta relation. Filters are
     checked incrementally as their variables bind, pruning before deeper
     traversal. Only complete closures are returned; limits and cancellation
-    behave like the binary engine. Witness collection is not offered here.
+    behave like the binary engine. Proof collection is opt-in and bounded:
+    truncating a witness trace never truncates the logical closure.
     """
 
     def evaluate(
@@ -768,14 +802,16 @@ class GenericEngine:
             raise ReasoningError("program must be a GenericProgram")
         if not isinstance(limits, ReasoningLimits):
             raise ReasoningError("limits must be ReasoningLimits")
-        if collect_proofs:
-            raise ReasoningError("generic evaluation does not collect witnesses")
+        if not isinstance(collect_proofs, bool):
+            raise ReasoningError("collect_proofs must be a bool")
         if any(rule.negated for rule in program.rules) or program.closed:
             raise ReasoningError(
                 "scoped negation requires evaluate_stratified; plain evaluation stays positive")
         check_cancelled(cancel)
         if len(program.rules) + len(program.aggregates) > limits.max_rules:
             raise ReasoningLimitError(f"evaluation exceeded max_rules={limits.max_rules}")
+        from .typed_proofs import _TypedProofCollector
+        collector = _TypedProofCollector(program, limits) if collect_proofs else None
         try:
             iterator = iter(facts)
         except TypeError as exc:
@@ -792,9 +828,14 @@ class GenericEngine:
             initial.add(fact)
             if len(initial) > limits.max_facts:
                 raise ReasoningLimitError(f"evaluation exceeded max_facts={limits.max_facts}")
+            if collector is not None:
+                collector.input(fact)
         full = _TypedIndex(sorted(initial, key=_sort_key))
+        horizon = _digest_facts(sorted(initial, key=_sort_key))
         delta = full
         del initial
+        if collector is not None:
+            collector.start()
         dispatch: dict[str, list[tuple[GenericRule, int]]] = defaultdict(list)
         for rule in program.rules:
             seen: set[TypedAtom] = set()
@@ -815,7 +856,9 @@ class GenericEngine:
                 raise ReasoningLimitError(f"evaluation exceeded max_iterations={limits.max_iterations}")
             added: set[TypedFact] = set()
             for rule, pivot in active:
-                for bindings in self._matches(rule, pivot, full, delta, budget):
+                track = collector is not None
+                for matched in self._matches(rule, pivot, full, delta, budget, track_premises=track):
+                    bindings, premises = matched if track else (matched, ())
                     conclusion = TypedFact(rule.head.predicate, tuple(
                         bindings[term] if isinstance(term, Variable) else term for term in rule.head.args))
                     if conclusion in full.facts or conclusion in added:
@@ -823,6 +866,14 @@ class GenericEngine:
                     if len(full.facts) + len(added) >= limits.max_facts:
                         raise ReasoningLimitError(f"evaluation exceeded max_facts={limits.max_facts}")
                     added.add(conclusion)
+                    if track:
+                        held = tuple(Comparison(item.op,
+                                                bindings.get(item.left, item.left)
+                                                if isinstance(item.left, Variable) else item.left,
+                                                bindings.get(item.right, item.right)
+                                                if isinstance(item.right, Variable) else item.right)
+                                     for item in rule.filters)
+                        collector.derived(conclusion, rule, premises, held, (), ())
             iterations += 1
             ordered = sorted(added, key=_sort_key)
             for fact in ordered:
@@ -831,18 +882,20 @@ class GenericEngine:
         if program.aggregates:
             if iterations >= limits.max_iterations:
                 raise ReasoningLimitError(f"evaluation exceeded max_iterations={limits.max_iterations}")
-            for fact in self._evaluate_aggregates(program, full, budget, cancel):
+            for fact in self._evaluate_aggregates(program, full, budget, cancel, collector):
                 if fact in full.facts:
                     continue
                 if len(full.facts) >= limits.max_facts:
                     raise ReasoningLimitError(f"evaluation exceeded max_facts={limits.max_facts}")
                 full.add(fact)
             iterations += 1
-        return GenericResult(tuple(full.facts), iterations, program.digest)
+        proofs = collector.finish(horizon) if collector is not None else None
+        return GenericResult(tuple(full.facts), iterations, program.digest, proofs)
 
     def evaluate_stratified(
         self, program: GenericProgram, facts: Iterable[TypedFact | Evidence], *,
         limits: ReasoningLimits, collect_negation_trace: bool = False,
+        collect_proofs: bool = False,
         cancel: Callable[[], bool] | None = None,
     ) -> StratifiedRun:
         """Fixpoint per positive component in stratum order, then aggregates.
@@ -851,7 +904,9 @@ class GenericEngine:
         records the first present blocker per failed binding when requested, bounded by
         ``max_proof_nodes``. ``iterations`` counts executed component rounds;
         the aggregate stratum adds one round when aggregates exist, matching
-        ``evaluate`` accounting on positive programs.
+        ``evaluate`` accounting on positive programs. Successful derivations
+        record absence checks naming the closed scope when ``collect_proofs``
+        is set; proof truncation never truncates the closure.
         """
         if not isinstance(program, GenericProgram):
             raise ReasoningError("program must be a GenericProgram")
@@ -859,9 +914,13 @@ class GenericEngine:
             raise ReasoningError("limits must be ReasoningLimits")
         if not isinstance(collect_negation_trace, bool):
             raise ReasoningError("collect_negation_trace must be a bool")
+        if not isinstance(collect_proofs, bool):
+            raise ReasoningError("collect_proofs must be a bool")
         check_cancelled(cancel)
         if len(program.rules) + len(program.aggregates) > limits.max_rules:
             raise ReasoningLimitError(f"evaluation exceeded max_rules={limits.max_rules}")
+        from .typed_proofs import AbsenceCheck, _TypedProofCollector
+        collector = _TypedProofCollector(program, limits) if collect_proofs else None
         try:
             iterator = iter(facts)
         except TypeError as exc:
@@ -878,9 +937,13 @@ class GenericEngine:
             initial.add(fact)
             if len(initial) > limits.max_facts:
                 raise ReasoningLimitError(f"evaluation exceeded max_facts={limits.max_facts}")
+            if collector is not None:
+                collector.input(fact)
         full = _TypedIndex(sorted(initial, key=_sort_key))
+        horizon = _digest_facts(sorted(initial, key=_sort_key))
         del initial
-        horizon = _digest_facts(full.facts)
+        if collector is not None:
+            collector.start()
         scope = tuple(sorted(program.closed))
         rounds, iterations, truncated = [], 0, False
         trace: list[NegationWitness] = []
@@ -907,9 +970,14 @@ class GenericEngine:
                     raise ReasoningLimitError("evaluation exceeded max_iterations (component delta rounds)")
                 added: set[TypedFact] = set()
                 for rule, pivot in active:
-                    for bindings in self._matches_stratified(
+                    track = collector is not None
+                    for matched in self._matches_stratified(
                             rule, pivot, full, delta, budget, scope, horizon,
-                            collect_negation_trace, trace, limits):
+                            collect_negation_trace, trace, limits, track_proofs=track):
+                        if track:
+                            bindings, premises, probed = matched
+                        else:
+                            bindings, premises, probed = matched, (), ()
                         if bindings is None:
                             truncated = True
                             continue
@@ -921,6 +989,17 @@ class GenericEngine:
                         if len(full.facts) + len(added) >= limits.max_facts:
                             raise ReasoningLimitError(f"evaluation exceeded max_facts={limits.max_facts}")
                         added.add(conclusion)
+                        if track:
+                            held = tuple(Comparison(
+                                item.op,
+                                bindings.get(item.left, item.left)
+                                if isinstance(item.left, Variable) else item.left,
+                                bindings.get(item.right, item.right)
+                                if isinstance(item.right, Variable) else item.right)
+                                for item in rule.filters)
+                            checks = tuple(AbsenceCheck(position, predicate, args, scope)
+                                           for position, predicate, args in probed)
+                            collector.derived(conclusion, rule, premises, held, checks, ())
                 iterations += 1
                 local_rounds += 1
                 ordered = sorted(added, key=_sort_key)
@@ -939,14 +1018,15 @@ class GenericEngine:
                 full.add(fact)
             iterations += 1
         result = GenericResult(tuple(full.facts), iterations, program.digest)
-        return StratifiedRun(result, program.strata, tuple(rounds), tuple(trace), truncated)
+        proofs = collector.finish(horizon) if collector is not None else None
+        return StratifiedRun(result, program.strata, tuple(rounds), tuple(trace), truncated, proofs)
 
     def _matches_stratified(self, rule, pivot, full, delta, budget, scope, horizon,
-                            collect_trace, trace, limits):
+                            collect_trace, trace, limits, track_proofs: bool = False):
         remaining = tuple(index for index in range(len(rule.body)) if index != pivot)
-        stack = [(dict(), remaining, pivot, iter(delta.candidates(rule.body[pivot], dict())))]
+        stack = [(dict(), remaining, pivot, iter(delta.candidates(rule.body[pivot], dict())), {})]
         while stack:
-            bindings, remaining, position, candidates = stack[-1]
+            bindings, remaining, position, candidates, support = stack[-1]
             try:
                 fact = next(candidates)
             except StopIteration:
@@ -956,18 +1036,27 @@ class GenericEngine:
             updated = _unify(rule.body[position], fact, bindings)
             if updated is None or not _ready(rule.filters, updated):
                 continue
+            if track_proofs:
+                supported = dict(support)
+                supported[position] = fact
+            else:
+                supported = support
             if not remaining:
                 # Range restriction guarantees bindings only after the whole
                 # positive body, not after an arbitrary delta pivot.
-                blocked, witness = self._check_negated(rule, updated, full, scope, horizon)
+                blocked, witness, probed = self._check_negated(
+                    rule, updated, full, scope, horizon, track_proofs)
                 if blocked:
                     if collect_trace:
                         if len(trace) >= limits.max_proof_nodes:
-                            yield None
+                            yield (None, (), ()) if track_proofs else None
                         else:
                             trace.append(witness)
                     continue
-                yield updated
+                if track_proofs:
+                    yield updated, tuple(supported[index] for index in range(len(rule.body))), probed
+                else:
+                    yield updated
                 continue
             chosen, bucket = remaining[0], full.candidates(rule.body[remaining[0]], updated)
             for other in remaining[1:]:
@@ -978,10 +1067,11 @@ class GenericEngine:
                     break
             if bucket:
                 stack.append((updated, tuple(index for index in remaining if index != chosen),
-                              chosen, iter(bucket)))
+                              chosen, iter(bucket), supported))
 
     @staticmethod
-    def _check_negated(rule, bindings, full, scope, horizon):
+    def _check_negated(rule, bindings, full, scope, horizon, probe_absence: bool = False):
+        probed = []
         for position, atom in enumerate(rule.negated):
             ground = tuple(bindings.get(term, term) if isinstance(term, Variable) else term
                            for term in atom.args)
@@ -990,14 +1080,18 @@ class GenericEngine:
             probe = TypedAtom(atom.predicate, [bindings.get(term, term) if isinstance(term, Variable) else term
                                                for term in atom.args])
             if full.candidates(probe, bindings):
-                return True, NegationWitness(rule.rule_id, position, atom.predicate, ground, scope, horizon)
-        return False, None
+                return True, NegationWitness(rule.rule_id, position, atom.predicate, ground, scope, horizon), ()
+            if probe_absence:
+                probed.append((position, atom.predicate, ground))
+        return False, None, tuple(probed)
 
-    def _evaluate_aggregates(self, program, full, budget, cancel):
+    def _evaluate_aggregates(self, program, full, budget, cancel, collector=None):
+        from .typed_proofs import AggregateDerivation
         for rule in program.aggregates:
             check_cancelled(cancel)
             variables = tuple(sorted(
                 frozenset().union(*(atom.variables for atom in rule.body)), key=lambda var: var.name))
+            slot = {variable: index for index, variable in enumerate(variables)}
             rows: set[tuple] = set()
             for pivot in range(len(rule.body)):
                 for bindings in self._matches(rule, pivot, full, full, budget):
@@ -1008,11 +1102,12 @@ class GenericEngine:
             for row in sorted(rows, key=_group_key):
                 bindings = dict(zip(variables, row))
                 key = tuple(bindings[variable] for variable in rule.group)
-                groups.setdefault(key, []).append(tuple(bindings[item.source] for item in rule.aggregations))
+                groups.setdefault(key, []).append(row)
+            recorded: set[TypedFact] = set()
             for key, members in sorted(groups.items(), key=lambda item: _group_key(item[0])):
                 targets: dict = {}
-                for index, item in enumerate(rule.aggregations):
-                    values = [member[index] for member in members]
+                for item in rule.aggregations:
+                    values = [member[slot[item.source]] for member in members]
                     value = self._reduce(item.op, values)
                     if value is None:
                         break
@@ -1022,7 +1117,28 @@ class GenericEngine:
                     scope.update(targets)
                     head = tuple(scope.get(term, term) if isinstance(term, Variable) else term
                                  for term in rule.head.args)
-                    yield TypedFact(rule.head.predicate, head)
+                    conclusion = TypedFact(rule.head.predicate, head)
+                    if (collector is not None and conclusion not in full.facts
+                            and conclusion not in recorded):
+                        operands = set()
+                        for row in members:
+                            bindings = dict(zip(variables, row))
+                            for atom in rule.body:
+                                premise = TypedFact(atom.predicate, tuple(
+                                    bindings.get(term, term) if isinstance(term, Variable) else term
+                                    for term in atom.args))
+                                if premise in full.facts:
+                                    operands.add(premise)
+                        if operands:
+                            ordered = tuple(sorted(operands, key=_sort_key))
+                            collector.derived(conclusion, rule, (), (), (), tuple(
+                                AggregateDerivation(rule.rule_id, item.op, item.target.name,
+                                                    key, ordered, targets[item.target])
+                                for item in rule.aggregations))
+                        else:
+                            collector.truncated = True
+                        recorded.add(conclusion)
+                    yield conclusion
 
     @staticmethod
     def _reduce(op, values):
@@ -1047,11 +1163,11 @@ class GenericEngine:
                 best = value
         return best
 
-    def _matches(self, rule, pivot, full, delta, budget):
+    def _matches(self, rule, pivot, full, delta, budget, track_premises: bool = False):
         remaining = tuple(index for index in range(len(rule.body)) if index != pivot)
-        stack = [(dict(), remaining, pivot, iter(delta.candidates(rule.body[pivot], dict())))]
+        stack = [(dict(), remaining, pivot, iter(delta.candidates(rule.body[pivot], dict())), {})]
         while stack:
-            bindings, remaining, position, candidates = stack[-1]
+            bindings, remaining, position, candidates, support = stack[-1]
             try:
                 fact = next(candidates)
             except StopIteration:
@@ -1061,10 +1177,15 @@ class GenericEngine:
             updated = _unify(rule.body[position], fact, bindings)
             if updated is None or not _ready(getattr(rule, "filters", ()), updated):
                 continue
+            if track_premises:
+                supported = dict(support)
+                supported[position] = fact
             if not remaining:
-                yield updated
+                if track_premises:
+                    yield updated, tuple(supported[index] for index in range(len(rule.body)))
+                else:
+                    yield updated
                 continue
-            # Stable ties retain original body position, including repeated atoms.
             chosen, bucket = remaining[0], full.candidates(rule.body[remaining[0]], updated)
             for other in remaining[1:]:
                 other_bucket = full.candidates(rule.body[other], updated)
@@ -1074,4 +1195,5 @@ class GenericEngine:
                     break
             if bucket:
                 stack.append((updated, tuple(index for index in remaining if index != chosen),
-                              chosen, iter(bucket)))
+                              chosen, iter(bucket),
+                              supported if track_premises else support))
