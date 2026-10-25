@@ -2,6 +2,14 @@
 
 ## Next release preparation (#385)
 
+PR CI cost reduction: edge-version Python matrices (3.10/3.13) for PRs, full
+3.10–3.13 on push/manual runs. Retain complete selected suites, real backend
+preflight, oracle gates, and distribution compatibility checks. Exclude prose-only
+changes from broad code workflows; docs retain Sphinx -W and API/roadmap checks.
+Cancel superseded PR runs and separate PR docs build concurrency from deployment.
+Validation: Actionlint 1.7.7 plus 22 workflow-policy/discovery tests passed.
+Docstring-work edits remain a separate in-progress slice under #387.
+
 Pre-merge documentation finishing pass: README component/application overview
 and Mermaid map; `docs/architecture.rst` with a rendered SVG component diagram,
 interfaces, application workflows, bitemporal examples, and explicit modularity

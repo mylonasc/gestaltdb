@@ -4,9 +4,12 @@ on:
   pull_request:
     branches: [main, feature/onto-dev-epic-2]
     paths:
-      - 'src/**'
+      - 'src/**/*.py'
+      - 'src/gestaltdb/viz/static/**'
       - 'tests/**'
-      - 'docs/**'
+      - 'benchmarks/**/*.py'
+      - 'benchmarks/*requirements*.txt'
+      - 'planning/**/*.py'
       - 'pyproject.toml'
       - 'uv.lock'
       - 'scripts/reasoning_release_smoke.py'
@@ -15,9 +18,12 @@ on:
   push:
     branches: [main, feature/onto-dev-epic-2]
     paths:
-      - 'src/**'
+      - 'src/**/*.py'
+      - 'src/gestaltdb/viz/static/**'
       - 'tests/**'
-      - 'docs/**'
+      - 'benchmarks/**/*.py'
+      - 'benchmarks/*requirements*.txt'
+      - 'planning/**/*.py'
       - 'pyproject.toml'
       - 'uv.lock'
       - 'scripts/reasoning_release_smoke.py'
@@ -28,6 +34,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   full-suite:
     name: Full suite (${{ matrix.python }})
@@ -36,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ['3.10', '3.11', '3.12', '3.13']
+        python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.10", "3.13"]' || '["3.10", "3.11", "3.12", "3.13"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -69,7 +79,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ['3.10', '3.11', '3.12', '3.13']
+        python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.10", "3.13"]' || '["3.10", "3.11", "3.12", "3.13"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0

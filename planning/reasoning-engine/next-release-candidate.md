@@ -58,3 +58,18 @@ replacements. Rebuild and revalidate after the next version is chosen. Full
 supported-Python/compatibility artifact checks remain a final gate.
 
 Draft main-target PR: #386. Preparation issue: #385, under #156.
+
+## Pre-merge CI policy
+
+PR Python matrices run 3.10 and 3.13, the supported edge versions; push/manual
+matrices keep 3.10–3.13. Each selected job still runs its complete suite, with
+real backend preflight, independent oracles, skip reports, and installed-artifact
+compatibility checks retained. The broad optional-integrations job uses 3.13.
+
+Code/dependency/test changes select code suites. README, Sphinx prose/assets,
+packaged Markdown help, and roadmap/benchmark reports alone do not select broad
+code workflows. Python-file docstring changes are conservatively treated as
+code. Documentation still builds with warnings-as-errors and checks API/roadmap
+references. Superseded PR runs can cancel; unrelated PR documentation builds no
+longer queue behind Pages deployment. Post-merge runs are not cancelled by this
+policy. Actionlint and ``tests/test_ci_workflow_policy.py`` validate the policy.

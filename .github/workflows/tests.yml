@@ -4,13 +4,41 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'src/**/*.py'
+      - 'src/gestaltdb/viz/static/**'
+      - 'tests/**'
+      - 'benchmarks/**/*.py'
+      - 'benchmarks/*requirements*.txt'
+      - 'scripts/**/*.py'
+      - 'scripts/**/*.sh'
+      - 'planning/**/*.py'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/tests.yml'
   pull_request:
     branches:
       - main
+    paths:
+      - 'src/**/*.py'
+      - 'src/gestaltdb/viz/static/**'
+      - 'tests/**'
+      - 'benchmarks/**/*.py'
+      - 'benchmarks/*requirements*.txt'
+      - 'scripts/**/*.py'
+      - 'scripts/**/*.sh'
+      - 'planning/**/*.py'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/tests.yml'
 
 # Least-privilege default: jobs only check out code and run tests.
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -18,7 +46,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        # PRs exercise the supported edges; pushes retain every supported minor.
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.10", "3.13"]' || '["3.10", "3.11", "3.12", "3.13"]') }}
 
     steps:
       - name: Check out repository
@@ -48,7 +77,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Install package with all optional integrations
         run: python -m pip install -e ".[all,coverage]"
