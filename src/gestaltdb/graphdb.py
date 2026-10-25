@@ -2788,6 +2788,21 @@ class GraphDB:
     def _temporal_version_id_exists(self, version_id: str) -> bool:
         return self._temporal_committer().version_id_exists(version_id)
 
+    @property
+    def history(self):
+        """Return read-only temporal capabilities bound to this handle's store.
+
+        Pass this capability instead of GraphDB to historical consumers.
+        It borrows this handle's lifetime; it is not a pinned read view.
+        Use ``read_view`` for authenticated fixed-horizon reads.
+        """
+        from .history import TemporalHistory
+
+        return TemporalHistory(
+            self._temporal_reader(), hydrate=self._get_temporal_version_at,
+            live_store=lambda: self.store,
+        )
+
     def _temporal_reader(self) -> _temporal_reads.TemporalReader:
         """Bind the historical read capability to this handle's scope."""
         return _temporal_reads.TemporalReader(
@@ -2828,7 +2843,7 @@ class GraphDB:
 
     def iter_temporal_commits(self, *, through_commit=None):
         """Iterate visible commits in commit order, skipping incomplete commits."""
-        return self._temporal_reader().iter_commits(through_commit=through_commit)
+        return self.history.iter_temporal_commits(through_commit=through_commit)
 
     def _temporal_orphan_details(self, commit_id: int, descriptor_payload: bytes):
         return _temporal_orphans.orphan_details(
@@ -2872,43 +2887,37 @@ class GraphDB:
         self, version_id: str, *, system_time=None, through_commit=None
     ) -> NodeVersion | None:
         """Return a visible node version by UUID using the temporal index."""
-        return self._temporal_reader().get_node_version(
+        return self.history.get_node_version(
             version_id, system_time=system_time, through_commit=through_commit)
 
     def get_edge_version(
         self, version_id: str, *, system_time=None, through_commit=None
     ) -> EdgeVersion | None:
         """Return a visible edge version by UUID using the temporal index."""
-        return self._temporal_reader().get_edge_version(
+        return self.history.get_edge_version(
             version_id, system_time=system_time, through_commit=through_commit)
 
     def get_claim_version(
         self, version_id: str, *, system_time=None, through_commit=None
     ) -> ClaimVersion | None:
         """Return a visible epistemic claim version by UUID."""
-        return self._temporal_reader().get_claim_version(
+        return self.history.get_claim_version(
             version_id, system_time=system_time, through_commit=through_commit)
 
     def iter_node_versions(self, logical_id=None, *, system_time=None, through_commit=None):
         """Iterate node versions, using the logical-history index when filtered."""
-        return _temporal_selection.iter_node_versions(
-            self._temporal_reader(), logical_id=logical_id,
-            system_time=system_time, through_commit=through_commit,
-        )
+        return self.history.iter_node_versions(logical_id,
+            system_time=system_time, through_commit=through_commit)
 
     def iter_edge_versions(self, logical_id=None, *, system_time=None, through_commit=None):
         """Iterate edge versions, using the logical-history index when filtered."""
-        return _temporal_selection.iter_edge_versions(
-            self._temporal_reader(), logical_id=logical_id,
-            system_time=system_time, through_commit=through_commit,
-        )
+        return self.history.iter_edge_versions(logical_id,
+            system_time=system_time, through_commit=through_commit)
 
     def iter_claim_versions(self, claim_id=None, *, system_time=None, through_commit=None):
         """Iterate claim versions, optionally restricted to one deterministic claim ID."""
-        return _temporal_selection.iter_claim_versions(
-            self._temporal_reader(), claim_id=claim_id,
-            system_time=system_time, through_commit=through_commit,
-        )
+        return self.history.iter_claim_versions(claim_id,
+            system_time=system_time, through_commit=through_commit)
 
     def _temporal_system_horizon(self, *, system_time=None, through_commit=None) -> int:
         return self._temporal_reader().system_horizon(
@@ -2929,31 +2938,22 @@ class GraphDB:
         self, logical_id, *, valid_time, system_time=None, through_commit=None
     ) -> NodeVersion | None:
         """Resolve a logical node at valid time and an optional system horizon."""
-        return _temporal_selection.entity_as_of(
-            self._temporal_reader(), "node", logical_id, valid_time=valid_time,
-            system_time=system_time, through_commit=through_commit,
-            hydrate=self._get_temporal_version_at,
-        )
+        return self.history.get_node_as_of(logical_id, valid_time=valid_time,
+            system_time=system_time, through_commit=through_commit)
 
     def get_edge_as_of(
         self, logical_id, *, valid_time, system_time=None, through_commit=None
     ) -> EdgeVersion | None:
         """Resolve a logical edge at valid time and an optional system horizon."""
-        return _temporal_selection.entity_as_of(
-            self._temporal_reader(), "edge", logical_id, valid_time=valid_time,
-            system_time=system_time, through_commit=through_commit,
-            hydrate=self._get_temporal_version_at,
-        )
+        return self.history.get_edge_as_of(logical_id, valid_time=valid_time,
+            system_time=system_time, through_commit=through_commit)
 
     def get_claim_as_of(
         self, claim_id, *, valid_time, system_time=None, through_commit=None
     ) -> ClaimVersion | None:
         """Resolve one claim identity at valid time and an optional system horizon."""
-        return _temporal_selection.entity_as_of(
-            self._temporal_reader(), "claim", claim_id, valid_time=valid_time,
-            system_time=system_time, through_commit=through_commit,
-            hydrate=self._get_temporal_version_at,
-        )
+        return self.history.get_claim_as_of(claim_id, valid_time=valid_time,
+            system_time=system_time, through_commit=through_commit)
 
     def iter_claims_as_of(
         self,
@@ -2978,13 +2978,12 @@ class GraphDB:
         Live-store commit integrity is checked again on successful exhaustion;
         partially consumed iterators are not completed authenticated reads.
         """
-        return _temporal_selection.iter_claims_as_of(
-            self._temporal_reader(), valid_time=valid_time,
+        return self.history.iter_claims_as_of(
+            valid_time=valid_time,
             statement_id=statement_id, subject=subject,
             predicate=predicate, object=object, object_kind=object_kind,
             agent=agent, source=source, world=world, polarity=polarity,
             system_time=system_time, through_commit=through_commit,
-            live_store=lambda: self.store,
         )
 
     def claim_status(
@@ -3002,8 +3001,8 @@ class GraphDB:
         through_commit=None,
     ) -> ClaimStatus:
         """Return supported/refuted/both/unknown under open-world semantics."""
-        return _temporal_selection.claim_status(
-            self._temporal_reader(), subject, predicate, object,
+        return self.history.claim_status(
+            subject, predicate, object,
             valid_time=valid_time, object_kind=object_kind, agent=agent,
             source=source, world=world, system_time=system_time,
             through_commit=through_commit,
@@ -3013,11 +3012,8 @@ class GraphDB:
         self, *, valid_time, system_time=None, through_commit=None
     ):
         """Iterate node versions visible at one valid and system-time point."""
-        return _temporal_selection.iter_nodes_as_of(
-            self._temporal_reader(), valid_time=valid_time,
-            system_time=system_time, through_commit=through_commit,
-            hydrate=self._get_temporal_version_at,
-        )
+        return self.history.iter_nodes_as_of(valid_time=valid_time,
+            system_time=system_time, through_commit=through_commit)
 
     def iter_edges_as_of(
         self,
@@ -3031,11 +3027,11 @@ class GraphDB:
         through_commit=None,
     ):
         """Iterate endpoint edges visible at valid time and a system horizon."""
-        return _temporal_selection.iter_edges_as_of(
-            self._temporal_reader(), valid_time=valid_time,
+        return self.history.iter_edges_as_of(
+            valid_time=valid_time,
             system_time=system_time, through_commit=through_commit,
             edge_type=edge_type, direction=direction, source=source,
-            target=target, hydrate=self._get_temporal_version_at,
+            target=target,
         )
 
     def rebuild_temporal_indexes(self, *, through_commit=None) -> dict[str, int]:

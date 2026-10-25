@@ -402,6 +402,10 @@ class GraphReadView:
 
     def __init__(self, graph, provenance: ReadViewProvenance):
         self._graph = graph
+        self._history = graph.history
+        # Legacy instance-level stream instrumentation remains an explicit seam.
+        # Ordinary reads use the capability, not a GraphDB method round trip.
+        self._claim_overrides = vars(graph)
         self.provenance = provenance
         self.valid_time = TemporalInstant(provenance.valid_time_us)
 
@@ -410,53 +414,55 @@ class GraphReadView:
         return self.provenance.commit_horizon
 
     def get_node_version(self, version_id):
-        return self._graph.get_node_version(version_id, through_commit=self.commit_horizon)
+        return self._history.get_node_version(version_id, through_commit=self.commit_horizon)
 
     def get_edge_version(self, version_id):
-        return self._graph.get_edge_version(version_id, through_commit=self.commit_horizon)
+        return self._history.get_edge_version(version_id, through_commit=self.commit_horizon)
 
     def get_claim_version(self, version_id):
-        return self._graph.get_claim_version(version_id, through_commit=self.commit_horizon)
+        return self._history.get_claim_version(version_id, through_commit=self.commit_horizon)
 
     def iter_node_versions(self, logical_id=None):
-        return self._graph.iter_node_versions(logical_id, through_commit=self.commit_horizon)
+        return self._history.iter_node_versions(logical_id, through_commit=self.commit_horizon)
 
     def iter_edge_versions(self, logical_id=None):
-        return self._graph.iter_edge_versions(logical_id, through_commit=self.commit_horizon)
+        return self._history.iter_edge_versions(logical_id, through_commit=self.commit_horizon)
 
     def iter_claim_versions(self, claim_id=None):
-        return self._graph.iter_claim_versions(claim_id, through_commit=self.commit_horizon)
+        return self._history.iter_claim_versions(claim_id, through_commit=self.commit_horizon)
 
     def get_node_as_of(self, logical_id, *, valid_time=None):
-        return self._graph.get_node_as_of(
+        return self._history.get_node_as_of(
             logical_id,
             valid_time=self.valid_time if valid_time is None else valid_time,
             through_commit=self.commit_horizon,
         )
 
     def get_edge_as_of(self, logical_id, *, valid_time=None):
-        return self._graph.get_edge_as_of(
+        return self._history.get_edge_as_of(
             logical_id,
             valid_time=self.valid_time if valid_time is None else valid_time,
             through_commit=self.commit_horizon,
         )
 
     def get_claim_as_of(self, claim_id, *, valid_time=None):
-        return self._graph.get_claim_as_of(
+        return self._history.get_claim_as_of(
             claim_id,
             valid_time=self.valid_time if valid_time is None else valid_time,
             through_commit=self.commit_horizon,
         )
 
     def iter_claims_as_of(self, *, valid_time=None, **kwargs):
-        return self._graph.iter_claims_as_of(
+        iterator = self._claim_overrides.get(
+            "iter_claims_as_of", self._history.iter_claims_as_of)
+        return iterator(
             valid_time=self.valid_time if valid_time is None else valid_time,
             through_commit=self.commit_horizon,
             **kwargs,
         )
 
     def claim_status(self, subject, predicate, object, *, valid_time=None, **kwargs):
-        return self._graph.claim_status(
+        return self._history.claim_status(
             subject,
             predicate,
             object,
@@ -474,14 +480,14 @@ class GraphReadView:
         )
 
     def iter_edges_as_of(self, *, valid_time=None, **kwargs):
-        return self._graph.iter_edges_as_of(
+        return self._history.iter_edges_as_of(
             valid_time=self.valid_time if valid_time is None else valid_time,
             through_commit=self.commit_horizon,
             **kwargs,
         )
 
     def iter_nodes_as_of(self, *, valid_time=None):
-        return self._graph.iter_nodes_as_of(
+        return self._history.iter_nodes_as_of(
             valid_time=self.valid_time if valid_time is None else valid_time,
             through_commit=self.commit_horizon,
         )

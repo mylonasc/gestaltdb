@@ -1,7 +1,7 @@
 {
   "generated_from": {
     "path": "src/gestaltdb/graphdb.py",
-    "sha256": "25096e52cd1c7eeddfdcbb9c98f5203284e85998b9bd9448beaeab021d56c220"
+    "sha256": "070a90b100ff4b174b572eb47807e26293a74b77d2a94a65b98598d173b68632"
   },
   "methods": [
     {
@@ -57,7 +57,7 @@
           "example": 1
         }
       ],
-      "line": 2990,
+      "line": 2989,
       "name": "claim_status",
       "returns": "",
       "signature": "claim_status(subject, predicate, object, valid_time, object_kind=ClaimObjectKind.ENTITY, agent=None, source=_UNSET, world=None, system_time=None, through_commit=None)",
@@ -123,7 +123,7 @@
           "example": 2
         }
       ],
-      "line": 3167,
+      "line": 3163,
       "name": "close",
       "returns": "",
       "signature": "close()",
@@ -506,7 +506,7 @@
     },
     {
       "examples": [],
-      "line": 2948,
+      "line": 2951,
       "name": "get_claim_as_of",
       "returns": "",
       "signature": "get_claim_as_of(claim_id, valid_time, system_time=None, through_commit=None)",
@@ -515,7 +515,7 @@
     },
     {
       "examples": [],
-      "line": 2885,
+      "line": 2900,
       "name": "get_claim_version",
       "returns": "",
       "signature": "get_claim_version(version_id: str, system_time=None, through_commit=None)",
@@ -543,7 +543,7 @@
           "example": 1
         }
       ],
-      "line": 2938,
+      "line": 2944,
       "name": "get_edge_as_of",
       "returns": "",
       "signature": "get_edge_as_of(logical_id, valid_time, system_time=None, through_commit=None)",
@@ -552,7 +552,7 @@
     },
     {
       "examples": [],
-      "line": 2878,
+      "line": 2893,
       "name": "get_edge_version",
       "returns": "",
       "signature": "get_edge_version(version_id: str, system_time=None, through_commit=None)",
@@ -579,7 +579,7 @@
     },
     {
       "examples": [],
-      "line": 2928,
+      "line": 2937,
       "name": "get_node_as_of",
       "returns": "",
       "signature": "get_node_as_of(logical_id, valid_time, system_time=None, through_commit=None)",
@@ -597,7 +597,7 @@
     },
     {
       "examples": [],
-      "line": 2871,
+      "line": 2886,
       "name": "get_node_version",
       "returns": "",
       "signature": "get_node_version(version_id: str, system_time=None, through_commit=None)",
@@ -624,7 +624,7 @@
     },
     {
       "examples": [],
-      "line": 2804,
+      "line": 2819,
       "name": "get_temporal_commit",
       "returns": "",
       "signature": "get_temporal_commit(commit_id: int, _validate_supersession: bool=True)",
@@ -639,6 +639,15 @@
       "signature": "get_typed_adjacency(node_id, edge_type: str, direction: str='out')",
       "summary": "Return typed adjacency records with clean direction semantics.",
       "topic": "sampling"
+    },
+    {
+      "examples": [],
+      "line": 2792,
+      "name": "history",
+      "returns": "",
+      "signature": "history()",
+      "summary": "Return read-only temporal capabilities bound to this handle's store.",
+      "topic": "quickstart"
     },
     {
       "examples": [
@@ -760,7 +769,7 @@
     },
     {
       "examples": [],
-      "line": 2906,
+      "line": 2917,
       "name": "iter_claim_versions",
       "returns": "",
       "signature": "iter_claim_versions(claim_id=None, system_time=None, through_commit=None)",
@@ -832,7 +841,7 @@
     },
     {
       "examples": [],
-      "line": 2899,
+      "line": 2912,
       "name": "iter_edge_versions",
       "returns": "",
       "signature": "iter_edge_versions(logical_id=None, system_time=None, through_commit=None)",
@@ -841,7 +850,7 @@
     },
     {
       "examples": [],
-      "line": 3022,
+      "line": 3018,
       "name": "iter_edges_as_of",
       "returns": "",
       "signature": "iter_edges_as_of(edge_type=None, direction='out', source=None, target=None, valid_time, system_time=None, through_commit=None)",
@@ -900,7 +909,7 @@
     },
     {
       "examples": [],
-      "line": 2892,
+      "line": 2907,
       "name": "iter_node_versions",
       "returns": "",
       "signature": "iter_node_versions(logical_id=None, system_time=None, through_commit=None)",
@@ -909,7 +918,7 @@
     },
     {
       "examples": [],
-      "line": 3012,
+      "line": 3011,
       "name": "iter_nodes_as_of",
       "returns": "",
       "signature": "iter_nodes_as_of(valid_time, system_time=None, through_commit=None)",
@@ -927,7 +936,7 @@
     },
     {
       "examples": [],
-      "line": 2829,
+      "line": 2844,
       "name": "iter_temporal_commits",
       "returns": "",
       "signature": "iter_temporal_commits(through_commit=None)",
@@ -963,7 +972,7 @@
     },
     {
       "examples": [],
-      "line": 2843,
+      "line": 2858,
       "name": "list_temporal_orphans",
       "returns": "",
       "signature": "list_temporal_orphans(through_commit=None)",
@@ -1260,7 +1269,7 @@
           "example": 1
         }
       ],
-      "line": 3055,
+      "line": 3051,
       "name": "query",
       "returns": "``gestaltdb.QueryResult`` containing projected records.",
       "signature": "query(cypher: str, parameters: Optional[dict[str, object]]=None, read_snapshot: bool | None=None, label_hierarchy=None, relation_hierarchy=None)",
@@ -1350,7 +1359,7 @@
     },
     {
       "examples": [],
-      "line": 3041,
+      "line": 3037,
       "name": "rebuild_temporal_indexes",
       "returns": "",
       "signature": "rebuild_temporal_indexes(through_commit=None)",
@@ -1368,7 +1377,7 @@
     },
     {
       "examples": [],
-      "line": 2848,
+      "line": 2863,
       "name": "reclaim_temporal_orphans",
       "returns": "",
       "signature": "reclaim_temporal_orphans(through_commit: int)",
@@ -1514,7 +1523,7 @@
     },
     {
       "examples": [],
-      "line": 3148,
+      "line": 3144,
       "name": "transaction",
       "returns": "",
       "signature": "transaction(**options)",
@@ -1541,7 +1550,7 @@
     },
     {
       "examples": [],
-      "line": 3104,
+      "line": 3100,
       "name": "visualize",
       "returns": "``gestaltdb.viz.api.VizFigure``.",
       "signature": "visualize(cypher=None, seeds=None, pattern=None, parameters=None, options=None, rng=None)",

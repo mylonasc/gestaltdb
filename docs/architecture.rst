@@ -210,6 +210,32 @@ Browse the `database implementation <https://github.com/mylonasc/gestaltdb/blob/
 and `reasoning components and adapters <https://github.com/mylonasc/gestaltdb/tree/main/src/gestaltdb/reasoning>`_
 to follow those boundaries in code.
 
+Historical consumers can use ``graph.history`` (``gestaltdb.history.TemporalHistory``)
+instead of accepting the full mutable database. ``TemporalHistory.from_store``
+also borrows an existing backend and serializer without constructing a
+``GraphDB``. This capability exposes only historical reads, does not own the
+store, and performs no identity initialization or index repair. It is not a
+snapshot or an authenticated source: use ``graph.read_view`` for authenticated
+fixed-horizon selection. ``GraphReadView`` delegates historical queries to this
+capability; its source verification and sampler integration still retain the
+owning graph. Temporal writes and publication remain behind the guarded facade.
+
+For example, pass only read authority to an application component::
+
+    from tempfile import TemporaryDirectory
+    from gestaltdb.graphdb import GraphDB, Node
+
+    def names_at(history, instant):
+        return [v.logical_id for v in history.iter_nodes_as_of(valid_time=instant)]
+
+    with TemporaryDirectory() as root:
+        graph = GraphDB.create(root + "/db", backend="lmdb")
+        try:
+            graph.put_node_version(Node("alice"), valid=(0, 10))
+            assert names_at(graph.history, 5) == ["alice"]
+        finally:
+            graph.close()
+
 The decomposition is useful, with four important boundaries:
 
 * ``GraphDB`` is the public integration facade: it owns handle lifecycle,

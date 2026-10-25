@@ -222,7 +222,48 @@ versions, rule catalog, commit path. They do not receive unrestricted
   real-backend evidence each time.
 
 
-## Completion status (2026-10-26)
+## Second pass: capability boundaries
+
+The first pass completed implementation extraction, **not architectural
+decoupling**. Its completion claim below applies only to that extraction.
+Moving bodies into `_graph/` did not remove consumers' dependency on GraphDB.
+
+The second pass measures dependencies and authority, not facade line count:
+
+* Added `TemporalHistory` (`gestaltdb.history`): read-only historical queries,
+  version lookup and commit inspection. It can borrow an existing store via
+  `from_store` without constructing GraphDB, initializing identity, writing
+  metadata or repairing indexes. It does not own store lifetime.
+* `GraphDB.history` is a scope-bound convenience; historical facade methods
+  delegate to this capability. Existing hydration and grouped-read tripwire
+  hooks remain explicit, preserving instrumentation and failure checks.
+* `GraphReadView` routes historical queries through the capability instead of
+  dispatching them back to GraphDB. Its source-authentication and sampler-build
+  integrations still use the owning graph; they are not read authority granted
+  by `TemporalHistory`.
+* Boundary tests forbid facade calls from historical consumers and verify
+  transaction binding, detached payloads, and absence of mutation/query APIs.
+* Validation: full optional suite 3,422 passed / 3 expected skips; Ruff,
+  shrinking module budgets, API-index drift, Sphinx `-W`, and all eight
+  modular documentation snippets passed. Existing reasoning admission tests
+  also verify that instance-level stream injection remains effective even
+  when installed after a view was created. Normal reads bypass that legacy
+  compatibility seam.
+
+Remaining work is substantive and is **not complete**:
+
+1. Separate authenticated source identity/lifetime from GraphReadView's graph
+   reference, without weakening provenance verification or native admission.
+2. Introduce a temporal writer capability owning guard/transaction coordination,
+   sequence/commit publication and retraction validation. A bare committer is
+   insufficient: never expose unguarded publication as the replacement API.
+3. Give stored-rule/claim and mutable-current-graph clients explicit capabilities;
+   migrate reasoning adapters off private GraphDB methods. Keep raw mutable
+   reads, historical reads, authenticated evidence and publication distinct.
+4. Enforce dependency boundaries with tests, then deprecate broad interfaces only
+   with a separate compatibility decision. Do not remove facade APIs now.
+
+## Completion status (2026-10-26; implementation extraction only)
 
 34 slices landed; `graphdb.py` went 7,113 -> 3,174 lines with zero
 behavior change (full optional suite: 3,418 passed, 3 expected

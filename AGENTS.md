@@ -9,6 +9,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Component/application map and integration boundaries: `docs/architecture.rst`.
 - Core package: `src/gestaltdb/`
 - Public graph model and database: `src/gestaltdb/graphdb.py`
+- Read-only temporal capability: `src/gestaltdb/history.py` (`graph.history` or `TemporalHistory.from_store`). Borrows store lifetime; no writes, identity initialization, index repair, source authentication or automatic pinning. `GraphReadView` uses it for historical queries.
 - Storage backends: `src/gestaltdb/kvstores.py`
 - Serializers: `src/gestaltdb/serializers.py`
 - Columnar ingestion containers and enums: `src/gestaltdb/ingestion.py`
