@@ -233,6 +233,8 @@ class PinnedClaimSource:
         _text(ontology_revision, "ontology_revision")
         self._original = view
         self._graph = view._graph
+        self._store = self._graph.store
+        self._serializer = self._graph.serializer
         self._provenance = ReadViewProvenance.from_dict(view.provenance.to_dict())
         self._time = TemporalInstant(self._provenance.valid_time_us)
         self._pinned = GraphReadView(self._graph, self._provenance)
@@ -255,7 +257,9 @@ class PinnedClaimSource:
         if self._closed:
             raise ReasoningError("claim source is closed")
         if (self._original._graph is not self._graph or self._original.provenance != self._provenance
-                or self._original.valid_time != self._time):
+                or self._original.valid_time != self._time
+                or self._graph.store is not self._store
+                or self._graph.serializer is not self._serializer):
             raise ProvenanceMismatchError("source view was rebound to a different context")
 
     def verify_source(self) -> None:
