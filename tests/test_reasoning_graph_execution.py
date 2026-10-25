@@ -87,6 +87,31 @@ def test_executor_parity_and_prepared_plan(graph, preferred):
         assert outcome.outcome.telemetry.admission_digest == outcome.binding.identity.digest
 
 
+def test_explicit_polars_budget_through_authenticated_current_consumer(graph):
+    pytest.importorskip("polars")
+    request = ExecutorRequest(preferred="polars-prototype", polars_available=True)
+    with graph.current_read_view(require_verifiable=True) as view:
+        reference = run(view)
+        with pytest.raises(ReasoningLimitError, match="max_intermediate_rows"):
+            run(view, executor_request=request, polars_max_intermediate_rows=1)
+        result = run(view, executor_request=request, polars_max_intermediate_rows=1000,
+                     expected_generation=reference.binding.identity)
+        assert result.binding.identity == reference.binding.identity
+        assert result.outcome.result.facts == reference.outcome.result.facts
+        assert result.outcome.polars_run.metrics["max_intermediate_rows"] == 1000
+
+
+@pytest.mark.parametrize("value", [1, False, 0, "100"])
+def test_current_consumer_rejects_irrelevant_or_invalid_budget_before_projection(graph, monkeypatch, value):
+    with graph.current_read_view(require_verifiable=True) as view:
+        def forbidden(*args):
+            pytest.fail("records read before physical option rejection")
+        monkeypatch.setattr(view, "get_node", forbidden)
+        monkeypatch.setattr(view, "get_edge", forbidden)
+        with pytest.raises(ReasoningError, match="polars_max_intermediate_rows"):
+            run(view, polars_max_intermediate_rows=value)
+
+
 @pytest.mark.parametrize("preferred", ["default", "indexed-scc"])
 def test_exact_parallel_edge_evidence_in_proofs(graph, preferred):
     with graph.current_read_view(require_verifiable=True) as view:

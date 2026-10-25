@@ -17,7 +17,7 @@ from ..executors import PROFILE, ExecutorRequest, select_executor
 from ..generation import AdmissionRequest, CurrentSourceIdentity, GenerationIdentity
 from ..model import ReasoningError, ReasoningLimits, check_cancelled
 from ..plans import PreparedProgram
-from .execution import ExecutionOutcome, execute_closure
+from .execution import ExecutionOutcome, execute_closure, _polars_intermediate_limit
 from .generation import catalog_for_ontology
 from .graph import GraphMapping, GraphSourceLimits, PinnedGraphSource, _graph_context
 
@@ -105,6 +105,7 @@ def execute_current_graph(view: CurrentGraphReadView, compiled: CompiledOntology
                           plan: PreparedProgram | None = None,
                           expected_generation: GenerationIdentity | None = None,
                           collect_proofs: bool = False,
+                          polars_max_intermediate_rows: int | None = None,
                           cancel: Callable[[], bool] | None = None) -> CurrentGraphExecution:
     """Authenticate, project and execute, checking expected identity before records.
 
@@ -125,6 +126,7 @@ def execute_current_graph(view: CurrentGraphReadView, compiled: CompiledOntology
         raise ReasoningError("expected_generation must be a GenerationIdentity or None")
     check_cancelled(cancel)
     decision = select_executor(executor_request)
+    _polars_intermediate_limit(decision.kind, polars_max_intermediate_rows)
     with PinnedGraphSource(view, mapping=mapping, limits=source_limits) as source:
         check_cancelled(cancel)
         binding = _binding(source, compiled, catalog, mapping)
@@ -135,7 +137,8 @@ def execute_current_graph(view: CurrentGraphReadView, compiled: CompiledOntology
             compiled.program, source._evidence(cancel=cancel), executor_request=executor_request,
             admission_request=AdmissionRequest(executor_request.mode, decision.kind),
             generation=identity, plan=plan, context=identity.context,
-            limits=limits, collect_proofs=collect_proofs, cancel=cancel)
+            limits=limits, collect_proofs=collect_proofs,
+            polars_max_intermediate_rows=polars_max_intermediate_rows, cancel=cancel)
         check_cancelled(cancel)
         source._check()
         return CurrentGraphExecution(outcome, binding)
