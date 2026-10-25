@@ -175,14 +175,10 @@ def validate(facts: Iterable[TypedFact], suite: ValidationSuite, *,
     ordered = sorted(set(items), key=_sort_key)
     violations: list[Violation] = []
     truncated = False
-    by_subject_predicate: dict[tuple, list[TypedFact]] = {}
     members: dict[object, set[str]] = {}
     for index, fact in enumerate(ordered):
         if index % 1024 == 0:
             check_cancelled(cancel)
-        if len(fact.values) >= 1:
-            key = (fact.predicate, fact.values[0])
-            by_subject_predicate.setdefault(key, []).append(fact)
         if fact.predicate == suite.membership and len(fact.values) == 2 and isinstance(fact.values[1], str):
             members.setdefault(fact.values[0], set()).add(fact.values[1])
     for denial in suite.denials:
