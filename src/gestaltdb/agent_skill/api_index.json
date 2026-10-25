@@ -1,7 +1,7 @@
 {
   "generated_from": {
     "path": "src/gestaltdb/graphdb.py",
-    "sha256": "357994fb35f8f6664049d469322cb2ae19a8b7ba3a47502e2039b24d0193296f"
+    "sha256": "25096e52cd1c7eeddfdcbb9c98f5203284e85998b9bd9448beaeab021d56c220"
   },
   "methods": [
     {
@@ -11,7 +11,7 @@
           "example": 1
         }
       ],
-      "line": 2631,
+      "line": 2586,
       "name": "assert_claim",
       "returns": "",
       "signature": "assert_claim(subject, predicate, object, polarity, agent, source=None, confidence=None, world='default', provenance=None, object_kind=ClaimObjectKind.ENTITY, valid=None, valid_from=None, valid_to=None, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -20,7 +20,7 @@
     },
     {
       "examples": [],
-      "line": 2660,
+      "line": 2615,
       "name": "assert_world_accessibility",
       "returns": "",
       "signature": "assert_world_accessibility(agent, from_world, to_world, kind, valid=None, valid_from=None, valid_to=None, source=None, provenance=None, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -29,7 +29,7 @@
     },
     {
       "examples": [],
-      "line": 2054,
+      "line": 2009,
       "name": "bfs",
       "returns": "Demonstrates how adjacency is used for graph traversal.",
       "signature": "bfs(start_node_id: bytes, direction='any', edge_key_serializer=lambda x: x.encode('utf-8'), node_key_serializer=lambda x: x.encode('utf-8'))",
@@ -57,7 +57,7 @@
           "example": 1
         }
       ],
-      "line": 3035,
+      "line": 2990,
       "name": "claim_status",
       "returns": "",
       "signature": "claim_status(subject, predicate, object, valid_time, object_kind=ClaimObjectKind.ENTITY, agent=None, source=_UNSET, world=None, system_time=None, through_commit=None)",
@@ -123,7 +123,7 @@
           "example": 2
         }
       ],
-      "line": 3212,
+      "line": 3167,
       "name": "close",
       "returns": "",
       "signature": "close()",
@@ -132,7 +132,7 @@
     },
     {
       "examples": [],
-      "line": 2787,
+      "line": 2742,
       "name": "commit_versions",
       "returns": "",
       "signature": "commit_versions(writes, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -146,7 +146,7 @@
           "example": 1
         }
       ],
-      "line": 2733,
+      "line": 2688,
       "name": "correct_claim",
       "returns": "",
       "signature": "correct_claim(claim, supersedes_version_id, confidence=_UNSET, provenance=_UNSET, valid=None, valid_from=None, valid_to=None, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -155,7 +155,7 @@
     },
     {
       "examples": [],
-      "line": 2569,
+      "line": 2524,
       "name": "correct_edge_version",
       "returns": "",
       "signature": "correct_edge_version(edge: Edge, supersedes_version_id: str, valid=None, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -164,7 +164,7 @@
     },
     {
       "examples": [],
-      "line": 2553,
+      "line": 2508,
       "name": "correct_node_version",
       "returns": "",
       "signature": "correct_node_version(node: Node, supersedes_version_id: str, valid=None, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -263,7 +263,7 @@
     },
     {
       "examples": [],
-      "line": 1327,
+      "line": 1282,
       "name": "count_typed_adjacency",
       "returns": "Number of typed adjacency records matching the node, edge type, and",
       "signature": "count_typed_adjacency(node_id, edge_type: str, direction: str='out')",
@@ -347,7 +347,7 @@
           "example": 1
         }
       ],
-      "line": 2347,
+      "line": 2302,
       "name": "create_rule",
       "returns": "",
       "signature": "create_rule(rule_id, when, then, not_when=(), closed_world=(), version_id=None)",
@@ -374,7 +374,7 @@
     },
     {
       "examples": [],
-      "line": 2021,
+      "line": 1976,
       "name": "delete_edge",
       "returns": "",
       "signature": "delete_edge(edge_id: str, edge_key_serializer=lambda x: x.encode('utf-8'))",
@@ -410,7 +410,7 @@
     },
     {
       "examples": [],
-      "line": 1378,
+      "line": 1333,
       "name": "edges_by_edge_type",
       "returns": "List of edge ID bytes.",
       "signature": "edges_by_edge_type(node_id, edge_type: str, direction: str='out')",
@@ -474,7 +474,7 @@
     },
     {
       "examples": [],
-      "line": 2698,
+      "line": 2653,
       "name": "entails",
       "returns": "",
       "signature": "entails(agent, proposition, mode, world, valid_time, system_time=None, through_commit=None, max_depth=4, max_states=1000)",
@@ -488,7 +488,7 @@
           "example": 1
         }
       ],
-      "line": 2484,
+      "line": 2439,
       "name": "explain_claim",
       "returns": "",
       "signature": "explain_claim(claim_id, valid_time, system_time=None, max_depth=100, max_nodes=10000)",
@@ -497,7 +497,7 @@
     },
     {
       "examples": [],
-      "line": 2001,
+      "line": 1956,
       "name": "get_adjacency_list",
       "returns": "If none found, returns an empty list.",
       "signature": "get_adjacency_list(node_id: bytes, direction='forward', return_raw=False)",
@@ -506,7 +506,7 @@
     },
     {
       "examples": [],
-      "line": 2993,
+      "line": 2948,
       "name": "get_claim_as_of",
       "returns": "",
       "signature": "get_claim_as_of(claim_id, valid_time, system_time=None, through_commit=None)",
@@ -515,7 +515,7 @@
     },
     {
       "examples": [],
-      "line": 2930,
+      "line": 2885,
       "name": "get_claim_version",
       "returns": "",
       "signature": "get_claim_version(version_id: str, system_time=None, through_commit=None)",
@@ -529,7 +529,7 @@
           "example": 1
         }
       ],
-      "line": 1523,
+      "line": 1478,
       "name": "get_edge",
       "returns": "The decoded edge, or ``None`` when absent.",
       "signature": "get_edge(edge_id)",
@@ -543,7 +543,7 @@
           "example": 1
         }
       ],
-      "line": 2983,
+      "line": 2938,
       "name": "get_edge_as_of",
       "returns": "",
       "signature": "get_edge_as_of(logical_id, valid_time, system_time=None, through_commit=None)",
@@ -552,7 +552,7 @@
     },
     {
       "examples": [],
-      "line": 2923,
+      "line": 2878,
       "name": "get_edge_version",
       "returns": "",
       "signature": "get_edge_version(version_id: str, system_time=None, through_commit=None)",
@@ -579,7 +579,7 @@
     },
     {
       "examples": [],
-      "line": 2973,
+      "line": 2928,
       "name": "get_node_as_of",
       "returns": "",
       "signature": "get_node_as_of(logical_id, valid_time, system_time=None, through_commit=None)",
@@ -588,7 +588,7 @@
     },
     {
       "examples": [],
-      "line": 1972,
+      "line": 1927,
       "name": "get_node_keys_generator",
       "returns": "Generator of node key bytes.",
       "signature": "get_node_keys_generator(num_nodes=None, key_offset=None)",
@@ -597,7 +597,7 @@
     },
     {
       "examples": [],
-      "line": 2916,
+      "line": 2871,
       "name": "get_node_version",
       "returns": "",
       "signature": "get_node_version(version_id: str, system_time=None, through_commit=None)",
@@ -606,7 +606,7 @@
     },
     {
       "examples": [],
-      "line": 1966,
+      "line": 1921,
       "name": "get_nodes",
       "returns": "",
       "signature": "get_nodes(node_ids: list[str])",
@@ -615,7 +615,7 @@
     },
     {
       "examples": [],
-      "line": 2367,
+      "line": 2322,
       "name": "get_rule",
       "returns": "",
       "signature": "get_rule(rule_id, system_time=None)",
@@ -624,7 +624,7 @@
     },
     {
       "examples": [],
-      "line": 2849,
+      "line": 2804,
       "name": "get_temporal_commit",
       "returns": "",
       "signature": "get_temporal_commit(commit_id: int, _validate_supersession: bool=True)",
@@ -633,7 +633,7 @@
     },
     {
       "examples": [],
-      "line": 1318,
+      "line": 1273,
       "name": "get_typed_adjacency",
       "returns": "",
       "signature": "get_typed_adjacency(node_id, edge_type: str, direction: str='out')",
@@ -661,7 +661,7 @@
           "example": 1
         }
       ],
-      "line": 1698,
+      "line": 1653,
       "name": "ingest_arrow",
       "returns": "",
       "signature": "ingest_arrow(node_ids, edge_ids, sources, targets, edge_types, ingestion_mode: str | ColumnarIngestionMode=ColumnarIngestionMode.ENTITY_COLUMNS, index_mode: str | IndexMaintenanceMode=IndexMaintenanceMode.DEFER_REBUILD, node_values=None, edge_values=None, labels=None, node_properties: dict[str, object] | None=None, edge_properties: dict[str, object] | None=None, native: bool=True, chunk_size: int=100000, progress: bool=False)",
@@ -670,7 +670,7 @@
     },
     {
       "examples": [],
-      "line": 2087,
+      "line": 2042,
       "name": "ingest_edges_arrow",
       "returns": "Number of ingested edges.",
       "signature": "ingest_edges_arrow(edge_ids, sources, targets, edge_types, edge_values, append_only: bool=True, native: bool=True, chunk_size: int=100000, index_mode: str='maintain', progress: bool=False)",
@@ -679,7 +679,7 @@
     },
     {
       "examples": [],
-      "line": 2205,
+      "line": 2160,
       "name": "ingest_edges_arrow_entities",
       "returns": "",
       "signature": "ingest_edges_arrow_entities(edge_ids, sources, targets, edge_types, properties: dict[str, object] | None=None, append_only: bool=True, native: bool=True, chunk_size: int=100000, index_mode: str='maintain', progress: bool=False)",
@@ -688,7 +688,7 @@
     },
     {
       "examples": [],
-      "line": 2139,
+      "line": 2094,
       "name": "ingest_edges_polars",
       "returns": "",
       "signature": "ingest_edges_polars(df, edge_id: str='edge_id', source: str='source', target: str='target', edge_type: str='edge_type', edge_value: str='edge_value', append_only: bool=True, native: bool=True, chunk_size: int=100000, index_mode: str='maintain', progress: bool=False)",
@@ -697,7 +697,7 @@
     },
     {
       "examples": [],
-      "line": 2175,
+      "line": 2130,
       "name": "ingest_edges_polars_entities",
       "returns": "",
       "signature": "ingest_edges_polars_entities(df, edge_id: str='edge_id', source: str='source', target: str='target', edge_type: str='edge_type', property_columns: list[str] | tuple[str, ...] | None=None, append_only: bool=True, native: bool=True, chunk_size: int=100000, index_mode: str='maintain', progress: bool=False)",
@@ -706,7 +706,7 @@
     },
     {
       "examples": [],
-      "line": 1806,
+      "line": 1761,
       "name": "ingest_nodes_arrow",
       "returns": "Number of ingested nodes.",
       "signature": "ingest_nodes_arrow(node_ids, node_values, native: bool=True, chunk_size: int=100000, append_only: bool=False, index_mode: str='maintain', progress: bool=False)",
@@ -715,7 +715,7 @@
     },
     {
       "examples": [],
-      "line": 1903,
+      "line": 1858,
       "name": "ingest_nodes_arrow_entities",
       "returns": "",
       "signature": "ingest_nodes_arrow_entities(node_ids, labels=None, properties: dict[str, object] | None=None, native: bool=True, chunk_size: int=100000, append_only: bool=False, index_mode: str='maintain', progress: bool=False)",
@@ -724,7 +724,7 @@
     },
     {
       "examples": [],
-      "line": 1847,
+      "line": 1802,
       "name": "ingest_nodes_polars",
       "returns": "",
       "signature": "ingest_nodes_polars(df, node_id: str='node_id', node_value: str='node_value', native: bool=True, chunk_size: int=100000, append_only: bool=False, index_mode: str='maintain', progress: bool=False)",
@@ -733,7 +733,7 @@
     },
     {
       "examples": [],
-      "line": 1878,
+      "line": 1833,
       "name": "ingest_nodes_polars_entities",
       "returns": "",
       "signature": "ingest_nodes_polars_entities(df, node_id: str='node_id', labels: str | list[str] | tuple[str, ...] | None='labels', property_columns: list[str] | tuple[str, ...] | None=None, native: bool=True, chunk_size: int=100000, append_only: bool=False, index_mode: str='maintain', progress: bool=False)",
@@ -751,7 +751,7 @@
           "example": 3
         }
       ],
-      "line": 1601,
+      "line": 1556,
       "name": "ingest_polars",
       "returns": "",
       "signature": "ingest_polars(node_df, edge_df, ingestion_mode: str | ColumnarIngestionMode=ColumnarIngestionMode.ENTITY_COLUMNS, index_mode: str | IndexMaintenanceMode=IndexMaintenanceMode.DEFER_REBUILD, node_id: str='node_id', node_value: str='node_value', labels: str | list[str] | tuple[str, ...] | None='labels', node_property_columns: list[str] | tuple[str, ...] | None=None, edge_id: str='edge_id', source: str='source', target: str='target', edge_type: str='edge_type', edge_value: str='edge_value', edge_property_columns: list[str] | tuple[str, ...] | None=None, native: bool=True, chunk_size: int=100000, progress: bool=False)",
@@ -760,7 +760,7 @@
     },
     {
       "examples": [],
-      "line": 2951,
+      "line": 2906,
       "name": "iter_claim_versions",
       "returns": "",
       "signature": "iter_claim_versions(claim_id=None, system_time=None, through_commit=None)",
@@ -769,7 +769,7 @@
     },
     {
       "examples": [],
-      "line": 3003,
+      "line": 2958,
       "name": "iter_claims_as_of",
       "returns": "",
       "signature": "iter_claims_as_of(valid_time, statement_id=None, subject=None, predicate=None, object=_UNSET, object_kind=None, agent=None, source=_UNSET, world=None, polarity=None, system_time=None, through_commit=None)",
@@ -832,7 +832,7 @@
     },
     {
       "examples": [],
-      "line": 2944,
+      "line": 2899,
       "name": "iter_edge_versions",
       "returns": "",
       "signature": "iter_edge_versions(logical_id=None, system_time=None, through_commit=None)",
@@ -841,7 +841,7 @@
     },
     {
       "examples": [],
-      "line": 3067,
+      "line": 3022,
       "name": "iter_edges_as_of",
       "returns": "",
       "signature": "iter_edges_as_of(edge_type=None, direction='out', source=None, target=None, valid_time, system_time=None, through_commit=None)",
@@ -900,7 +900,7 @@
     },
     {
       "examples": [],
-      "line": 2937,
+      "line": 2892,
       "name": "iter_node_versions",
       "returns": "",
       "signature": "iter_node_versions(logical_id=None, system_time=None, through_commit=None)",
@@ -909,7 +909,7 @@
     },
     {
       "examples": [],
-      "line": 3057,
+      "line": 3012,
       "name": "iter_nodes_as_of",
       "returns": "",
       "signature": "iter_nodes_as_of(valid_time, system_time=None, through_commit=None)",
@@ -918,7 +918,7 @@
     },
     {
       "examples": [],
-      "line": 2363,
+      "line": 2318,
       "name": "iter_rule_versions",
       "returns": "",
       "signature": "iter_rule_versions(rule_id=None, system_time=None)",
@@ -927,7 +927,7 @@
     },
     {
       "examples": [],
-      "line": 2874,
+      "line": 2829,
       "name": "iter_temporal_commits",
       "returns": "",
       "signature": "iter_temporal_commits(through_commit=None)",
@@ -936,7 +936,7 @@
     },
     {
       "examples": [],
-      "line": 1343,
+      "line": 1298,
       "name": "iter_typed_adjacency",
       "returns": "",
       "signature": "iter_typed_adjacency(node_id, edge_type: str, direction: str='out')",
@@ -963,7 +963,7 @@
     },
     {
       "examples": [],
-      "line": 2888,
+      "line": 2843,
       "name": "list_temporal_orphans",
       "returns": "",
       "signature": "list_temporal_orphans(through_commit=None)",
@@ -972,7 +972,7 @@
     },
     {
       "examples": [],
-      "line": 2457,
+      "line": 2412,
       "name": "maintain_truth",
       "returns": "",
       "signature": "maintain_truth(as_of=None, system_time=None, world=None, max_iterations=100, max_derivations=10000, max_justifications=100000, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -995,7 +995,7 @@
           "example": 1
         }
       ],
-      "line": 2520,
+      "line": 2475,
       "name": "migrate_time_indexed_edges",
       "returns": "Newly appended edge versions in migration order.",
       "signature": "migrate_time_indexed_edges(delete_legacy: bool=False, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -1017,7 +1017,7 @@
           "example": 1
         }
       ],
-      "line": 1361,
+      "line": 1316,
       "name": "neighbors_by_edge_type",
       "returns": "List of neighbor ID bytes.",
       "signature": "neighbors_by_edge_type(node_id, edge_type: str, direction: str='out')",
@@ -1108,7 +1108,7 @@
     },
     {
       "examples": [],
-      "line": 2014,
+      "line": 1969,
       "name": "put_adjacency_list",
       "returns": "",
       "signature": "put_adjacency_list(node_id: str, edges_list: list[str])",
@@ -1151,7 +1151,7 @@
     },
     {
       "examples": [],
-      "line": 2510,
+      "line": 2465,
       "name": "put_edge_version",
       "returns": "",
       "signature": "put_edge_version(edge: Edge, valid, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -1177,7 +1177,7 @@
           "example": 4
         }
       ],
-      "line": 2066,
+      "line": 2021,
       "name": "put_edges_bulk",
       "returns": "",
       "signature": "put_edges_bulk(edges: List[Edge], check_existing: bool=True)",
@@ -1208,7 +1208,7 @@
     },
     {
       "examples": [],
-      "line": 2500,
+      "line": 2455,
       "name": "put_node_version",
       "returns": "",
       "signature": "put_node_version(node: Node, valid, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -1242,7 +1242,7 @@
           "example": 4
         }
       ],
-      "line": 1586,
+      "line": 1541,
       "name": "put_nodes",
       "returns": "",
       "signature": "put_nodes(nodes: list[Node])",
@@ -1260,7 +1260,7 @@
           "example": 1
         }
       ],
-      "line": 3100,
+      "line": 3055,
       "name": "query",
       "returns": "``gestaltdb.QueryResult`` containing projected records.",
       "signature": "query(cypher: str, parameters: Optional[dict[str, object]]=None, read_snapshot: bool | None=None, label_hierarchy=None, relation_hierarchy=None)",
@@ -1269,7 +1269,7 @@
     },
     {
       "examples": [],
-      "line": 1541,
+      "line": 1496,
       "name": "range_query_nodes",
       "returns": "",
       "signature": "range_query_nodes(property_name: str, start_val, end_val)",
@@ -1350,7 +1350,7 @@
     },
     {
       "examples": [],
-      "line": 3086,
+      "line": 3041,
       "name": "rebuild_temporal_indexes",
       "returns": "",
       "signature": "rebuild_temporal_indexes(through_commit=None)",
@@ -1359,7 +1359,7 @@
     },
     {
       "examples": [],
-      "line": 1508,
+      "line": 1463,
       "name": "rebuild_typed_adjacency",
       "returns": "Number of typed edges indexed.",
       "signature": "rebuild_typed_adjacency()",
@@ -1368,7 +1368,7 @@
     },
     {
       "examples": [],
-      "line": 2893,
+      "line": 2848,
       "name": "reclaim_temporal_orphans",
       "returns": "",
       "signature": "reclaim_temporal_orphans(through_commit: int)",
@@ -1377,7 +1377,7 @@
     },
     {
       "examples": [],
-      "line": 2760,
+      "line": 2715,
       "name": "retract_claim",
       "returns": "",
       "signature": "retract_claim(claim_id, valid=None, valid_from=None, valid_to=None, supersedes_version_id=None, reason=None, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -1386,7 +1386,7 @@
     },
     {
       "examples": [],
-      "line": 2608,
+      "line": 2563,
       "name": "retract_edge_version",
       "returns": "",
       "signature": "retract_edge_version(logical_id: str, valid=None, valid_from=None, supersedes_version_id=None, reason=None, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -1395,7 +1395,7 @@
     },
     {
       "examples": [],
-      "line": 2585,
+      "line": 2540,
       "name": "retract_node_version",
       "returns": "",
       "signature": "retract_node_version(logical_id: str, valid=None, valid_from=None, supersedes_version_id=None, reason=None, version_id=None, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -1409,7 +1409,7 @@
           "example": 1
         }
       ],
-      "line": 2399,
+      "line": 2354,
       "name": "run_rules",
       "returns": "that evaluator to database sources and publication.",
       "signature": "run_rules(as_of, system_time=None, world=None, max_iterations=100, max_derivations=10000, max_justifications=100000, index_mode=IndexMaintenanceMode.MAINTAIN)",
@@ -1423,7 +1423,7 @@
           "example": 1
         }
       ],
-      "line": 1434,
+      "line": 1389,
       "name": "sample_neighbors",
       "returns": "List of typed adjacency records.",
       "signature": "sample_neighbors(node_id, edge_type: str, direction: str='out', sample_size: int=10, rng=None, relation_hierarchy=None)",
@@ -1432,7 +1432,7 @@
     },
     {
       "examples": [],
-      "line": 1395,
+      "line": 1350,
       "name": "sample_nodes",
       "returns": "Sampled node IDs as strings, in reservoir order.",
       "signature": "sample_nodes(sample_size: int, label: str | None=None, node_filter: Callable[[Node], bool] | None=None, rng=None)",
@@ -1446,7 +1446,7 @@
           "example": 3
         }
       ],
-      "line": 1461,
+      "line": 1416,
       "name": "sample_typed_paths",
       "returns": "List of dictionaries with ``seed`` and sampled ``path`` records.",
       "signature": "sample_typed_paths(seed_ids, pattern: Union[SamplingPattern, list[dict]], rng=None, relation_hierarchy=None)",
@@ -1460,7 +1460,7 @@
           "example": 3
         }
       ],
-      "line": 1486,
+      "line": 1441,
       "name": "sample_typed_subgraph",
       "returns": "Dictionary with ``nodes``, ``edges``, and ``paths`` entries.",
       "signature": "sample_typed_subgraph(seed_ids, pattern: Union[SamplingPattern, list[dict]], rng=None, relation_hierarchy=None)",
@@ -1478,7 +1478,7 @@
     },
     {
       "examples": [],
-      "line": 1962,
+      "line": 1917,
       "name": "serialize_edge_value",
       "returns": "",
       "signature": "serialize_edge_value(edge: Edge)",
@@ -1487,7 +1487,7 @@
     },
     {
       "examples": [],
-      "line": 1958,
+      "line": 1913,
       "name": "serialize_node_value",
       "returns": "",
       "signature": "serialize_node_value(node: Node)",
@@ -1514,7 +1514,7 @@
     },
     {
       "examples": [],
-      "line": 3193,
+      "line": 3148,
       "name": "transaction",
       "returns": "",
       "signature": "transaction(**options)",
@@ -1523,7 +1523,7 @@
     },
     {
       "examples": [],
-      "line": 1569,
+      "line": 1524,
       "name": "update_edge",
       "returns": "",
       "signature": "update_edge(edge_id: str, new_data: dict, merge_func)",
@@ -1532,7 +1532,7 @@
     },
     {
       "examples": [],
-      "line": 1554,
+      "line": 1509,
       "name": "update_node",
       "returns": "",
       "signature": "update_node(node_id: str, new_data: dict, merge_func)",
@@ -1541,7 +1541,7 @@
     },
     {
       "examples": [],
-      "line": 3149,
+      "line": 3104,
       "name": "visualize",
       "returns": "``gestaltdb.viz.api.VizFigure``.",
       "signature": "visualize(cypher=None, seeds=None, pattern=None, parameters=None, options=None, rng=None)",

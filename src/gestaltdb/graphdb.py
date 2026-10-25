@@ -1264,56 +1264,11 @@ class GraphDB:
         snapshots use ``current_read_view``; the temporal-versioning guide
         explains valid time, system time, and historical Cypher qualifiers.
         """
-        from .readview import GraphReadView, ReadViewProvenance
-
-        instant = normalize_temporal_instant(valid_time)
-        if system_time is not None and through_commit is not None:
-            raise ValueError("provide either system_time or through_commit, not both")
-        allocated, _ = self._temporal_sequence()
-        latest = 0
-        markers = []
-        for commit_id in range(1, allocated + 1):
-            commit_candidate = self.get_temporal_commit(commit_id, _validate_supersession=False)
-            if commit_candidate is None:
-                if self.store.get_metadata(self._temporal_commit_key(commit_id)) is None:
-                    continue
-                break
-            marker_candidate = self.store.get_metadata(self._temporal_visible_key(commit_id))
-            markers.append(commit_id.to_bytes(8, "big") + marker_candidate)
-            latest = commit_id
-        if system_time is not None:
-            through_commit = min(
-                latest, self._temporal_system_horizon(system_time=system_time)
-            )
-        if through_commit is None:
-            horizon = latest
-        else:
-            if isinstance(through_commit, bool) or not isinstance(through_commit, int) or through_commit < 0:
-                raise ValueError("through_commit must be a non-negative integer")
-            if through_commit > latest:
-                raise ValueError("through_commit is newer than the latest visible commit")
-            horizon = through_commit
-        commit = self.get_temporal_commit(horizon) if horizon else None
-        if horizon and commit is None:
-            raise ValueError("through_commit does not identify a visible commit")
-        marker = self.store.get_metadata(self._temporal_visible_key(horizon)) if horizon else None
-        visibility_digest = hashlib.sha256(b"".join(
-            value for value in markers if int.from_bytes(value[:8], "big") <= horizon
-        )).hexdigest()
-        manifest = self.manifest
-        provenance = ReadViewProvenance(
-            database_id=self.database_id,
-            commit_horizon=horizon,
-            commit_system_time_us=None if commit is None else commit.system_time.epoch_microseconds,
-            commit_marker_sha256=None if marker is None else marker.hex(),
-            visibility_sha256=visibility_digest,
-            valid_time_us=instant.epoch_microseconds,
-            backend_name=manifest["backend"]["name"],
-            backend_layout_version=manifest["backend"]["layout_version"],
-            serializer_name=manifest["serializer"]["name"],
-            serializer_format_version=manifest["serializer"]["format_version"],
+        yield from _temporal_reads.open_temporal_view(
+            self, self._temporal_reader(), manifest=self.manifest,
+            database_id=self.database_id, valid_time=valid_time,
+            system_time=system_time, through_commit=through_commit,
         )
-        yield GraphReadView(self, provenance)
 
     def get_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out'):
         """Return typed adjacency records with clean direction semantics.

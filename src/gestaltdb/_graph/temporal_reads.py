@@ -424,3 +424,65 @@ def claim_valid_interval(valid, valid_from, valid_to, *, required):
         normalize_temporal_instant(valid_from),
         None if valid_to is None else normalize_temporal_instant(valid_to),
     )
+
+
+def open_temporal_view(graph, reader: "TemporalReader", *, manifest: dict,
+                       database_id: str, valid_time, system_time=None,
+                       through_commit=None):
+    """Yield a temporal read view pinned to one visible commit horizon.
+
+    ``graph`` is the live handle the returned view binds to; all history
+    reads go through ``reader``. The caller owns transaction/snapshot
+    scope and keeps the view's context open while consumers run.
+    """
+    from ..readview import GraphReadView, ReadViewProvenance
+
+    instant = normalize_temporal_instant(valid_time)
+    if system_time is not None and through_commit is not None:
+        raise ValueError("provide either system_time or through_commit, not both")
+    allocated, _ = read_temporal_sequence(
+        reader.store, reader.sequence_key, reader.store_path,
+        reader.sequence_filename)
+    latest = 0
+    markers = []
+    for commit_id in range(1, allocated + 1):
+        commit_candidate = reader.get_commit(commit_id, _validate_supersession=False)
+        if commit_candidate is None:
+            if reader.store.get_metadata(temporal_commit_key(commit_id)) is None:
+                continue
+            break
+        marker_candidate = reader.store.get_metadata(temporal_visible_key(commit_id))
+        markers.append(commit_id.to_bytes(8, "big") + marker_candidate)
+        latest = commit_id
+    if system_time is not None:
+        through_commit = min(
+            latest, reader.system_horizon(system_time=system_time)
+        )
+    if through_commit is None:
+        horizon = latest
+    else:
+        if isinstance(through_commit, bool) or not isinstance(through_commit, int) or through_commit < 0:
+            raise ValueError("through_commit must be a non-negative integer")
+        if through_commit > latest:
+            raise ValueError("through_commit is newer than the latest visible commit")
+        horizon = through_commit
+    commit = reader.get_commit(horizon) if horizon else None
+    if horizon and commit is None:
+        raise ValueError("through_commit does not identify a visible commit")
+    marker = reader.store.get_metadata(temporal_visible_key(horizon)) if horizon else None
+    visibility_digest = hashlib.sha256(b"".join(
+        value for value in markers if int.from_bytes(value[:8], "big") <= horizon
+    )).hexdigest()
+    provenance = ReadViewProvenance(
+        database_id=database_id,
+        commit_horizon=horizon,
+        commit_system_time_us=None if commit is None else commit.system_time.epoch_microseconds,
+        commit_marker_sha256=None if marker is None else marker.hex(),
+        visibility_sha256=visibility_digest,
+        valid_time_us=instant.epoch_microseconds,
+        backend_name=manifest["backend"]["name"],
+        backend_layout_version=manifest["backend"]["layout_version"],
+        serializer_name=manifest["serializer"]["name"],
+        serializer_format_version=manifest["serializer"]["format_version"],
+    )
+    yield GraphReadView(graph, provenance)
