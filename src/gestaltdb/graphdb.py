@@ -84,6 +84,7 @@ from ._graph import index_maintenance as _index_maintenance
 from ._graph import edge_records as _edge_records
 from ._graph import node_records as _node_records
 from ._graph import index_lookup as _index_lookup
+from ._graph import index_rebuild as _index_rebuild
 from ._graph import temporal_keys as _temporal_keys
 from ._graph.temporal_keys import (
     _TEMPORAL_COMMIT_PREFIX,
@@ -770,54 +771,11 @@ class GraphDB:
                 return tx.rebuild_node_indexes(
                     labels=labels, properties=properties, batch_size=batch_size
                 )
-        property_names = sorted(self.indexed_node_properties if properties is None else set(properties))
-        entries = []
-        range_entries = []
-        rebuilt = {"node_label": 0}
-        rebuilt.update({f"node_property:{property_name}": 0 for property_name in property_names})
-
-        for node_id in self.store.get_node_keys_generator():
-            node = self.get_node(node_id)
-            if node is None:
-                continue
-            node_key = node.get_id_bytes
-            if labels:
-                for label in node.labels:
-                    entries.append(("node_label", [label.encode("utf-8")], node_key))
-                    rebuilt["node_label"] += 1
-            for property_name in property_names:
-                if property_name not in node.properties:
-                    continue
-                raw_value = node.properties[property_name]
-                property_value = _property_value_to_index_bytes(raw_value)
-                entries.append(("node_property", [property_name.encode("utf-8"), property_value], node_key))
-                for label in node.labels:
-                    entries.append((
-                        "node_label_property",
-                        [label.encode("utf-8"), property_name.encode("utf-8"), property_value],
-                        node_key,
-                    ))
-                range_value = _property_value_to_range_index_bytes(raw_value)
-                if range_value is not None:
-                    range_entries.append(("node_property", [property_name.encode("utf-8")], range_value, node_key))
-                    for label in node.labels:
-                        range_entries.append((
-                            "node_label_property",
-                            [label.encode("utf-8"), property_name.encode("utf-8")],
-                            range_value,
-                            node_key,
-                        ))
-                rebuilt[f"node_property:{property_name}"] += 1
-            if len(entries) + len(range_entries) >= batch_size:
-                self._flush_index_rebuild_batches(entries, range_entries)
-
-        self._flush_index_rebuild_batches(entries, range_entries)
-        if labels:
-            self._clear_stale_indexes("node_label")
-        if property_names and self.indexed_node_properties.issubset(set(property_names)):
-            self._clear_stale_indexes("node_property")
-        rebuilt["node_property"] = sum(rebuilt[f"node_property:{property_name}"] for property_name in property_names)
-        return rebuilt
+        return _index_rebuild.rebuild_node_indexes(
+            self.store, self.entity_serializer, self.indexed_node_properties,
+            _STALE_INDEXES_METADATA_KEY, labels=labels, properties=properties,
+            batch_size=batch_size,
+        )
 
     def create_node_property_index(self, property_name: str):
         """Register and rebuild an exact-match node property index.
@@ -1094,54 +1052,11 @@ class GraphDB:
                 return tx.rebuild_edge_indexes(
                     edge_types=edge_types, properties=properties, batch_size=batch_size
                 )
-        property_names = sorted(self.indexed_edge_properties if properties is None else set(properties))
-        entries = []
-        range_entries = []
-        rebuilt = {"edge_type": 0}
-        rebuilt.update({f"edge_property:{property_name}": 0 for property_name in property_names})
-
-        for edge_id in self.store.get_edge_keys_generator():
-            edge = self.get_edge(edge_id)
-            if edge is None:
-                continue
-            edge_key = edge.get_id_bytes
-            edge_type = self.edge_type(edge)
-            if edge_types and edge_type is not None:
-                entries.append(("edge_type", [str(edge_type).encode("utf-8")], edge_key))
-                rebuilt["edge_type"] += 1
-            for property_name in property_names:
-                if property_name not in edge.properties:
-                    continue
-                raw_value = edge.properties[property_name]
-                property_value = _property_value_to_index_bytes(raw_value)
-                entries.append(("edge_property", [property_name.encode("utf-8"), property_value], edge_key))
-                if edge_type is not None:
-                    entries.append((
-                        "edge_type_property",
-                        [str(edge_type).encode("utf-8"), property_name.encode("utf-8"), property_value],
-                        edge_key,
-                    ))
-                range_value = _property_value_to_range_index_bytes(raw_value)
-                if range_value is not None:
-                    range_entries.append(("edge_property", [property_name.encode("utf-8")], range_value, edge_key))
-                    if edge_type is not None:
-                        range_entries.append((
-                            "edge_type_property",
-                            [str(edge_type).encode("utf-8"), property_name.encode("utf-8")],
-                            range_value,
-                            edge_key,
-                        ))
-                rebuilt[f"edge_property:{property_name}"] += 1
-            if len(entries) + len(range_entries) >= batch_size:
-                self._flush_index_rebuild_batches(entries, range_entries)
-
-        self._flush_index_rebuild_batches(entries, range_entries)
-        if edge_types:
-            self._clear_stale_indexes("edge_type")
-        if property_names and self.indexed_edge_properties.issubset(set(property_names)):
-            self._clear_stale_indexes("edge_property")
-        rebuilt["edge_property"] = sum(rebuilt[f"edge_property:{property_name}"] for property_name in property_names)
-        return rebuilt
+        return _index_rebuild.rebuild_edge_indexes(
+            self.store, self.entity_serializer, self.indexed_edge_properties,
+            _STALE_INDEXES_METADATA_KEY, edge_types=edge_types, properties=properties,
+            batch_size=batch_size,
+        )
 
     def rebuild_relationship_type_index(self):
         """Rebuild the relationship type catalog from stored edges.
