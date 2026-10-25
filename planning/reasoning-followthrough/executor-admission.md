@@ -1,7 +1,8 @@
 # Application executor admission — #255
 
-Status: original #255 acceptance implemented; final issue closure requires green
-integration checks for this evidence/reconciliation slice. Shared admission is in
+Status: original #255 acceptance reconciled and issue closed after #365 at
+`4a2c393`, 12 exact-head green checks and post-merge Ontology `40168451602` /
+readiness `40168451655`. Shared admission is in
 `reasoning/generation.py` (`admit`; see `docs/reasoning-admission.rst`); binary
 defaults remain unchanged. #248's acceptance reconciliation
 is merged via #362 and #248 is closed after green post-merge checks.

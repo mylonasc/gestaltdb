@@ -34,6 +34,26 @@ checks are not universal identity admission or concurrent atomic publication.
 
 ## Ordered implementation
 
+### Authenticated native claim source continuation (#194)
+
+Dedicated `feature/re-194-native-admission` / `re-194-native-admission`, based on
+integration `4a2c393`. #255 closed after #365's 12 exact-head checks and
+post-merge Ontology `40168451602` / readiness `40168451655` passed. No competing
+implementation/owner found in refreshed audit; unrelated PRs/worktrees preserved.
+
+Implement an explicit native full-record candidate scan under one temporal
+writer guard and authenticated read view. Native bytes must match canonical
+commit membership/key/ordinal and complete expected record coverage. Resolve
+candidate logical histories with the existing canonical point selector before
+policy filtering, including correction/retraction and historical prefixes.
+Share existing batched claim policy/context/evidence validation rather than
+inventing a second logical mapping contract. Bound raw rows and candidates,
+probe plain-PyRex/Arrow capabilities, reject rebinding/corruption, and test
+historical parity, movement, cancellation and iterator lifetime. Do not claim
+index-locator acceleration, automatic adoption or reduced authentication costs
+from a correctness-first full-scan path. Remaining #194 measurement/support/
+publication acceptance stays open until independently reconciled.
+
 ### Explicit-budget pipeline evidence continuation (#255)
 
 Dedicated `feature/re-255-pipeline-evidence` / `re-255-pipeline-evidence`, based
