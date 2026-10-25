@@ -54,6 +54,26 @@ index-locator acceleration, automatic adoption or reduced authentication costs
 from a correctness-first full-scan path. Remaining #194 measurement/support/
 publication acceptance stays open until independently reconciled.
 
+First implementation pushed at `6e610d5`: explicit `PinnedNativeClaimSource`
+and shared batched physical-provider hook; extraction cancellation now flows
+through inherited evaluation into native admission too. Canonical point-index
+selection is checked against final eligible full-scan records, rejecting omitted
+index histories as well as corrupted native streams. Tests cover mixed-kind/
+same-commit ordinal winners, correction/retraction/alternative evidence, half-open
+points, old prefixes, interrupted descriptors/reservation gaps, four serializers,
+restart and multistep bounded witnesses, handle/view rebinding, corruption after
+partial output, cancellation/bounds/retry, writer blocking and deterministic
+iterator release. Physical profiles explicitly report no filter pushdown.
+PyRex 0.6.0 exposes transactional scan methods, but transaction source admission
+remains deliberately rejected pending a separate conformance/capability audit;
+this API admits only the explicit plain-PyRex path. No new performance claim.
+
+Final native-admission validation: **3,322 passed / 2 skipped** (58.46s), full
+optional backends/serializers/RDF/Polars/docs/bloom and ontology requirements.
+Executable native guide, 8/8 existing examples, docs/API drift, Sphinx `-W`,
+roadmap and whitespace gates passed. #194 remains open for remaining measured
+native locator/support/publication scope and original-acceptance reconciliation.
+
 ### Explicit-budget pipeline evidence continuation (#255)
 
 Dedicated `feature/re-255-pipeline-evidence` / `re-255-pipeline-evidence`, based

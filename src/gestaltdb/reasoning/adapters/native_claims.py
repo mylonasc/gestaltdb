@@ -192,6 +192,8 @@ class PinnedNativeClaimSource(PinnedBatchedClaimSource):
         self._completed_native_profile = profile
 
     def iter_batches(self, *, cancel=None):
+        check_cancelled(cancel)
+        self._check_binding()
         if self._active:
             raise ReasoningError("native source already has an active extraction pass")
         self._active = True

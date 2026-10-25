@@ -355,3 +355,55 @@ def test_extraction_never_writes_or_reads_mutable_graph(graph, monkeypatch):
         monkeypatch.setattr(graph, "get_node", forbidden)
         monkeypatch.setattr(graph, "get_edge", forbidden)
         assert len(evidence(native)) == 1
+
+
+def test_mixed_commit_ordinal_winners_and_interrupted_commit_records(graph, monkeypatch):
+    from gestaltdb.epistemic import Claim
+    from gestaltdb.graphdb import Node, Edge
+    from gestaltdb.versioning import ClaimVersionWrite, NodeVersionWrite, EdgeVersionWrite
+    value = Claim(subject="a", predicate="p", object="b", agent="registry", polarity="positive")
+    commit = graph.commit_versions([
+        NodeVersionWrite.assertion(Node("node"), (0, 100)),
+        ClaimVersionWrite.assertion(value, (0, 100)),
+        EdgeVersionWrite.assertion(Edge("edge", "a", "b"), (0, 100)),
+        ClaimVersionWrite.assertion(value, (0, 100)),
+    ])
+    with graph.read_view(valid_time=50) as view, source(view) as native:
+        rows = evidence(native)
+        assert len(rows) == 1 and rows[0].reference_id == commit.versions[-1].version_id
+        assert native.native_profile.visible_records == 4
+    original_put = graph.store.put_metadata
+    def interrupt_marker(key, value):
+        if key.startswith(b"temporal:v1:visible:"):
+            raise RuntimeError("injected interrupted commit")
+        return original_put(key, value)
+    with monkeypatch.context() as patch:
+        patch.setattr(graph.store, "put_metadata", interrupt_marker)
+        with pytest.raises(RuntimeError, match="interrupted"):
+            claim(graph, "incomplete")
+    claim(graph, "later")
+    # An incomplete descriptor blocks the authenticated contiguous prefix.
+    with graph.read_view(valid_time=50) as view:
+        assert {row.fact.subject for row in parity(view)} == {"a"}
+    hidden_key = graph._temporal_record_key(2, 0)
+    hidden_value = graph.store.get_metadata(hidden_key)
+    graph.reclaim_temporal_orphans(through_commit=2)
+    # A leftover raw row in a descriptor-free reservation gap is not evidence.
+    graph.store.put_metadata(hidden_key, hidden_value)
+    with graph.read_view(valid_time=50) as view, source(view) as native:
+        rows = evidence(native)
+        assert {row.fact.subject for row in rows} == {"a", "later"}
+        assert native.native_profile.raw_rows > native.native_profile.visible_records
+        assert rows == parity(view)
+
+
+def test_native_claim_documentation_example():
+    from pathlib import Path
+    import re
+    pytest.importorskip("pyrex")
+    pytest.importorskip("pyarrow")
+    text = (Path(__file__).parents[1] / "docs/reasoning-native-claims.rst").read_text()
+    blocks = re.findall(r"\.\. code-block:: python\n\n((?:   .*\n|\n)+)", text)
+    assert len(blocks) == 1
+    for block in blocks:
+        exec("\n".join(line[3:] if line.startswith("   ") else line for line in block.splitlines()), {})
