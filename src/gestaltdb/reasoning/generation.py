@@ -183,8 +183,10 @@ def admit(generation: GenerationIdentity, request: AdmissionRequest) -> Admissio
     Dictionary identity must match exactly: a generation computed under one
     dictionary cannot be consumed through another without explicit recoding.
     Witness-bearing and stateful modes (proofs, maintenance supports,
-    temporal closure) are indexed-engine only; the Polars prototype stays
-    closure-only. Unknown combinations raise instead of falling back.
+    temporal closure) are binary indexed-engine only; the Polars prototype stays
+    closure-only. The typed indexed row additionally requires the exact positive
+    typed profile/representation and supports closure only. Unknown combinations
+    raise instead of falling back.
     """
     if not isinstance(generation, GenerationIdentity):
         raise ReasoningError("generation must be a GenerationIdentity")

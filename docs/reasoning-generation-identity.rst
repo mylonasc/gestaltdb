@@ -50,6 +50,11 @@ For exact caller generation/state pins on durable v1 session load/advance,
 see :doc:`reasoning-authenticated-sessions`. That explicit consumer independently
 authenticates source input; a raw persisted checksum does not.
 
+For actual fresh execution from that complete active assertion ledger, see
+:doc:`reasoning-typed-execution`. Source-only admission does not prove closure;
+the execution consumer additionally recomputes from base input and compares
+the complete session closure, without certifying supports or proof steps.
+
 The existing inferred sampler consumer has explicit source/session-authenticated
 build and complete artifact hydration in :doc:`reasoning-authenticated-inferred`.
 Its projection selection is separate from source identity; legacy partial

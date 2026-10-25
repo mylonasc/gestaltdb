@@ -206,3 +206,104 @@ def test_reentrant_source_move_during_evaluation_fails_before_return(source, mon
     monkeypatch.setattr(adapter, "execute_typed_closure", moved)
     with pytest.raises(ProvenanceMismatchError, match="horizon moved"):
         execute_authenticated_session(graph, session, **pins(binding), limits=ReasoningLimits())
+
+
+def test_negative_and_aggregate_programs_require_their_separate_explicit_paths():
+    from gestaltdb.reasoning.typed import AggregateRule, Aggregation
+    negated = GenericProgram([GenericRule("not", [TypedAtom("p", [X])], [], TypedAtom("q", [X]),
+                                          [TypedAtom("excluded", [X])])], closed=("excluded",))
+    aggregate = GenericProgram([], [AggregateRule("n", [TypedAtom("p", [X])], [],
+        [Aggregation("count", X, Y)], TypedAtom("count", [Y]))])
+    for program in (negated, aggregate):
+        def forbidden():
+            pytest.fail("input consumed for unsupported typed program")
+            yield
+        with pytest.raises(ReasoningError, match="negation, aggregates"):
+            execute_typed_closure(program, forbidden(), limits=ReasoningLimits())
+
+
+def test_source_capability_rejection_precedes_source_admission(source, monkeypatch):
+    import gestaltdb.reasoning.adapters.typed_execution as adapter
+    graph, session, binding = source
+    def forbidden(*args, **kwargs):
+        pytest.fail("source read before capability rejection")
+    monkeypatch.setattr(adapter, "bind_session_generation", forbidden)
+    for request in (ExecutorRequest(), ExecutorRequest(profile=TYPED_PROFILE, mode="proofs"),
+                    ExecutorRequest(profile=TYPED_PROFILE, preferred="polars-prototype", polars_available=True)):
+        with pytest.raises(ReasoningError):
+            execute_authenticated_session(graph, session, **pins(binding), limits=ReasoningLimits(), executor_request=request)
+
+
+def test_source_execution_bounds_cancellation_and_retired_versions(source):
+    graph, session, binding = source
+    with pytest.raises(ReasoningLimitError, match="max_input_facts"):
+        execute_authenticated_session(graph, session, **pins(binding), limits=ReasoningLimits(max_input_facts=1))
+    with pytest.raises(ReasoningCancelledError):
+        execute_authenticated_session(graph, session, **pins(binding), limits=ReasoningLimits(), cancel=lambda: True)
+    for version in tuple(graph.iter_claim_versions()):
+        graph.retract_claim(version.logical_id, valid=(0, 100), supersedes_version_id=version.version_id)
+    advanced = advance_session(graph, session, limits=ReasoningLimits()).session
+    assert advanced.ledger.retired
+    outcome = execute_authenticated_session(graph, advanced, **pins(bind_session_generation(graph, advanced)), limits=ReasoningLimits())
+    assert outcome.evidence == () and outcome.outcome.telemetry.input_facts == 0
+    assert outcome.outcome.result.facts == ()
+
+
+def test_decoder_rebinding_after_engine_completion_is_rejected(source, monkeypatch):
+    import gestaltdb.reasoning.adapters.typed_execution as adapter
+    from gestaltdb.serializers import JSONSerializer
+    graph, session, binding = source
+    original, serializer = adapter.execute_typed_closure, graph.serializer
+    def rebound(*args, **kwargs):
+        outcome = original(*args, **kwargs)
+        graph.serializer = JSONSerializer()
+        return outcome
+    monkeypatch.setattr(adapter, "execute_typed_closure", rebound)
+    try:
+        with pytest.raises(ReasoningError, match="rebound"):
+            execute_authenticated_session(graph, session, **pins(binding), limits=ReasoningLimits())
+    finally:
+        graph.serializer = serializer
+
+
+def test_writer_cannot_move_source_during_authenticated_execution(source, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    import gestaltdb.reasoning.adapters.typed_execution as adapter
+    graph, session, binding = source
+    entered, release, attempted, finished = Event(), Event(), Event(), Event()
+    original = adapter.execute_typed_closure
+    def paused(*args, **kwargs):
+        entered.set()
+        assert release.wait(5)
+        return original(*args, **kwargs)
+    def write():
+        attempted.set()
+        try:
+            graph.assert_claim(subject="b", predicate="memberOf", object="g", agent="new", polarity="positive", valid=(0, 100))
+        finally:
+            finished.set()
+    monkeypatch.setattr(adapter, "execute_typed_closure", paused)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        executing = pool.submit(execute_authenticated_session, graph, session, **pins(binding), limits=ReasoningLimits())
+        try:
+            assert entered.wait(5)
+            writer = pool.submit(write)
+            assert attempted.wait(5) and not finished.wait(0.05)
+        finally:
+            release.set()
+        outcome = executing.result(timeout=5)
+        writer.result(timeout=5)
+    assert TypedFact("person", ["b"]) not in outcome.outcome.result.facts
+    assert finished.is_set()  # Guarantee ends at return, not a continuing latest lease.
+
+
+def test_typed_execution_documentation_examples():
+    from pathlib import Path
+    import re
+    pytest.importorskip("lmdb")
+    text = (Path(__file__).resolve().parents[1] / "docs/reasoning-typed-execution.rst").read_text()
+    blocks = re.findall(r"\.\. code-block:: python\n\n((?:   .*\n|\n)+)", text)
+    assert len(blocks) == 2
+    for block in blocks:
+        exec("\n".join(line[3:] if line.startswith("   ") else line for line in block.splitlines()), {})

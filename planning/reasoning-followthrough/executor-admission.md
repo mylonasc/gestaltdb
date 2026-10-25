@@ -13,7 +13,22 @@ the decided engine (indexed reference default; prepared-plan and Polars only
 on explicit caller-supplied plan/context plus available runtime), uniform
 `StageTelemetry`, no automatic switching, no dictionary recoding. Existing
 engine call sites are unchanged; typed/maintenance/temporal paths keep their
-adapters. Benchmark crossover and broader pipeline adoption remain open.
+adapters. Broader pipeline adoption remains acceptance-reviewed rather than
+implied by one dispatcher or a benchmark result.
+
+Positive typed application integration now uses the same central
+`ExecutorRequest` selector and common stage telemetry, with a distinct
+`typed-indexed-python-v1` identity and exact `typed-values-v1` admission. The raw
+`execute_typed_closure` owns bounded single-pass TypedFact buffering and preserves
+literal/n-ary values without binary conversion. The real
+`typed_execution.execute_authenticated_session` consumer independently verifies
+the complete active source ledger under exact caller generation/state pins,
+recomputes from only active base input, compares complete closure, retains every
+independent input version and rechecks source/decoder under the writer guard.
+Negation/aggregate/closed-scope programs and typed witness/SCC/Polars requests
+remain explicitly rejected here, not silently routed to weaker semantics.
+See `docs/reasoning-typed-execution.rst`; no supports/proof/publication guarantee
+is inferred from matching closure or source authentication.
 
 Physical-budget continuation: the dispatcher and authenticated current-graph
 consumer now expose explicit `polars_max_intermediate_rows`, default unchanged
@@ -30,7 +45,7 @@ concurrent-source admission remain distinct #255/#194 work.
 |---|---|
 | Binary positive closure | Existing indexed reference; Polars only on explicit opt-in |
 | Binary witness | Indexed engines with the existing witness contract |
-| Typed n-ary closure/filter | Generic indexed engine |
+| Typed n-ary closure/filter | Explicit typed dispatcher / Generic indexed engine; authenticated session base-input consumer |
 | Closed-scope negation | Explicit stratified engine |
 | Complete maintenance supports | Maintenance path; not a bounded witness trace |
 | Temporal closure | Generation-bound change-segment path |

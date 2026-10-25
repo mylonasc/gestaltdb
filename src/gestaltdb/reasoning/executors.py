@@ -1,9 +1,11 @@
 """Deterministic executor selection over measured evidence; no auto-tuning.
 
-The default stays the indexed Python engine. The Polars prototype is honored
+The binary default stays the indexed Python engine. Positive typed closure has
+a distinct GenericEngine identity; it never recodes to a binary engine. The Polars prototype is honored
 only on explicit request for closure-only runs with a declared-available
 runtime. Proofs always route to indexed engines. Unknown profiles, modes or
-preferences fail closed. Callers declare optional-runtime availability; this
+preferences fail closed. Typed proofs and alternative engines are rejected.
+Callers declare optional-runtime availability; this
 module never imports optional dependencies.
 """
 
