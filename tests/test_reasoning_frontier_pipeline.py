@@ -305,3 +305,32 @@ def test_retained_admitted_native_baseline_includes_the_attributed_100k_timeout(
             assert timeout["status"] == "timeout" and timeout["last_stage"] == "extraction"
             assert timeout["method"] == "native-authenticated" and timeout["timeout_s"] == 120
             assert "metrics" not in timeout and "closure_digest" not in timeout
+
+
+def test_grouped_admitted_native_reports_retain_exact_successful_scale_parity():
+    from collections import Counter
+    from pathlib import Path
+    paths = list((Path(__file__).parents[1] / "benchmarks/results").glob("reasoning-re194-grouped-native-*.json"))
+    assert len(paths) == 5
+    cases, total = set(), 0
+    for path in paths:
+        report = json.loads(path.read_text())
+        assert report["revision"] == "1730fb79d9b1e51eb5e245a3e92434db718a9c32" and not report["dirty"]
+        assert report["harness_sha256"] == "220d7fc711eed1b79f1db07d7cfb04c9144fd12d5ced661f6e8b618d02f331d5"
+        assert report["complete"] and report["all_parity_verified"]
+        config, samples = report["configuration"], report["samples"]
+        cases.add((config["rows"], config["shape"], config["repeats"]))
+        assert config["backend"] == "pyrex" and config["timeout_s"] == 120
+        assert Counter((s["method"], s["cache"]) for s in samples) == {
+            (method, cache): config["repeats"] for method in config["methods"] for cache in config["caches"]}
+        assert len({s["closure_digest"] for s in samples}) == len({s["answer_digest"] for s in samples}) == 1
+        total += len(samples)
+        for sample in samples:
+            assert sample["status"] == "ok" and sample["evidence_digest"] == report["fixture"]["evidence_digest"]
+            assert sample["bytes_copied"] is None and sample["rss_peak_bytes"] > 0
+            if sample["method"] == "native-authenticated":
+                assert sample["source_contract"] == "authenticated-native-full-history"
+                assert sample["metrics"]["native_raw_rows"] == sample["metrics"]["native_visible_records"] == config["rows"]
+                assert sample["metrics"]["native_logical_claims"] == sample["metrics"]["native_resolved_claims"] == config["rows"]
+    assert total == 40 and cases == {(1000, "selective", 3), (10000, "selective", 1),
+                                    (100000, "selective", 1), (100000, "selective", 3), (100000, "sparse", 3)}

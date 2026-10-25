@@ -1,0 +1,242 @@
+{
+  "schema_version": 2,
+  "revision": "1730fb79d9b1e51eb5e245a3e92434db718a9c32",
+  "dirty": false,
+  "harness_sha256": "220d7fc711eed1b79f1db07d7cfb04c9144fd12d5ced661f6e8b618d02f331d5",
+  "python": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "dependencies": {
+    "lmdb": "2.2.1",
+    "plyvel": "1.5.1",
+    "pyrex-rocksdb": "0.6.0",
+    "pyarrow": "24.0.0",
+    "polars": "1.41.2"
+  },
+  "cpu_count": 24,
+  "configuration": {
+    "rows": 100000,
+    "shape": "selective",
+    "backend": "pyrex",
+    "methods": [
+      "indexed-python",
+      "native-authenticated"
+    ],
+    "caches": [
+      "first"
+    ],
+    "repeats": 1,
+    "timeout_s": 120.0,
+    "proofs": false,
+    "polars_max_intermediate_rows": null
+  },
+  "threads": {
+    "POLARS_MAX_THREADS": "1",
+    "OMP_NUM_THREADS": "1"
+  },
+  "os_cache": "uncontrolled; first is not OS-cold",
+  "samples": [
+    {
+      "status": "ok",
+      "method": "indexed-python",
+      "mode": "closure",
+      "source_contract": "authenticated-pinned-claims",
+      "rows": 100000,
+      "shape": "selective",
+      "cache": "first",
+      "polars_max_intermediate_rows": null,
+      "cache_boundary": "first extraction on reopened handle",
+      "metrics": {
+        "view_open_s": 3.6334190810011933,
+        "extract_decode_verify_s": 5.0117204999987734,
+        "prepare_s": 2.390006557106972e-07,
+        "evaluate_convert_s": 1.456134854000993,
+        "post_verify_s": 0.26960701700591017,
+        "query_pipeline_s": 10.371741586001008,
+        "import_s": 0.2621975220099557,
+        "compile_s": 2.9894988983869553e-05,
+        "reopen_s": 0.29006440899684094,
+        "total_pipeline_s": 10.924033411996788
+      },
+      "answers": 8,
+      "answer_digest": "f0c361577569cb3555387c73cbe6cbc48a15d77d788921e9a0ae00015295f74b",
+      "evidence_rows": 100000,
+      "evidence_digest": "791d808a32a3558e6fc569677369ed23bc8f024dd879c2c5fda3a15d6ed455db",
+      "scanned_claims_or_raw_rows": 100000,
+      "known_facts": 200028,
+      "scheduler_work": null,
+      "requests": null,
+      "closure_digest": "004b0eb49a503ce6babda2621613fe7b1c36a9e867890981ecb7195fb1c12f1c",
+      "proof_nodes": null,
+      "proof_truncated": null,
+      "polars_threads": null,
+      "rss_peak_bytes": 634699776,
+      "rss_boundary": "worker high-water, includes warmup and parity validation; not query-only RSS",
+      "conversion_boundary": "included in evaluate_convert_s; no zero-copy claim",
+      "bytes_copied": null,
+      "bytes_copied_boundary": "not instrumented, not assumed zero",
+      "worker_wall_s": 11.420718214998487,
+      "repeat": 0
+    },
+    {
+      "status": "ok",
+      "method": "native-authenticated",
+      "mode": "closure",
+      "source_contract": "authenticated-native-full-history",
+      "rows": 100000,
+      "shape": "selective",
+      "cache": "first",
+      "polars_max_intermediate_rows": null,
+      "cache_boundary": "first extraction on reopened handle",
+      "metrics": {
+        "view_open_s": 3.623382355988724,
+        "native_raw_rows": 100000,
+        "native_visible_records": 100000,
+        "native_logical_claims": 100000,
+        "native_resolved_claims": 100000,
+        "extract_decode_verify_s": 10.660065727002802,
+        "prepare_s": 2.3700704332441092e-07,
+        "evaluate_convert_s": 1.6300300970033277,
+        "post_verify_s": 0.2851264320051996,
+        "query_pipeline_s": 16.199449047999224,
+        "import_s": 0.2623497979948297,
+        "compile_s": 2.9952992917969823e-05,
+        "reopen_s": 0.016439600003650412,
+        "total_pipeline_s": 16.478268398990622
+      },
+      "answers": 8,
+      "answer_digest": "f0c361577569cb3555387c73cbe6cbc48a15d77d788921e9a0ae00015295f74b",
+      "evidence_rows": 100000,
+      "evidence_digest": "791d808a32a3558e6fc569677369ed23bc8f024dd879c2c5fda3a15d6ed455db",
+      "scanned_claims_or_raw_rows": 100000,
+      "known_facts": 200028,
+      "scheduler_work": null,
+      "requests": null,
+      "closure_digest": "004b0eb49a503ce6babda2621613fe7b1c36a9e867890981ecb7195fb1c12f1c",
+      "proof_nodes": null,
+      "proof_truncated": null,
+      "polars_threads": null,
+      "rss_peak_bytes": 991117312,
+      "rss_boundary": "worker high-water, includes warmup and parity validation; not query-only RSS",
+      "conversion_boundary": "included in evaluate_convert_s; no zero-copy claim",
+      "bytes_copied": null,
+      "bytes_copied_boundary": "not instrumented, not assumed zero",
+      "worker_wall_s": 17.032971660999465,
+      "repeat": 0
+    }
+  ],
+  "complete": true,
+  "decision": "no automatic executor/native adoption; workload-specific evidence only",
+  "fixture": {
+    "status": "ok",
+    "evidence_digest": "791d808a32a3558e6fc569677369ed23bc8f024dd879c2c5fda3a15d6ed455db",
+    "load_s": 20.03500064999389,
+    "rows": 100000,
+    "shape": "selective",
+    "backend": "pyrex",
+    "backend_options": {},
+    "worker_wall_s": 20.371565281995572
+  },
+  "all_parity_verified": true,
+  "summary": {
+    "indexed-python/first": {
+      "view_open_s": {
+        "p50": 3.6334190810011933,
+        "p95": 3.6334190810011933
+      },
+      "extract_decode_verify_s": {
+        "p50": 5.0117204999987734,
+        "p95": 5.0117204999987734
+      },
+      "prepare_s": {
+        "p50": 2.390006557106972e-07,
+        "p95": 2.390006557106972e-07
+      },
+      "evaluate_convert_s": {
+        "p50": 1.456134854000993,
+        "p95": 1.456134854000993
+      },
+      "post_verify_s": {
+        "p50": 0.26960701700591017,
+        "p95": 0.26960701700591017
+      },
+      "query_pipeline_s": {
+        "p50": 10.371741586001008,
+        "p95": 10.371741586001008
+      },
+      "import_s": {
+        "p50": 0.2621975220099557,
+        "p95": 0.2621975220099557
+      },
+      "compile_s": {
+        "p50": 2.9894988983869553e-05,
+        "p95": 2.9894988983869553e-05
+      },
+      "reopen_s": {
+        "p50": 0.29006440899684094,
+        "p95": 0.29006440899684094
+      },
+      "total_pipeline_s": {
+        "p50": 10.924033411996788,
+        "p95": 10.924033411996788
+      }
+    },
+    "native-authenticated/first": {
+      "view_open_s": {
+        "p50": 3.623382355988724,
+        "p95": 3.623382355988724
+      },
+      "native_raw_rows": {
+        "p50": 100000,
+        "p95": 100000
+      },
+      "native_visible_records": {
+        "p50": 100000,
+        "p95": 100000
+      },
+      "native_logical_claims": {
+        "p50": 100000,
+        "p95": 100000
+      },
+      "native_resolved_claims": {
+        "p50": 100000,
+        "p95": 100000
+      },
+      "extract_decode_verify_s": {
+        "p50": 10.660065727002802,
+        "p95": 10.660065727002802
+      },
+      "prepare_s": {
+        "p50": 2.3700704332441092e-07,
+        "p95": 2.3700704332441092e-07
+      },
+      "evaluate_convert_s": {
+        "p50": 1.6300300970033277,
+        "p95": 1.6300300970033277
+      },
+      "post_verify_s": {
+        "p50": 0.2851264320051996,
+        "p95": 0.2851264320051996
+      },
+      "query_pipeline_s": {
+        "p50": 16.199449047999224,
+        "p95": 16.199449047999224
+      },
+      "import_s": {
+        "p50": 0.2623497979948297,
+        "p95": 0.2623497979948297
+      },
+      "compile_s": {
+        "p50": 2.9952992917969823e-05,
+        "p95": 2.9952992917969823e-05
+      },
+      "reopen_s": {
+        "p50": 0.016439600003650412,
+        "p95": 0.016439600003650412
+      },
+      "total_pipeline_s": {
+        "p50": 16.478268398990622,
+        "p95": 16.478268398990622
+      }
+    }
+  }
+}

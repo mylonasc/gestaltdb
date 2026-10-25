@@ -81,6 +81,23 @@ full optional suite **3,333 passed / 2 skipped** (56.66s). Repeat the original
 staged gates first; only after success collect a three-repeat first/primed 100K
 selective/sparse comparison serially. Baseline timeout evidence remains immutable.
 
+Corrected clean `1730fb7` collection completed **40/40 exact-evidence/full
+analytical closure parity observations** across 1K/10K/100K gates and repeated
+100K selective/sparse first/primed comparisons. No timeout/bound failure in the
+corrected cut. Native total 100K medians 16.725/9.589s selective and
+17.189/10.555s sparse versus ordinary 10.756/7.402s and 11.609/8.361s. Native
+worker RSS remains higher (~992--1020 MB vs 634--662 MB), not query-only memory.
+Grouping fixed the composition regression without establishing native benefit.
+Original 120s timeout and pre-correction reports retained unchanged. Full
+runtime/source/hash/P95/accounting limits in native guide/measurement register.
+#194 remains open for explicit locator/support/publication and reconciliation.
+
+Final evidence/correction validation: **3,334 passed / 2 skipped** (67.04s), full
+optional backend/serializer/oracle requirements. Executable native example,
+docs/API drift, 8/8 existing examples, Sphinx `-W`, roadmap and whitespace checks
+passed. Report tests preserve baseline failure attribution and bind all 40
+corrected samples to exact source/harness/evidence/closure and physical counters.
+
 ### Authenticated native claim source continuation (#194)
 
 Dedicated `feature/re-194-native-admission` / `re-194-native-admission`, based on
