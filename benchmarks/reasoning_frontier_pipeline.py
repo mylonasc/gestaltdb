@@ -101,7 +101,7 @@ def fixture(path, rows, shape, backend):
             claim = Claim(s, p, o, "positive", "benchmark", provenance={"payload": "p" * (32 + i % 257)})
             pending.append(ClaimVersionWrite.assertion(claim, (0, 100)))
             if len(pending) == 1000 or i == rows - 1:
-                commit = graph.commit_versions(pending)
+                commit = graph.temporal.commit_versions(pending)
                 records.extend((v.claim.subject, v.claim.predicate, v.claim.object, v.version_id) for v in commit.versions)
                 pending.clear()
         return {"status": "ok", "evidence_digest": digest(records), "load_s": time.perf_counter() - start,
@@ -137,7 +137,7 @@ def native_evidence(graph, view, method, rows):
                 or not 0 < version.commit_id <= provenance.commit_horizon):
             raise ValueError("native benchmark fixture is not an active assertion-only prefix")
         if version.commit_id not in admitted:
-            commit = graph._get_temporal_commit_cached(version.commit_id)
+            commit = graph.temporal.get_commit_cached(version.commit_id)
             if commit is None:
                 raise ValueError("native fixture commit is not visible")
             admitted[version.commit_id] = commit.versions
@@ -151,7 +151,7 @@ def native_evidence(graph, view, method, rows):
         def decode(key, value):
             nonlocal scanned
             scanned += 1
-            version = admit(graph._decode_temporal_version(value))
+            version = admit(graph.temporal.decode_version(value))
             claim = version.claim
             return DecodedRow(claim.subject, claim.predicate, claim.object, version.version_id, version.version_id)
         with NativeKeyScan(graph.store, prefix=prefix, batch_rows=1024, max_rows=rows + 1) as scan:
@@ -159,22 +159,22 @@ def native_evidence(graph, view, method, rows):
                 evidence.extend(Evidence(Fact(row.subject, row.predicate, row.object), row.version_id) for row in batch.rows)
     else:
         # Actual temporal predicate-index keys, not synthetic locator payloads.
-        graph._ensure_temporal_indexes(provenance.commit_horizon)
-        name = graph._temporal_index_name(_TEMPORAL_CLAIM_DIMENSION_INDEX, graph._temporal_index_generation())
+        graph.temporal.ensure_indexes(provenance.commit_horizon)
+        name = graph.temporal.index_name(_TEMPORAL_CLAIM_DIMENSION_INDEX, graph.temporal.index_generation())
         prefix = _range_index_prefix(name, [b"predicate", b'"edge"'])
         with NativeKeyScan(graph.store, prefix=prefix, batch_rows=1024, max_rows=rows + 1) as scan:
             for key in iter_locator_keys(scan, max_rows=rows):
                 scanned += 1
                 encoded = key.rsplit(b"\x1f", 1)[1]
                 locator = base64.urlsafe_b64decode(encoded + b"=" * (-len(encoded) % 4))
-                commit_id, ordinal = graph._decode_temporal_locator(locator)
+                commit_id, ordinal = graph.temporal.decode_locator(locator)
                 # Point-materialize the record, then authenticate its exact commit.
-                value = graph.store.get_metadata(graph._temporal_record_key(commit_id, ordinal))
-                version = admit(graph._decode_temporal_version(value))
+                value = graph.store.get_metadata(graph.temporal.record_key(commit_id, ordinal))
+                version = admit(graph.temporal.decode_version(value))
                 claim = version.claim
                 evidence.append(Evidence(Fact(claim.subject, claim.predicate, claim.object), version.version_id))
     provenance.verify_source(graph)
-    if graph._temporal_system_horizon() != provenance.commit_horizon:
+    if graph.temporal.system_horizon() != provenance.commit_horizon:
         raise ValueError("native benchmark fixture moved")
     return evidence, scanned
 
@@ -218,7 +218,7 @@ def worker(path, rows, shape, method, cache, proofs=False, polars_max_intermedia
         metrics = {}
         begin = time.perf_counter()
         checkpoint("read-view")
-        with graph.read_view(valid_time=50) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             metrics["view_open_s"] = time.perf_counter() - begin
             if method == "frontier":
                 begin = time.perf_counter()
@@ -286,7 +286,7 @@ def worker(path, rows, shape, method, cache, proofs=False, polars_max_intermedia
     try:
         # The fixture is read-only for all workers; keep the writer guard for the
         # benchmark-only native decoder's explicitly quiescent contract.
-        with graph._temporal_writer_guard():
+        with graph.temporal.write_guard():
             if cache == "warm":
                 measure()
             begin = time.perf_counter()

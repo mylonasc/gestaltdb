@@ -58,7 +58,7 @@ def test_temporal_qualifier_grammar_ast_and_semantic_errors():
 
 
 def test_temporal_scan_metadata_and_unqualified_compatibility(temporal_graph):
-    version = temporal_graph.put_node_version(
+    version = temporal_graph.temporal.put_node_version(
         Node("alice", labels=["Person"], properties={"name": "Historical Alice"}),
         valid=(0, None),
     )
@@ -84,15 +84,15 @@ def test_temporal_scan_metadata_and_unqualified_compatibility(temporal_graph):
 
 
 def test_temporal_system_horizon_corrections_and_retractions(temporal_graph):
-    first = temporal_graph.put_node_version(
+    first = temporal_graph.temporal.put_node_version(
         Node("alice", properties={"name": "Alice"}), valid=(0, 100)
     )
-    corrected = temporal_graph.correct_node_version(
+    corrected = temporal_graph.temporal.correct_node_version(
         Node("alice", properties={"name": "Alicia"}),
         supersedes_version_id=first.version_id,
         valid=(20, 40),
     )
-    retracted = temporal_graph.retract_node_version(
+    retracted = temporal_graph.temporal.retract_node_version(
         "alice", supersedes_version_id=corrected.version_id, valid=(30, 35)
     )
     query = (
@@ -122,11 +122,11 @@ def test_temporal_typed_untyped_optional_variable_and_shortest_paths(temporal_gr
         Node("c", labels=["Person"]),
         Node("orphan", labels=["Person"]),
     ):
-        temporal_graph.put_node_version(node, valid=(0, None))
-    e1 = temporal_graph.put_edge_version(
+        temporal_graph.temporal.put_node_version(node, valid=(0, None))
+    e1 = temporal_graph.temporal.put_edge_version(
         Edge("e1", "a", "b", {"type": "KNOWS"}), valid=(0, None)
     )
-    temporal_graph.put_edge_version(Edge("e2", "b", "c", {}), valid=(0, None))
+    temporal_graph.temporal.put_edge_version(Edge("e2", "b", "c", {}), valid=(0, None))
 
     typed = temporal_graph.query(
         "MATCH (a {id: 'a'})-[r:KNOWS]->(b) "
@@ -160,9 +160,9 @@ def test_temporal_typed_untyped_optional_variable_and_shortest_paths(temporal_gr
 
 def test_temporal_context_propagates_to_chains_union_and_subqueries(temporal_graph):
     for node in (Node("a"), Node("b"), Node("c")):
-        temporal_graph.put_node_version(node, valid=(0, None))
-    temporal_graph.put_edge_version(Edge("e1", "a", "b", {"type": "R"}), valid=(0, None))
-    temporal_graph.put_edge_version(Edge("e2", "b", "c", {"type": "R"}), valid=(0, None))
+        temporal_graph.temporal.put_node_version(node, valid=(0, None))
+    temporal_graph.temporal.put_edge_version(Edge("e1", "a", "b", {"type": "R"}), valid=(0, None))
+    temporal_graph.temporal.put_edge_version(Edge("e2", "b", "c", {"type": "R"}), valid=(0, None))
 
     chained = temporal_graph.query(
         "MATCH (a {id: 'a'}) FOR VALID_TIME AS OF $at "
@@ -189,13 +189,13 @@ def test_temporal_catalog_rebuild_matches_incremental_and_avoids_history_scan(tm
     maintained = _memory_graph(tmp_path, "maintained")
     rebuilt = _memory_graph(tmp_path, "rebuilt")
     for graph, mode in ((maintained, "maintain"), (rebuilt, "defer")):
-        graph.put_node_version(Node("a"), valid=(0, None), index_mode=mode)
-        graph.put_node_version(Node("b"), valid=(0, None), index_mode=mode)
-        graph.put_edge_version(Edge("e", "a", "b", {}), valid=(0, None), index_mode=mode)
+        graph.temporal.put_node_version(Node("a"), valid=(0, None), index_mode=mode)
+        graph.temporal.put_node_version(Node("b"), valid=(0, None), index_mode=mode)
+        graph.temporal.put_edge_version(Edge("e", "a", "b", {}), valid=(0, None), index_mode=mode)
     query = "MATCH (a)-->(b) FOR VALID_TIME AS OF $at RETURN a.id, b.id"
     with pytest.raises(RuntimeError, match="temporal"):
         rebuilt.query(query, parameters={"at": _at(0)})
-    rebuilt.rebuild_temporal_indexes()
+    rebuilt.temporal.rebuild_temporal_indexes()
     maintained.iter_temporal_commits = lambda *args, **kwargs: (_ for _ in ()).throw(
         AssertionError("history scan")
     )
@@ -206,21 +206,21 @@ def test_temporal_catalog_rebuild_matches_incremental_and_avoids_history_scan(tm
 
 
 def test_temporal_query_keeps_the_horizon_captured_at_start(temporal_graph):
-    first = temporal_graph.put_node_version(
+    first = temporal_graph.temporal.put_node_version(
         Node("alice", properties={"name": "Alice"}), valid=(0, None)
     )
-    original_read_view = temporal_graph.read_view
+    original_open = temporal_graph.temporal.open_read_view
 
     @contextmanager
-    def publish_after_capture(**kwargs):
-        with original_read_view(**kwargs) as view:
-            temporal_graph.correct_node_version(
+    def publish_after_capture(graph, **kwargs):
+        with original_open(graph, **kwargs) as view:
+            temporal_graph.temporal.correct_node_version(
                 Node("alice", properties={"name": "Alicia"}),
                 supersedes_version_id=first.version_id,
             )
             yield view
 
-    temporal_graph.read_view = publish_after_capture
+    temporal_graph.temporal.open_read_view = publish_after_capture
     result = temporal_graph.query(
         "MATCH (n {id: 'alice'}) FOR VALID_TIME AS OF $at RETURN n.name",
         parameters={"at": _at(0)},
@@ -230,7 +230,7 @@ def test_temporal_query_keeps_the_horizon_captured_at_start(temporal_graph):
 
 
 def test_temporal_qualifier_runtime_validation_and_conflicts(temporal_graph):
-    temporal_graph.put_node_version(Node("n"), valid=(0, None))
+    temporal_graph.temporal.put_node_version(Node("n"), valid=(0, None))
     with pytest.raises(TypeError, match="datetime"):
         temporal_graph.query("MATCH (n) FOR VALID_TIME AS OF date('2020-01-01') RETURN n")
     with pytest.raises(ValueError, match="cannot be null"):

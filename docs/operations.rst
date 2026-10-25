@@ -77,7 +77,7 @@ the serializer that originally wrote it, and run:
 
 .. code-block:: python
 
-   migrated = graph.migrate_time_indexed_edges(
+   migrated = graph.temporal.migrate_time_indexed_edges(
        delete_legacy=False,
        metadata={"operator": "release-2026-09"},
    )
@@ -118,7 +118,7 @@ Inspect failed publications before deleting anything:
 
 .. code-block:: python
 
-   report = graph.list_temporal_orphans()
+   report = graph.temporal.list_temporal_orphans()
    for artifact in report.artifacts:
        print(artifact.commit_id, artifact.kind, artifact.present_record_count)
 
@@ -126,7 +126,7 @@ After confirming an inclusive recovery horizon, reclaim only through that ID:
 
 .. code-block:: python
 
-   result = graph.reclaim_temporal_orphans(through_commit=report.through_commit)
+   result = graph.temporal.reclaim_temporal_orphans(through_commit=report.through_commit)
 
 Reclamation never lowers the allocation high-water mark or reuses commit IDs.
 It validates unpublished descriptors and records, deletes their derivable index

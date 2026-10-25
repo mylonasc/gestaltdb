@@ -210,27 +210,31 @@ Browse the `database implementation <https://github.com/mylonasc/gestaltdb/blob/
 and `reasoning components and adapters <https://github.com/mylonasc/gestaltdb/tree/main/src/gestaltdb/reasoning>`_
 to follow those boundaries in code.
 
-Historical consumers can use ``graph.history`` (``gestaltdb.history.TemporalHistory``)
+Historical consumers can use ``graph.temporal.history()`` (``gestaltdb.history.TemporalHistory``)
 instead of accepting the full mutable database. ``TemporalHistory.from_store``
 also borrows an existing backend and serializer without constructing a
 ``GraphDB``. This capability exposes only historical reads, does not own the
 store, and performs no identity initialization or index repair. It is not a
-snapshot or an authenticated source: use ``graph.read_view`` for authenticated
-fixed-horizon selection. ``GraphReadView`` delegates historical queries to this
-capability; its source verification and sampler integration still retain the
-owning graph.
+snapshot or an authenticated source: use
+``graph.temporal.open_read_view(...)`` for authenticated fixed-horizon
+selection. ``GraphReadView`` delegates historical queries to this
+capability; its source verification and sampler integration take the
+owning handle explicitly as the read source.
 
 Temporal writes, sequencing, index maintenance and recovery live in
 ``gestaltdb.temporal_engine.TemporalEngine`` rather than in the facade.
-Each database handle owns one engine as ``graph.temporal``; it is
-constructed with the store, entity codec, clock and store path, and it
-borrows the owner's lifetime and database identity. Transaction and snapshot
-children rebind the engine to their own store instead of sharing the live
-handle's. Reasoning adapters and future services consume the engine (or its
-reader/history) instead of private ``GraphDB`` methods; the facade keeps
-thin compatibility wrappers with identical signatures, errors, visibility
-contracts and fault-injection seams. Temporal writes and publication remain
-behind the guarded engine, not ad-hoc store access.
+Sourced claims and modal evaluation live in
+``gestaltdb.epistemic_engine.EpistemicEngine`` (``graph.epistemic``) and
+Horn rules in ``gestaltdb.rules_engine.RulesEngine`` (``graph.rules``),
+both bound to the handle's temporal scope. Each database handle owns one
+of each; they are constructed with the store, entity codec, clock and
+store path, and they borrow the owner's lifetime and database identity.
+Transaction and snapshot children rebind the engines to their own store
+instead of sharing the live handle's. Reasoning adapters and other
+services consume the engines (or the temporal reader/history) instead of
+facade methods; ``GraphDB`` keeps no wrapper methods for them, and the
+engines never call back into the facade. Temporal writes and publication
+remain behind the guarded engine, not ad-hoc store access.
 
 For example, pass only read authority to an application component::
 
@@ -243,8 +247,8 @@ For example, pass only read authority to an application component::
     with TemporaryDirectory() as root:
         graph = GraphDB.create(root + "/db", backend="lmdb")
         try:
-            graph.put_node_version(Node("alice"), valid=(0, 10))
-            assert names_at(graph.history, 5) == ["alice"]
+            graph.temporal.put_node_version(Node("alice"), valid=(0, 10))
+            assert names_at(graph.temporal.history(), 5) == ["alice"]
         finally:
             graph.close()
 

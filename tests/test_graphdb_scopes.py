@@ -46,9 +46,9 @@ def test_transaction_binds_tx_store_and_shares_only_deliberate_state(tmp_path):
         with graph.transaction() as tx:
             assert isinstance(tx, GraphDB)
             assert tx.store is not live_store
-            assert tx._temporal_transaction_bound is True
-            assert tx._temporal_write_lock is graph._temporal_write_lock
-            assert tx._temporal_clock is graph._temporal_clock
+            assert tx.temporal.is_transaction_bound is True
+            assert tx.temporal._write_lock is graph.temporal._write_lock
+            assert tx.temporal._clock is graph.temporal._clock
             assert tx._store_path == graph._store_path
             assert tx._database_id == graph._database_id
             tx.put_node(Node("tx-only"))

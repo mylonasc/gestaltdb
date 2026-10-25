@@ -31,7 +31,7 @@ def scope():
 
 
 def assert_member(graph, subject, agent, group="g1"):
-    return graph.assert_claim(subject=subject, predicate="memberOf", object=group,
+    return graph.epistemic.assert_claim(subject=subject, predicate="memberOf", object=group,
                               agent=agent, polarity="positive", valid=(0, 100))
 
 
@@ -84,10 +84,10 @@ def test_build_rebuild_stability_and_mismatch(tmp_path, backend, module):
             build_inferred_snapshot(session, first_dir)
 
         # Retract the final version for "a": new generation, new path, old artifact stable.
-        remaining = [v for v in graph.iter_claim_versions()
+        remaining = [v for v in graph.epistemic.iter_claim_versions()
                      if v.claim is not None and v.claim.subject == "a"]
         for version in remaining:
-            graph.retract_claim(version.logical_id, valid=(0, 100),
+            graph.epistemic.retract_claim(version.logical_id, valid=(0, 100),
                                 supersedes_version_id=version.version_id)
         moved = advance_session(graph, session, limits=ReasoningLimits())
         second_dir = tmp_path / "snap2"
@@ -125,11 +125,11 @@ def test_snapshot_respects_pinned_valid_time(tmp_path, backend, module):
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
     try:
         rules = program()
-        graph.assert_claim(subject="a", predicate="memberOf", object="g1",
+        graph.epistemic.assert_claim(subject="a", predicate="memberOf", object="g1",
                            agent="registry", polarity="positive", valid=(0, 100))
-        graph.assert_claim(subject="b", predicate="memberOf", object="g1",
+        graph.epistemic.assert_claim(subject="b", predicate="memberOf", object="g1",
                            agent="registry", polarity="positive", valid=(200, 300))
-        graph.assert_claim(subject="c", predicate="memberOf", object="g1",
+        graph.epistemic.assert_claim(subject="c", predicate="memberOf", object="g1",
                            agent="registry", polarity="positive", valid=(0, 50))
         catalog = catalog_for(rules)
         selection, mapping = ClaimSelection(), ClaimMapping()

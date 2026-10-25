@@ -46,7 +46,7 @@ def memory_graph(tmp_path):
 
 def _populate_history(graph):
     valid = TemporalInterval.parse("2024-01-01T00:00:00Z", None)
-    first = graph.commit_versions(
+    first = graph.temporal.commit_versions(
         [
             NodeVersionWrite.assertion(Node("a", properties={"kind": "person", "name": "old"}), valid),
             NodeVersionWrite.assertion(Node("b", properties={"kind": "person"}), valid),
@@ -81,7 +81,7 @@ def test_open_rejects_identity_metadata_conflicting_with_manifest(managed_graph)
 def test_provenance_is_deterministic_json_and_detects_tampering(managed_graph):
     graph, _ = managed_graph
     _populate_history(graph)
-    with graph.read_view(valid_time="2024-06-01T00:00:00Z") as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time="2024-06-01T00:00:00Z") as view:
         encoded = view.provenance.to_json()
         assert encoded == view.provenance.to_json()
         assert ReadViewProvenance.from_json(encoded) == view.provenance
@@ -97,19 +97,19 @@ def test_read_view_keeps_captured_horizon(managed_graph):
     graph, _ = managed_graph
     first = _populate_history(graph)
     original = first.versions[0]
-    with graph.read_view(valid_time="2024-06-01T00:00:00Z") as view:
-        graph.correct_node_version(
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time="2024-06-01T00:00:00Z") as view:
+        graph.temporal.correct_node_version(
             Node("a", properties={"kind": "person", "name": "new"}),
             supersedes_version_id=original.version_id,
         )
         assert view.commit_horizon == first.commit_id
         assert view.get_node_as_of("a").node.properties["name"] == "old"
-        assert graph.get_node_as_of("a", valid_time="2024-06-01T00:00:00Z").node.properties["name"] == "new"
+        assert graph.temporal.get_node_as_of("a", valid_time="2024-06-01T00:00:00Z").node.properties["name"] == "new"
 
 
 def test_empty_history_read_view_has_authenticated_provenance(managed_graph):
     graph, _ = managed_graph
-    with graph.read_view(valid_time="2024-01-01T00:00:00Z") as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time="2024-01-01T00:00:00Z") as view:
         assert view.commit_horizon == 0
         assert view.provenance.commit_marker_sha256 is None
         view.verify_source()
@@ -119,10 +119,10 @@ def test_temporal_snapshot_uses_one_view_and_verified_hydration(managed_graph, t
     graph, _ = managed_graph
     first = _populate_history(graph)
     original = first.versions[0]
-    with graph.read_view(valid_time="2024-06-01T00:00:00Z") as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time="2024-06-01T00:00:00Z") as view:
         snapshot = view.build_sampler_snapshot(tmp_path / "snapshot")
 
-    graph.correct_node_version(
+    graph.temporal.correct_node_version(
         Node("a", properties={"kind": "person", "name": "new"}),
         supersedes_version_id=original.version_id,
     )
@@ -137,7 +137,7 @@ def test_temporal_snapshot_uses_one_view_and_verified_hydration(managed_graph, t
 def test_snapshot_rejects_replacement_source(managed_graph, tmp_path):
     graph, _ = managed_graph
     _populate_history(graph)
-    with graph.read_view(valid_time="2024-06-01T00:00:00Z") as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time="2024-06-01T00:00:00Z") as view:
         snapshot = view.build_sampler_snapshot(tmp_path / "snapshot")
 
     replacement = GraphDB.create(tmp_path / "replacement", backend=_available_backend(), serializer="json")
@@ -152,49 +152,49 @@ def test_read_view_rejects_future_or_invalid_horizon(managed_graph):
     graph, _ = managed_graph
     _populate_history(graph)
     with pytest.raises(ValueError, match="newer than"):
-        with graph.read_view(valid_time="2024-01-01T00:00:00Z", through_commit=2):
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time="2024-01-01T00:00:00Z", through_commit=2):
             pass
     with pytest.raises(ValueError, match="non-negative"):
-        with graph.read_view(valid_time="2024-01-01T00:00:00Z", through_commit=-1):
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time="2024-01-01T00:00:00Z", through_commit=-1):
             pass
 
 
 def test_read_view_stops_before_gap_and_ignores_later_marker(memory_graph):
     _populate_history(memory_graph)
-    second = memory_graph.put_node_version(
+    second = memory_graph.temporal.put_node_version(
         Node("c", properties={"kind": "person"}),
         valid=TemporalInterval.parse("2024-01-01T00:00:00Z", None),
     )
-    third = memory_graph.put_node_version(
+    third = memory_graph.temporal.put_node_version(
         Node("d", properties={"kind": "person"}),
         valid=TemporalInterval.parse("2024-01-01T00:00:00Z", None),
     )
-    marker_key = memory_graph._temporal_visible_key(second.commit_id)
+    marker_key = memory_graph.temporal.visible_key(second.commit_id)
     marker = memory_graph.store.metadata.pop(marker_key)
 
-    with memory_graph.read_view(valid_time="2024-06-01T00:00:00Z") as view:
+    with memory_graph.temporal.open_read_view(memory_graph, manifest=memory_graph.manifest, database_id=memory_graph.database_id, valid_time="2024-06-01T00:00:00Z") as view:
         assert view.commit_horizon == 1
         with pytest.raises(graphdb_module.TemporalCorruptionError, match="checksum"):
-            with memory_graph.read_view(
+            with memory_graph.temporal.open_read_view(memory_graph, manifest=memory_graph.manifest, database_id=memory_graph.database_id,
                 valid_time="2024-06-01T00:00:00Z",
                 system_time=third.system_time,
             ):
                 pass
         memory_graph.store.put_metadata(marker_key, marker)
         assert view.get_node_as_of("c") is None
-    with memory_graph.read_view(valid_time="2024-06-01T00:00:00Z") as newer:
+    with memory_graph.temporal.open_read_view(memory_graph, manifest=memory_graph.manifest, database_id=memory_graph.database_id, valid_time="2024-06-01T00:00:00Z") as newer:
         assert newer.commit_horizon == 3
         assert newer.get_node_as_of("c") is not None
 
 
 def test_read_view_crosses_empty_abandoned_commit_reservation(memory_graph):
     _populate_history(memory_graph)
-    abandoned = memory_graph.put_node_version(Node("abandoned"), valid=(0, None))
-    memory_graph.store.metadata.pop(memory_graph._temporal_visible_key(abandoned.commit_id))
-    memory_graph.store.metadata.pop(memory_graph._temporal_commit_key(abandoned.commit_id))
-    later = memory_graph.put_node_version(Node("later"), valid=(0, None))
+    abandoned = memory_graph.temporal.put_node_version(Node("abandoned"), valid=(0, None))
+    memory_graph.store.metadata.pop(memory_graph.temporal.visible_key(abandoned.commit_id))
+    memory_graph.store.metadata.pop(memory_graph.temporal.commit_key(abandoned.commit_id))
+    later = memory_graph.temporal.put_node_version(Node("later"), valid=(0, None))
 
-    with memory_graph.read_view(valid_time="2024-06-01T00:00:00Z") as view:
+    with memory_graph.temporal.open_read_view(memory_graph, manifest=memory_graph.manifest, database_id=memory_graph.database_id, valid_time="2024-06-01T00:00:00Z") as view:
         assert view.commit_horizon == later.commit_id
         assert view.get_node_as_of("later") is not None
 
@@ -204,10 +204,10 @@ def test_read_view_crosses_empty_abandoned_commit_reservation(memory_graph):
 def test_read_view_core_guarantees_run_without_optional_backends(memory_graph, tmp_path):
     first = _populate_history(memory_graph)
     original = first.versions[0]
-    with memory_graph.read_view(valid_time="2024-06-01T00:00:00Z") as view:
+    with memory_graph.temporal.open_read_view(memory_graph, manifest=memory_graph.manifest, database_id=memory_graph.database_id, valid_time="2024-06-01T00:00:00Z") as view:
         encoded = view.provenance.to_json()
         snapshot = view.build_sampler_snapshot(tmp_path / "memory-snapshot")
-        memory_graph.correct_node_version(
+        memory_graph.temporal.correct_node_version(
             Node("a", properties={"kind": "person", "name": "new"}),
             supersedes_version_id=original.version_id,
         )
@@ -218,8 +218,8 @@ def test_read_view_core_guarantees_run_without_optional_backends(memory_graph, t
 
 def test_visibility_digest_detects_lower_commit_marker_changes(memory_graph):
     _populate_history(memory_graph)
-    with memory_graph.read_view(valid_time="2024-06-01T00:00:00Z") as view:
-        memory_graph.store.put_metadata(memory_graph._temporal_visible_key(1), b"x" * 32)
+    with memory_graph.temporal.open_read_view(memory_graph, manifest=memory_graph.manifest, database_id=memory_graph.database_id, valid_time="2024-06-01T00:00:00Z") as view:
+        memory_graph.store.put_metadata(memory_graph.temporal.visible_key(1), b"x" * 32)
         with pytest.raises((ProvenanceMismatchError, graphdb_module.TemporalCorruptionError)):
             view.verify_source()
 
@@ -248,18 +248,18 @@ def test_identity_reconciliation_rejects_conflicting_expected_value(memory_graph
 
 
 def _populate_temporal_snapshot_history(graph):
-    nodes = graph.commit_versions([
+    nodes = graph.temporal.commit_versions([
         NodeVersionWrite.assertion(Node("a", properties={"kind": "person"}), (-10, None), version_id="00000000-0000-0000-0000-000000000001"),
         NodeVersionWrite.assertion(Node("b", properties={"kind": "person"}), (-10, None), version_id="00000000-0000-0000-0000-000000000002"),
         EdgeVersionWrite.assertion(Edge("ab", "a", "b", properties={"type": "KNOWS"}), (-10, None), version_id="00000000-0000-0000-0000-000000000003"),
     ])
     asserted = nodes.versions[-1]
-    corrected = graph.correct_edge_version(
+    corrected = graph.temporal.correct_edge_version(
         Edge("ab", "a", "b", properties={"type": "KNOWS", "revision": 2}),
         supersedes_version_id=asserted.version_id,
         version_id="00000000-0000-0000-0000-000000000004",
     )
-    retracted = graph.retract_edge_version(
+    retracted = graph.temporal.retract_edge_version(
         "ab", valid=(20, 30), supersedes_version_id=corrected.version_id,
         version_id="00000000-0000-0000-0000-000000000005",
     )
@@ -267,7 +267,7 @@ def _populate_temporal_snapshot_history(graph):
 
 
 def _build_runtime_temporal_snapshot(graph, path):
-    graph.commit_versions([
+    graph.temporal.commit_versions([
         NodeVersionWrite.assertion(Node(node_id), (-20, None))
         for node_id in ["a", "b", "c", "d", "x"]
     ])
@@ -279,7 +279,7 @@ def _build_runtime_temporal_snapshot(graph, path):
         (Edge("forward", "b", "c", properties={"type": "R"}), (10, 30)),
         (Edge("backward", "b", "d", properties={"type": "R"}), (-5, 30)),
     ]:
-        graph.put_edge_version(edge, valid=valid)
+        graph.temporal.put_edge_version(edge, valid=valid)
     return graph.build_sampler_snapshot(path, temporal=True, time_bucket="none")
 
 
@@ -359,7 +359,7 @@ def test_temporal_neighbor_sampling_composes_exact_filters(memory_graph, tmp_pat
 def test_sampling_policies_preserve_temporal_filters_and_weights(memory_graph, tmp_path):
     from gestaltdb.sampling import ExternalNeighborSamplingSpec
 
-    memory_graph.commit_versions([
+    memory_graph.temporal.commit_versions([
         NodeVersionWrite.assertion(Node(node_id), (0, None))
         for node_id in ["a", "b", "c"]
     ])
@@ -367,7 +367,7 @@ def test_sampling_policies_preserve_temporal_filters_and_weights(memory_graph, t
         (Edge("old", "a", "b", properties={"type": "R", "weight": 1000}), (0, 10)),
         (Edge("new", "a", "c", properties={"type": "R", "weight": 2}), (10, None)),
     ]:
-        memory_graph.put_edge_version(edge, valid=valid)
+        memory_graph.temporal.put_edge_version(edge, valid=valid)
     snapshot = memory_graph.build_sampler_snapshot(
         tmp_path / "weighted-history", temporal=True, edge_weight_property="weight",
     )
@@ -404,7 +404,7 @@ def test_temporal_external_edge_ids_are_ambiguous_across_version_rows(memory_gra
 
 
 def test_temporal_incident_self_loop_is_one_candidate(memory_graph, tmp_path):
-    memory_graph.put_edge_version(Edge("loop", "a", "a", properties={"type": "R"}), valid=(0, None))
+    memory_graph.temporal.put_edge_version(Edge("loop", "a", "a", properties={"type": "R"}), valid=(0, None))
     snapshot = memory_graph.build_sampler_snapshot(tmp_path / "loop-history", temporal=True)
     sampled = SamplerEngine(snapshot).sample_neighbors_external(
         ["a"], 10, direction="any", temporal=TemporalContext.as_of(0),
@@ -465,7 +465,7 @@ def test_temporal_multihop_enforces_causal_path_starts(
 
 
 def test_temporal_multihop_propagates_converged_causal_states(memory_graph, tmp_path):
-    memory_graph.commit_versions([
+    memory_graph.temporal.commit_versions([
         NodeVersionWrite.assertion(Node(node_id), (-10, None))
         for node_id in ["a", "b", "c", "d"]
     ])
@@ -475,7 +475,7 @@ def test_temporal_multihop_propagates_converged_causal_states(memory_graph, tmp_
         ("c-b", "c", "b", 2),
         ("b-d", "b", "d", 3),
     ]:
-        memory_graph.put_edge_version(
+        memory_graph.temporal.put_edge_version(
             Edge(edge_id, source, target, properties={"type": "R"}),
             valid=(start, 100),
         )
@@ -533,17 +533,17 @@ def test_temporal_sampling_duplicate_versions_and_ram_memmap_parity(memory_graph
 
 
 def _build_temporal_negative_snapshot(graph, path):
-    graph.commit_versions([
+    graph.temporal.commit_versions([
         NodeVersionWrite.assertion(Node(node_id), valid)
         for node_id, valid in [
             ("a", (0, None)), ("b", (0, None)), ("c", (0, None)),
             ("future", (100, None)),
         ]
     ])
-    graph.put_edge_version(
+    graph.temporal.put_edge_version(
         Edge("seed", "a", "b", properties={"type": "R"}), valid=(0, 50)
     )
-    graph.put_edge_version(
+    graph.temporal.put_edge_version(
         Edge("future-positive", "a", "c", properties={"type": "R"}), valid=(20, 50)
     )
     return graph.build_sampler_snapshot(path, temporal=True, time_bucket="none")
@@ -643,14 +643,14 @@ def test_temporal_hard_negatives_reject_ambiguous_candidate_time(memory_graph, t
 
 
 def test_temporal_snapshot_does_not_resurrect_fully_retracted_node(memory_graph, tmp_path):
-    memory_graph.commit_versions([
+    memory_graph.temporal.commit_versions([
         NodeVersionWrite.assertion(Node("a"), (0, None)),
         NodeVersionWrite.assertion(Node("gone"), (0, 10)),
         EdgeVersionWrite.assertion(
             Edge("a-gone", "a", "gone", properties={"type": "R"}), (0, None)
         ),
     ])
-    memory_graph.commit_versions([
+    memory_graph.temporal.commit_versions([
         NodeVersionWrite.retraction("gone", valid=(0, 10)),
     ])
     snapshot = memory_graph.build_sampler_snapshot(
@@ -740,15 +740,15 @@ def test_temporal_snapshot_rejects_authoritative_metadata_overrides(memory_graph
 
 
 def test_temporal_snapshot_hydrates_exact_edge_version(memory_graph, tmp_path):
-    memory_graph.commit_versions([
+    memory_graph.temporal.commit_versions([
         NodeVersionWrite.assertion(Node("a"), (0, 100)),
         NodeVersionWrite.assertion(Node("b"), (0, 100)),
         NodeVersionWrite.assertion(Node("c"), (0, 100)),
     ])
-    asserted = memory_graph.put_edge_version(
+    asserted = memory_graph.temporal.put_edge_version(
         Edge("edge", "a", "b", properties={"type": "OLD"}), valid=(0, 100)
     )
-    corrected = memory_graph.correct_edge_version(
+    corrected = memory_graph.temporal.correct_edge_version(
         Edge("edge", "a", "c", properties={"type": "NEW"}),
         supersedes_version_id=asserted.version_id,
         valid=(20, 40),
@@ -866,7 +866,7 @@ def _resign_snapshot(snapshot_path, artifact_name):
 
 def test_temporal_snapshot_rejects_candidate_index_with_wrong_key_membership(memory_graph, tmp_path):
     _populate_temporal_snapshot_history(memory_graph)
-    memory_graph.put_edge_version(
+    memory_graph.temporal.put_edge_version(
         Edge("ba", "b", "a", properties={"type": "KNOWS"}), valid=(-10, None)
     )
     snapshot = memory_graph.build_sampler_snapshot(tmp_path / "snapshot", temporal=True)

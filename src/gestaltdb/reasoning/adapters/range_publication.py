@@ -227,7 +227,7 @@ def stage_range_generation(graph: GraphDB, program: GenericProgram, catalog: Rul
         raise ReasoningError("publication requires a separate target world and non-derived selection")
     check_cancelled(cancel)
     store, serializer = graph.store, graph.serializer
-    with graph.read_view(valid_time=valid_start_us) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=valid_start_us) as view:
         result = evaluate_pinned_range(view, program, catalog, valid_start_us=valid_start_us, valid_end_us=valid_end_us,
             world=source_world, selection=selection, mapping=mapping, limits=limits,
             source_limits=source_limits, expected_generation=expected_generation, cancel=cancel)
@@ -277,7 +277,7 @@ def publish_range_generation(graph: GraphDB, staged: StagedRangeGeneration, *, l
         if any(item.kind == "incomplete_commit" for item in graph.temporal.list_temporal_orphans().artifacts):
             raise ReasoningError("unreclaimed temporal publication requires explicit orphan recovery")
         binding.verify_source(graph, freshness=freshness)
-        with graph.read_view(valid_time=identity.source.valid_start_us,
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=identity.source.valid_start_us,
                              through_commit=identity.source.commit_horizon) as original:
             admit_range_result(original, staged.result, staged.program, staged.catalog,
                 expected_generation=identity, limits=limits, source_limits=source_limits, cancel=cancel)
@@ -285,7 +285,7 @@ def publish_range_generation(graph: GraphDB, staged: StagedRangeGeneration, *, l
         check_binding()
         if desired_rows != staged.desired or _content(staged.result, desired_rows) != staged.content_id:
             raise ReasoningError("staged interval output/content was altered; re-stage explicitly")
-        with graph.read_view(valid_time=identity.source.valid_start_us) as latest:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=identity.source.valid_start_us) as latest:
             horizon = latest.commit_horizon
             state = _target_state(latest, staged.namespace, staged.publication_key, staged.target_world,
                                   identity.source, publication_limits, cancel)
@@ -337,7 +337,7 @@ def publish_range_generation(graph: GraphDB, staged: StagedRangeGeneration, *, l
         check_cancelled(cancel)
         check_binding()
         binding.verify_source(graph, freshness=freshness)
-        with graph.read_view(valid_time=identity.source.valid_start_us) as final:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=identity.source.valid_start_us) as final:
             if final.commit_horizon != horizon:
                 raise GenerationStaleError("source/target moved while preparing publication")
         commit = graph.temporal.commit_versions(writes, metadata=metadata) if writes else None

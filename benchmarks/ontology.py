@@ -343,19 +343,19 @@ def _run_worker(spec):
                 writes, rules = _timed(metrics, "conversion_s", descriptors)
 
                 def load():
-                    graph.commit_versions(writes)
+                    graph.temporal.commit_versions(writes)
                     for rule_id, when, then in rules:
-                        graph.create_rule(rule_id, when=when, then=then)
+                        graph.rules.create_rule(rule_id, when=when, then=then)
 
                 _timed(metrics, "load_s", load)
                 if backend == "legacy-lmdb":
-                    result = _timed(metrics, "execution_s", lambda: graph.run_rules(
+                    result = _timed(metrics, "execution_s", lambda: graph.rules.run(
                         as_of=50, max_iterations=1000, max_derivations=spec["max_facts"],
                         max_justifications=spec["max_justifications"],
                     ))
                     decoded = _timed(metrics, "decode_s", lambda: {
                         (v.claim.subject, v.claim.predicate, v.claim.object)
-                        for v in graph.iter_claims_as_of(valid_time=50, world="default", polarity="positive", object_kind="entity")
+                        for v in graph.epistemic.iter_claims_as_of(valid_time=50, world="default", polarity="positive", object_kind="entity")
                     })
                     metrics["justifications"] = result.justification_count
                     kind = "extract_fixpoint_all_justifications_and_temporal_publication"
@@ -367,7 +367,7 @@ def _run_worker(spec):
                     selection, mapping = ClaimSelection(), ClaimMapping()
 
                     def pin():
-                        view = resources.enter_context(graph.read_view(valid_time=50))
+                        view = resources.enter_context(graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50))
                         return resources.enter_context(PinnedClaimSource(
                             view, world="default", ontology_revision=compiled.revision_id,
                             selection=selection, mapping=mapping,

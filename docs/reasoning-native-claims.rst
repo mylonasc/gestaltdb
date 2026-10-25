@@ -20,11 +20,11 @@ contract as ``PinnedBatchedClaimSource``. It is not selected automatically.
    with TemporaryDirectory() as root:
        graph = GraphDB.create(Path(root) / "db", backend="pyrex", serializer="json")
        try:
-           first = graph.assert_claim(subject="alice", predicate="worksFor", object="acme",
+           first = graph.epistemic.assert_claim(subject="alice", predicate="worksFor", object="acme",
                agent="registry", polarity="positive", valid=(0, 100))
-           graph.correct_claim(first.logical_id, confidence=0.9, valid=(20, 80),
+           graph.epistemic.correct_claim(first.logical_id, confidence=0.9, valid=(20, 80),
                                supersedes_version_id=first.version_id)
-           with graph.read_view(valid_time=50) as view:
+           with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
                options = dict(request=ExtractionRequest(world="default", predicates=["worksFor"]),
                    ontology_revision="example-revision", selection=ClaimSelection(), mapping=ClaimMapping())
                with PinnedNativeClaimSource(view, **options,

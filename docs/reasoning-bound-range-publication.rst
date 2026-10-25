@@ -22,7 +22,7 @@ and evaluation, and publishing re-admits exact source evidence and closure.
    with TemporaryDirectory() as path:
        graph = GraphDB.create(path, backend="lmdb", serializer="json")
        try:
-           graph.assert_claim(subject="a", predicate="edge", object="b", agent="example",
+           graph.epistemic.assert_claim(subject="a", predicate="edge", object="b", agent="example",
                               polarity="positive", valid=(10, 20))
            staged = stage_range_generation(graph, program, catalog,
                valid_start_us=0, valid_end_us=30, source_world="default", target_world="inferred",
@@ -30,8 +30,8 @@ and evaluation, and publishing re-admits exact source evidence and closure.
            published = publish_range_generation(graph, staged, limits=ReasoningLimits(),
                expected_generation=staged.result.binding.identity)
            assert published.asserted == 2  # base edge plus derived reach
-           assert len(graph.get_temporal_commit(published.commit_id).versions) == 2
-           with graph.read_view(valid_time=20) as view:
+           assert len(graph.temporal.get_temporal_commit(published.commit_id).versions) == 2
+           with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=20) as view:
                assert tuple(view.iter_claims_as_of(world="inferred")) == ()
        finally:
            graph.close()

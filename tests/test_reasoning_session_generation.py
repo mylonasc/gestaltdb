@@ -24,7 +24,7 @@ def bound_source(tmp_path, request):
     pytest.importorskip(module)
     graph = GraphDB.create(tmp_path / "db", backend=backend, serializer="json")
     try:
-        versions = [graph.assert_claim(subject="a", predicate="p", object="b", agent=agent,
+        versions = [graph.epistemic.assert_claim(subject="a", predicate="p", object="b", agent=agent,
                                         source="registry", polarity="positive", valid=(0, 100))
                     for agent in ("one", "two")]
         x, y = Variable("x"), Variable("y")
@@ -52,7 +52,7 @@ def test_authenticates_alternative_assertions_and_persisted_state(bound_source, 
     path = tmp_path / "session.json"
     assert save_session(session, path) == binding.session_digest
     binding.verify(graph, load_session(path))
-    graph.retract_claim(versions[0].logical_id, valid=(0, 100))
+    graph.epistemic.retract_claim(versions[0].logical_id, valid=(0, 100))
     with pytest.raises(ProvenanceMismatchError, match="horizon moved"):
         bind_session_generation(graph, session)
     historical = bind_session_generation(graph, session, freshness="historical")
@@ -132,18 +132,18 @@ def test_resurrected_session_rebinds_to_authenticated_source(tmp_path, backend, 
         x, y = Variable("x"), Variable("y")
         program = GenericProgram([GenericRule("r", [TypedAtom("p", [x, y])], [], TypedAtom("q", [x]))])
         scope = SessionScope("default", 50, ClaimSelection(), ClaimMapping())
-        first = graph.assert_claim(subject="a", predicate="p", object="b", agent="registry",
+        first = graph.epistemic.assert_claim(subject="a", predicate="p", object="b", agent="registry",
                                    polarity="positive", valid=(0, 100))
         session = start_session(graph, program, catalog_for_typed_program(program),
                                 scope=scope, limits=ReasoningLimits())
         binding = bind_session_generation(graph, session)
         binding.verify(graph, session)
-        graph.retract_claim(first.logical_id, valid=(0, 100))
+        graph.epistemic.retract_claim(first.logical_id, valid=(0, 100))
         emptied = advance_session(graph, session, limits=ReasoningLimits()).session
         assert emptied.facts == ()
         with pytest.raises(ProvenanceMismatchError, match="session state drifted"):
             binding.verify(graph, emptied)
-        graph.assert_claim(subject="a", predicate="p", object="b", agent="registry",
+        graph.epistemic.assert_claim(subject="a", predicate="p", object="b", agent="registry",
                            polarity="positive", valid=(0, 100))
         resurrected = advance_session(graph, emptied, limits=ReasoningLimits()).session
         rebound = bind_session_generation(graph, resurrected)
@@ -190,7 +190,7 @@ def test_unsupported_profiles_and_dictionaries_fail_closed(bound_source, field, 
 
 def test_candidate_bound_counts_before_policy_filtering(bound_source):
     graph, session, _ = bound_source
-    graph.assert_claim(subject="unrelated", predicate="p", object="c", agent="excluded",
+    graph.epistemic.assert_claim(subject="unrelated", predicate="p", object="c", agent="excluded",
                        polarity="positive", valid=(0, 100))
     selected = start_session(graph, session.program, session.catalog,
                              scope=replace(session.scope, selection=ClaimSelection(agents=("one",))),
@@ -203,13 +203,13 @@ def test_candidate_bound_counts_before_policy_filtering(bound_source):
 @pytest.mark.parametrize("include_derived", [False, True])
 def test_effective_policy_aliases_and_world_are_authenticated(bound_source, include_derived):
     graph, session, versions = bound_source
-    graph.assert_claim(subject="foreign", predicate="p", object="b", agent="one", source="registry",
+    graph.epistemic.assert_claim(subject="foreign", predicate="p", object="b", agent="one", source="registry",
                        polarity="positive", world="foreign", valid=(0, 100))
-    graph.assert_claim(subject="excluded", predicate="p", object="b", agent="one", source="elsewhere",
+    graph.epistemic.assert_claim(subject="excluded", predicate="p", object="b", agent="one", source="elsewhere",
                        polarity="positive", valid=(0, 100))
-    graph.assert_claim(subject="negative", predicate="p", object="b", agent="one", source="registry",
+    graph.epistemic.assert_claim(subject="negative", predicate="p", object="b", agent="one", source="registry",
                        polarity="negative", valid=(0, 100))
-    derived = graph.assert_claim(subject="derived", predicate="p", object="b", agent="gestaltdb:ontology",
+    derived = graph.epistemic.assert_claim(subject="derived", predicate="p", object="b", agent="gestaltdb:ontology",
                                  source="registry", polarity="positive", valid=(0, 100),
                                  provenance={"derived_by": "gestaltdb.ontology"})
     scope = replace(session.scope, selection=ClaimSelection(agents=("one", "gestaltdb:ontology"),
@@ -228,7 +228,7 @@ def test_effective_policy_aliases_and_world_are_authenticated(bound_source, incl
 def test_historical_correction_does_not_replace_the_admitted_prefix(bound_source):
     graph, session, versions = bound_source
     binding = bind_session_generation(graph, session)
-    graph.correct_claim(versions[0].logical_id, supersedes_version_id=versions[0].version_id, valid=(0, 100))
+    graph.epistemic.correct_claim(versions[0].logical_id, supersedes_version_id=versions[0].version_id, valid=(0, 100))
     binding.verify(graph, session, freshness="historical")
     advanced = advance_session(graph, session, limits=ReasoningLimits()).session
     bind_session_generation(graph, advanced).verify(graph, advanced)

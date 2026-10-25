@@ -408,7 +408,7 @@ class GraphReadView:
 
     def __init__(self, graph, provenance: ReadViewProvenance):
         self._graph = graph
-        self._history = graph.history
+        self._history = graph.temporal.history()
         # Legacy instance-level stream instrumentation remains an explicit seam.
         # Ordinary reads use the capability, not a GraphDB method round trip.
         self._claim_overrides = vars(graph)

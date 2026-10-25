@@ -1,6 +1,6 @@
 """Read-only temporal capabilities, independent of the mutable graph API.
 
-Use ``graph.history`` for a scope-bound capability. It does not own or close
+Use ``graph.temporal.history()`` for a scope-bound capability. It does not own or close
 the store, open snapshots, or grant mutation/publication rights. Keep the
 owning graph/transaction/snapshot open for the lifetime of its consumers.
 See the runnable capability example in ``docs/architecture.rst``.

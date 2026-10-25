@@ -32,7 +32,7 @@ See :doc:`architecture` for the database, evaluator, and persistence boundaries.
    with TemporaryDirectory() as root:
        graph = GraphDB.create(Path(root) / "db", backend="lmdb", serializer="json")
        try:
-           graph.assert_claim(subject="a", predicate="memberOf", object="g", agent="example",
+           graph.epistemic.assert_claim(subject="a", predicate="memberOf", object="g", agent="example",
                               polarity="positive", valid=(0, 100))
            session = start_session(graph, program, catalog_for_typed_program(program),
                scope=SessionScope("default", 50, ClaimSelection(), ClaimMapping()), limits=ReasoningLimits())
@@ -42,7 +42,7 @@ See :doc:`architecture` for the database, evaluator, and persistence boundaries.
            loaded = load_authenticated_session(graph, path, expected_generation=binding.identity,
                expected_session_digest=binding.session_digest)
            assert loaded.session == session
-           graph.assert_claim(subject="b", predicate="memberOf", object="g", agent="example",
+           graph.epistemic.assert_claim(subject="b", predicate="memberOf", object="g", agent="example",
                               polarity="positive", valid=(0, 100))
            moved = advance_authenticated_session(graph, path, expected_generation=binding.identity,
                expected_session_digest=binding.session_digest, freshness="historical", limits=ReasoningLimits())

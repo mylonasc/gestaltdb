@@ -27,9 +27,9 @@ current-state and temporal source identities remain separate.
        graph = GraphDB.create(path, backend="lmdb", serializer="json")
        try:
            for source, target in [("a", "b"), ("b", "c")]:
-               graph.assert_claim(subject=source, predicate="storedEdge", object=target,
+               graph.epistemic.assert_claim(subject=source, predicate="storedEdge", object=target,
                                   polarity="positive", agent="example", valid=(0, 100))
-           with graph.read_view(valid_time=50) as view:
+           with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
                result = answer_pinned_claims(
                    view, program, Atom("a", "reach", y), world="default",
                    ontology_revision="example-v1", selection=ClaimSelection(),

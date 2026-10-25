@@ -61,11 +61,11 @@ def test_repository_delete_cascades_current_edges_only(graph):
     graph.put_node(Node("a"))
     graph.put_node(Node("b"))
     graph.put_edge(Edge("e", source="a", target="b", properties={"type": "T"}))
-    historical = graph.put_node_version(Node("a"), valid=(0, 10))
+    historical = graph.temporal.put_node_version(Node("a"), valid=(0, 10))
     graph.nodes.delete("a")
     assert graph.get_edge(b"e") is None
     assert graph.count_typed_adjacency("b", "T", "in") == 0
-    assert graph.history.get_node_as_of("a", valid_time=5).version_id == historical.version_id
+    assert graph.temporal.history().get_node_as_of("a", valid_time=5).version_id == historical.version_id
 
 
 @pytest.mark.parametrize("backend", ["lmdb", "pyrex"])

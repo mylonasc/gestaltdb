@@ -27,11 +27,11 @@ def publish(graph, compiled=None, **kw):
 
 
 def assertion(graph, agent="one"):
-    return graph.assert_claim(subject="a", predicate="p", object="b", agent=agent, polarity="positive", valid=(0, 100))
+    return graph.epistemic.assert_claim(subject="a", predicate="p", object="b", agent=agent, polarity="positive", valid=(0, 100))
 
 
 def outputs(graph, time=50):
-    return list(graph.iter_claims_as_of(world="ontology-output", valid_time=time))
+    return list(graph.epistemic.iter_claims_as_of(world="ontology-output", valid_time=time))
 
 
 def test_point_scope_idempotence_and_no_base_mutation(graph):
@@ -43,7 +43,7 @@ def test_point_scope_idempotence_and_no_base_mutation(graph):
     assert second.unchanged == 2 and second.commit_id is None
     assert len(outputs(graph)) == 2
     assert not outputs(graph, 49) and not outputs(graph, 51)
-    assert len(list(graph.iter_claims_as_of(world="default", valid_time=50))) == 1
+    assert len(list(graph.epistemic.iter_claims_as_of(world="default", valid_time=50))) == 1
     assert len({v.commit_id for v in outputs(graph)}) == 1
     third = publish(graph, valid_time=51)
     assert third.asserted == 2 and len(outputs(graph, 51)) == 2
@@ -53,10 +53,10 @@ def test_point_scope_idempotence_and_no_base_mutation(graph):
 def test_loss_of_independent_support_and_cycles(graph):
     one, two = assertion(graph), assertion(graph, "two")
     publish(graph)
-    graph.retract_claim(one.logical_id, supersedes_version_id=one.version_id)
+    graph.epistemic.retract_claim(one.logical_id, supersedes_version_id=one.version_id)
     update = publish(graph)
     assert update.corrected == 2 and len(outputs(graph)) == 2
-    graph.retract_claim(two.logical_id, supersedes_version_id=two.version_id)
+    graph.epistemic.retract_claim(two.logical_id, supersedes_version_id=two.version_id)
     removed = publish(graph)
     assert removed.retracted == 2 and not outputs(graph)
     assert publish(graph).commit_id is None
@@ -65,7 +65,7 @@ def test_loss_of_independent_support_and_cycles(graph):
 def test_revision_changes_and_unrelated_target_claims(graph):
     assertion(graph)
     publish(graph)
-    graph.assert_claim(subject="unrelated", predicate="x", object="z", agent="user", world="ontology-output", polarity="positive", valid=(0, 100))
+    graph.epistemic.assert_claim(subject="unrelated", predicate="x", object="z", agent="user", world="ontology-output", polarity="positive", valid=(0, 100))
     change = publish(graph, plan([]))
     assert change.retracted == 1 and change.corrected == 1
     assert {v.claim.predicate for v in outputs(graph)} == {"p", "x"}
@@ -176,9 +176,9 @@ def test_interrupted_nontransactional_marker_never_exposes_partial_closure(graph
         outputs(graph)
     with pytest.raises(ReasoningError, match="orphan recovery"):
         publish(graph)
-    report = graph.list_temporal_orphans()
-    graph.reclaim_temporal_orphans(through_commit=report.through_commit)
-    graph.rebuild_temporal_indexes()
+    report = graph.temporal.list_temporal_orphans()
+    graph.temporal.reclaim_temporal_orphans(through_commit=report.through_commit)
+    graph.temporal.rebuild_temporal_indexes()
     assert not outputs(graph)
     retried = publish(graph)
     assert retried.asserted == 2

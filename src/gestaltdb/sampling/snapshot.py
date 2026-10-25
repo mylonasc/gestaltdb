@@ -1455,7 +1455,7 @@ class SamplerSnapshot:
                     source.verify_snapshot_store(view)
                     return view.get_node(self.external_node_id(node_int).encode("utf-8"))
             source.verify_source(graph)
-            version = graph.get_node_as_of(
+            version = graph.temporal.get_node_as_of(
                 self.external_node_id(node_int),
                 valid_time=source.valid_time_us,
                 through_commit=source.commit_horizon,
@@ -1476,12 +1476,12 @@ class SamplerSnapshot:
                     return view.get_edge(self.external_edge_id(edge_int).encode("utf-8"))
             source.verify_source(graph)
             if self.temporal:
-                version = graph.get_edge_version(
+                version = graph.temporal.get_edge_version(
                     str(self.edge_version_ids[int(edge_int)]),
                     through_commit=source.commit_horizon,
                 )
             else:
-                version = graph.get_edge_as_of(
+                version = graph.temporal.get_edge_as_of(
                     self.external_edge_id(edge_int),
                     valid_time=source.valid_time_us,
                     through_commit=source.commit_horizon,

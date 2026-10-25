@@ -149,7 +149,7 @@ def _full_scan(graph: GraphDB, scope: SessionScope, horizon: int, *,
     instant = TemporalInstant(scope.valid_time_us)
     agents, sources = _filters(scope)
     seen: dict[str, tuple[str, TypedFact]] = {}
-    with graph.read_view(valid_time=instant) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=instant) as view:
         iterator = iter(view.iter_claims_as_of(world=scope.world, polarity=ClaimPolarity.POSITIVE,
                                                object_kind=ClaimObjectKind.ENTITY))
         count = 0
@@ -209,12 +209,12 @@ def start_session(graph: GraphDB, program: GenericProgram, catalog: RuleCatalog,
             >>> with TemporaryDirectory() as root:
             ...     graph = GraphDB.create(root + "/db", backend="lmdb", serializer="json")
             ...     try:
-            ...         _ = graph.assert_claim(subject="alice", predicate="member", object="team",
+            ...         _ = graph.epistemic.assert_claim(subject="alice", predicate="member", object="team",
             ...             agent="registry", polarity="positive", valid=(0, 100))
             ...         session = start_session(graph, program, catalog_for_typed_program(program),
             ...             scope=scope, limits=ReasoningLimits())
             ...         digest = save_session(session, root + "/session.json")
-            ...         _ = graph.assert_claim(subject="bob", predicate="member", object="team",
+            ...         _ = graph.epistemic.assert_claim(subject="bob", predicate="member", object="team",
             ...             agent="registry", polarity="positive", valid=(0, 100))
             ...         moved = advance_session(graph, session, limits=ReasoningLimits())
             ...         _ = save_session(moved.session, root + "/session.json", expected_session_digest=digest)
@@ -240,7 +240,7 @@ def start_session(graph: GraphDB, program: GenericProgram, catalog: RuleCatalog,
     if missing:
         raise ReasoningError(f"catalog does not cover program rules: {sorted(missing)}")
     instant = TemporalInstant(scope.valid_time_us)
-    with graph.read_view(valid_time=instant) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=instant) as view:
         database_id = view.provenance.database_id
         horizon = view.provenance.commit_horizon
     seen = _full_scan(graph, scope, horizon, max_versions=max_versions, cancel=cancel)
@@ -262,7 +262,7 @@ def advance_session(graph: GraphDB, session: ReasoningSession, *, limits: Reason
             raise ReasoningError(f"{name} must be a positive integer")
     scope = session.scope
     instant = TemporalInstant(scope.valid_time_us)
-    with graph.read_view(valid_time=instant) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=instant) as view:
         if view.provenance.database_id != session.database_id:
             raise ReasoningError("session belongs to a different database")
         current = view.provenance.commit_horizon

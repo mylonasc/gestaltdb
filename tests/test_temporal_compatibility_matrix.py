@@ -49,12 +49,12 @@ def test_temporal_epistemic_history_reopens_across_backend_serializer_matrix(
     path = str(tmp_path / f"{backend_name}-{serializer_name}")
     graph = GraphDB(store_cls(path=path), serializer_cls())
     try:
-        node = graph.put_node_version(Node("alice", labels=["Person"]), valid=(0, None))
-        edge = graph.put_edge_version(
+        node = graph.temporal.put_node_version(Node("alice", labels=["Person"]), valid=(0, None))
+        edge = graph.temporal.put_edge_version(
             Edge("employment", "alice", "acme", {"type": "WORKS_FOR"}),
             valid=(0, None),
         )
-        claim = graph.assert_claim(
+        claim = graph.epistemic.assert_claim(
             subject="alice", predicate="WORKS_FOR", object="acme",
             polarity="positive", agent="source:test", world="reported", valid=(0, None),
         )
@@ -63,9 +63,9 @@ def test_temporal_epistemic_history_reopens_across_backend_serializer_matrix(
 
     reopened = GraphDB(store_cls(path=path), serializer_cls())
     try:
-        assert reopened.get_node_version(node.version_id).node.labels == ("Person",)
-        assert reopened.get_edge_version(edge.version_id).edge.get_type == "WORKS_FOR"
-        assert reopened.get_claim_as_of(claim.logical_id, valid_time=0).claim.agent == "source:test"
+        assert reopened.temporal.get_node_version(node.version_id).node.labels == ("Person",)
+        assert reopened.temporal.get_edge_version(edge.version_id).edge.get_type == "WORKS_FOR"
+        assert reopened.epistemic.get_claim_as_of(claim.logical_id, valid_time=0).claim.agent == "source:test"
     finally:
         reopened.close()
 

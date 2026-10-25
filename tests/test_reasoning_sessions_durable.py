@@ -53,7 +53,7 @@ def start(graph, rules=None):
 
 
 def assert_member(graph, subject, group="g1", agent="registry"):
-    return graph.assert_claim(subject=subject, predicate="memberOf", object=group,
+    return graph.epistemic.assert_claim(subject=subject, predicate="memberOf", object=group,
                               agent=agent, polarity="positive", valid=(0, 100))
 
 
@@ -62,7 +62,7 @@ def fresh_facts(rules, graph):
     from gestaltdb.reasoning.maintenance import rematerialize
 
     seen = {}
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         for version in view.iter_claims_as_of(world="default"):
             if version.claim is None or version.operation not in (VersionOperation.ASSERT, VersionOperation.CORRECT):
                 continue
@@ -105,7 +105,7 @@ def test_roundtrip_and_resume_parity(tmp_path, backend, module):
         # Retraction flows through the persisted path with parity.
         target = assert_member(graph, "c")
         advance_persisted_session(graph, path, limits=ReasoningLimits())
-        graph.retract_claim(target.logical_id, valid=(0, 100))
+        graph.epistemic.retract_claim(target.logical_id, valid=(0, 100))
         after = advance_persisted_session(graph, path, limits=ReasoningLimits())
         assert TypedFact("person", ("c",)) not in set(after.session.facts)
         assert set(after.session.facts) == fresh_facts(after.session.program, graph)
@@ -127,7 +127,7 @@ def test_reopened_persisted_session_respects_retraction_validity(tmp_path, backe
         graph.close()
     graph = GraphDB.open(database_path)
     try:
-        graph.retract_claim(first.logical_id, valid=interval, supersedes_version_id=first.version_id)
+        graph.epistemic.retract_claim(first.logical_id, valid=interval, supersedes_version_id=first.version_id)
         moved = advance_persisted_session(graph, session_path, limits=ReasoningLimits())
         fresh = start(graph)
         reloaded = load_session(session_path)
@@ -153,7 +153,7 @@ def test_reopened_resurrection_matches_fresh_materialization(tmp_path, backend, 
         graph.close()
     graph = GraphDB.open(database_path)
     try:
-        graph.retract_claim(first.logical_id, valid=(0, 100))
+        graph.epistemic.retract_claim(first.logical_id, valid=(0, 100))
         removed = advance_persisted_session(graph, session_path, limits=ReasoningLimits())
         assert not removed.rebuilt and removed.session.facts == ()
         assert_member(graph, "a")

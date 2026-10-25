@@ -352,7 +352,7 @@ def test_current_read_view_blocks_side_effecting_graph_methods(tmp_path):
                 with pytest.raises(RuntimeError, match="read-only"):
                     getattr(view, method_name)
         assert graph.store.current_snapshot_sequence() == initial_sequence
-        assert graph.list_temporal_orphans().artifacts == ()
+        assert graph.temporal.list_temporal_orphans().artifacts == ()
     finally:
         graph.close()
 

@@ -128,12 +128,11 @@ def maintain_truth(temporal, truth_state_key: bytes, *,
             facts_by_predicate.setdefault(predicate, []).append(fact)
             return fact
 
-        for version in temporal.iter_claims_as_of(
+        for version in temporal.history().iter_claims_as_of(
             valid_time=instant,
             polarity=ClaimPolarity.POSITIVE,
             world=world,
             through_commit=input_horizon,
-            live_store=lambda: temporal.store,
         ):
             claim = version.claim
             if claim is None or claim.object_kind is not ClaimObjectKind.ENTITY:
@@ -269,7 +268,7 @@ def maintain_truth(temporal, truth_state_key: bytes, *,
                 delta = {fact["ref"] for fact in added}
 
         def semantic_premise(version_id):
-            premise = temporal.get_claim_version(version_id, through_commit=input_horizon)
+            premise = temporal.history().get_claim_version(version_id, through_commit=input_horizon)
             if (
                 premise is not None
                 and premise.claim is not None
@@ -512,7 +511,7 @@ def explain_claim(temporal, *, claim_id, valid_time,
                 continue
             edges.add(ExplanationEdge(version.version_id, rule_id, "derived_by"))
             for ordinal, premise_id in enumerate(premise_ids):
-                premise = temporal.get_claim_version(premise_id, through_commit=horizon)
+                premise = temporal.history().get_claim_version(premise_id, through_commit=horizon)
                 if premise is None:
                     truncated = True
                     continue

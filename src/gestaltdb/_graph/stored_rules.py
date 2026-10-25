@@ -267,12 +267,11 @@ def run_rules(temporal, *,
         return fact
 
     has_negation = any(rule.not_when for rule in rules)
-    for version in temporal.iter_claims_as_of(
+    for version in temporal.history().iter_claims_as_of(
         valid_time=instant,
         polarity=ClaimPolarity.POSITIVE,
         world=world,
         through_commit=horizon,
-        live_store=lambda: temporal.store,
     ):
         claim = version.claim
         if claim is None or claim.object_kind is not ClaimObjectKind.ENTITY:

@@ -33,7 +33,7 @@ def source(tmp_path, request):
     pytest.importorskip(module)
     graph = GraphDB.create(tmp_path / "db", backend=backend, serializer="json")
     for subject, agent in (("a", "one"), ("a", "two"), ("b", "one")):
-        graph.assert_claim(subject=subject, predicate="memberOf", object="g", agent=agent,
+        graph.epistemic.assert_claim(subject=subject, predicate="memberOf", object="g", agent=agent,
                            polarity="positive", valid=(0, 100))
     x, y = Variable("x"), Variable("y")
     program = GenericProgram([GenericRule("r", [TypedAtom("memberOf", [x, y])], [], TypedAtom("person", [x]))])
@@ -65,7 +65,7 @@ def test_exact_build_hydration_legacy_parity_and_new_generation(source):
     assert meta["format_version"] == 1 and meta["session_digest"] == binding.session_digest
     assert meta["generation"]["source"]["provenance_token"] == binding.provenance.token
     assert meta["scope"]["selection"]["include_derived"] is False
-    graph.assert_claim(subject="c", predicate="memberOf", object="g", agent="new", polarity="positive", valid=(0, 100))
+    graph.epistemic.assert_claim(subject="c", predicate="memberOf", object="g", agent="new", polarity="positive", valid=(0, 100))
     with pytest.raises(ProvenanceMismatchError, match="horizon moved"):
         load(graph, session, path, **pins(binding))
     assert load(graph, session, path, **pins(binding), freshness="historical").num_edges == 2
@@ -214,7 +214,7 @@ def test_source_move_after_staging_fails_before_install(source, monkeypatch):
     original = adapter._reconstruct
     def moved(*args):
         result = original(*args)
-        graph.assert_claim(subject="c", predicate="memberOf", object="g", agent="new", polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="c", predicate="memberOf", object="g", agent="new", polarity="positive", valid=(0, 100))
         return result
     monkeypatch.setattr(adapter, "_reconstruct", moved)
     with pytest.raises(ProvenanceMismatchError, match="horizon moved"):
@@ -325,7 +325,7 @@ def test_hydration_after_independent_process_restart(tmp_path, backend, module):
     try:
         x, y = Variable("x"), Variable("y")
         program = GenericProgram([GenericRule("r", [TypedAtom("memberOf", [x, y])], [], TypedAtom("person", [x]))])
-        graph.assert_claim(subject="a", predicate="memberOf", object="g", agent="one", polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="a", predicate="memberOf", object="g", agent="one", polarity="positive", valid=(0, 100))
         session = start_session(graph, program, catalog_for_typed_program(program),
             scope=SessionScope("default", 50, ClaimSelection(), ClaimMapping()), limits=ReasoningLimits())
         binding = bind_session_generation(graph, session)
@@ -377,10 +377,10 @@ def test_nondefault_source_policy_mapping_and_retraction_remain_exact(source):
     assert metadata["scope"]["selection"]["agents"] == ["one"]
     assert metadata["scope"]["mapping"]["predicate_aliases"] == [["memberOf", "link"]]
     before = bytes_of(path)
-    versions = [v for v in graph.iter_claim_versions() if v.claim is not None and v.claim.subject == "a" and v.claim.agent == "one"]
+    versions = [v for v in graph.epistemic.iter_claim_versions() if v.claim is not None and v.claim.subject == "a" and v.claim.agent == "one"]
     assert len(versions) == 1
     v = versions[0]
-    graph.retract_claim(v.logical_id, valid=(0, 100), supersedes_version_id=v.version_id)
+    graph.epistemic.retract_claim(v.logical_id, valid=(0, 100), supersedes_version_id=v.version_id)
     advanced = advance_session(graph, session, limits=ReasoningLimits()).session
     new_binding = bind_session_generation(graph, advanced)
     second = build(graph, advanced, path.parent / "after-retraction", **pins(new_binding), selection=selection)

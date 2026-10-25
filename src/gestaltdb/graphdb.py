@@ -148,6 +148,8 @@ from ._graph.entities import (
 from ._graph.scopes import configure_snapshot_child, configure_transaction_child
 from .concurrency import DEFAULT_LOCK_MANAGER, ReentrantFileLock as _TemporalWriterLock
 from .temporal_engine import TemporalEngine
+from .epistemic_engine import EpistemicEngine
+from .rules_engine import RulesEngine
 
 _NODE_PROPERTY_INDEXES_METADATA_KEY = b"schema:indexes:node_properties"
 _EDGE_PROPERTY_INDEXES_METADATA_KEY = b"schema:indexes:edge_properties"
@@ -168,11 +170,15 @@ _SimpleProgress = _ingest_support.SimpleProgress
 
 
 class GraphDB:
-    """Persistent graph records, indexes, queries, and explicit temporal history.
+    """Persistent current-graph records, indexes, queries, and scoped services.
 
     Choose an installed backend and serializer with :meth:`create`; :meth:`open`
     restores those choices from the database manifest. Always close the handle.
-    Ordinary node/edge writes and temporal claim/version writes are separate.
+
+    Temporal history lives on ``graph.temporal``, sourced claims and modal
+    evaluation on ``graph.epistemic``, and Horn rules on ``graph.rules``.
+    Those services own their state and operations; this class keeps no
+    wrapper methods for them. Ordinary node/edge writes stay here.
 
     Examples:
         Create, query, and reopen a disposable database (requires ``lmdb``)::
@@ -200,8 +206,8 @@ class GraphDB:
     and historical reads; use ``ingest_arrow`` for a columnar loading example.
     """
     def __init__(
-            self, 
-            store: KVStore, 
+            self,
+            store: KVStore,
             serializer: Serializer,
             indexed_node_properties: Optional[list[str]] = None,
             indexed_edge_properties: Optional[list[str]] = None,
@@ -222,7 +228,7 @@ class GraphDB:
             >>> from gestaltdb.serializers import PickleSerializer
             >>> graph = GraphDB(LMDBStore(path="/tmp/example"), PickleSerializer(), indexed_node_properties=["name"])  # doctest: +SKIP
         """
-        self.store = store
+        self._store = store
         self.serializer = serializer
         store_path = getattr(store, "path", None)
         self._store_path: Path | None = None if store_path is None else Path(store_path)
@@ -240,10 +246,8 @@ class GraphDB:
             clock=lambda: datetime.datetime.now(datetime.timezone.utc),
             store_path=self._store_path,
         )
-        self.temporal._ensure_identity = lambda: self.database_id
-        self.temporal._delete_current_edge = self.delete_edge
-        self.temporal._retraction_hook = lambda identities: self._require_temporal_retraction_identities(identities)
-        self.temporal._write_indexes_hook = lambda *args, **kwargs: self._write_temporal_indexes(*args, **kwargs)
+        self.epistemic = EpistemicEngine(self.temporal)
+        self.rules = RulesEngine(self.temporal)
         self._typed_adjacency_count_cache: dict[tuple[str, bytes, str], int] = {}
         self._verified_current_provenance: dict[str, str] = {}
         persisted_node_indexes = self._load_property_index_metadata(_NODE_PROPERTY_INDEXES_METADATA_KEY)
@@ -345,6 +349,24 @@ class GraphDB:
         except Exception:
             graph.close()
             raise
+
+    @property
+    def store(self):
+        """The bound backend store; assigning rebinds scope-owned engines."""
+        return self._store
+
+    @store.setter
+    def store(self, value) -> None:
+        self._store = value
+        temporal = getattr(self, "temporal", None)
+        if temporal is None:
+            return
+        path = getattr(value, "path", None)
+        self.temporal = temporal.rebound(
+            value, store_path=None if path is None else Path(path))
+        self.epistemic = self.epistemic.rebound(self.temporal)
+        self.rules = self.rules.rebound(self.temporal)
+        self._node_repository = None
 
     @property
     def database_id(self) -> str:
@@ -450,7 +472,7 @@ class GraphDB:
     def stale_indexes(self) -> tuple[str, ...]:
         """Return index families requiring rebuild after deferred ingestion."""
         stale = self._load_stale_indexes()
-        if self._temporal_index_state() is None and self._has_visible_temporal_history():
+        if self.temporal.index_horizon() is None and self.temporal.has_visible_history():
             stale.add("temporal")
         return tuple(sorted(stale))
 
@@ -519,8 +541,8 @@ class GraphDB:
             indexed_node_properties=self.indexed_node_properties,
             indexed_edge_properties=self.indexed_edge_properties,
             adjacency_counts=self._typed_adjacency_count_cache,
-            transaction_bound=self._temporal_transaction_bound,
-            write_guard=lambda: self._temporal_writer_guard(), lock_manager=self._lock_manager,
+            transaction_bound=self.temporal.is_transaction_bound,
+            write_guard=lambda: self.temporal.write_guard(), lock_manager=self._lock_manager,
         )
         return self._node_repository
 
@@ -1074,7 +1096,7 @@ class GraphDB:
                 )
             )
         if "temporal" in stale:
-            rebuilt.update(self.rebuild_temporal_indexes())
+            rebuilt.update(self.temporal.rebuild_temporal_indexes())
         return rebuilt
 
     def build_sampler_snapshot(
@@ -1120,7 +1142,10 @@ class GraphDB:
                     "serializer": self._serializer_name,
                 }
         if temporal:
-            with self.read_view(valid_time=0, system_time=system_time) as view:
+            with self.temporal.open_read_view(
+                self, manifest=self.manifest, database_id=self.database_id,
+                valid_time=0, system_time=system_time,
+            ) as view:
                 return view.build_sampler_snapshot(
                     output_path, temporal=True, time_bucket=time_bucket,
                     **kwargs,
@@ -1182,42 +1207,6 @@ class GraphDB:
             snapshot_graph.store = snapshot_store
             configure_snapshot_child(self, snapshot_graph)
             yield CurrentGraphReadView(snapshot_graph, provenance)
-
-    @contextmanager
-    def read_view(self, *, valid_time, system_time=None, through_commit=None):
-        """Yield a temporal read view pinned to one visible commit horizon.
-
-        ``valid_time`` selects domain time; ``through_commit`` selects a recorded
-        history prefix. Omit the latter for the latest visible prefix, or use
-        ``system_time`` for selection by recorded time instead.
-
-        Examples:
-            Inspect an assertion before and after retraction (requires ``lmdb``)::
-
-                >>> from tempfile import TemporaryDirectory
-                >>> from gestaltdb.graphdb import GraphDB
-                >>> with TemporaryDirectory() as root:
-                ...     graph = GraphDB.create(root + "/db", backend="lmdb", serializer="json")
-                ...     try:
-                ...         first = graph.assert_claim(subject="alice", predicate="member", object="team",
-                ...             agent="registry", polarity="positive", valid=(0, 100))
-                ...         _ = graph.retract_claim(first.logical_id, valid=(0, 100))
-                ...         with graph.read_view(valid_time=50, through_commit=first.commit_id) as old:
-                ...             assert len(tuple(old.iter_claims_as_of(predicate="member"))) == 1
-                ...         with graph.read_view(valid_time=50) as current:
-                ...             assert not tuple(current.iter_claims_as_of(predicate="member"))
-                ...     finally:
-                ...         graph.close()
-
-        Keep the context open while its consumers run. For mutable node/edge
-        snapshots use ``current_read_view``; the temporal-versioning guide
-        explains valid time, system time, and historical Cypher qualifiers.
-        """
-        yield from self.temporal.open_read_view(
-            self, manifest=self.manifest, database_id=self.database_id,
-            valid_time=valid_time, system_time=system_time,
-            through_commit=through_commit,
-        )
 
     def get_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out'):
         """Return typed adjacency records with clean direction semantics.
@@ -1879,7 +1868,7 @@ class GraphDB:
     # -----------------------
     # Adjacency Management
     # -----------------------
-    
+
     # def _append_edge_to_adjacency(self, node_id: str, edge_id: str):
     #     """
     #     Internal helper: read the adjacency list for node_id,
@@ -1894,15 +1883,15 @@ class GraphDB:
         """
         Returns the list of edge IDs connected to node_id.
         If none found, returns an empty list.
-        
+
         Args:
           node_id: a string representing the node_id
-          direction : 'forward', 'backward' or 'any' -> controls whether the source, target, or un-directed adjacency of the node will be returned. 
+          direction : 'forward', 'backward' or 'any' -> controls whether the source, target, or un-directed adjacency of the node will be returned.
           return_raw : if this flag is true it will return the data as they are stored (e.g., a dictionary of 'source' and 'target' lists. )
         """
-        
+
         return _edge_records.get_adjacency_list(self.store, self.serializer, node_id, direction, return_raw)
-        
+
     def put_adjacency_list(self, node_id: str, edges_list: list[str]):
         """Stores the adjacency list for node_id."""
         _edge_records.put_adjacency_list(self.store, self.serializer, node_id, edges_list)
@@ -1937,7 +1926,7 @@ class GraphDB:
             edge_id: Edge key to remove.
         """
 
-        
+
         _edge_records.remove_edge_from_adjacency(self.store, self.serializer, node_id, edge_id)
 
     # -----------------------
@@ -2124,812 +2113,6 @@ class GraphDB:
         _ingest_edges.put_edge_property_indexes_for_columnar_chunk(
             self.store, self.entity_serializer, self.indexed_edge_properties, chunk)
 
-    # ------------------------
-    # Temporal Version History
-    # ------------------------
-
-    @staticmethod
-    def _temporal_commit_key(commit_id: int) -> bytes:
-        return _temporal_keys.temporal_commit_key(commit_id)
-
-    @staticmethod
-    def _temporal_visible_key(commit_id: int) -> bytes:
-        return _temporal_keys.temporal_visible_key(commit_id)
-
-    @staticmethod
-    def _temporal_record_key(commit_id: int, ordinal: int) -> bytes:
-        return _temporal_keys.temporal_record_key(commit_id, ordinal)
-
-    @staticmethod
-    def _temporal_locator(commit_id: int, ordinal: int) -> bytes:
-        return _temporal_keys.temporal_locator(commit_id, ordinal)
-
-    @staticmethod
-    def _decode_temporal_locator(locator: bytes) -> tuple[int, int]:
-        return _temporal_keys.decode_temporal_locator(locator)
-
-    @staticmethod
-    def _temporal_instant_index_value(instant: TemporalInstant) -> bytes:
-        return _temporal_keys.temporal_instant_index_value(instant)
-
-    def _load_temporal_index_state(self) -> dict | None:
-        return self.temporal.load_index_state()
-
-    def _temporal_index_state(self) -> int | None:
-        return self.temporal.index_horizon()
-
-    def _temporal_index_generation(self) -> int:
-        return self.temporal.index_generation()
-
-    @staticmethod
-    def _temporal_index_name(index_name: str, generation: int) -> str:
-        return TemporalEngine.index_name(index_name, generation)
-
-    def _temporal_visibility_checksum(
-        self, through_commit: int, *, pending_marker=None
-    ) -> str:
-        return self.temporal.visibility_checksum(through_commit, pending_marker=pending_marker)
-
-    def _persist_temporal_index_state(
-        self, commit_id: int, generation: int, *, pending_marker=None
-    ) -> None:
-        self.temporal.persist_index_state(commit_id, generation, pending_marker=pending_marker)
-
-    def _ensure_temporal_indexes(self, horizon: int) -> None:
-        self.temporal.ensure_indexes(horizon)
-
-    def _has_visible_temporal_history(self) -> bool:
-        return self.temporal.has_visible_history()
-
-    def _temporal_index_entries(self, version, *, generation=None):
-        return self.temporal.index_entries(version, generation=generation)
-
-    def _write_temporal_indexes(self, versions, commit_id: int, *, generation=None) -> dict[str, int]:
-        return self.temporal._write_temporal_indexes(versions, commit_id, generation=generation)
-
-    # Temporal scope state lives on the engine; these properties preserve
-    # the historical attribute seams (including test monkeypatching).
-    @property
-    def _temporal_clock(self):
-        return self.temporal._clock
-
-    @_temporal_clock.setter
-    def _temporal_clock(self, value):
-        self.temporal._clock = value
-
-    @property
-    def _temporal_write_lock(self):
-        return self.temporal._write_lock
-
-    @_temporal_write_lock.setter
-    def _temporal_write_lock(self, value):
-        self.temporal._write_lock = value
-
-    @property
-    def _temporal_commit_cache(self):
-        return self.temporal._commit_cache
-
-    @_temporal_commit_cache.setter
-    def _temporal_commit_cache(self, value):
-        self.temporal._commit_cache = value
-
-    @property
-    def _temporal_transaction_bound(self):
-        return self.temporal._transaction_bound
-
-    @_temporal_transaction_bound.setter
-    def _temporal_transaction_bound(self, value):
-        self.temporal._transaction_bound = value
-
-    @contextmanager
-    def _temporal_writer_guard(self):
-        with self.temporal.write_guard():
-            yield
-
-    @staticmethod
-    def _decode_temporal_sequence(payload: bytes) -> tuple[int, TemporalInstant]:
-        return TemporalEngine.decode_sequence(payload)
-
-    def _temporal_sequence(self) -> tuple[int, TemporalInstant | None]:
-        return self.temporal.sequence()
-
-    def _reserve_temporal_sequence(self) -> tuple[int, TemporalInstant]:
-        return self.temporal.reserve_sequence()
-
-    def _next_temporal_system_time(self, previous: TemporalInstant | None) -> TemporalInstant:
-        return self.temporal.next_system_time(previous)
-
-    # ------------------------
-    # Positive Horn Rules
-    # ------------------------
-
-    def _load_rule_catalog(self) -> tuple[RuleVersion, ...]:
-        return _stored_rules.load_rule_catalog(self.store)
-
-    def create_rule(
-        self, rule_id, *, when, then, not_when=(), closed_world=(), version_id=None
-    ) -> RuleVersion:
-        """Validate and append one immutable version of a Horn rule.
-
-        ``not_when`` atoms are closed-world absence checks. Every negated
-        predicate must be named in the active program's ``closed_world``
-        declarations, and the resulting active program must be stratified.
-        Unstratifiable programs are rejected before the catalog changes.
-        """
-        return _stored_rules.create_rule(
-            self.temporal, rule_id, when=when, then=then, not_when=not_when,
-            closed_world=closed_world, version_id=version_id,
-        )
-
-    def iter_rule_versions(self, rule_id=None, *, system_time=None):
-        """Iterate immutable rule versions in catalog order at a system-time horizon."""
-        return _stored_rules.iter_rule_versions(self.store, rule_id, system_time=system_time)
-
-    def get_rule(self, rule_id, *, system_time=None) -> RuleVersion | None:
-        """Return the latest version of a named rule at a system-time horizon."""
-        return _stored_rules.get_rule(self.store, rule_id, system_time=system_time)
-
-    @staticmethod
-    def _rule_justifications(
-        provenance,
-    ) -> set[tuple[str, tuple[str, ...], tuple[RuleAbsence, ...]]]:
-        return _stored_rules.rule_justifications(provenance)
-    @staticmethod
-    def _justification_order(justification):
-        return _stored_rules.justification_order(justification)
-
-    def _rule_program(self, *, system_time):
-        """Return active rule versions and their stratification schedule."""
-        return _stored_rules.rule_program(self.store, system_time=system_time)
-
-    @staticmethod
-    def _rule_scope(rules) -> tuple[str, ...]:
-        return _stored_rules.rule_scope(rules)
-
-    @staticmethod
-    def _absence_checks(rule, bindings, valid, world, facts_by_predicate, scope):
-        """Return ground absence witnesses or ``None`` when negation is blocked.
-
-        A negated atom is satisfied only when no matching positive claim
-        overlaps the candidate conclusion's whole validity interval. Partial
-        overlap blocks the derivation instead of producing an interval fragment
-        that the claim model cannot represent.
-        """
-        return _stored_rules.absence_checks(rule, bindings, valid, world, facts_by_predicate, scope)
-
-    def run_rules(
-        self,
-        *,
-        as_of,
-        system_time=None,
-        world=None,
-        max_iterations=100,
-        max_derivations=10_000,
-        max_justifications=100_000,
-        index_mode=IndexMaintenanceMode.MAINTAIN,
-    ) -> RuleRunResult:
-        """Evaluate active rules semi-naively and persist a bounded fixpoint.
-
-        Positive components run in stratification order. Only positive
-        entity-object claims participate; ``not_when`` atoms are closed-world
-        absence checks against completed lower strata, not negative claims.
-        Premises must share a world, and each conclusion receives their
-        half-open validity intersection. No claims are written if any resource
-        bound is exceeded.
-
-        Examples:
-            Persist a conclusion, explain it, and maintain it after evidence loss
-            (requires ``lmdb``)::
-
-                >>> from tempfile import TemporaryDirectory
-                >>> from gestaltdb.graphdb import GraphDB
-                >>> with TemporaryDirectory() as root:
-                ...     graph = GraphDB.create(root + "/db", backend="lmdb", serializer="json")
-                ...     try:
-                ...         base = graph.assert_claim(subject="alice", predicate="member", object="team",
-                ...             agent="registry", polarity="positive", valid=(0, 100))
-                ...         _ = graph.create_rule("classify", when=[("?x", "member", "?team")],
-                ...             then=("?x", "is", "person"))
-                ...         _ = graph.run_rules(as_of=50)
-                ...         conclusion = next(graph.iter_claims_as_of(valid_time=50, predicate="is"))
-                ...         assert graph.explain_claim(conclusion.logical_id, valid_time=50) is not None
-                ...         _ = graph.retract_claim(base.logical_id, valid=(0, 100))
-                ...         _ = graph.maintain_truth(as_of=50)
-                ...         assert not tuple(graph.iter_claims_as_of(valid_time=50, predicate="is"))
-                ...     finally:
-                ...         graph.close()
-
-        This API writes derived temporal claims. Standalone ``DatalogEngine``
-        returns an in-memory closure instead; use explicit adapters to connect
-        that evaluator to database sources and publication.
-        """
-        return _stored_rules.run_rules(
-            self.temporal, as_of=as_of, system_time=system_time,
-            world=world, max_iterations=max_iterations,
-            max_derivations=max_derivations,
-            max_justifications=max_justifications, index_mode=index_mode,
-        )
-
-    def _last_truth_maintenance_instant(self) -> TemporalInstant | None:
-        return _truth_maintenance.last_truth_maintenance_instant(
-            self.temporal, _TRUTH_MAINTENANCE_STATE_KEY)
-
-    def maintain_truth(
-        self,
-        *,
-        as_of=None,
-        system_time=None,
-        world=None,
-        max_iterations=100,
-        max_derivations=10_000,
-        max_justifications=100_000,
-        index_mode=IndexMaintenanceMode.MAINTAIN,
-    ) -> TruthMaintenanceResult:
-        """Incrementally reconcile derived claims with the current rule fixpoint.
-
-        The authoritative base excludes claims emitted by the rule engine, so a
-        cycle cannot preserve itself after its final independent support is
-        removed, and completed lower strata are rechecked for closed-world
-        absence. If ``as_of`` is omitted, the valid time from the most recent
-        rule run or maintenance pass is resumed.
-        """
-        return _truth_maintenance.maintain_truth(
-            self.temporal, _TRUTH_MAINTENANCE_STATE_KEY, as_of=as_of,
-            system_time=system_time, world=world, max_iterations=max_iterations,
-            max_derivations=max_derivations, max_justifications=max_justifications,
-            index_mode=index_mode,
-        )
-
-    def explain_claim(
-        self,
-        claim_id,
-        *,
-        valid_time,
-        system_time=None,
-        max_depth=100,
-        max_nodes=10_000,
-    ) -> ClaimExplanation | None:
-        """Return a finite derivation graph for a visible historical claim."""
-        return _truth_maintenance.explain_claim(
-            self.temporal, claim_id=claim_id,
-            valid_time=valid_time, system_time=system_time,
-            max_depth=max_depth, max_nodes=max_nodes,
-        )
-
-    def put_node_version(
-        self, node: Node, *, valid, version_id=None, metadata=None,
-        index_mode=IndexMaintenanceMode.MAINTAIN,
-    ) -> NodeVersion:
-        """Append an immutable node assertion without changing the current graph."""
-        return self.temporal.put_node_version(
-            node, valid=valid, version_id=version_id,
-            metadata=metadata, index_mode=index_mode,
-        )
-
-    def put_edge_version(
-        self, edge: Edge, *, valid, version_id=None, metadata=None,
-        index_mode=IndexMaintenanceMode.MAINTAIN,
-    ) -> EdgeVersion:
-        """Append an immutable edge assertion without changing the current graph."""
-        return self.temporal.put_edge_version(
-            edge, valid=valid, version_id=version_id,
-            metadata=metadata, index_mode=index_mode,
-        )
-
-    def migrate_time_indexed_edges(
-        self,
-        *,
-        delete_legacy: bool = False,
-        metadata=None,
-        index_mode=IndexMaintenanceMode.MAINTAIN,
-    ) -> tuple[EdgeVersion, ...]:
-        """Append legacy ``TimeIndexedEdge`` records as temporal edge history.
-
-        Records are grouped by logical edge ID and ordered by timestamp. Each
-        record is valid until the next timestamp for that ID; the final record
-        has an open end. Existing equivalent assertions from an earlier run are
-        skipped, making cleanup retryable after a completed or interrupted
-        migration. Changed legacy input after a successful migration is rejected
-        instead of creating overlapping history. When requested, legacy
-        current-state records are deleted only after the temporal commit is
-        visible.
-
-        Returns:
-            Newly appended edge versions in migration order.
-
-        Raises:
-            TemporalVersionError: If timestamps are duplicated or legacy input
-                changed after an earlier migration.
-            TemporalCorruptionError: If a legacy record cannot be decoded or its
-                timestamp-prefixed key does not match its payload.
-        """
-        return self.temporal.migrate_time_indexed_edges(
-            metadata=metadata, index_mode=index_mode, delete_legacy=delete_legacy,
-            delete_current_edge=self.delete_edge,
-        )
-
-    def correct_node_version(
-        self,
-        node: Node,
-        *,
-        supersedes_version_id: str,
-        valid=None,
-        version_id=None,
-        metadata=None,
-        index_mode=IndexMaintenanceMode.MAINTAIN,
-    ) -> NodeVersion:
-        """Append a corrected node payload while preserving the superseded version."""
-        return self.temporal.correct_node_version(
-            node, supersedes_version_id=supersedes_version_id,
-            valid=valid, version_id=version_id, metadata=metadata, index_mode=index_mode,
-        )
-
-    def correct_edge_version(
-        self,
-        edge: Edge,
-        *,
-        supersedes_version_id: str,
-        valid=None,
-        version_id=None,
-        metadata=None,
-        index_mode=IndexMaintenanceMode.MAINTAIN,
-    ) -> EdgeVersion:
-        """Append a corrected edge payload while preserving the superseded version."""
-        return self.temporal.correct_edge_version(
-            edge, supersedes_version_id=supersedes_version_id,
-            valid=valid, version_id=version_id, metadata=metadata, index_mode=index_mode,
-        )
-
-    def retract_node_version(
-        self,
-        logical_id: str,
-        *,
-        valid=None,
-        valid_from=None,
-        supersedes_version_id=None,
-        reason=None,
-        version_id=None,
-        metadata=None,
-        index_mode=IndexMaintenanceMode.MAINTAIN,
-    ) -> NodeVersion:
-        """Append a node retraction over an explicit or inherited interval.
-
-        Raise TemporalVersionError if the node has no asserted temporal history.
-        """
-        return self.temporal.retract_node_version(
-            logical_id, valid=valid,
-            valid_from=valid_from, supersedes_version_id=supersedes_version_id,
-            reason=reason, version_id=version_id, metadata=metadata,
-            index_mode=index_mode,
-        )
-
-    def retract_edge_version(
-        self,
-        logical_id: str,
-        *,
-        valid=None,
-        valid_from=None,
-        supersedes_version_id=None,
-        reason=None,
-        version_id=None,
-        metadata=None,
-        index_mode=IndexMaintenanceMode.MAINTAIN,
-    ) -> EdgeVersion:
-        """Append an edge retraction over an explicit or inherited interval.
-
-        Raise TemporalVersionError if the edge has no asserted temporal history.
-        """
-        return self.temporal.retract_edge_version(
-            logical_id, valid=valid,
-            valid_from=valid_from, supersedes_version_id=supersedes_version_id,
-            reason=reason, version_id=version_id, metadata=metadata,
-            index_mode=index_mode,
-        )
-
-    def assert_claim(
-        self,
-        *,
-        subject,
-        predicate,
-        object,
-        polarity,
-        agent,
-        source=None,
-        confidence=None,
-        world="default",
-        provenance=None,
-        object_kind=ClaimObjectKind.ENTITY,
-        valid=None,
-        valid_from=None,
-        valid_to=None,
-        version_id=None,
-        metadata=None,
-        index_mode=IndexMaintenanceMode.MAINTAIN,
-    ) -> ClaimVersion:
-        """Append an immutable sourced assertion or denial."""
-        return self.temporal.assert_claim(
-            subject=subject, predicate=predicate,
-            object=object, polarity=polarity, agent=agent, source=source,
-            confidence=confidence, world=world, provenance=provenance,
-            object_kind=object_kind, valid=valid, valid_from=valid_from,
-            valid_to=valid_to, version_id=version_id, metadata=metadata,
-            index_mode=index_mode,
-        )
-    def assert_world_accessibility(
-        self,
-        *,
-        agent,
-        from_world,
-        to_world,
-        kind,
-        valid=None,
-        valid_from=None,
-        valid_to=None,
-        source=None,
-        provenance=None,
-        version_id=None,
-        metadata=None,
-        index_mode=IndexMaintenanceMode.MAINTAIN,
-    ) -> ClaimVersion:
-        """Append a positive temporal accessibility fact for one agent frame."""
-        return self.temporal.assert_world_accessibility(
-            agent=agent, from_world=from_world, to_world=to_world, kind=kind,
-            valid=valid, valid_from=valid_from, valid_to=valid_to, source=source,
-            provenance=provenance, version_id=version_id, metadata=metadata,
-            index_mode=index_mode,
-        )
-
-    def entails(
-        self,
-        agent,
-        proposition,
-        mode,
-        *,
-        world,
-        valid_time,
-        system_time=None,
-        through_commit=None,
-        max_depth=4,
-        max_states=1_000,
-    ):
-        """Evaluate a bounded modal proposition under one pinned temporal view."""
-        try:
-            operator = ModalOperator(str(mode).upper())
-        except ValueError as exc:
-            raise ValueError("mode must be BELIEVES, KNOWS, POSSIBLE, or NECESSARY") from exc
-        if operator not in {
-            ModalOperator.BELIEVES, ModalOperator.KNOWS,
-            ModalOperator.POSSIBLE, ModalOperator.NECESSARY,
-        }:
-            raise ValueError("mode must be BELIEVES, KNOWS, POSSIBLE, or NECESSARY")
-        expression = ModalExpression.from_value({
-            "operator": operator.value,
-            "agent": agent,
-            "formula": proposition,
-        })
-        with self.read_view(
-            valid_time=valid_time, system_time=system_time, through_commit=through_commit
-        ) as view:
-            return evaluate_modal(
-                view, expression, world=world, max_depth=max_depth, max_states=max_states
-            )
-
-    def correct_claim(
-        self,
-        claim,
-        *,
-        supersedes_version_id,
-        confidence=_UNSET,
-        provenance=_UNSET,
-        valid=None,
-        valid_from=None,
-        valid_to=None,
-        version_id=None,
-        metadata=None,
-        index_mode=IndexMaintenanceMode.MAINTAIN,
-    ) -> ClaimVersion:
-        """Append corrected confidence/provenance for one claim identity.
-
-        Explicit confidence/provenance keywords override the supplied Claim's
-        values, or the superseded version's values when given a claim ID.
-        Omitted keywords preserve those values; the claim identity cannot change.
-        """
-        return self.temporal.correct_claim(
-            claim,
-            supersedes_version_id=supersedes_version_id, confidence=confidence,
-            provenance=provenance, valid=valid, valid_from=valid_from,
-            valid_to=valid_to, version_id=version_id, metadata=metadata,
-            index_mode=index_mode,
-        )
-    def retract_claim(
-        self,
-        claim_id,
-        *,
-        valid=None,
-        valid_from=None,
-        valid_to=None,
-        supersedes_version_id=None,
-        reason=None,
-        version_id=None,
-        metadata=None,
-        index_mode=IndexMaintenanceMode.MAINTAIN,
-    ) -> ClaimVersion:
-        """Append a bitemporal retraction without deleting claim history.
-
-        Raise TemporalVersionError if the claim has no asserted temporal history.
-        """
-        return self.temporal.retract_claim(
-            claim_id, valid=valid,
-            valid_from=valid_from, valid_to=valid_to,
-            supersedes_version_id=supersedes_version_id, reason=reason,
-            version_id=version_id, metadata=metadata, index_mode=index_mode,
-        )
-    def _claim_valid_interval(valid, valid_from, valid_to, *, required):
-        return _temporal_reads.claim_valid_interval(
-            valid, valid_from, valid_to, required=required)
-
-    def commit_versions(
-        self, writes, *, metadata=None, index_mode=IndexMaintenanceMode.MAINTAIN
-    ) -> TemporalCommit:
-        """Append one logical commit containing immutable node/edge versions."""
-        return self.temporal.commit_versions(writes, metadata=metadata, index_mode=index_mode)
-
-    def _temporal_committer(self):
-        """Bind the temporal write capability to this handle's scope."""
-        return self.temporal.committer()
-
-    def _commit_versions_direct(self, writes, metadata, index_mode) -> TemporalCommit:
-        return self.temporal.commit_direct(writes, metadata, index_mode)
-
-    def _require_temporal_retraction_identities(self, identities) -> None:
-        """Validate against published history, independently of deferred indexes.
-
-        Called under the temporal writer guard before reserving a commit ID.
-        Scan once for all unresolved identities in the batch; unpublished records
-        and prior retraction-only history cannot establish an identity.
-        """
-        self.temporal.require_retraction_identities(identities)
-
-    def _temporal_version_id_exists(self, version_id: str) -> bool:
-        return self.temporal.version_id_exists(version_id)
-
-    @property
-    def history(self):
-        """Return read-only temporal capabilities bound to this handle's store.
-
-        Pass this capability instead of GraphDB to historical consumers.
-        It borrows this handle's lifetime; it is not a pinned read view.
-        Use ``read_view`` for authenticated fixed-horizon reads.
-        """
-        return self.temporal.history(
-            hydrate=self._get_temporal_version_at,
-            live_store=lambda: self.store,
-        )
-
-    def _temporal_reader(self) -> _temporal_reads.TemporalReader:
-        """Bind the historical read capability to this handle's scope."""
-        return self.temporal.reader()
-
-    def get_temporal_commit(
-        self, commit_id: int, *, _validate_supersession: bool = True
-    ) -> TemporalCommit | None:
-        """Return a validated visible commit with detached mutable entities.
-
-        Decode reuse is bounded and scoped to the exact store object. Pinned
-        verifiable read snapshots can reuse validated records directly;
-        live/unverifiable stores recheck descriptor, marker and envelopes.
-        """
-        return self.temporal.get_temporal_commit(
-            commit_id, _validate_supersession=_validate_supersession)
-
-    @staticmethod
-    def _copy_temporal_payload(version):
-        return _temporal_reads.TemporalReader.copy_payload(version)
-
-    def _get_temporal_commit_cached(
-        self, commit_id: int, *, _validate_supersession: bool = True
-    ) -> TemporalCommit | None:
-        return self.temporal.get_commit_cached(
-            commit_id, _validate_supersession=_validate_supersession)
-
-    def _decode_temporal_version(self, envelope: bytes):
-        return self.temporal.decode_version(envelope)
-
-    def iter_temporal_commits(self, *, through_commit=None):
-        """Iterate visible commits in commit order, skipping incomplete commits."""
-        return self.history.iter_temporal_commits(through_commit=through_commit)
-
-    def _temporal_orphan_details(self, commit_id: int, descriptor_payload: bytes):
-        return self.temporal.orphan_details(commit_id, descriptor_payload)
-
-    def _list_temporal_orphans_locked(self, through_commit=None) -> TemporalOrphanReport:
-        return self.temporal.list_orphans_locked(through_commit)
-
-    def list_temporal_orphans(self, *, through_commit=None) -> TemporalOrphanReport:
-        """List durable allocation gaps and incomplete unpublished commits."""
-        return self.temporal.list_temporal_orphans(through_commit=through_commit)
-
-    def reclaim_temporal_orphans(self, *, through_commit: int) -> TemporalOrphanReclaimResult:
-        """Delete validated unpublished artifacts through an explicit commit horizon."""
-        return self.temporal.reclaim_temporal_orphans(through_commit=through_commit)
-
-    def _reclaim_temporal_orphans_locked(self, through_commit: int) -> TemporalOrphanReclaimResult:
-        return self.temporal._reclaim_locked(through_commit)
-
-    def _get_temporal_version(self, version_id: str):
-        return self.temporal.get_version(version_id)
-
-    def _get_temporal_version_at(self, locator: bytes):
-        return self.temporal.get_version_at(locator)
-
-    def _get_temporal_version_through(self, version_id: str, through_commit: int):
-        return self.temporal.get_version_through(version_id, through_commit)
-
-    def get_node_version(
-        self, version_id: str, *, system_time=None, through_commit=None
-    ) -> NodeVersion | None:
-        """Return a visible node version by UUID using the temporal index."""
-        return self.temporal.get_node_version(
-            version_id, system_time=system_time, through_commit=through_commit)
-
-    def get_edge_version(
-        self, version_id: str, *, system_time=None, through_commit=None
-    ) -> EdgeVersion | None:
-        """Return a visible edge version by UUID using the temporal index."""
-        return self.temporal.get_edge_version(
-            version_id, system_time=system_time, through_commit=through_commit)
-
-    def get_claim_version(
-        self, version_id: str, *, system_time=None, through_commit=None
-    ) -> ClaimVersion | None:
-        """Return a visible epistemic claim version by UUID."""
-        return self.temporal.get_claim_version(
-            version_id, system_time=system_time, through_commit=through_commit)
-
-    def iter_node_versions(self, logical_id=None, *, system_time=None, through_commit=None):
-        """Iterate node versions, using the logical-history index when filtered."""
-        return self.temporal.iter_node_versions(logical_id,
-            system_time=system_time, through_commit=through_commit)
-
-    def iter_edge_versions(self, logical_id=None, *, system_time=None, through_commit=None):
-        """Iterate edge versions, using the logical-history index when filtered."""
-        return self.temporal.iter_edge_versions(logical_id,
-            system_time=system_time, through_commit=through_commit)
-
-    def iter_claim_versions(self, claim_id=None, *, system_time=None, through_commit=None):
-        """Iterate claim versions, optionally restricted to one deterministic claim ID."""
-        return self.temporal.iter_claim_versions(claim_id,
-            system_time=system_time, through_commit=through_commit)
-
-    def _temporal_system_horizon(self, *, system_time=None, through_commit=None) -> int:
-        return self.temporal.system_horizon(
-            system_time=system_time, through_commit=through_commit)
-
-    def _temporal_interval_locators(self, index_name, parts, instant):
-        return self.temporal.interval_locators(index_name, parts, instant)
-
-    def _temporal_entity_as_of(
-        self, kind, logical_id, *, valid_time, system_time=None, through_commit=None
-    ):
-        return self.temporal.entity_as_of(
-            kind, logical_id, valid_time=valid_time, system_time=system_time,
-            through_commit=through_commit, hydrate=self._get_temporal_version_at,
-        )
-
-    def get_node_as_of(
-        self, logical_id, *, valid_time, system_time=None, through_commit=None
-    ) -> NodeVersion | None:
-        """Resolve a logical node at valid time and an optional system horizon."""
-        return self.temporal.get_node_as_of(logical_id, valid_time=valid_time,
-            system_time=system_time, through_commit=through_commit,
-            hydrate=self._get_temporal_version_at)
-
-    def get_edge_as_of(
-        self, logical_id, *, valid_time, system_time=None, through_commit=None
-    ) -> EdgeVersion | None:
-        """Resolve a logical edge at valid time and an optional system horizon."""
-        return self.temporal.get_edge_as_of(logical_id, valid_time=valid_time,
-            system_time=system_time, through_commit=through_commit,
-            hydrate=self._get_temporal_version_at)
-
-    def get_claim_as_of(
-        self, claim_id, *, valid_time, system_time=None, through_commit=None
-    ) -> ClaimVersion | None:
-        """Resolve one claim identity at valid time and an optional system horizon."""
-        return self.temporal.get_claim_as_of(claim_id, valid_time=valid_time,
-            system_time=system_time, through_commit=through_commit,
-            hydrate=self._get_temporal_version_at)
-
-    def iter_claims_as_of(
-        self,
-        *,
-        valid_time,
-        statement_id=None,
-        subject=None,
-        predicate=None,
-        object=_UNSET,
-        object_kind=None,
-        agent=None,
-        source=_UNSET,
-        world=None,
-        polarity=None,
-        system_time=None,
-        through_commit=None,
-    ):
-        """Iterate visible claims matching indexed epistemic dimensions.
-
-        Locator reads are grouped by commit, with full commit validation per
-        group rather than per row. Winners are buffered at one logical horizon.
-        Live-store commit integrity is checked again on successful exhaustion;
-        partially consumed iterators are not completed authenticated reads.
-        """
-        return self.history.iter_claims_as_of(
-            valid_time=valid_time,
-            statement_id=statement_id, subject=subject,
-            predicate=predicate, object=object, object_kind=object_kind,
-            agent=agent, source=source, world=world, polarity=polarity,
-            system_time=system_time, through_commit=through_commit,
-        )
-
-    def claim_status(
-        self,
-        subject,
-        predicate,
-        object,
-        *,
-        valid_time,
-        object_kind=ClaimObjectKind.ENTITY,
-        agent=None,
-        source=_UNSET,
-        world=None,
-        system_time=None,
-        through_commit=None,
-    ) -> ClaimStatus:
-        """Return supported/refuted/both/unknown under open-world semantics."""
-        return self.temporal.claim_status(
-            subject, predicate, object,
-            valid_time=valid_time, object_kind=object_kind, agent=agent,
-            source=source, world=world, system_time=system_time,
-            through_commit=through_commit,
-        )
-
-    def iter_nodes_as_of(
-        self, *, valid_time, system_time=None, through_commit=None
-    ):
-        """Iterate node versions visible at one valid and system-time point."""
-        return self.temporal.iter_nodes_as_of(valid_time=valid_time,
-            system_time=system_time, through_commit=through_commit,
-            hydrate=self._get_temporal_version_at)
-
-    def iter_edges_as_of(
-        self,
-        *,
-        edge_type=None,
-        direction="out",
-        source=None,
-        target=None,
-        valid_time,
-        system_time=None,
-        through_commit=None,
-    ):
-        """Iterate endpoint edges visible at valid time and a system horizon."""
-        return self.temporal.iter_edges_as_of(
-            valid_time=valid_time,
-            system_time=system_time, through_commit=through_commit,
-            edge_type=edge_type, direction=direction, source=source,
-            target=target, hydrate=self._get_temporal_version_at,
-        )
-
-    def rebuild_temporal_indexes(self, *, through_commit=None) -> dict[str, int]:
-        """Rebuild all derived temporal indexes from visible canonical history."""
-        return self.temporal.rebuild_temporal_indexes(
-            through_commit=through_commit,
-            write_indexes_fn=self._write_temporal_indexes,
-        )
-
-    def _delete_temporal_index_generation(self, generation: int, through_commit: int) -> None:
-        self.temporal.delete_index_generation(generation, through_commit)
-
     def query(
         self,
         cypher: str,
@@ -3019,7 +2202,7 @@ class GraphDB:
     def _implicit_transaction_required(self) -> bool:
         return bool(
             getattr(self.store, "supports_transactions", False)
-            and not self._temporal_transaction_bound
+            and not self.temporal.is_transaction_bound
         )
 
     @contextmanager
@@ -3029,7 +2212,7 @@ class GraphDB:
         The transaction commits on clean context exit and rolls back if an
         exception leaves the context.
         """
-        with self._temporal_writer_guard():
+        with self.temporal.write_guard():
             tx_store = self.store.transaction(**options)
             try:
                 tx_graph = GraphDB(tx_store, self.serializer)
@@ -3049,4 +2232,4 @@ class GraphDB:
             >>> graph_db.close()  # doctest: +SKIP
         """
         self.store.close()
-        
+

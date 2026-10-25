@@ -29,9 +29,9 @@ def source(tmp_path, request):
     backend, module = request.param
     pytest.importorskip(module)
     graph = GraphDB.create(tmp_path / "db", backend=backend, serializer="json")
-    a = graph.assert_claim(subject="a", predicate="edge", object="b", agent="one", polarity="positive", valid=(0, 40))
-    b = graph.assert_claim(subject="b", predicate="edge", object="c", agent="two", polarity="positive", valid=(10, 30))
-    graph.assert_claim(subject="a", predicate="edge", object="b", agent="three", polarity="positive", valid=(60, 80))
+    a = graph.epistemic.assert_claim(subject="a", predicate="edge", object="b", agent="one", polarity="positive", valid=(0, 40))
+    b = graph.epistemic.assert_claim(subject="b", predicate="edge", object="c", agent="two", polarity="positive", valid=(10, 30))
+    graph.epistemic.assert_claim(subject="a", predicate="edge", object="b", agent="three", polarity="positive", valid=(60, 80))
     yield graph, a, b
     graph.close()
 
@@ -48,7 +48,7 @@ def publish(graph, staged, **kwargs):
 
 
 def visible(graph, point, horizon=None):
-    with graph.read_view(valid_time=point, through_commit=horizon) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=point, through_commit=horizon) as view:
         return tuple(view.iter_claims_as_of(world="inferred"))
 
 
@@ -59,7 +59,7 @@ def test_atomic_interval_commit_gaps_metadata_and_pinned_old_view(source):
     horizon = staged.result.binding.provenance.commit_horizon
     outcome = publish(graph, staged, expected_generation=staged.result.binding.identity)
     assert outcome.asserted == len(staged.desired) and outcome.commit_id == horizon + 1
-    commit = graph.get_temporal_commit(outcome.commit_id)
+    commit = graph.temporal.get_temporal_commit(outcome.commit_id)
     assert len(commit.versions) == outcome.asserted
     assert commit.metadata["reasoning_generation"] == staged.result.binding.identity.digest
     assert commit.metadata["source_provenance_token"] == staged.result.binding.identity.source.provenance_token
@@ -88,23 +88,23 @@ def test_restage_content_idempotence_after_own_commit(source):
 def test_source_retraction_removes_disappeared_intervals_in_same_commit(source):
     graph, first, _ = source
     publish(graph, stage(graph))
-    graph.retract_claim(first.logical_id, valid=(0, 40))
+    graph.epistemic.retract_claim(first.logical_id, valid=(0, 40))
     changed = stage(graph)
     outcome = publish(graph, changed)
     assert outcome.retracted > 0
     assert all(v.claim.subject != "a" for v in visible(graph, 10))
     assert any(v.claim.subject == "a" for v in visible(graph, 70))
-    assert len(graph.get_temporal_commit(outcome.commit_id).versions) == outcome.asserted + outcome.corrected + outcome.retracted
+    assert len(graph.temporal.get_temporal_commit(outcome.commit_id).versions) == outcome.asserted + outcome.corrected + outcome.retracted
 
 
 def test_latest_and_explicit_historical_source_policy(source):
     graph, _, _ = source
     staged = stage(graph)
-    graph.assert_claim(subject="new", predicate="edge", object="node", agent="other", polarity="positive", valid=(0, 100))
-    horizon = graph._temporal_system_horizon()
+    graph.epistemic.assert_claim(subject="new", predicate="edge", object="node", agent="other", polarity="positive", valid=(0, 100))
+    horizon = graph.temporal.system_horizon()
     with pytest.raises(ProvenanceMismatchError, match="horizon moved"):
         publish(graph, staged)
-    assert graph._temporal_system_horizon() == horizon and not visible(graph, 10)
+    assert graph.temporal.system_horizon() == horizon and not visible(graph, 10)
     published = publish(graph, staged, freshness="historical")
     assert published.commit_id == horizon + 1
     assert all(v.claim.subject != "new" for v in visible(graph, 10))
@@ -115,32 +115,32 @@ def test_target_version_cas_not_bypassed_by_historical_or_matching_pin(source):
     publish(graph, stage(graph))
     staged = stage(graph)
     target = visible(graph, 10)[0]
-    graph.correct_claim(target.logical_id, supersedes_version_id=target.version_id,
+    graph.epistemic.correct_claim(target.logical_id, supersedes_version_id=target.version_id,
                         valid=(target.valid.start, target.valid.end))
-    horizon = graph._temporal_system_horizon()
+    horizon = graph.temporal.system_horizon()
     with pytest.raises(GenerationStaleError, match="target versions moved"):
         publish(graph, staged, freshness="historical", expected_generation=staged.result.binding.identity)
-    assert graph._temporal_system_horizon() == horizon
+    assert graph.temporal.system_horizon() == horizon
 
 
 def test_empty_target_aba_does_not_bypass_historical_cas(source):
     graph, _, _ = source
     old_empty = stage(graph)
     outcome = publish(graph, old_empty)
-    for version in graph.get_temporal_commit(outcome.commit_id).versions:
-        graph.retract_claim(version.logical_id, valid=(version.valid.start, version.valid.end))
+    for version in graph.temporal.get_temporal_commit(outcome.commit_id).versions:
+        graph.epistemic.retract_claim(version.logical_id, valid=(version.valid.start, version.valid.end))
     assert not visible(graph, 10)
-    horizon = graph._temporal_system_horizon()
+    horizon = graph.temporal.system_horizon()
     with pytest.raises(GenerationStaleError, match="target versions moved"):
         publish(graph, old_empty, freshness="historical")
-    assert graph._temporal_system_horizon() == horizon
+    assert graph.temporal.system_horizon() == horizon
 
 
 def test_partial_external_retraction_fails_closed(source):
     graph, _, _ = source
     publish(graph, stage(graph))
     target = next(v for v in visible(graph, 10) if v.valid.start.epoch_microseconds == 0)
-    graph.retract_claim(target.logical_id, valid=(10, 20))
+    graph.epistemic.retract_claim(target.logical_id, valid=(10, 20))
     with pytest.raises(ReasoningError, match="partially changed"):
         stage(graph)
 
@@ -148,17 +148,17 @@ def test_partial_external_retraction_fails_closed(source):
 def test_altered_outputs_or_source_evidence_never_write(source):
     graph, _, _ = source
     staged = stage(graph)
-    horizon = graph._temporal_system_horizon()
+    horizon = graph.temporal.system_horizon()
     for bad in (replace(staged, desired=staged.desired[1:]), replace(staged, content_id="other"),
                 replace(staged, result=replace(staged.result, evidence=staged.result.evidence[1:]))):
         with pytest.raises((ReasoningError, ProvenanceMismatchError)):
             publish(graph, bad)
-        assert graph._temporal_system_horizon() == horizon and not visible(graph, 10)
+        assert graph.temporal.system_horizon() == horizon and not visible(graph, 10)
 
 
 def test_shape_limits_and_cancellation_preserve_database(source):
     graph, _, _ = source
-    horizon = graph._temporal_system_horizon()
+    horizon = graph.temporal.system_horizon()
     unary = GenericProgram([GenericRule("unary", [TypedAtom("edge", [X, Y])], [], TypedAtom("person", [X]))])
     with pytest.raises(ReasoningError, match="binary entity output"):
         stage(graph, program=unary)
@@ -169,7 +169,7 @@ def test_shape_limits_and_cancellation_preserve_database(source):
         publish(graph, staged, publication_limits=RangePublicationLimits(max_writes=1))
     with pytest.raises(ReasoningCancelledError):
         publish(graph, staged, cancel=lambda: True)
-    assert graph._temporal_system_horizon() == horizon and not visible(graph, 10)
+    assert graph.temporal.system_horizon() == horizon and not visible(graph, 10)
 
 
 def test_expected_pin_rejects_before_guard_and_source_scan(source, monkeypatch):
@@ -186,13 +186,13 @@ def test_expected_pin_rejects_before_guard_and_source_scan(source, monkeypatch):
 def test_stale_computation_cannot_be_laundered_through_new_staging(source):
     graph, _, _ = source
     old = stage(graph)
-    graph.assert_claim(subject="fresh", predicate="edge", object="node", agent="new", polarity="positive", valid=(1, 2))
+    graph.epistemic.assert_claim(subject="fresh", predicate="edge", object="node", agent="new", polarity="positive", valid=(1, 2))
     new = stage(graph)
     laundered = replace(new, result=old.result, desired=old.desired, content_id=old.content_id)
-    horizon = graph._temporal_system_horizon()
+    horizon = graph.temporal.system_horizon()
     with pytest.raises(ProvenanceMismatchError, match="horizon moved"):
         publish(graph, laundered)
-    assert graph._temporal_system_horizon() == horizon and not visible(graph, 1)
+    assert graph.temporal.system_horizon() == horizon and not visible(graph, 1)
     publish(graph, new)
     assert any(v.claim.subject == "fresh" for v in visible(graph, 1))
 
@@ -238,9 +238,9 @@ def test_nontransactional_marker_failure_requires_explicit_orphan_recovery(sourc
         visible(graph, 10)
     with pytest.raises(ReasoningError, match="orphan recovery"):
         publish(graph, staged)
-    report = graph.list_temporal_orphans()
-    graph.reclaim_temporal_orphans(through_commit=report.through_commit)
-    graph.rebuild_temporal_indexes()
+    report = graph.temporal.list_temporal_orphans()
+    graph.temporal.reclaim_temporal_orphans(through_commit=report.through_commit)
+    graph.temporal.rebuild_temporal_indexes()
     assert not visible(graph, 10)
     assert publish(graph, stage(graph)).asserted == len(staged.desired)
 
@@ -259,7 +259,7 @@ def test_writer_guard_covers_readmission_through_commit(source, monkeypatch):
         return original(*args, **kwargs)
     def writer():
         attempted.set()
-        graph.assert_claim(subject="concurrent", predicate="edge", object="node", agent="new", polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="concurrent", predicate="edge", object="node", agent="new", polarity="positive", valid=(0, 100))
         finished.set()
     monkeypatch.setattr(adapter, "admit_range_result", paused)
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -273,7 +273,7 @@ def test_writer_guard_covers_readmission_through_commit(source, monkeypatch):
             release.set()
         outcome = published.result(timeout=5)
         written.result(timeout=5)
-    assert graph._temporal_system_horizon() == outcome.commit_id + 1
+    assert graph.temporal.system_horizon() == outcome.commit_id + 1
 
 
 def test_target_history_bounds_and_unmanaged_namespaces_fail_before_writes(source):
@@ -281,12 +281,12 @@ def test_target_history_bounds_and_unmanaged_namespaces_fail_before_writes(sourc
     with pytest.raises(ReasoningLimitError, match="max_target_history"):
         stage(graph, publication_limits=RangePublicationLimits(max_target_history=1))
     staged = stage(graph)
-    graph.assert_claim(subject="manual", predicate="p", object="value", agent="other",
+    graph.epistemic.assert_claim(subject="manual", predicate="p", object="value", agent="other",
                        source=staged.namespace + ":fake", world="inferred", polarity="positive", valid=(0, 1))
-    horizon = graph._temporal_system_horizon()
+    horizon = graph.temporal.system_horizon()
     with pytest.raises(ReasoningError, match="unmanaged"):
         stage(graph)
-    assert graph._temporal_system_horizon() == horizon
+    assert graph.temporal.system_horizon() == horizon
 
 
 def test_historical_final_horizon_check_rejects_reentrant_movement(source, monkeypatch):
@@ -294,15 +294,15 @@ def test_historical_final_horizon_check_rejects_reentrant_movement(source, monke
     graph, _, _ = source
     staged = stage(graph)
     original = adapter._target_state
-    horizon = graph._temporal_system_horizon()
+    horizon = graph.temporal.system_horizon()
     def moved(*args, **kwargs):
         state = original(*args, **kwargs)
-        graph.assert_claim(subject="reentrant", predicate="other", object="value", agent="test", polarity="positive", valid=(0, 1))
+        graph.epistemic.assert_claim(subject="reentrant", predicate="other", object="value", agent="test", polarity="positive", valid=(0, 1))
         return state
     monkeypatch.setattr(adapter, "_target_state", moved)
     with pytest.raises(GenerationStaleError, match="while preparing"):
         publish(graph, staged, freshness="historical")
-    assert graph._temporal_system_horizon() == horizon + 1 and not visible(graph, 10)
+    assert graph.temporal.system_horizon() == horizon + 1 and not visible(graph, 10)
 
 
 def test_cancellation_after_readmission_preserves_target(source, monkeypatch):
@@ -316,10 +316,10 @@ def test_cancellation_after_readmission_preserves_target(source, monkeypatch):
         cancelled.append(True)
         return state
     monkeypatch.setattr(adapter, "_target_state", cancel_after)
-    horizon = graph._temporal_system_horizon()
+    horizon = graph.temporal.system_horizon()
     with pytest.raises(ReasoningCancelledError):
         publish(graph, staged, cancel=lambda: bool(cancelled))
-    assert graph._temporal_system_horizon() == horizon and not visible(graph, 10)
+    assert graph.temporal.system_horizon() == horizon and not visible(graph, 10)
 
 
 def test_bound_range_publication_documentation_example():

@@ -92,40 +92,48 @@ redispatch. Separate DDL's post-commit config updates. Build `graph.ingest` over
 current repositories/native batch capabilities, retaining native fast paths;
 move callers to the narrower interfaces and measure ingestion/sampling parity.
 
-### Stage D — guarded temporal and claim services (first slice implemented)
+### Stage D — guarded temporal, epistemic, and rules services (decoupling landed)
 
-`gestaltdb.temporal_engine.TemporalEngine` now owns temporal state and
+`gestaltdb.temporal_engine.TemporalEngine` owns temporal state and
 operations for one store scope: commit sequencing, guarded publication with
-backend-transaction scoping, versioned entity/claim writes, temporal index
-maintenance and recovery, point-in-time selection, and read-view construction.
-`GraphDB` constructs one engine per handle (`self.temporal`), keeps thin
-compatibility wrappers, and preserves every adapter/test seam (retraction
-validation, interrupted-rebuild injection, hydration counting, grouped-read
-tripwire, Cypher lazy-scan copies, delete-edge fault injection). Scope state
-(clock, write lock, commit cache, transaction bound) lives on the engine and
-is exposed through compatibility properties; transaction/snapshot children
-rebind or share it explicitly instead of the facade copying fields. Rules,
-modal evaluation, Cypher, sampling and visualization stay out of the engine
-for later stages. Two grouped-read tests that hand-rolled snapshot scopes
-now use the same scope helper as production; intent unchanged.
+backend-transaction scoping, versioned entity writes, temporal index
+maintenance and recovery, entity selection, and read-view construction.
+`gestaltdb.epistemic_engine.EpistemicEngine` (`graph.epistemic`) owns claim
+writes, claim selection/status, and view-pinned modal entailment on top of
+the temporal scope. `gestaltdb.rules_engine.RulesEngine` (`graph.rules`)
+owns the rule catalog, fixpoint evaluation, truth maintenance, and
+explanations. `GraphDB` constructs all three per handle, exposes them as
+attributes, and keeps **no wrapper methods** for them: the breaking API
+change removes ~150 temporal/epistemic/rules methods and private seams
+from the facade (`graphdb.py` 3052 -> 2235 lines).
 
-Stage D validation (2026-10-26): full optional suite 3,442 passed / 3 expected
-skips with zero behavior change; the API index and module budgets were
-refreshed (`graphdb.py` 3103 -> 3052, new `temporal_engine.py` 562 lines and
-therefore outside the legacy-exception baseline). Internal callers
-(`readview`, reasoning adapters, stored rules, truth maintenance) now
-consume `graph.temporal` directly; commit-failure and guard-ordering
-fault-injection tests were migrated to the engine boundary with intent
-unchanged. Ruff, size gate, API-index drift, docs checks and Sphinx `-W`
-green. No subclass was introduced: composition keeps consumers off the
-god-class surface instead of inheriting it.
+The engines never call back into the facade. The writer guard, commit
+cache, clock, and lock coordination live on the engine; database identity
+stays a lifecycle concern and legacy-edge migration takes an explicit
+`delete_current_edge` integration hook. `store` assignment rebinds the
+scope-owned engines so handle/store divergence cannot silently split
+current and temporal reads. Transaction/snapshot children rebind all
+three engines through `scopes.py`. Hydration defaults to the engine seam
+so scoped instrumentation keeps working; fault-injection tests were
+migrated to the engine boundary with intent unchanged (commit-failure
+retry safety, guard ordering, grouped-read tripwire, retraction-only
+legacy history, index-rebuild interruption, hydration counting,
+per-claim-read regression, view-horizon pinning). `GraphReadView` binds
+history via `graph.temporal.history()`; the instance claim-stream override
+remains a documented explicit seam. Cypher `kg.entails` pins a view
+through the temporal engine and evaluates through the epistemic engine;
+the procedure-row seeder moved to `query_engine/cypher/procedures.py`
+(`runtime.py` 1918 -> 1873 lines). No subclass was introduced:
+composition keeps consumers off the god-class surface instead of
+inheriting it.
 
-### Stage E — rules/modal and optional consumers
+### Stage E — optional consumers (rules/modal done; narrow Cypher/sampling/viz)
 
-Build `graph.rules` over claim/history/commit protocols, not GraphDB. Move
-Cypher, sampling and visualization clients to minimal structural protocols,
-checking actual method requirements rather than asserting universal executor
-substitution. Keep compatibility wrappers; new code should consume services.
+`graph.rules` and view-pinned `graph.epistemic.entails` are done (see
+Stage D). Remaining: move Cypher, sampling and visualization clients to
+minimal structural protocols, checking actual method requirements rather
+than asserting universal executor substitution. New code should consume
+services.
 
 Each stage requires backend tests, architectural dependency tests, docs/API
 checks and the size ratchet. Stage completion means migrated callers and owned
