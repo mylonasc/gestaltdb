@@ -2,6 +2,18 @@
 
 Tracking: https://github.com/mylonasc/gestaltdb/issues/388 (open follow-up).
 
+Progress (2026-10-26, `feature/graphdb-refactor-388`, #388): 33 landed slices
+moved ~3,900 lines into 18 cohesive `_graph/` modules (all <=800 lines);
+`graphdb.py` is 7,113 -> ~3,220 lines and is now a facade (public
+constructors, scope binding, transaction boundaries, thin delegation) plus
+its API docstrings. No behavior change: full optional suite stays green
+(3,416 passed, 3 expected capability skips), including the
+monkeypatched-adapter and fault-injection seams, which are preserved via
+explicit facade hooks. Remaining facade content is orchestration,
+signatures, and documentation — see GRAPHDB_REFACTOR_EPIC.md for the
+per-slice record. The original prevention-first note follows and still
+applies to the other seven oversized modules.
+
 The initial lint change adds prevention, **not** a 7,113-line behavioral refactor.
 Module ceilings alone cannot prove cohesion or reduce the coupling of GraphDB's
 many responsibilities. Each extraction needs focused tests plus real-backend

@@ -198,7 +198,8 @@ Choose an application workflow
 Code navigation and modularity
 -------------------------------
 
-The main source entry points are ``graphdb.py``, ``kvstores.py``,
+The main source entry points are ``graphdb.py`` (public facade),
+``_graph/`` (private implementation collaborators), ``kvstores.py``,
 ``serializers.py``, ``readview.py``, ``sampling/``, ``ontology/``,
 ``reasoning/``, ``reasoning/adapters/``, ``query_engine/cypher/``, and ``viz/``
 under ``src/gestaltdb``. :doc:`api` exposes documented APIs and source links;
@@ -211,9 +212,14 @@ to follow those boundaries in code.
 
 The decomposition is useful, with four important boundaries:
 
-* ``GraphDB`` is a substantial integration hub. Ingestion, temporal writes,
+* ``GraphDB`` is the public integration facade: it owns handle lifecycle,
+  transaction/snapshot scope binding, and thin method delegation. The
+  implementation lives in cohesive private collaborators under
+  ``src/gestaltdb/_graph/`` (entities, typed adjacency, secondary indexes,
+  columnar ingestion, temporal history/commit/selection, claims, stored
+  rules, sampling, lifecycle, scope binding). Ingestion, temporal writes,
   stored claims/rules, live traversal, and modal queries are responsibilities
-  within that hub rather than separately deployable engines.
+  behind that facade rather than separately deployable engines.
 * ``GraphDB.run_rules`` / ``maintain_truth`` evaluate stored temporal claims.
   Standalone Datalog evaluators use their own programs, facts, supports, and
   adapters. These are two rule-execution families with different interfaces.

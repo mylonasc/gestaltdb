@@ -152,3 +152,22 @@ def delete_typed_adjacency_for_edge(store: KVStore, cache: dict, edge) -> None:
     target_id = node_key_to_bytes(edge.target)
     store.delete_typed_adjacency(source_id, target_id, edge_type, edge.get_id_bytes)
     update_count_cache(cache, [(source_id, target_id, edge_type, edge.get_id_bytes)], -1)
+
+
+def rebuild_typed_adjacency(store, entity_serializer, adj_cache) -> int:
+    """Rebuild typed adjacency indexes from stored edge records.
+
+    Returns the number of typed edges indexed. The caller owns the
+    transaction boundary and clears/initializes the count cache.
+    """
+    from .edge_records import get_edge
+
+    rebuilt = 0
+    adj_cache.clear()
+    for edge_id in store.get_edge_keys_generator():
+        edge = get_edge(store, entity_serializer, edge_id)
+        if edge is None or edge.get_type is None:
+            continue
+        put_typed_adjacency_for_edge(store, adj_cache, edge)
+        rebuilt += 1
+    return rebuilt

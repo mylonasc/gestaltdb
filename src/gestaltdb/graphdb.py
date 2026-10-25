@@ -1518,15 +1518,8 @@ class GraphDB:
         if self._implicit_transaction_required():
             with self.transaction() as tx:
                 return tx.rebuild_typed_adjacency()
-        rebuilt = 0
-        self._typed_adjacency_count_cache.clear()
-        for edge_id in self.store.get_edge_keys_generator():
-            edge = self.get_edge(edge_id)
-            if edge is None or self.edge_type(edge) is None:
-                continue
-            self._put_typed_adjacency_for_edge(edge)
-            rebuilt += 1
-        return rebuilt
+        return _adjacency.rebuild_typed_adjacency(
+            self.store, self.entity_serializer, self._typed_adjacency_count_cache)
 
     def get_edge(self, edge_id) -> Edge:
         """Return an edge by byte key.
