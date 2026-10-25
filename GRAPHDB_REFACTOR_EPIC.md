@@ -92,14 +92,28 @@ redispatch. Separate DDL's post-commit config updates. Build `graph.ingest` over
 current repositories/native batch capabilities, retaining native fast paths;
 move callers to the narrower interfaces and measure ingestion/sampling parity.
 
-### Stage D — guarded temporal and claim services
+### Stage D — guarded temporal and claim services (first slice implemented)
 
-Introduce `graph.temporal` owning reader + guarded writer + recovery interfaces.
-Move sequence/publication/transaction orchestration off GraphDB, then migrate
-adapters to these contracts. Never expose the unguarded TemporalCommitter as a
-public replacement. Separate authenticated source identity and lifetime from
-GraphReadView's graph reference. `graph.history` remains read-only and distinct
-from mutable-current snapshots, authenticated evidence and publication rights.
+`gestaltdb.temporal_engine.TemporalEngine` now owns temporal state and
+operations for one store scope: commit sequencing, guarded publication with
+backend-transaction scoping, versioned entity/claim writes, temporal index
+maintenance and recovery, point-in-time selection, and read-view construction.
+`GraphDB` constructs one engine per handle (`self.temporal`), keeps thin
+compatibility wrappers, and preserves every adapter/test seam (retraction
+validation, interrupted-rebuild injection, hydration counting, grouped-read
+tripwire, Cypher lazy-scan copies, delete-edge fault injection). Scope state
+(clock, write lock, commit cache, transaction bound) lives on the engine and
+is exposed through compatibility properties; transaction/snapshot children
+rebind or share it explicitly instead of the facade copying fields. Rules,
+modal evaluation, Cypher, sampling and visualization stay out of the engine
+for later stages. Two grouped-read tests that hand-rolled snapshot scopes
+now use the same scope helper as production; intent unchanged.
+
+Stage D validation (2026-10-26): full optional suite 3,442 passed / 3 expected
+skips with zero behavior change; the API index and module budgets were
+refreshed (`graphdb.py` 3103 -> 3055, new `temporal_engine.py` 562 lines and
+therefore outside the legacy-exception baseline). Ruff, size gate, API-index
+drift, docs checks and Sphinx `-W` green.
 
 ### Stage E — rules/modal and optional consumers
 

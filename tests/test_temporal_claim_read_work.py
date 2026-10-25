@@ -163,12 +163,15 @@ def test_store_rebinding_cannot_finish_a_grouped_read(backend, tmp_path):
 
 def test_grouped_snapshot_reads_remain_isolated_from_live_corruption(tmp_path):
     pytest.importorskip("lmdb")
+    from gestaltdb._graph.scopes import configure_snapshot_child
+
     graph = GraphDB.create(tmp_path / "db", backend="lmdb")
     try:
         graph.commit_versions(writes(4))
         with graph.store.read_snapshot() as store:
             pinned = copy.copy(graph)
             pinned.store = store
+            configure_snapshot_child(graph, pinned)
             expected = list(pinned.iter_claims_as_of(valid_time=5))
             iterator = pinned.iter_claims_as_of(valid_time=5)
             first = next(iterator)

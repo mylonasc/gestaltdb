@@ -218,7 +218,19 @@ store, and performs no identity initialization or index repair. It is not a
 snapshot or an authenticated source: use ``graph.read_view`` for authenticated
 fixed-horizon selection. ``GraphReadView`` delegates historical queries to this
 capability; its source verification and sampler integration still retain the
-owning graph. Temporal writes and publication remain behind the guarded facade.
+owning graph.
+
+Temporal writes, sequencing, index maintenance and recovery live in
+``gestaltdb.temporal_engine.TemporalEngine`` rather than in the facade.
+Each database handle owns one engine as ``graph.temporal``; it is
+constructed with the store, entity codec, clock and store path, and it
+borrows the owner's lifetime and database identity. Transaction and snapshot
+children rebind the engine to their own store instead of sharing the live
+handle's. Reasoning adapters and future services consume the engine (or its
+reader/history) instead of private ``GraphDB`` methods; the facade keeps
+thin compatibility wrappers with identical signatures, errors, visibility
+contracts and fault-injection seams. Temporal writes and publication remain
+behind the guarded engine, not ad-hoc store access.
 
 For example, pass only read authority to an application component::
 
@@ -271,12 +283,13 @@ The decomposition is useful, with four important boundaries:
 
 * ``GraphDB`` is the public integration facade: it owns handle lifecycle,
   transaction/snapshot scope binding, and thin method delegation. The
-  implementation lives in cohesive private collaborators under
+  implementation lives in cohesive collaborators: current-graph services in
+  ``gestaltdb.current``/``gestaltdb.concurrency``, the temporal subsystem in
+  ``gestaltdb.temporal_engine``, and storage details under
   ``src/gestaltdb/_graph/`` (entities, typed adjacency, secondary indexes,
-  columnar ingestion, temporal history/commit/selection, claims, stored
-  rules, sampling, lifecycle, scope binding). Ingestion, temporal writes,
-  stored claims/rules, live traversal, and modal queries are responsibilities
-  behind that facade rather than separately deployable engines.
+  columnar ingestion, stored rules, sampling, lifecycle, scope binding).
+  Ingestion, stored rules, live traversal, and modal queries remain
+  responsibilities behind that facade; temporal work has its own engine.
 * ``GraphDB.run_rules`` / ``maintain_truth`` evaluate stored temporal claims.
   Standalone Datalog evaluators use their own programs, facts, supports, and
   adapters. These are two rule-execution families with different interfaces.

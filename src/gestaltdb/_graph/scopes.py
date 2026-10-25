@@ -49,6 +49,10 @@ def configure_transaction_child(parent: GraphDB, child: GraphDB) -> None:
     child._lock_manager = parent._lock_manager
     child._temporal_transaction_bound = True
     child._temporal_clock = parent._temporal_clock
+    child._node_repository = None
+    child.temporal._store_path = child._store_path
+    child.temporal._lock_manager = parent.temporal._lock_manager
+    child.temporal._transaction_bound = True
 
 
 def configure_snapshot_child(parent: GraphDB, child: GraphDB) -> None:
@@ -65,6 +69,7 @@ def configure_snapshot_child(parent: GraphDB, child: GraphDB) -> None:
     )
 
     del parent  # ownership is explicit: only the snapshot-bound child is read.
+    parent_temporal = child.temporal  # copy.copy shares the live engine; rebind below.
     child.indexed_node_properties = set(
         child._load_property_index_metadata(_NODE_PROPERTY_INDEXES_METADATA_KEY)
     )
@@ -74,3 +79,11 @@ def configure_snapshot_child(parent: GraphDB, child: GraphDB) -> None:
     child.node_constraints = child._load_node_constraint_metadata()
     child._typed_adjacency_count_cache = {}
     child._node_repository = None
+    child.temporal = parent_temporal.rebound(
+        child.store,
+        store_path=child._store_path,
+        delete_current_edge=child.delete_edge,
+        ensure_identity=lambda: child.database_id,
+    )
+    child.temporal._retraction_hook = lambda identities: child._require_temporal_retraction_identities(identities)
+    child.temporal._write_indexes_hook = lambda *args, **kwargs: child._write_temporal_indexes(*args, **kwargs)

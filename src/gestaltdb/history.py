@@ -87,6 +87,11 @@ class TemporalHistory:
         return selection.entity_as_of(
             self._reader, "node", logical_id, hydrate=self._hydrate, **point)
 
+    def entity_as_of(self, kind, logical_id, **point):
+        """Resolve one logical node/edge/claim version at a valid time."""
+        return selection.entity_as_of(
+            self._reader, kind, logical_id, hydrate=self._hydrate, **point)
+
     def get_edge_as_of(self, logical_id, **point):
         """Resolve an edge at a valid-time point and optional system horizon."""
         return selection.entity_as_of(

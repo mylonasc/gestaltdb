@@ -61,6 +61,8 @@ def test_cache_does_not_cross_store_objects(graph):
 
 def test_pinned_snapshot_and_live_store_do_not_share_admission(tmp_path):
     pytest.importorskip("lmdb")
+    from gestaltdb._graph.scopes import configure_snapshot_child
+
     graph = GraphDB.create(tmp_path / "db", backend="lmdb", serializer="json")
     try:
         version = graph.put_node_version(Node("a"), valid=(0, 10))
@@ -68,6 +70,7 @@ def test_pinned_snapshot_and_live_store_do_not_share_admission(tmp_path):
         with graph.store.read_snapshot() as snapshot_store:
             pinned = copy.copy(graph)
             pinned.store = snapshot_store
+            configure_snapshot_child(graph, pinned)
             assert pinned.get_temporal_commit(version.commit_id)
             graph.store.put_metadata(graph._temporal_visible_key(version.commit_id), b"bad")
             assert pinned.get_temporal_commit(version.commit_id)
