@@ -13,6 +13,8 @@ untouched.
 
 from __future__ import annotations
 
+import json
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -154,3 +156,84 @@ def delete_edge_indexes(store: KVStore, indexed_edge_properties, edge) -> None:
                 store.delete_range_index_entry("edge_property", [property_name.encode("utf-8")], range_value, edge_id)
                 if edge_type is not None:
                     store.delete_range_index_entry("edge_type_property", [str(edge_type).encode("utf-8"), property_name.encode("utf-8")], range_value, edge_id)
+
+
+def load_stale_indexes(store: KVStore, key: bytes) -> set[str]:
+
+    """Load index families known to be stale after deferred bulk ingestion."""
+    try:
+        payload = store.get_metadata(key)
+    except NotImplementedError:
+        return set()
+    if not payload:
+        return set()
+    return set(json.loads(payload.decode("utf-8")))
+
+
+def persist_stale_indexes(store: KVStore, key: bytes, stale_indexes: set[str]) -> None:
+    payload = json.dumps(sorted(stale_indexes), separators=(",", ":")).encode("utf-8")
+    store.put_metadata(key, payload)
+
+
+def mark_indexes_stale(store: KVStore, key: bytes, *index_names: str) -> None:
+    """Mark index families stale after a deferred bulk load."""
+    if not index_names:
+        return
+    try:
+        stale_indexes = load_stale_indexes(store, key)
+        stale_indexes.update(index_names)
+        persist_stale_indexes(store, key, stale_indexes)
+    except NotImplementedError:
+        return
+
+
+def clear_stale_indexes(store: KVStore, key: bytes, *index_names: str) -> None:
+    """Clear stale markers after rebuilding index families."""
+    try:
+        stale_indexes = load_stale_indexes(store, key)
+        stale_indexes.difference_update(index_names)
+        persist_stale_indexes(store, key, stale_indexes)
+    except NotImplementedError:
+        return
+
+
+def ensure_indexes_current(store: KVStore, key: bytes, *index_names: str) -> None:
+    """Prevent stale secondary indexes from silently returning wrong results."""
+    stale = load_stale_indexes(store, key).intersection(index_names)
+    if stale:
+        names = ", ".join(sorted(stale))
+        raise RuntimeError(f"stale indexes require rebuild before query: {names}")
+
+
+def load_property_index_metadata(store: KVStore, key: bytes) -> set[str]:
+    """Load persisted property index definitions from backend metadata."""
+    try:
+        payload = store.get_metadata(key)
+    except NotImplementedError:
+        return set()
+    if not payload:
+        return set()
+    return set(json.loads(payload.decode("utf-8")))
+
+
+def persist_property_index_metadata(store: KVStore, key: bytes, property_names: set[str]) -> None:
+    """Persist property index definitions to backend metadata."""
+    payload = json.dumps(sorted(property_names), separators=(",", ":")).encode("utf-8")
+    store.put_metadata(key, payload)
+
+
+def load_node_constraint_metadata(store: KVStore, key: bytes) -> list[dict[str, str]]:
+    """Load persisted node constraint definitions from backend metadata."""
+    try:
+        payload = store.get_metadata(key)
+    except NotImplementedError:
+        return []
+    if not payload:
+        return []
+    decoded = json.loads(payload.decode("utf-8"))
+    if not isinstance(decoded, dict) or decoded.get("version") != 1:
+        raise ValueError("Unsupported node constraint catalog format")
+    constraints = decoded.get("constraints", [])
+    if not isinstance(constraints, list):
+        raise ValueError("Invalid node constraint catalog")
+    return [dict(constraint) for constraint in constraints]

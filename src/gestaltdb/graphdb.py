@@ -599,38 +599,19 @@ class GraphDB:
 
     def _load_stale_indexes(self) -> set[str]:
         """Load index families known to be stale after deferred bulk ingestion."""
-        try:
-            payload = self.store.get_metadata(_STALE_INDEXES_METADATA_KEY)
-        except NotImplementedError:
-            return set()
-        if not payload:
-            return set()
-        return set(json.loads(payload.decode("utf-8")))
+        return _index_maintenance.load_stale_indexes(self.store, _STALE_INDEXES_METADATA_KEY)
 
     def _persist_stale_indexes(self, stale_indexes: set[str]) -> None:
         """Persist stale index metadata."""
-        payload = json.dumps(sorted(stale_indexes), separators=(",", ":")).encode("utf-8")
-        self.store.put_metadata(_STALE_INDEXES_METADATA_KEY, payload)
+        _index_maintenance.persist_stale_indexes(self.store, _STALE_INDEXES_METADATA_KEY, stale_indexes)
 
     def _mark_indexes_stale(self, *index_names: str) -> None:
         """Mark index families stale after a deferred bulk load."""
-        if not index_names:
-            return
-        try:
-            stale_indexes = self._load_stale_indexes()
-            stale_indexes.update(index_names)
-            self._persist_stale_indexes(stale_indexes)
-        except NotImplementedError:
-            return
+        _index_maintenance.mark_indexes_stale(self.store, _STALE_INDEXES_METADATA_KEY, *index_names)
 
     def _clear_stale_indexes(self, *index_names: str) -> None:
         """Clear stale markers after rebuilding index families."""
-        try:
-            stale_indexes = self._load_stale_indexes()
-            stale_indexes.difference_update(index_names)
-            self._persist_stale_indexes(stale_indexes)
-        except NotImplementedError:
-            return
+        _index_maintenance.clear_stale_indexes(self.store, _STALE_INDEXES_METADATA_KEY, *index_names)
 
     def stale_indexes(self) -> tuple[str, ...]:
         """Return index families requiring rebuild after deferred ingestion."""
@@ -641,10 +622,7 @@ class GraphDB:
 
     def _ensure_indexes_current(self, *index_names: str) -> None:
         """Prevent stale secondary indexes from silently returning wrong results."""
-        stale = self._load_stale_indexes().intersection(index_names)
-        if stale:
-            names = ", ".join(sorted(stale))
-            raise RuntimeError(f"stale indexes require rebuild before query: {names}")
+        _index_maintenance.ensure_indexes_current(self.store, _STALE_INDEXES_METADATA_KEY, *index_names)
 
     def _validate_index_mode(self, index_mode: str) -> None:
         """Validate the columnar ingestion index mode."""
@@ -697,34 +675,15 @@ class GraphDB:
 
     def _load_property_index_metadata(self, key: bytes) -> set[str]:
         """Load persisted property index definitions from backend metadata."""
-        try:
-            payload = self.store.get_metadata(key)
-        except NotImplementedError:
-            return set()
-        if not payload:
-            return set()
-        return set(json.loads(payload.decode("utf-8")))
+        return _index_maintenance.load_property_index_metadata(self.store, key)
 
     def _persist_property_index_metadata(self, key: bytes, property_names: set[str]) -> None:
         """Persist property index definitions to backend metadata."""
-        payload = json.dumps(sorted(property_names), separators=(",", ":")).encode("utf-8")
-        self.store.put_metadata(key, payload)
+        _index_maintenance.persist_property_index_metadata(self.store, key, property_names)
 
     def _load_node_constraint_metadata(self) -> list[dict[str, str]]:
         """Load persisted node constraint definitions from backend metadata."""
-        try:
-            payload = self.store.get_metadata(_NODE_CONSTRAINTS_METADATA_KEY)
-        except NotImplementedError:
-            return []
-        if not payload:
-            return []
-        decoded = json.loads(payload.decode("utf-8"))
-        if not isinstance(decoded, dict) or decoded.get("version") != 1:
-            raise ValueError("Unsupported node constraint catalog format")
-        constraints = decoded.get("constraints", [])
-        if not isinstance(constraints, list):
-            raise ValueError("Invalid node constraint catalog")
-        return [dict(constraint) for constraint in constraints]
+        return _index_maintenance.load_node_constraint_metadata(self.store, _NODE_CONSTRAINTS_METADATA_KEY)
 
     def set_node_constraints(self, constraints: list[dict[str, str]]) -> None:
         """Replace and persist the node constraint catalog."""
