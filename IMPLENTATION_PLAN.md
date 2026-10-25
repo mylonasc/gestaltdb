@@ -34,6 +34,26 @@ checks are not universal identity admission or concurrent atomic publication.
 
 ## Ordered implementation
 
+### Authenticated native historical locator continuation (#194)
+
+Dedicated `feature/re-194-native-locator-admission` / `re-194-native-locator-admission`
+on integration `2ed6ade` (#368 merged after 17 applicable exact-head checks;
+post-merge monitoring active). Refreshed ownership/open-PR audit found no
+competing implementation; unrelated work remains untouched.
+
+Add a separately explicit locator source, not a relabel of the full-record
+source or benchmark assertion decoder. Authenticate the complete pinned commit
+catalog to establish expected index membership, scan predicate/subject prefixes
+natively under one snapshot/writer guard, intersect candidate logical IDs, then
+scan their complete point-eligible logical histories (including retractions)
+and point-materialize exact commit members before shared claim policy/mapping.
+Reject missing/forged/duplicate/stale index rows against canonical membership;
+retain canonical winner conformance. Bound authentication records and cumulative
+native rows independently. Physical index-prefix pushdown does not eliminate
+full authentication cost, imply speedup, or admit transactional/range sources.
+Test correction/retraction/old-prefix/empty binding semantics, corruption and
+resource lifetimes before measuring or reconciling #194 closure.
+
 ### Native upstream capability re-audit (#194)
 
 Dedicated `feature/re-194-native-capability-audit` / `re-194-native-capability-audit`
