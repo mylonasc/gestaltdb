@@ -32,7 +32,14 @@ if TYPE_CHECKING:
 
 
 class ReasoningError(ValueError):
-    """Invalid input to the standalone reasoning layer."""
+    """Invalid input to the standalone reasoning layer.
+
+    Sibling of top-level ``RuleError``/``ModalError`` under ``ValueError``
+    (via :class:`TemporalVersionError`). ``except ReasoningError`` misses
+    graph-rule/modal bounds by design; catch
+    ``(ReasoningError, TemporalVersionError)`` to cover every
+    bounded-evaluation failure.
+    """
 
 
 class ReasoningLimitError(ReasoningError):

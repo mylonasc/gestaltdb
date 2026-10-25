@@ -223,6 +223,8 @@ def verify_closure(program: GenericProgram, closure: TemporalClosure, *,
         raise ReasoningError("closure segments drifted from base validity; rematerialize explicitly")
     rule_ids = {rule.rule_id for rule in program.rules}
     points = 0
+    # One sample per segment suffices: segments tile maximal constant-active
+    # intervals, so every point in a segment shares its active set and closure.
     for segment in closure.segments:
         check_cancelled(cancel)
         point = _sample(segment)
@@ -323,6 +325,10 @@ def update_range(program: GenericProgram, closure: TemporalClosure, new_base: It
                                   max_segments=max_segments, max_memberships=max_sweep_memberships,
                                   cancel=cancel)
     segments = tuple(interval for interval, _ in scheduled)
+    # Memo key is sound: segments tile maximal constant-active intervals, and
+    # closure evaluation is a pure set function of (program, active facts).
+    # Reused derivations are re-segmented to the new interval (entry carries
+    # `segment`), so equal active sets share fact/rule/premise content only.
     old_by_active: dict[frozenset, list[TemporalDerivation]] = {}
     for derivation in closure.derivations:
         sample = _sample(derivation.segment)

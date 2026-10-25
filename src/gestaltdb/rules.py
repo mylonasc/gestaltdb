@@ -12,7 +12,14 @@ from .versioning import TemporalVersionError, normalize_version_id
 
 
 class RuleError(TemporalVersionError):
-    """Base error for invalid rule catalogs and evaluations."""
+    """Base error for invalid rule catalogs and evaluations.
+
+    Sibling of :class:`gestaltdb.reasoning.model.ReasoningError` under
+    :class:`TemporalVersionError` (both are ``ValueError``). Callers that
+    need to catch every bounded-evaluation failure must catch
+    ``(ReasoningError, TemporalVersionError)`` or ``ValueError``;
+    ``except ReasoningError`` alone misses rule/modal bounds.
+    """
 
 
 class RuleEvaluationLimitError(RuleError):
