@@ -82,6 +82,7 @@ from .versioning import (
 from ._graph import adjacency as _adjacency
 from ._graph import index_maintenance as _index_maintenance
 from ._graph import edge_records as _edge_records
+from ._graph import node_records as _node_records
 from ._graph import index_lookup as _index_lookup
 from ._graph import temporal_keys as _temporal_keys
 from ._graph.temporal_keys import (
@@ -714,12 +715,7 @@ class GraphDB:
         if self._implicit_transaction_required():
             with self.transaction() as tx:
                 return tx.put_node(node)
-        old_node = self.get_node(node.get_id_bytes)
-        if old_node is not None:
-            self._delete_node_indexes(old_node)
-        value = self.entity_serializer.serialize(node, 'Node')
-        self.store.put_node(node.get_id_bytes, value)
-        self._put_node_indexes(node)
+        _node_records.put_node(self.store, self.entity_serializer, self.indexed_node_properties, node)
 
     def get_node(self, node_id) -> Node:
         """Return a node by byte key.
@@ -733,13 +729,7 @@ class GraphDB:
         Examples:
             >>> graph_db.get_node(b"drug-1")  # doctest: +SKIP
         """
-        data = self.store.get_node(node_id)
-        if data:
-            # node_dict = self.serializer.deserialize(data)
-            # return Node.from_dict(node_dict)
-            return self.entity_serializer.deserialize(data,'Node')
-        else:
-            return None
+        return _node_records.get_node(self.store, self.entity_serializer, node_id)
 
     def delete_node(self, node_id):
         """Delete a node by byte key.
@@ -753,23 +743,7 @@ class GraphDB:
         if self._implicit_transaction_required():
             with self.transaction() as tx:
                 return tx.delete_node(node_id)
-        node_id = self.node_key_to_bytes(node_id)
-        incident_edge_ids = []
-        for edge_id in self.store.get_edge_keys_generator():
-            edge = self.get_edge(edge_id)
-            if edge is None:
-                continue
-            if self.node_key_to_bytes(edge.source) == node_id or self.node_key_to_bytes(edge.target) == node_id:
-                incident_edge_ids.append(edge_id)
-
-        for edge_id in incident_edge_ids:
-            self.delete_edge(edge_id)
-
-        old_node = self.get_node(node_id)
-        if old_node is not None:
-            self._delete_node_indexes(old_node)
-        self.store.delete_adjacency(node_id)
-        self.store.delete_node(node_id)
+        _node_records.delete_node(self.store, self.entity_serializer, self.serializer, self.indexed_node_properties, self.indexed_edge_properties, self._typed_adjacency_count_cache, node_id)
 
     def _put_node_indexes(self, node: Node):
         """Maintain label and configured property indexes for a node."""
@@ -2554,16 +2528,7 @@ class GraphDB:
         Use store.get_nodes_bulk(...) and deserialize each one.
         Return a list of Node (in the same order as node_ids, or possibly just all found).
         """
-        results = []
-        raw_dict = self.store.get_nodes_bulk(node_ids)  # dict[node_id, bytes]
-        for node_id in node_ids:
-            raw_data = raw_dict.get(node_id)
-            if raw_data is not None:
-                node_dict = self.serializer.deserialize(raw_data)
-                results.append(Node.from_dict(node_dict))
-            else:
-                results.append(None)  # or skip it
-        return results
+        return _node_records.get_nodes(self.store, self.serializer, node_ids)
     def get_node_keys_generator(self, num_nodes = None, key_offset = None):
         """Yield node keys from the backing store.
 
@@ -2577,7 +2542,7 @@ class GraphDB:
         Examples:
             >>> list(graph_db.get_node_keys_generator(num_nodes=10))  # doctest: +SKIP
         """
-        return self.store.get_node_keys_generator(num_nodes, key_offset)
+        return _node_records.get_node_keys_generator(self.store, num_nodes, key_offset)
 
     # -----------------------
     # Adjacency Management

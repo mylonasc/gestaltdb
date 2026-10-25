@@ -2,6 +2,7 @@
 
 from . import adjacency
 from . import edge_records
+from . import node_records
 from . import index_lookup
 from . import index_maintenance
 from . import registry
@@ -41,6 +42,7 @@ __all__ = [
     "index_maintenance",
     "key_to_string",
     "node_key_to_bytes",
+    "node_records",
     "registry",
     "temporal_keys",
 ]
