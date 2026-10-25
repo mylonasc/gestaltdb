@@ -91,6 +91,7 @@ from ._graph.entities import (
     bytes_to_datetime,
     datetime_to_bytes,
 )
+from ._graph.scopes import configure_snapshot_child, configure_transaction_child
 
 
 
@@ -1776,14 +1777,7 @@ class GraphDB:
                 )
             snapshot_graph = copy.copy(self)
             snapshot_graph.store = snapshot_store
-            snapshot_graph.indexed_node_properties = set(
-                snapshot_graph._load_property_index_metadata(_NODE_PROPERTY_INDEXES_METADATA_KEY)
-            )
-            snapshot_graph.indexed_edge_properties = set(
-                snapshot_graph._load_property_index_metadata(_EDGE_PROPERTY_INDEXES_METADATA_KEY)
-            )
-            snapshot_graph.node_constraints = snapshot_graph._load_node_constraint_metadata()
-            snapshot_graph._typed_adjacency_count_cache = {}
+            configure_snapshot_child(self, snapshot_graph)
             yield CurrentGraphReadView(snapshot_graph, provenance)
 
     @contextmanager
@@ -6709,16 +6703,7 @@ class GraphDB:
             tx_store = self.store.transaction(**options)
             try:
                 tx_graph = GraphDB(tx_store, self.serializer)
-                tx_graph.indexed_node_properties = set(self.indexed_node_properties)
-                tx_graph.indexed_edge_properties = set(self.indexed_edge_properties)
-                tx_graph._store_path = self._store_path
-                tx_graph._backend_name = self._backend_name
-                tx_graph._serializer_name = self._serializer_name
-                tx_graph._manifest = self._manifest
-                tx_graph._database_id = self._database_id
-                tx_graph._temporal_write_lock = self._temporal_write_lock
-                tx_graph._temporal_transaction_bound = True
-                tx_graph._temporal_clock = self._temporal_clock
+                configure_transaction_child(self, tx_graph)
                 yield tx_graph
             except Exception:
                 tx_store.rollback()

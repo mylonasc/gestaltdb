@@ -70,6 +70,19 @@ def test_transaction_rollback_does_not_publish_tx_writes(tmp_path):
         graph.close()
 
 
+def test_transaction_index_config_is_copied_not_shared(tmp_path):
+    graph = _lmdb_graph(tmp_path)
+    try:
+        graph.create_node_property_index("kind")
+        with graph.transaction() as tx:
+            assert tx.indexed_node_properties == graph.indexed_node_properties
+            assert tx.indexed_node_properties is not graph.indexed_node_properties
+            tx.indexed_node_properties.add("injected")
+        assert "injected" not in graph.indexed_node_properties
+    finally:
+        graph.close()
+
+
 def test_snapshot_binds_snapshot_store_and_isolates_caches(tmp_path):
     graph = _lmdb_graph(tmp_path)
     try:

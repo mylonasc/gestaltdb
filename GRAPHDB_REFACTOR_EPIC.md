@@ -236,3 +236,10 @@ versions, rule catalog, commit path. They do not receive unrestricted
   cache isolation. Gates: Ruff, size ratchet, 136 backend tests
   (transactions/snapshots/interfaces/scopes), 67 workflow/agent/policy
   tests, docs drift + Sphinx `-W` green; API index regenerated.
+- 2026-10-25 (slice 2, landed): Phase 2 scope binding centralized in
+  `src/gestaltdb/_graph/scopes.py` (74 lines). `transaction()` and
+  `current_read_view()` delegate shared-vs-store-bound field binding to
+  `configure_transaction_child` / `configure_snapshot_child`; inline
+  copies removed. `graphdb.py` 6737 → 6722 lines, budget lowered in same
+  change. Added index-config copy-isolation regression. Same gates green
+  (Ruff, size ratchet, 164 backend/policy tests, docs drift, Sphinx -W).

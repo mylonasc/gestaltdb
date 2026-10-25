@@ -11,6 +11,7 @@ from .entities import (
     bytes_to_datetime,
     datetime_to_bytes,
 )
+from .scopes import configure_snapshot_child, configure_transaction_child
 
 __all__ = [
     "Edge",
@@ -21,5 +22,7 @@ __all__ = [
     "_property_value_to_index_bytes",
     "_property_value_to_range_index_bytes",
     "bytes_to_datetime",
+    "configure_snapshot_child",
+    "configure_transaction_child",
     "datetime_to_bytes",
 ]
