@@ -2,6 +2,7 @@
 
 import json
 import sys
+import subprocess
 
 import pytest
 
@@ -90,10 +91,72 @@ def test_limit_is_diagnostic_not_partial_success(tmp_path, monkeypatch):
     assert "answers" not in result and "intentional" in result["reason"]
 
 
+def test_real_polars_budget_and_native_accounting(tmp_path):
+    pytest.importorskip("lmdb")
+    pytest.importorskip("polars")
+    pytest.importorskip("pyarrow")
+    path = tmp_path / "db"
+    manifest = fixture(path, 12, "sparse", "lmdb")
+    (tmp_path / "fixture.json").write_text(json.dumps(manifest))
+    reference = worker(path, 12, "sparse", "indexed-python", "first")
+    default = worker(path, 12, "sparse", "polars-prototype", "first")
+    explicit = worker(path, 12, "sparse", "polars-prototype", "warm", polars_max_intermediate_rows=1000)
+    assert reference["closure_digest"] == default["closure_digest"] == explicit["closure_digest"]
+    assert reference["evidence_digest"] == explicit["evidence_digest"] == manifest["evidence_digest"]
+    assert reference["polars_max_intermediate_rows"] is None
+    assert default["polars_max_intermediate_rows"] == 100_000
+    assert explicit["polars_max_intermediate_rows"] == explicit["metrics"]["polars_max_intermediate_rows"] == 1000
+    assert 0 < explicit["metrics"]["polars_peak_intermediate_rows"] <= 1000
+    assert explicit["metrics"]["polars_candidate_rows"] > 0
+    bounded = worker(path, 12, "sparse", "polars-prototype", "first", polars_max_intermediate_rows=1)
+    assert bounded["status"] == "bounded" and bounded["no_result"]
+    assert bounded["polars_max_intermediate_rows"] == 1 and "closure_digest" not in bounded
+
+
+@pytest.mark.parametrize("value,method,proofs", [(0, "polars-prototype", False), (True, "polars-prototype", False),
+    (1.5, "polars-prototype", False), (1, "indexed-python", False), (1, "polars-prototype", True)])
+def test_invalid_worker_budget_rejected_before_database_open(value, method, proofs):
+    with pytest.raises(ValueError, match="Polars closure"):
+        worker("missing", 12, "sparse", method, "first", proofs, value)
+
+
+@pytest.mark.parametrize("options", [["--polars-max-intermediate-rows", "0"],
+    ["--methods", "indexed-python", "--polars-max-intermediate-rows", "1"],
+    ["--worker", "load", "--polars-max-intermediate-rows", "1"],
+    ["--methods", "indexed-python", "--proofs", "--polars-max-intermediate-rows", "1"]])
+def test_invalid_cli_budget_rejected_before_workers(monkeypatch, options):
+    import benchmarks.reasoning_frontier_pipeline as benchmark
+    monkeypatch.setattr(sys, "argv", ["benchmark", *options])
+    def forbidden(*args, **kwargs):
+        pytest.fail("launched worker before budget validation")
+    monkeypatch.setattr(benchmark, "call_worker", forbidden)
+    with pytest.raises(SystemExit) as exc:
+        benchmark.main()
+    assert exc.value.code == 2
+
+
+def test_fresh_worker_report_forwards_explicit_budget_only_to_polars(tmp_path):
+    pytest.importorskip("lmdb")
+    pytest.importorskip("polars")
+    pytest.importorskip("pyarrow")
+    output = tmp_path / "report.json"
+    run = subprocess.run([sys.executable, "-m", "benchmarks.reasoning_frontier_pipeline",
+        "--rows", "12", "--shape", "sparse", "--backend", "lmdb", "--methods", "indexed-python", "polars-prototype",
+        "--polars-max-intermediate-rows", "1000", "--caches", "first", "--repeats", "1", "--output", str(output)],
+        capture_output=True, text=True, timeout=30)
+    assert run.returncode == 0, run.stderr
+    report = json.loads(output.read_text())
+    assert report["schema_version"] == 2 and report["configuration"]["polars_max_intermediate_rows"] == 1000
+    assert report["complete"] and report["all_parity_verified"]
+    indexed, polars = report["samples"]
+    assert indexed["method"] == "indexed-python" and indexed["polars_max_intermediate_rows"] is None
+    assert polars["polars_max_intermediate_rows"] == 1000 and polars["metrics"]["polars_max_intermediate_rows"] == 1000
+    assert indexed["closure_digest"] == polars["closure_digest"]
+
+
 def test_committed_measurements_distinguish_parity_from_bounded_outcomes():
     from collections import Counter
     from pathlib import Path
-    import hashlib
     root = Path(__file__).parents[1]
     paths = list((root / "benchmarks/results").glob("reasoning-re342-*.json"))
     counts = Counter()
@@ -106,8 +169,9 @@ def test_committed_measurements_distinguish_parity_from_bounded_outcomes():
         final_reports += 1
         assert report["complete"] and not report["dirty"]
         assert report["revision"] == "a1cfceb9cbac2d6b8140bf03f55bcc19fd8354e7"
-        assert report["harness_sha256"] == hashlib.sha256(
-            (root / "benchmarks/reasoning_frontier_pipeline.py").read_bytes()).hexdigest()
+        # Historical reports bind the measured harness, not later additive CLI
+        # revisions. Never rewrite their hashes/results to match current code.
+        assert report["harness_sha256"] == "7720bda89839f83f3c13f94faee26508d84122791a6d5f2eefa0e5eb68f4eb12"
         config = report["configuration"]
         assert len(report["samples"]) == config["repeats"] * len(config["methods"]) * len(config["caches"])
         assert report["all_parity_verified"] == all(s["status"] == "ok" for s in report["samples"])

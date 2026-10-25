@@ -157,7 +157,12 @@ def native_evidence(graph, view, method, rows):
     return evidence, scanned
 
 
-def worker(path, rows, shape, method, cache, proofs=False):
+def worker(path, rows, shape, method, cache, proofs=False, polars_max_intermediate_rows=None):
+    if polars_max_intermediate_rows is not None:
+        if (isinstance(polars_max_intermediate_rows, bool) or not isinstance(polars_max_intermediate_rows, int)
+                or polars_max_intermediate_rows < 1 or method != "polars-prototype" or proofs):
+            raise ValueError("positive polars_max_intermediate_rows requires a Polars closure worker")
+    effective_cap = (100_000 if polars_max_intermediate_rows is None else polars_max_intermediate_rows) if method == "polars-prototype" else None
     started = time.perf_counter()
     from gestaltdb.graphdb import GraphDB
     from gestaltdb.reasoning import Atom, Fact, Program, Rule, Variable, ReasoningLimits
@@ -222,10 +227,13 @@ def worker(path, rows, shape, method, cache, proofs=False):
                 begin = time.perf_counter()
                 preferred = method if not method.startswith("native-") else "indexed-python"
                 result = execute_closure(program, evidence, plan=plan, context=context, limits=limits,
+                                         polars_max_intermediate_rows=polars_max_intermediate_rows,
                                          collect_proofs=proofs, executor_request=ExecutorRequest(
                                              preferred=preferred, mode="proofs" if proofs else "closure",
                                              polars_available=method == "polars-prototype"))
                 metrics["evaluate_convert_s"] = time.perf_counter() - begin
+                if result.polars_run is not None:
+                    metrics.update({"polars_" + key: value for key, value in result.polars_run.metrics.items()})
                 answers = result.result.match(subject=entity(0), predicate="reach")
                 known, work, requests = len(result.result.facts), None, None
                 if proofs and result.result.proofs is None:
@@ -264,6 +272,7 @@ def worker(path, rows, shape, method, cache, proofs=False):
         # Conversion is included in evaluate_convert_s, never presented as free.
         return {"status": "ok", "method": method, "mode": "proofs" if proofs else "closure",
                 "rows": rows, "shape": shape, "cache": cache,
+                "polars_max_intermediate_rows": effective_cap,
                 "cache_boundary": "first extraction on reopened handle" if cache == "first" else "same-method primed extraction; OS cache uncontrolled",
                 "metrics": metrics, "answers": len(answers), "answer_digest": digest((f.subject, f.predicate, f.object) for f in answers),
                 "evidence_rows": len(evidence), "evidence_digest": evidence_hash, "scanned_claims_or_raw_rows": scanned,
@@ -279,6 +288,7 @@ def worker(path, rows, shape, method, cache, proofs=False):
     except ReasoningLimitError as exc:
         return {"status": "bounded", "method": method, "rows": rows, "shape": shape,
                 "cache": cache, "mode": "proofs" if proofs else "closure", "reason": str(exc),
+                "polars_max_intermediate_rows": effective_cap,
                 "no_result": True, "metrics": {"elapsed_to_limit_s": time.perf_counter() - started}}
     finally:
         graph.close()
@@ -313,6 +323,8 @@ def main():
     parser.add_argument("--timeout", type=float, default=600)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--proofs", action="store_true")
+    parser.add_argument("--polars-max-intermediate-rows", type=int,
+                        help="explicit physical row budget for Polars closure workers only; default unchanged")
     parser.add_argument("--fixture", type=Path)
     parser.add_argument("--worker", choices=("load", *METHODS))
     args = parser.parse_args()
@@ -320,23 +332,30 @@ def main():
         parser.error("positive rows <=1000000, repeats and timeout required")
     if args.proofs and any(m not in ("indexed-python", "indexed-scc") for m in args.methods):
         parser.error("proofs require only indexed methods")
+    if args.polars_max_intermediate_rows is not None:
+        if args.polars_max_intermediate_rows < 1 or args.proofs:
+            parser.error("positive Polars closure intermediate budget required")
+        if args.worker not in (None, "polars-prototype") or (args.worker is None and "polars-prototype" not in args.methods):
+            parser.error("intermediate budget requires a Polars method/worker")
     if any(m.startswith("native-") for m in args.methods) and args.backend != "pyrex":
         parser.error("native methods require plain PyRex")
     if args.worker:
         result = fixture(args.fixture, args.rows, args.shape, args.backend) if args.worker == "load" else worker(
-            args.fixture, args.rows, args.shape, args.worker, args.caches[0], args.proofs)
+            args.fixture, args.rows, args.shape, args.worker, args.caches[0], args.proofs,
+            args.polars_max_intermediate_rows)
         print(json.dumps(result))
         return
     os.environ.update(POLARS_MAX_THREADS="1", OMP_NUM_THREADS="1")
     root = Path(__file__).resolve().parents[1]
-    report = {"schema_version": 1, "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),
+    report = {"schema_version": 2, "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),
               "dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=root, text=True).strip()),
               "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               "python": sys.version, "platform": platform.platform(), "dependencies": {},
               "cpu_count": os.cpu_count(),
               "configuration": {"rows": args.rows, "shape": args.shape, "backend": args.backend,
                                 "methods": args.methods, "caches": args.caches, "repeats": args.repeats,
-                                "timeout_s": args.timeout, "proofs": args.proofs},
+                                 "timeout_s": args.timeout, "proofs": args.proofs,
+                                 "polars_max_intermediate_rows": args.polars_max_intermediate_rows},
               "threads": {k: os.environ[k] for k in ("POLARS_MAX_THREADS", "OMP_NUM_THREADS")},
               "os_cache": "uncontrolled; first is not OS-cold", "samples": [], "complete": False,
               "decision": "no automatic executor/native adoption; workload-specific evidence only"}
@@ -363,6 +382,8 @@ def main():
             for cache in args.caches:
                 for method in args.methods:
                     command = [*common, "--worker", method, "--caches", cache]
+                    if method == "polars-prototype" and args.polars_max_intermediate_rows is not None:
+                        command += ["--polars-max-intermediate-rows", str(args.polars_max_intermediate_rows)]
                     if args.proofs:
                         command += ["--proofs", "--methods", *args.methods]
                     row = call_worker(command, args.timeout)

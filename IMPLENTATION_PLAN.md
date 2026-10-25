@@ -34,6 +34,23 @@ checks are not universal identity admission or concurrent atomic publication.
 
 ## Ordered implementation
 
+### Explicit-budget pipeline evidence continuation (#255)
+
+Dedicated `feature/re-255-pipeline-evidence` / `re-255-pipeline-evidence`, based
+on `1860e41` (#364). Post-merge Ontology `40166592538` and readiness
+`40166592546` passed. Ownership/open-PR audit found no competing work.
+The existing real-pipeline harness now forwards an explicit physical Polars
+intermediate cap only to eligible workers, records requested/effective bounds
+and separately prefixed native metrics, and emits schema version 2. Historical
+#342 reports remain immutable and retain their measured harness hash.
+
+Validation before measurement: 22 focused harness tests passed; full optional
+suite **3,262 passed / 2 skipped** (56.24s). Collect reports outside the checkout
+from a clean committed tree: 100K selective/sparse, LMDB/PyRex, indexed Python
+versus explicit Polars, first/warm, three repeats, serial workers, 1,000,000-row
+intermediate cap. Require exact evidence and analytical complete-closure parity;
+retain bounded/error/timeout diagnostics. No default/adoption/source-policy change.
+
 ### Broader roadmap continuation (2026-10-25)
 
 Child #350 of #249 delivers the current-property-graph demand path on
