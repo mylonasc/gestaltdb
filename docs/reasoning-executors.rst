@@ -143,7 +143,50 @@ closure-only conversion. It does not return proofs or all-support provenance.
 Actual pinned frontier/reference/prepared/Polars/native pipeline evidence and
 the no-automatic-adoption decision are in :doc:`reasoning-frontier-benchmarks`.
 In particular, installed Polars availability does not imply that an application's
-intermediates fit the dispatcher's fixed prototype cap.
+intermediates fit the dispatcher's default prototype cap.
+
+Explicit prototype physical budget
+----------------------------------------
+
+``execute_closure(..., polars_max_intermediate_rows=N)`` and
+``execute_current_graph(..., polars_max_intermediate_rows=N)`` expose the existing
+prototype's physical intermediate-row bound. Omission retains **100,000**;
+there is no automatic increase based on input size. A supplied value must be a
+positive integer (not a Boolean), and is rejected before input/projection reads
+unless the request explicitly selects ``polars-prototype``. Indexed execution
+never ignores the option or switches engines to honor it.
+
+.. code-block:: python
+
+   from gestaltdb.reasoning import Atom, Fact, Program, Rule, Variable, ReasoningLimits
+   from gestaltdb.reasoning.executors import ExecutorRequest
+   from gestaltdb.reasoning.protocols import InputContext
+   from gestaltdb.reasoning.adapters.execution import execute_closure
+
+   x, y = Variable("x"), Variable("y")
+   program = Program([Rule("r", [Atom(x, "edge", y)], Atom(x, "reach", y))])
+   outcome = execute_closure(program, [Fact("a", "edge", "b")],
+       executor_request=ExecutorRequest(preferred="polars-prototype", polars_available=True),
+       context=InputContext("example", "world", "revision", "policy", "mapping"),
+       limits=ReasoningLimits(), polars_max_intermediate_rows=200_000)
+   assert Fact("a", "reach", "b") in outcome.result.facts
+   assert outcome.polars_run.metrics["max_intermediate_rows"] == 200_000
+
+The physical bound is not part of logical generation/program/catalog/dictionary
+identity. All source/context/executor admission checks and the cumulative
+``ReasoningLimits.max_candidate_rows`` and ``max_facts`` checks still apply.
+Raising one budget does not disable another, add spill, interrupt native kernels,
+authenticate caller facts, or guarantee completion/RSS. It only permits the
+caller to make the existing closure-only experiment with an explicit bound.
+
+``ExecutionOutcome.polars_run`` retains the native ``PolarsRun`` for successful
+Polars invocations (``None`` for indexed engines). ``StageTelemetry`` remains
+the same common schema; native metrics separately report the chosen cap,
+observed conservative peak rows, cumulative output-row accounting and timings.
+Those candidate rows are not indexed Python attempted-unification counts.
+There is no successful partial outcome after cancellation or a bound failure.
+The over-100K regression verifies full reference parity, not a new performance
+ranking. Measured adoption decisions remain unchanged.
 
 Installation isolation
 ----------------------------------------

@@ -147,6 +147,17 @@ def test_explicit_dispatcher_budget_admits_over_100k_rows_with_complete_referenc
     assert result.polars_run.metrics["max_intermediate_rows"] == 220_000
 
 
+def test_executor_documentation_examples():
+    from pathlib import Path
+    import re
+    pytest.importorskip("polars")
+    text = (Path(__file__).resolve().parents[1] / "docs/reasoning-executors.rst").read_text()
+    blocks = re.findall(r"\.\. code-block:: python\n\n((?:   .*\n|\n)+)", text)
+    assert len(blocks) == 2
+    for block in blocks:
+        exec("\n".join(line[3:] if line.startswith("   ") else line for line in block.splitlines()), {})
+
+
 def test_polars_unavailable_or_missing_context_fails_closed():
     with pytest.raises(ReasoningError, match="polars_available"):
         execute_closure(program(), facts(),

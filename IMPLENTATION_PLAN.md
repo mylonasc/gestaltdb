@@ -250,6 +250,31 @@ optional backends/serializers/RDF/Polars/docs/bloom and ontology requirements;
 docs drift, 8/8 examples, Sphinx `-W`, roadmap and whitespace checks passed.
 All 13 referenced acceptance-test paths were checked to exist. Runtime unchanged.
 
+### Explicit application pipeline intermediate budget (#255)
+
+Branch/worktree `feature/re-255-execution-budget` / `re-255-execution-budget`,
+from integration `a57f166` (#362 acceptance reconciliation exact-head green and
+merged; post-merge watcher active). Refreshed issue/PR ownership before starting.
+
+#362 post-merge gates passed: Ontology `40146769957` / readiness `40146769959`;
+#248 closed against the explicit original acceptance map, not child count.
+
+Reproduced the measured adoption gap: the prototype's existing configurable
+intermediate-row bound was silently fixed at 100,000 by the real dispatcher.
+Expose explicit `polars_max_intermediate_rows` through both dispatcher and
+authenticated current-graph consumer, preserving defaults. Reject malformed or
+irrelevant options before input/projection; never auto-select or recode. Keep
+physical budget outside shared logical identity. Retain native `PolarsRun` in
+successful outcomes with chosen cap/observed counters, separate from unchanged
+common stage telemetry and indexed candidate-accounting units.
+
+Initial focused validation: 101 passed, including >100K complete reference parity,
+same logical generation across physical budgets, independent cumulative/fact
+limits, and invalid/irrelevant option rejection before reads. No performance or
+hard RSS claim; original benchmark failures stay recorded. Broader typed/common
+pipeline integration and #194 native historical/concurrent-source admission
+remain open, not presumed delivered by configuring one physical bound.
+
 ### Prior ordered follow-through
 
 Native GitHub links established: #338 (identity), #339 (input bounds), #340

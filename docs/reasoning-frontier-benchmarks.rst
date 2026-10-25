@@ -87,7 +87,7 @@ Prepared indexed execution is effectively tied with reference execution on
 these cases. On the 1024-input denser closure, reference medians were
 0.409 / 0.362 seconds, Polars 0.497 / 0.414, and frontier 2.922 / 2.888.
 Polars conversion is included in the evaluation stage, not independently
-isolated or free. At 100K the real dispatcher Polars path raises
+isolated or free. In this recorded measurement cut, at 100K the real dispatcher Polars path raises
 ``max_intermediate_rows exceeded before materialization`` under its fixed
 default intermediate cap; no production limit was raised to manufacture parity.
 This limits application admission despite a declared installed runtime.
@@ -116,9 +116,12 @@ material native pipeline win. No universal native-speedup claim follows.
 The next performance investigation should safely amortize repeated source
 authentication within a pinned extraction session, with corruption, rebinding,
 concurrent-write and cancellation parity gates. Do not simply skip verification
-or trust an opaque cached digest. Explicit intermediate-cap ownership/admission
-and larger successful Polars pipeline measurements are another follow-up;
-raising the cap alone is not executor admission or a memory guarantee.
+or trust an opaque cached digest. Explicit intermediate-cap ownership is now
+available through the dispatcher/current-graph consumer (see
+:doc:`reasoning-executors`); the default remains unchanged, and these original
+bounded failures are retained. Larger successful Polars pipeline measurements
+remain a follow-up: raising the cap alone is not executor admission, a memory
+guarantee or new performance evidence.
 Broader #194/#249/#255 acceptance remains separate from this measurement cut.
 
 Reproduction

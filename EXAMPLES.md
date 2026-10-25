@@ -29,6 +29,12 @@ Use exact caller generation/state pins and explicit projection selection;
 pass the admitted snapshot directly to `SamplerEngine` rather than reloading
 through the raw, source-unverified loader.
 
+The explicit dispatcher/current-graph execution paths accept
+`polars_max_intermediate_rows` only with an explicit Polars request. See
+[`docs/reasoning-executors.rst`](docs/reasoning-executors.rst) for a tested example;
+the default cap and indexed reference remain unchanged, and physical row
+budgets are not logical identity or hard memory bounds.
+
 These examples are designed for developers and agents who need working patterns quickly. They use explicit imports from submodules because the package root intentionally exports only selected helpers.
 
 **Filtering and sampling workflows:** [Indexed property lookups](#index-and-lookup-properties) · [Live typed sampling](#traverse-and-sample-typed-relationships) · [Filtered, reusable sampler snapshots](#build-and-use-a-sampler-snapshot). The [sampling guide](https://mylonasc.github.io/gestaltdb/typed-sampling.html) covers all policies; the [filtering guide](https://mylonasc.github.io/gestaltdb/property-filtering.html) explains seed selection versus filtering every sampled hop.
