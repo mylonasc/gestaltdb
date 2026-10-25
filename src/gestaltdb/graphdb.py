@@ -78,7 +78,6 @@ from .versioning import (
 from ._graph import adjacency as _adjacency
 from ._graph import index_maintenance as _index_maintenance
 from ._graph import edge_records as _edge_records
-from ._graph import node_records as _node_records
 from ._graph import ingest_edges as _ingest_edges
 from ._graph import ingest_nodes as _ingest_nodes
 from ._graph import ingest_support as _ingest_support
@@ -149,8 +148,6 @@ from ._graph.entities import (
 from ._graph.scopes import configure_snapshot_child, configure_transaction_child
 from .concurrency import DEFAULT_LOCK_MANAGER, ReentrantFileLock as _TemporalWriterLock
 
-
-
 _NODE_PROPERTY_INDEXES_METADATA_KEY = b"schema:indexes:node_properties"
 _EDGE_PROPERTY_INDEXES_METADATA_KEY = b"schema:indexes:edge_properties"
 _NODE_CONSTRAINTS_METADATA_KEY = b"schema:constraints:nodes"
@@ -159,6 +156,8 @@ _MANIFEST_METADATA_KEY = b"schema:manifest"
 _DATABASE_ID_METADATA_KEY = b"schema:database_identity:v1"
 _INDEX_REBUILD_BATCH_SIZE = 100_000
 _TEMPORAL_WRITER_LOCK_FILENAME = ".gestaltdb_temporal_writer.lock"
+
+
 def _temporal_writer_lock(path: Path) -> _TemporalWriterLock:
     return DEFAULT_LOCK_MANAGER.for_path(path / _TEMPORAL_WRITER_LOCK_FILENAME)
 
@@ -502,6 +501,25 @@ class GraphDB:
     # -----------
     # Node Methods
     # -----------
+    @property
+    def nodes(self):
+        """Current-node repository; see the architecture guide for standalone use.
+
+        Borrows this handle's lifetime and store scope. Temporal records and
+        schema changes remain separate capabilities.
+        """
+        from .current import bind_nodes
+
+        self._node_repository = bind_nodes(getattr(self, "_node_repository", None),
+            self.store, self.serializer, entity_serializer=self.entity_serializer,
+            indexed_node_properties=self.indexed_node_properties,
+            indexed_edge_properties=self.indexed_edge_properties,
+            adjacency_counts=self._typed_adjacency_count_cache,
+            transaction_bound=self._temporal_transaction_bound,
+            write_guard=lambda: self._temporal_writer_guard(), lock_manager=self._lock_manager,
+        )
+        return self._node_repository
+
     def put_node(self, node: Node):
         """Store a node.
 
@@ -511,10 +529,7 @@ class GraphDB:
         Examples:
             >>> graph_db.put_node(Node(node_id="drug-1"))  # doctest: +SKIP
         """
-        if self._implicit_transaction_required():
-            with self.transaction() as tx:
-                return tx.put_node(node)
-        _node_records.put_node(self.store, self.entity_serializer, self.indexed_node_properties, node)
+        return self.nodes.put(node)
 
     def get_node(self, node_id) -> Node:
         """Return a node by byte key.
@@ -528,7 +543,7 @@ class GraphDB:
         Examples:
             >>> graph_db.get_node(b"drug-1")  # doctest: +SKIP
         """
-        return _node_records.get_node(self.store, self.entity_serializer, node_id)
+        return self.nodes.get(node_id)
 
     def delete_node(self, node_id):
         """Delete a node by byte key.
@@ -539,10 +554,7 @@ class GraphDB:
         Examples:
             >>> graph_db.delete_node(b"drug-1")  # doctest: +SKIP
         """
-        if self._implicit_transaction_required():
-            with self.transaction() as tx:
-                return tx.delete_node(node_id)
-        _node_records.delete_node(self.store, self.entity_serializer, self.serializer, self.indexed_node_properties, self.indexed_edge_properties, self._typed_adjacency_count_cache, node_id)
+        return self.nodes.delete(node_id)
 
     def _put_node_indexes(self, node: Node):
         """Maintain label and configured property indexes for a node."""
@@ -1444,15 +1456,7 @@ class GraphDB:
         Fetch existing node (if any). If none found, treat as new or handle gracefully.
         merge_func(old_node_dict, new_data_dict) -> merged_properties (dict)
         """
-        old_node = self.get_node(node_id)
-        if old_node is None:
-            # Decide if we create a new node or return None
-            old_node = Node(node_id=node_id, properties={})
-        # merged_properties is a dict that results from the user’s custom logic
-        merged_props = merge_func(old_node.properties, new_data)
-        old_node.properties = merged_props
-        self.put_node(old_node)
-        return old_node
+        return self.nodes.update(node_id, new_data, merge_func)
 
     def update_edge(self, edge_id: str, new_data: dict, merge_func) -> Edge:
         """
@@ -1480,11 +1484,7 @@ class GraphDB:
         Examples:
             >>> graph_db.put_nodes([Node(node_id="drug-1", labels=["Drug"])])  # doctest: +SKIP
         """
-        if self._implicit_transaction_required():
-            with self.transaction() as tx:
-                return tx.put_nodes(nodes)
-        _node_records.put_nodes(
-            self.store, self.entity_serializer, self.indexed_node_properties, nodes)
+        return self.nodes.put_many(nodes)
 
     def ingest_polars(
         self,
@@ -1856,7 +1856,7 @@ class GraphDB:
         Use store.get_nodes_bulk(...) and deserialize each one.
         Return a list of Node (in the same order as node_ids, or possibly just all found).
         """
-        return _node_records.get_nodes(self.store, self.serializer, node_ids)
+        return self.nodes.get_many(node_ids)
     def get_node_keys_generator(self, num_nodes = None, key_offset = None):
         """Yield node keys from the backing store.
 
@@ -1870,7 +1870,7 @@ class GraphDB:
         Examples:
             >>> list(graph_db.get_node_keys_generator(num_nodes=10))  # doctest: +SKIP
         """
-        return _node_records.get_node_keys_generator(self.store, num_nodes, key_offset)
+        return self.nodes.keys(num_nodes, key_offset)
 
     # -----------------------
     # Adjacency Management

@@ -64,6 +64,26 @@ unrelated paths and actual process exclusion. Focused concurrency/durability/
 scope/interface suites: 213 passed. Windows branches retain the existing
 platform algorithm; validation so far is on Linux, not a Windows claim.
 
+Stage B first vertical slice implemented: `gestaltdb.current.StorageSession`
+owns ordinary backend transaction binding/rollback and current-write config;
+`NodeRepository` owns node get/put/bulk/delete/update over it. The operations
+can run with backend+serializer alone. `graph.nodes` supplies the current scope,
+and the old node facade methods delegate without opening a child GraphDB.
+`CurrentGraphReadView` node consumers use a narrowed `NodeReader`, not the
+mutable facade or repository write methods. Node deletion still uses the
+current-edge record collaborator; index DDL and ingestion stay in Stage C.
+Thirteen new real-backend tests cover standalone construction, forbidden
+GraphDB redispatch, rollback/index parity, current-only cascades and snapshot
+read authority. Focused existing CRUD/transaction/snapshot/ingestion/Cypher
+suite: 348 passed before the final read-view consumer migration; final complete
+validation is recorded below when available.
+
+Stage B validation (2026-10-26): full optional suite 3,442 passed / 3 expected
+skips; a Cypher lazy-scan seam failure found mid-validation was fixed by
+keeping snapshot `view.get_node` on the copied facade method while the new
+narrowed `view.nodes` reader stays decoupled. Added an explicit seam test.
+Ruff, size gate, API-index drift, docs checks and Sphinx `-W` all green.
+
 ### Stage C — current edges, indexes and ingestion
 
 Migrate edge/index repositories to the same scope binding; replace duplicated

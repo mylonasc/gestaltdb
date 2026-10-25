@@ -73,3 +73,4 @@ def configure_snapshot_child(parent: GraphDB, child: GraphDB) -> None:
     )
     child.node_constraints = child._load_node_constraint_metadata()
     child._typed_adjacency_count_cache = {}
+    child._node_repository = None

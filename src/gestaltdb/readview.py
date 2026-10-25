@@ -358,7 +358,13 @@ class CurrentGraphReadView:
 
     def __init__(self, graph, provenance: CurrentReadProvenance | None):
         self._graph = graph
+        self._nodes = graph.nodes.reader
         self.provenance = provenance
+
+    @property
+    def nodes(self):
+        """Read-only node capabilities bound to this view's snapshot."""
+        return self._nodes
 
     @property
     def store(self):

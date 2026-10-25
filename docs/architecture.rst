@@ -243,6 +243,30 @@ reclaimed. Identity initialization, temporal writers and durable-session CAS
 use the same reentrant file-lock abstraction. Lock files themselves are never
 unlinked, and independent processes still coordinate through OS file locks.
 
+Current-node consumers can similarly accept ``graph.nodes`` rather than
+``GraphDB``. ``gestaltdb.current.NodeRepository`` uses a ``StorageSession``
+for codecs, index configuration, cache scope and ordinary backend transactions.
+It can be constructed over an existing store without GraphDB. Its ``reader``
+property narrows authority to ``NodeReader``; current read views use that reader
+on their snapshot store. These services borrow the store lifetime and do not
+create a snapshot, initialize temporal identity, expose schema DDL or own
+temporal publication. Unsupported backend transactions remain best-effort;
+``update`` keeps the legacy non-atomic read/merge boundary unless the session
+was already transaction-bound. For example::
+
+    from tempfile import TemporaryDirectory
+    from gestaltdb.current import NodeRepository, StorageSession
+    from gestaltdb.graphdb import GraphDB, Node
+
+    with TemporaryDirectory() as root:
+        graph = GraphDB.create(root + "/db", backend="lmdb")
+        try:
+            nodes = NodeRepository(StorageSession(graph.store, graph.serializer))
+            nodes.put(Node("alice", labels=["Person"]))
+            assert nodes.reader.get(b"alice").labels == ("Person",)
+        finally:
+            graph.close()
+
 The decomposition is useful, with four important boundaries:
 
 * ``GraphDB`` is the public integration facade: it owns handle lifecycle,

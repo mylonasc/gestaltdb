@@ -9,6 +9,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Component/application map and integration boundaries: `docs/architecture.rst`.
 - Core package: `src/gestaltdb/`
 - Public graph model and database: `src/gestaltdb/graphdb.py`
+- Current-node services: `src/gestaltdb/current.py` (`StorageSession`, `NodeRepository`, `NodeReader`, `graph.nodes`). Scope-bound ordinary transaction coordination; no temporal writes or schema DDL. File coordination: `src/gestaltdb/concurrency.py` (`LockManager`, reclaimable live lock identities).
 - Read-only temporal capability: `src/gestaltdb/history.py` (`graph.history` or `TemporalHistory.from_store`). Borrows store lifetime; no writes, identity initialization, index repair, source authentication or automatic pinning. `GraphReadView` uses it for historical queries.
 - Storage backends: `src/gestaltdb/kvstores.py`
 - Serializers: `src/gestaltdb/serializers.py`
