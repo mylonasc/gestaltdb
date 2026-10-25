@@ -16,6 +16,7 @@ APIs remain unchanged.
    from gestaltdb.reasoning.adapters.generation import catalog_for_ontology
    from gestaltdb.reasoning.adapters.graph import GraphMapping
    from gestaltdb.reasoning.adapters.graph_execution import bind_current_generation, execute_current_graph
+   from gestaltdb.reasoning.adapters.inferred_view import PathPattern, open_inferred_view
    from gestaltdb.reasoning.executors import ExecutorRequest
    from gestaltdb.reasoning.plans import PreparedProgram
    from gestaltdb.reasoning.relational import CompilationIdentity
@@ -39,6 +40,11 @@ APIs remain unchanged.
                assert Fact("a", "related", "b") in result.outcome.result.facts
                assert result.outcome.telemetry.admission_digest == binding.identity.digest
                result.binding.verify_view(view)
+               inferred = open_inferred_view(view, compiled, catalog, mapping=mapping,
+                                             limits=ReasoningLimits())
+               assert inferred.query_path(PathPattern(edge="related"))[0].target == "b"
+               assert inferred.with_mode("asserted-only").match(predicate="related") == ()
+               assert inferred.require_generation(inferred.generation) is None
            result.binding.verify_source(graph)
        finally:
            graph.close()
@@ -108,3 +114,18 @@ This completes one current-graph admission/execution consumer, not persistent
 cache migration, range/session/sampler admission, publication or general typed,
 negation/equality/aggregate execution. Those require their own source and
 semantic contracts; see :doc:`reasoning-generation-identity`.
+
+Opt-in reasoning-aware queries (#395)
+-------------------------------------
+
+``gestaltdb.reasoning.adapters.inferred_view`` answers triple matches and
+single-hop path patterns from one admitted generation — never through the
+Cypher planner, which stays asserted-only by default. ``open_inferred_view``
+runs the same authenticated admission above, then projects the asserted
+records in a second bounded pass; both passes enforce ``GraphSourceLimits``.
+``mode`` selects the fact set explicitly per view: ``asserted-only`` reads
+projected records, ``asserted-plus-inferred`` reads the closure (selected
+in the worked example above). Every answer carries the
+generation identity: ``require_generation`` rejects drifted re-use,
+``assert_current`` re-authenticates the snapshot, and the view holds fact
+tuples plus the binding — never a live graph handle, never a write.
