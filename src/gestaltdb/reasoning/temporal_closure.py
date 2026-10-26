@@ -223,6 +223,8 @@ def verify_closure(program: GenericProgram, closure: TemporalClosure, *,
         raise ReasoningError("closure segments drifted from base validity; rematerialize explicitly")
     rule_ids = {rule.rule_id for rule in program.rules}
     points = 0
+    # One sample per segment suffices: segments tile maximal constant-active
+    # intervals, so every point in a segment shares its active set and closure.
     for segment in closure.segments:
         check_cancelled(cancel)
         point = _sample(segment)
@@ -323,6 +325,10 @@ def update_range(program: GenericProgram, closure: TemporalClosure, new_base: It
                                   max_segments=max_segments, max_memberships=max_sweep_memberships,
                                   cancel=cancel)
     segments = tuple(interval for interval, _ in scheduled)
+    # Memo key is sound: segments tile maximal constant-active intervals, and
+    # closure evaluation is a pure set function of (program, active facts).
+    # Reused derivations are re-segmented to the new interval (entry carries
+    # `segment`), so equal active sets share fact/rule/premise content only.
     old_by_active: dict[frozenset, list[TemporalDerivation]] = {}
     for derivation in closure.derivations:
         sample = _sample(derivation.segment)
@@ -384,6 +390,25 @@ def evaluate_range(program: GenericProgram, facts: Iterable[TemporalFact], *,
     assertions), and segments tile exactly the change points
     ``change_segments`` would emit. Per-segment evaluation, support
     discovery and evidence identity are unchanged.
+
+    Examples:
+        Derive eligibility only during the premise's half-open validity::
+
+            >>> from gestaltdb.reasoning.model import ReasoningLimits, Variable
+            >>> from gestaltdb.reasoning.typed import GenericProgram, GenericRule, TypedAtom, TypedFact
+            >>> from gestaltdb.reasoning.intervals import Interval, IntervalSet
+            >>> from gestaltdb.reasoning.temporal_closure import TemporalFact, evaluate_range, verify_closure
+            >>> x = Variable("x")
+            >>> program = GenericProgram([GenericRule("r", [TypedAtom("member", [x])], [], TypedAtom("eligible", [x]))])
+            >>> base = [TemporalFact(TypedFact("member", ["alice"]), IntervalSet([Interval(0, 10)]))]
+            >>> closure = evaluate_range(program, base, limits=ReasoningLimits())
+            >>> assert TypedFact("eligible", ["alice"]) in closure.at(5)
+            >>> assert TypedFact("eligible", ["alice"]) not in closure.at(10)
+            >>> assert verify_closure(program, closure, limits=ReasoningLimits()).points_checked == 1
+
+    Times here are integer microseconds, not database commit IDs. Database-backed
+    extraction and publication require the separate range adapters; see the
+    reasoning-range-admission and reasoning-bound-range-publication guides.
     """
     if not isinstance(program, GenericProgram):
         raise ReasoningError("program must be a GenericProgram")

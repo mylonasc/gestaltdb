@@ -17,9 +17,9 @@ from gestaltdb.reasoning.model import ReasoningLimits
 def graph(tmp_path):
     pytest.importorskip("lmdb")
     graph = GraphDB.create(tmp_path / "db", backend="lmdb", serializer="json")
-    graph.assert_claim(subject="a", predicate="knows", object="b", agent="registry",
+    graph.epistemic.assert_claim(subject="a", predicate="knows", object="b", agent="registry",
                        polarity="positive", valid=(0, 100))
-    graph.assert_claim(subject="c", predicate="likes", object="d", agent="other",
+    graph.epistemic.assert_claim(subject="c", predicate="likes", object="d", agent="other",
                        polarity="positive", valid=(0, 100))
     try:
         yield graph
@@ -36,7 +36,7 @@ def test_each_logical_restriction_binds_a_distinct_context(graph):
     compiled = compile_ontology(Ontology("o", []))
     restrictions = [{}, {"predicates": []}, {"predicates": ["knows"]}, {"predicates": ["likes"]},
                     {"subject": "a"}, {"subject": "c"}, {"object": "b"}, {"object": "d"}]
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         contexts = []
         for restriction in restrictions:
             with source(view, ExtractionRequest(world="default", **restriction), compiled) as selected:
@@ -46,7 +46,7 @@ def test_each_logical_restriction_binds_a_distinct_context(graph):
 
 def test_physical_batch_settings_and_predicate_order_do_not_change_identity(graph):
     compiled = compile_ontology(Ontology("o", []))
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         contexts = []
         for predicates, batch_rows, max_rows in [(["knows", "likes"], 1, 10),
                                                    (["likes", "knows", "likes"], 100, 1000)]:
@@ -60,7 +60,7 @@ def test_physical_batch_settings_and_predicate_order_do_not_change_identity(grap
 def test_results_retain_and_validate_the_normalized_extraction_request(graph):
     compiled = compile_ontology(Ontology("o", []))
     request = ExtractionRequest(world="default", predicates=["knows"], agents=["registry"])
-    with graph.read_view(valid_time=50) as view, source(view, request, compiled) as selected:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view, source(view, request, compiled) as selected:
         result = selected.evaluate(compiled, limits=ReasoningLimits())
         assert result.extraction_request == request
         assert result.selection.agents == ("registry",)
@@ -72,7 +72,7 @@ def test_results_retain_and_validate_the_normalized_extraction_request(graph):
 
 def test_unrestricted_batched_context_remains_compatible_with_unbatched(graph):
     compiled = compile_ontology(Ontology("o", []))
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         with source(view, ExtractionRequest(world="default"), compiled) as batched:
             with PinnedClaimSource(view, world="default", ontology_revision=compiled.revision_id,
                                    selection=ClaimSelection(), mapping=ClaimMapping()) as single:

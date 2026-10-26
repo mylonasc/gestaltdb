@@ -240,9 +240,6 @@ def _advance_past(current: int | None, end: int | None):
     if current is None or end > current:
         return end
     return current
-    if first is None or second is None:
-        return None
-    return first if first >= second else second
 
 
 @dataclass(frozen=True)

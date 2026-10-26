@@ -11,7 +11,14 @@ from .versioning import TemporalVersionError, canonical_json_bytes
 
 
 class ModalError(TemporalVersionError):
-    """Base error for invalid modal formulas and evaluations."""
+    """Base error for invalid modal formulas and evaluations.
+
+    Sibling of :class:`gestaltdb.reasoning.model.ReasoningError` under
+    :class:`TemporalVersionError` (both are ``ValueError``). Callers that
+    need to catch every bounded-evaluation failure must catch
+    ``(ReasoningError, TemporalVersionError)`` or ``ValueError``;
+    ``except ReasoningError`` alone misses rule/modal bounds.
+    """
 
 
 class ModalEvaluationLimitError(ModalError):

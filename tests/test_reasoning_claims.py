@@ -39,7 +39,7 @@ def _claim(graph, subject="alice", predicate="worksFor", object="acme", **kwargs
     values = dict(subject=subject, predicate=predicate, object=object, agent="registry",
                   polarity="positive", world="default", valid=(0, 100))
     values.update(kwargs)
-    return graph.assert_claim(**values)
+    return graph.epistemic.assert_claim(**values)
 
 
 def _compiled(name="organization"):
@@ -56,7 +56,7 @@ def _source(view, compiled=None, **kwargs):
 def test_read_only_complete_result_retains_exact_input_context_and_evidence(graph, monkeypatch):
     original = _claim(graph, confidence=0.0)
     compiled = _compiled()
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         before = copy.deepcopy((graph.store.metadata, graph.store.indexes, graph.store.range_indexes))
 
         def forbidden(*args, **kwargs):
@@ -87,12 +87,12 @@ def test_read_only_complete_result_retains_exact_input_context_and_evidence(grap
 def test_pin_survives_later_corrections_and_new_view_has_a_different_context(graph):
     first = _claim(graph)
     compiled = _compiled()
-    with graph.read_view(valid_time=50) as old_view, _source(old_view) as source:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as old_view, _source(old_view) as source:
         first_result = source.evaluate(compiled, limits=ReasoningLimits())
-        corrected = graph.correct_claim(first.logical_id, confidence=0.9, supersedes_version_id=first.version_id)
+        corrected = graph.epistemic.correct_claim(first.logical_id, confidence=0.9, supersedes_version_id=first.version_id)
         assert source.evaluate(compiled, limits=ReasoningLimits()) == first_result
         assert next(source.iter_evidence()).reference_id == first.version_id
-        with graph.read_view(valid_time=50) as new_view, _source(new_view) as new_source:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as new_view, _source(new_view) as new_source:
             result = new_source.evaluate(compiled, limits=ReasoningLimits())
             assert result.context != first_result.context
             assert result.facts == first_result.facts
@@ -107,7 +107,7 @@ def test_positive_entity_half_open_point_selection_and_negative_coexistence(grap
     _claim(graph, subject="starts-now", valid=(50, 100))
     _claim(graph, subject="literal", object="acme", object_kind="literal")
     _claim(graph, subject="other-world", world="alternate")
-    with graph.read_view(valid_time=50) as view, _source(view) as source:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view, _source(view) as source:
         facts = {evidence.fact for evidence in source.iter_evidence()}
         assert facts == {Fact("alice", "worksFor", "acme"), Fact("starts-now", "worksFor", "acme")}
 
@@ -116,7 +116,7 @@ def test_explicit_source_agent_policy_distinguishes_all_none_and_unsourced(graph
     _claim(graph, subject="a", agent="one", source=None)
     _claim(graph, subject="b", agent="one", source="file")
     _claim(graph, subject="c", agent="two", source="file")
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         contexts = []
         for selection, subjects in [
             (ClaimSelection(), {"a", "b", "c"}),
@@ -137,7 +137,7 @@ def test_explicit_mapping_is_canonical_and_part_of_context_identity(graph):
     mapping = ClaimMapping([["IS_A", TYPE_PREDICATE], ["EMPLOYED", "worksFor"]])
     assert mapping == ClaimMapping(list(reversed(mapping.predicate_aliases)))
     assert mapping.map(Fact("?s", "unknown", "?o")) == Fact("?s", "unknown", "?o")
-    with graph.read_view(valid_time=50) as view, _source(view, mapping=mapping) as source:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view, _source(view, mapping=mapping) as source:
         result = source.evaluate(compiled, limits=ReasoningLimits())
         assert Fact("alice", TYPE_PREDICATE, "Person") in result
         with _source(view) as identity_source:
@@ -148,12 +148,12 @@ def test_explicit_mapping_is_canonical_and_part_of_context_identity(graph):
 
 def test_actual_rule_outputs_excluded_unless_opted_in_and_policy_fingerprint_changes(graph):
     _claim(graph, predicate="employment")
-    graph.create_rule("employment", when=[("?x", "employment", "?y")], then=("?x", "worksFor", "?y"))
-    graph.run_rules(as_of=50)
+    graph.rules.create_rule("employment", when=[("?x", "employment", "?y")], then=("?x", "worksFor", "?y"))
+    graph.rules.run(as_of=50)
     _claim(graph, subject="ontology-derived", agent="gestaltdb:ontology", provenance={"derived_by": "gestaltdb.ontology"})
     # Arbitrary provenance JSON is legal and is not a recognized derivation marker.
     _claim(graph, subject="external", agent="gestaltdb:rules", provenance={"derived_by": {"custom": True}})
-    with graph.read_view(valid_time=50) as view, _source(view) as source:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view, _source(view) as source:
         ordinary = {item.fact for item in source.iter_evidence()}
         assert Fact("alice", "worksFor", "acme") not in ordinary
         assert Fact("ontology-derived", "worksFor", "acme") not in ordinary
@@ -169,7 +169,7 @@ def test_duplicate_evidence_preserves_versions_but_not_logical_multiplicity(grap
     first = _claim(graph, agent="one")
     second = _claim(graph, agent="two")
     compiled = _compiled()
-    with graph.read_view(valid_time=50) as view, _source(view) as source:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view, _source(view) as source:
         assert {item.reference_id for item in source.iter_evidence()} == {first.version_id, second.version_id}
         result = source.evaluate(compiled, limits=ReasoningLimits(), collect_proofs=True)
         leaves = [node for node in result.result.proofs.nodes if node.rule is None]
@@ -183,15 +183,15 @@ def test_source_scan_counter_bounds_rejected_candidates_without_successful_parti
     for name in "abcd":
         _claim(graph, subject=name)
     seen = []
-    original = graph.iter_claims_as_of
+    original = graph.epistemic.iter_claims_as_of
 
     def observed(**kwargs):
         for version in original(**kwargs):
             seen.append(version.version_id)
             yield version
 
-    monkeypatch.setattr(graph, "iter_claims_as_of", observed)
-    with graph.read_view(valid_time=50) as view, _source(
+    monkeypatch.setattr(graph, "iter_claims_as_of", observed, raising=False)
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view, _source(
         view, selection=ClaimSelection(agents=["absent"]), limits=ClaimSourceLimits(2),
     ) as source:
         with pytest.raises(ReasoningLimitError, match="max_scanned_claims"):
@@ -202,7 +202,7 @@ def test_source_scan_counter_bounds_rejected_candidates_without_successful_parti
 @pytest.mark.parametrize("field", ["time", "provenance", "graph"])
 def test_mutable_view_rebinding_is_rejected(graph, field):
     _claim(graph)
-    with graph.read_view(valid_time=50) as view, _source(view) as source:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view, _source(view) as source:
         if field == "time":
             view.valid_time = TemporalInstant(51)
         elif field == "provenance":
@@ -215,14 +215,14 @@ def test_mutable_view_rebinding_is_rejected(graph, field):
 
 def test_rebinding_during_backend_iteration_is_caught_before_yield(graph, monkeypatch):
     _claim(graph)
-    original = graph.iter_claims_as_of
-    with graph.read_view(valid_time=50) as view, _source(view) as source:
+    original = graph.epistemic.iter_claims_as_of
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view, _source(view) as source:
         def rebound(**kwargs):
             for version in original(**kwargs):
                 view.valid_time = TemporalInstant(51)
                 yield version
 
-        monkeypatch.setattr(graph, "iter_claims_as_of", rebound)
+        monkeypatch.setattr(graph, "iter_claims_as_of", rebound, raising=False)
         with pytest.raises(ProvenanceMismatchError, match="rebound"):
             source.evaluate(_compiled(), limits=ReasoningLimits())
 
@@ -230,7 +230,7 @@ def test_rebinding_during_backend_iteration_is_caught_before_yield(graph, monkey
 def test_verification_after_inference_rejects_view_mutation(graph, monkeypatch):
     _claim(graph)
     original = adapter.DatalogEngine.evaluate
-    with graph.read_view(valid_time=50) as view, _source(view) as source:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view, _source(view) as source:
         def changed(*args, **kwargs):
             result = original(*args, **kwargs)
             view.valid_time = TemporalInstant(51)
@@ -243,13 +243,13 @@ def test_verification_after_inference_rejects_view_mutation(graph, monkeypatch):
 
 def test_corruption_at_stream_exhaustion_is_rejected(graph, monkeypatch):
     _claim(graph)
-    original = graph.iter_claims_as_of
-    with graph.read_view(valid_time=50) as view, _source(view) as source:
+    original = graph.epistemic.iter_claims_as_of
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view, _source(view) as source:
         def corrupted(**kwargs):
             yield from original(**kwargs)
-            graph.store.metadata.pop(graph._temporal_visible_key(view.commit_horizon))
+            graph.store.metadata.pop(graph.temporal.visible_key(view.commit_horizon))
 
-        monkeypatch.setattr(graph, "iter_claims_as_of", corrupted)
+        monkeypatch.setattr(graph, "iter_claims_as_of", corrupted, raising=False)
         with pytest.raises(ValueError):
             source.evaluate(_compiled(), limits=ReasoningLimits())
 
@@ -258,7 +258,7 @@ def test_corruption_at_stream_exhaustion_is_rejected(graph, monkeypatch):
                                     "valid", "world", "polarity", "literal", "invalid"])
 def test_invalid_or_out_of_context_backend_records_fail_closed(graph, monkeypatch, change):
     version = _claim(graph)
-    with graph.read_view(valid_time=50) as view, _source(view) as source:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view, _source(view) as source:
         bad = version
         if change == "commit":
             bad = replace(version, commit_id=view.commit_horizon + 1)
@@ -280,13 +280,13 @@ def test_invalid_or_out_of_context_backend_records_fail_closed(graph, monkeypatc
             bad = replace(version, claim=replace(version.claim, object_kind="literal"))
         elif change == "invalid":
             bad = None
-        monkeypatch.setattr(graph, "iter_claims_as_of", lambda **kwargs: iter([bad]))
+        monkeypatch.setattr(graph, "iter_claims_as_of", lambda **kwargs: iter([bad]), raising=False)
         with pytest.raises(ProvenanceMismatchError):
             source.evaluate(_compiled(), limits=ReasoningLimits())
 
 
 def test_identity_verification_never_initializes_an_unmanaged_handle(graph):
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         unmanaged = GraphDB(_MetadataStore(), JSONSerializer())
         before = dict(unmanaged.store.metadata)
         forged = GraphReadView(unmanaged, view.provenance)
@@ -297,7 +297,7 @@ def test_identity_verification_never_initializes_an_unmanaged_handle(graph):
 
 
 def test_persisted_identity_swap_is_detected_even_when_graph_cache_is_unchanged(graph):
-    with graph.read_view(valid_time=50) as view, _source(view) as source:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view, _source(view) as source:
         graph.store.put_metadata(_DATABASE_ID_METADATA_KEY, b"different")
         with pytest.raises(ProvenanceMismatchError, match="persisted"):
             list(source.iter_evidence())
@@ -307,15 +307,15 @@ def test_close_invalidates_pending_iterators_but_not_the_caller_graph(graph, mon
     _claim(graph, subject="a")
     _claim(graph, subject="b")
     seen = []
-    original = graph.iter_claims_as_of
+    original = graph.epistemic.iter_claims_as_of
 
     def observed(**kwargs):
         for value in original(**kwargs):
             seen.append(value)
             yield value
 
-    monkeypatch.setattr(graph, "iter_claims_as_of", observed)
-    with graph.read_view(valid_time=50) as view:
+    monkeypatch.setattr(graph, "iter_claims_as_of", observed, raising=False)
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         source = _source(view)
         iterator = source.iter_evidence()
         next(iterator)
@@ -331,7 +331,7 @@ def test_close_invalidates_pending_iterators_but_not_the_caller_graph(graph, mon
 def test_stale_indexes_are_not_rebuilt_implicitly(graph):
     _claim(graph, index_mode=IndexMaintenanceMode.DEFER)
     before = copy.deepcopy((graph.store.metadata, graph.store.indexes, graph.store.range_indexes))
-    with graph.read_view(valid_time=50) as view, _source(view) as source:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view, _source(view) as source:
         with pytest.raises(RuntimeError, match="stale indexes"):
             source.evaluate(_compiled(), limits=ReasoningLimits())
     assert before == (graph.store.metadata, graph.store.indexes, graph.store.range_indexes)
@@ -342,7 +342,7 @@ def test_result_rejects_context_policy_mapping_or_revision_mixing(graph, tmp_pat
     compiled = _compiled()
     other = _compiled("different-id-same-program")
     assert other.program.digest == compiled.program.digest
-    with graph.read_view(valid_time=50) as view, _source(view) as source:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view, _source(view) as source:
         with pytest.raises(ProvenanceMismatchError, match="revision"):
             source.evaluate(other, limits=ReasoningLimits())
         result = source.evaluate(compiled, limits=ReasoningLimits())
@@ -363,11 +363,11 @@ def test_result_rejects_context_policy_mapping_or_revision_mixing(graph, tmp_pat
 
 
 def test_empty_view_and_repeat_construction_have_stable_context_identity(graph):
-    with graph.read_view(valid_time=50) as first, graph.read_view(valid_time=50) as second:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as first, graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as second:
         with _source(first) as a, _source(second) as b:
             assert a.context == b.context
             assert a.evaluate(_compiled(), limits=ReasoningLimits()).facts == ()
-    with graph.read_view(valid_time=51) as other, _source(other) as source:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=51) as other, _source(other) as source:
         assert source.context != a.context
 
 
@@ -397,7 +397,7 @@ def test_policy_and_mapping_values_are_canonical_copied_and_validated():
 def test_adapter_works_on_available_backends(graph_db, tmp_path):
     graph_db.save_manifest(tmp_path / "adapter-managed")
     _claim(graph_db)
-    with graph_db.read_view(valid_time=50) as view, _source(view) as source:
+    with graph_db.temporal.open_read_view(graph_db, manifest=graph_db.manifest, database_id=graph_db.database_id, valid_time=50) as view, _source(view) as source:
         result = source.evaluate(_compiled(), limits=ReasoningLimits(), collect_proofs=True)
         assert Fact("alice", TYPE_PREDICATE, "Person") in result
         result.verify_source(graph_db)
@@ -405,15 +405,15 @@ def test_adapter_works_on_available_backends(graph_db, tmp_path):
 
 def test_historical_system_time_and_retraction_do_not_change_a_pinned_prefix(graph):
     first = _claim(graph)
-    with graph.read_view(valid_time=30) as original, _source(original) as source:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=30) as original, _source(original) as source:
         original_result = source.evaluate(_compiled(), limits=ReasoningLimits())
-        graph.retract_claim(first.logical_id, supersedes_version_id=first.version_id, valid=(20, 40))
+        graph.epistemic.retract_claim(first.logical_id, supersedes_version_id=first.version_id, valid=(20, 40))
         assert source.evaluate(_compiled(), limits=ReasoningLimits()) == original_result
-        with graph.read_view(valid_time=30, system_time=first.system_time) as historical, _source(historical) as old:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=30, system_time=first.system_time) as historical, _source(historical) as old:
             assert old.context == original_result.context
-        with graph.read_view(valid_time=30) as current, _source(current) as now:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=30) as current, _source(current) as now:
             assert now.evaluate(_compiled(), limits=ReasoningLimits()).facts == ()
-        with graph.read_view(valid_time=50) as outside, _source(outside) as active:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as outside, _source(outside) as active:
             assert Fact("alice", TYPE_PREDICATE, "Person") in active.evaluate(_compiled(), limits=ReasoningLimits())
 
 
@@ -423,7 +423,7 @@ def test_transitive_rules_cannot_join_premises_across_worlds(graph):
     compiled = compile_ontology(Ontology("worlds", [Transitive("p")]))
     _claim(graph, "a", "p", "b", world="one")
     _claim(graph, "b", "p", "c", world="two")
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         contexts = []
         for world in ("one", "two"):
             with _source(view, compiled, world=world) as source:
@@ -445,7 +445,7 @@ def test_claims_documentation_helper_runs_against_a_real_pinned_view(graph):
         lines.append(line)
     namespace = {}
     exec(compile(textwrap.dedent("\n".join(lines)), str(document), "exec"), namespace)
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         result = namespace["reason_over_claims"](view, _compiled(), world="default")
         assert Fact("alice", TYPE_PREDICATE, "Person") in result
 
@@ -458,7 +458,7 @@ def test_result_provenance_verifies_after_managed_database_reopen(tmp_path, back
     graph = GraphDB.create(path, backend=backend, serializer="json")
     try:
         _claim(graph)
-        with graph.read_view(valid_time=50) as view, _source(view) as source:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view, _source(view) as source:
             result = source.evaluate(_compiled(), limits=ReasoningLimits(), collect_proofs=True)
     finally:
         graph.close()

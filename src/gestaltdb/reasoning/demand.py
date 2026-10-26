@@ -231,6 +231,21 @@ def answer(program: GenericProgram, facts: Iterable[TypedFact], goal: BoundGoal,
     Unsupported combinations (negation, aggregates, closed scopes, predicate
     variables) fail closed here instead of silently falling back — callers
     that need those modes use full closure explicitly and document it.
+
+    Examples:
+        Ask for one entity's derived classifications using a bound goal::
+
+            >>> from gestaltdb.reasoning.demand import BoundGoal, answer
+            >>> from gestaltdb.reasoning.model import ReasoningLimits, Variable
+            >>> from gestaltdb.reasoning.typed import GenericProgram, GenericRule, TypedAtom, TypedFact
+            >>> x = Variable("x")
+            >>> program = GenericProgram([GenericRule("r", [TypedAtom("member", [x])], [], TypedAtom("person", [x]))])
+            >>> facts = [TypedFact("member", ["alice"]), TypedFact("member", ["bob"])]
+            >>> result = answer(program, facts, BoundGoal("person", ("alice",)), limits=ReasoningLimits())
+            >>> assert result.facts == (TypedFact("person", ["alice"]),)
+
+    This specializes a program over caller-provided facts. For selective reads
+    directly from a pinned database view, use the explicit frontier adapter.
     """
     if not isinstance(program, GenericProgram):
         raise ReasoningError("program must be a GenericProgram")

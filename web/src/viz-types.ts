@@ -7,6 +7,7 @@ export interface VizPayloadNode {
   group: string;
   properties: Record<string, unknown>;
   extra: Record<string, unknown>;
+  shape?: "circle" | "triangle" | "square";
 }
 
 export interface VizPayloadEdge {
@@ -16,6 +17,7 @@ export interface VizPayloadEdge {
   type: string;
   properties: Record<string, unknown>;
   extra: Record<string, unknown>;
+  dash?: string | null;
 }
 
 export interface VizPayload {

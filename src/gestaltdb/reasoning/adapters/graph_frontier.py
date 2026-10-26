@@ -102,7 +102,7 @@ def answer_current_graph(view: CurrentGraphReadView, program: Program, goal: Ato
                     if request.subject is not None:
                         keys, strategy = (request.subject,), "node-id"
                     else:
-                        keys, strategy = view.iter_node_ids_by_label(label), "label-index"
+                        keys, strategy = view.indexes.iter_node_ids_by_label(label), "label-index"
                     for key in keys:
                         node = record("node", key, strategy, missing_ok=request.subject is not None)
                         if node is not None:
@@ -114,7 +114,7 @@ def answer_current_graph(view: CurrentGraphReadView, program: Program, goal: Ato
                     keys, strategy = (request.subject,), "node-id"
                 elif prop in view.indexed_node_properties:
                     if request.object is not None:
-                        keys, strategy = view.iter_node_ids_by_property(prop, request.object), "property-exact-index"
+                        keys, strategy = view.indexes.iter_node_ids_by_property(prop, request.object), "property-exact-index"
                     else:
                         keys = view.store.iter_index_prefix("node_property", [prop.encode("utf-8")])
                         strategy = "property-prefix-index"
@@ -133,7 +133,7 @@ def answer_current_graph(view: CurrentGraphReadView, program: Program, goal: Ato
                     keys = (item["edge_id"] for item in view.iter_typed_adjacency(endpoint, edge_type, direction))
                     strategy = "typed-adjacency-" + direction
                 else:
-                    keys, strategy = view.iter_edge_ids_by_type(edge_type), "edge-type-index"
+                    keys, strategy = view.indexes.iter_edge_ids_by_type(edge_type), "edge-type-index"
                 for key in keys:
                     edge = record("edge", key, strategy)
                     yield from selected(_edge_evidence(edge, GraphMapping(edge_types=((edge_type, predicate),))), request)

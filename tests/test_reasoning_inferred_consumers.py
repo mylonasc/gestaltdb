@@ -49,7 +49,7 @@ def start(graph, rules):
 
 
 def assert_member(graph, subject, agent, group="g1"):
-    return graph.assert_claim(subject=subject, predicate="memberOf", object=group,
+    return graph.epistemic.assert_claim(subject=subject, predicate="memberOf", object=group,
                               agent=agent, polarity="positive", valid=(0, 100))
 
 
@@ -59,7 +59,7 @@ def goal_persons(session):
 
 def fresh_persons(rules, graph):
     seen = {}
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         for version in view.iter_claims_as_of(world="default"):
             if version.claim is None or version.operation not in (VersionOperation.ASSERT, VersionOperation.CORRECT):
                 continue
@@ -74,13 +74,13 @@ def fresh_persons(rules, graph):
 
 def managed_persons(graph, through_commit=None):
     kwargs = {} if through_commit is None else {"through_commit": through_commit}
-    with graph.read_view(valid_time=50, **kwargs) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50, **kwargs) as view:
         return {version.claim.subject for version in
                 view.iter_claims_as_of(world=MANAGED_WORLD) if version.claim is not None}
 
 
 def horizon(graph):
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         return view.provenance.commit_horizon
 
 
@@ -89,17 +89,17 @@ def publish_persons(graph, session):
     horizon = session.commit_horizon
     current = managed_persons(graph)
     desired = goal_persons(session)
-    with graph.read_view(valid_time=50, through_commit=horizon) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50, through_commit=horizon) as view:
         by_subject = {}
         for version in view.iter_claims_as_of(world=MANAGED_WORLD):
             if version.claim is not None:
                 by_subject[version.claim.subject] = version.logical_id
     for subject in sorted(desired - current):
-        graph.assert_claim(subject=subject, predicate="isPerson", object="yes",
+        graph.epistemic.assert_claim(subject=subject, predicate="isPerson", object="yes",
                            agent="session-publisher", polarity="positive", valid=(0, 100),
                            provenance={"session_horizon": horizon}, world=MANAGED_WORLD)
     for subject in sorted(current - desired):
-        graph.retract_claim(by_subject[subject], valid=(0, 100))
+        graph.epistemic.retract_claim(by_subject[subject], valid=(0, 100))
 
 
 @pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
@@ -119,7 +119,7 @@ def test_query_publish_correct_retract_cycle(tmp_path, backend, module):
         assert managed_persons(graph) == {"a", "b"}
 
         # Correct one assertion: managed world is unchanged, old reader stable.
-        graph.correct_claim(one.logical_id, supersedes_version_id=one.version_id, valid=(0, 100))
+        graph.epistemic.correct_claim(one.logical_id, supersedes_version_id=one.version_id, valid=(0, 100))
         moved = advance_session(graph, session, limits=ReasoningLimits())
         assert not moved.rebuilt
         assert goal_persons(moved.session) == fresh_persons(rules, graph) == {"a", "b"}
@@ -128,7 +128,7 @@ def test_query_publish_correct_retract_cycle(tmp_path, backend, module):
         assert managed_persons(graph, through_commit=horizon_after_publish) == {"a", "b"}
 
         # Retract one of two independent versions: the fact survives.
-        graph.retract_claim(one.logical_id, valid=(0, 100), supersedes_version_id=one.version_id)
+        graph.epistemic.retract_claim(one.logical_id, valid=(0, 100), supersedes_version_id=one.version_id)
         moved = advance_session(graph, moved.session, limits=ReasoningLimits())
         assert not moved.rebuilt
         assert goal_persons(moved.session) == fresh_persons(rules, graph) == {"a", "b"}
@@ -136,11 +136,11 @@ def test_query_publish_correct_retract_cycle(tmp_path, backend, module):
         assert managed_persons(graph) == {"a", "b"}
 
         # Retract the final version: the fact disappears from both views.
-        remaining = [v for v in graph.iter_claim_versions()
+        remaining = [v for v in graph.epistemic.iter_claim_versions()
                      if v.claim is not None and v.claim.subject == "a"
                      and v.claim.agent == "two" and v.operation == VersionOperation.ASSERT]
         assert len(remaining) == 1
-        graph.retract_claim(remaining[0].logical_id, valid=(0, 100),
+        graph.epistemic.retract_claim(remaining[0].logical_id, valid=(0, 100),
                             supersedes_version_id=remaining[0].version_id)
         moved = advance_session(graph, moved.session, limits=ReasoningLimits())
         assert not moved.rebuilt

@@ -134,7 +134,7 @@ def stage_point(
     instant = normalize_temporal_instant(valid_time)
     interval = (instant, TemporalInstant(instant.epoch_microseconds + 1))
     namespace = "ontology-publication:" + _digest([publication_key, source_world, target_world, instant.epoch_microseconds]).split(":")[1]
-    with graph.read_view(valid_time=instant) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=instant) as view:
         with PinnedClaimSource(view, world=source_world, ontology_revision=compiled.revision_id,
                                selection=selection, mapping=mapping, limits=source_limits) as source:
             evidence = []
@@ -213,10 +213,10 @@ def publish_staged(
                                "catalog_digest": identity.catalog_digest}
     instant = TemporalInstant(staged.valid_point_us)
     interval = (instant, TemporalInstant(instant.epoch_microseconds + 1))
-    with graph._temporal_writer_guard():
-        if any(item.kind == "incomplete_commit" for item in graph.list_temporal_orphans().artifacts):
+    with graph.temporal.write_guard():
+        if any(item.kind == "incomplete_commit" for item in graph.temporal.list_temporal_orphans().artifacts):
             raise ReasoningError("unreclaimed temporal publication requires explicit orphan recovery")
-        with graph.read_view(valid_time=instant) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=instant) as view:
             if view.provenance.database_id != staged.database_id:
                 raise ReasoningError("staged generation belongs to a different database")
             staged.source_provenance.verify_source(graph)
@@ -276,7 +276,7 @@ def publish_staged(
                                    staged.ontology_revision, "explicit-staged-generation-v1", staged.mapping_id)
         commit = None
         if writes:
-            commit = graph.commit_versions(writes, metadata={"engine": "gestaltdb.ontology", "generation": staged.generation,
+            commit = graph.temporal.commit_versions(writes, metadata={"engine": "gestaltdb.ontology", "generation": staged.generation,
                                                              "input_context": staged.input_context_id,
                                                               "source_commit_horizon": staged.source_provenance.commit_horizon,
                                                               "publication_freshness": freshness,
@@ -289,7 +289,7 @@ def audit_publication_orphans(graph: GraphDB, *, through_commit=None):
     """Read-only orphan inventory; never mutates or repairs."""
     if not isinstance(graph, GraphDB):
         raise ReasoningError("GraphDB is required")
-    return graph.list_temporal_orphans(through_commit=through_commit)
+    return graph.temporal.list_temporal_orphans(through_commit=through_commit)
 
 
 def reclaim_publication_orphans(graph: GraphDB, *, through_commit: int, consent: bool = False):
@@ -304,7 +304,7 @@ def reclaim_publication_orphans(graph: GraphDB, *, through_commit: int, consent:
         raise ReasoningError("through_commit must be a non-negative integer")
     if not isinstance(graph, GraphDB):
         raise ReasoningError("GraphDB is required")
-    return graph.reclaim_temporal_orphans(through_commit=through_commit)
+    return graph.temporal.reclaim_temporal_orphans(through_commit=through_commit)
 
 
 @dataclass(frozen=True)
@@ -414,7 +414,7 @@ def stage_range(graph: GraphDB, desired: Iterable[tuple[str, str, str]], *, vali
         raise ReasoningError("valid_end_us must be None or greater than valid_start_us")
     namespace = _range_namespace(publication_key, source_world, target_world, valid_start_us, valid_end_us)
     sample = TemporalInstant(valid_start_us)
-    with graph.read_view(valid_time=sample) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=sample) as view:
         base = []
         for version in view.iter_claims_as_of(world=target_world, agent="gestaltdb:ontology", source=namespace):
             claim = version.claim
@@ -468,10 +468,10 @@ def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
         raise ReasoningError("staged source provenance is required; re-stage explicitly")
     interval = TemporalInterval(TemporalInstant(staged.valid_start_us),
                                 None if staged.valid_end_us is None else TemporalInstant(staged.valid_end_us))
-    with graph._temporal_writer_guard():
-        if any(item.kind == "incomplete_commit" for item in graph.list_temporal_orphans().artifacts):
+    with graph.temporal.write_guard():
+        if any(item.kind == "incomplete_commit" for item in graph.temporal.list_temporal_orphans().artifacts):
             raise ReasoningError("unreclaimed temporal publication requires explicit orphan recovery")
-        with graph.read_view(valid_time=TemporalInstant(staged.valid_start_us)) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=TemporalInstant(staged.valid_start_us)) as view:
             if view.provenance.database_id != staged.database_id:
                 raise ReasoningError("staged generation belongs to a different database")
             staged.source_provenance.verify_source(graph)
@@ -529,7 +529,7 @@ def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
                                    staged.ontology_revision, "explicit-staged-range-v1", staged.mapping_id)
         commit = None
         if writes:
-            commit = graph.commit_versions(writes, metadata={"engine": "gestaltdb.ontology", "generation": staged.generation,
+            commit = graph.temporal.commit_versions(writes, metadata={"engine": "gestaltdb.ontology", "generation": staged.generation,
                                                              "input_context": staged.input_context_id,
                                                              "source_commit_horizon": staged.source_provenance.commit_horizon,
                                                              "publication_freshness": freshness})
@@ -574,10 +574,10 @@ def reconcile_point(
     namespace = "ontology-publication:" + _digest([publication_key, source_world, target_world, instant.epoch_microseconds]).split(":")[1]
     # Private lock access is deliberately confined to this persistence adapter.
     # It is shared with every temporal writer, including other GraphDB handles.
-    with graph._temporal_writer_guard():
-        if any(item.kind == "incomplete_commit" for item in graph.list_temporal_orphans().artifacts):
+    with graph.temporal.write_guard():
+        if any(item.kind == "incomplete_commit" for item in graph.temporal.list_temporal_orphans().artifacts):
             raise ReasoningError("unreclaimed temporal publication requires explicit orphan recovery")
-        with graph.read_view(valid_time=instant) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=instant) as view:
             with PinnedClaimSource(view, world=source_world, ontology_revision=compiled.revision_id,
                                    selection=selection, mapping=mapping, limits=source_limits) as source:
                 # Exact input references, not a single proof witness, identify this
@@ -636,7 +636,7 @@ def reconcile_point(
                     retracted += 1
         commit = None
         if writes:
-            commit = graph.commit_versions(writes, metadata={"engine": "gestaltdb.ontology", "generation": generation,
+            commit = graph.temporal.commit_versions(writes, metadata={"engine": "gestaltdb.ontology", "generation": generation,
                                                            "input_context": context.context_id})
         return PublicationResult(context, generation, None if commit is None else commit.commit_id,
                                  asserted, corrected, retracted, unchanged)

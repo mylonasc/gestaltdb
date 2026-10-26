@@ -41,13 +41,13 @@ def start(graph, rules=None):
 
 
 def assert_member(graph, subject, group="g1", agent="registry"):
-    return graph.assert_claim(subject=subject, predicate="memberOf", object=group,
+    return graph.epistemic.assert_claim(subject=subject, predicate="memberOf", object=group,
                               agent=agent, polarity="positive", valid=(0, 100))
 
 
 def fresh_facts(rules, graph):
     seen = {}
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         for version in view.iter_claims_as_of(world="default"):
             if version.claim is None or version.operation not in (VersionOperation.ASSERT, VersionOperation.CORRECT):
                 continue
@@ -79,14 +79,14 @@ def test_noop_advance_insert_retract_correct(tmp_path, backend, module):
         assert {f.values[0] for f in moved.inserted} == {"b"}
         assert set(moved.session.facts) == fresh_facts(moved.session.program, graph)
 
-        graph.retract_claim(first.logical_id, valid=(0, 100))
+        graph.epistemic.retract_claim(first.logical_id, valid=(0, 100))
         after_retract = advance_session(graph, moved.session, limits=ReasoningLimits())
         assert not after_retract.rebuilt
         assert {f.values[0] for f in after_retract.retracted} >= {"a"}
         assert set(after_retract.session.facts) == fresh_facts(after_retract.session.program, graph)
 
         target = assert_member(graph, "c")
-        corrected = graph.correct_claim(target.logical_id, supersedes_version_id=target.version_id,
+        corrected = graph.epistemic.correct_claim(target.logical_id, supersedes_version_id=target.version_id,
                                         valid=(0, 100))
         assert corrected.supersedes_version_id == target.version_id
         after_correct = advance_session(graph, after_retract.session, limits=ReasoningLimits())
@@ -109,7 +109,7 @@ def test_alternative_evidence_survives_single_retraction(tmp_path, backend, modu
         one = assert_member(graph, "a", agent="one")
         assert_member(graph, "a", agent="two")
         session = start(graph)
-        graph.retract_claim(one.logical_id, valid=(0, 100), supersedes_version_id=one.version_id)
+        graph.epistemic.retract_claim(one.logical_id, valid=(0, 100), supersedes_version_id=one.version_id)
         moved = advance_session(graph, session, limits=ReasoningLimits())
         assert not moved.rebuilt
         assert TypedFact("person", ("a",)) in set(moved.session.facts)
@@ -126,9 +126,9 @@ def test_stale_supersedes_retraction_applies_logically(tmp_path, backend, module
         first = assert_member(graph, "a")
         # v1 is retired before the session starts; a later retraction naming
         # v1 still retracts the logical claim the session observes as v2.
-        graph.correct_claim(first.logical_id, supersedes_version_id=first.version_id, valid=(0, 100))
+        graph.epistemic.correct_claim(first.logical_id, supersedes_version_id=first.version_id, valid=(0, 100))
         session = start(graph)
-        graph.retract_claim(first.logical_id, valid=(0, 100), supersedes_version_id=first.version_id)
+        graph.epistemic.retract_claim(first.logical_id, valid=(0, 100), supersedes_version_id=first.version_id)
         moved = advance_session(graph, session, limits=ReasoningLimits())
         assert not moved.rebuilt
         # The retraction wins over the whole logical claim in
@@ -147,7 +147,7 @@ def test_retract_then_reassert_resurrects_with_fresh_parity(tmp_path, backend, m
         first = assert_member(graph, "a")
         session = start(graph)
         assert len(session.facts) == 3
-        graph.retract_claim(first.logical_id, valid=(0, 100))
+        graph.epistemic.retract_claim(first.logical_id, valid=(0, 100))
         removed = advance_session(graph, session, limits=ReasoningLimits())
         assert not removed.rebuilt
         assert removed.session.facts == ()
@@ -169,6 +169,7 @@ def test_retract_then_reassert_resurrects_with_fresh_parity(tmp_path, backend, m
 
 @pytest.mark.parametrize("backend,module", [("lmdb", "lmdb"), ("leveldb", "plyvel"), ("pyrex", "pyrex")])
 def test_overwide_gap_rebuilds_explicitly(tmp_path, backend, module):
+    pytest.importorskip(module)
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
     try:
         assert_member(graph, "a")
@@ -211,9 +212,9 @@ def test_delta_validity_matches_pinned_point(tmp_path, backend, module, interval
         first = assert_member(graph, "a")
         session = start(graph)
         if operation == "retract":
-            graph.retract_claim(first.logical_id, valid=interval, supersedes_version_id=first.version_id)
+            graph.epistemic.retract_claim(first.logical_id, valid=interval, supersedes_version_id=first.version_id)
         else:
-            graph.correct_claim(first.logical_id, valid=interval, supersedes_version_id=first.version_id)
+            graph.epistemic.correct_claim(first.logical_id, valid=interval, supersedes_version_id=first.version_id)
         moved = advance_session(graph, session, limits=ReasoningLimits())
         fresh = start(graph)
         assert not moved.rebuilt
@@ -235,16 +236,16 @@ def test_batch_correction_and_out_of_point_retractions_preserve_exact_versions(t
     try:
         first = assert_member(graph, "a")
         session = start(graph)
-        corrected = graph.correct_claim(first.logical_id, valid=(0, 100),
+        corrected = graph.epistemic.correct_claim(first.logical_id, valid=(0, 100),
                                         supersedes_version_id=first.version_id)
-        graph.retract_claim(first.logical_id, valid=(0, 50), supersedes_version_id=first.version_id)
-        graph.retract_claim(first.logical_id, valid=(51, 100), supersedes_version_id=corrected.version_id)
+        graph.epistemic.retract_claim(first.logical_id, valid=(0, 50), supersedes_version_id=first.version_id)
+        graph.epistemic.retract_claim(first.logical_id, valid=(51, 100), supersedes_version_id=corrected.version_id)
         moved = advance_session(graph, session, limits=ReasoningLimits())
         assert not moved.rebuilt
         assert moved.inserted == moved.retracted == ()
         assert moved.session.facts == start(graph).facts
         assert moved.session.version_logical == ((corrected.version_id, first.logical_id),)
-        graph.retract_claim(first.logical_id, valid=(50, 51), supersedes_version_id=first.version_id)
+        graph.epistemic.retract_claim(first.logical_id, valid=(50, 51), supersedes_version_id=first.version_id)
         removed = advance_session(graph, moved.session, limits=ReasoningLimits())
         assert removed.session.facts == start(graph).facts == ()
     finally:

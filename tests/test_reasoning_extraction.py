@@ -137,11 +137,11 @@ assert not any(name.startswith(('gestaltdb','numpy','pyarrow','polars')) for nam
 
 
 def _seed(graph):
-    graph.assert_claim(subject="alice", predicate="knows", object="bob",
+    graph.epistemic.assert_claim(subject="alice", predicate="knows", object="bob",
                        agent="registry", polarity="positive", valid=(0, 100))
-    graph.assert_claim(subject="bob", predicate="knows", object="carol",
+    graph.epistemic.assert_claim(subject="bob", predicate="knows", object="carol",
                        agent="registry", polarity="positive", valid=(0, 100))
-    graph.assert_claim(subject="alice", predicate="likes", object="carol",
+    graph.epistemic.assert_claim(subject="alice", predicate="likes", object="carol",
                        agent="other", polarity="positive", valid=(0, 100))
 
 
@@ -159,7 +159,7 @@ def test_batched_matches_single_pass_evidence_and_reports_profile(tmp_path, back
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
     try:
         _seed(graph)
-        with graph.read_view(valid_time=50) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             expected = PinnedClaimSource(view, world="default", ontology_revision="rev-1",
                                          selection=ClaimSelection(), mapping=ClaimMapping())
             with expected:
@@ -198,7 +198,7 @@ def test_predicate_and_binding_pushdown_narrows_scans(tmp_path, backend, module)
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
     try:
         _seed(graph)
-        with graph.read_view(valid_time=50) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             request = ExtractionRequest(world="default", predicates=["knows"],
                                         subject="alice", batch_rows=100, max_rows=100)
             with _batched(graph, view, request) as source:
@@ -225,15 +225,15 @@ def test_multi_predicate_pushdown_matches_full_scan_and_narrows_scans(tmp_path, 
 
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
     try:
-        graph.assert_claim(subject="a", predicate="edge", object="b",
+        graph.epistemic.assert_claim(subject="a", predicate="edge", object="b",
                            agent="registry", polarity="positive", valid=(0, 100))
-        graph.assert_claim(subject="b", predicate="edge", object="c",
+        graph.epistemic.assert_claim(subject="b", predicate="edge", object="c",
                            agent="registry", polarity="positive", valid=(0, 100))
-        graph.assert_claim(subject="a", predicate="reach", object="seeded",
+        graph.epistemic.assert_claim(subject="a", predicate="reach", object="seeded",
                            agent="registry", polarity="positive", valid=(0, 100))
-        graph.assert_claim(subject="n", predicate="noise", object="unused",
+        graph.epistemic.assert_claim(subject="n", predicate="noise", object="unused",
                            agent="registry", polarity="positive", valid=(0, 100))
-        with graph.read_view(valid_time=50) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             full_request = ExtractionRequest(world="default", batch_rows=100, max_rows=100)
             with _batched(graph, view, full_request) as source:
                 full = [e for b in source.iter_batches() for e in b.evidence]
@@ -285,15 +285,15 @@ def test_selective_extraction_preserves_demand_closure(tmp_path, backend, module
     assert plan == ("edge", "reach")
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
     try:
-        graph.assert_claim(subject="a", predicate="edge", object="b",
+        graph.epistemic.assert_claim(subject="a", predicate="edge", object="b",
                            agent="registry", polarity="positive", valid=(0, 100))
-        graph.assert_claim(subject="b", predicate="edge", object="c",
+        graph.epistemic.assert_claim(subject="b", predicate="edge", object="c",
                            agent="registry", polarity="positive", valid=(0, 100))
-        graph.assert_claim(subject="a", predicate="reach", object="asserted",
+        graph.epistemic.assert_claim(subject="a", predicate="reach", object="asserted",
                            agent="registry", polarity="positive", valid=(0, 100))
-        graph.assert_claim(subject="n", predicate="noise", object="unused",
+        graph.epistemic.assert_claim(subject="n", predicate="noise", object="unused",
                            agent="registry", polarity="positive", valid=(0, 100))
-        with graph.read_view(valid_time=50) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             full_request = ExtractionRequest(world="default", batch_rows=100, max_rows=100)
             with _batched(graph, view, full_request) as source:
                 full_facts = [TypedFact(e.fact.predicate, (e.fact.subject, e.fact.object))
@@ -351,13 +351,13 @@ def test_aliased_selective_extraction_matches_full_closure(tmp_path, backend, mo
     assert mapping.storage_predicates(list(plan)) == ("employedBy", "memberOf", "person", "veteran", "worksFor")
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
     try:
-        graph.assert_claim(subject="a", predicate="worksFor", object="g1",
+        graph.epistemic.assert_claim(subject="a", predicate="worksFor", object="g1",
                            agent="registry", polarity="positive", valid=(0, 100))
-        graph.assert_claim(subject="b", predicate="employedBy", object="g1",
+        graph.epistemic.assert_claim(subject="b", predicate="employedBy", object="g1",
                            agent="registry", polarity="positive", valid=(0, 100))
-        graph.assert_claim(subject="n", predicate="noise", object="unused",
+        graph.epistemic.assert_claim(subject="n", predicate="noise", object="unused",
                            agent="registry", polarity="positive", valid=(0, 100))
-        with graph.read_view(valid_time=50) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             # Without inversion the logical plan matches nothing at storage level.
             naive_request = ExtractionRequest(world="default", predicates=list(plan),
                                               batch_rows=100, max_rows=100)
@@ -395,7 +395,7 @@ def test_batched_limits_rebinding_and_evaluation_parity(tmp_path, backend, modul
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
     try:
         _seed(graph)
-        with graph.read_view(valid_time=50) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             request = ExtractionRequest(world="default", batch_rows=1, max_rows=2)
             with _batched(graph, view, request) as source:
                 with pytest.raises(ReasoningLimitError, match="max_rows"):

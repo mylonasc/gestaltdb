@@ -35,7 +35,7 @@ def source(tmp_path, request):
     pytest.importorskip(module)
     graph = GraphDB.create(tmp_path / "db", backend=backend, serializer="json")
     for agent in ("one", "two"):
-        graph.assert_claim(subject="a", predicate="memberOf", object="g", agent=agent, polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="a", predicate="memberOf", object="g", agent=agent, polarity="positive", valid=(0, 100))
     session = start_session(graph, PROGRAM, catalog_for_typed_program(PROGRAM),
         scope=SessionScope("default", 50, ClaimSelection(), ClaimMapping()), limits=ReasoningLimits())
     binding = bind_session_generation(graph, session)
@@ -135,7 +135,7 @@ def test_authenticated_actual_base_execution_retains_independent_versions(source
     assert outcome.outcome.telemetry.input_facts == 2  # versions, not unique base facts
     assert len(outcome.evidence) == 2 and len({v.fact for v in outcome.evidence}) == 1
     assert TypedFact("tag", ["a", "g", Literal("integer", 1)]) in outcome.outcome.result.facts
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         assert view.provenance.commit_horizon == session.commit_horizon
 
 
@@ -188,7 +188,7 @@ def test_all_exact_session_pins_rejected_before_engine(source, monkeypatch, dime
 
 def test_latest_historical_and_new_generation_execution(source):
     graph, session, binding = source
-    graph.assert_claim(subject="b", predicate="memberOf", object="g", agent="new", polarity="positive", valid=(0, 100))
+    graph.epistemic.assert_claim(subject="b", predicate="memberOf", object="g", agent="new", polarity="positive", valid=(0, 100))
     with pytest.raises(ProvenanceMismatchError, match="horizon moved"):
         execute_authenticated_session(graph, session, **pins(binding), limits=ReasoningLimits())
     historical = execute_authenticated_session(graph, session, **pins(binding), limits=ReasoningLimits(), freshness="historical")
@@ -204,7 +204,7 @@ def test_reentrant_source_move_during_evaluation_fails_before_return(source, mon
     original = adapter.execute_typed_closure
     def moved(*args, **kwargs):
         outcome = original(*args, **kwargs)
-        graph.assert_claim(subject="b", predicate="memberOf", object="g", agent="new", polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="b", predicate="memberOf", object="g", agent="new", polarity="positive", valid=(0, 100))
         return outcome
     monkeypatch.setattr(adapter, "execute_typed_closure", moved)
     with pytest.raises(ProvenanceMismatchError, match="horizon moved"):
@@ -243,8 +243,8 @@ def test_source_execution_bounds_cancellation_and_retired_versions(source):
         execute_authenticated_session(graph, session, **pins(binding), limits=ReasoningLimits(max_input_facts=1))
     with pytest.raises(ReasoningCancelledError):
         execute_authenticated_session(graph, session, **pins(binding), limits=ReasoningLimits(), cancel=lambda: True)
-    for version in tuple(graph.iter_claim_versions()):
-        graph.retract_claim(version.logical_id, valid=(0, 100), supersedes_version_id=version.version_id)
+    for version in tuple(graph.epistemic.iter_claim_versions()):
+        graph.epistemic.retract_claim(version.logical_id, valid=(0, 100), supersedes_version_id=version.version_id)
     advanced = advance_session(graph, session, limits=ReasoningLimits()).session
     assert advanced.ledger.retired
     outcome = execute_authenticated_session(graph, advanced, **pins(bind_session_generation(graph, advanced)), limits=ReasoningLimits())
@@ -283,7 +283,7 @@ def test_writer_cannot_move_source_during_authenticated_execution(source, monkey
     def write():
         attempted.set()
         try:
-            graph.assert_claim(subject="b", predicate="memberOf", object="g", agent="new", polarity="positive", valid=(0, 100))
+            graph.epistemic.assert_claim(subject="b", predicate="memberOf", object="g", agent="new", polarity="positive", valid=(0, 100))
         finally:
             finished.set()
     monkeypatch.setattr(adapter, "execute_typed_closure", paused)

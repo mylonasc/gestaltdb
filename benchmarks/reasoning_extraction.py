@@ -49,11 +49,11 @@ def run_case(backend, rows, predicates, batch_rows, temp_root):
         try:
             begin = time.perf_counter()
             for index in range(rows):
-                graph.assert_claim(subject=f"n{index}", predicate=f"p{index % predicates}",
+                graph.epistemic.assert_claim(subject=f"n{index}", predicate=f"p{index % predicates}",
                                    object=f"m{index}", agent="registry",
                                    polarity="positive", valid=(0, 100))
             metrics["load_s"] = time.perf_counter() - begin
-            with graph.read_view(valid_time=50) as view:
+            with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
                 begin = time.perf_counter()
                 with PinnedClaimSource(view, world="default", ontology_revision="rev-1",
                                        selection=ClaimSelection(), mapping=ClaimMapping()) as source:

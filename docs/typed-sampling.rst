@@ -8,6 +8,9 @@ traversal to repeated GNN/KG training batches. The live APIs and the array-nativ
 engine serve different workloads; they are not interchangeable implementations
 of the same operation.
 
+The :doc:`architecture` guide shows the ingestion-to-training application path
+and how explicit reasoning adapters can supply derived graph structure.
+
 Choose a Sampling Layer
 -----------------------
 

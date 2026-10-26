@@ -38,7 +38,7 @@ def test_actual_native_records_and_index_locators(tmp_path):
     try:
         if not ExtractionCapability.probe(graph.store).native_arrow_scan:
             pytest.skip("runtime lacks plain PyRex native scan")
-        with graph._temporal_writer_guard(), graph.read_view(valid_time=50) as view:
+        with graph.temporal.write_guard(), graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             decoded, n = native_evidence(graph, view, "native-decoded", 12)
             located, m = native_evidence(graph, view, "native-locator", 12)
         assert set(decoded) == set(located) and n == m == 12
@@ -59,9 +59,9 @@ def test_native_benchmark_refuses_nonfixture_context(tmp_path):
     try:
         if not ExtractionCapability.probe(graph.store).native_arrow_scan:
             pytest.skip("runtime lacks plain PyRex native scan")
-        graph.assert_claim(subject="bad", predicate="edge", object="other", polarity="positive",
+        graph.epistemic.assert_claim(subject="bad", predicate="edge", object="other", polarity="positive",
                            agent="not-benchmark", valid=(0, 100))
-        with graph._temporal_writer_guard(), graph.read_view(valid_time=50) as view:
+        with graph.temporal.write_guard(), graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             from gestaltdb.reasoning.model import ReasoningError
             with pytest.raises(ReasoningError, match="fixture|decoding"):
                 native_evidence(graph, view, "native-decoded", 3)

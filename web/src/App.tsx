@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GraphCanvas, type CanvasHandle } from "./GraphCanvas";
 import { Inspector, type Selection } from "./Inspector";
-import { legendGroups, legendTypes } from "./graph";
+import { legendGroups, legendShapes, legendTypes } from "./graph";
 import { computeView } from "./view";
 import { downloadBlob, exportJson, exportPng, exportSvg, type ExportOptions } from "./export";
 import { ExportControls } from "./ExportControls";
@@ -12,7 +12,12 @@ import { graphIdentity, parseViewState, type LayoutState, type ViewState } from 
 import { DEFAULT_SETTINGS, type VizPayload, type VizViewOptions, type ViewerSettings } from "./viz-types";
 
 export function App({ payload, initial = {} }: { payload: VizPayload; initial?: VizViewOptions }) {
-  const [settings, setSettings] = useState<ViewerSettings>({ ...DEFAULT_SETTINGS, ...initial });
+  // Reasoning figures open as a static pinned diagram: the tree arrangement
+  // is already the final layout, so the force simulation starts paused.
+  // Explicit view overrides still win over this suggestion default.
+  const treeSuggested = payload.meta["suggested_layout"] === "tree";
+  const [settings, setSettings] = useState<ViewerSettings>(
+    { ...DEFAULT_SETTINGS, ...(treeSuggested ? { paused: true } : null), ...initial });
   const canvasRef = useRef<SVGSVGElement>(null);
   const controllerRef = useRef<CanvasHandle>(null);
   const [exporting, setExporting] = useState(false);
@@ -25,7 +30,7 @@ export function App({ payload, initial = {} }: { payload: VizPayload; initial?: 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [restoration, setRestoration] = useState<LayoutState | null>(null);
   const [filters, setFilters] = useState<ViewState["filters"]>({
-    query: "", hiddenGroups: [], hiddenTypes: [], requiredLabel: "", focusNodeId: null,
+    query: "", hiddenGroups: [], hiddenTypes: [], hiddenShapes: [], requiredLabel: "", focusNodeId: null,
     focusDirection: "both", focusHops: 1, searchProperties: true,
     highlightOn: payload.highlight.nodes.length + payload.highlight.edges.length > 0,
   });
@@ -34,8 +39,10 @@ export function App({ payload, initial = {} }: { payload: VizPayload; initial?: 
   });
   const groups = useMemo(() => legendGroups(payload), [payload]);
   const types = useMemo(() => legendTypes(payload), [payload]);
+  const shapes = useMemo(() => legendShapes(payload), [payload]);
   const view = useMemo(() => computeView(payload, {
     ...filters, hiddenGroups: new Set(filters.hiddenGroups), hiddenTypes: new Set(filters.hiddenTypes),
+    hiddenShapes: new Set(filters.hiddenShapes),
   }), [payload, filters]);
   const hiddenNodes = new Set(view.hiddenNodes), hiddenEdges = new Set(view.hiddenEdges);
 
@@ -76,7 +83,7 @@ export function App({ payload, initial = {} }: { payload: VizPayload; initial?: 
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   }
 
-  function toggleFilter(key: "hiddenGroups" | "hiddenTypes", value: string) {
+  function toggleFilter(key: "hiddenGroups" | "hiddenTypes" | "hiddenShapes", value: string) {
     setFilters(current => ({ ...current, [key]: current[key].includes(value)
       ? current[key].filter(item => item !== value) : [...current[key], value] }));
   }
@@ -93,6 +100,7 @@ export function App({ payload, initial = {} }: { payload: VizPayload; initial?: 
         <button onClick={() => setUnpinSignal(value => value + 1)}>Unpin all</button>
         <button onClick={() => controllerRef.current?.relayout(false)}>Reset layout</button>
         <button onClick={() => controllerRef.current?.relayout(true)}>Relayout visible graph</button>
+        <button onClick={() => controllerRef.current?.treeLayout()}>Tree layout</button>
         <label>Charge<input type="range" min={-1000} max={-10} step={10} value={settings.charge} onChange={event => setSettings({ ...settings, charge: Number(event.target.value) })} /></label>
         <label>Link distance<input type="range" min={10} max={200} step={5} value={settings.linkDistance} onChange={event => setSettings({ ...settings, linkDistance: Number(event.target.value) })} /></label>
         <label><input type="checkbox" checked={settings.showLabels} onChange={event => setSettings({ ...settings, showLabels: event.target.checked })} />Node labels</label>
@@ -133,9 +141,9 @@ export function App({ payload, initial = {} }: { payload: VizPayload; initial?: 
         {selection?.kind === "node" && <button onClick={() => controllerRef.current?.togglePin(selection.id)}>{pinnedIds.includes(selection.id) ? "Unpin selected node" : "Pin selected node"}</button>}
         <Inspector showProperties={settings.showProperties} payload={payload} selection={selection} focusNodeId={filters.focusNodeId}
           onFocus={focusNodeId => setFilters({ ...filters, focusNodeId })} onClear={() => setSelection(null)} />
-        {([ ["Node groups", groups, "hiddenGroups"], ["Edge types", types, "hiddenTypes"] ] as const).map(([heading, entries, key]) => <section key={key}>
+        {([ ["Node groups", groups, "hiddenGroups"], ["Edge types", types, "hiddenTypes"], ["Node shapes", shapes, "hiddenShapes"] ] as const).map(([heading, entries, key]) => <section key={key}>
           <h2>{heading}</h2><ul>{entries.map(([value, count]) => <li key={value}><label>
-            <input type="checkbox" checked={!filters[key].includes(value)} onChange={() => toggleFilter(key, value)} aria-label={`Toggle ${key === "hiddenGroups" ? "node group" : "edge type"} ${value}`} />
+            <input type="checkbox" checked={!filters[key].includes(value)} onChange={() => toggleFilter(key, value)} aria-label={`Toggle ${key === "hiddenGroups" ? "node group" : key === "hiddenTypes" ? "edge type" : "node shape"} ${value}`} />
             <span className="gdviz-swatch" style={{ backgroundColor: colorFor(value) }} aria-hidden="true" />{value}: {count}
           </label></li>)}</ul>
         </section>)}
