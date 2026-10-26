@@ -271,7 +271,8 @@ def admit_range_result(view: GraphReadView, result: RangeReasoningResult, progra
             (len(result.closure.base), source_limits.max_evidence, "max_evidence"),
             (len(result.closure.segments), source_limits.max_segments, "max_segments"),
             (len(result.extraction_segments), source_limits.max_segments, "max_segments"),
-            (len(result.closure.derivations), source_limits.max_supports, "max_supports")):
+            (len(result.closure.derivations), source_limits.max_supports, "max_supports"),
+            (len(result.closure.conclusions), source_limits.max_supports, "max_supports")):
         if size > maximum:
             raise ReasoningLimitError(f"range admission exceeded {name}")
     binding, interval = result.binding, result.binding.identity.source

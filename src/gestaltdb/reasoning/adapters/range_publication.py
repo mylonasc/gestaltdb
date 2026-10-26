@@ -69,7 +69,8 @@ def _interval_source(namespace, start, end):
 
 def _outputs(result, bounds, cancel):
     facts = set()
-    for fact in chain((b.fact for b in result.closure.base), (d.fact for d in result.closure.derivations)):
+    for fact in chain((b.fact for b in result.closure.base),
+                      (c.fact for c in result.closure.conclusions)):
         check_cancelled(cancel)
         if len(fact.values) != 2 or not all(isinstance(v, str) and v for v in fact.values):
             raise ReasoningError("range publication requires binary entity output; explicit conversion required")

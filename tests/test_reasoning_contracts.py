@@ -120,7 +120,7 @@ def test_core_implementation_imports_only_stdlib_and_inward_contracts():
     # Inspect implementation imports, not sys.modules: gestaltdb.__init__ already
     # eagerly imports other subsystems and this slice does not alter that API.
     root = Path(__file__).parents[1] / "src" / "gestaltdb" / "reasoning"
-    allowed = {"__future__", "hashlib", "json", "dataclasses", "typing", "collections", "bisect", "heapq", "types", "array", "itertools"}
+    allowed = {"__future__", "hashlib", "json", "dataclasses", "typing", "collections", "bisect", "heapq", "types", "array", "itertools", "warnings"}
     for path in root.glob("*.py"):
         tree = ast.parse(path.read_text())
         for node in ast.walk(tree):
