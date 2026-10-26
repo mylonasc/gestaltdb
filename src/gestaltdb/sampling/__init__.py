@@ -7,7 +7,10 @@ adding array-native sampler snapshot and engine primitives.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Sequence, Union
+from typing import Iterable, Iterator, Literal, Mapping, Sequence, Union, cast
+
+HopDirection = Literal["out", "in", "any"]
+"""One directed sampling orientation."""
 
 
 @dataclass(frozen=True)
@@ -15,10 +18,10 @@ class SamplingHop:
     """Configuration for one typed sampling hop."""
 
     edge_type: str
-    direction: str = "out"
+    direction: HopDirection = "out"
     sample_size: int = 10
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.direction not in {"out", "in", "any"}:
             raise ValueError("direction must be 'out', 'in', or 'any'")
         if self.sample_size < 1:
@@ -26,10 +29,16 @@ class SamplingHop:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> "SamplingHop":
+        direction = str(data.get("direction", "out"))
+        if direction not in {"out", "in", "any"}:
+            raise ValueError("direction must be 'out', 'in', or 'any'")
+        sample_size = data.get("sample_size", 10)
+        if isinstance(sample_size, bool) or not isinstance(sample_size, int):
+            raise ValueError("sample_size must be an integer")
         return cls(
             edge_type=str(data["edge_type"]),
-            direction=str(data.get("direction", "out")),
-            sample_size=int(data.get("sample_size", 10)),
+            direction=cast(HopDirection, direction),
+            sample_size=sample_size,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -46,13 +55,13 @@ class SamplingPattern:
 
     hops: Sequence[Union[SamplingHop, Mapping[str, object]]]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         object.__setattr__(self, "hops", tuple(as_sampling_hop(hop) for hop in self.hops))
 
-    def __iter__(self):
-        return iter(self.hops)
+    def __iter__(self) -> Iterator[SamplingHop]:
+        return (as_sampling_hop(hop) for hop in self.hops)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.hops)
 
     @classmethod
@@ -60,7 +69,7 @@ class SamplingPattern:
         return cls(list(hops))
 
     def to_dicts(self) -> list[dict[str, object]]:
-        return [hop.to_dict() for hop in self.hops]
+        return [as_sampling_hop(hop).to_dict() for hop in self.hops]
 
 
 def as_sampling_hop(hop: Union[SamplingHop, Mapping[str, object]]) -> SamplingHop:

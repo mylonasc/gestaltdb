@@ -59,6 +59,14 @@ def test_query_returns_query_result(graph):
     assert list(result) == [{"value": 1}]
 
 
+def test_label_expression_with_property_seek(graph):
+    graph.put_node(Node("a", labels=["A"], properties={"v": 1}))
+    graph.put_node(Node("b", labels=["B"], properties={"v": 1}))
+    graph.create_node_property_index("v")
+    result = graph.query("MATCH (n:A|B {v: 1}) RETURN n")
+    assert {node.get_id for node in (record["n"] for record in result)} == {"a", "b"}
+
+
 def test_entity_identity_and_labels():
     node = Node(node_id="n1", labels=["Drug", "Drug"], properties={"kind": "drug"})
     assert node.get_id == "n1"

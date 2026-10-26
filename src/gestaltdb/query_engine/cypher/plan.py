@@ -8,6 +8,7 @@ from .ast import (
     CreateClause,
     DeleteClause,
     EntailsCall,
+    Expression,
     ForeachClause,
     FunctionCall,
     MatchClause,
@@ -19,10 +20,13 @@ from .ast import (
     PropertyRef,
     Query,
     RemoveClause,
+    RemoveItem,
     ReturnClause,
     SampleTypedPathsCall,
     SetClause,
+    SetItem,
     SubqueryClause,
+    TemporalQualifier,
     UnionQuery,
     UnwindClause,
     Variable,
@@ -56,9 +60,9 @@ class MatchStep:
 
     patterns: tuple[PathPatternClause, ...]
     group_id: int
-    where: object = None
+    where: Expression | None = None
     selector: PathSelector | None = None
-    qualifiers: tuple[object, ...] = ()
+    qualifiers: tuple[TemporalQualifier, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -72,16 +76,16 @@ class OptionalMatchStep:
 
     patterns: tuple[PathPatternClause, ...]
     group_id: int
-    where: object = None
+    where: Expression | None = None
     selector: PathSelector | None = None
-    qualifiers: tuple[object, ...] = ()
+    qualifiers: tuple[TemporalQualifier, ...] = ()
 
 
 @dataclass(frozen=True)
 class Unwind:
     """Expand each input row into one row per element of a list expression."""
 
-    expression: object
+    expression: Expression
     variable: str
 
 
@@ -104,21 +108,21 @@ class CreateStep:
 class SetStep:
     """Apply one textual ``SET`` per input row with copy-on-write."""
 
-    items: tuple[object, ...]
+    items: tuple[SetItem, ...]
 
 
 @dataclass(frozen=True)
 class RemoveStep:
     """Apply one textual ``REMOVE`` per input row with copy-on-write."""
 
-    items: tuple[object, ...]
+    items: tuple[RemoveItem, ...]
 
 
 @dataclass(frozen=True)
 class DeleteStep:
     """Delete the entities of one textual ``DELETE`` per input row."""
 
-    expressions: tuple[object, ...]
+    expressions: tuple[Expression, ...]
     detach: bool = False
 
 
@@ -127,8 +131,8 @@ class MergeStep:
     """Match a pattern per input row or create it, running ``ON`` actions."""
 
     patterns: tuple[PathPatternClause, ...]
-    on_create: tuple[object, ...] = ()
-    on_match: tuple[object, ...] = ()
+    on_create: tuple[SetItem, ...] = ()
+    on_match: tuple[SetItem, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -136,7 +140,7 @@ class ForeachStep:
     """Run a write-only inner plan per input row and list element."""
 
     variable: str
-    iterable: object
+    iterable: Expression
     plan: LogicalPlan
 
 
@@ -154,7 +158,7 @@ class ProjectItems:
     """Project one ``WITH`` or ``RETURN`` clause from resolved expressions."""
 
     returns: tuple[str, ...]
-    expressions: tuple[object, ...] = ()
+    expressions: tuple[Expression, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -162,7 +166,7 @@ class AggregateCall:
     """One aggregate invocation; a ``None`` argument counts every row."""
 
     function: str
-    argument: object | None = None
+    argument: Expression | None = None
     distinct: bool = False
 
 
@@ -171,9 +175,9 @@ class Aggregate:
     """Group binding rows by key expressions and apply aggregate calls."""
 
     returns: tuple[str, ...]
-    keys: tuple[tuple[str, object], ...] = ()
+    keys: tuple[tuple[str, Expression], ...] = ()
     calls: tuple[tuple[str, AggregateCall], ...] = ()
-    expressions: tuple[object, ...] = ()
+    expressions: tuple[Expression, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -187,7 +191,7 @@ class ProcedureSource:
 class FilterExpression:
     """Filter rows by a boolean expression."""
 
-    expression: object
+    expression: Expression
 
 
 @dataclass(frozen=True)
@@ -206,7 +210,7 @@ class Distinct:
 class Sort:
     """Sort rows by the query's ORDER BY items."""
 
-    items: tuple[object, ...]
+    items: tuple[OrderItem, ...]
 
 
 @dataclass(frozen=True)

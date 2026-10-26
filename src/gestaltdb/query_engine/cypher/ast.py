@@ -559,7 +559,7 @@ class TraversalHop:
     rel_var: str | None
     edge_type: str
     target_var: str
-    direction: str = "out"
+    direction: Literal["out", "in", "any"] = "out"
     edge_types: tuple[str, ...] = ()
 
 
@@ -587,7 +587,7 @@ class PatternHop:
     rel_var: str | None
     edge_types: tuple[str, ...]
     target: NodePattern
-    direction: str = "out"
+    direction: Literal["out", "in", "any"] = "out"
     properties: tuple[tuple[str, object], ...] = ()
     min_length: int = 1
     max_length: int | None = 1
@@ -643,7 +643,7 @@ class RelationshipPatternClause:
     rel_var: str | None
     edge_type: str
     target_var: str
-    direction: str = "out"
+    direction: Literal["out", "in", "any"] = "out"
     edge_types: tuple[str, ...] = ()
 
 
@@ -725,7 +725,7 @@ class RelationshipScanQuery:
     edge_type: str
     target_var: str
     returns: tuple[str, ...]
-    direction: str = "out"
+    direction: Literal["out", "in", "any"] = "out"
     edge_types: tuple[str, ...] = ()
     where: Expression | None = None
     projections: tuple[str, ...] = ()

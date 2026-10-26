@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 from dataclasses import dataclass
 from enum import Enum
 from typing import Mapping
@@ -72,7 +73,7 @@ class ModalExpression:
     operator: ModalOperator
     subject: str | None = None
     predicate: str | None = None
-    object: object = None
+    object: builtins.object = None
     object_kind: ClaimObjectKind = ClaimObjectKind.ENTITY
     agent: str | None = None
     operands: tuple["ModalExpression", ...] = ()
@@ -82,19 +83,19 @@ class ModalExpression:
             operator = ModalOperator(self.operator)
         except (TypeError, ValueError) as exc:
             raise ModalError(f"unsupported modal operator: {self.operator}") from exc
-        object.__setattr__(self, "operator", operator)
+        builtins.object.__setattr__(self, "operator", operator)
         operands = tuple(self.operands)
         if not all(isinstance(item, ModalExpression) for item in operands):
             raise ModalError("modal operands must be ModalExpression values")
-        object.__setattr__(self, "operands", operands)
+        builtins.object.__setattr__(self, "operands", operands)
         if operator is ModalOperator.ATOM:
-            object.__setattr__(self, "subject", _text(self.subject, "subject"))
-            object.__setattr__(self, "predicate", _text(self.predicate, "predicate"))
+            builtins.object.__setattr__(self, "subject", _text(self.subject, "subject"))
+            builtins.object.__setattr__(self, "predicate", _text(self.predicate, "predicate"))
             try:
                 object_kind = ClaimObjectKind(self.object_kind)
             except (TypeError, ValueError) as exc:
                 raise ModalError("atom object_kind must be 'entity' or 'literal'") from exc
-            object.__setattr__(self, "object_kind", object_kind)
+            builtins.object.__setattr__(self, "object_kind", object_kind)
             if object_kind is ClaimObjectKind.ENTITY:
                 _text(self.object, "entity object")
             else:
@@ -103,7 +104,7 @@ class ModalExpression:
                 except TemporalVersionError as exc:
                     raise ModalError("atom literal object must be JSON-compatible") from exc
             if self.agent is not None:
-                object.__setattr__(self, "agent", _text(self.agent, "atom agent"))
+                builtins.object.__setattr__(self, "agent", _text(self.agent, "atom agent"))
             if operands:
                 raise ModalError("ATOM cannot contain operands")
             return
@@ -121,10 +122,10 @@ class ModalExpression:
             if self.agent is not None:
                 raise ModalError("NOT cannot contain an agent")
             return
-        object.__setattr__(self, "agent", _text(self.agent, f"{operator.value} agent"))
+        builtins.object.__setattr__(self, "agent", _text(self.agent, f"{operator.value} agent"))
 
     @classmethod
-    def from_value(cls, value: object) -> "ModalExpression":
+    def from_value(cls, value: builtins.object) -> "ModalExpression":
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -182,7 +183,7 @@ class ModalExpression:
             agent = _text(agent, f"{operator.value} agent")
         return cls(operator, agent=agent, operands=(cls.from_value(value["formula"]),))
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(self) -> dict[str, builtins.object]:
         if self.operator is ModalOperator.ATOM:
             result = {
                 "operator": "ATOM", "subject": self.subject, "predicate": self.predicate,
@@ -241,7 +242,7 @@ def _confidence(value: _Value) -> float | None:
 
 
 def _all_confidences(values: list[float | None]) -> float | None:
-    return None if not values or any(value is None for value in values) else min(values)
+    return None if not values or any(value is None for value in values) else min(value for value in values if value is not None)
 
 
 def _any_confidences(values: list[float | None]) -> float | None:
@@ -277,8 +278,8 @@ def evaluate_modal(
     """Evaluate one formula under a pinned read view and explicit finite bounds."""
     formula = ModalExpression.from_value(expression)
     world = _text(world, "world")
-    for name, value in (("max_depth", max_depth), ("max_states", max_states)):
-        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+    for name, bound in (("max_depth", max_depth), ("max_states", max_states)):
+        if isinstance(bound, bool) or not isinstance(bound, int) or bound < 1:
             raise ModalError(f"{name} must be a positive integer")
 
     cache: dict[tuple[bytes, str, int], _Value] = {}

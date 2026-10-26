@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from itertools import islice
-from typing import Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from .ast import (
     AndExpression,
@@ -13,6 +13,7 @@ from .ast import (
     EntailsCall,
     NodePattern,
     NodeScanQuery,
+    OrderItem,
     Parameter,
     PathPatternClause,
     PathValue,
@@ -48,19 +49,26 @@ from .plan import Project as LogicalProject
 from .plan import Skip as LogicalSkip
 from .plan import Sort as LogicalSort
 
+if TYPE_CHECKING:
+    from ..._graph.entities import Edge, Node
+    from ...hierarchy import LabelHierarchy, RelationHierarchy
+    from ...readview import GraphReadView
+    from .ast import Expression
+    from .scope import GraphQueryScope
+
 
 @dataclass
 class QueryContext:
     """Runtime state shared by physical operators during one query."""
 
-    graph: object
+    graph: GraphQueryScope
     parameters: dict[str, object] = field(default_factory=dict)
     node_cache: dict[bytes, object] = field(default_factory=dict)
     edge_cache: dict[bytes, object] = field(default_factory=dict)
     label_cardinalities: dict[str, int] = field(default_factory=dict)
-    label_hierarchy: object | None = None
-    relation_hierarchy: object | None = None
-    read_view: object | None = None
+    label_hierarchy: LabelHierarchy | None = None
+    relation_hierarchy: RelationHierarchy | None = None
+    read_view: GraphReadView | None = None
     entity_versions: dict[int, object] = field(default_factory=dict)
 
     def node_key_to_bytes(self, node_key):
@@ -93,7 +101,7 @@ class QueryContext:
         return self.edge_cache[edge_id]
 
     def iter_temporal_node_ids(self):
-        for version in self.read_view.iter_nodes_as_of():
+        for version in cast("GraphReadView", self.read_view).iter_nodes_as_of():
             node = version.node
             self.entity_versions[id(node)] = version
             node_id = self.node_key_to_bytes(version.logical_id)
@@ -108,7 +116,7 @@ class QueryContext:
         for current_direction in directions:
             for edge_type in types:
                 kwargs = {"source": logical_id} if current_direction == "out" else {"target": logical_id}
-                for version in self.read_view.iter_edges_as_of(
+                for version in cast("GraphReadView", self.read_view).iter_edges_as_of(
                     edge_type=edge_type, direction=current_direction, **kwargs
                 ):
                     edge = version.edge
@@ -166,34 +174,23 @@ class BindingRow:
         adapted, but that path is deprecated and will be removed once all
         operators emit ``BindingRow`` directly (see ``[cypher-02]``).
         """
-        if isinstance(row, cls):
+        if isinstance(row, BindingRow):
             return row
         return cls(
-            bindings=dict(row["bindings"]),  # type: ignore[arg-type]
-            current_node_id=row.get("current_node_id"),  # type: ignore[arg-type]
-            used_relationship_ids=frozenset(row.get("used_relationship_ids", ())),  # type: ignore[arg-type]
+            bindings=dict(cast(Mapping[str, object], row["bindings"])),
+            current_node_id=cast(bytes | None, row.get("current_node_id")),
+            used_relationship_ids=frozenset(cast(Iterable[bytes], row.get("used_relationship_ids", ()))),
         )
 
     def with_bindings(
-        self,
-        bindings: dict[str, object],
-        *,
-        current_node_id: bytes | None = None,
+        self, bindings: dict[str, object], *, current_node_id: bytes | None = None,
         preserve_current_node: bool = True,
         used_relationship_ids: frozenset[bytes] | None = None,
     ) -> BindingRow:
         """Return a row with updated bindings and traversal state."""
-        return BindingRow(
-            bindings=bindings,
-            current_node_id=(
-                self.current_node_id if preserve_current_node else current_node_id
-            ),
-            used_relationship_ids=(
-                self.used_relationship_ids
-                if used_relationship_ids is None
-                else used_relationship_ids
-            ),
-        )
+        current = self.current_node_id if preserve_current_node else current_node_id
+        used = self.used_relationship_ids if used_relationship_ids is None else used_relationship_ids
+        return BindingRow(bindings=bindings, current_node_id=current, used_relationship_ids=used)
 
 
 @dataclass(frozen=True, slots=True)
@@ -224,10 +221,11 @@ class Operator(Protocol):
     Every operator consumes an iterable of rows and lazily yields rows for the
     next stage. Binding stages yield ``BindingRow``; projection stages yield
     ``ProjectedRow``. The phase-specific protocols below document which row
-    kind each operator consumes and produces.
+    kind each operator consumes and produces. Row iterables use ``Any`` at
+    this level for override compatibility; sub-protocols pin exact row types.
     """
 
-    def execute(self, rows: Iterable[object], context: QueryContext) -> Iterable[object]: ...
+    def execute(self, rows: Iterable[Any], context: QueryContext) -> Iterable[Any]: ...
 
 
 class BindingOperator(Operator, Protocol):
@@ -254,7 +252,7 @@ class ProjectOperator:
 
     returns: tuple[str, ...]
     projections: tuple[str, ...] = ()
-    projection_expressions: tuple[object, ...] = ()
+    projection_expressions: tuple[Expression, ...] = ()
 
     def execute(
         self, rows: Iterable[BindingRow], context: QueryContext
@@ -282,7 +280,7 @@ class ProjectionView:
     """Minimal projection metadata for alias-aware ordering in staged plans."""
 
     returns: tuple[str, ...]
-    projection_expressions: tuple[object, ...] = ()
+    projection_expressions: tuple[Expression, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -297,11 +295,10 @@ class SortOperator:
     ) -> Iterator[ProjectedRow]:
         sorted_rows = list(rows)
         for item in reversed(self.items):
+            order_item = cast(OrderItem, item)
             sorted_rows.sort(
-                key=lambda row, order_item=item: _sortable_value(
-                    _order_value(row, order_item, self.parsed, context)
-                ),
-                reverse=item.descending,
+                key=lambda row: _sortable_value(_order_value(row, order_item, self.parsed, context)),
+                reverse=order_item.descending,
             )
         yield from sorted_rows
 
@@ -378,29 +375,29 @@ def execute_plan(plan: LogicalPlan, context: QueryContext) -> list[dict[str, obj
         elif isinstance(operator, LogicalProject):
             if projected or stream is None:
                 raise TypeError("Logical plan contains multiple projections")
-            stream = ProjectOperator(returns=operator.returns).execute(stream, context)
+            stream = ProjectOperator(returns=operator.returns).execute(cast(Iterable[BindingRow], stream), context)
             projected = True
         elif isinstance(operator, LogicalSort):
             _require_projected(projected, operator)
-            stream = SortOperator(operator.items, ProjectionView(plan.columns)).execute(stream, context)
+            stream = SortOperator(operator.items, ProjectionView(plan.columns)).execute(cast(Iterable[ProjectedRow], stream), context)
         elif isinstance(operator, LogicalDistinct):
             _require_projected(projected, operator)
-            stream = DistinctOperator(plan.columns).execute(stream, context)
+            stream = DistinctOperator(plan.columns).execute(cast(Iterable[ProjectedRow], stream), context)
         elif isinstance(operator, LogicalSkip):
             _require_projected(projected, operator)
             count = _resolve_pagination(operator.count, context, "SKIP")
-            stream = SkipOperator(count or 0).execute(stream, context)
+            stream = SkipOperator(count or 0).execute(cast(Iterable[ProjectedRow], stream), context)
         elif isinstance(operator, LogicalLimit):
             _require_projected(projected, operator)
             count = _resolve_pagination(operator.limit, context, "LIMIT")
-            stream = LimitOperator(count or 0).execute(stream, context)
+            stream = LimitOperator(count or 0).execute(cast(Iterable[ProjectedRow], stream), context)
         else:
             raise TypeError(
                 f"Unsupported logical operator: {type(operator).__name__}"
             )
     if not projected or stream is None:
         raise TypeError("Logical plan does not contain a projection")
-    return [dict(row.values) for row in stream]
+    return [dict(cast(ProjectedRow, row).values) for row in stream]
 
 
 def _execute_union(union: Union, context: QueryContext) -> list[dict[str, object]]:
@@ -544,8 +541,8 @@ class AggregateOperator:
                 group = {"key_values": key_values, "row_count": 0, "arguments": []}
                 groups[key] = group
                 order.append(key)
-            group["row_count"] += 1
-            group["arguments"].append(
+            group["row_count"] = cast(int, group["row_count"]) + 1
+            cast(list, group["arguments"]).append(
                 [
                     evaluate_expression(call.argument, bindings, context)
                     if call.argument is not None
@@ -561,11 +558,12 @@ class AggregateOperator:
             group = groups[key]
             aggregate_values: dict[str, object] = {
                 output: value
-                for (output, _), value in zip(self.aggregate.keys, group["key_values"])
+                for (output, _), value in zip(self.aggregate.keys, cast(list[object], group["key_values"]))
             }
-            columns = list(zip(*group["arguments"])) if group["arguments"] else [() for _ in self.aggregate.calls]
+            arguments: list[list[object]] = cast(list[list[object]], group["arguments"])
+            columns = [tuple(argument[i] for argument in arguments) for i in range(len(self.aggregate.calls))] if arguments else [() for _ in self.aggregate.calls]
             for (output, call), values in zip(self.aggregate.calls, columns):
-                aggregate_values[output] = _apply_aggregate(call, list(values), group["row_count"])
+                aggregate_values[output] = _apply_aggregate(call, list(values), cast(int, group["row_count"]))
             expressions = self.aggregate.expressions or tuple(
                 Variable(output) for output in self.aggregate.returns
             )
@@ -601,20 +599,20 @@ def _apply_aggregate(call, values: list[object], row_count: int) -> object:
                 raise TypeError(f"{call.function} expects numeric operands")
         if not non_null:
             return 0 if call.function == "sum" else None
-        total = sum(non_null)
+        total = sum(cast(list[float], non_null))
         return total if call.function == "sum" else total / len(non_null)
     if call.function in ("min", "max"):
         if not non_null:
             return None
         try:
-            return min(non_null) if call.function == "min" else max(non_null)
+            return min(non_null) if call.function == "min" else max(non_null)  # type: ignore[type-var]
         except TypeError as exc:
             raise TypeError(f"{call.function} expects comparable values") from exc
     raise TypeError(f"Unsupported aggregate function: {call.function}")
 
 
 def filter_projected(
-    rows: Iterable[ProjectedRow], expression: object, context: QueryContext
+    rows: Iterable[ProjectedRow], expression: Expression, context: QueryContext
 ) -> Iterator[ProjectedRow]:
     """Yield projected rows whose output values satisfy a ``WHERE`` filter."""
     for row in rows:
@@ -698,7 +696,7 @@ def _execute_staged(
             projected = ProjectOperator(
                 returns=operator.returns,
                 projection_expressions=operator.expressions,
-            ).execute(source, context)
+            ).execute(cast(Iterable[BindingRow], source), context)
             bindings = None
         elif isinstance(operator, LogicalAggregate):
             aggregate_source: Iterable[BindingRow] | Iterable[ProjectedRow] = (
@@ -707,7 +705,7 @@ def _execute_staged(
             view = ProjectionView(
                 operator.returns, tuple(Variable(name) for name in operator.returns)
             )
-            projected = AggregateOperator(operator).execute(aggregate_source, context)
+            projected = AggregateOperator(operator).execute(cast(Iterable[BindingRow], aggregate_source), context)
             bindings = None
         elif isinstance(operator, LogicalSort):
             if projected is None:
@@ -933,7 +931,7 @@ def apply_path_pattern_clause(rows, clause: PathPatternClause, context: QueryCon
 
 def _match_named_pattern(row: BindingRow, pattern: PathPatternClause, context: QueryContext, where, selector):
     """Match one named pattern, binding its name to a path value per match."""
-    trails = []
+    trails: list[tuple[BindingRow, list[Node | None], list[Edge]]] = []
     for start in _path_start_rows(row, pattern, context, where):
         if pattern.source.variable is not None:
             start_node = start.bindings.get(pattern.source.variable)
@@ -947,7 +945,7 @@ def _match_named_pattern(row: BindingRow, pattern: PathPatternClause, context: Q
     if not pattern.hops:
         for start, nodes, edges in trails:
             bindings = dict(start.bindings)
-            bindings[pattern.name] = PathValue(tuple(nodes), tuple(edges))
+            bindings[cast(str, pattern.name)] = PathValue(tuple(nodes), tuple(edges))
             yield start.with_bindings(bindings)
         return
     for hop in pattern.hops:
@@ -956,13 +954,13 @@ def _match_named_pattern(row: BindingRow, pattern: PathPatternClause, context: Q
             return
     for final, nodes, edges in trails:
         bindings = dict(final.bindings)
-        bindings[pattern.name] = PathValue(tuple(nodes), tuple(edges))
+        bindings[cast(str, pattern.name)] = PathValue(tuple(nodes), tuple(edges))
         yield final.with_bindings(bindings)
 
 
-def _extend_named_trails(context: QueryContext, trails, hop: PatternHop, selector):
+def _extend_named_trails(context: QueryContext, trails: list[tuple[BindingRow, list[Node | None], list[Edge]]], hop: PatternHop, selector):
     """Extend named-pattern trails across one hop, fixed or variable-length."""
-    extended = []
+    extended: list[tuple[BindingRow, list[Node | None], list[Edge]]] = []
     for start, nodes, edges in trails:
         if (hop.min_length, hop.max_length) == (1, 1):
             for bindings, neighbor_id, edge_id, edge in _expand_fixed_step(context, start, hop, set()):
@@ -1002,7 +1000,7 @@ def _extend_named_variable(context: QueryContext, start: BindingRow, nodes, edge
     if hop.max_length == 0:
         return
     for neighbor_id, target_node, path_edges, path_used, path_nodes in _bfs_trails(
-        context, start.current_node_id, hop, start.used_relationship_ids
+        context, cast(bytes, start.current_node_id), hop, start.used_relationship_ids
     ):
         if hop.max_length is not None and len(path_edges) > hop.max_length:
             break
@@ -1041,7 +1039,7 @@ def _extend_named_shortest(context: QueryContext, start: BindingRow, nodes, edge
     if hop.max_length == 0:
         return
     for neighbor_id, target_node, path_edges, path_used, path_nodes in _bfs_trails(
-        context, start.current_node_id, hop, start.used_relationship_ids
+        context, cast(bytes, start.current_node_id), hop, start.used_relationship_ids
     ):
         length = len(path_edges)
         if hop.max_length is not None and length > hop.max_length:
@@ -1172,7 +1170,7 @@ def _edge_seek_spec(rel_var: str | None, properties, where, context: QueryContex
     indexed edge properties qualify. Returns ``None`` when no predicate can
     use the composite type/property index.
     """
-    indexed = getattr(context.graph, "indexed_edge_properties", set())
+    indexed: set[str] = getattr(context.graph, "indexed_edge_properties", set())
     for property_name, value in properties:
         if (
             property_name in indexed
@@ -1288,6 +1286,7 @@ def _path_start_rows(row, clause: PathPatternClause, context: QueryContext, wher
         if source.label_expression is not None:
             scan = NodeScanQuery(
                 variable=scan.variable,
+                label=None,
                 property_name=scan.property_name,
                 property_value=scan.property_value,
                 returns=(),
@@ -1313,7 +1312,7 @@ def _expand_pattern_hop(context: QueryContext, rows, hop: PatternHop, selector=N
         row = BindingRow.from_row(row)
         if _is_null_bound(row, hop.target.variable) or _is_null_bound(row, hop.rel_var):
             continue
-        seen = set()
+        seen: set[tuple[bytes, bytes]] = set()
         for bindings, neighbor_id, edge_id, _edge in _expand_fixed_step(context, row, hop, seen):
             yield row.with_bindings(
                 bindings,
@@ -1323,9 +1322,9 @@ def _expand_pattern_hop(context: QueryContext, rows, hop: PatternHop, selector=N
             )
 
 
-def _expand_fixed_step(context: QueryContext, row: BindingRow, hop: PatternHop, seen: set):
+def _expand_fixed_step(context: QueryContext, row: BindingRow, hop: PatternHop, seen: set[tuple[bytes, bytes]]):
     """Yield ``(bindings, neighbor_id, edge_id, edge)`` for one fixed hop."""
-    for adjacency in _iter_pattern_adjacency(context, row.current_node_id, hop):
+    for adjacency in _iter_pattern_adjacency(context, cast(bytes, row.current_node_id), hop):
         edge_id = adjacency["edge_id"]
         neighbor_id = adjacency["neighbor_id"]
         occurrence = (edge_id, neighbor_id)
@@ -1427,9 +1426,9 @@ def _bfs_trails(context: QueryContext, start_id: bytes, hop: PatternHop, used_id
     non-decreasing length. Node labels and target properties are left to
     callers so intermediate nodes stay unconstrained.
     """
-    frontier = [(start_id, [], used_ids, [start_id])]
+    frontier: list[tuple[bytes, list[Edge], frozenset[bytes], list[bytes]]] = [(start_id, [], used_ids, [start_id])]
     while frontier:
-        next_frontier = []
+        next_frontier: list[tuple[bytes, list[Edge], frozenset[bytes], list[bytes]]] = []
         for node_id, edges, used, node_ids in frontier:
             for adjacency in _iter_pattern_adjacency(context, node_id, hop):
                 edge_id = adjacency["edge_id"]
@@ -1678,7 +1677,7 @@ def _where_exact_seek(variable: str, where, context: QueryContext):
 
 def _inline_exact_seek(properties, context: QueryContext):
     """Return the first index-eligible exact predicate from an inline map."""
-    indexed = getattr(context.graph, "indexed_node_properties", set())
+    indexed: set[str] = context.graph.indexed_node_properties
     for property_name, value in properties:
         if property_name in indexed and _is_seek_value(value):
             return property_name, value

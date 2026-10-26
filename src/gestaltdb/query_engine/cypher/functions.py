@@ -14,7 +14,7 @@ import random
 import uuid
 from dataclasses import dataclass
 from functools import partial
-from typing import Callable
+from typing import Any, Callable, Protocol, TypeGuard, TypeVar, cast, overload
 
 from .ast import PathValue
 from .temporal import construct_temporal, temporal_to_string
@@ -46,14 +46,29 @@ def _scalar(name: str, arity: tuple[int, int | None], execute: Callable[[list[ob
     return FunctionDef(name, arity, "scalar", execute)
 
 
-def _expect_type(value: object, name: str, *types: type) -> None:
+_T = TypeVar("_T")
+_T1 = TypeVar("_T1")
+_T2 = TypeVar("_T2")
+
+
+class _EntityLike(Protocol):
+    @property
+    def get_id(self) -> str: ...
+
+
+@overload
+def _expect_type(value: object, name: str, kind: type[_T]) -> _T: ...
+@overload
+def _expect_type(value: object, name: str, kind1: type[_T1], kind2: type[_T2]) -> _T1 | _T2: ...
+def _expect_type(value: object, name: str, *types: type[Any]) -> Any:  # type: ignore[misc]
     """Raise a ``TypeError`` when a function argument has the wrong type."""
     if not isinstance(value, types) or isinstance(value, bool) and bool not in types:
         expected = " or ".join(kind.__name__ for kind in types)
         raise TypeError(f"{name} expects {expected} operands")
+    return value
 
 
-def _is_entity(value: object) -> bool:
+def _is_entity(value: object) -> TypeGuard[_EntityLike]:
     """Return whether a value quacks like a graph entity."""
     return hasattr(value, "get_id") and hasattr(value, "properties")
 
@@ -149,7 +164,7 @@ def _head(args: list[object], context) -> object:
     (value,) = args
     if value is None:
         return None
-    _expect_type(value, "head()", list, tuple)
+    value = _expect_type(value, "head()", list, tuple)
     return value[0] if value else None
 
 
@@ -157,7 +172,7 @@ def _last(args: list[object], context) -> object:
     (value,) = args
     if value is None:
         return None
-    _expect_type(value, "last()", list, tuple)
+    value = _expect_type(value, "last()", list, tuple)
     return value[-1] if value else None
 
 
@@ -267,7 +282,7 @@ def _trim(args: list[object], context) -> object:
     (value,) = args
     if value is None:
         return None
-    _expect_type(value, "trim()", str)
+    value = _expect_type(value, "trim()", str)
     return value.strip()
 
 
@@ -275,7 +290,7 @@ def _ltrim(args: list[object], context) -> object:
     (value,) = args
     if value is None:
         return None
-    _expect_type(value, "lTrim()", str)
+    value = _expect_type(value, "lTrim()", str)
     return value.lstrip()
 
 
@@ -283,7 +298,7 @@ def _rtrim(args: list[object], context) -> object:
     (value,) = args
     if value is None:
         return None
-    _expect_type(value, "rTrim()", str)
+    value = _expect_type(value, "rTrim()", str)
     return value.rstrip()
 
 
@@ -292,7 +307,7 @@ def _case_fold(name: str, fold) -> Callable[[list[object], object], object]:
         (value,) = args
         if value is None:
             return None
-        _expect_type(value, f"{name}()", str)
+        value = _expect_type(value, f"{name}()", str)
         return fold(value)
 
     return convert
@@ -302,9 +317,9 @@ def _replace(args: list[object], context) -> object:
     original, search, replacement = args
     if original is None or search is None or replacement is None:
         return None
-    _expect_type(original, "replace()", str)
-    _expect_type(search, "replace()", str)
-    _expect_type(replacement, "replace()", str)
+    original = _expect_type(original, "replace()", str)
+    search = _expect_type(search, "replace()", str)
+    replacement = _expect_type(replacement, "replace()", str)
     return original.replace(search, replacement)
 
 
@@ -312,8 +327,8 @@ def _split(args: list[object], context) -> object:
     value, delimiter = args
     if value is None or delimiter is None:
         return None
-    _expect_type(value, "split()", str)
-    _expect_type(delimiter, "split()", str)
+    value = _expect_type(value, "split()", str)
+    delimiter = _expect_type(delimiter, "split()", str)
     if delimiter == "":
         return list(value)
     return value.split(delimiter)
@@ -325,10 +340,10 @@ def _substring(args: list[object], context) -> object:
     length = args[2] if len(args) > 2 else 0
     if value is None or start is None or length is None:
         return None
-    _expect_type(value, "substring()", str)
-    _expect_type(start, "substring()", int)
+    value = _expect_type(value, "substring()", str)
+    start = _expect_type(start, "substring()", int)
     if len(args) > 2:
-        _expect_type(length, "substring()", int)
+        length = _expect_type(length, "substring()", int)
         return value[max(start, 0):max(start, 0) + max(length, 0)]
     return value[max(start, 0):]
 
@@ -338,8 +353,8 @@ def _side(name: str, take_left: bool) -> Callable[[list[object], object], object
         value, count = args
         if value is None or count is None:
             return None
-        _expect_type(value, f"{name}()", str)
-        _expect_type(count, f"{name}()", int)
+        value = _expect_type(value, f"{name}()", str)
+        count = _expect_type(count, f"{name}()", int)
         clamped = max(count, 0)
         if take_left:
             return value[:clamped]
@@ -414,8 +429,8 @@ def _random_uuid(args: list[object], context) -> object:
 
 
 def _range(args: list[object], context) -> object:
-    start, end = args[0], args[1]
-    step = args[2] if len(args) > 2 else 1
+    start, end = cast(int, args[0]), cast(int, args[1])
+    step = cast(int, args[2]) if len(args) > 2 else 1
     if start is None or end is None or step is None:
         return None
     for label, bound in (("range() start", start), ("range() end", end), ("range() step", step)):
@@ -444,7 +459,7 @@ def _tail(args: list[object], context) -> object:
     (value,) = args
     if value is None:
         return None
-    _expect_type(value, "tail()", list, tuple)
+    value = _expect_type(value, "tail()", list, tuple)
     return list(value[1:])
 
 
