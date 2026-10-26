@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 import hashlib
 import json
 from types import MappingProxyType
-from typing import Callable, Iterator, Mapping
+from typing import Callable, Iterator, Mapping, cast
 
 from ...epistemic import Claim, ClaimObjectKind, ClaimPolarity
 from ...graphdb import GraphDB, _DATABASE_ID_METADATA_KEY
@@ -319,7 +319,7 @@ class PinnedClaimSource:
             derived = marker is not None and claim.provenance.get("derived_by") == marker
             if derived and not selection.include_derived:
                 continue
-            yield Evidence(self._mapping.map(Fact(claim.subject, claim.predicate, claim.object)), version.version_id)
+            yield Evidence(self._mapping.map(Fact(claim.subject, claim.predicate, cast(str, claim.object))), version.version_id)
         self.verify_source()
 
     def evaluate(

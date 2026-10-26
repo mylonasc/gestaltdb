@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, cast
 
 import numpy as np
 
-from ..temporal import TemporalContext
+from ..temporal import TemporalContext, TemporalInput, TemporalInstant, TemporalInterval
 from .batch import SampledSubgraphBatch
 from .negatives import HardNegativeConfig
 from .snapshot import SamplerSnapshot
@@ -20,7 +20,7 @@ class NeighborSamplingSpec:
 
     fanout: int
     direction: str = "out"
-    relations: Sequence[int] | None = None
+    relations: Sequence[int] | np.ndarray | None = None
     replace: bool = False
     strategy: str = "uniform"
     balanced: bool = False
@@ -526,7 +526,7 @@ class SamplerEngine:
         for row, node in enumerate(input_nodes.tolist()):
             candidates = self._candidate_edges(node, direction, relation_filter, temporal, window_policy)
             if causal_starts is not None and causal_starts[row] is not None and candidates.size:
-                starts = self.snapshot.valid_from_us[candidates]
+                starts = cast(np.ndarray, self.snapshot.valid_from_us)[candidates]
                 if causal_policy == "nondecreasing":
                     candidates = candidates[starts >= causal_starts[row]]
                 elif causal_policy == "nonincreasing":
@@ -1149,7 +1149,7 @@ class SamplerEngine:
                 for position in range(int(start), int(end)):
                     node = int(sampled.neighbor_nodes[position])
                     edge = int(sampled.edge_indices[position])
-                    next_states.append((node, int(self.snapshot.valid_from_us[edge])))
+                    next_states.append((node, int(cast(np.ndarray, self.snapshot.valid_from_us)[edge])))
             nodes.update(state[0] for state in next_states)
             states = list(dict.fromkeys(next_states))
         return self._batch_from_edges(nodes, edges, positives=np.empty((0, 3), dtype=np.int64), negatives=np.empty((0, 3), dtype=np.int64))
@@ -1214,7 +1214,7 @@ class SamplerEngine:
         if causal_policy != "none":
             initial_states = []
             for edge in seed_edges.tolist():
-                start = int(self.snapshot.valid_from_us[edge])
+                start = int(cast(np.ndarray, self.snapshot.valid_from_us)[edge])
                 initial_states.extend([(int(self.snapshot.src_int[edge]), start), (int(self.snapshot.dst_int[edge]), start)])
             initial_states = list(dict.fromkeys(initial_states))
         context_temporal = temporal
@@ -1223,7 +1223,7 @@ class SamplerEngine:
             and self.snapshot.temporal and not negative_config.allow_future_candidates
             and seed_edges.size
         ):
-            cutoff = int(np.min(self.snapshot.valid_from_us[seed_edges]))
+            cutoff = int(np.min(cast(np.ndarray, self.snapshot.valid_from_us)[seed_edges]))
             if negative_config.temporal_candidate_window_days is None:
                 context_temporal = TemporalContext.as_of(cutoff)
             else:
@@ -1249,7 +1249,7 @@ class SamplerEngine:
             if temporal is not None and temporal.instant is not None:
                 positive_times = np.full(seed_edges.size, temporal.instant.epoch_microseconds, dtype=np.int64)
             else:
-                positive_times = self.snapshot.valid_from_us[seed_edges].astype(np.int64, copy=True)
+                positive_times = cast(np.ndarray, self.snapshot.valid_from_us)[seed_edges].astype(np.int64, copy=True)
         if negative_config is not None:
             negatives, diagnostics = self.sample_hard_negatives(
                 positives, nodes, negative_config, positive_times_us=positive_times,
@@ -1389,12 +1389,12 @@ class SamplerEngine:
 
         return SampledSubgraphBatch(
             node_ids_global=np.concatenate(node_ids) if node_ids else np.empty(0, dtype=np.int64),
-            node_type_ids=concat([component.node_type_ids for component in components])
+            node_type_ids=cast(np.ndarray, concat([component.node_type_ids for component in components]))
             if components else np.empty(0, dtype=np.int64),
             senders=np.concatenate(senders) if senders else np.empty(0, dtype=np.int64),
             receivers=np.concatenate(receivers) if receivers else np.empty(0, dtype=np.int64),
             edge_ids_global=np.concatenate(edge_ids) if edge_ids else np.empty(0, dtype=np.int64),
-            edge_relation_ids=concat([component.edge_relation_ids for component in components])
+            edge_relation_ids=cast(np.ndarray, concat([component.edge_relation_ids for component in components]))
             if components else np.empty(0, dtype=np.int64),
             positives=np.concatenate(positives) if positives else np.empty((0, 3), dtype=np.int64),
             negatives=np.concatenate(negatives) if negatives else np.empty((0, 3), dtype=np.int64),
@@ -1751,29 +1751,29 @@ class SamplerEngine:
         group = self._positive_history_groups.get(code)
         if group is None:
             return False
-        start, end = self.snapshot.positive_history_indptr[group:group + 2]
-        edges = self.snapshot.positive_history_edge_indices[int(start):int(end)]
+        start, end = cast(np.ndarray, self.snapshot.positive_history_indptr)[group:group + 2]
+        edges = cast(np.ndarray, self.snapshot.positive_history_edge_indices)[int(start):int(end)]
         if policy == "at_positive_time":
             if temporal.instant is None:
                 raise ValueError("at_positive_time requires an instant temporal context")
             instant = temporal.instant.epoch_microseconds
             return bool(np.any(
-                (self.snapshot.valid_from_us[edges] <= instant)
-                & (self.snapshot.valid_to_open[edges] | (instant < self.snapshot.valid_to_us[edges]))
+                (cast(np.ndarray, self.snapshot.valid_from_us)[edges] <= instant)
+                & (cast(np.ndarray, self.snapshot.valid_to_open)[edges] | (instant < cast(np.ndarray, self.snapshot.valid_to_us)[edges]))
             ))
         if temporal.interval is None:
             raise ValueError("window positive policy requires a window temporal context")
         window_start = temporal.interval.start.epoch_microseconds
-        window_end = temporal.interval.end.epoch_microseconds
+        window_end = cast(TemporalInstant, temporal.interval.end).epoch_microseconds
         if window_policy == "overlap":
             return bool(np.any(
-                (self.snapshot.valid_from_us[edges] < window_end)
-                & (self.snapshot.valid_to_open[edges] | (window_start < self.snapshot.valid_to_us[edges]))
+                (cast(np.ndarray, self.snapshot.valid_from_us)[edges] < window_end)
+                & (cast(np.ndarray, self.snapshot.valid_to_open)[edges] | (window_start < cast(np.ndarray, self.snapshot.valid_to_us)[edges]))
             ))
         return bool(np.any(
-            (window_start <= self.snapshot.valid_from_us[edges])
-            & ~self.snapshot.valid_to_open[edges]
-            & (self.snapshot.valid_to_us[edges] <= window_end)
+            (window_start <= cast(np.ndarray, self.snapshot.valid_from_us)[edges])
+            & ~cast(np.ndarray, self.snapshot.valid_to_open)[edges]
+            & (cast(np.ndarray, self.snapshot.valid_to_us)[edges] <= window_end)
         ))
 
     def sample_hard_negatives(
@@ -1814,7 +1814,7 @@ class SamplerEngine:
         raw_positives = np.asarray(positive_triples)
         if raw_positives.ndim != 2 or raw_positives.shape[1] != 3:
             raise ValueError("positive_triples must have shape (n, 3)")
-        positives = _integer_array(raw_positives.reshape(-1), "positive_triples").reshape(raw_positives.shape)
+        positives: np.ndarray = _integer_array(raw_positives.reshape(-1), "positive_triples").reshape(raw_positives.shape)
         self._validated_ids(positives[:, 0], self.snapshot.num_nodes, "positive sources")
         self._validated_ids(positives[:, 1], self.snapshot.num_relations, "positive relations")
         self._validated_ids(positives[:, 2], self.snapshot.num_nodes, "positive destinations")
@@ -1894,9 +1894,9 @@ class SamplerEngine:
     ) -> np.ndarray:
         if temporal is not None:
             relations = range(self.snapshot.num_relations) if relation_filter is None else sorted(relation_filter)
-            query_time = temporal.instant
+            query_time: TemporalInput | None = temporal.instant
             if temporal.interval is not None:
-                query_time = temporal.interval.end.epoch_microseconds - 1
+                query_time = cast(TemporalInstant, temporal.interval.end).epoch_microseconds - 1
             ranges = []
             directions = ("out", "in") if direction == "any" else (direction,)
             for candidate_direction in directions:
@@ -1939,15 +1939,15 @@ class SamplerEngine:
         edges = np.asarray(edges, dtype=np.int64)
         if edges.size == 0:
             return edges
-        starts = self.snapshot.valid_from_us[edges]
-        ends = self.snapshot.valid_to_us[edges]
-        open_ends = self.snapshot.valid_to_open[edges]
+        starts = cast(np.ndarray, self.snapshot.valid_from_us)[edges]
+        ends = cast(np.ndarray, self.snapshot.valid_to_us)[edges]
+        open_ends = cast(np.ndarray, self.snapshot.valid_to_open)[edges]
         if temporal.instant is not None:
             instant = temporal.instant.epoch_microseconds
             mask = (starts <= instant) & (open_ends | (instant < ends))
         else:
-            window_start = temporal.interval.start.epoch_microseconds
-            window_end = temporal.interval.end.epoch_microseconds
+            window_start = cast(TemporalInterval, temporal.interval).start.epoch_microseconds
+            window_end = cast(TemporalInstant, cast(TemporalInterval, temporal.interval).end).epoch_microseconds
             if window_policy == "overlap":
                 mask = (starts < window_end) & (open_ends | (window_start < ends))
             else:
@@ -2171,7 +2171,7 @@ class SamplerEngine:
 
     @staticmethod
     def _candidate_window_us(config: HardNegativeConfig) -> int:
-        return int(config.temporal_candidate_window_days * 86_400_000_000)
+        return int(cast(float, config.temporal_candidate_window_days) * 86_400_000_000)
 
     def _candidate_context(
         self, config: HardNegativeConfig, positive_time: int | None
@@ -2181,7 +2181,7 @@ class SamplerEngine:
         if config.temporal_candidate_window_days is None:
             return TemporalContext.as_of(positive_time)
         width = self._candidate_window_us(config)
-        return TemporalContext.during(positive_time - width, positive_time + 1)
+        return TemporalContext.during(cast(int, positive_time) - width, cast(int, positive_time) + 1)
 
     def _positive_context(
         self,
@@ -2192,13 +2192,13 @@ class SamplerEngine:
         if config.temporal_positive_policy == "any_time":
             return None
         if config.temporal_positive_policy == "at_positive_time":
-            return TemporalContext.as_of(positive_time)
+            return TemporalContext.as_of(cast(int, positive_time))
         if temporal is not None and temporal.interval is not None:
             return temporal
         if config.temporal_candidate_window_days is None:
             raise ValueError("window positive policy requires a temporal window or temporal_candidate_window_days")
         width = self._candidate_window_us(config)
-        return TemporalContext.during(positive_time - width, positive_time + 1)
+        return TemporalContext.during(cast(int, positive_time) - width, cast(int, positive_time) + 1)
 
     def _node_available(
         self,
@@ -2208,18 +2208,18 @@ class SamplerEngine:
     ) -> bool:
         if temporal is None:
             return True
-        start = int(self.snapshot.node_history_indptr[node])
-        end = int(self.snapshot.node_history_indptr[node + 1])
+        start = int(cast(np.ndarray, self.snapshot.node_history_indptr)[node])
+        end = int(cast(np.ndarray, self.snapshot.node_history_indptr)[node + 1])
         if start == end:
             return False
-        starts = self.snapshot.node_valid_from_us[start:end]
-        ends = self.snapshot.node_valid_to_us[start:end]
-        open_ends = self.snapshot.node_valid_to_open[start:end]
+        starts = cast(np.ndarray, self.snapshot.node_valid_from_us)[start:end]
+        ends = cast(np.ndarray, self.snapshot.node_valid_to_us)[start:end]
+        open_ends = cast(np.ndarray, self.snapshot.node_valid_to_open)[start:end]
         if temporal.instant is not None:
             instant = temporal.instant.epoch_microseconds
             return bool(np.any((starts <= instant) & (open_ends | (instant < ends))))
-        window_start = temporal.interval.start.epoch_microseconds
-        window_end = temporal.interval.end.epoch_microseconds
+        window_start = cast(TemporalInterval, temporal.interval).start.epoch_microseconds
+        window_end = cast(TemporalInstant, cast(TemporalInterval, temporal.interval).end).epoch_microseconds
         if window_policy == "contained":
             return bool(np.any(
                 (window_start <= starts) & (~open_ends) & (ends <= window_end)
@@ -2234,14 +2234,14 @@ class SamplerEngine:
     ) -> np.ndarray:
         if temporal is None:
             return np.ones(edges.size, dtype=bool)
-        starts = self.snapshot.valid_from_us[edges]
-        ends = self.snapshot.valid_to_us[edges]
-        open_ends = self.snapshot.valid_to_open[edges]
+        starts = cast(np.ndarray, self.snapshot.valid_from_us)[edges]
+        ends = cast(np.ndarray, self.snapshot.valid_to_us)[edges]
+        open_ends = cast(np.ndarray, self.snapshot.valid_to_open)[edges]
         if temporal.instant is not None:
             instant = temporal.instant.epoch_microseconds
             return (starts <= instant) & (open_ends | (instant < ends))
-        window_start = temporal.interval.start.epoch_microseconds
-        window_end = temporal.interval.end.epoch_microseconds
+        window_start = cast(TemporalInterval, temporal.interval).start.epoch_microseconds
+        window_end = cast(TemporalInstant, cast(TemporalInterval, temporal.interval).end).epoch_microseconds
         if window_policy == "contained":
             return (window_start <= starts) & (~open_ends) & (ends <= window_end)
         return (starts < window_end) & (open_ends | (window_start < ends))
@@ -2361,10 +2361,10 @@ class SamplerEngine:
             edge_relation_ids=self.snapshot.rel_int[ordered_edges] if ordered_edges.size else np.empty(0, dtype=np.int64),
             positives=localize_triples(positives),
             negatives=localize_triples(negatives),
-            edge_version_ids=self.snapshot.edge_version_ids[ordered_edges] if self.snapshot.temporal else None,
-            valid_from_us=self.snapshot.valid_from_us[ordered_edges] if self.snapshot.temporal else None,
-            valid_to_us=self.snapshot.valid_to_us[ordered_edges] if self.snapshot.temporal else None,
-            valid_to_open=self.snapshot.valid_to_open[ordered_edges] if self.snapshot.temporal else None,
+            edge_version_ids=cast(np.ndarray, self.snapshot.edge_version_ids)[ordered_edges] if self.snapshot.temporal else None,
+            valid_from_us=cast(np.ndarray, self.snapshot.valid_from_us)[ordered_edges] if self.snapshot.temporal else None,
+            valid_to_us=cast(np.ndarray, self.snapshot.valid_to_us)[ordered_edges] if self.snapshot.temporal else None,
+            valid_to_open=cast(np.ndarray, self.snapshot.valid_to_open)[ordered_edges] if self.snapshot.temporal else None,
             positive_time_us=positive_times,
             negative_time_us=negative_times,
             negative_diagnostics=negative_diagnostics,
@@ -2391,7 +2391,7 @@ class SamplerEngine:
         return {
             int(self._pack_triple(src, rel, dst)): index
             for index, (src, rel, dst) in enumerate(
-                self.snapshot.positive_history_triples.tolist()
+                cast(np.ndarray, self.snapshot.positive_history_triples).tolist()
             )
         }
 

@@ -28,7 +28,7 @@ def catalog_for_ontology(compiled: CompiledOntology) -> RuleCatalog:
     """Catalog compiled rule content; version IDs name the immutable ontology revision."""
     if not isinstance(compiled, CompiledOntology):
         raise ReasoningError("CompiledOntology required")
-    return RuleCatalog(tuple(CatalogEntry(rule.rule_id, compiled.revision_id, Program([rule]).digest, 1)
+    return RuleCatalog(tuple(CatalogEntry(rule.rule_id, compiled.revision_id, Program((rule,)).digest, 1)
                              for rule in compiled.program.rules))
 
 

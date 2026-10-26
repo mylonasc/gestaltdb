@@ -149,33 +149,33 @@ def _typed_node_evidence(record, mapping: TypedGraphMapping, limits: TypedSource
     labels = dict(mapping.labels)
     for label in record.labels:
         if label in labels:
-            yield TypedEvidence(TypedFact(TYPE_PREDICATE, [subject, labels[label]]),
+            yield TypedEvidence(TypedFact(TYPE_PREDICATE, (subject, labels[label])),
                                 f"typed:node-label:{record.get_id}:{label}")
     for prop, predicate in mapping.node_properties:
         if prop in record.properties:
-            yield TypedEvidence(TypedFact(predicate, [subject, _entity(
-                record.properties[prop], f"mapped entity property {prop!r} on {record.get_id!r}")]),
+            yield TypedEvidence(TypedFact(predicate, (subject, _entity(
+                record.properties[prop], f"mapped entity property {prop!r} on {record.get_id!r}"))),
                 f"typed:node-property:{record.get_id}:{prop}")
     for prop, predicate in mapping.node_attributes:
         if prop in record.properties:
-            yield TypedEvidence(TypedFact(predicate, [subject, _literal(
-                record.properties[prop], f"mapped attribute {prop!r} on {record.get_id!r}")]),
+            yield TypedEvidence(TypedFact(predicate, (subject, _literal(
+                record.properties[prop], f"mapped attribute {prop!r} on {record.get_id!r}"))),
                 f"typed:node-attribute:{record.get_id}:{prop}")
     for prop, predicate in mapping.node_lists:
         if prop in record.properties:
             for index, item in enumerate(_expand_list(
                     record.properties[prop], f"mapped list {prop!r} on {record.get_id!r}",
                     limits.max_elements_per_value)):
-                yield TypedEvidence(TypedFact(predicate, [subject, _literal(
-                    item, f"mapped list {prop!r}[{index}] on {record.get_id!r}")]),
+                yield TypedEvidence(TypedFact(predicate, (subject, _literal(
+                    item, f"mapped list {prop!r}[{index}] on {record.get_id!r}"))),
                     f"typed:node-list:{record.get_id}:{prop}:{index}")
     for prop, predicate in mapping.node_reference_lists:
         if prop in record.properties:
             for index, item in enumerate(_expand_list(
                     record.properties[prop], f"mapped reference list {prop!r} on {record.get_id!r}",
                     limits.max_elements_per_value)):
-                yield TypedEvidence(TypedFact(predicate, [subject, _entity(
-                    item, f"mapped reference list {prop!r}[{index}] on {record.get_id!r}")]),
+                yield TypedEvidence(TypedFact(predicate, (subject, _entity(
+                    item, f"mapped reference list {prop!r}[{index}] on {record.get_id!r}"))),
                     f"typed:node-reference-list:{record.get_id}:{prop}:{index}")
 
 
@@ -187,28 +187,28 @@ def _typed_edge_evidence(record, mapping: TypedGraphMapping, limits: TypedSource
     types = dict(mapping.edge_types)
     edge_type = record.properties.get("type")
     if isinstance(edge_type, str) and edge_type in types:
-        yield TypedEvidence(TypedFact(types[edge_type], [source, target]),
+        yield TypedEvidence(TypedFact(types[edge_type], (source, target)),
                             f"typed:edge:{record.get_id}")
         for attr, predicate in mapping.edge_attributes:
             if attr in record.properties:
-                yield TypedEvidence(TypedFact(predicate, [source, target, _literal(
-                    record.properties[attr], f"mapped edge attribute {attr!r} on {record.get_id!r}")]),
+                yield TypedEvidence(TypedFact(predicate, (source, target, _literal(
+                    record.properties[attr], f"mapped edge attribute {attr!r} on {record.get_id!r}"))),
                     f"typed:edge-attribute:{record.get_id}:{attr}")
         for attr, predicate in mapping.edge_lists:
             if attr in record.properties:
                 for index, item in enumerate(_expand_list(
                         record.properties[attr], f"mapped edge list {attr!r} on {record.get_id!r}",
                         limits.max_elements_per_value)):
-                    yield TypedEvidence(TypedFact(predicate, [source, target, _literal(
-                        item, f"mapped edge list {attr!r}[{index}] on {record.get_id!r}")]),
+                    yield TypedEvidence(TypedFact(predicate, (source, target, _literal(
+                        item, f"mapped edge list {attr!r}[{index}] on {record.get_id!r}"))),
                         f"typed:edge-list:{record.get_id}:{attr}:{index}")
         for attr, predicate in mapping.edge_reference_lists:
             if attr in record.properties:
                 for index, item in enumerate(_expand_list(
                         record.properties[attr], f"mapped edge reference list {attr!r} on {record.get_id!r}",
                         limits.max_elements_per_value)):
-                    yield TypedEvidence(TypedFact(predicate, [source, target, _entity(
-                        item, f"mapped edge reference list {attr!r}[{index}] on {record.get_id!r}")]),
+                    yield TypedEvidence(TypedFact(predicate, (source, target, _entity(
+                        item, f"mapped edge reference list {attr!r}[{index}] on {record.get_id!r}"))),
                         f"typed:edge-reference-list:{record.get_id}:{attr}:{index}")
     elif mapping.edge_attributes or mapping.edge_lists or mapping.edge_reference_lists:
         attrs = [attr for attr, _ in (*mapping.edge_attributes, *mapping.edge_lists,

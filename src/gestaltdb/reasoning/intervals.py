@@ -158,7 +158,7 @@ class IntervalSet:
                 if cut is not None:
                     parts.append(cut)
                 index += 1
-        return IntervalSet(parts, max_intervals=self.max_intervals)
+        return IntervalSet(tuple(parts), max_intervals=self.max_intervals)
 
     def difference(self, other: IntervalSet | Interval) -> IntervalSet:
         cuts = _as_tuple(other)
@@ -178,7 +178,7 @@ class IntervalSet:
                 index += 1
             if current is not _EXHAUSTED and _start_before_end(current, item.end):
                 out.append(Interval(current, item.end))
-        return IntervalSet(out, max_intervals=self.max_intervals)
+        return IntervalSet(tuple(out), max_intervals=self.max_intervals)
 
 
 def _as_tuple(value: IntervalSet | Interval) -> tuple[Interval, ...]:

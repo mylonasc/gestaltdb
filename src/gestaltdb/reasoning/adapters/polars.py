@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 import time
-from typing import Callable, Iterable
+from typing import Any, Callable, Iterable
 
 from ..batches import CompactRelation, SymbolDictionary, UINT64_MAX, _positive
 from ..model import (
@@ -209,7 +209,7 @@ class PolarsDatalogPrototype:
                 break
             if iterations >= limits.max_iterations:
                 raise ReasoningLimitError("max_iterations exceeded")
-            added = {}
+            added: dict[str, Any] = {}
             size = sum(frame.height for frame in full.values())
             for rule, pivot, variables in active:
                 joined = ops.atom(rule.body[pivot], delta[rule.body[pivot].predicate], variables, dictionary)

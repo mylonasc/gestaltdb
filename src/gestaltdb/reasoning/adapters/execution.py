@@ -179,6 +179,8 @@ def execute_closure(program: Program, facts: Iterable[Fact | Evidence], *,
     identity = None if context is None else CompilationIdentity(
         program.digest, context, "external-strings-v1", executor_request.profile, decision.kind)
     if plan is not None:
+        if identity is None:
+            raise ReasoningError("prepared-plan execution requires an explicit input context")
         plan.identity.require_compatible(identity)
     if decision.kind == POLARS_PROTOTYPE:
         _polars()
@@ -186,6 +188,8 @@ def execute_closure(program: Program, facts: Iterable[Fact | Evidence], *,
     if generation is not None or admission_request is not None:
         if generation is None or admission_request is None:
             raise ReasoningError("generation and admission_request are required together")
+        if identity is None:
+            raise ReasoningError("bound execution requires an explicit input context")
         if admission_request.mode != mode:
             raise ReasoningError("admission mode must match the requested proof behavior")
         if admission_request.executor != decision.kind:
@@ -203,6 +207,8 @@ def execute_closure(program: Program, facts: Iterable[Fact | Evidence], *,
         return ExecutionOutcome(result, _telemetry(decision.kind, mode, rationale, admission_digest,
                                                    None, len(inputs), result, collect_proofs))
     if decision.kind == INDEXED_SCC:
+        if plan is None or identity is None:
+            raise ReasoningError("prepared-plan execution requires an explicit PreparedProgram and input context")
         run: PlannedRun = PlannedDatalogEngine().evaluate(
             plan, inputs, identity=identity, limits=limits,
             collect_proofs=collect_proofs, cancel=cancel)
@@ -213,7 +219,7 @@ def execute_closure(program: Program, facts: Iterable[Fact | Evidence], *,
         raise ReasoningError("polars execution requires an explicit InputContext")
     run_polars: PolarsRun = PolarsDatalogPrototype().evaluate(
         program, inputs, context=context, limits=limits,
-        max_intermediate_rows=intermediate_limit, cancel=cancel)
+        max_intermediate_rows=intermediate_limit if intermediate_limit is not None else 100_000, cancel=cancel)
     return ExecutionOutcome(run_polars.result, _telemetry(decision.kind, mode, rationale, admission_digest,
                                                           None, len(inputs), run_polars.result, False), run_polars)
 
@@ -224,7 +230,7 @@ def _materialize_inputs(facts: Iterable[Fact | Evidence], *, limits: ReasoningLi
         iterator = iter(facts)
     except TypeError as exc:
         raise ReasoningError("facts must be iterable") from exc
-    out = []
+    out: list[Fact | Evidence] = []
     while True:
         check_cancelled(cancel)
         try:
@@ -287,7 +293,7 @@ def execute_typed_closure(program: GenericProgram, facts: Iterable[TypedFact], *
         iterator = iter(facts)
     except TypeError as exc:
         raise ReasoningError("facts must be iterable TypedFact values") from exc
-    inputs = []
+    inputs: list[TypedFact] = []
     while True:
         check_cancelled(cancel)
         try:

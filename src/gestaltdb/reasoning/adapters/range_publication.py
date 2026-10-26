@@ -14,7 +14,7 @@ from ...graphdb import GraphDB
 from ...temporal import TemporalInstant, TemporalInterval
 from ...versioning import ClaimVersionWrite
 from ..catalog import RuleCatalog
-from ..generation import GenerationIdentity
+from ..generation import GenerationIdentity, TemporalRangeSourceIdentity
 from ..model import ReasoningError, ReasoningLimitError, ReasoningLimits, _text, check_cancelled
 from ..typed import GenericProgram
 from .claims import ClaimMapping, ClaimSelection, _digest, _verify_graph
@@ -261,7 +261,10 @@ def publish_range_generation(graph: GraphDB, staged: StagedRangeGeneration, *, l
         raise ReasoningError("freshness must be latest or historical")
     binding = staged.result.binding
     identity = binding.identity
-    if identity.source.commit_horizon > source_limits.max_commits:
+    if not isinstance(identity.source, TemporalRangeSourceIdentity):
+        raise ReasoningError("range publication requires a temporal-range source")
+    source = identity.source
+    if source.commit_horizon > source_limits.max_commits:
         raise ReasoningLimitError("range publication exceeded max_commits")
     store, serializer = graph.store, graph.serializer
     def check_binding():
@@ -277,15 +280,15 @@ def publish_range_generation(graph: GraphDB, staged: StagedRangeGeneration, *, l
         if any(item.kind == "incomplete_commit" for item in graph.temporal.list_temporal_orphans().artifacts):
             raise ReasoningError("unreclaimed temporal publication requires explicit orphan recovery")
         binding.verify_source(graph, freshness=freshness)
-        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=identity.source.valid_start_us,
-                             through_commit=identity.source.commit_horizon) as original:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=source.valid_start_us,
+                             through_commit=source.commit_horizon) as original:
             admit_range_result(original, staged.result, staged.program, staged.catalog,
                 expected_generation=identity, limits=limits, source_limits=source_limits, cancel=cancel)
         desired_rows = _outputs(staged.result, publication_limits, cancel)
         check_binding()
         if desired_rows != staged.desired or _content(staged.result, desired_rows) != staged.content_id:
             raise ReasoningError("staged interval output/content was altered; re-stage explicitly")
-        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=identity.source.valid_start_us) as latest:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=source.valid_start_us) as latest:
             horizon = latest.commit_horizon
             state = _target_state(latest, staged.namespace, staged.publication_key, staged.target_world,
                                   identity.source, publication_limits, cancel)
@@ -296,9 +299,9 @@ def publish_range_generation(graph: GraphDB, staged: StagedRangeGeneration, *, l
             "range_namespace": staged.namespace, "range_content": staged.content_id,
             "reasoning_generation": identity.digest, "program_digest": identity.program_digest,
             "catalog_digest": identity.catalog_digest, "input_context": identity.context.context_id,
-            "source_world": identity.context.world, "source_commit_horizon": identity.source.commit_horizon,
-            "source_provenance_token": identity.source.provenance_token,
-            "source_valid_start_us": identity.source.valid_start_us, "source_valid_end_us": identity.source.valid_end_us,
+            "source_world": identity.context.world, "source_commit_horizon": source.commit_horizon,
+            "source_provenance_token": source.provenance_token,
+            "source_valid_start_us": source.valid_start_us, "source_valid_end_us": source.valid_end_us,
             "selection_policy": identity.context.source_policy_id, "mapping_id": identity.context.mapping_id,
             "semantics_profile": identity.semantics_profile, "dictionary_id": identity.dictionary_id,
             "publication_freshness": freshness}
@@ -310,7 +313,7 @@ def publish_range_generation(graph: GraphDB, staged: StagedRangeGeneration, *, l
                 provenance={**metadata, "derived_by": "gestaltdb.ontology",
                             "valid_start_us": row.start_us, "valid_end_us": row.end_us})
             desired[claim.claim_id] = (claim, row.valid)
-        writes = []
+        writes: list[ClaimVersionWrite] = []
         def append_write(write):
             if len(writes) >= publication_limits.max_writes:
                 raise ReasoningLimitError("range publication exceeded max_writes")
@@ -337,7 +340,7 @@ def publish_range_generation(graph: GraphDB, staged: StagedRangeGeneration, *, l
         check_cancelled(cancel)
         check_binding()
         binding.verify_source(graph, freshness=freshness)
-        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=identity.source.valid_start_us) as final:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=source.valid_start_us) as final:
             if final.commit_horizon != horizon:
                 raise GenerationStaleError("source/target moved while preparing publication")
         commit = graph.temporal.commit_versions(writes, metadata=metadata) if writes else None

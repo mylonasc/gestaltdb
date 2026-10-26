@@ -10,16 +10,16 @@ interval is its own namespace and gaps are never filled.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, cast
 
 from ...epistemic import Claim
 from ...graphdb import GraphDB
 from ...ontology.compiler import CompiledOntology
 from ...readview import ReadViewProvenance
 from ...temporal import TemporalInstant, TemporalInterval
-from ...versioning import ClaimVersionWrite, normalize_temporal_instant
+from ...versioning import ClaimVersion, ClaimVersionWrite, normalize_temporal_instant
 from ..model import ReasoningError, ReasoningLimitError, ReasoningLimits, _text
-from ..protocols import InputContext
+from ..protocols import Evidence, InputContext
 from ..generation import GenerationIdentity, TemporalSourceIdentity
 from .claims import ClaimMapping, ClaimSelection, ClaimSourceLimits, PinnedClaimSource, _digest
 from .generation import ClaimGenerationBinding, catalog_for_ontology
@@ -137,7 +137,7 @@ def stage_point(
     with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=instant) as view:
         with PinnedClaimSource(view, world=source_world, ontology_revision=compiled.revision_id,
                                selection=selection, mapping=mapping, limits=source_limits) as source:
-            evidence = []
+            evidence: list[Evidence] = []
             for item in source.iter_evidence():
                 if len(evidence) >= limits.max_input_facts:
                     raise ReasoningLimitError("publication exceeded max_input_facts")
@@ -227,18 +227,18 @@ def publish_staged(
                 # The guard remains held until commit; the binding alone is
                 # deliberately not a compare-and-publish authorization.
                 staged.generation_binding.verify_source(graph, freshness=freshness)
-            current = {}
+            current: dict[str, ClaimVersion] = {}
             for version in view.iter_claims_as_of(world=staged.target_world, agent="gestaltdb:ontology",
                                                   source=staged.namespace):
                 if len(current) >= max_target_claims:
                     raise ReasoningLimitError("publication exceeded max_target_claims")
                 claim = version.claim
-                if (claim.provenance.get("engine") != "gestaltdb.ontology"
+                if claim is None or (claim.provenance.get("engine") != "gestaltdb.ontology"
                         or claim.provenance.get("publication_key") != staged.publication_key
                         or version.valid != TemporalInterval(*interval)):
                     raise ReasoningError("publication namespace contains unmanaged claims")
                 current[claim.claim_id] = version
-            if _stage_fingerprint([(claim_id, str(version.claim.provenance.get("generation", "")))
+            if _stage_fingerprint([(claim_id, str(cast(Claim, version.claim).provenance.get("generation", "")))
                                    for claim_id, version in current.items()]) != staged.base_fingerprint:
                 raise GenerationStaleError("target namespace moved since staging; re-stage and retry")
             desired = {}
@@ -262,7 +262,7 @@ def publish_staged(
                 if previous is None:
                     writes.append(ClaimVersionWrite.assertion(claim, interval))
                     asserted += 1
-                elif previous.claim.provenance.get("generation") != staged.generation:
+                elif cast(Claim, previous.claim).provenance.get("generation") != staged.generation:
                     writes.append(ClaimVersionWrite.correction(claim, supersedes_version_id=previous.version_id, valid=interval))
                     corrected += 1
                 else:
@@ -404,7 +404,7 @@ def stage_range(graph: GraphDB, desired: Iterable[tuple[str, str, str]], *, vali
     if not isinstance(mapping, ClaimMapping):
         raise ReasoningError("explicit ClaimMapping is required")
     try:
-        triples = [tuple(triple) for triple in desired]
+        triples = list(desired)
     except TypeError as exc:
         raise ReasoningError("desired must be iterable") from exc
     if isinstance(valid_start_us, bool) or not isinstance(valid_start_us, int) or valid_start_us < 0:
@@ -478,18 +478,18 @@ def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
             if freshness == "latest" and (
                     view.provenance.commit_horizon != staged.source_provenance.commit_horizon):
                 raise GenerationStaleError("source horizon moved since staging; re-stage and retry")
-            current = {}
+            current: dict[str, ClaimVersion] = {}
             for version in view.iter_claims_as_of(world=staged.target_world, agent="gestaltdb:ontology",
                                                   source=staged.namespace):
                 if len(current) >= max_target_claims:
                     raise ReasoningLimitError("publication exceeded max_target_claims")
                 claim = version.claim
-                if (claim.provenance.get("engine") != "gestaltdb.ontology"
+                if claim is None or (claim.provenance.get("engine") != "gestaltdb.ontology"
                         or claim.provenance.get("publication_key") != staged.publication_key
                         or version.valid != interval):
                     raise ReasoningError("publication namespace contains unmanaged claims")
                 current[claim.claim_id] = version
-            if _stage_fingerprint([(claim_id, str(version.claim.provenance.get("generation", "")))
+            if _stage_fingerprint([(claim_id, str(cast(Claim, version.claim).provenance.get("generation", "")))
                                    for claim_id, version in current.items()]) != staged.base_fingerprint:
                 raise GenerationStaleError("target namespace moved since staging; re-stage and retry")
             desired = {}
@@ -514,7 +514,7 @@ def publish_staged_range(graph: GraphDB, staged: StagedRangePublication, *,
                 if previous is None:
                     writes.append(ClaimVersionWrite.assertion(claim, (interval.start, interval.end)))
                     asserted += 1
-                elif previous.claim.provenance.get("generation") != staged.generation:
+                elif cast(Claim, previous.claim).provenance.get("generation") != staged.generation:
                     writes.append(ClaimVersionWrite.correction(claim, supersedes_version_id=previous.version_id,
                                                               valid=(interval.start, interval.end)))
                     corrected += 1
@@ -582,7 +582,7 @@ def reconcile_point(
                                    selection=selection, mapping=mapping, limits=source_limits) as source:
                 # Exact input references, not a single proof witness, identify this
                 # generation. Bounds are applied during extraction before collection.
-                evidence = []
+                evidence: list[Evidence] = []
                 for item in source.iter_evidence():
                     if len(evidence) >= limits.max_input_facts:
                         raise ReasoningLimitError("publication exceeded max_input_facts")
@@ -597,7 +597,7 @@ def reconcile_point(
                 compiled.revision_id, selection.policy_id, mapping.mapping_id,
                 sorted((item.fact.subject, item.fact.predicate, item.fact.object, item.reference_id) for item in evidence),
             ])
-            existing = {}
+            existing: dict[str, ClaimVersion] = {}
             for version in view.iter_claims_as_of(world=target_world, agent="gestaltdb:ontology", source=namespace):
                 if len(existing) >= max_target_claims:
                     raise ReasoningLimitError("publication exceeded max_target_claims")
@@ -624,7 +624,7 @@ def reconcile_point(
                 if previous is None:
                     writes.append(ClaimVersionWrite.assertion(claim, interval))
                     asserted += 1
-                elif previous.claim.provenance.get("generation") != generation:
+                elif cast(Claim, previous.claim).provenance.get("generation") != generation:
                     writes.append(ClaimVersionWrite.correction(claim, supersedes_version_id=previous.version_id, valid=interval))
                     corrected += 1
                 else:

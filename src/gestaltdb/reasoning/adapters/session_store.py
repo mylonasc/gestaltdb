@@ -75,7 +75,7 @@ def _encode_term(value: object) -> list:
     return ["entity", _text(value, "term value")]
 
 
-def _decode_term(raw: object) -> object:
+def _decode_term(raw: object) -> str | Variable | Literal:
     if not isinstance(raw, list) or len(raw) not in (2, 3):
         raise ReasoningError("invalid encoded term")
     kind = raw[0]
@@ -104,7 +104,7 @@ def _encode_predicate(predicate: object) -> object:
     return _text(predicate, "atom predicate")
 
 
-def _decode_predicate(raw: object) -> object:
+def _decode_predicate(raw: object) -> str | Variable:
     if isinstance(raw, list):
         term = _decode_term(raw)
         if not isinstance(term, Variable):
@@ -158,7 +158,12 @@ def _decode_fact(raw: object) -> TypedFact:
         raise ReasoningError("fact must be a mapping")
     try:
         predicate = _text(raw["predicate"], "fact predicate")
-        values = [_decode_term(term) for term in raw["values"]]
+        values: list[str | Literal] = []
+        for term in raw["values"]:
+            value = _decode_term(term)
+            if isinstance(value, Variable):
+                raise ReasoningError("fact values must be literals or entities, not variables")
+            values.append(value)
     except KeyError as exc:
         raise ReasoningError(f"fact missing field: {exc}") from exc
     return TypedFact(predicate, tuple(values))
