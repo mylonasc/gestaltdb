@@ -6,7 +6,11 @@ The default full-record and ordinary sources remain unchanged.
 
 from dataclasses import dataclass
 
-from ...graphdb import _TEMPORAL_CLAIM_DIMENSION_INDEX, _TEMPORAL_LOGICAL_VALID_INDEX
+from ..._graph.temporal_indexes import (
+    CLAIM_DIMENSION_INDEX as _TEMPORAL_CLAIM_DIMENSION_INDEX,
+    LOGICAL_VALID_INDEX as _TEMPORAL_LOGICAL_VALID_INDEX,
+)
+from ..._graph.temporal_keys import temporal_instant_index_value
 from ...kvstores import _range_index_key, _range_index_prefix
 from ...readview import ProvenanceMismatchError
 from ...versioning import ClaimVersion, VersionOperation, canonical_json_bytes
@@ -51,18 +55,18 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
         super().__init__(view, native_limits=native_limits, **kwargs)
 
     def _read_winners(self, cancel):
-        graph, limits = self._graph, self._native_limits
+        temporal, limits = self._graph.temporal, self._native_limits
         horizon = self.provenance.commit_horizon
         if horizon > limits.max_commits:
             raise ReasoningLimitError("native locator extraction exceeded max_commits")
-        graph._ensure_temporal_indexes(horizon)
-        generation = graph._temporal_index_generation()
+        temporal.ensure_indexes(horizon)
+        generation = temporal.index_generation()
         catalog, histories, all_winners = {}, {}, {}
         authenticated_records = 0
         for commit_id in range(1, horizon + 1):
             check_cancelled(cancel)
             self._check_binding()
-            commit = graph._get_temporal_commit_cached(commit_id)
+            commit = temporal.get_commit_cached(commit_id)
             if commit is None:
                 continue
             # Commit decoding/verification is atomic with respect to this cap;
@@ -73,7 +77,7 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
             for version in commit.versions:
                 check_cancelled(cancel)
                 if isinstance(version, ClaimVersion):
-                    locator = graph._temporal_locator(commit_id, version.commit_ordinal)
+                    locator = temporal.locator(commit_id, version.commit_ordinal)
                     catalog[locator] = version
                     histories.setdefault(version.logical_id, []).append((locator, version))
                     if version.valid.contains(self._time):
@@ -82,14 +86,14 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
                             raise ReasoningLimitError("native locator extraction exceeded max_logical_claims")
 
         raw_rows = scans = materialized = 0
-        point = graph._temporal_instant_index_value(self._time)
+        point = temporal_instant_index_value(self._time)
         snapshot = self._native_handle.create_snapshot()
         try:
             def scan_index(base_name, parts, expected):
                 nonlocal raw_rows, scans
                 check_cancelled(cancel)
                 self._check_binding()
-                name = graph._temporal_index_name(base_name, generation)
+                name = temporal.index_name(base_name, generation)
                 prefix = _range_index_prefix(name, parts)
                 # Fixed-width sortable start, followed by 0x1f and locator.
                 # Include every start equal to the point, but no later start.
@@ -112,7 +116,7 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
                                 raise ProvenanceMismatchError("native locator keys escaped bounds or are unordered/duplicated")
                             previous = key
                             try:
-                                commit_id, ordinal = graph._decode_temporal_locator(value)
+                                commit_id, ordinal = temporal.decode_locator(value)
                             except (TypeError, ValueError) as exc:
                                 raise ProvenanceMismatchError("native locator payload is malformed") from exc
                             if commit_id < 1:
@@ -132,7 +136,7 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
                 return found
 
             def expected_dimension(dimension, value):
-                name = graph._temporal_index_name(_TEMPORAL_CLAIM_DIMENSION_INDEX, generation)
+                name = temporal.index_name(_TEMPORAL_CLAIM_DIMENSION_INDEX, generation)
                 parts = [dimension.encode("ascii"), canonical_json_bytes(value)]
                 expected = {}
                 for locator, version in catalog.items():
@@ -140,7 +144,7 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
                     if (version.claim is not None and version.valid.start <= self._time
                             and getattr(version.claim, dimension) == value):
                         key = _range_index_key(name, parts,
-                            graph._temporal_instant_index_value(version.valid.start), locator)
+                            temporal_instant_index_value(version.valid.start), locator)
                         expected[key] = locator
                 return parts, expected
 
@@ -158,13 +162,13 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
             if self._request.subject is not None:
                 ids.intersection_update(dimension_ids("subject", self._request.subject))
             selected = {}
-            logical_name = graph._temporal_index_name(_TEMPORAL_LOGICAL_VALID_INDEX, generation)
+            logical_name = temporal.index_name(_TEMPORAL_LOGICAL_VALID_INDEX, generation)
             for logical_id in sorted(ids):
                 check_cancelled(cancel)
                 parts = [b"c", logical_id.encode("utf-8")]
                 expected = {
                     _range_index_key(logical_name, parts,
-                        graph._temporal_instant_index_value(v.valid.start), locator): locator
+                        temporal_instant_index_value(v.valid.start), locator): locator
                     for locator, v in histories[logical_id]
                     if v.valid.start <= self._time
                 }
@@ -172,9 +176,9 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
                 for version in scan_index(_TEMPORAL_LOGICAL_VALID_INDEX, parts, expected):
                     check_cancelled(cancel)
                     self._check_binding()
-                    key = graph._temporal_record_key(version.commit_id, version.commit_ordinal)
+                    key = temporal.record_key(version.commit_id, version.commit_ordinal)
                     payload = self._native_store.get_metadata(key)
-                    if payload is None or graph._decode_temporal_version(payload) != version:
+                    if payload is None or temporal.decode_version(payload) != version:
                         raise ProvenanceMismatchError("point-materialized locator differs from authenticated version")
                     materialized += 1
                     if version.valid.contains(self._time) and (winner is None or
