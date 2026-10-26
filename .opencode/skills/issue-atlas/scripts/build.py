@@ -152,11 +152,16 @@ def fetch_snapshot(repo, days, workers=6, roadmap=None, comments=True):
     external = {}
     for entry in enriched:
         for row in entry["dependencies"] + entry["children"]:
-            if row["number"] not in issues and row.get("repository_url", "").endswith("/" + repo):
+            if row["number"] not in issues and same_repository(row, repo):
                 external[row["number"]] = row
     return {"repository": repo, "fetched_at": datetime.now(timezone.utc).isoformat(),
             "days": days, "issues": enriched, "external": list(external.values()),
             "overlay": roadmap, "comments_included": comments, "schema_version": 1}
+
+
+def same_repository(row, repo):
+    """Issue numbers are repository-local, including native relationships."""
+    return row.get("html_url", "").startswith(f"https://github.com/{repo}/issues/")
 
 
 def brief(body, limit=420):
@@ -199,9 +204,11 @@ def graph_data(snapshot):
     for entry in snapshot["issues"]:
         number = entry["issue"]["number"]
         for row in entry["dependencies"]:
-            link(row["number"], number, "dependency", "GitHub blocked-by")
+            if same_repository(row, repo):
+                link(row["number"], number, "dependency", "GitHub blocked-by")
         for row in entry["children"]:
-            link(number, row["number"], "parent", "GitHub sub-issue")
+            if same_repository(row, repo):
+                link(number, row["number"], "parent", "GitHub sub-issue")
         texts = [entry["issue"].get("body") or ""] + [c["body"] or "" for c in entry["comments"]]
         for text in texts:
             # Ordinary mentions NEVER become dependency claims.
