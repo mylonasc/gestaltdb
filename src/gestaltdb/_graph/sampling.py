@@ -14,22 +14,43 @@ Array-native sampling stays in ``gestaltdb.sampling``.
 from __future__ import annotations
 
 import random
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, TypedDict
 
 if TYPE_CHECKING:
     from ..kvstores import KVStore
+    from ..serializers import Serializer
+    from ..sampling import RelationHierarchy, SamplingHop, SamplingPattern
+    from .entities import Edge, GraphEntityDictSerializer, Node
 
 from ..sampling import RelationHierarchy, as_sampling_pattern
 from . import adjacency as _adjacency
 from . import index_lookup as _index_lookup
 from .edge_records import get_edge
-from .entities import key_to_string, node_key_to_bytes
+from .entities import NodeKeyInput, key_to_string, node_key_to_bytes
 from .node_records import get_node
 
+TypedAdjacencyRecord = dict[str, bytes]
 
-def sample_nodes(store: KVStore, entity_serializer, guard: Callable, sample_size: int,
+
+class SampledPath(TypedDict):
+    """One seed and its ordered typed-adjacency records."""
+
+    seed: bytes
+    path: list[TypedAdjacencyRecord]
+
+
+class SampledSubgraph(TypedDict):
+    """Materialized typed subgraph around seed nodes."""
+
+    nodes: dict[bytes, Node | None]
+    edges: dict[bytes, Edge | None]
+    paths: list[SampledPath]
+
+
+def sample_nodes(store: KVStore, entity_serializer: GraphEntityDictSerializer, guard: Callable[..., None], sample_size: int,
                  *, label: str | None = None,
-                 node_filter: Callable | None = None, rng=None) -> list[str]:
+                 node_filter: Callable[[Node], bool] | None = None, rng: Any = None) -> list[str]:
     """Sample live node IDs using reservoir sampling.
 
     Memory is bounded by ``sample_size``; eligible keys are still scanned.
@@ -67,17 +88,17 @@ def sample_nodes(store: KVStore, entity_serializer, guard: Callable, sample_size
     return sample
 
 
-def sample_neighbors(store: KVStore, node_id, edge_type: str, direction: str = 'out',
-                     sample_size: int = 10, rng=None, *, relation_hierarchy=None) -> list:
+def sample_neighbors(store: KVStore, node_id: NodeKeyInput, edge_type: str, direction: str = 'out',
+                     sample_size: int = 10, rng: Any = None, *,
+                     relation_hierarchy: RelationHierarchy | None = None) -> list[TypedAdjacencyRecord]:
     """Sample typed neighbors using reservoir sampling."""
     rng = rng or random
-    if relation_hierarchy is None:
-        edge_types = (edge_type,)
-    else:
+    edge_types: tuple[str, ...] = (edge_type,)
+    if relation_hierarchy is not None:
         if not isinstance(relation_hierarchy, RelationHierarchy):
             raise ValueError("relation_hierarchy must be a RelationHierarchy")
         edge_types = relation_hierarchy.closure(edge_type)
-    sample = []
+    sample: list[TypedAdjacencyRecord] = []
     seen = 0
     for current_type in edge_types:
         for record in _adjacency.iter_typed_adjacency(
@@ -92,8 +113,10 @@ def sample_neighbors(store: KVStore, node_id, edge_type: str, direction: str = '
     return sample
 
 
-def sample_typed_paths(store: KVStore, seed_ids, pattern, rng=None, *,
-                       relation_hierarchy=None) -> list:
+def sample_typed_paths(store: KVStore, seed_ids: Iterable[NodeKeyInput],
+                       pattern: SamplingPattern | Iterable[SamplingHop | Mapping[str, object]],
+                       rng: Any = None, *,
+                       relation_hierarchy: RelationHierarchy | None = None) -> list[SampledPath]:
     """Sample paths that follow an ordered typed edge pattern."""
     rng = rng or random
     if relation_hierarchy is not None and not isinstance(
@@ -101,11 +124,11 @@ def sample_typed_paths(store: KVStore, seed_ids, pattern, rng=None, *,
     ):
         raise ValueError("relation_hierarchy must be a RelationHierarchy")
     pattern = as_sampling_pattern(pattern)
-    paths = []
+    paths: list[SampledPath] = []
 
     for seed_id in seed_ids:
         seed_id_bytes = node_key_to_bytes(seed_id)
-        frontier = [{'seed': seed_id_bytes, 'path': [], 'current_node_id': seed_id_bytes}]
+        frontier: list[dict[str, Any]] = [{'seed': seed_id_bytes, 'path': [], 'current_node_id': seed_id_bytes}]
         for hop in pattern:
             next_frontier = []
             edge_type = hop.edge_type
@@ -135,9 +158,11 @@ def sample_typed_paths(store: KVStore, seed_ids, pattern, rng=None, *,
     return paths
 
 
-def sample_typed_subgraph(store: KVStore, entity_serializer,
-                          seed_ids, pattern, rng=None, *,
-                          relation_hierarchy=None) -> dict:
+def sample_typed_subgraph(store: KVStore, entity_serializer: GraphEntityDictSerializer,
+                          seed_ids: Iterable[NodeKeyInput],
+                          pattern: SamplingPattern | Iterable[SamplingHop | Mapping[str, object]],
+                          rng: Any = None, *,
+                          relation_hierarchy: RelationHierarchy | None = None) -> SampledSubgraph:
     """Sample and materialize a typed subgraph around seed nodes."""
     paths = sample_typed_paths(
         store,

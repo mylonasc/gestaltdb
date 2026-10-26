@@ -14,17 +14,20 @@ legacy read-modify-write boundary.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Iterable
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from ..kvstores import KVStore
+    from ..serializers import Serializer
+    from .entities import Edge, GraphEntityDictSerializer
 
 from . import adjacency as _adjacency
 from . import index_maintenance as _index_maintenance
 from .entities import node_key_to_bytes
 
 
-def get_edge(store: KVStore, entity_serializer, edge_id):
+def get_edge(store: KVStore, entity_serializer: GraphEntityDictSerializer, edge_id: bytes) -> Edge | None:
     """Return an edge by byte key, or ``None`` when absent."""
     data = store.get_edge(edge_id)
     if data:
@@ -32,8 +35,8 @@ def get_edge(store: KVStore, entity_serializer, edge_id):
     return None
 
 
-def get_adjacency_list(store: KVStore, raw_serializer, node_id: bytes,
-                       direction: str = 'forward', return_raw: bool = False):
+def get_adjacency_list(store: KVStore, raw_serializer: Serializer, node_id: bytes,
+                       direction: str = 'forward', return_raw: bool = False) -> Any:
     """Return the legacy adjacency list for a node ID.
 
     Returns ``[]`` when the node has no stored adjacency, the raw stored
@@ -58,14 +61,14 @@ def get_adjacency_list(store: KVStore, raw_serializer, node_id: bytes,
         return list(set(_s).union(set(_t)))
 
 
-def put_adjacency_list(store: KVStore, raw_serializer, node_id: str, edges_list: list[str]) -> None:
+def put_adjacency_list(store: KVStore, raw_serializer: Serializer, node_id: bytes, edges_list: dict[str, Any]) -> None:
     """Store the legacy adjacency list for a node ID."""
     raw = raw_serializer.serialize(edges_list)
     store.put_adjacency(node_id, raw)
 
 
-def put_edge(store: KVStore, entity_serializer, raw_serializer,
-             indexed_edge_properties, adj_cache: dict, edge,
+def put_edge(store: KVStore, entity_serializer: GraphEntityDictSerializer, raw_serializer: Serializer,
+             indexed_edge_properties: Iterable[str], adj_cache: dict[bytes, int], edge: Edge,
              update_adjacency: bool = True) -> None:
     """Store an edge and maintain adjacency and secondary indexes."""
     old_edge = get_edge(store, entity_serializer, edge.get_id_bytes)
@@ -82,21 +85,21 @@ def put_edge(store: KVStore, entity_serializer, raw_serializer,
         # and if they exist update them, if they don't exist
         # create them.
         for dict_flag, io_node in zip(['source', 'target'], (edge.source, edge.target)):
-            io_node_key = node_key_to_bytes(io_node)
+            io_node_key = node_key_to_bytes(cast(str, io_node))
             adj_list = store.get_adjacency(io_node_key)
             new_edge_list = {dict_flag: [edge.get_id]}
             if adj_list is None:
                 serialized_adj_list = entity_serializer.serialize(new_edge_list, 'AdjacencyList')
                 store.put_adjacency(io_node_key, serialized_adj_list)
             else:
-                adj_edge_list = entity_serializer.deserialize(adj_list, 'AdjacencyList')
+                adj_edge_list = cast(dict[str, Any], entity_serializer.deserialize(adj_list, 'AdjacencyList'))
                 if edge.get_id not in adj_edge_list.setdefault(dict_flag, []):
                     adj_edge_list[dict_flag].append(edge.get_id)
                 store.put_adjacency(io_node_key, raw_serializer.serialize(adj_edge_list))
 
 
-def delete_edge(store: KVStore, entity_serializer, raw_serializer,
-                indexed_edge_properties, adj_cache: dict, edge_id) -> None:
+def delete_edge(store: KVStore, entity_serializer: GraphEntityDictSerializer, raw_serializer: Serializer,
+                indexed_edge_properties: Iterable[str], adj_cache: dict[bytes, int], edge_id: bytes) -> None:
     """Remove an edge, its adjacency records, and its secondary indexes."""
     e = get_edge(store, entity_serializer, edge_id)
     if not e:
@@ -109,7 +112,7 @@ def delete_edge(store: KVStore, entity_serializer, raw_serializer,
     store.delete_edge(edge_id)
 
 
-def edge_id_variants(edge_id) -> list:
+def edge_id_variants(edge_id: str | bytes) -> list[str | bytes]:
     """Return string/byte forms used by legacy adjacency records."""
     variants = [edge_id]
     if isinstance(edge_id, bytes):
@@ -124,10 +127,10 @@ def edge_id_variants(edge_id) -> list:
     return variants
 
 
-def remove_edge_from_endpoint_adjacencies(store: KVStore, raw_serializer, edge) -> None:
+def remove_edge_from_endpoint_adjacencies(store: KVStore, raw_serializer: Serializer, edge: Edge) -> None:
     """Remove an edge from the legacy adjacency blobs for its endpoints."""
-    source_id = node_key_to_bytes(edge.source)
-    target_id = node_key_to_bytes(edge.target)
+    source_id = node_key_to_bytes(cast(str, edge.source))
+    target_id = node_key_to_bytes(cast(str, edge.target))
     remove_edge_from_adjacency(store, raw_serializer, source_id, edge.get_id)
     remove_edge_from_adjacency(store, raw_serializer, source_id, edge.get_id_bytes)
     if target_id != source_id:
@@ -135,7 +138,7 @@ def remove_edge_from_endpoint_adjacencies(store: KVStore, raw_serializer, edge) 
         remove_edge_from_adjacency(store, raw_serializer, target_id, edge.get_id_bytes)
 
 
-def remove_edge_from_adjacency(store: KVStore, raw_serializer, node_id: str, edge_id: str) -> None:
+def remove_edge_from_adjacency(store: KVStore, raw_serializer: Serializer, node_id: bytes, edge_id: str | bytes) -> None:
     """Remove an edge ID from a node's stored adjacency lists."""
     adj_list = get_adjacency_list(store, raw_serializer, node_id, return_raw=True)
     _changed = False
@@ -153,13 +156,13 @@ def remove_edge_from_adjacency(store: KVStore, raw_serializer, node_id: str, edg
             put_adjacency_list(store, raw_serializer, node_id, adj_list)
 
 
-def bfs(store, entity_serializer, raw_serializer, start_node_id: bytes,
-        direction: str = 'any', edge_key_serializer=lambda x: x.encode('utf-8'),
-        node_key_serializer=lambda x: x.encode('utf-8')) -> list:
+def bfs(store: KVStore, entity_serializer: GraphEntityDictSerializer, raw_serializer: Serializer, start_node_id: bytes,
+        direction: str = 'any', edge_key_serializer: Callable[[Any], bytes] = lambda x: cast(str, x).encode('utf-8'),
+        node_key_serializer: Callable[[Any], bytes] = lambda x: cast(str, x).encode('utf-8')) -> list[bytes]:
     """Return node IDs in BFS order over legacy adjacency blobs."""
-    visited = set()
-    queue = [start_node_id]
-    result = []
+    visited: set[bytes] = set()
+    queue: list[bytes] = [start_node_id]
+    result: list[bytes] = []
     while queue:
         current = queue.pop(0)
         if current in visited:

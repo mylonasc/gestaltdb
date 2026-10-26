@@ -1,7 +1,7 @@
 {
   "generated_from": {
     "path": "src/gestaltdb/graphdb.py",
-    "sha256": "6145a2d5ab368af99e9eb685feee431206e6b590e3425f2f3161a61be404ac6b"
+    "sha256": "9363f528130f2c1202b4269aae357bbdf448f5649bec03161d83e54a645a3380"
   },
   "methods": [
     {
@@ -860,7 +860,7 @@
       "line": 1635,
       "name": "put_adjacency_list",
       "returns": "",
-      "signature": "put_adjacency_list(node_id: str, edges_list: list[str])",
+      "signature": "put_adjacency_list(node_id: bytes, edges_list: dict[str, Any])",
       "summary": "Stores the adjacency list for node_id.",
       "topic": "quickstart"
     },

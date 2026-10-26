@@ -1,4 +1,4 @@
-from typing import Optional, Dict, List, Union
+from typing import Any, Dict, Iterable, List, Optional, Union
 import base64
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -193,87 +193,102 @@ class KVStore:
     supports_verifiable_read_snapshots = False
 
     # The basic K/V methods:
-    def put(self, key: bytes, value: bytes):
+    def put(self, key: bytes, value: bytes) -> None:
         """Store a raw key/value pair."""
         raise NotImplementedError
 
-    def get(self, key: bytes) -> bytes:
+    def get(self, key: bytes) -> bytes | None:
         """Return a raw value by key."""
         raise NotImplementedError
 
-    def delete(self, key: bytes):
+    def delete(self, key: bytes) -> None:
         """Delete a raw key/value pair."""
         raise NotImplementedError
 
-    def range_iter(self, start_key: bytes, end_key: bytes):
+    def range_iter(self, start_key: bytes, end_key: bytes) -> Iterable[tuple[bytes, bytes]]:
         """Iterate over keys from start_key to end_key (inclusive)."""
         raise NotImplementedError
 
-    def close(self):
+    def close(self) -> None:
         """Close any resources owned by the store."""
         raise NotImplementedError
 
-    def transaction(self, **options):
+    def transaction(self, **options: Any) -> "KVTransaction":
         """Return a transaction-bound store when supported."""
         raise NotImplementedError("transactions are not supported by this KVStore")
 
-    def read_snapshot(self):
+    def read_snapshot(self) -> Any:
         """Return a context manager yielding a unified read-only store view."""
         raise NotImplementedError("unified read snapshots are not supported by this KVStore")
 
-    def put_metadata(self, key: bytes, value: bytes):
+    def put_metadata(self, key: bytes, value: bytes) -> None:
         """Store a metadata key/value pair."""
         raise NotImplementedError
 
-    def get_metadata(self, key: bytes) -> bytes:
+    def get_metadata(self, key: bytes) -> bytes | None:
         """Return a metadata value by key."""
         raise NotImplementedError
 
-    def delete_metadata(self, key: bytes):
+    def delete_metadata(self, key: bytes) -> None:
         """Delete a metadata key/value pair."""
         raise NotImplementedError
 
     # The specialized node/edge methods:
-    def put_node(self, node_id: str, value: bytes):
+    def put_node(self, node_id: bytes, value: bytes) -> None:
         """Store a node (serialized)."""
         raise NotImplementedError
 
-    def get_node(self, node_id: str) -> bytes:
+    def get_node(self, node_id: bytes) -> bytes | None:
         """Retrieve a node by ID."""
         raise NotImplementedError
 
-    def delete_node(self, node_id: str):
+    def delete_node(self, node_id: bytes) -> None:
         """Delete a node."""
         raise NotImplementedError
 
-    def put_edge(self, edge_id: str, value: bytes):
+    def put_edge(self, edge_id: bytes, value: bytes) -> None:
         """Store an edge (serialized)."""
         raise NotImplementedError
 
-    def get_edge(self, edge_id: str) -> bytes:
+    def get_edge(self, edge_id: bytes) -> bytes | None:
         """Retrieve an edge."""
         raise NotImplementedError
 
-    def delete_edge(self, edge_id: str):
+    def delete_edge(self, edge_id: bytes) -> None:
         """Delete an edge."""
         raise NotImplementedError
 
-    def put_nodes_bulk(self, keys_and_values: dict[str, bytes]):
+    def put_nodes_bulk(self, keys_and_values: dict[bytes, bytes]) -> None:
         """
         Store multiple node (serialized) values in a single batch/transaction if possible.
         """
         raise NotImplementedError
 
-    def get_nodes_bulk(self, node_ids: list[str]) -> dict[str, bytes]:
+    def get_nodes_bulk(self, node_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         """Retrieve multiple serialized nodes by key."""
         raise NotImplementedError
 
-    def put_edges_bulk(self, keys_and_values: dict[str, bytes]):
+    def put_edges_bulk(self, keys_and_values: dict[bytes, bytes]) -> None:
         """Store multiple serialized edges."""
         raise NotImplementedError
-    
-    def get_edges_bulk(self, edge_ids: list[str]) -> dict[str, bytes]:
+
+    def get_edges_bulk(self, edge_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         """Retrieve multiple serialized edges by key."""
+        raise NotImplementedError
+
+    def get_node_keys_generator(self, num_nodes: int | None = None, key_offset: bytes | None = None) -> Any:
+        raise NotImplementedError
+
+    def get_edge_keys_generator(self, num_edges: int | None = None, key_offset: bytes | None = None) -> Any:
+        raise NotImplementedError
+
+    def put_adjacency(self, node_id: bytes, value: bytes) -> None:
+        raise NotImplementedError
+
+    def get_adjacency(self, node_id: bytes) -> bytes | None:
+        raise NotImplementedError
+
+    def put_adjacency_bulk(self, adjacencies: dict[bytes, bytes]) -> None:
         raise NotImplementedError
 
     def delete_adjacency(self, node_id: bytes):
@@ -301,58 +316,21 @@ class KVStore:
         """Count typed adjacency records for a node and edge type."""
         return sum(1 for _ in self.iter_typed_adjacency(node_id, edge_type, direction))
 
-    def put_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
-        """Store one sorted index entry.
-
-        Args:
-            index_name: Logical index name, such as ``"node_label"``.
-            key_parts: Ordered components used as the scan prefix.
-            value: Entity ID or payload returned by prefix scans.
-
-        Examples:
-            >>> store.put_index_entry("node_label", [b"Drug"], b"drug-1")  # doctest: +SKIP
-        """
+    def put_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes) -> None:
+        """Store one sorted index entry."""
         raise NotImplementedError
 
-    def put_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes]]):
-        """Store many sorted index entries.
-
-        Args:
-            entries: Tuples of ``(index_name, key_parts, value)``.
-
-        Examples:
-            >>> store.put_index_entries_bulk([("node_label", [b"Drug"], b"drug-1")])  # doctest: +SKIP
-        """
+    def put_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes]]) -> None:
+        """Store many sorted index entries."""
         for index_name, key_parts, value in entries:
             self.put_index_entry(index_name, key_parts, value)
 
-    def delete_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
-        """Delete one sorted index entry.
-
-        Args:
-            index_name: Logical index name.
-            key_parts: Ordered components used when the entry was written.
-            value: Entity ID or payload used when the entry was written.
-
-        Examples:
-            >>> store.delete_index_entry("node_label", [b"Drug"], b"drug-1")  # doctest: +SKIP
-        """
+    def delete_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes) -> None:
+        """Delete one sorted index entry."""
         raise NotImplementedError
 
-    def iter_index_prefix(self, index_name: str, key_parts: list[bytes]):
-        """Yield values whose index key starts with ``key_parts``.
-
-        Args:
-            index_name: Logical index name.
-            key_parts: Ordered prefix components.
-
-        Yields:
-            Values associated with matching index entries.
-
-        Examples:
-            >>> list(store.iter_index_prefix("node_label", [b"Drug"]))  # doctest: +SKIP
-            [b'drug-1']
-        """
+    def iter_index_prefix(self, index_name: str, key_parts: list[bytes]) -> Any:
+        """Yield values whose index key starts with ``key_parts``."""
         raise NotImplementedError
 
     def put_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes):
@@ -389,6 +367,17 @@ class KVStore:
                 ("edge_type", [edge_type.encode("utf-8")], edge_id)
                 for edge_type, edge_id in zip(edge_list.edge_types, edge_list.edge_ids)
             ])
+
+
+class KVTransaction(KVStore):
+    """A transaction-bound store with explicit commit/rollback coordination."""
+
+    def rollback(self) -> None:
+        raise NotImplementedError
+
+    def commit(self) -> None:
+        raise NotImplementedError
+
 
 # =========================================
 # LMDB Implementation
@@ -510,7 +499,7 @@ class LMDBStore(KVStore):
         # For LMDB, we'd need to decide which db to put to. This might remain unused.
         pass
 
-    def get(self, key: bytes) -> bytes:
+    def get(self, key: bytes) -> bytes | None:
         """Placeholder generic get; graph code uses specialized methods."""
         # Not used directly.
         return None
@@ -590,12 +579,12 @@ class LMDBStore(KVStore):
         with self.env.begin(write=True, db=self.edges_db) as txn:
             txn.put(edge_id, value)
 
-    def get_edge(self, edge_id: str) -> bytes:
+    def get_edge(self, edge_id: bytes) -> bytes | None:
         """Return serialized edge bytes by key, or ``None``."""
         with self.env.begin(write=False, db=self.edges_db) as txn:
             return txn.get(edge_id)
 
-    def delete_edge(self, edge_id: str):
+    def delete_edge(self, edge_id: bytes):
         """Delete an edge by byte key."""
         with self.env.begin(write=True, db=self.edges_db) as txn:
             txn.delete(edge_id)
@@ -606,13 +595,12 @@ class LMDBStore(KVStore):
             for node_id, val in keys_and_values.items():
                 txn.put(node_id, val)
     
-    def get_nodes_bulk(self, node_ids: list[bytes]) -> dict[bytes, bytes]:
+    def get_nodes_bulk(self, node_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         """Retrieve multiple nodes in one read transaction."""
         results = {}
         with self.env.begin(write=False, db=self.nodes_db) as txn:
             with txn.cursor() as c:
-            # for node_id in node_ids:
-                data = c.getmulti(node_ids)
+                data = c.getmulti(list(node_ids))
                 if data is not None:
                     results.update({k : v for k, v in data})
 
@@ -624,7 +612,7 @@ class LMDBStore(KVStore):
             for edge_id, val in keys_and_values.items():
                 txn.put(edge_id, val)
     
-    def get_edges_bulk(self, edge_ids: list[bytes]) -> dict[bytes, bytes]:
+    def get_edges_bulk(self, edge_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         """Return serialized edges for the requested keys."""
         results = {}
         with self.env.begin(write=False, db=self.edges_db) as txn:
@@ -674,9 +662,7 @@ class LMDBStore(KVStore):
             else:
                 raise Exception('Get adjacency requires the bytes! (serialized data)')
 
-    # -------------------------------------------------------------------------
-    # Bulk Write: Adjacency
-    # -------------------------------------------------------------------------
+    # -- Bulk Write: Adjacency --
     def put_adjacency_bulk(self, adj_dict: Dict[bytes, bytes]) -> None:
         """
         Insert/update multiple adjacency lists in one transaction.
@@ -874,7 +860,7 @@ class LMDBTransactionStore(KVStore):
     def put(self, key: bytes, value: bytes):
         self._check_active()
 
-    def get(self, key: bytes) -> bytes:
+    def get(self, key: bytes) -> bytes | None:
         self._check_active()
         return None
 
@@ -932,7 +918,7 @@ class LMDBTransactionStore(KVStore):
         for node_id, value in keys_and_values.items():
             self.txn.put(node_id, value, db=self.parent.nodes_db)
 
-    def get_nodes_bulk(self, node_ids: list[bytes]) -> dict[bytes, bytes]:
+    def get_nodes_bulk(self, node_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         self._check_active()
         results = {}
         for node_id in node_ids:
@@ -946,7 +932,7 @@ class LMDBTransactionStore(KVStore):
         for edge_id, value in keys_and_values.items():
             self.txn.put(edge_id, value, db=self.parent.edges_db)
 
-    def get_edges_bulk(self, edge_ids: list[bytes]) -> dict[bytes, bytes]:
+    def get_edges_bulk(self, edge_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         self._check_active()
         results = {}
         for edge_id in edge_ids:
@@ -1320,7 +1306,7 @@ class LevelDBStore(KVStore):
         """Return serialized edge bytes by key, or ``None``."""
         return self.db_edges.get(edge_id)
 
-    def delete_edge(self, edge_id: str):
+    def delete_edge(self, edge_id: bytes):
         """Delete an edge by byte key."""
         self.db_edges.delete(edge_id)
 
@@ -1328,11 +1314,9 @@ class LevelDBStore(KVStore):
         """Use a WriteBatch for atomic bulk updates."""
         with self.db_nodes.write_batch() as wb:
             for node_id, val in keys_and_values.items():
-                # s = node_id.decode()
-                # wb.put(f"N:{s}".encode('utf-8'), val)
                 wb.put(node_id, val)
 
-    def get_nodes_bulk(self, node_ids: list[bytes]) -> dict[bytes, bytes]:
+    def get_nodes_bulk(self, node_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         """Return serialized nodes for the requested keys."""
         results = {}
         for node_id in node_ids:
@@ -1347,12 +1331,10 @@ class LevelDBStore(KVStore):
             for edge_id, val in keys_and_values.items():
                 wb.put(edge_id, val)
     
-    def get_edges_bulk(self, edge_ids: list[bytes]) -> dict[bytes, bytes]:
+    def get_edges_bulk(self, edge_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         """Return serialized edges for the requested keys."""
         results = {}
         for edge_id in edge_ids:
-            # s = edge_id.decode()
-            # key = f"E:{s}".encode('utf-8')
             data = self.db_edges.get(edge_id)
             if data is not None:
                 results[edge_id] = data
@@ -1368,10 +1350,8 @@ class LevelDBStore(KVStore):
         """Return a serialized adjacency list for a node."""
         return self.db_adj.get(node_id)
     
-    # -------------------------------------------------------------------------
-    # Bulk Write: Adjacency
-    # -------------------------------------------------------------------------
-    def put_adjacency_bulk(self, adj_dict: Dict[str, bytes]) -> None:
+    # -- Bulk Write: Adjacency --
+    def put_adjacency_bulk(self, adj_dict: Dict[bytes, bytes]) -> None:
         """
         Insert/update multiple adjacency lists in one write batch.
         :param adj_dict: a dict mapping node_id -> serialized adjacency
@@ -1387,8 +1367,6 @@ class LevelDBStore(KVStore):
         """Return serialized adjacency lists for the requested nodes."""
         results = {}
         for node_id in node_ids:
-            # s = node_id.decode()
-            # key = f"A:{s}".encode('utf-8')
             data = self.db_adj.get(node_id)
             if data is not None:
                 results[node_id] = data
@@ -1803,7 +1781,7 @@ class PyRexStore(KVStore):
             return
         self.put_nodes_bulk(dict(zip(node_list.node_ids, node_list.node_values)))
 
-    def get_nodes_bulk(self, node_ids: list[bytes]) -> dict[bytes, bytes]:
+    def get_nodes_bulk(self, node_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         """Return serialized nodes for the requested keys."""
         results = {}
         for node_id in node_ids:
@@ -1831,7 +1809,7 @@ class PyRexStore(KVStore):
             batch.put(self._key(b"E", edge_id), value)
         self._write_batch(batch)
 
-    def get_edges_bulk(self, edge_ids: list[bytes]) -> dict[bytes, bytes]:
+    def get_edges_bulk(self, edge_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         """Return serialized edges for the requested keys."""
         results = {}
         for edge_id in edge_ids:

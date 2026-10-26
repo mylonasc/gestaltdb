@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union
 
 if TYPE_CHECKING:
     from .kvstores import KVStore
@@ -509,7 +509,7 @@ class GraphDB:
         """
         return self.nodes.put(node)
 
-    def get_node(self, node_id) -> Node:
+    def get_node(self, node_id) -> Node | None:
         """Return a node by byte key.
 
         Args:
@@ -1291,7 +1291,7 @@ class GraphDB:
         """
         return self.traversal.rebuild_typed_adjacency()
 
-    def get_edge(self, edge_id) -> Edge:
+    def get_edge(self, edge_id) -> Edge | None:
         """Return an edge by byte key.
 
         Args:
@@ -1584,7 +1584,7 @@ class GraphDB:
         """Serialize an edge for use with columnar edge ingestion."""
         return self.entity_serializer.serialize(edge, "Edge")
 
-    def get_nodes(self, node_ids: list[str]) -> list[Node]:
+    def get_nodes(self, node_ids: list[str]) -> list[Node | None]:
         """
         Use store.get_nodes_bulk(...) and deserialize each one.
         Return a list of Node (in the same order as node_ids, or possibly just all found).
@@ -1632,7 +1632,7 @@ class GraphDB:
 
         return _edge_records.get_adjacency_list(self.store, self.serializer, node_id, direction, return_raw)
 
-    def put_adjacency_list(self, node_id: str, edges_list: list[str]):
+    def put_adjacency_list(self, node_id: bytes, edges_list: dict[str, Any]):
         """Stores the adjacency list for node_id."""
         _edge_records.put_adjacency_list(self.store, self.serializer, node_id, edges_list)
 
@@ -1650,7 +1650,7 @@ class GraphDB:
     # -----------------------
     # BFS Example
     # -----------------------
-    def bfs(self, start_node_id: bytes, direction = 'any', edge_key_serializer = lambda x : x.encode('utf-8'), node_key_serializer = lambda x : x.encode('utf-8')) -> list[str]:
+    def bfs(self, start_node_id: bytes, direction = 'any', edge_key_serializer = lambda x : x.encode('utf-8'), node_key_serializer = lambda x : x.encode('utf-8')) -> list[bytes]:
         """
         Returns a list of node_ids in BFS order starting from `start_node_id`.
         Demonstrates how adjacency is used for graph traversal.
