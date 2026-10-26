@@ -916,7 +916,7 @@ class GenericEngine:
         if program.aggregates:
             if iterations >= limits.max_iterations:
                 raise ReasoningLimitError("evaluation exceeded max_iterations (component delta rounds)")
-            for fact in self._evaluate_aggregates(program, full, budget, cancel):
+            for fact in self._evaluate_aggregates(program, full, budget, cancel, collector):
                 if fact in full.facts:
                     continue
                 if len(full.facts) >= limits.max_facts:
