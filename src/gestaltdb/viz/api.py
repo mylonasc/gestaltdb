@@ -123,17 +123,20 @@ class VizFigure:
             'title="GestaltDB graph visualization"></iframe>'
         )
 
-    def as_svg(self, *, width: int = 1200, height: int = 800, layout: str = "circle",
+    def as_svg(self, *, width: int = 1200, height: int = 800, layout: str | None = None,
                positions: Mapping[str, tuple[float, float]] | None = None, background: bool = True) -> str:
         """Return dependency-free SVG using a static layout or supplied coordinates.
 
         This renders the Python graph, not the current notebook iframe state.
         Set ``edge_labels='all'`` to include relationship labels in static output.
+        ``layout`` defaults to the payload's suggested layout (reasoning figures
+        suggest ``"tree"``; everything else defaults to ``"circle"``).
         """
         from .svg import render_svg
 
+        resolved = layout or self.viz.meta.get("suggested_layout", "circle")
         return render_svg(self.viz, self.options, width=width, height=height,
-                          layout=layout, positions=positions, background=background)
+                          layout=resolved, positions=positions, background=background)
 
     def save_svg(self, path: str | Path, **kwargs: Any) -> Path:
         """Write :meth:`as_svg` output and return the resolved destination."""
@@ -192,6 +195,25 @@ def visualize_nodes_edges(
         edges: ``Edge`` objects or edge-shaped dicts.
         options: ``VizOptions`` or equivalent mapping.
         caps: Optional ``max_nodes``/``max_edges`` overrides.
+
+    Examples:
+        Create a portable SVG without a database, browser, or notebook::
+
+            >>> from tempfile import TemporaryDirectory
+            >>> from pathlib import Path
+            >>> from gestaltdb.graphdb import Node, Edge
+            >>> from gestaltdb.viz.api import VizOptions, visualize_nodes_edges
+            >>> figure = visualize_nodes_edges(
+            ...     [Node("a", properties={"name": "Alice"}), Node("b", properties={"name": "Bob"})],
+            ...     [Edge("ab", "a", "b", properties={"type": "knows"})],
+            ...     options=VizOptions(node_label_property="name"))
+            >>> assert "Alice" in figure.as_svg()
+            >>> with TemporaryDirectory() as root:
+            ...     _ = figure.save_svg(Path(root) / "graph.svg")
+            ...     assert (Path(root) / "graph.svg").is_file()
+
+    ``figure.as_html()`` produces the interactive viewer. The visualization guide
+    covers notebook display, query/sample builders, caps, and browser export.
     """
     from .ir import VizGraph
 
@@ -267,4 +289,161 @@ def visualize_sampler_batch(
         VizGraph.from_sampler_batch(batch, snapshot, **_caps_kwargs(resolved)),
         resolved,
         source="visualize_sampler_batch",
+    )
+
+
+def _resolve_caps(options: VizOptions | Mapping[str, Any] | None, caps: Mapping[str, Any]) -> VizOptions:
+    if caps:
+        merged = dict(_coerce_options(options).__dict__)
+        merged.update(dict(caps))
+        return VizOptions(**merged)
+    return _coerce_options(options)
+
+
+def visualize_claim_explanation(
+    explanation: Any,
+    *,
+    options: VizOptions | Mapping[str, Any] | None = None,
+    **caps: Any,
+) -> VizFigure:
+    """Visualize a ``ClaimExplanation`` derivation graph from ``graph.rules.explain``.
+
+    Claim, rule, and absence versions become color-grouped nodes; stored
+    ``derived_by`` / ``premise`` / ``absent_premise`` edges read as
+    "depends on" from the highlighted root outward. The inspector carries
+    the statement triple, agent/polarity, rule head, and absence scope.
+    SVG output needs no browser and keeps the same topology.
+    """
+    from .reasoning import claim_explanation_graph
+
+    resolved = _resolve_caps(options, caps)
+    return _finish(
+        claim_explanation_graph(explanation, **_caps_kwargs(resolved)),
+        resolved,
+        source="visualize_claim_explanation",
+    )
+
+
+def visualize_inference_audit(
+    report: Any,
+    *,
+    options: VizOptions | Mapping[str, Any] | None = None,
+    **caps: Any,
+) -> VizFigure:
+    """Visualize an inference-audit document from ``export_inference``.
+
+    Accepts an ``InferenceExplanation`` or its ``to_dict()`` mapping, so
+    archived audits render without a live database handle. Node kinds
+    (``claim``/``model_output``/``rule``/``absence``) become groups and
+    recorded justifications become derivation edges.
+    """
+    from .reasoning import inference_audit_graph
+
+    resolved = _resolve_caps(options, caps)
+    return _finish(
+        inference_audit_graph(report, **_caps_kwargs(resolved)),
+        resolved,
+        source="visualize_inference_audit",
+    )
+
+
+def visualize_proof_explanation(
+    explanation: Any,
+    *,
+    options: VizOptions | Mapping[str, Any] | None = None,
+    **caps: Any,
+) -> VizFigure:
+    """Visualize a standalone Datalog proof witness as a fact tree.
+
+    Each ground fact is one node (``input`` vs ``derived`` groups) and each
+    witness premise is one directed ``premise → conclusion`` edge typed by
+    the deriving rule ID, with the explained root highlighted. Works for
+    ``ProofTrace.explain`` and ``EvaluationResult.explain`` results.
+    """
+    from .reasoning import proof_explanation_graph
+
+    resolved = _resolve_caps(options, caps)
+    return _finish(
+        proof_explanation_graph(explanation, **_caps_kwargs(resolved)),
+        resolved,
+        source="visualize_proof_explanation",
+    )
+
+
+def visualize_support_set(
+    fact: Any,
+    supports: Any,
+    witness: Any | None = None,
+    *,
+    options: VizOptions | Mapping[str, Any] | None = None,
+    **caps: Any,
+) -> VizFigure:
+    """Visualize every alternative support for one typed fact.
+
+    The conclusion fans out to one ``support`` node per derivation, each
+    fanning out to its premises. A supplied ``RankedWitness`` (from
+    ``minimal_witness`` / ``top_k``) highlights the chosen derivation
+    against the full alternative set instead of hiding the alternatives.
+    """
+    from .reasoning import support_set_graph
+
+    resolved = _resolve_caps(options, caps)
+    return _finish(
+        support_set_graph(fact, supports, witness, **_caps_kwargs(resolved)),
+        resolved,
+        source="visualize_support_set",
+    )
+
+
+def visualize_ontology(
+    ontology: Any,
+    *,
+    options: VizOptions | Mapping[str, Any] | None = None,
+    **caps: Any,
+) -> VizFigure:
+    """Visualize an ontology revision as a class/property hierarchy graph.
+
+    Binary axioms become single typed edges (subclass, subproperty,
+    equivalence, domain, range, inverses, characteristics); property
+    chains and intersections become explicit ``axiom`` nodes so n-ary
+    premises are never dropped. Union members each imply the superclass
+    and stay direct edges.
+    """
+    from .reasoning import ontology_graph
+
+    resolved = _resolve_caps(options, caps)
+    return _finish(
+        ontology_graph(ontology, **_caps_kwargs(resolved)),
+        resolved,
+        source="visualize_ontology",
+    )
+
+
+def visualize_inference_chain(
+    nodes: Any,
+    edges: Any,
+    explanation: Any | None = None,
+    ontology: Any | None = None,
+    *,
+    link_layers: bool = True,
+    options: VizOptions | Mapping[str, Any] | None = None,
+    **caps: Any,
+) -> VizFigure:
+    """Visualize the whole inference chain in one figure.
+
+    Circles mark the data layer (property-graph nodes plus asserted/input
+    facts), triangles mark inferred conclusions, and squares mark schema
+    (rules, absences, axiom nodes, ontology terms). Stored and structural
+    edges are solid; inference steps are dotted. With ``link_layers=True``,
+    statements link to graph nodes they mention and to ontology properties
+    they instantiate, both by exact ID equality only.
+    """
+    from .chain import inference_chain_graph
+
+    resolved = _resolve_caps(options, caps)
+    return _finish(
+        inference_chain_graph(nodes, edges, explanation, ontology,
+                              link_layers=link_layers, **_caps_kwargs(resolved)),
+        resolved,
+        source="visualize_inference_chain",
     )

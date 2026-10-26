@@ -31,7 +31,7 @@ def source(tmp_path, request):
     pytest.importorskip(module)
     graph = GraphDB.create(tmp_path / "db", backend=backend, serializer="json")
     for agent in ("one", "two"):
-        graph.assert_claim(subject="a", predicate="memberOf", object="g1", agent=agent, polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="a", predicate="memberOf", object="g1", agent=agent, polarity="positive", valid=(0, 100))
     session = start_session(graph, PROGRAM, catalog_for_typed_program(PROGRAM),
         scope=SessionScope("default", 50, ClaimSelection(), ClaimMapping()), limits=ReasoningLimits())
     binding = bind_session_generation(graph, session)
@@ -51,7 +51,7 @@ def test_v1_load_and_historical_advance_authenticate_both_generations(source):
     assert load_authenticated_session(graph, path, **pins(binding)).session == session
     assert path.read_bytes() == before
     assert json.loads(before)["format_version"] == 1
-    graph.assert_claim(subject="b", predicate="memberOf", object="g2", agent="new", polarity="positive", valid=(0, 100))
+    graph.epistemic.assert_claim(subject="b", predicate="memberOf", object="g2", agent="new", polarity="positive", valid=(0, 100))
     with pytest.raises(ProvenanceMismatchError, match="horizon moved"):
         load_authenticated_session(graph, path, **pins(binding))
     with pytest.raises(ProvenanceMismatchError, match="horizon moved"):
@@ -127,7 +127,7 @@ def test_bounds_cancellation_and_new_generation_admission_preserve_old_bytes(sou
         load_authenticated_session(graph, path, **pins(binding), max_bytes=1)
     with pytest.raises(ReasoningCancelledError):
         advance_authenticated_session(graph, path, **pins(binding), limits=ReasoningLimits(), cancel=lambda: True)
-    graph.assert_claim(subject="b", predicate="memberOf", object="g2", agent="new", polarity="positive", valid=(0, 100))
+    graph.epistemic.assert_claim(subject="b", predicate="memberOf", object="g2", agent="new", polarity="positive", valid=(0, 100))
     with pytest.raises(ReasoningLimitError, match="max_facts"):
         advance_authenticated_session(graph, path, **pins(binding), limits=ReasoningLimits(), freshness="historical",
             admission_limits=SessionAdmissionLimits(max_facts=2))
@@ -155,7 +155,7 @@ def test_reentrant_source_move_before_replace_does_not_persist_stale_new_generat
     before = path.read_bytes()
     original = store._encoded_bytes
     def moved(session):
-        graph.assert_claim(subject="new", predicate="memberOf", object="g2", agent="new", polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="new", predicate="memberOf", object="g2", agent="new", polarity="positive", valid=(0, 100))
         return original(session)
     monkeypatch.setattr(store, "_encoded_bytes", moved)
     with pytest.raises(ProvenanceMismatchError, match="horizon moved"):
@@ -168,7 +168,7 @@ def test_concurrent_cooperating_file_writer_waits_then_fails_old_state_pin(sourc
     from threading import Event
     import gestaltdb.reasoning.adapters.authenticated_sessions as adapter
     graph, path, session, binding = source
-    graph.assert_claim(subject="b", predicate="memberOf", object="g2", agent="new", polarity="positive", valid=(0, 100))
+    graph.epistemic.assert_claim(subject="b", predicate="memberOf", object="g2", agent="new", polarity="positive", valid=(0, 100))
     entered, release, attempted, finished = Event(), Event(), Event(), Event()
     original = adapter.advance_session
     def paused(*args, **kwargs):
@@ -231,12 +231,12 @@ def test_authenticated_resume_after_process_restart(tmp_path, backend, module):
     db, path = tmp_path / "db", tmp_path / "session.json"
     graph = GraphDB.create(db, backend=backend, serializer="json")
     try:
-        graph.assert_claim(subject="a", predicate="memberOf", object="g1", agent="one", polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="a", predicate="memberOf", object="g1", agent="one", polarity="positive", valid=(0, 100))
         session = start_session(graph, PROGRAM, catalog_for_typed_program(PROGRAM),
             scope=SessionScope("default", 50, ClaimSelection(), ClaimMapping()), limits=ReasoningLimits())
         binding = bind_session_generation(graph, session)
         save_session(session, path)
-        graph.assert_claim(subject="b", predicate="memberOf", object="g2", agent="new", polarity="positive", valid=(0, 100))
+        graph.epistemic.assert_claim(subject="b", predicate="memberOf", object="g2", agent="new", polarity="positive", valid=(0, 100))
     finally:
         graph.close()
     code = '''

@@ -31,14 +31,14 @@ def source(tmp_path, request):
     pytest.importorskip(module)
     graph = GraphDB.create(tmp_path / "db", backend=backend, serializer="json")
     def assertion(s, p, o, agent, valid):
-        return graph.assert_claim(subject=s, predicate=p, object=o, agent=agent, source="registry",
+        return graph.epistemic.assert_claim(subject=s, predicate=p, object=o, agent=agent, source="registry",
                                   polarity="positive", valid=valid)
     first = assertion("a", "p", "b", "one", (0, 100))
     second = assertion("a", "p", "b", "two", (10, 90))
     bc = assertion("b", "q", "c", "one", (20, 80))
-    graph.retract_claim(first.logical_id, valid=(40, 60))
-    corrected = graph.correct_claim(second.logical_id, supersedes_version_id=second.version_id, valid=(30, 70))
-    graph.retract_claim(bc.logical_id, valid=(50, 55))
+    graph.epistemic.retract_claim(first.logical_id, valid=(40, 60))
+    corrected = graph.epistemic.correct_claim(second.logical_id, supersedes_version_id=second.version_id, valid=(30, 70))
+    graph.epistemic.retract_claim(bc.logical_id, valid=(50, 55))
     tail = assertion("a", "p", "b", "three", (110, 120))
     yield graph, (first, second, bc, corrected, tail)
     graph.close()
@@ -75,7 +75,7 @@ def oracle(point):
 
 def test_independent_point_oracle_every_boundary_and_gap(source):
     graph, versions = source
-    with graph.read_view(valid_time=0) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0) as view:
         result = run(view)
         for point in range(130):
             assert set(result.closure.at(point)) == oracle(point)
@@ -90,7 +90,7 @@ def test_independent_point_oracle_every_boundary_and_gap(source):
 
 def test_independent_versions_cannot_be_dropped_with_same_logical_facts(source):
     graph, _ = source
-    with graph.read_view(valid_time=0) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0) as view:
         result = run(view)
         changed = replace(result, evidence=result.evidence[1:])
         with pytest.raises(ProvenanceMismatchError, match="complete authenticated source"):
@@ -103,7 +103,7 @@ def test_independent_versions_cannot_be_dropped_with_same_logical_facts(source):
 
 def test_closure_and_derivation_tampering_rejected(source):
     graph, _ = source
-    with graph.read_view(valid_time=0) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0) as view:
         result = run(view)
         assert result.closure.derivations
         for closure in (replace(result.closure, derivations=()),
@@ -122,24 +122,24 @@ def test_closure_and_derivation_tampering_rejected(source):
 
 def test_historical_prefix_and_latest_source_movement(source):
     graph, _ = source
-    with graph.read_view(valid_time=0) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0) as view:
         result = run(view)
-        graph.assert_claim(subject="c", predicate="q", object="d", agent="new", polarity="positive", valid=(0, 130))
+        graph.epistemic.assert_claim(subject="c", predicate="q", object="d", agent="new", polarity="positive", valid=(0, 130))
         assert run(view).closure == result.closure
         admit(view, result)
         result.binding.verify_source(graph, freshness="historical")
         with pytest.raises(ProvenanceMismatchError, match="horizon moved"):
             result.binding.verify_source(graph)
-    with graph.read_view(valid_time=0, through_commit=result.binding.provenance.commit_horizon) as historical:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0, through_commit=result.binding.provenance.commit_horizon) as historical:
         admit(historical, result)
-    with graph.read_view(valid_time=0) as latest:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0) as latest:
         with pytest.raises(ReasoningError, match="source drifted"):
             admit(latest, result)
 
 
 def test_empty_historical_prefix_is_not_latest_or_missing_history(source):
     graph, _ = source
-    with graph.read_view(valid_time=0, through_commit=0) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0, through_commit=0) as view:
         result = run(view)
         assert result.evidence == () and result.history_versions == result.scanned_claims == 0
         assert result.extraction_segments == (Interval(0, 130),)
@@ -153,7 +153,7 @@ def test_empty_historical_prefix_is_not_latest_or_missing_history(source):
                                         "semantics_profile", "dictionary_id", "world", "mapping_id", "point", "current"])
 def test_expected_identity_rejected_before_source_iteration(source, monkeypatch, dimension):
     graph, _ = source
-    with graph.read_view(valid_time=0) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0) as view:
         identity = run(view).binding.identity
         if dimension in ("start", "end", "horizon", "token"):
             key, value = {"start": ("valid_start_us", -1), "end": ("valid_end_us", 131),
@@ -178,14 +178,14 @@ def test_expected_identity_rejected_before_source_iteration(source, monkeypatch,
 @pytest.mark.parametrize("field", ["max_history_versions", "max_scanned_claims", "max_segments", "max_evidence", "max_commits"])
 def test_cumulative_source_bounds(source, field):
     graph, _ = source
-    with graph.read_view(valid_time=0) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0) as view:
         with pytest.raises(ReasoningLimitError, match=field):
             run(view, source_limits=replace(RangeSourceLimits(), **{field: 1}))
 
 
 def test_policy_empty_inputs_catalog_and_invalid_ranges(source):
     graph, _ = source
-    with graph.read_view(valid_time=0) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0) as view:
         result = run(view, selection=ClaimSelection(agents=()))
         assert result.evidence == () and result.closure.base == () and result.closure.derivations == ()
         assert result.extraction_segments[0].start == 0 and result.extraction_segments[-1].end == 130
@@ -200,7 +200,7 @@ def test_policy_empty_inputs_catalog_and_invalid_ranges(source):
 
 def test_cancellation_and_view_rebinding(source, monkeypatch):
     graph, _ = source
-    with graph.read_view(valid_time=0) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0) as view:
         reads = []
         original = view.iter_claim_versions
         def counted():
@@ -211,7 +211,7 @@ def test_cancellation_and_view_rebinding(source, monkeypatch):
         with pytest.raises(ReasoningCancelledError):
             run(view, cancel=lambda: len(reads) >= 2)
         assert len(reads) == 2
-    with graph.read_view(valid_time=0) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0) as view:
         original = view.iter_claims_as_of
         def rebound(**kwargs):
             for v in original(**kwargs):
@@ -225,7 +225,7 @@ def test_cancellation_and_view_rebinding(source, monkeypatch):
 def test_final_conformance_cannot_bypass_source_checks(source, monkeypatch):
     import gestaltdb.reasoning.adapters.range_generation as adapter
     graph, _ = source
-    with graph.read_view(valid_time=0) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0) as view:
         result = run(view)
         original = adapter.verify_closure
         def rebound(*args, **kwargs):
@@ -239,7 +239,7 @@ def test_final_conformance_cannot_bypass_source_checks(source, monkeypatch):
 
 def test_catalog_version_and_policy_are_bound_independently(source):
     graph, _ = source
-    with graph.read_view(valid_time=0) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0) as view:
         first = run(view)
         catalog = RuleCatalog([replace(e, version_id="changed", ordinal=2)
                                for e in catalog_for_typed_program(PROGRAM).entries])
@@ -257,13 +257,13 @@ def test_catalog_version_and_policy_are_bound_independently(source):
 
 def test_full_validity_disjoint_policy_and_nonentity_inputs(source):
     graph, _ = source
-    graph.assert_claim(subject="ignored", predicate="p", object="literal", object_kind="literal",
+    graph.epistemic.assert_claim(subject="ignored", predicate="p", object="literal", object_kind="literal",
                        agent="one", polarity="positive", valid=(1, 2))
-    graph.assert_claim(subject="ignored", predicate="p", object="negative", agent="one",
+    graph.epistemic.assert_claim(subject="ignored", predicate="p", object="negative", agent="one",
                        polarity="negative", valid=(3, 4))
-    graph.assert_claim(subject="ignored", predicate="p", object="other-world", agent="one",
+    graph.epistemic.assert_claim(subject="ignored", predicate="p", object="other-world", agent="one",
                        world="elsewhere", polarity="positive", valid=(5, 6))
-    with graph.read_view(valid_time=0) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0) as view:
         result = run(view)
         assert all(e.fact.values[0] != "ignored" for e in result.evidence)
         for point in range(130):
@@ -272,9 +272,9 @@ def test_full_validity_disjoint_policy_and_nonentity_inputs(source):
 
 def test_asserted_rule_heads_remain_complete_inputs(source):
     graph, _ = source
-    graph.assert_claim(subject="a", predicate="reach", object="explicit", agent="one",
+    graph.epistemic.assert_claim(subject="a", predicate="reach", object="explicit", agent="one",
                        polarity="positive", valid=(1, 9))
-    with graph.read_view(valid_time=0) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0) as view:
         result = run(view)
         fact = TypedFact("reach", ("a", "explicit"))
         assert result.closure.answers(fact) == IntervalSet([Interval(1, 9)])
@@ -283,7 +283,7 @@ def test_asserted_rule_heads_remain_complete_inputs(source):
 
 def test_retained_result_bounds_and_cancel_precede_readmission(source):
     graph, _ = source
-    with graph.read_view(valid_time=0) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0) as view:
         result = run(view)
         with pytest.raises(ReasoningLimitError, match="max_evidence"):
             admit(view, result, source_limits=RangeSourceLimits(max_evidence=1))

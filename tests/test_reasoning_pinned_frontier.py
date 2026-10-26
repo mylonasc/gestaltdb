@@ -30,7 +30,7 @@ def program():
 
 
 def put(graph, subject, predicate, obj, **kwargs):
-    return graph.assert_claim(subject=subject, predicate=predicate, object=obj, agent="chosen",
+    return graph.epistemic.assert_claim(subject=subject, predicate=predicate, object=obj, agent="chosen",
                               polarity="positive", valid=(0, 100), world="base", **kwargs)
 
 
@@ -49,7 +49,7 @@ def test_selective_alias_recursive_frontier_and_historical_pin(graph):
     for i in range(20):
         put(graph, f"noise-{i}", "storedEdge", "outside")
     put(graph, "a", "storedEdge", "b", source="independent")
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         put(graph, "c", "storedEdge", "future")
         result = run(view)
         assert {fact.object for fact in result.answer.facts} == {"a", "b", "c", "d", "e", "f"}
@@ -67,14 +67,14 @@ def test_selective_alias_recursive_frontier_and_historical_pin(graph):
         assert result.answer.facts == full.match(subject="a", predicate="reach")
         assert result.scanned_claims < baseline_scanned
         assert not any(e.fact.object == "future" for e in result.answer.evidence)
-        with graph.read_view(valid_time=50) as latest:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as latest:
             assert Fact("a", "reach", "future") in run(latest).answer.facts
 
 
 def test_bounds_cancellation_and_exact_object_goal(graph):
     put(graph, "a", "storedEdge", "b")
     put(graph, "b", "storedEdge", "c")
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         assert run(view, Atom("a", "reach", "c")).answer.facts == (Fact("a", "reach", "c"),)
         with pytest.raises(ReasoningLimitError, match="max_scanned_claims"):
             run(view, source_limits=ClaimSourceLimits(1))
@@ -87,13 +87,13 @@ def test_bounds_cancellation_and_exact_object_goal(graph):
 
 def test_policy_world_and_valid_time_isolation(graph):
     put(graph, "a", "storedEdge", "b")
-    graph.assert_claim(subject="b", predicate="storedEdge", object="wrong-agent", agent="other",
+    graph.epistemic.assert_claim(subject="b", predicate="storedEdge", object="wrong-agent", agent="other",
                        polarity="positive", world="base", valid=(0, 100))
-    graph.assert_claim(subject="b", predicate="storedEdge", object="wrong-world", agent="chosen",
+    graph.epistemic.assert_claim(subject="b", predicate="storedEdge", object="wrong-world", agent="chosen",
                        polarity="positive", world="other", valid=(0, 100))
-    graph.assert_claim(subject="b", predicate="storedEdge", object="wrong-time", agent="chosen",
+    graph.epistemic.assert_claim(subject="b", predicate="storedEdge", object="wrong-time", agent="chosen",
                        polarity="positive", world="base", valid=(100, 200))
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         assert run(view).answer.facts == (Fact("a", "reach", "b"),)
 
 
@@ -101,7 +101,7 @@ def test_unsupported_profile_fails_before_reads(graph, monkeypatch):
     from gestaltdb.reasoning.typed import GenericProgram
     def unread(*args, **kwargs):
         raise AssertionError("unsupported fragment reached storage")
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         monkeypatch.setattr(view, "iter_claims_as_of", unread)
         with pytest.raises(ReasoningError, match="binary"):
             answer_pinned_claims(view, GenericProgram([]), Atom("a", "p", Y), world="base",

@@ -55,7 +55,7 @@ def test_version_qualified_raw_capability_and_separate_claim_source_gate(graph):
         with pytest.raises(ReasoningError, match="no native Arrow scan"):
             require_native_scan(graph.store)
     if transactional:
-        with graph.read_view(valid_time=50) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             with pytest.raises(ReasoningError, match="plain PyRex"):
                 PinnedNativeClaimSource(view, request=ExtractionRequest("default"),
                     ontology_revision="audit", selection=ClaimSelection(), mapping=ClaimMapping())

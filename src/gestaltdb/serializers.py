@@ -173,7 +173,21 @@ class PickleSerializer(Serializer):
 
 
 class JSONSerializer(Serializer):
-    """Uses JSON for serialization."""
+    """Encode supported property payloads as UTF-8 JSON bytes.
+
+    Examples:
+        Round-trip a dictionary independently of any storage backend::
+
+            >>> from gestaltdb.serializers import JSONSerializer
+            >>> serializer = JSONSerializer()
+            >>> payload = {"name": "Alice", "scores": [1, 2]}
+            >>> encoded = serializer.serialize(payload)
+            >>> assert isinstance(encoded, bytes)
+            >>> assert serializer.deserialize(encoded) == payload
+
+    ``GraphDB.create(..., serializer="json")`` selects this implementation.
+    See the serializers guide for temporal property values and optional encodings.
+    """
     def serialize(self, obj: dict) -> bytes:
         """Serialize a JSON-compatible object.
 

@@ -6,11 +6,11 @@ Ontology v1 implementation contract
 Development status
 ------------------
 
-This is the ONTO-01 interface agreement for epic #131 on ``onto-dev``.
-The immutable reasoning contracts, standalone Datalog evaluator, ontology
-compiler, bounded witness explanations and pinned claims adapter now exist on
-the epic branch. They are not yet a main-branch release.
-See ``ONTO-EPIC.md`` in the repository for priorities and dependencies.
+This is the ONTO-01 interface agreement for epic #131. The immutable reasoning
+contracts, standalone Datalog evaluator, ontology compiler, bounded witness
+explanations and pinned claims adapter shipped on ``main`` in ``0.13.0rc1``.
+See ``EPIC_REASONING_ENGINE.md`` in the repository for roadmap priorities and
+``planning/reasoning-engine/release-readiness.md`` for release evidence.
 
 Separation of concerns
 ----------------------
@@ -346,7 +346,7 @@ adapter layer depends on GraphDB and temporal/provenance records; the standalone
 core and ontology compiler never import it.
 
 The caller first obtains a temporal ``GraphReadView`` through the existing
-``graph.read_view(valid_time=..., system_time=...)`` context manager. Database
+``graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=..., system_time=...)`` context manager. Database
 creation/opening and any identity initialization happen outside extraction.
 The adapter requires an already initialized, verifiable source, and does not
 initialize identity, rebuild stale indexes or write any records or claims.

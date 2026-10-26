@@ -39,43 +39,43 @@ from gestaltdb.graphdb import GraphDB
 with TemporaryDirectory() as tmpdir:
     graph = GraphDB.create(tmpdir, backend="leveldb", serializer="json")
     try:
-        positive = graph.assert_claim(
+        positive = graph.epistemic.assert_claim(
             subject="alice", predicate="WORKS_FOR", object="acme",
             polarity="positive", agent="source:hr", source="hr.csv",
             confidence=0.97, world="reported",
             valid_from="2024-01-01T00:00:00Z",
         )
-        graph.assert_claim(
+        graph.epistemic.assert_claim(
             subject="alice", predicate="WORKS_FOR", object="acme",
             polarity="negative", agent="source:audit", confidence=0.7,
             world="reported", valid_from="2024-01-01T00:00:00Z",
         )
-        assert graph.claim_status(
+        assert graph.epistemic.claim_status(
             "alice", "WORKS_FOR", "acme",
             valid_time="2024-06-01T00:00:00Z", world="reported",
         ) is ClaimStatus.BOTH
 
-        graph.correct_claim(
+        graph.epistemic.correct_claim(
             positive.logical_id,
             supersedes_version_id=positive.version_id,
             confidence=0.99,
             provenance={"reviewed": True},
         )
 
-        graph.assert_claim(
+        graph.epistemic.assert_claim(
             subject="acme", predicate="MEMBER_OF", object="industry",
             polarity="positive", agent="source:registry", world="reported",
             valid_from="2024-03-01T00:00:00Z",
         )
-        graph.create_rule(
+        graph.rules.create_rule(
             "employment-implies-affiliation",
             when=[("?p", "WORKS_FOR", "?c"), ("?c", "MEMBER_OF", "?g")],
             then=("?p", "AFFILIATED_WITH", "?g"),
         )
-        result = graph.run_rules(as_of="2024-06-01T00:00:00Z")
+        result = graph.rules.run(as_of="2024-06-01T00:00:00Z")
         assert result.derived_count == 1
         derived = result.versions[0]
-        explanation = graph.explain_claim(
+        explanation = graph.rules.explain(
             derived.logical_id, valid_time="2024-06-01T00:00:00Z"
         )
         assert explanation.root_version_id == derived.version_id

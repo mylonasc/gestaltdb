@@ -85,10 +85,10 @@ def test_pinned_sources_reject_serializer_rebind():
     with tempfile.TemporaryDirectory() as tmp:
         graph = GraphDB.create(tmp + "/db", backend="lmdb", serializer="json")
         try:
-            graph.assert_claim(subject="a", predicate="knows", object="b",
+            graph.epistemic.assert_claim(subject="a", predicate="knows", object="b",
                                agent="registry", polarity="positive", valid=(0, 100))
             compiled = compile_ontology(Ontology("o", []))
-            with graph.read_view(valid_time=50) as view:
+            with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
                 sources = [
                     PinnedClaimSource(view, world="default",
                                       ontology_revision=compiled.revision_id,

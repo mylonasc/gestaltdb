@@ -73,30 +73,30 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, object]:
             for write in edge_writes
         )
         commit, write_seconds = _elapsed(
-            lambda: graph.commit_versions(node_writes + edge_writes + interval_writes)
+            lambda: graph.temporal.commit_versions(node_writes + edge_writes + interval_writes)
         )
 
         interval_candidates_decoded = 0
         if interval_writes:
-            original_lookup = graph._get_temporal_version_at
+            original_lookup = graph.temporal.get_version_at
 
             def counted_lookup(locator):
                 nonlocal interval_candidates_decoded
                 interval_candidates_decoded += 1
                 return original_lookup(locator)
 
-            graph._get_temporal_version_at = counted_lookup
+            graph.temporal.get_version_at = counted_lookup
             try:
-                graph.get_node_as_of(
+                graph.temporal.get_node_as_of(
                     "interval-probe", valid_time=args.interval_versions - 1
                 )
             finally:
-                graph._get_temporal_version_at = original_lookup
+                graph.temporal.get_version_at = original_lookup
 
         query_latencies = []
         for index in range(args.queries):
             _, elapsed = _elapsed(
-                lambda index=index: graph.get_edge_as_of(
+                lambda index=index: graph.temporal.get_edge_as_of(
                     f"e{index % args.edges}", valid_time=20
                 )
             )
@@ -115,27 +115,33 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, object]:
             )
         )
 
-        graph.assert_claim(
+        graph.epistemic.assert_claim(
             subject="n0", predicate="P", object="n1", polarity="positive",
             agent="source:benchmark", world="verified", valid=(0, None),
         )
-        graph.create_rule("p-implies-q", when=[("?x", "P", "?y")], then=("?x", "Q", "?y"))
+        graph.rules.create_rule("p-implies-q", when=[("?x", "P", "?y")], then=("?x", "Q", "?y"))
         rule_result, rule_seconds = _elapsed(
-            lambda: graph.run_rules(
+            lambda: graph.rules.run(
                 as_of=20, world="verified", max_iterations=10,
                 max_derivations=100, max_justifications=100,
             )
         )
-        graph.assert_world_accessibility(
+        graph.epistemic.assert_world_accessibility(
             agent="benchmark", from_world="actual", to_world="verified",
             kind="knowledge", valid=(0, None),
         )
-        modal_result, modal_seconds = _elapsed(
-            lambda: graph.entails(
-                "benchmark", {"subject": "n0", "predicate": "Q", "object": "n1"},
-                "KNOWS", world="actual", valid_time=20, max_depth=4, max_states=100,
-            )
-        )
+        def _probe():
+            with graph.temporal.open_read_view(
+                graph, manifest=graph.manifest, database_id=graph.database_id,
+                valid_time=20,
+            ) as view:
+                return graph.epistemic.entails(
+                    view,
+                    "benchmark", {"subject": "n0", "predicate": "Q", "object": "n1"},
+                    "KNOWS", world="actual", max_depth=4, max_states=100,
+                )
+
+        modal_result, modal_seconds = _elapsed(_probe)
         _, peak_memory = tracemalloc.get_traced_memory()
         storage_bytes = disk_usage(database_path)
         ordered_latencies = sorted(query_latencies)

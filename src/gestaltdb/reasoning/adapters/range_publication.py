@@ -211,7 +211,14 @@ def stage_range_generation(graph: GraphDB, program: GenericProgram, catalog: Rul
                             source_limits: RangeSourceLimits = RangeSourceLimits(),
                             publication_limits: RangePublicationLimits = RangePublicationLimits(),
                             expected_generation: GenerationIdentity | None = None, cancel=None) -> StagedRangeGeneration:
-    """Own source computation and target capture under one prefix, without writes."""
+    """Compute from a pinned source and capture the target state for publication.
+
+    ``source_world`` selects assertions; ``target_world`` must be different.
+    Staging returns a value to pass to ``publish_range_generation``; publication
+    rechecks source and target history and commits the interval batch. The
+    complete runnable setup (database, program/catalog, policies, stage, publish,
+    and interval reads) is in :doc:`reasoning-bound-range-publication`.
+    """
     if not isinstance(graph, GraphDB) or not isinstance(publication_limits, RangePublicationLimits):
         raise ReasoningError("GraphDB and RangePublicationLimits required")
     _text(publication_key, "publication_key")
@@ -220,7 +227,7 @@ def stage_range_generation(graph: GraphDB, program: GenericProgram, catalog: Rul
         raise ReasoningError("publication requires a separate target world and non-derived selection")
     check_cancelled(cancel)
     store, serializer = graph.store, graph.serializer
-    with graph.read_view(valid_time=valid_start_us) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=valid_start_us) as view:
         result = evaluate_pinned_range(view, program, catalog, valid_start_us=valid_start_us, valid_end_us=valid_end_us,
             world=source_world, selection=selection, mapping=mapping, limits=limits,
             source_limits=source_limits, expected_generation=expected_generation, cancel=cancel)
@@ -239,7 +246,13 @@ def publish_range_generation(graph: GraphDB, staged: StagedRangeGeneration, *, l
                               publication_limits: RangePublicationLimits = RangePublicationLimits(),
                               expected_generation: GenerationIdentity | None = None,
                               freshness: str = "latest", cancel=None) -> PublicationResult:
-    """Re-admit computation and CAS the entire interval batch in one logical commit."""
+    """Re-admit computation and CAS the entire interval batch in one logical commit.
+
+    Pass the value returned by ``stage_range_generation``. Source/target movement
+    can reject that value; restage explicitly rather than modifying its pins.
+    See :doc:`reasoning-bound-range-publication` for a self-contained example
+    covering publication, validity gaps, and idempotent retry.
+    """
     if (not isinstance(graph, GraphDB) or not isinstance(staged, StagedRangeGeneration)
             or not isinstance(publication_limits, RangePublicationLimits)
             or not isinstance(source_limits, RangeSourceLimits) or not isinstance(limits, ReasoningLimits)):
@@ -259,12 +272,12 @@ def publish_range_generation(graph: GraphDB, staged: StagedRangeGeneration, *, l
     if len(staged.desired) > publication_limits.max_outputs:
         raise ReasoningLimitError("range publication exceeded max_outputs")
     check_cancelled(cancel)
-    with graph._temporal_writer_guard():
+    with graph.temporal.write_guard():
         check_binding()
-        if any(item.kind == "incomplete_commit" for item in graph.list_temporal_orphans().artifacts):
+        if any(item.kind == "incomplete_commit" for item in graph.temporal.list_temporal_orphans().artifacts):
             raise ReasoningError("unreclaimed temporal publication requires explicit orphan recovery")
         binding.verify_source(graph, freshness=freshness)
-        with graph.read_view(valid_time=identity.source.valid_start_us,
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=identity.source.valid_start_us,
                              through_commit=identity.source.commit_horizon) as original:
             admit_range_result(original, staged.result, staged.program, staged.catalog,
                 expected_generation=identity, limits=limits, source_limits=source_limits, cancel=cancel)
@@ -272,7 +285,7 @@ def publish_range_generation(graph: GraphDB, staged: StagedRangeGeneration, *, l
         check_binding()
         if desired_rows != staged.desired or _content(staged.result, desired_rows) != staged.content_id:
             raise ReasoningError("staged interval output/content was altered; re-stage explicitly")
-        with graph.read_view(valid_time=identity.source.valid_start_us) as latest:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=identity.source.valid_start_us) as latest:
             horizon = latest.commit_horizon
             state = _target_state(latest, staged.namespace, staged.publication_key, staged.target_world,
                                   identity.source, publication_limits, cancel)
@@ -324,9 +337,9 @@ def publish_range_generation(graph: GraphDB, staged: StagedRangeGeneration, *, l
         check_cancelled(cancel)
         check_binding()
         binding.verify_source(graph, freshness=freshness)
-        with graph.read_view(valid_time=identity.source.valid_start_us) as final:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=identity.source.valid_start_us) as final:
             if final.commit_horizon != horizon:
                 raise GenerationStaleError("source/target moved while preparing publication")
-        commit = graph.commit_versions(writes, metadata=metadata) if writes else None
+        commit = graph.temporal.commit_versions(writes, metadata=metadata) if writes else None
         return PublicationResult(identity.context, staged.content_id, None if commit is None else commit.commit_id,
                                  asserted, corrected, retracted, unchanged)

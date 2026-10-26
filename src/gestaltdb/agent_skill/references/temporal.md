@@ -37,10 +37,10 @@ with TemporaryDirectory() as tmpdir:
             properties={"type": "WORKS_FOR"},
         )
         graph.put_edge(legacy, update_adjacency=False)
-        migrated = graph.migrate_time_indexed_edges(delete_legacy=False)
+        migrated = graph.temporal.migrate_time_indexed_edges(delete_legacy=False)
         assert len(migrated) == 1
-        assert graph.get_edge_as_of("e1", valid_time="2024-06-01T00:00:00Z")
-        graph.migrate_time_indexed_edges(delete_legacy=True)
+        assert graph.temporal.get_edge_as_of("e1", valid_time="2024-06-01T00:00:00Z")
+        graph.temporal.migrate_time_indexed_edges(delete_legacy=True)
     finally:
         graph.close()
 ```

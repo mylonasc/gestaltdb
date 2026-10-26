@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gestaltdb"
-version = "0.13.0rc1"
+version = "0.14.0rc1"
 description = "A pure Python GraphDB for attributed graphs."
 authors = [
     { name = "Mylonas Charilaos", email = "mylonas.charilaos@gmail.com" },
@@ -34,6 +34,7 @@ serializers = ["msgpack>=1.2.1", "protobuf>=6.33.6"]
 bloom = ["pybloom-live"]
 coverage = ["coverage", "pytest"]
 docs = ["myst-parser", "sphinx", "sphinx-rtd-theme"]
+lint = ["ruff==0.17.2"]
 rocksdb = ["pyrex-rocksdb>=0.4.1"]
 arrow = ["pyarrow"]
 polars = ["polars", "pyarrow"]
@@ -52,8 +53,18 @@ gestaltdb = ["agent_skill/**/*.md", "agent_skill/api_index.json", "viz/static/*"
 pythonpath = ["src"]
 testpaths = ["tests"]
 
+[tool.ruff]
+target-version = "py310"
+include = ["src/**/*.py", "scripts/check_code_quality.py", "tests/test_code_quality.py"]
+
+[tool.ruff.lint]
+# Start with correctness, not a repository-wide formatting/API rewrite.
+# In particular F401 cleanup needs care around compatibility re-exports.
+select = ["E4", "E7", "E9", "F63", "F7", "F82"]
+
 [dependency-groups]
 dev = [
+    "ruff==0.17.2",
     "coverage>=7.10.7",
     "jinja2>=3.1",
     "pytest>=8.0",

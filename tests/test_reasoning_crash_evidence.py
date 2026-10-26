@@ -66,14 +66,14 @@ def db_path(tmp_path, request):
 def test_sigkill_between_reserve_and_commit_leaves_gap(db_path):
     path, backend = db_path
     graph = GraphDB.create(path, backend=backend, serializer="json")
-    graph.assert_claim(subject="a", predicate="edge", object="b", agent="one",
+    graph.epistemic.assert_claim(subject="a", predicate="edge", object="b", agent="one",
                        polarity="positive", valid=(0, 100))
     graph.close()
     code = (
         "import sys, time\n"
         "from gestaltdb.graphdb import GraphDB\n"
         "graph = GraphDB.open(sys.argv[1])\n"
-        "cid, _ = graph._reserve_temporal_sequence()\n"
+        "cid, _ = graph.temporal.reserve_sequence()\n"
         "print(cid, flush=True)\n"
         "time.sleep(60)\n"
     )
@@ -89,24 +89,24 @@ def test_sigkill_between_reserve_and_commit_leaves_gap(db_path):
     graph = GraphDB.open(path)
     try:
         # No lock poisoning: the dead writer's guard is gone.
-        report = graph.list_temporal_orphans()
+        report = graph.temporal.list_temporal_orphans()
         kinds = {a.commit_id: a.kind for a in report.artifacts}
         assert kinds.get(reserved) == "reservation_gap"
         assert "incomplete_commit" not in kinds.values()
-        reclaimed = graph.reclaim_temporal_orphans(through_commit=reserved)
+        reclaimed = graph.temporal.reclaim_temporal_orphans(through_commit=reserved)
         assert reserved in reclaimed.reservation_gap_ids
         assert reclaimed.reclaimed_commit_ids == ()
         assert reclaimed.indexes_rebuilt is False
         # Old-or-new: commit 1 visible, no partial commit 2.
-        assert graph.get_temporal_commit(1) is not None
-        assert graph.get_temporal_commit(reserved) is None
-        old = list(graph.iter_claims_as_of(valid_time=50, predicate="edge"))
+        assert graph.temporal.get_temporal_commit(1) is not None
+        assert graph.temporal.get_temporal_commit(reserved) is None
+        old = list(graph.epistemic.iter_claims_as_of(valid_time=50, predicate="edge"))
         assert len(old) == 1
         # The dead ID is consumed, never reused.
-        new = graph.assert_claim(subject="b", predicate="edge", object="c",
+        new = graph.epistemic.assert_claim(subject="b", predicate="edge", object="c",
                                  agent="two", polarity="positive", valid=(0, 100))
         assert new.commit_id == reserved + 1
-        assert len(list(graph.iter_claims_as_of(valid_time=50, predicate="edge"))) == 2
+        assert len(list(graph.epistemic.iter_claims_as_of(valid_time=50, predicate="edge"))) == 2
     finally:
         graph.close()
 
@@ -115,7 +115,7 @@ def test_sigkill_before_session_replace_preserves_old_file(db_path):
     path, backend = db_path
     session_file = path.parent / "session.json"
     graph = GraphDB.create(path, backend=backend, serializer="json")
-    graph.assert_claim(subject="a", predicate="memberOf", object="g1", agent="one",
+    graph.epistemic.assert_claim(subject="a", predicate="memberOf", object="g1", agent="one",
                        polarity="positive", valid=(0, 100))
     session = start_session(graph, MEMBER_PROGRAM, catalog_for_typed_program(MEMBER_PROGRAM),
                             scope=SessionScope("default", 50, ClaimSelection(), ClaimMapping()),
@@ -123,7 +123,7 @@ def test_sigkill_before_session_replace_preserves_old_file(db_path):
     old_digest = _digest(session_to_dict(session))
     from gestaltdb.reasoning.adapters.session_store import save_session as _save
     _save(session, session_file)
-    graph.assert_claim(subject="b", predicate="memberOf", object="g2", agent="new",
+    graph.epistemic.assert_claim(subject="b", predicate="memberOf", object="g2", agent="new",
                        polarity="positive", valid=(0, 100))
     graph.close()
     before = session_file.read_bytes()
@@ -186,9 +186,9 @@ def test_cross_process_claim_move_stales_range_publication(tmp_path):
     pytest.importorskip("lmdb")
     db = tmp_path / "db"
     graph = GraphDB.create(db, backend="lmdb", serializer="json")
-    graph.assert_claim(subject="a", predicate="edge", object="b", agent="one",
+    graph.epistemic.assert_claim(subject="a", predicate="edge", object="b", agent="one",
                        polarity="positive", valid=(0, 40))
-    graph.assert_claim(subject="b", predicate="edge", object="c", agent="two",
+    graph.epistemic.assert_claim(subject="b", predicate="edge", object="c", agent="two",
                        polarity="positive", valid=(10, 30))
     staged = stage_range_generation(graph, PROGRAM, catalog_for_typed_program(PROGRAM),
                                     valid_start_us=0, valid_end_us=100, source_world="default",
@@ -200,7 +200,7 @@ def test_cross_process_claim_move_stales_range_publication(tmp_path):
          "import sys; from gestaltdb.graphdb import GraphDB\n"
          "graph = GraphDB.open(sys.argv[1])\n"
          "try:\n"
-         "    graph.assert_claim(subject='c', predicate='edge', object='d',"
+         "    graph.epistemic.assert_claim(subject='c', predicate='edge', object='d',"
          " agent='mover', polarity='positive', valid=(0, 100))\n"
          "finally:\n"
          "    graph.close()\n", str(db)],
@@ -224,7 +224,7 @@ def test_cross_process_claim_move_stales_range_publication(tmp_path):
                                           limits=ReasoningLimits())
         result = publish_range_generation(graph, restaged, limits=ReasoningLimits())
         assert result.commit_id is not None
-        with graph.read_view(valid_time=20) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=20) as view:
             inferred = list(view.iter_claims_as_of(world="inferred"))
         assert any(v.claim is not None and v.claim.predicate == "reach" for v in inferred)
     finally:

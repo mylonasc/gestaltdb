@@ -175,7 +175,7 @@ def explain_inference(graph, claim_id, *, valid_time, system_time=None,
     """
     _limit(max_edges, "max_edges")
     _limit(max_bytes, "max_bytes")
-    explanation = graph.explain_claim(claim_id, valid_time=valid_time,
+    explanation = graph.rules.explain(claim_id, valid_time=valid_time,
                                      system_time=system_time, max_depth=max_depth,
                                      max_nodes=max_nodes)
     return None if explanation is None else export_inference(

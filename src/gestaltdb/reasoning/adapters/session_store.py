@@ -31,10 +31,10 @@ import json
 import os
 from pathlib import Path
 import tempfile
-import threading
 from typing import Callable
 
-from ...graphdb import GraphDB, _TemporalWriterLock
+from ...graphdb import GraphDB
+from ...concurrency import DEFAULT_LOCK_MANAGER
 from ..catalog import RuleCatalog
 from ..evidence_ledger import AssertionVersion, EvidenceLedger
 from ..maintenance import DependencyIndex, Support
@@ -60,8 +60,6 @@ from .sessions import (
 
 SESSION_FORMAT = "gestaltdb-reasoning-session-v1"
 SESSION_FORMAT_VERSION = 1
-_SESSION_FILE_LOCKS = {}
-_SESSION_FILE_LOCKS_GUARD = threading.Lock()
 
 
 def _digest(payload: object) -> str:
@@ -409,8 +407,7 @@ def _session_file_guard(path):
     target = Path(path).resolve()
     target.parent.mkdir(parents=True, exist_ok=True)
     lock_path = target.with_name(f".{target.name}.session.lock")
-    with _SESSION_FILE_LOCKS_GUARD:
-        return _SESSION_FILE_LOCKS.setdefault(str(lock_path), _TemporalWriterLock(lock_path))
+    return DEFAULT_LOCK_MANAGER.for_path(lock_path)
 
 
 def _read_state(path: Path, max_bytes: int):
@@ -452,6 +449,11 @@ def save_session(
     ``expected_session_digest`` compares exact state, including same-horizon
     changes and deletion; horizon-only pins retain their legacy behavior.
     Checksums/locks do not authenticate the database or prove closure soundness.
+
+    The ``start_session`` docstring in ``reasoning.adapters.sessions`` contains
+    a complete create/advance/save/reload example, including the expected state
+    digest. For independent source admission on durable resume, see
+    :doc:`reasoning-authenticated-sessions`.
     """
     if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 1:
         raise ReasoningError("max_bytes must be a positive integer")

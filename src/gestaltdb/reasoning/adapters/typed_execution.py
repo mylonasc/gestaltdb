@@ -44,7 +44,7 @@ def execute_authenticated_session(graph, session, *, expected_generation, expect
     if expected_generation.semantics_profile != TYPED_PROFILE or expected_generation.dictionary_id != TYPED_DICTIONARY:
         raise ReasoningError("typed profile/representation mismatch; rebind or explicitly recode")
     store, serializer = graph.store, graph.serializer
-    with graph._temporal_writer_guard():
+    with graph.temporal.write_guard():
         binding = bind_session_generation(graph, session, freshness=freshness, limits=admission_limits, cancel=cancel)
         expected_generation.require_compatible(binding.identity)
         if expected_session_digest != binding.session_digest:

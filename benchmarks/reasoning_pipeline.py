@@ -56,10 +56,10 @@ def run_once(rows: int, backend: str, batch_rows: int, commit_batch: int = 2000,
                               world="default", provenance={"benchmark_payload": "x" * size})
                 pending.append(ClaimVersionWrite.assertion(claim, (0, 100)))
                 if len(pending) >= commit_batch:
-                    graph.commit_versions(pending)
+                    graph.temporal.commit_versions(pending)
                     pending = []
             if pending:
-                graph.commit_versions(pending)
+                graph.temporal.commit_versions(pending)
             note("load_s", time.perf_counter() - begin)
             graph.close()
             begin = time.perf_counter()
@@ -69,7 +69,7 @@ def run_once(rows: int, backend: str, batch_rows: int, commit_batch: int = 2000,
             compiled = compile_ontology(Ontology("pipeline", [Domain("memberOf", "Member"),
                                                                SubClassOf("Member", "Entity")]))
             note("compile_s", time.perf_counter() - begin)
-            with graph.read_view(valid_time=50) as view:
+            with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
                 request = ExtractionRequest(
                     world="default", batch_rows=batch_rows, max_rows=rows,
                     predicates=None if selection == "all" else ("memberOf",),

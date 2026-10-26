@@ -209,7 +209,7 @@ def test_range_publication_roundtrip_on_backend(tmp_path):
         assert (out.asserted, out.corrected, out.retracted, out.unchanged) == (1, 0, 0, 0)
         assert out.commit_id is not None
         assert out.context.ontology_revision == "rev-1"
-        with graph.read_view(valid_time=1_000_000) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=1_000_000) as view:
             published = [version.claim for version in view.iter_claims_as_of(
                 world="derived", agent="gestaltdb:ontology", source=staged.namespace)]
         assert len(published) == 1
@@ -240,7 +240,7 @@ def test_range_publication_roundtrip_on_backend(tmp_path):
             publish_staged_range(graph, staged)
         reconciled = publish_staged_range(graph, staged, freshness="historical")
         assert reconciled.asserted == 1 and reconciled.commit_id is not None
-        with graph.read_view(valid_time=1_000_000) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=1_000_000) as view:
             stale_source = [version.claim for version in view.iter_claims_as_of(
                 world="derived", agent="gestaltdb:ontology", source=staged.namespace)]
         assert all(claim.provenance["publication_freshness"] == "historical" for claim in stale_source)
@@ -271,17 +271,17 @@ def test_range_publication_rejects_moved_source_without_writes(tmp_path, backend
         assert staged.source_provenance is not None
         horizon = staged.source_provenance.commit_horizon
         # A source-world write moves the horizon; latest must fail before writing.
-        graph.assert_claim(subject="unrelated", predicate="p", object="q", agent="other",
+        graph.epistemic.assert_claim(subject="unrelated", predicate="p", object="q", agent="other",
                            polarity="positive", valid=(0, 100))
         with pytest.raises(GenerationStaleError, match="source"):
             publish_staged_range(graph, staged)
-        with graph.read_view(valid_time=50) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             assert view.provenance.commit_horizon == horizon + 1
             assert list(view.iter_claims_as_of(world="derived")) == []
         # Historical mode explicitly publishes the old prefix and records it.
         published = publish_staged_range(graph, staged, freshness="historical")
         assert published.asserted == 1
-        with graph.read_view(valid_time=50) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             claims = [version.claim for version in view.iter_claims_as_of(world="derived")]
         assert all(claim.provenance["publication_freshness"] == "historical" for claim in claims)
         assert all(claim.provenance["source_commit_horizon"] == horizon for claim in claims)

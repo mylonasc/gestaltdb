@@ -134,12 +134,18 @@ def build_authenticated_inferred_snapshot(graph, session, output_path, *, expect
     Cooperating calls serialize by canonical path; no existing directory (even
     empty) is replaced. Cancellation/failure before rename removes only own staging.
     The database writer guard spans source admission and final freshness check.
+
+    This consumes an existing reasoning session, caller-held generation/state
+    pins, and an explicit projection selection. The complete runnable workflow
+    in :doc:`reasoning-authenticated-inferred` creates those inputs, builds the
+    artifact, verifies a reload, and samples its derived relations. Use a fresh
+    output directory for each build.
     """
     _options(selection, limits)
     _validate(graph, expected_generation, expected_session_digest, admission_limits, freshness, cancel)
     target = Path(output_path)
     store, serializer = graph.store, graph.serializer
-    with graph._temporal_writer_guard(), _session_file_guard(target):
+    with graph.temporal.write_guard(), _session_file_guard(target):
         if target.exists() or target.is_symlink():
             raise ReasoningError("output_path already exists; use a new path per generation")
         binding = _admit(graph, session, expected_generation, expected_session_digest, freshness, admission_limits, cancel)
@@ -170,7 +176,7 @@ def load_authenticated_inferred_snapshot(graph, session, path, *, expected_gener
     _validate(graph, expected_generation, expected_session_digest, admission_limits, freshness, cancel)
     target = Path(path)
     store, serializer = graph.store, graph.serializer
-    with graph._temporal_writer_guard():
+    with graph.temporal.write_guard():
         binding = _admit(graph, session, expected_generation, expected_session_digest, freshness, admission_limits, cancel)
         _files(target, limits, cancel)
         with TemporaryDirectory(prefix="gestaltdb-inferred-admission-") as root:

@@ -35,14 +35,14 @@ def build_plain_snapshot(graph, path):
 
 
 def build_temporal_snapshot(graph, path):
-    graph.commit_versions([NodeVersionWrite.assertion(Node(f"n{index}"), (0, None)) for index in range(5)])
+    graph.temporal.commit_versions([NodeVersionWrite.assertion(Node(f"n{index}"), (0, None)) for index in range(5)])
     for edge, valid in (
         (Edge("e0", "n0", "n1", properties={"type": "R"}), (0, 10)),
         (Edge("e1", "n1", "n2", properties={"type": "R"}), (10, 20)),
         (Edge("e2", "n2", "n3", properties={"type": "S"}), (20, None)),
         (Edge("e3", "n3", "n4", properties={"type": "R"}), (0, 20)),
     ):
-        graph.put_edge_version(edge, valid=valid)
+        graph.temporal.put_edge_version(edge, valid=valid)
     return graph.build_sampler_snapshot(path, temporal=True, time_bucket="none")
 
 

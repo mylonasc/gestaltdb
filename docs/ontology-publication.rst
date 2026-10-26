@@ -21,7 +21,7 @@ installs generated rules in the global rule catalog.
    with TemporaryDirectory() as directory:
        graph = GraphDB.create(directory, backend="lmdb", serializer="json")
        try:
-           graph.assert_claim(subject="a", predicate="p", object="b", agent="registry",
+           graph.epistemic.assert_claim(subject="a", predicate="p", object="b", agent="registry",
                               polarity="positive", valid=(0, 100))
            params = dict(valid_time=50, source_world="default", target_world="derived",
                          publication_key="my-job", selection=ClaimSelection(),
@@ -29,7 +29,7 @@ installs generated rules in the global rule catalog.
            first = reconcile_point(graph, plan, **params)
            assert first.asserted == 2  # complete closure, including input p
            assert reconcile_point(graph, plan, **params).commit_id is None
-           assert not list(graph.iter_claims_as_of(world="derived", valid_time=51))
+           assert not list(graph.epistemic.iter_claims_as_of(world="derived", valid_time=51))
        finally:
            graph.close()
 
@@ -57,8 +57,8 @@ or power-loss durability guarantee is invented here.
 On a nontransactional backend, interruption before the visibility marker can
 leave derived temporal indexes ahead of canonical history. Reads/reconciliation
 fail closed rather than returning a partial closure. Quiesce writers, audit with
-``report = graph.list_temporal_orphans()``, explicitly reclaim validated unpublished
-artifacts with ``graph.reclaim_temporal_orphans(through_commit=report.through_commit)``,
+``report = graph.temporal.list_temporal_orphans()``, explicitly reclaim validated unpublished
+artifacts with ``graph.temporal.reclaim_temporal_orphans(through_commit=report.through_commit)``,
 rebuild temporal indexes if still required, then retry reconciliation.
 The adapter rejects unreclaimed incomplete commits even if older-prefix reads
 would otherwise succeed; it never silently repairs indexes. Transactional

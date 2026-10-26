@@ -186,8 +186,11 @@ def execute(
             if previous is not None and previous != value:
                 raise ValueError(f"Conflicting query-wide {qualifier.kind}-time qualifiers")
             resolved[qualifier.kind] = value
-        with graph.read_view(
-            valid_time=resolved["valid"], system_time=resolved.get("system")
+        with graph.temporal.open_read_view(
+            graph,
+            manifest=graph.manifest,
+            database_id=graph.database_id,
+            valid_time=resolved["valid"], system_time=resolved.get("system"),
         ) as read_view:
             records = execute_plan(
                 logical_plan,

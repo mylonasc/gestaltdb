@@ -18,7 +18,7 @@ def staged_graph(tmp_path, request):
     pytest.importorskip(module)
     graph = GraphDB.create(tmp_path / backend, backend=backend, serializer="json")
     try:
-        version = graph.assert_claim(subject="a", predicate="worksFor", object="org", agent="registry",
+        version = graph.epistemic.assert_claim(subject="a", predicate="worksFor", object="org", agent="registry",
                                      polarity="positive", valid=(0, 100))
         compiled = compile_ontology(Ontology("o", [Domain("worksFor", "Person")]))
         staged = stage_point(graph, compiled, valid_time=50, source_world="default", target_world="derived",
@@ -31,12 +31,12 @@ def staged_graph(tmp_path, request):
 
 def test_latest_rejects_source_retraction_without_writes(staged_graph):
     graph, version, staged = staged_graph
-    graph.retract_claim(version.logical_id, valid=(0, 100))
-    with graph.read_view(valid_time=50) as view:
+    graph.epistemic.retract_claim(version.logical_id, valid=(0, 100))
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         before = view.provenance.commit_horizon
     with pytest.raises(GenerationStaleError, match="source"):
         publish_staged(graph, staged)
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         assert view.provenance.commit_horizon == before
         assert list(view.iter_claims_as_of(world="derived")) == []
 
@@ -46,14 +46,14 @@ def test_latest_unchanged_source_publishes_with_provenance(staged_graph):
     published = publish_staged(graph, staged)
     assert published.asserted == 2
     identity = staged.generation_binding.identity
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         claims = list(view.iter_claims_as_of(world="derived"))
     assert all(v.claim.provenance["reasoning_generation"] == identity.digest for v in claims)
     assert all(v.claim.provenance["program_digest"] == identity.program_digest for v in claims)
     assert all(v.claim.provenance["catalog_digest"] == identity.catalog_digest for v in claims)
-    commit = graph.get_temporal_commit(published.commit_id)
+    commit = graph.temporal.get_temporal_commit(published.commit_id)
     assert commit.metadata["reasoning_generation"] == identity.digest
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         claims = list(view.iter_claims_as_of(world="derived"))
     assert all(v.claim.provenance["publication_freshness"] == "latest" for v in claims)
     assert all(v.claim.provenance["source_commit_horizon"] == staged.source_provenance.commit_horizon
@@ -62,9 +62,9 @@ def test_latest_unchanged_source_publishes_with_provenance(staged_graph):
 
 def test_historical_mode_is_explicit_and_records_old_horizon(staged_graph):
     graph, version, staged = staged_graph
-    graph.retract_claim(version.logical_id, valid=(0, 100))
+    graph.epistemic.retract_claim(version.logical_id, valid=(0, 100))
     assert publish_staged(graph, staged, freshness="historical").asserted == 2
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         claims = list(view.iter_claims_as_of(world="derived"))
     assert all(v.claim.provenance["publication_freshness"] == "historical" for v in claims)
     assert all(v.claim.provenance["source_commit_horizon"] == staged.source_provenance.commit_horizon
@@ -81,7 +81,7 @@ def test_unknown_mode_or_missing_source_provenance_fails_closed(staged_graph):
 
 def test_conservative_latest_guard_also_rejects_unrelated_commits(staged_graph):
     graph, _, staged = staged_graph
-    graph.assert_claim(subject="unrelated", predicate="p", object="q", agent="other",
+    graph.epistemic.assert_claim(subject="unrelated", predicate="p", object="q", agent="other",
                        polarity="positive", valid=(0, 100))
     with pytest.raises(GenerationStaleError, match="source"):
         publish_staged(graph, staged)
@@ -99,7 +99,7 @@ def test_stage_carries_shared_generation_contract(staged_graph):
     assert binding.identity.source.database_id == staged.database_id
     assert binding.provenance == staged.source_provenance
     binding.verify_source(graph)
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         with PinnedClaimSource(view, world="default", ontology_revision=compiled.revision_id,
                                selection=ClaimSelection(), mapping=ClaimMapping()) as source:
             result = source.evaluate(compiled, limits=ReasoningLimits())
@@ -135,7 +135,7 @@ def test_stage_rejects_incompatible_binding_profile(staged_graph, field, value):
 def test_legacy_stage_without_shared_binding_retains_freshness_guard(staged_graph):
     graph, version, staged = staged_graph
     legacy = replace(staged, generation_binding=None)
-    graph.retract_claim(version.logical_id, valid=(0, 100))
+    graph.epistemic.retract_claim(version.logical_id, valid=(0, 100))
     with pytest.raises(GenerationStaleError, match="source"):
         publish_staged(graph, legacy)
     assert publish_staged(graph, legacy, freshness="historical").asserted == 2
@@ -166,11 +166,11 @@ def test_expected_generation_rejects_every_identity_drift_without_writes(
         expected = replace(expected, **{outer: replace(getattr(expected, outer), **{inner: value})})
     else:
         expected = replace(expected, **{path: value})
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         horizon = view.provenance.commit_horizon
     with pytest.raises(ReasoningError, match="drifted"):
         publish_staged(graph, staged, expected_generation=expected, freshness=freshness)
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         assert view.provenance.commit_horizon == horizon
         assert list(view.iter_claims_as_of(world="derived")) == []
 
@@ -188,7 +188,7 @@ def test_expected_generation_is_opt_in_and_requires_a_bound_stage(staged_graph):
 def test_matching_pin_does_not_bypass_freshness(staged_graph):
     graph, version, staged = staged_graph
     expected = staged.generation_binding.identity
-    graph.retract_claim(version.logical_id, valid=(0, 100))
+    graph.epistemic.retract_claim(version.logical_id, valid=(0, 100))
     with pytest.raises(GenerationStaleError, match="source"):
         publish_staged(graph, staged, expected_generation=expected)
     assert publish_staged(graph, staged, expected_generation=expected, freshness="historical").asserted == 2
@@ -200,6 +200,6 @@ def test_matching_pin_does_not_bypass_target_comparison(staged_graph):
     invalid_base = replace(staged, base_fingerprint="not-the-current-target")
     with pytest.raises(GenerationStaleError, match="target namespace"):
         publish_staged(graph, invalid_base, expected_generation=expected, freshness="historical")
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         assert view.provenance.commit_horizon == expected.source.commit_horizon
         assert list(view.iter_claims_as_of(world="derived")) == []

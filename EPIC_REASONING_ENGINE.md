@@ -14,12 +14,12 @@ not automatically close their phase epics. Current phase disposition:
 | Phase | Status | Remaining gate |
 |---|---|---|
 | RE-E1 [#157](https://github.com/mylonasc/gestaltdb/issues/157) | Complete; stale-open issue corrected | Explicit executor/measurement/limits/install-isolation gate verified; optional #194 does not block E1. |
-| RE-E2 [#158](https://github.com/mylonasc/gestaltdb/issues/158) | Complete | Verified selected-profile contract; broader review accounting remains #371. |
-| RE-E3 [#159](https://github.com/mylonasc/gestaltdb/issues/159) | Open | Durable crash/concurrency evidence reconciliation #370. |
-| RE-E4 [#160](https://github.com/mylonasc/gestaltdb/issues/160) | Open | #159 and the shared bounded interval-publication evidence gate #370. |
-| RE-E5 [#161](https://github.com/mylonasc/gestaltdb/issues/161) | Own bounded/defer deliverables reviewed; blocked | Original sequential prerequisite #160 remains open; not missing full OWL DL or a new native engine. |
+| RE-E2 [#158](https://github.com/mylonasc/gestaltdb/issues/158) | Complete | Verified selected-profile contract; broader review accounting closed with #371. |
+| RE-E3 [#159](https://github.com/mylonasc/gestaltdb/issues/159) | Complete (closed 2026-10-25) | Durable crash/concurrency evidence reconciled in #370 (closed). |
+| RE-E4 [#160](https://github.com/mylonasc/gestaltdb/issues/160) | Complete (closed 2026-10-25) | Bounded interval-publication evidence gate reconciled in #370 (closed). |
+| RE-E5 [#161](https://github.com/mylonasc/gestaltdb/issues/161) | Complete (closed 2026-10-25) | Sequential prerequisite #160 closed; not missing full OWL DL or a new native engine. |
 
-Review #200 remains open for explicitly tracked D2–D6 dispositions in #371;
+Review #200 is closed; D2–D6 dispositions were reconciled in #371 (closed);
 #248–#256 are all closed against their scoped acceptance. #194 is the separate
 open native-extraction follow-up; PR #369 is not integrated in this audit.
 See [tracking-audit.md](planning/reasoning-engine/tracking-audit.md) for evidence,
@@ -28,8 +28,25 @@ remaining checklists and corrected native issue relationships. Run
 status/relationship drift without changing GitHub.
 
 **Release history:** `0.13.0rc1` was published on 2026-10-23 via #307 and trusted
-Publish `39936450890`. Later integration commits are not automatically released.
-No new main merge, tag or release is authorized by this sanitation.
+Publish `39936450890`. `0.14.0rc1` was published on 2026-10-25 via #389
+(GraphDB service decomposition plus post-rc1 reasoning work). The sanitation
+authorization below is superseded for that release; later integration commits
+are still not automatically released. No new main merge, tag or release is
+authorized by this sanitation.
+
+## Follow-on ontology extensions (2026-10-26)
+
+Composability follow-ups — typed derivation explanations, temporal negation
+and aggregates, structural validation, reasoning-aware graph queries, richer
+graph-to-fact mappings — are tracked in
+[#391](https://github.com/mylonasc/gestaltdb/issues/391) and recorded in
+`EPIC_ONTOLOGY_EXTENSIONS_251026.md` (children
+[#392](https://github.com/mylonasc/gestaltdb/issues/392),
+[#393](https://github.com/mylonasc/gestaltdb/issues/393),
+[#394](https://github.com/mylonasc/gestaltdb/issues/394),
+[#395](https://github.com/mylonasc/gestaltdb/issues/395),
+[#396](https://github.com/mylonasc/gestaltdb/issues/396)).
+They sit outside the closed RE-01…RE-27 index; that table is unchanged.
 
 ## Historical priority: release readiness and early user testing (2026-10-23)
 
@@ -133,7 +150,10 @@ its issue and dependency links; the roadmap is not being declared complete.
 - GitHub issue index: [issues.json](planning/reasoning-engine/issues.json).
 - Validate source hashes, complete GR coverage and dependency DAG:
   `uv run python planning/reasoning-engine/check_roadmap.py`.
-- Previous delivery and its precise boundaries: [ONTO-EPIC.md](ONTO-EPIC.md).
+- Previous v1 delivery (#131, ONTO-01–ONTO-11, PRs #143–#155) and its boundaries:
+  see epic [#131](https://github.com/mylonasc/gestaltdb/issues/131), its child
+  issues and git history. The standalone v1 epic note was removed after the
+  `0.13.0rc1` main merge; it is preserved in history, not in the working tree.
 
 This document and the new parent tracker carry the **whole** reviewed roadmap.
 The workbook is historical input, not the current delivery dashboard: its audit
@@ -528,7 +548,7 @@ parent/sub-issue and blocked-by relationships were read back and verified.
 
 These checks confirm existing baseline behavior and planning consistency, not
 new performance or all-backend guarantees. Previous baseline integration evidence
-is recorded in `ONTO-EPIC.md`. No new executor was implemented or benchmarked
+is recorded in epic #131, its child issues/PRs and git history. No new executor was implemented or benchmarked
 during this review.
 
 ### Implementation started: RE-08 (#169)

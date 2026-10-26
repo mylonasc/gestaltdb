@@ -279,7 +279,7 @@ def test_invalid_values_and_temporal_or_partial_inputs_are_not_admitted(graph):
             run(view, mapping=GraphMapping(node_properties=(("entity", "p"),)))
         with pytest.raises(ReasoningError, match="CompiledOntology"):
             execute_current_graph(view, object(), catalog_for_ontology(compiled()), mapping=MAPPING, limits=ReasoningLimits())
-    with graph.read_view(valid_time=50) as temporal:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as temporal:
         with pytest.raises(ReasoningError, match="CurrentGraphReadView"):
             run(temporal)
 

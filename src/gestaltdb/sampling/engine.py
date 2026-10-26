@@ -363,11 +363,23 @@ class SamplerEngine:
         seed: Optional NumPy RNG seed for reproducible sampling.
 
     Examples:
-        Load a snapshot and sample two-hop neighborhoods around seed edges::
+        Build a tiny snapshot and sample by external IDs (no KV backend needed)::
 
-            engine = SamplerEngine.load("data/sampler", mode="memmap", seed=7)
-            batch = engine.sample_subgraph([10, 11], fanouts=[15, 10])
-            arrays = batch.to_numpy()
+            >>> from tempfile import TemporaryDirectory
+            >>> from gestaltdb.sampling import SamplerEngine, SamplerSnapshot
+            >>> with TemporaryDirectory() as root:
+            ...     snapshot = SamplerSnapshot.from_edge_arrays(
+            ...         root + "/snapshot", external_node_ids=["a", "b"],
+            ...         external_edge_ids=["ab"], external_relation_ids=["knows"],
+            ...         src_int=[0], dst_int=[1], rel_int=[0])
+            ...     engine = SamplerEngine.load(snapshot.path, mode="ram", seed=7)
+            ...     batch = engine.sample_neighbors_external(["a"], fanout=1, relations=["knows"])
+            ...     assert batch.to_external(engine.snapshot)["neighbor_nodes"].tolist() == ["b"]
+
+        Reuse the engine across batches. Use ``GraphDB.build_sampler_snapshot``
+        to build from database records. Sampling outputs use compact integer IDs
+        until explicitly converted; see the typed-sampling guide for layers,
+        walks, negative sampling, and RAM versus memory-mapped lifetimes.
     """
 
     def __init__(self, snapshot: SamplerSnapshot, *, seed: int | None = None):

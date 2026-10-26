@@ -36,7 +36,7 @@ returns successful partial closure. Proof limits truncate explanations only;
 one witness is not an all-supports or deletion-maintenance index.
 
 For temporal claims use `gestaltdb.reasoning.adapters.claims.PinnedClaimSource`
-with an existing `graph.read_view(...)`, explicit world, `ClaimSelection`,
+with an existing `graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, ...)`, explicit world, `ClaimSelection`,
 `ClaimMapping` and the compiled ontology revision. It returns a context-bound,
 point-scoped result, excludes recognized derived inputs by default and never
 publishes claims. Do not concatenate evidence from incompatible contexts.

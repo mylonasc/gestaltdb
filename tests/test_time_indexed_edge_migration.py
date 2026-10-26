@@ -28,7 +28,7 @@ def test_time_indexed_edge_migration_is_idempotent_and_preserves_current_records
     graph_db.put_edge(second, update_adjacency=False)
     graph_db.put_edge(current, update_adjacency=False)
 
-    migrated = graph_db.migrate_time_indexed_edges(metadata={"operator": "test"})
+    migrated = graph_db.temporal.migrate_time_indexed_edges(metadata={"operator": "test"})
 
     assert len(migrated) == 2
     assert migrated[0].valid.start.epoch_microseconds < migrated[1].valid.start.epoch_microseconds
@@ -37,32 +37,32 @@ def test_time_indexed_edge_migration_is_idempotent_and_preserves_current_records
     assert migrated[0].edge.properties["revision"] == 1
     assert migrated[1].edge.properties["revision"] == 2
     assert graph_db.get_edge(current.get_id_bytes).to_dict() == current.to_dict()
-    assert graph_db.migrate_time_indexed_edges() == ()
+    assert graph_db.temporal.migrate_time_indexed_edges() == ()
 
-    assert graph_db.migrate_time_indexed_edges(delete_legacy=True) == ()
+    assert graph_db.temporal.migrate_time_indexed_edges(delete_legacy=True, delete_current_edge=graph_db.delete_edge) == ()
     assert graph_db.get_edge(first.get_id_bytes) is None
     assert graph_db.get_edge(second.get_id_bytes) is None
     assert graph_db.get_edge(current.get_id_bytes) is not None
-    assert len(list(graph_db.iter_edge_versions("employment"))) == 2
+    assert len(list(graph_db.temporal.iter_edge_versions("employment"))) == 2
 
 
 def test_time_indexed_edge_migration_rejects_changed_input_after_publication(graph_db):
     start = datetime(2024, 1, 1, tzinfo=timezone.utc)
     original = _legacy_edge(start, revision=1)
     graph_db.put_edge(original, update_adjacency=False)
-    graph_db.migrate_time_indexed_edges()
+    graph_db.temporal.migrate_time_indexed_edges()
     graph_db.put_edge(_legacy_edge(start, revision=2), update_adjacency=False)
 
     with pytest.raises(TemporalVersionError, match="changed after migration"):
-        graph_db.migrate_time_indexed_edges()
+        graph_db.temporal.migrate_time_indexed_edges()
 
-    assert len(list(graph_db.iter_edge_versions("employment"))) == 1
+    assert len(list(graph_db.temporal.iter_edge_versions("employment"))) == 1
 
 
 def test_time_indexed_edge_migration_rejects_new_logical_id_after_publication(graph_db):
     start = datetime(2024, 1, 1, tzinfo=timezone.utc)
     graph_db.put_edge(_legacy_edge(start, revision=1), update_adjacency=False)
-    graph_db.migrate_time_indexed_edges()
+    graph_db.temporal.migrate_time_indexed_edges()
     graph_db.put_edge(
         TimeIndexedEdge(
             start,
@@ -75,9 +75,9 @@ def test_time_indexed_edge_migration_rejects_new_logical_id_after_publication(gr
     )
 
     with pytest.raises(TemporalVersionError, match="new logical IDs after migration"):
-        graph_db.migrate_time_indexed_edges()
+        graph_db.temporal.migrate_time_indexed_edges()
 
-    assert len(list(graph_db.iter_temporal_commits())) == 1
+    assert len(list(graph_db.temporal.iter_temporal_commits())) == 1
 
 
 def test_time_indexed_edge_migration_fails_closed_on_mismatched_key(graph_db):
@@ -85,18 +85,18 @@ def test_time_indexed_edge_migration_fails_closed_on_mismatched_key(graph_db):
     graph_db.store.put_edge(b"wrong-key", graph_db.entity_serializer.serialize(edge, "Edge"))
 
     with pytest.raises(TemporalCorruptionError, match="key does not match"):
-        graph_db.migrate_time_indexed_edges()
+        graph_db.temporal.migrate_time_indexed_edges()
 
-    assert list(graph_db.iter_temporal_commits()) == []
+    assert list(graph_db.temporal.iter_temporal_commits()) == []
 
 
 def test_time_indexed_edge_migration_fails_closed_on_undecodable_record(graph_db):
     graph_db.store.put_edge(b"corrupt", b"not-a-pickle")
 
     with pytest.raises(TemporalCorruptionError, match="cannot decode"):
-        graph_db.migrate_time_indexed_edges()
+        graph_db.temporal.migrate_time_indexed_edges()
 
-    assert list(graph_db.iter_temporal_commits()) == []
+    assert list(graph_db.temporal.iter_temporal_commits()) == []
 
 
 def test_time_indexed_edge_cleanup_can_resume_after_interruption(graph_db, monkeypatch):
@@ -117,11 +117,11 @@ def test_time_indexed_edge_cleanup_can_resume_after_interruption(graph_db, monke
 
     monkeypatch.setattr(graph_db, "delete_edge", interrupted_delete)
     with pytest.raises(RuntimeError, match="interrupted cleanup"):
-        graph_db.migrate_time_indexed_edges(delete_legacy=True)
+        graph_db.temporal.migrate_time_indexed_edges(delete_legacy=True, delete_current_edge=graph_db.delete_edge)
 
     assert graph_db.get_edge(first.get_id_bytes) is None
     assert graph_db.get_edge(second.get_id_bytes) is not None
     monkeypatch.setattr(graph_db, "delete_edge", original_delete)
-    assert graph_db.migrate_time_indexed_edges(delete_legacy=True) == ()
+    assert graph_db.temporal.migrate_time_indexed_edges(delete_legacy=True, delete_current_edge=graph_db.delete_edge) == ()
     assert graph_db.get_edge(second.get_id_bytes) is None
-    assert len(list(graph_db.iter_edge_versions("employment"))) == 2
+    assert len(list(graph_db.temporal.iter_edge_versions("employment"))) == 2
