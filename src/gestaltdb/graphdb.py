@@ -9,15 +9,24 @@ import random
 import shutil
 import threading
 import base64
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union
 
 if TYPE_CHECKING:
+    from ._graph.sampling import SampledPath, SampledSubgraph
+    from .current import EdgeRepository, NodeRepository
+    from .hierarchy import LabelHierarchy, RelationHierarchy
+    from .indexes import IndexService
+    from .ingestion_service import IngestionCoordinator, IngestionService
     from .kvstores import KVStore
+    from .lookups import EntityLookup
+    from .query_engine.cypher.api import QueryResult
+    from .readview import CurrentGraphReadView
     from .serializers import Serializer
+    from .traversal import Direction, RandomLike, TraversalService
 
 import datetime
 import struct
@@ -128,6 +137,7 @@ from ._graph.entities import (
     Edge,
     GraphEntityDictSerializer,
     Node,
+    NodeKeyInput,
     TimeIndexedEdge,
     _normalize_labels,
     _property_value_to_index_bytes,
@@ -358,8 +368,8 @@ class GraphDB:
             value, store_path=None if path is None else Path(path))
         self.epistemic = self.epistemic.rebound(self.temporal)
         self.rules = self.rules.rebound(self.temporal)
-        self._node_repository = None
-        self._edge_repository = None
+        self._node_repository: NodeRepository | None = None
+        self._edge_repository: EdgeRepository | None = None
 
     @property
     def database_id(self) -> str:
@@ -480,7 +490,7 @@ class GraphDB:
     # Node Methods
     # -----------
     @property
-    def nodes(self):
+    def nodes(self) -> NodeRepository:
         """Current-node repository; see the architecture guide for standalone use.
 
         Borrows this handle's lifetime and store scope. Temporal records and
@@ -535,14 +545,14 @@ class GraphDB:
         return self.nodes.delete(node_id)
 
     @property
-    def lookup(self):
+    def lookup(self) -> EntityLookup:
         """Index-backed decoded node/edge reads bound to this store scope."""
         from .lookups import EntityLookup
 
         return EntityLookup(self.nodes._session)
 
     @property
-    def indexes(self):
+    def indexes(self) -> IndexService:
         """Current index lookup, DDL and rebuild authority for this store scope."""
         from .indexes import IndexService
 
@@ -769,7 +779,7 @@ class GraphDB:
     # Edge Methods
     # -----------
     @property
-    def edges(self):
+    def edges(self) -> EdgeRepository:
         """Current-edge repository bound to this handle's store and lifetime."""
         from .current import bind_edges
 
@@ -1053,6 +1063,7 @@ class GraphDB:
                     raise
             else:
                 with stack:
+                    assert view.provenance is not None  # require_verifiable=True pins provenance above
                     kwargs["source_provenance"] = view.provenance.to_dict()
                     return SamplerSnapshot.build(view, output_path, **kwargs)
         return SamplerSnapshot.build(self, output_path, **kwargs)
@@ -1063,7 +1074,7 @@ class GraphDB:
         *,
         require_verifiable: bool = False,
         capture_provenance: bool = True,
-    ):
+    ) -> Iterator[CurrentGraphReadView]:
         """Yield current graph reads pinned to one backend snapshot."""
         from .readview import CurrentGraphReadView, CurrentReadProvenance
 
@@ -1093,13 +1104,13 @@ class GraphDB:
             yield CurrentGraphReadView(snapshot_graph, provenance)
 
     @property
-    def traversal(self):
+    def traversal(self) -> TraversalService:
         """Typed adjacency and live sampling bound to this current store scope."""
         from .traversal import TraversalService
 
         return TraversalService(self.nodes._session)
 
-    def get_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out'):
+    def get_typed_adjacency(self, node_id: NodeKeyInput, edge_type: str, direction: Direction = 'out') -> list[dict[str, bytes]]:
         """Return typed adjacency records with clean direction semantics.
 
         `out` means source -> target, `in` means target -> source, and `any`
@@ -1107,7 +1118,7 @@ class GraphDB:
         """
         return self.traversal.get_typed_adjacency(node_id, edge_type, direction)
 
-    def count_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out') -> int:
+    def count_typed_adjacency(self, node_id: NodeKeyInput, edge_type: str, direction: Direction = 'out') -> int:
         """Count typed adjacency records without materializing traversal records.
 
         Args:
@@ -1121,7 +1132,7 @@ class GraphDB:
         """
         return self.traversal.count_typed_adjacency(node_id, edge_type, direction)
 
-    def iter_typed_adjacency(self, node_id, edge_type: str, direction: str = 'out'):
+    def iter_typed_adjacency(self, node_id: NodeKeyInput, edge_type: str, direction: Direction = 'out') -> Iterator[dict[str, bytes]]:
         """Yield typed adjacency records with clean direction semantics.
 
         Args:
@@ -1138,7 +1149,7 @@ class GraphDB:
         """
         return self.traversal.iter_typed_adjacency(node_id, edge_type, direction)
 
-    def neighbors_by_edge_type(self, node_id, edge_type: str, direction: str = 'out'):
+    def neighbors_by_edge_type(self, node_id: NodeKeyInput, edge_type: str, direction: Direction = 'out') -> list[bytes]:
         """Return neighbor IDs connected by a specific edge type.
 
         Args:
@@ -1154,7 +1165,7 @@ class GraphDB:
         """
         return self.traversal.neighbors_by_edge_type(node_id, edge_type, direction)
 
-    def edges_by_edge_type(self, node_id, edge_type: str, direction: str = 'out'):
+    def edges_by_edge_type(self, node_id: NodeKeyInput, edge_type: str, direction: Direction = 'out') -> list[bytes]:
         """Return edge IDs connected by a specific edge type.
 
         Args:
@@ -1208,7 +1219,7 @@ class GraphDB:
             sample_size, label=label, node_filter=node_filter, rng=rng,
         )
 
-    def sample_neighbors(self, node_id, edge_type: str, direction: str = 'out', sample_size: int = 10, rng=None, *, relation_hierarchy=None):
+    def sample_neighbors(self, node_id: NodeKeyInput, edge_type: str, direction: Direction = 'out', sample_size: int = 10, rng: RandomLike | None = None, *, relation_hierarchy: RelationHierarchy | None = None) -> list[dict[str, bytes]]:
         """Sample typed neighbors using reservoir sampling.
 
         Args:
@@ -1235,7 +1246,7 @@ class GraphDB:
             sample_size=sample_size, rng=rng, relation_hierarchy=relation_hierarchy,
         )
 
-    def sample_typed_paths(self, seed_ids, pattern: Union[SamplingPattern, list[dict]], rng=None, *, relation_hierarchy=None):
+    def sample_typed_paths(self, seed_ids: Iterable[NodeKeyInput], pattern: Union[SamplingPattern, list[dict]], rng: RandomLike | None = None, *, relation_hierarchy: RelationHierarchy | None = None) -> list[SampledPath]:
         """Sample paths that follow an ordered typed edge pattern.
 
         Args:
@@ -1259,7 +1270,7 @@ class GraphDB:
             seed_ids, pattern, rng=rng, relation_hierarchy=relation_hierarchy,
         )
 
-    def sample_typed_subgraph(self, seed_ids, pattern: Union[SamplingPattern, list[dict]], rng=None, *, relation_hierarchy=None):
+    def sample_typed_subgraph(self, seed_ids: Iterable[NodeKeyInput], pattern: Union[SamplingPattern, list[dict]], rng: RandomLike | None = None, *, relation_hierarchy: RelationHierarchy | None = None) -> SampledSubgraph:
         """Sample and materialize a typed subgraph around seed nodes.
 
         Args:
@@ -1305,10 +1316,7 @@ class GraphDB:
         """
         return self.edges.get(edge_id)
 
-    # -----------
-    # Example Range Query
-    #  (Implementation depends on how you store indexes in the KVStore)
-    # -----------
+    # --- Legacy example range query (keeps its exact raw key format) ---
     def range_query_nodes(self, property_name: str, start_val, end_val):
         """Example stub: You might rely on the underlying store to handle indexing for nodes."""
         return self.lookup.range_query_nodes(property_name, start_val, end_val)
@@ -1345,7 +1353,7 @@ class GraphDB:
         return self.nodes.put_many(nodes)
 
     @property
-    def ingest(self):
+    def ingest(self) -> IngestionService:
         """Arrow/Polars ingestion capabilities bound to this current store scope."""
         from .ingestion_service import IngestionService
 
@@ -1584,11 +1592,8 @@ class GraphDB:
         """Serialize an edge for use with columnar edge ingestion."""
         return self.entity_serializer.serialize(edge, "Edge")
 
-    def get_nodes(self, node_ids: list[str]) -> list[Node | None]:
-        """
-        Use store.get_nodes_bulk(...) and deserialize each one.
-        Return a list of Node (in the same order as node_ids, or possibly just all found).
-        """
+    def get_nodes(self, node_ids: Iterable[bytes]) -> list[Node | None]:
+        """Return decoded nodes in request order (``None`` for missing IDs)."""
         return self.nodes.get_many(node_ids)
     def get_node_keys_generator(self, num_nodes = None, key_offset = None):
         """Yield node keys from the backing store.
@@ -1608,16 +1613,6 @@ class GraphDB:
     # -----------------------
     # Adjacency Management
     # -----------------------
-
-    # def _append_edge_to_adjacency(self, node_id: str, edge_id: str):
-    #     """
-    #     Internal helper: read the adjacency list for node_id,
-    #     append edge_id if not present, and write it back.
-    #     """
-    #     edges_list = self.get_adjacency_list(node_id)
-    #     if edge_id not in edges_list:
-    #         edges_list.append(edge_id)
-    #         self.put_adjacency_list(node_id, edges_list)
 
     def get_adjacency_list(self, node_id: bytes,direction = 'forward', return_raw = False) -> list[str]:
         """
@@ -1799,9 +1794,9 @@ class GraphDB:
         parameters: Optional[dict[str, object]] = None,
         *,
         read_snapshot: bool | None = None,
-        label_hierarchy=None,
-        relation_hierarchy=None,
-    ):
+        label_hierarchy: LabelHierarchy | None = None,
+        relation_hierarchy: RelationHierarchy | None = None,
+    ) -> QueryResult:
         """Execute a supported Cypher query.
 
         Read queries run directly; queries with ``CREATE``/``SET``/``REMOVE``
@@ -1886,7 +1881,7 @@ class GraphDB:
         )
 
     @contextmanager
-    def transaction(self, **options):
+    def transaction(self, **options: Any) -> Iterator[GraphDB]:
         """Run graph operations in a backend transaction when supported.
 
         The transaction commits on clean context exit and rolls back if an

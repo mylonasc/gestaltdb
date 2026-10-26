@@ -10,7 +10,13 @@ import random
 
 import pytest
 
+from gestaltdb import QueryResult
+from gestaltdb.current import EdgeRepository, NodeRepository
 from gestaltdb.graphdb import Edge, GraphDB, Node
+from gestaltdb.indexes import IndexService
+from gestaltdb.ingestion_service import IngestionService
+from gestaltdb.lookups import EntityLookup
+from gestaltdb.traversal import TraversalService
 
 
 @pytest.fixture(params=["lmdb", "leveldb", "pyrex"])
@@ -34,6 +40,23 @@ def test_missing_lookups_return_none(graph):
     assert graph.get_node(b"missing") is None
     assert graph.get_edge(b"missing") is None
     assert graph.get_nodes([b"missing"]) == [None]
+
+
+def test_service_properties_expose_typed_capabilities(graph):
+    assert isinstance(graph.nodes, NodeRepository)
+    assert isinstance(graph.edges, EdgeRepository)
+    assert isinstance(graph.indexes, IndexService)
+    assert isinstance(graph.traversal, TraversalService)
+    assert isinstance(graph.lookup, EntityLookup)
+    assert isinstance(graph.ingest, IngestionService)
+
+
+def test_query_returns_query_result(graph):
+    result = graph.query("UNWIND [1] AS value RETURN value")
+    assert isinstance(result, QueryResult)
+    assert result.columns == ("value",)
+    assert result.records == [{"value": 1}]
+    assert list(result) == [{"value": 1}]
 
 
 def test_entity_identity_and_labels():

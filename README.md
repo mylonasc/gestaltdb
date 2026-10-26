@@ -1,6 +1,7 @@
 # GestaltDB
 
 ![Coverage](https://raw.githubusercontent.com/mylonasc/gestaltdb/refs/heads/main/assets/coverage_badge.svg)
+![Typing](https://raw.githubusercontent.com/mylonasc/gestaltdb/refs/heads/main/assets/typing_badge.svg)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mylonasc/gestaltdb/badge)](https://scorecard.dev/viewer/?uri=github.com/mylonasc/gestaltdb)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://mylonasc.github.io/gestaltdb/)
 
