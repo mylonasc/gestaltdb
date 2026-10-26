@@ -77,10 +77,24 @@ def test_missing_context_nodes_do_not_create_dangling_edges():
     assert all(edge["source"] in ids and edge["target"] in ids for edge in data["links"])
 
 
+def test_foreign_relationship_numbers_cannot_alias_local_issues():
+    value = snapshot()
+    value.pop("overlay")
+    foreign = dict(issue(3), html_url="https://github.com/elsewhere/project/issues/3")
+    value["issues"][0]["dependencies"] = [foreign]
+    value["issues"][0]["children"] = [foreign]
+    edges = {(e["source"], e["target"], e["kind"]) for e in build.graph_data(value)["links"]}
+    assert ("3", "1", "dependency") not in edges
+    assert ("1", "3", "parent") not in edges
+
+
 def test_no_roadmap_is_required_for_an_unrelated_repository():
     value = snapshot()
     value.pop("overlay")
     value["repository"] = "another-team/unrelated-project"
+    for entry in value["issues"]:
+        for row in [entry["issue"], *entry["dependencies"], *entry["children"]]:
+            row["html_url"] = f'https://github.com/{value["repository"]}/issues/{row["number"]}'
     data = build.graph_data(value)
     assert data["repository"] == "another-team/unrelated-project"
     assert data["title"] == "another-team/unrelated-project · Issue atlas"
