@@ -99,6 +99,39 @@ def test_aggregates_identify_contributing_facts_and_ops():
         TypedFact("deg", ["a", Literal("integer", 2)]), *facts}
 
 
+def test_stratified_aggregate_proofs_cover_result_closure():
+    # Regression for #411: evaluate_stratified omitted the proof collector
+    # when running the aggregate stratum, so the untruncated trace missed
+    # aggregate conclusions and failed result-closure validation.
+    total = Variable("total")
+    value = Variable("value")
+    program = GenericProgram([], aggregates=[AggregateRule(
+        "sum-values", [TypedAtom("amount", [value])], (),
+        (Aggregation("sum", value, total),),
+        TypedAtom("total", [total]))])
+    facts = [TypedFact("amount", [Literal("integer", 10)])]
+    expected = {*facts, TypedFact("total", [Literal("integer", 10)])}
+
+    ordinary = GenericEngine().evaluate(program, facts, limits=LIMITS, collect_proofs=True)
+    assert set(ordinary.facts) == expected
+
+    without_proofs = GenericEngine().evaluate_stratified(
+        program, facts, limits=LIMITS, collect_proofs=False)
+    assert set(without_proofs.result.facts) == expected
+
+    run = GenericEngine().evaluate_stratified(
+        program, facts, limits=LIMITS, collect_proofs=True)
+    assert set(run.result.facts) == expected
+    assert run.proofs is not None and not run.proofs.truncated
+    assert len(run.proofs.nodes) == len(run.result.facts)
+    node = run.proofs._by_fact[TypedFact("total", [Literal("integer", 10)])]
+    assert node.aggregates and node.aggregates[0].op == "sum"
+    assert set(node.aggregates[0].operands) == set(facts)
+    explanation = run.proofs.explain(TypedFact("total", [Literal("integer", 10)]))
+    assert not explanation.truncated
+    assert {item.fact for item in explanation.nodes} == expected
+
+
 def test_traces_are_deterministic_and_generation_bound():
     facts = [TypedFact("parent", ["a", "b"]), TypedFact("parent", ["b", "c"])]
     first = GenericEngine().evaluate(parent_program(), facts, limits=LIMITS, collect_proofs=True)
