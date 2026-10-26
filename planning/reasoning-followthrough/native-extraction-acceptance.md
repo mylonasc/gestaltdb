@@ -48,6 +48,25 @@ admission, and post-decode/post-selection filters must not be renamed physical
 storage pushdown. Those are the specific original/native-source boundaries to
 reconcile before #194 closure, separately from raw capability availability.
 
+## Historical locator continuation (post-#368)
+
+`PinnedNativeLocatorClaimSource` now implements a separate explicit production
+source: native world/predicate/subject-prefix candidate intersection, complete
+logical-history locator scans (including retractions), point materialization and
+exact expected index coverage from the complete authenticated pinned catalog.
+It retains grouped canonical conformance and shared policy/context/evidence;
+object/agent/source/derived filters are still post-selection. Its physical
+prefix pushdown must not be described as eliminating full catalog decoding or
+canonical reads. Dedicated catalog-record and cumulative native-index-row
+limits/profiles expose the different work units.
+
+This addresses the historical locator/source correctness gap in implementation,
+but acceptance is still pending green integration and an actual-adapter
+measurement/decision review. Existing benchmark-only locator and full-record
+native reports are not relabelled measurements of this source. Original scale
+evidence remains valid for the modes it measured; do not infer a universal
+locator acceleration or automatically close #194 from this additive API.
+
 ## Re-audit commands
 
 ```sh

@@ -34,6 +34,54 @@ checks are not universal identity admission or concurrent atomic publication.
 
 ## Ordered implementation
 
+### Authenticated native historical locator continuation (#194)
+
+Dedicated `feature/re-194-native-locator-admission` / `re-194-native-locator-admission`
+on integration `2ed6ade` (#368 merged after 17 applicable exact-head checks;
+post-merge monitoring active). Refreshed ownership/open-PR audit found no
+competing implementation; unrelated work remains untouched.
+
+Add a separately explicit locator source, not a relabel of the full-record
+source or benchmark assertion decoder. Authenticate the complete pinned commit
+catalog to establish expected index membership, scan predicate/subject prefixes
+natively under one snapshot/writer guard, intersect candidate logical IDs, then
+scan their complete point-eligible logical histories (including retractions)
+and point-materialize exact commit members before shared claim policy/mapping.
+Reject missing/forged/duplicate/stale index rows against canonical membership;
+retain canonical winner conformance. Bound authentication records and cumulative
+native rows independently. Physical index-prefix pushdown does not eliminate
+full authentication cost, imply speedup, or admit transactional/range sources.
+Test correction/retraction/old-prefix/empty binding semantics, corruption and
+resource lifetimes before measuring or reconciling #194 closure.
+
+#368 post-merge Ontology `40172610592` and readiness `40172610589` passed on
+`2ed6ade`. The 17-check count includes the additional four backend compatibility
+matrix checks; all applicable checks were green before the exact-head merge.
+
+Initial implementation: `PinnedNativeLocatorClaimSource` shares policy/context,
+writer guard, rebinding/lifetime/cancellation and evaluation with the full-record
+source. It scans native dimension prefixes and complete logical histories using
+one borrowed snapshot, authenticates expected key/payload membership from all
+pinned commits, then point-materializes versions and retains unfiltered grouped
+canonical conformance. Separate cumulative native-index and authenticated-record
+limits/profiles avoid hiding full catalog work behind selective counters.
+Focused PyRex 0.5.0 validation: **118 passed**, covering historical boundaries,
+old prefixes after appends, mixed-kind/same-commit ordinals, missing retraction
+locators, forged/omitted native rows, canonical omissions/stale results,
+independent/cumulative budgets, scan cancellation/release/retry, writer blocking,
+partial-pass rebinding, interrupted descriptors/gaps, four serializers/restart
+and bounded witness parity. No performance result or #194 closure yet.
+
+Final locator-source validation: **3,377 passed / 3 skipped** (67.76s) with full
+optional requirements on PyRex 0.6.0; focused source/extraction tests **119 passed**
+on 0.6.0 (118 passed on 0.5.0 before the additional executable-guide test).
+Executable locator guide, docs/API drift, 8/8 existing examples, Sphinx `-W`,
+roadmap and whitespace gates passed. Documentation explicitly separates native
+prefix transfer from full catalog/canonical decoding, independent physical
+budget units and output policy filters. Integration and actual-adapter
+measurement/decision review remain gates; earlier benchmark-only locator and
+full-record measurements are not relabelled. #194 remains open.
+
 ### Native upstream capability re-audit (#194)
 
 Dedicated `feature/re-194-native-capability-audit` / `re-194-native-capability-audit`
