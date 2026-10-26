@@ -1,7 +1,7 @@
 # Benchmark/test-only environment observed in ONTO-07; never runtime requirements.
 clingo==5.8.2
 cffi==2.1.1
-pycparser==3.0
+pycparser==3.11
 owlrl==7.6.2
 rdflib==7.6.0
 pyparsing==3.3.3
