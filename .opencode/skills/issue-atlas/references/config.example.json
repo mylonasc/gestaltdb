@@ -1,0 +1,11 @@
+{
+  "repo": "owner/repository",
+  "title": "Project delivery atlas",
+  "days": 60,
+  "workers": 4,
+  "comments": true,
+  "snapshot": "atlas/snapshot.json",
+  "output": "atlas/index.html",
+  "d3": "atlas/d3.v7.9.0.min.js",
+  "roadmap": null
+}

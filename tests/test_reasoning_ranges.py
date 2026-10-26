@@ -110,10 +110,11 @@ def test_update_validation_and_budgets():
         update_range(prog, "nope", base, limits=ReasoningLimits())
     with pytest.raises(ReasoningError):
         update_range(prog, closure, base, limits=ReasoningLimits(), incremental="yes")
-    with pytest.raises(ReasoningError, match="negation"):
-        negated = GenericProgram([GenericRule("n", [TypedAtom("p", [X])], [], TypedAtom("q", [X]),
-                                              [TypedAtom("m", [X])])], closed=["m"])
-        update_range(negated, closure, base, limits=ReasoningLimits())
+    negated = GenericProgram([GenericRule("n", [TypedAtom("p", [X])], [], TypedAtom("q", [X]),
+                                          [TypedAtom("m", [X])])], closed=["m"])
+    rebuilt = update_range(negated, closure, base, limits=ReasoningLimits())
+    assert rebuilt.closure.program_digest == negated.digest
+    assert rebuilt.recomputed_segments == len(rebuilt.closure.segments)
     with pytest.raises(ReasoningCancelledError):
         update_range(prog, closure, base, limits=ReasoningLimits(), cancel=lambda: True)
     crowded = [TemporalFact(TypedFact("edge", [f"n{i}"]), span(i, i + 1)) for i in range(6)]

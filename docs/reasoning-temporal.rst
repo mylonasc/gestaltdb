@@ -40,9 +40,10 @@ Time-scoped equality
 ``canonicalize_segments`` rebuilds canonical representatives at every
 change point under per-segment scopes, so entities equal during one
 interval never merge globally. Time-varying links are separate
-evaluations per segment, never one global union. Temporal negation,
-aggregates and closed scopes fail closed; per-point stratified
-evaluation is the documented explicit fallback.
+evaluations per segment, never one global union. Stratified negation over
+declared closed scopes and nonrecursive aggregates evaluate per segment
+with per-interval absence and aggregate evidence; gaps stay gaps and
+empty groups infer no zero counts (see :doc:`reasoning-ranges`).
 
 Measured cost
 ----------------------------------------

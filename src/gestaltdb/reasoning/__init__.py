@@ -45,6 +45,13 @@ from .scopes import CalculusPolicy, CalculusRegistry, CalculusSpec, InheritanceG
 from .temporal_closure import TemporalClosure, TemporalDerivation, TemporalFact, RangeUpdate, ClosureVerification, canonicalize_segments, change_segments, evaluate_range, update_range, verify_closure
 from .maintenance import DependencyIndex, Materialization, PropagationResult, RetractionResult, Support, build_index, propagate_insertions, rematerialize, retract_facts
 from .validation import Denial, ValidationReport, ValidationSuite, Violation, find_unsatisfiable, validate
+from .structural import (
+    CardinalityBound, DatatypeConstraint, ExclusiveGroup, RequiredField,
+    StructuralReport, StructuralSuite, StructuralViolation, validate_structural,
+)
+from .typed_proofs import (
+    AbsenceCheck, AggregateDerivation, TypedExplanation, TypedFactWitness, TypedProofTrace,
+)
 
 __all__ = [
     "DatalogEngine", "Atom", "EvaluationResult", "Fact", "Program", "ReasoningError",
@@ -57,6 +64,9 @@ __all__ = [
     "AggregateRule", "Aggregation", "expand_predicate_variables", "normalize_program", "predicate_domain",
     "NegationWitness", "StratifiedRun",
     "Denial", "ValidationReport", "ValidationSuite", "Violation", "find_unsatisfiable", "validate",
+    "CardinalityBound", "DatatypeConstraint", "ExclusiveGroup", "RequiredField",
+    "StructuralReport", "StructuralSuite", "StructuralViolation", "validate_structural",
+    "AbsenceCheck", "AggregateDerivation", "TypedExplanation", "TypedFactWitness", "TypedProofTrace",
     "BoundGoal", "DemandAnswer", "SpecializationCache", "answer", "specialize",
     "DependencyIndex", "PropagationResult", "Support", "build_index", "propagate_insertions",
     "Materialization", "RetractionResult", "rematerialize", "retract_facts",

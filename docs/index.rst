@@ -62,6 +62,7 @@ Filter, Sample, Train
    reasoning-authenticated-inferred
    reasoning-typed-execution
    reasoning-native-claims
+   reasoning-native-locator-claims
    ontology-benchmarks
    ontology-publication
    cypher

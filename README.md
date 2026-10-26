@@ -12,8 +12,9 @@ Ontology and reasoning components add semantic classification, temporal evidence
 
 Documentation: https://mylonasc.github.io/gestaltdb/
 
-**Release status:** `0.14.0rc1` is the current testing prerelease covering the
-GraphDB service decomposition (#388) plus post-rc1 reasoning work. See the
+**Release status:** `0.14.0rc2` is the testing release candidate covering the
+GraphDB service decomposition (#388), typed/temporal reasoning extensions and
+explicit historical native locator admission. See the
 [testing guide](docs/reasoning-testing.rst) for compatibility boundaries.
 
 ## Components and Applications

@@ -6,6 +6,9 @@ correctness-first native full-record extraction path for a caller-supplied
 temporal ``GraphReadView``. It implements the same ``ExtractionRequest``,
 ``ClaimSelection``, ``ClaimMapping``, ``FactBatch`` and logical ``InputContext``
 contract as ``PinnedBatchedClaimSource``. It is not selected automatically.
+For the separately explicit historical index-prefix source with retained full
+catalog authentication, see :doc:`reasoning-native-locator-claims`. This page
+and its measured results describe the full-record source only.
 
 .. code-block:: python
 
