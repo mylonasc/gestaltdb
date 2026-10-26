@@ -8,6 +8,7 @@ from gestaltdb.reasoning.terms import Literal
 from gestaltdb.reasoning.temporal_closure import (
     TemporalDerivation,
     TemporalFact,
+    TemporalProofTruncatedWarning,
     evaluate_range,
     update_range,
     verify_closure,
@@ -127,3 +128,54 @@ def test_range_results_are_deterministic():
     second = evaluate_range(ban_program(), list(reversed(base_ban())), limits=LIMITS)
     assert first.derivations == second.derivations
     assert first.segments == second.segments
+
+
+def test_tight_proof_budget_keeps_conclusions_and_warns():
+    base = [base_ban()[0]]
+    tight = ReasoningLimits(max_proof_nodes=1)
+    with pytest.warns(TemporalProofTruncatedWarning):
+        partial = evaluate_range(ban_program(), base, limits=tight)
+    full = evaluate_range(ban_program(), base, limits=LIMITS)
+    # Answers are a logical product, not a product of proof storage.
+    assert partial.at(5) == full.at(5)
+    assert partial.answers(TypedFact("ok", ["a"])) == full.answers(TypedFact("ok", ["a"]))
+    assert TypedFact("ok", ["a"]) in partial.at(5)
+    assert partial.proofs_truncated and not full.proofs_truncated
+    assert partial.derivations == ()
+    assert partial.missing_evidence()
+    verification = verify_closure(ban_program(), partial, limits=LIMITS)
+    assert verification.proofs_truncated
+
+
+def test_truncated_evidence_does_not_change_negated_validity():
+    tight = ReasoningLimits(max_proof_nodes=1)
+    with pytest.warns(TemporalProofTruncatedWarning):
+        partial = evaluate_range(ban_program(), base_ban(), limits=tight)
+    full = evaluate_range(ban_program(), base_ban(), limits=LIMITS)
+    assert partial.segments == full.segments
+    assert [partial.at(point) for point in (0, 2, 4, 5, 7, 9)] == [
+        full.at(point) for point in (0, 2, 4, 5, 7, 9)]
+    assert partial.answers(TypedFact("ok", ["a"])) == IntervalSet([Interval(0, 5)])
+
+
+def test_update_range_rematerializes_truncated_evidence():
+    tight = ReasoningLimits(max_proof_nodes=1)
+    with pytest.warns(TemporalProofTruncatedWarning):
+        truncated = evaluate_range(ban_program(), [base_ban()[0]], limits=tight)
+    updated = update_range(ban_program(), truncated, base_ban(), limits=LIMITS)
+    assert updated.reused_segments == 0 and updated.recomputed_segments == 2
+    assert not updated.closure.proofs_truncated
+    assert updated.closure.answers(TypedFact("ok", ["a"])) == IntervalSet([Interval(0, 5)])
+    assert updated.closure.derivations
+    verify_closure(ban_program(), updated.closure, limits=LIMITS)
+
+
+def test_update_range_with_truncated_budget_keeps_conclusions():
+    tight = ReasoningLimits(max_proof_nodes=1)
+    with pytest.warns(TemporalProofTruncatedWarning):
+        truncated = evaluate_range(ban_program(), [base_ban()[0]], limits=tight)
+    with pytest.warns(TemporalProofTruncatedWarning):
+        updated = update_range(ban_program(), truncated, base_ban(), limits=tight)
+    assert updated.closure.proofs_truncated
+    assert updated.closure.answers(TypedFact("ok", ["a"])) == IntervalSet([Interval(0, 5)])
+
