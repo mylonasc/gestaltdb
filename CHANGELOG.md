@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 0.14.0rc2 — integrated reasoning and visualization testing candidate
+
+- Added bounded typed n-ary derivation tracking and proof verification (#392),
+  temporal negation/aggregates over interval partitions (#393), declarative
+  structural validation (#394), opt-in inferred graph queries (#395), and typed
+  graph-to-fact projection (#396).
+- Added explicit historical native claim-index locator admission (#369), with
+  complete catalog authentication, canonical conformance, cumulative budgets,
+  exact version evidence and correction/retraction handling. Full authentication
+  still reads unrelated records; no actual-adapter acceleration or automatic
+  native-source adoption is claimed. Larger-scale measurement remains #194.
+- Integrated offline reasoning/proof/ontology visualization, deterministic tree
+  layouts, shape filters and gentle interaction behavior (#404).
+- Added the portable read-only issue atlas (#304); foreign-repository issue
+  numbers cannot alias local dependency/parent nodes.
+- Reconciled integration features with the scoped services already on main,
+  preserving the service decomposition, visualization and CI release gates.
+  Extracted typed result contracts without changing their existing import paths.
+- Updated pinned CI/publishing actions and benchmark-only LMDB/pycparser pins
+  (#316–#322). This remains an opt-in prerelease, not full OWL/SHACL or universal
+  crash-recovery/performance certification.
+
 ## 0.14.0rc1 — GraphDB service decomposition testing milestone
 
 Published prerelease for opt-in user testing (2026-10-25). Public behavior and
