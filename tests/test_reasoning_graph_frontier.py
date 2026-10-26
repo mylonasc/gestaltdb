@@ -42,7 +42,7 @@ def graph(tmp_path):
     for i in range(20):
         graph.put_node(Node(f"noise{i}", labels=["Noise"]))
         graph.put_edge(Edge(f"noise-edge{i}", f"noise{i}", "outside", {"type": "knows"}))
-    graph.assert_claim(subject="a", predicate="edge", object="temporal-only", agent="other",
+    graph.epistemic.assert_claim(subject="a", predicate="edge", object="temporal-only", agent="other",
                        polarity="positive", valid=(0, 100))
     yield graph
     graph.close()
@@ -221,7 +221,7 @@ def test_stale_indexes_and_unsupported_views_fail_closed(graph, monkeypatch):
         monkeypatch.setattr(view, "stale_indexes", lambda: ("node_property",))
         with pytest.raises(ReasoningError, match="stale"):
             run(view, Atom("a", "reach", Y))
-    with graph.read_view(valid_time=50) as temporal:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as temporal:
         with pytest.raises(ReasoningError, match="CurrentGraphReadView"):
             run(temporal, Atom("a", "reach", Y))
 

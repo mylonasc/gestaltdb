@@ -128,6 +128,21 @@ def execute_closure(program: Program, facts: Iterable[Fact | Evidence], *,
     ``polars_max_intermediate_rows`` explicitly configures the prototype's
     physical row bound (default 100,000), separately from logical identity and
     cumulative ``limits.max_candidate_rows``. Non-Polars requests reject it.
+
+    Examples:
+        Run the default indexed executor with closure telemetry::
+
+            >>> from gestaltdb.reasoning.adapters.execution import execute_closure
+            >>> from gestaltdb.reasoning.model import Atom, Fact, Program, Rule, Variable, ReasoningLimits
+            >>> x, y = Variable("x"), Variable("y")
+            >>> program = Program([Rule("r", [Atom(x, "parent", y)], Atom(x, "ancestor", y))])
+            >>> outcome = execute_closure(program, [Fact("alice", "parent", "bob")], limits=ReasoningLimits())
+            >>> assert Fact("alice", "ancestor", "bob") in outcome.result.facts
+            >>> assert outcome.telemetry.executor == "indexed-python-v1"
+
+    Caller-provided facts alone carry no database source-verification guarantee.
+    See the reasoning-executors and reasoning-admission guides for contexts,
+    prepared plans, generation pins, and explicit optional executor requests.
     """
     if not isinstance(program, Program):
         raise ReasoningError("Program required")

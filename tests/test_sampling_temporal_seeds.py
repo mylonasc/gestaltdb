@@ -21,7 +21,7 @@ def graph(tmp_path):
 
 
 def build_temporal_snapshot(graph, path):
-    graph.commit_versions([
+    graph.temporal.commit_versions([
         NodeVersionWrite.assertion(Node("a", properties={"kind": "x"}), (0, 10)),
         NodeVersionWrite.assertion(Node("b", properties={"kind": "x"}), (10, 20)),
         NodeVersionWrite.assertion(Node("c", properties={"kind": "y"}), (20, None)),
@@ -31,7 +31,7 @@ def build_temporal_snapshot(graph, path):
         (Edge("new", "b", "b", properties={"type": "R"}), (10, 20)),
         (Edge("open", "c", "c", properties={"type": "S"}), (20, None)),
     ):
-        graph.put_edge_version(edge, valid=valid)
+        graph.temporal.put_edge_version(edge, valid=valid)
     return graph.build_sampler_snapshot(path, temporal=True, time_bucket="none")
 
 

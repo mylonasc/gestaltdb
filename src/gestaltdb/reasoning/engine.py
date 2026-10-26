@@ -146,6 +146,21 @@ class DatalogEngine:
     Only complete closures are returned. Limits apply to each invocation;
     failure does not poison later runs. Proof collection is opt-in and bounded
     independently: truncating a witness trace never truncates logical closure.
+
+    Examples:
+        Infer a relationship from a positive rule, without a database::
+
+            >>> from gestaltdb.reasoning.engine import DatalogEngine
+            >>> from gestaltdb.reasoning.model import Atom, Fact, Program, Rule, Variable, ReasoningLimits
+            >>> x, y = Variable("x"), Variable("y")
+            >>> program = Program([Rule("parent-is-ancestor", [Atom(x, "parent", y)], Atom(x, "ancestor", y))])
+            >>> result = DatalogEngine().evaluate(program, [Fact("alice", "parent", "bob")],
+            ...     limits=ReasoningLimits(), collect_proofs=True)
+            >>> conclusion = Fact("alice", "ancestor", "bob")
+            >>> assert conclusion in result
+            >>> assert not result.explain(conclusion).truncated
+
+    For n-ary relations, strict literals, and filters use ``GenericEngine``.
     """
 
     def evaluate(

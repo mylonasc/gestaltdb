@@ -137,7 +137,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
 }
 
 .gdviz-canvas .node-label, .gdviz-canvas .edge-label {
-  font-size: 10px;
+  font-size: 13px;
   fill: var(--gdviz-fg);
   paint-order: stroke;
   stroke: var(--gdviz-bg);

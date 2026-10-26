@@ -139,17 +139,17 @@ def test_historical_readback_on_backend(tmp_path):
     stores = {"lmdb": LMDBStore, "leveldb": LevelDBStore, "pyrex": PyRexStore}
     graph = GraphDB(stores[BACKEND](path=str(tmp_path / "backend")), PickleSerializer())
     try:
-        graph.put_node_version(Node(node_id="ann", properties={"employer": "acme"}),
+        graph.temporal.put_node_version(Node(node_id="ann", properties={"employer": "acme"}),
                                valid=TemporalInterval(TemporalInstant(0), TemporalInstant(10)))
-        graph.put_node_version(Node(node_id="ann", properties={"employer": "globex"}),
+        graph.temporal.put_node_version(Node(node_id="ann", properties={"employer": "globex"}),
                                valid=TemporalInterval(TemporalInstant(10), TemporalInstant(20)))
-        assert graph.get_node_as_of("ann", valid_time=TemporalInstant(0)) is not None
-        assert graph.get_node_as_of("ann", valid_time=TemporalInstant(9)) is not None
-        assert graph.get_node_as_of("ann", valid_time=TemporalInstant(10)) is not None
-        assert graph.get_node_as_of("ann", valid_time=TemporalInstant(19)) is not None
-        assert graph.get_node_as_of("ann", valid_time=TemporalInstant(20)) is None
-        first = graph.get_node_as_of("ann", valid_time=TemporalInstant(3))
-        second = graph.get_node_as_of("ann", valid_time=TemporalInstant(13))
+        assert graph.temporal.get_node_as_of("ann", valid_time=TemporalInstant(0)) is not None
+        assert graph.temporal.get_node_as_of("ann", valid_time=TemporalInstant(9)) is not None
+        assert graph.temporal.get_node_as_of("ann", valid_time=TemporalInstant(10)) is not None
+        assert graph.temporal.get_node_as_of("ann", valid_time=TemporalInstant(19)) is not None
+        assert graph.temporal.get_node_as_of("ann", valid_time=TemporalInstant(20)) is None
+        first = graph.temporal.get_node_as_of("ann", valid_time=TemporalInstant(3))
+        second = graph.temporal.get_node_as_of("ann", valid_time=TemporalInstant(13))
         assert first.node.properties["employer"] == "acme"
         assert second.node.properties["employer"] == "globex"
     finally:

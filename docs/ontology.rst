@@ -105,6 +105,9 @@ are not supported. Domain/range infer memberships rather than validate missing d
 Read-only temporal claims
 --------------------------------
 
+The :doc:`architecture` guide maps ontology compilation, source extraction,
+and rule evaluation to entity-classification and knowledge-enrichment workflows.
+
 This source adapter never writes claims. The separate explicit, point-only
 publication operation is documented in :doc:`ontology-publication`.
 
@@ -124,9 +127,9 @@ its source, policy, mapping and ontology revision before returning a scoped resu
    with TemporaryDirectory() as directory:
        graph = GraphDB.create(directory, backend="lmdb", serializer="json")
        try:
-           graph.assert_claim(subject="alice", predicate="worksFor", object="acme",
+           graph.epistemic.assert_claim(subject="alice", predicate="worksFor", object="acme",
                               agent="registry", polarity="positive", valid=(0, 100))
-           with graph.read_view(valid_time=50) as view:
+           with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
                with PinnedClaimSource(view, world="default", ontology_revision=plan.revision_id,
                                       selection=ClaimSelection(), mapping=ClaimMapping()) as source:
                    scoped = source.evaluate(plan, limits=ReasoningLimits(), collect_proofs=True)

@@ -1,0 +1,12 @@
+{
+  "nodes": [
+    {"number": 1, "kind": "roadmap", "phase": "Roadmap", "roadmap_id": "PLAN", "description": "Product delivery plan"},
+    {"number": 2, "kind": "epic", "phase": "Foundation", "roadmap_id": "E1", "description": "Build the foundation"},
+    {"number": 3, "kind": "feature", "phase": "Foundation", "roadmap_id": "F1", "description": "Ship the first feature", "delivery": "in review", "acceptance": ["All acceptance tests pass"]}
+  ],
+  "links": [
+    {"source": 1, "target": 2, "kind": "parent"},
+    {"source": 2, "target": 3, "kind": "parent"},
+    {"source": 2, "target": 3, "kind": "dependency", "origin": "Explicit planning prerequisite"}
+  ]
+}

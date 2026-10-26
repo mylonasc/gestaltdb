@@ -23,9 +23,9 @@ start and keeps its source graph available throughout evaluation.
    with TemporaryDirectory() as path:
        graph = GraphDB.create(path, backend="lmdb", serializer="json")
        try:
-           graph.assert_claim(subject="a", predicate="edge", object="b", agent="example",
+           graph.epistemic.assert_claim(subject="a", predicate="edge", object="b", agent="example",
                               polarity="positive", valid=(10, 20))
-           with graph.read_view(valid_time=0) as view:
+           with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=0) as view:
                result = evaluate_pinned_range(view, program, catalog,
                    valid_start_us=0, valid_end_us=30, world="default",
                    selection=ClaimSelection(), mapping=ClaimMapping(), limits=ReasoningLimits())

@@ -34,14 +34,14 @@ Python API
 
 .. code-block:: python
 
-   graph_db.assert_world_accessibility(
+   graph_db.epistemic.assert_world_accessibility(
        agent="alice",
        from_world="actual",
        to_world="alice-belief-1",
        kind="belief",
        valid_from="2025-01-01T00:00:00Z",
    )
-   graph_db.assert_claim(
+   graph_db.epistemic.assert_claim(
        subject="bob",
        predicate="LOCATED_IN",
        object="paris",
@@ -52,15 +52,19 @@ Python API
        valid_from="2025-01-01T00:00:00Z",
    )
 
-   result = graph_db.entails(
-       "alice",
-       {"subject": "bob", "predicate": "LOCATED_IN", "object": "paris"},
-       "BELIEVES",
-       world="actual",
+   with graph_db.temporal.open_read_view(
+       graph_db, manifest=graph_db.manifest, database_id=graph_db.database_id,
        valid_time="2025-06-01T00:00:00Z",
-       max_depth=4,
-       max_states=1000,
-   )
+   ) as view:
+       result = graph_db.epistemic.entails(
+           view,
+           "alice",
+           {"subject": "bob", "predicate": "LOCATED_IN", "object": "paris"},
+           "BELIEVES",
+           world="actual",
+           max_depth=4,
+           max_states=1000,
+       )
    assert result.status.value == "supported"
 
 ``system_time`` or ``through_commit`` selects a historical system horizon.

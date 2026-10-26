@@ -2,12 +2,13 @@
 // 1-hop focus, and highlight dimming. Framework-free so it stays testable;
 // the canvas only applies the resulting id sets.
 import type { VizPayload } from "./viz-types";
-import { groupKey, typeKey } from "./graph";
+import { groupKey, shapeKey, typeKey } from "./graph";
 
 export interface ViewOptions {
   query: string;
   hiddenGroups: ReadonlySet<string>;
   hiddenTypes: ReadonlySet<string>;
+  hiddenShapes: ReadonlySet<string>;
   focusNodeId: string | null;
   highlightOn: boolean;
   searchProperties?: boolean;
@@ -44,6 +45,7 @@ export function computeView(payload: VizPayload, options: ViewOptions): ViewSets
   const query = options.query.trim().toLowerCase();
   const nodeById = new Map(payload.nodes.map((node) => [node.id, node]));
   const excluded = new Set(payload.nodes.filter(node => options.hiddenGroups.has(groupKey(node)) ||
+    options.hiddenShapes.has(shapeKey(node)) ||
     (options.requiredLabel && !node.labels.includes(options.requiredLabel))).map(node => node.id));
   const neighbors = neighborMap(payload, options.focusDirection, options.hiddenTypes, excluded);
 

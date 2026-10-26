@@ -84,7 +84,7 @@ the source-verified typed-point session contract to actual fresh execution:
        graph = GraphDB.create(Path(root) / "db", backend="lmdb", serializer="json")
        try:
            for agent in ("one", "two"):
-               graph.assert_claim(subject="a", predicate="memberOf", object="g", agent=agent,
+               graph.epistemic.assert_claim(subject="a", predicate="memberOf", object="g", agent=agent,
                                   polarity="positive", valid=(0, 100))
            session = start_session(graph, program, catalog_for_typed_program(program),
                scope=SessionScope("default", 50, ClaimSelection(), ClaimMapping()), limits=ReasoningLimits())

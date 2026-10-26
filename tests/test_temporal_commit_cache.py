@@ -4,6 +4,7 @@ import pytest
 
 from gestaltdb.epistemic import Claim
 from gestaltdb.graphdb import GraphDB
+from gestaltdb.temporal_engine import TemporalEngine
 from gestaltdb.versioning import ClaimVersionWrite
 
 
@@ -18,7 +19,7 @@ def _bulk_graph(tmp_path, backend, module, rows):
         )
         for index in range(rows)
     ]
-    graph.commit_versions(writes)
+    graph.temporal.commit_versions(writes)
     return graph
 
 
@@ -29,11 +30,11 @@ def test_bulk_commit_iteration_matches_per_claim_results(tmp_path, backend, modu
     single = GraphDB.create(tmp_path / "single", backend=backend, serializer="json")
     try:
         for index in range(50):
-            single.assert_claim(subject=f"n{index}", predicate="memberOf", object=f"group{index % 8}",
+            single.epistemic.assert_claim(subject=f"n{index}", predicate="memberOf", object=f"group{index % 8}",
                                 agent="registry", polarity="positive", valid=(0, 100))
-        with bulk.read_view(valid_time=50) as view:
+        with bulk.temporal.open_read_view(bulk, manifest=bulk.manifest, database_id=bulk.database_id, valid_time=50) as view:
             bulk_ids = sorted(version.logical_id for version in view.iter_claims_as_of(world="default"))
-        with single.read_view(valid_time=50) as view:
+        with single.temporal.open_read_view(single, manifest=single.manifest, database_id=single.database_id, valid_time=50) as view:
             single_ids = sorted(version.logical_id for version in view.iter_claims_as_of(world="default"))
         assert bulk_ids == single_ids
         assert len(bulk_ids) == 50
@@ -48,19 +49,19 @@ def test_bulk_commit_decodes_each_version_once_per_read(tmp_path, backend, modul
     graph = _bulk_graph(tmp_path, backend, module, rows)
     try:
         calls = 0
-        original = GraphDB._decode_temporal_version
+        original = TemporalEngine.decode_version
 
         def counting(self, envelope):
             nonlocal calls
             calls += 1
             return original(self, envelope)
 
-        graph._decode_temporal_version = counting.__get__(graph, GraphDB)
+        graph.temporal.decode_version = counting.__get__(graph.temporal, TemporalEngine)
         try:
-            with graph.read_view(valid_time=50) as view:
+            with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
                 assert len(list(view.iter_claims_as_of(world="default"))) == rows
         finally:
-            del graph._decode_temporal_version
+            del graph.temporal.decode_version
         # One full commit decode plus small constant overhead; pre-fix this
         # was ~600 decodes per version (60,000+ here).
         assert calls <= 3 * rows
@@ -72,11 +73,11 @@ def test_bulk_commit_decodes_each_version_once_per_read(tmp_path, backend, modul
 def test_new_commits_stay_visible_with_commit_cache(tmp_path, backend, module):
     graph = _bulk_graph(tmp_path, backend, module, 10)
     try:
-        with graph.read_view(valid_time=50) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             assert len(list(view.iter_claims_as_of(world="default"))) == 10
-        graph.assert_claim(subject="extra", predicate="memberOf", object="group0",
+        graph.epistemic.assert_claim(subject="extra", predicate="memberOf", object="group0",
                            agent="registry", polarity="positive", valid=(0, 100))
-        with graph.read_view(valid_time=50) as view:
+        with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
             found = sorted(version.logical_id for version in view.iter_claims_as_of(world="default"))
         assert len(found) == 11
     finally:

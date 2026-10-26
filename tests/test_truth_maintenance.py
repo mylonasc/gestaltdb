@@ -14,7 +14,7 @@ def graph():
 
 
 def _claim(graph, subject, predicate, object, *, agent="source", valid=(0, 100)):
-    return graph.assert_claim(
+    return graph.epistemic.assert_claim(
         subject=subject,
         predicate=predicate,
         object=object,
@@ -25,7 +25,7 @@ def _claim(graph, subject, predicate, object, *, agent="source", valid=(0, 100))
 
 
 def _copy_rule(graph, source="P", target="Q", rule_id="copy"):
-    return graph.create_rule(
+    return graph.rules.create_rule(
         rule_id,
         when=[("?subject", source, "?object")],
         then=("?subject", target, "?object"),
@@ -36,16 +36,16 @@ def test_maintenance_removes_one_support_then_retracts_after_the_final_support(g
     first = _claim(graph, "a", "P", "b", agent="first")
     second = _claim(graph, "a", "P", "b", agent="second")
     _copy_rule(graph)
-    initial = graph.maintain_truth(as_of=50)
+    initial = graph.rules.maintain(as_of=50)
     derived = initial.versions[0]
 
-    graph.retract_claim(
+    graph.epistemic.retract_claim(
         first.logical_id,
         supersedes_version_id=first.version_id,
         reason="withdrawn",
     )
-    maintained = graph.maintain_truth()
-    current = graph.get_claim_as_of(derived.logical_id, valid_time=50)
+    maintained = graph.rules.maintain()
+    current = graph.epistemic.get_claim_as_of(derived.logical_id, valid_time=50)
 
     assert isinstance(maintained, TruthMaintenanceResult)
     assert maintained.corrected_count == 1
@@ -55,35 +55,35 @@ def test_maintenance_removes_one_support_then_retracts_after_the_final_support(g
         second.version_id,
     )
 
-    graph.retract_claim(
+    graph.epistemic.retract_claim(
         second.logical_id,
         supersedes_version_id=second.version_id,
         reason="withdrawn",
     )
-    final = graph.maintain_truth()
+    final = graph.rules.maintain()
 
     assert final.corrected_count == 0
     assert final.retracted_count == 1
-    assert graph.get_claim_as_of(derived.logical_id, valid_time=50) is None
-    assert graph.maintain_truth().commit_id is None
+    assert graph.epistemic.get_claim_as_of(derived.logical_id, valid_time=50) is None
+    assert graph.rules.maintain().commit_id is None
 
 
 def test_historical_explanations_are_stable_after_support_changes(graph):
     first = _claim(graph, "a", "P", "b", agent="first")
     second = _claim(graph, "a", "P", "b", agent="second")
     rule = _copy_rule(graph)
-    original = graph.maintain_truth(as_of=50).versions[0]
+    original = graph.rules.maintain(as_of=50).versions[0]
     original_system_time = original.system_time
 
-    graph.retract_claim(first.logical_id, supersedes_version_id=first.version_id)
-    corrected = graph.maintain_truth().versions[0]
+    graph.epistemic.retract_claim(first.logical_id, supersedes_version_id=first.version_id)
+    corrected = graph.rules.maintain().versions[0]
 
-    historical = graph.explain_claim(
+    historical = graph.rules.explain(
         original.logical_id,
         valid_time=50,
         system_time=original_system_time,
     )
-    current = graph.explain_claim(original.logical_id, valid_time=50)
+    current = graph.rules.explain(original.logical_id, valid_time=50)
 
     assert isinstance(historical, ClaimExplanation)
     assert historical.root_version_id == original.version_id
@@ -99,58 +99,58 @@ def test_historical_explanations_are_stable_after_support_changes(graph):
         rule.version_id,
         second.version_id,
     }
-    assert graph.explain_claim("claim:missing", valid_time=50) is None
+    assert graph.rules.explain("claim:missing", valid_time=50) is None
 
 
 def test_maintenance_retracts_removed_segments_when_support_narrows_validity(graph):
     broad = _claim(graph, "a", "P", "b", agent="broad", valid=(0, 100))
     _claim(graph, "a", "P", "b", agent="narrow", valid=(20, 80))
     _copy_rule(graph)
-    derived = graph.maintain_truth(as_of=50).versions[0]
+    derived = graph.rules.maintain(as_of=50).versions[0]
 
-    graph.retract_claim(broad.logical_id, supersedes_version_id=broad.version_id)
-    result = graph.maintain_truth()
+    graph.epistemic.retract_claim(broad.logical_id, supersedes_version_id=broad.version_id)
+    result = graph.rules.maintain()
 
     assert result.corrected_count == 1
     assert len(result.versions) == 3
-    assert graph.get_claim_as_of(derived.logical_id, valid_time=19) is None
-    assert graph.get_claim_as_of(derived.logical_id, valid_time=20) is not None
-    assert graph.get_claim_as_of(derived.logical_id, valid_time=79) is not None
-    assert graph.get_claim_as_of(derived.logical_id, valid_time=80) is None
+    assert graph.epistemic.get_claim_as_of(derived.logical_id, valid_time=19) is None
+    assert graph.epistemic.get_claim_as_of(derived.logical_id, valid_time=20) is not None
+    assert graph.epistemic.get_claim_as_of(derived.logical_id, valid_time=79) is not None
+    assert graph.epistemic.get_claim_as_of(derived.logical_id, valid_time=80) is None
 
 
 def test_maintenance_matches_a_fresh_full_recomputation_and_collapses_cycles(graph):
     premise = _claim(graph, "a", "P", "b")
     _copy_rule(graph, "P", "Q", "p-to-q")
     _copy_rule(graph, "Q", "P", "q-to-p")
-    graph.maintain_truth(as_of=50)
+    graph.rules.maintain(as_of=50)
 
-    graph.retract_claim(premise.logical_id, supersedes_version_id=premise.version_id)
-    result = graph.maintain_truth()
+    graph.epistemic.retract_claim(premise.logical_id, supersedes_version_id=premise.version_id)
+    result = graph.rules.maintain()
 
     assert result.retracted_count == 2
-    assert list(graph.iter_claims_as_of(
+    assert list(graph.epistemic.iter_claims_as_of(
         valid_time=50, agent="gestaltdb:rules"
     )) == []
 
     fresh = GraphDB(_MetadataStore(), JSONSerializer())
     _copy_rule(fresh, "P", "Q", "p-to-q")
     _copy_rule(fresh, "Q", "P", "q-to-p")
-    assert fresh.run_rules(as_of=50).derived_count == 0
+    assert fresh.rules.run(as_of=50).derived_count == 0
 
 
 def test_rule_version_changes_incrementally_replace_conclusions(graph):
     premise = _claim(graph, "a", "P", "b")
     _copy_rule(graph, "P", "Q")
-    old = graph.maintain_truth(as_of=50).versions[0]
+    old = graph.rules.maintain(as_of=50).versions[0]
     _copy_rule(graph, "P", "R")
 
-    result = graph.maintain_truth()
+    result = graph.rules.maintain()
 
     assert result.asserted_count == 1
     assert result.retracted_count == 1
-    assert graph.get_claim_as_of(old.logical_id, valid_time=50) is None
-    current = list(graph.iter_claims_as_of(
+    assert graph.epistemic.get_claim_as_of(old.logical_id, valid_time=50) is None
+    current = list(graph.epistemic.iter_claims_as_of(
         valid_time=50, agent="gestaltdb:rules"
     ))
     assert [(item.claim.subject, item.claim.predicate, item.claim.object) for item in current] == [
@@ -167,14 +167,14 @@ def test_maintenance_limits_publish_no_partial_changes(graph):
     _claim(graph, "a", "P", "b")
     _copy_rule(graph, "P", "Q", "p-to-q")
     _copy_rule(graph, "Q", "R", "q-to-r")
-    before, _ = graph._temporal_sequence()
+    before, _ = graph.temporal.sequence()
 
     with pytest.raises(RuleEvaluationLimitError, match="max_iterations"):
-        graph.maintain_truth(as_of=50, max_iterations=1)
+        graph.rules.maintain(as_of=50, max_iterations=1)
 
-    after, _ = graph._temporal_sequence()
+    after, _ = graph.temporal.sequence()
     assert after == before
-    assert list(graph.iter_claims_as_of(
+    assert list(graph.epistemic.iter_claims_as_of(
         valid_time=50, agent="gestaltdb:rules"
     )) == []
 
@@ -182,7 +182,7 @@ def test_maintenance_limits_publish_no_partial_changes(graph):
 def test_interrupted_dependency_index_publication_resumes_idempotently(graph):
     first = _claim(graph, "a", "P", "b", valid=(0, 10))
     _copy_rule(graph)
-    graph.maintain_truth(as_of=5)
+    graph.rules.maintain(as_of=5)
     second = _claim(graph, "c", "P", "d", valid=(20, 30))
     original_put = graph.store.put_metadata
     interrupted = False
@@ -196,17 +196,17 @@ def test_interrupted_dependency_index_publication_resumes_idempotently(graph):
 
     graph.store.put_metadata = put_metadata
     with pytest.raises(RuntimeError, match="interrupted"):
-        graph.maintain_truth(as_of=25)
+        graph.rules.maintain(as_of=25)
 
-    resumed = graph.maintain_truth()
+    resumed = graph.rules.maintain()
 
     assert resumed.commit_id is None
-    assert len(list(graph.iter_claims_as_of(valid_time=5, agent="gestaltdb:rules"))) == 1
-    current = list(graph.iter_claims_as_of(valid_time=25, agent="gestaltdb:rules"))
+    assert len(list(graph.epistemic.iter_claims_as_of(valid_time=5, agent="gestaltdb:rules"))) == 1
+    current = list(graph.epistemic.iter_claims_as_of(valid_time=25, agent="gestaltdb:rules"))
     assert [(item.claim.subject, item.claim.object) for item in current] == [
         (second.claim.subject, second.claim.object)
     ]
-    assert graph.get_claim_as_of(first.logical_id, valid_time=5) is not None
+    assert graph.epistemic.get_claim_as_of(first.logical_id, valid_time=5) is not None
     assert graph.store.get_metadata(_TRUTH_MAINTENANCE_STATE_KEY) is not None
 
 
@@ -214,9 +214,9 @@ def test_explanation_bounds_terminate_recursive_derivations(graph):
     _claim(graph, "a", "P", "b")
     _copy_rule(graph, "P", "Q", "p-to-q")
     _copy_rule(graph, "Q", "P", "q-to-p")
-    derived = graph.maintain_truth(as_of=50).versions[0]
+    derived = graph.rules.maintain(as_of=50).versions[0]
 
-    explanation = graph.explain_claim(
+    explanation = graph.rules.explain(
         derived.logical_id,
         valid_time=50,
         max_depth=0,
@@ -225,4 +225,4 @@ def test_explanation_bounds_terminate_recursive_derivations(graph):
     assert explanation.truncated is True
     assert len(explanation.nodes) == 1
     with pytest.raises(ValueError, match="max_nodes"):
-        graph.explain_claim(derived.logical_id, valid_time=50, max_nodes=0)
+        graph.rules.explain(derived.logical_id, valid_time=50, max_nodes=0)

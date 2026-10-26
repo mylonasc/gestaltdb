@@ -1,15 +1,19 @@
 GestaltDB Documentation
 =======================
 
-GestaltDB combines an embedded property graph with **high-performance graph
-sampling** and **indexed property-graph filtering**. Store attributed nodes and
+GestaltDB combines an embedded property graph with **fast bulk ingestion**,
+**high-performance graph sampling**, and **indexed property-graph filtering**. Store attributed nodes and
 edges on LMDB, LevelDB, or RocksDB/PyRex; select cohorts by labels, relationship
 types, properties, and Cypher; then sample live neighborhoods or reusable
-array-native snapshots for ML training.
+array-native snapshots for ML training. Ontology and reasoning components add
+semantic classification, temporal evidence, explanations, and incremental
+maintenance of supported conclusions.
 
 Start with the quickstart if you want to create a graph and run a query. Use the
 topic pages for backend selection, serializers, Cypher syntax, ingestion,
-sampling, and benchmarks.
+sampling, and benchmarks. The :doc:`architecture` guide maps library components
+and their interfaces to application workflows, with links to the corresponding
+APIs, temporal/bitemporal features, and integration boundaries.
 
 Filter, Sample, Train
 -------------------------
@@ -40,6 +44,7 @@ Filter, Sample, Train
 
    installation
    quickstart
+   architecture
    storage-backends
    serializers
    operations
@@ -57,6 +62,7 @@ Filter, Sample, Train
    reasoning-authenticated-inferred
    reasoning-typed-execution
    reasoning-native-claims
+   reasoning-native-locator-claims
    ontology-benchmarks
    ontology-publication
    cypher
@@ -69,6 +75,8 @@ Filter, Sample, Train
    :caption: API Reference
 
    api
+   api-workflows
+   code-quality
 
 Quick Example
 -------------

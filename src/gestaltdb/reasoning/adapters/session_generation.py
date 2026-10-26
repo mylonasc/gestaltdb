@@ -162,7 +162,7 @@ def bind_session_generation(graph: GraphDB, session: ReasoningSession, *, freshn
     agents, sources = _filters(scope)
     expected_versions = {}
     expected_logical = {}
-    with graph.read_view(valid_time=instant, through_commit=session.commit_horizon) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=instant, through_commit=session.commit_horizon) as view:
         provenance = view.provenance
         if (provenance.database_id != session.database_id
                 or provenance.commit_horizon != session.commit_horizon):

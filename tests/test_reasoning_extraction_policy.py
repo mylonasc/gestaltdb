@@ -14,7 +14,7 @@ def graph(tmp_path):
     graph = GraphDB.create(tmp_path / "db", backend="lmdb", serializer="json")
     for subject, agent, source in [("a", "registry", "trusted"),
                                     ("c", "other", "untrusted"), ("e", "registry", None)]:
-        graph.assert_claim(subject=subject, predicate="p", object="b", agent=agent,
+        graph.epistemic.assert_claim(subject=subject, predicate="p", object="b", agent=agent,
                            source=source, polarity="positive", valid=(0, 100))
     try:
         yield graph
@@ -35,7 +35,7 @@ def graph(tmp_path):
     ({"agents": ["registry"], "sources": ["trusted"]}, {}, {"a"}),
 ])
 def test_effective_policy_intersects_request_and_selection(graph, request_args, selection_args, expected):
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         with PinnedBatchedClaimSource(
             view, request=ExtractionRequest(world="default", **request_args), ontology_revision="rev",
             selection=ClaimSelection(**selection_args), mapping=ClaimMapping(),
@@ -45,7 +45,7 @@ def test_effective_policy_intersects_request_and_selection(graph, request_args, 
 
 
 def test_equivalent_effective_policies_bind_the_same_context(graph):
-    with graph.read_view(valid_time=50) as view:
+    with graph.temporal.open_read_view(graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50) as view:
         contexts = []
         for request_args, selection in [({"agents": ["registry"]}, ClaimSelection()),
                                          ({}, ClaimSelection(agents=["registry"]))]:

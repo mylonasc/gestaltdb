@@ -96,6 +96,13 @@ def _graph_context(provenance, revision, mapping):
 
 @dataclass(frozen=True)
 class GraphReasoningResult:
+    """Source context and provenance alongside an ``EvaluationResult``.
+
+    Use ``result.facts`` for the closure, ``match`` for logical triples, and
+    ``sample_neighbors`` for bounded sampling of derived relations. The
+    ``PinnedGraphSource`` class example shows the complete construction flow.
+    """
+
     context: InputContext
     provenance: CurrentReadProvenance
     result: EvaluationResult
@@ -251,6 +258,31 @@ class PinnedGraphSource:
     Keep the read-view context open through evaluation. Closing this source does
     not close the view or graph. Snapshot authentication is checked before/after
     extraction; record limits do not bound snapshot digest cost or kernel work.
+
+    Examples:
+        Classify a stored node through an explicit label mapping (requires LMDB)::
+
+            >>> from tempfile import TemporaryDirectory
+            >>> from gestaltdb.graphdb import GraphDB, Node
+            >>> from gestaltdb.ontology import Ontology, SubClassOf, compile_ontology
+            >>> from gestaltdb.ontology.model import TYPE_PREDICATE
+            >>> from gestaltdb.reasoning.adapters.graph import GraphMapping, PinnedGraphSource
+            >>> from gestaltdb.reasoning.model import Fact, ReasoningLimits
+            >>> compiled = compile_ontology(Ontology("people", [SubClassOf("Employee", "Person")]))
+            >>> with TemporaryDirectory() as root:
+            ...     graph = GraphDB.create(root + "/db", backend="lmdb", serializer="json")
+            ...     try:
+            ...         graph.put_node(Node("alice", labels=["Employee"]))
+            ...         with graph.current_read_view(require_verifiable=True) as view:
+            ...             with PinnedGraphSource(view, mapping=GraphMapping(labels=(("Employee", "Employee"),))) as source:
+            ...                 result = source.evaluate(compiled, limits=ReasoningLimits())
+            ...         assert Fact("alice", TYPE_PREDICATE, "Person") in result.result.facts
+            ...     finally:
+            ...         graph.close()
+
+    Labels, properties, and edge types participate only through the supplied
+    mapping. See the ontology-graph and reasoning-current-admission guides for
+    projection rules and source-bound generation reuse.
     """
 
     def __init__(self, view: CurrentGraphReadView, *, mapping: GraphMapping,
