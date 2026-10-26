@@ -23,11 +23,13 @@ full-record native source remain unchanged; there is no automatic selection.
    with TemporaryDirectory() as root:
        graph = GraphDB.create(Path(root) / "db", backend="pyrex", serializer="json")
        try:
-           first = graph.assert_claim(subject="alice", predicate="worksFor", object="acme",
+           first = graph.epistemic.assert_claim(subject="alice", predicate="worksFor", object="acme",
                agent="registry", polarity="positive", valid=(0, 100))
-           corrected = graph.correct_claim(first.logical_id, confidence=0.9,
+           corrected = graph.epistemic.correct_claim(first.logical_id, confidence=0.9,
                supersedes_version_id=first.version_id)
-           with graph.read_view(valid_time=50) as view:
+           with graph.temporal.open_read_view(
+               graph, manifest=graph.manifest, database_id=graph.database_id, valid_time=50
+           ) as view:
                options = dict(request=ExtractionRequest("default", predicates=["worksFor"], subject="alice"),
                    ontology_revision="example-revision", selection=ClaimSelection(), mapping=ClaimMapping())
                with PinnedNativeLocatorClaimSource(view, **options,
