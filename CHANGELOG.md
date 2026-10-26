@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.14.0rc3 — reasoning correctness fixes
+
+- Preserved complete temporal conclusions when proof budgets are exhausted
+  (#393): `TemporalClosure` separates logical conclusions from bounded
+  derivations, warns with `TemporalProofTruncatedWarning`, and reports missing
+  evidence instead of silently dropping answers.
+- Made typed graph projection fail closed on identity collisions and renamed
+  source references to unambiguous JSON components (#396). Merging subjects now
+  requires an explicit `identity_collision="merge"` opt-in, and colon-bearing
+  IDs or property names cannot alias.
+- Included main's stratified aggregate proof-collector fix (#411/#412), so
+  aggregate conclusions carry witnesses during stratified evaluation.
+
 ## 0.14.0rc2 — integrated reasoning and visualization testing candidate
 
 - Added bounded typed n-ary derivation tracking and proof verification (#392),

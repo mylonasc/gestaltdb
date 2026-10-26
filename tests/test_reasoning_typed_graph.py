@@ -8,6 +8,7 @@ from gestaltdb.graphdb import Edge, GraphDB, Node
 from gestaltdb.reasoning import ReasoningError, ReasoningLimitError
 from gestaltdb.reasoning.adapters.graph import GraphMapping
 from gestaltdb.reasoning.adapters.typed_graph import (
+    TYPE_PREDICATE,
     PinnedTypedGraphSource,
     TypedEvidence,
     TypedGraphMapping,
@@ -38,10 +39,13 @@ def test_mapping_validation_rejects_malformed_fields():
     with pytest.raises(ReasoningError):
         TypedGraphMapping(labels=[("A", "B"), ("A", "C")])
     with pytest.raises(ReasoningError):
+        TypedGraphMapping(identity_collision="silent")
+    with pytest.raises(ReasoningError):
         TypedSourceLimits(max_elements_per_value=0)
     with pytest.raises(ReasoningError):
         TypedEvidence("not-a-fact", "ref")
     assert TypedGraphMapping().mapping_id != TypedGraphMapping(labels=[("P", "Person")]).mapping_id
+    assert TypedGraphMapping().mapping_id != TypedGraphMapping(identity_collision="merge").mapping_id
 
 
 def test_scalar_attributes_coerce_and_fail_closed():
@@ -68,7 +72,8 @@ def test_list_expansion_is_bounded_and_explicit():
     items = list(_typed_node_evidence(record, mapping, LIMITS))
     assert [item.fact for item in items] == [TypedFact("tag", ["n", Literal("text", "a")]),
                                              TypedFact("tag", ["n", Literal("text", "b")])]
-    assert [item.reference_id for item in items] == ["typed:node-list:n:tags:0", "typed:node-list:n:tags:1"]
+    assert [item.reference_id for item in items] == [
+        'typed:node-list:["n","tags",0]', 'typed:node-list:["n","tags",1]']
     assert list(_typed_node_evidence(record, TypedGraphMapping(node_lists=[("empty", "tag")]), LIMITS)) == []
     with pytest.raises(ReasoningError):
         list(_typed_node_evidence(record, TypedGraphMapping(node_lists=[("scalar", "tag")]), LIMITS))
@@ -97,7 +102,7 @@ def test_edge_attributes_project_nary_and_unmapped_types_fail_closed():
     assert TypedFact("tag", ["a", "b", Literal("text", "x")]) in facts
     assert TypedFact("party", ["a", "b", "c"]) in facts
     refs = {item.reference_id for item in _typed_edge_evidence(record, mapping, LIMITS)}
-    assert "typed:edge:e1" in refs and "typed:edge-attribute:e1:amount" in refs
+    assert 'typed:edge:["e1"]' in refs and 'typed:edge-attribute:["e1","amount"]' in refs
     with pytest.raises(ReasoningError):
         list(_typed_edge_evidence(record, TypedGraphMapping(
             edge_types=[("PAYS", "pays")], edge_attributes=[("junk", "j")]), LIMITS))
@@ -119,7 +124,7 @@ def test_node_identity_construction_is_deterministic_and_strict():
     assert facts[0].values[0] == "S-1"
     assert all(fact.values[0] == "S-1" for fact in facts)
     assert [item.reference_id for item in _typed_node_evidence(record, mapping, LIMITS)][0] == \
-        "typed:node-label:n1:Person"
+        'typed:node-label:["n1","Person"]'
     with pytest.raises(ReasoningError):
         list(_typed_node_evidence(node("n2", labels=["Person"], properties={}), mapping, LIMITS))
     with pytest.raises(ReasoningError):
@@ -188,6 +193,71 @@ def test_end_to_end_projection_evaluation_and_pinning(graph):
     changed = TypedGraphMapping(labels=[("Person", "Person")],
                                 node_attributes=[("name", "name")])
     assert changed.mapping_id != mapping.mapping_id
+
+
+def test_identity_collision_fails_closed_and_merge_is_explicit(tmp_path):
+    pytest.importorskip("lmdb")
+    db = GraphDB.create(tmp_path / "db", backend="lmdb", serializer="json")
+    try:
+        db.put_nodes([Node("a", labels=["Person"], properties={"key": "same", "name": "ann"}),
+                      Node("b", labels=["Person"], properties={"key": "same", "name": "bob"})])
+        mapping = TypedGraphMapping(labels=[("Person", "Person")],
+                                    node_attributes=[("name", "name")],
+                                    node_identity=[("Person", "key")])
+        with db.current_read_view(require_verifiable=True) as view:
+            with PinnedTypedGraphSource(view, mapping=mapping) as source:
+                with pytest.raises(ReasoningError, match="identity collision"):
+                    list(source.iter_evidence())
+        merged = TypedGraphMapping(labels=[("Person", "Person")],
+                                   node_attributes=[("name", "name")],
+                                   node_identity=[("Person", "key")],
+                                   identity_collision="merge")
+        with db.current_read_view(require_verifiable=True) as view:
+            with PinnedTypedGraphSource(view, mapping=merged) as source:
+                evidence = list(source.iter_evidence())
+        facts = {item.fact for item in evidence}
+        assert TypedFact(TYPE_PREDICATE, ["same", "Person"]) in facts
+        assert TypedFact("name", ["same", Literal("text", "ann")]) in facts
+        assert TypedFact("name", ["same", Literal("text", "bob")]) in facts
+        # Merge unifies subjects; projected assertions still name their records.
+        refs = [item.reference_id for item in evidence]
+        assert len(refs) == len(set(refs))
+        assert 'typed:node-label:["a","Person"]' in refs
+        assert 'typed:node-label:["b","Person"]' in refs
+        assert mapping.mapping_id != merged.mapping_id
+    finally:
+        db.close()
+
+
+def test_identity_collision_with_unchanged_record_id_fails_closed(tmp_path):
+    pytest.importorskip("lmdb")
+    db = GraphDB.create(tmp_path / "db", backend="lmdb", serializer="json")
+    try:
+        db.put_nodes([Node("same"), Node("n2", labels=["Person"], properties={"key": "same"})])
+        mapping = TypedGraphMapping(labels=[("Person", "Person")],
+                                    node_identity=[("Person", "key")])
+        with db.current_read_view(require_verifiable=True) as view:
+            with PinnedTypedGraphSource(view, mapping=mapping) as source:
+                with pytest.raises(ReasoningError, match="identity collision"):
+                    list(source.iter_evidence())
+    finally:
+        db.close()
+
+
+def test_source_references_separate_colon_bearing_components(tmp_path):
+    pytest.importorskip("lmdb")
+    db = GraphDB.create(tmp_path / "db", backend="lmdb", serializer="json")
+    try:
+        db.put_nodes([Node("a:b", properties={"c": 1}), Node("a", properties={"b:c": 2})])
+        mapping = TypedGraphMapping(node_attributes=[("c", "p"), ("b:c", "q")])
+        with db.current_read_view(require_verifiable=True) as view:
+            with PinnedTypedGraphSource(view, mapping=mapping) as source:
+                evidence = list(source.iter_evidence())
+        assert len(evidence) == 2
+        assert {item.reference_id for item in evidence} == {
+            'typed:node-attribute:["a:b","c"]', 'typed:node-attribute:["a","b:c"]'}
+    finally:
+        db.close()
 
 
 def test_closed_source_is_rejected(graph):
