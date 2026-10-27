@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.15.0 — native Python typing
+
+- Added native service, entity, storage, temporal, sampling and Cypher typing
+  contracts, packaged `py.typed`, dtype-aware arrays, structured dictionary
+  records and focused read/write capability protocols (#410).
+- Added positive/negative static consumer fixtures, per-module typing ratchets
+  and a measured precision badge. Arbitrary properties and optional native
+  boundaries remain intentionally dynamic; whole-library mypy is not yet clean.
+- Preserved runtime behavior in the final annotation slices and retained the
+  reasoning correctness fixes from `0.14.0rc3` during integration.
+
 ## 0.14.0rc3 — reasoning correctness fixes
 
 - Preserved complete temporal conclusions when proof budgets are exhausted

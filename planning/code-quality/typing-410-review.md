@@ -6,6 +6,23 @@ opportunities below are historical; implementation results follow later.
 
 ## Wrap-up: parser contracts and final checkpoint
 
+### Main integration and 0.15.0 merge checkpoint
+
+Integrated `main` at `fb69bef`, preserving rc3's identity-collision policy,
+unambiguous JSON evidence references and temporal proof-budget correctness
+fixes. Resolved typed-graph overlap by retaining tuple-based fact inputs and
+main's new reference encoding. Package metadata and lockfile now use **0.15.0**.
+
+After integration: **24,464 precise / 32,474 eligible lines = 75.3341%**;
+1,334 imprecise, 6,676 Any and 402 unanalyzed lines. Mypy reports **81 errors
+in 20 files** (159 checked), versus the pre-integration 71 in 19; recent main
+changes add temporal-closure/range-admission diagnostics. These remain tracked
+gaps, not suppressed or evidence of a clean whole-library check.
+
+Validation: **3,509 passed / 140 skipped** with PyArrow; Ruff, module-size and
+documentation drift pass. Wheel and sdist build successfully with `py.typed`.
+This prepares a version bump only; no release or package upload is performed.
+
 Typing work is paused after the parser slice at the user's request. Relative to
 the original review baseline, precision rose from **61.7248% to 75.3423%** and
 diagnostics fell from **107 in 29 files to 71 in 19 files**. This is incremental
