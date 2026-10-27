@@ -4,6 +4,8 @@
 
 ## 0.16.0 — generation-pinned reasoning-aware Cypher
 
+- Raised the optional MessagePack minimum to 1.2.3 and locked 1.2.4 to address
+  CVE-2026-114613 (map-deserialization memory-leak denial of service).
 - Added explicit generation-pinned, read-only Cypher over selected logical
   inference facts via `ReasoningQueryView` (#395). Supports node/one-hop
   patterns, explicit asserted-only/plus-inferred modes, source freshness,
