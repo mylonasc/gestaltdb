@@ -151,3 +151,48 @@ implicitly expand hierarchies.
        WalkTransition(1, 0, relation=1, direction="in", target_types=[0]),
    ]))
    assert policy.schema.initial_state == 0
+
+RWS-06: chronological interval/event walks
+----------------------------------------
+
+``WalkPolicy(chronology=TemporalWalkPolicy(...))`` requires a temporal snapshot.
+It is separate from ordinary point/window eligibility filters, which remain in
+force. ``order="nondecreasing"`` (default) or ``"nonincreasing"`` permits equal
+times. ``time_selection="interval"`` chooses the earliest feasible microsecond
+forward or the latest backward, inside edge validity AND the query window/point.
+Backward interval selection requires an explicit ``initial_time`` because an
+open-ended interval has no latest instant. ``time_selection="valid_start"``
+instead treats the original edge-version valid start as an event; if that event
+falls outside the query window it is excluded even if the interval overlaps.
+This is deliberately not a silent equivalence between intervals and events.
+
+``initial_time`` and ``reference_time`` accept UTC instants, aware datetimes or
+integer epoch microseconds. ``max_gap_us`` limits absolute gaps from the current
+clock, including the first step when an initial time is supplied. Half-open
+validity excludes the end; backward latest selection uses end minus one
+microsecond. Open ends impose no finite upper bound. Restart resets chronology
+to the initial clock, and starts a new chronological segment.
+
+Optional ``recency_half_life_us`` requires ``reference_time`` and multiplies
+probabilities by 2 ** (-abs(time - reference) / half-life). It favors proximity
+to that reference, not an implicit no-future rule. Relative scaling avoids total
+underflow; sufficiently remote candidates may underflow to zero. Eligibility,
+schema restrictions and avoidance are never relaxed to satisfy chronology.
+Only edge-version validity is enforced; node-history availability is not an
+additional implicit constraint.
+
+The returned ``TemporalWalkBatch`` extends ordinary walk arrays with aligned
+``transition_times_us``, ``transition_time_mask`` and ``edge_version_ids``.
+Padding/restarts have a false mask and None version ID; zero is a valid epoch
+time. ``source_provenance`` is copied from the loaded snapshot, not independently
+reauthenticated during sampling; existing snapshot hydration/source verification
+guarantees still apply. Legacy non-chronological batch formats are unchanged.
+
+.. code-block:: python
+
+   from gestaltdb.sampling import TemporalWalkPolicy, WalkPolicy
+
+   policy = WalkPolicy(chronology=TemporalWalkPolicy(
+       initial_time=0, max_gap_us=1000000, time_selection="interval",
+   ))
+   assert policy.chronology.order == "nondecreasing"

@@ -59,6 +59,14 @@ source/target types and weights. Unknown compact IDs fail closed. State/metapath
 progress resets on restart. Overlapping arcs are distinct (arc, edge) choices;
 global relation filters always intersect schema restrictions.
 
+`WalkPolicy(chronology=TemporalWalkPolicy(...))` requires temporal snapshots and
+enforces nondecreasing/nonincreasing chosen traversal times, optional maximum
+gaps and explicit-reference recency weights. Interval-time and valid-start event
+selection are distinct; backward interval selection requires an initial clock.
+`TemporalWalkBatch` carries masked times, edge-version IDs and copied snapshot
+provenance. Restarts reset the clock; ordinary point/window filters alone still
+do not imply chronology. See `docs/random-walks.rst` for interval boundaries.
+
 ### Filter Once, Sample Repeatedly
 
 Pass `node_filter`/`edge_filter` to `graph.build_sampler_snapshot` to define an

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import deque
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -11,6 +12,7 @@ import numpy as np
 from .validation import _validate_count
 from .walks import RandomWalkBatch
 from .walk_schema import WalkSchema
+from .walk_time import TemporalWalkBatch, TemporalWalkPolicy
 
 if TYPE_CHECKING:
     from .engine import SamplerEngine
@@ -31,6 +33,7 @@ class WalkPolicy:
     avoidance_exhaustion: str = "terminate"
     strategy: str = "uniform"
     schema: WalkSchema | None = None
+    chronology: TemporalWalkPolicy | None = None
 
     def __post_init__(self):
         if not isinstance(self.non_backtracking, bool):
@@ -42,6 +45,8 @@ class WalkPolicy:
             raise ValueError("strategy must be uniform or weighted")
         if self.schema is not None and not isinstance(self.schema, WalkSchema):
             raise TypeError("schema must be a WalkSchema")
+        if self.chronology is not None and not isinstance(self.chronology, TemporalWalkPolicy):
+            raise TypeError("chronology must be a TemporalWalkPolicy")
 
 
 def sample_policy_walks(
@@ -63,14 +68,19 @@ def sample_policy_walks(
     )
     schema = policy.schema or WalkSchema()
     schema.validate_snapshot(engine)
+    chronology = policy.chronology
+    if chronology is not None and not engine.snapshot.temporal:
+        raise ValueError("chronological walks require a temporal snapshot")
     nodes = np.full((starts.size, walk_length + 1), -1, dtype=np.int64)
     edges = np.full((starts.size, walk_length), -1, dtype=np.int64)
     rels = np.full_like(edges, -1)
     lengths = np.zeros(starts.size, dtype=np.int64)
+    times = np.zeros_like(edges) if chronology is not None else None
     nodes[:, 0] = starts
     for row, start in enumerate(starts.tolist()):
         current, previous = start, None
         state, position = schema.initial_state, 0
+        clock = chronology.initial_time if chronology is not None else None
         history = deque([start], maxlen=max(2, policy.avoid_recent))
         for step in range(walk_length):
             restart = restart_probability > 0 and engine.rng.random() < restart_probability
@@ -78,6 +88,16 @@ def sample_policy_walks(
                 candidates, endpoints, next_states, schema_weights = schema.candidates(
                     engine, current, state, position, direction, relation_filter, temporal, window_policy,
                 )
+                candidate_times = None
+                if chronology is not None:
+                    feasible, candidate_times, time_weights = chronology.candidates(
+                        engine.snapshot, candidates, clock, temporal,
+                    )
+                    candidates, endpoints, next_states, schema_weights, candidate_times = (
+                        values[feasible] for values in (
+                            candidates, endpoints, next_states, schema_weights * time_weights, candidate_times
+                        )
+                    )
                 action = dead_end
                 if candidates.size:
                     forbidden = set(list(history)[-policy.avoid_recent:]) if policy.avoid_recent else set()
@@ -89,6 +109,8 @@ def sample_policy_walks(
                         endpoints, next_states, schema_weights = (
                             values[allowed] for values in (endpoints, next_states, schema_weights)
                         )
+                        if candidate_times is not None:
+                            candidate_times = candidate_times[allowed]
                     elif policy.avoidance_exhaustion != "relax":
                         candidates = candidates[:0]
                         action = policy.avoidance_exhaustion
@@ -98,12 +120,15 @@ def sample_policy_walks(
                         static = engine.snapshot.edge_weights[candidates]
                         weights = weights * (static / (float(static.max()) or 1))
                     # Keep the default uniform RNG path compatible with legacy walks.
-                    if policy.schema is None and policy.strategy == "uniform":
+                    if policy.schema is None and chronology is None and policy.strategy == "uniform":
                         weights = None
                     chosen = int(engine._choose_candidates(np.arange(candidates.size), 1, replace=False, weights=weights)[0])
                     edge = int(candidates[chosen])
                     previous, current = current, int(endpoints[chosen])
                     state, position = int(next_states[chosen]), position + 1
+                    if chronology is not None:
+                        clock = int(candidate_times[chosen])
+                        times[row, step] = clock
                     history.append(current)
                     edges[row, step] = edge
                     rels[row, step] = int(engine.snapshot.rel_int[edge])
@@ -114,8 +139,17 @@ def sample_policy_walks(
             if restart:
                 current, previous = start, None
                 state, position = schema.initial_state, 0
+                clock = chronology.initial_time if chronology is not None else None
                 history.clear()
                 history.append(start)
             nodes[row, step + 1] = current
             lengths[row] = step + 1
+    if chronology is not None:
+        versions = np.full(edges.shape, None, dtype=object)
+        mask = edges >= 0
+        versions[mask] = engine.snapshot.edge_version_ids[edges[mask]]
+        return TemporalWalkBatch(
+            nodes, edges, rels, lengths, times, mask, versions,
+            deepcopy(engine.snapshot.metadata.get("source_provenance")),
+        )
     return RandomWalkBatch(nodes, edges, rels, lengths)
