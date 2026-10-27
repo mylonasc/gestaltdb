@@ -1,6 +1,7 @@
 # GestaltDB
 
 ![Coverage](https://raw.githubusercontent.com/mylonasc/gestaltdb/refs/heads/main/assets/coverage_badge.svg)
+![Typing](https://raw.githubusercontent.com/mylonasc/gestaltdb/refs/heads/main/assets/typing_badge.svg)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mylonasc/gestaltdb/badge)](https://scorecard.dev/viewer/?uri=github.com/mylonasc/gestaltdb)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://mylonasc.github.io/gestaltdb/)
 
@@ -12,12 +13,11 @@ Ontology and reasoning components add semantic classification, temporal evidence
 
 Documentation: https://mylonasc.github.io/gestaltdb/
 
-**Release status:** `0.14.0rc3` is the testing release candidate covering the
-GraphDB service decomposition (#388), typed/temporal reasoning extensions,
-explicit historical native locator admission, and reasoning correctness fixes
-for temporal proof budgets (#393) and typed projection identity/references
-(#396). See the [testing guide](docs/reasoning-testing.rst) for compatibility
-boundaries.
+**Development version:** `0.15.0` adds native Python typing across public
+services, entities, storage, sampling, temporal APIs and Cypher (#410), building
+on the `0.14.0rc3` reasoning correctness fixes. Typing remains incremental, not
+whole-library strict coverage. See the [testing guide](docs/reasoning-testing.rst)
+for compatibility boundaries.
 
 ## Components and Applications
 

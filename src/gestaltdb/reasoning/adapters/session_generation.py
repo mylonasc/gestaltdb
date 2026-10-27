@@ -60,7 +60,7 @@ def catalog_for_typed_program(program: GenericProgram) -> RuleCatalog:
     _check_supported(program)
     entries = []
     for rule in program.rules:
-        digest = GenericProgram([rule]).digest
+        digest = GenericProgram((rule,)).digest
         entries.append(CatalogEntry(rule.rule_id, digest, digest, 1))
     return RuleCatalog(tuple(entries))
 
@@ -112,6 +112,8 @@ class SessionGenerationBinding:
         if not isinstance(self.source_binding, ClaimGenerationBinding) or not isinstance(self.scope, SessionScope):
             raise ReasoningError("ClaimGenerationBinding and SessionScope required")
         identity = self.identity
+        if not isinstance(identity.source, TemporalSourceIdentity):
+            raise ProvenanceMismatchError("typed session source must be a temporal point source")
         if (identity.semantics_profile != TYPED_SESSION_PROFILE
                 or identity.dictionary_id != TYPED_SESSION_DICTIONARY
                 or identity.source.valid_time_us != self.scope.valid_time_us

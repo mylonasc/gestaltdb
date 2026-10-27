@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import builtins
 import hashlib
 import json
 import math
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
-from typing import Mapping
+from typing import Mapping, cast
 
 from .versioning import TemporalVersionError, canonical_json_bytes
 
@@ -110,13 +111,13 @@ class Claim:
 
     subject: str
     predicate: str
-    object: object
+    object: builtins.object
     polarity: ClaimPolarity | str
     agent: str
     source: str | None = None
     confidence: float | None = None
     world: str = "default"
-    provenance: Mapping[str, object] = field(default_factory=dict)
+    provenance: Mapping[str, builtins.object] = field(default_factory=dict)
     object_kind: ClaimObjectKind | str = ClaimObjectKind.ENTITY
     statement_id: str = field(init=False)
     claim_id: str = field(init=False)
@@ -136,7 +137,7 @@ class Claim:
         except (TypeError, ValueError) as exc:
             raise TemporalVersionError("claim object_kind must be 'entity' or 'literal'") from exc
         if object_kind is ClaimObjectKind.ENTITY:
-            claim_object = _nonempty_text(self.object, "entity object")
+            claim_object: builtins.object = _nonempty_text(self.object, "entity object")
         else:
             claim_object = _normalized_json(self.object, "literal object")
         confidence = self.confidence
@@ -159,20 +160,20 @@ class Claim:
             "source": source,
             "world": world,
         })
-        object.__setattr__(self, "subject", subject)
-        object.__setattr__(self, "predicate", predicate)
-        object.__setattr__(self, "object", claim_object)
-        object.__setattr__(self, "polarity", polarity)
-        object.__setattr__(self, "agent", agent)
-        object.__setattr__(self, "source", source)
-        object.__setattr__(self, "confidence", confidence)
-        object.__setattr__(self, "world", world)
-        object.__setattr__(self, "provenance", provenance)
-        object.__setattr__(self, "object_kind", object_kind)
-        object.__setattr__(self, "statement_id", statement_id)
-        object.__setattr__(self, "claim_id", claim_id)
+        builtins.object.__setattr__(self, "subject", subject)
+        builtins.object.__setattr__(self, "predicate", predicate)
+        builtins.object.__setattr__(self, "object", claim_object)
+        builtins.object.__setattr__(self, "polarity", polarity)
+        builtins.object.__setattr__(self, "agent", agent)
+        builtins.object.__setattr__(self, "source", source)
+        builtins.object.__setattr__(self, "confidence", confidence)
+        builtins.object.__setattr__(self, "world", world)
+        builtins.object.__setattr__(self, "provenance", provenance)
+        builtins.object.__setattr__(self, "object_kind", object_kind)
+        builtins.object.__setattr__(self, "statement_id", statement_id)
+        builtins.object.__setattr__(self, "claim_id", claim_id)
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(self) -> dict[str, builtins.object]:
         """Return the canonical JSON-compatible claim payload."""
         return {
             "claim_id": self.claim_id,
@@ -180,8 +181,8 @@ class Claim:
             "subject": self.subject,
             "predicate": self.predicate,
             "object": _thaw_json(self.object),
-            "object_kind": self.object_kind.value,
-            "polarity": self.polarity.value,
+            "object_kind": self.object_kind.value if isinstance(self.object_kind, ClaimObjectKind) else self.object_kind,
+            "polarity": self.polarity.value if isinstance(self.polarity, ClaimPolarity) else self.polarity,
             "agent": self.agent,
             "source": self.source,
             "confidence": self.confidence,
@@ -190,22 +191,22 @@ class Claim:
         }
 
     @classmethod
-    def from_dict(cls, value: Mapping[str, object]) -> "Claim":
+    def from_dict(cls, value: Mapping[str, builtins.object]) -> "Claim":
         """Decode and authenticate a canonical claim payload."""
         if not isinstance(value, Mapping):
             raise TemporalVersionError("claim payload must be an object")
         try:
             claim = cls(
-                subject=value["subject"],
-                predicate=value["predicate"],
+                subject=cast(str, value["subject"]),
+                predicate=cast(str, value["predicate"]),
                 object=value["object"],
-                object_kind=value["object_kind"],
-                polarity=value["polarity"],
-                agent=value["agent"],
-                source=value.get("source"),
-                confidence=value.get("confidence"),
-                world=value["world"],
-                provenance=value.get("provenance", {}),
+                object_kind=cast("ClaimObjectKind | str", value["object_kind"]),
+                polarity=cast("ClaimPolarity | str", value["polarity"]),
+                agent=cast(str, value["agent"]),
+                source=cast("str | None", value.get("source")),
+                confidence=cast("float | None", value.get("confidence")),
+                world=cast(str, value["world"]),
+                provenance=cast(Mapping[str, builtins.object], value.get("provenance", {})),
             )
         except KeyError as exc:
             raise TemporalVersionError("claim payload is incomplete") from exc

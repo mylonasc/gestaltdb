@@ -34,6 +34,12 @@ html_title = "GestaltDB"
 html_static_path = ["_static"]
 
 autodoc_typehints = "description"
+# Keep dtype aliases readable; expanding numpy.str_ into prose creates an
+# unintended reStructuredText reference to "numpy.str" under strict builds.
+autodoc_type_aliases = {
+    name: f"gestaltdb.sampling._arrays.{name}"
+    for name in ("Array", "IntArray", "FloatArray", "BoolArray", "StringArray", "TypedArray")
+}
 autosummary_generate = True
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False

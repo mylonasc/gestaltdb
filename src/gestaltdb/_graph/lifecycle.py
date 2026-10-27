@@ -13,7 +13,7 @@ import json
 import uuid
 from contextlib import nullcontext
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from ..kvstores import KVStore
@@ -81,30 +81,12 @@ def initialize_database_id_locked(store: KVStore, store_path: Path | None,
         store.put_metadata(database_id_key, candidate.encode("ascii"))
         payload = store.get_metadata(database_id_key)
     try:
-        value = str(uuid.UUID(payload.decode("ascii")))
+        value = str(uuid.UUID(cast(bytes, payload).decode("ascii")))
     except (AttributeError, UnicodeDecodeError, ValueError) as exc:
         raise ValueError("invalid persisted database identity") from exc
     if expected is not None and value != expected:
         raise ValueError("persisted database identity does not match root manifest")
     return value
-
-
-def backend_class(name: str):
-    """Return the backend store class for a manifest name."""
-    registry = backend_registry()
-    if name not in registry:
-        allowed = ", ".join(sorted(registry))
-        raise ValueError(f"unknown GestaltDB backend '{name}'. Expected one of: {allowed}")
-    return registry[name]
-
-
-def serializer_class(name: str):
-    """Return the serializer class for a manifest name."""
-    registry = serializer_registry()
-    if name not in registry:
-        allowed = ", ".join(sorted(registry))
-        raise ValueError(f"unknown GestaltDB serializer '{name}'. Expected one of: {allowed}")
-    return registry[name]
 
 
 def manifest_from_current(store, *, backend_name, serializer_name, database_id,

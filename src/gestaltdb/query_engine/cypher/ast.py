@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal, Union
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,7 +32,7 @@ class SourceSpan:
 class Query:
     """Canonical Cypher query represented as an ordered clause sequence."""
 
-    clauses: tuple[object, ...]
+    clauses: tuple[Clause, ...]
     source: str
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
 
@@ -50,8 +51,8 @@ class MatchClause:
 class TemporalQualifier:
     """One query-wide valid-time or system-time ``AS OF`` expression."""
 
-    kind: str
-    expression: object
+    kind: Literal["valid", "system"]
+    expression: Expression
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
 
 
@@ -63,7 +64,7 @@ class PathSelector:
     set) or ``"all"`` (every path at the minimal matching length).
     """
 
-    mode: str
+    mode: Literal["any", "all"]
     limit: int | None = None
 
 
@@ -81,7 +82,7 @@ class OptionalMatchClause:
 class UnwindClause:
     """One ``UNWIND <expression> AS <variable>`` list-to-rows expansion."""
 
-    expression: object
+    expression: Expression
     variable: str
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
 
@@ -92,7 +93,7 @@ class SetProperty:
 
     variable: str
     property_name: str
-    expression: object
+    expression: Expression
 
 
 @dataclass(frozen=True)
@@ -108,7 +109,7 @@ class SetMerge:
     """A ``SET n += <map>`` item merging properties."""
 
     variable: str
-    expression: object
+    expression: Expression
 
 
 @dataclass(frozen=True)
@@ -116,7 +117,7 @@ class SetReplace:
     """A ``SET n = <map>`` item replacing all properties."""
 
     variable: str
-    expression: object
+    expression: Expression
 
 
 @dataclass(frozen=True)
@@ -147,7 +148,7 @@ class CreateClause:
 class SetClause:
     """One ``SET`` with comma-separated mutation items."""
 
-    items: tuple[object, ...]
+    items: tuple[SetItem, ...]
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
 
 
@@ -155,7 +156,7 @@ class SetClause:
 class RemoveClause:
     """One ``REMOVE`` with comma-separated removal items."""
 
-    items: tuple[object, ...]
+    items: tuple[RemoveItem, ...]
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
 
 
@@ -163,7 +164,7 @@ class RemoveClause:
 class DeleteClause:
     """One ``DELETE`` or ``DETACH DELETE`` over entity expressions."""
 
-    expressions: tuple[object, ...]
+    expressions: tuple[Expression, ...]
     detach: bool = False
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
 
@@ -173,8 +174,8 @@ class MergeClause:
     """One ``MERGE`` matching a pattern or creating it, with ``ON`` actions."""
 
     patterns: tuple[PathPatternClause, ...]
-    on_create: tuple[object, ...] = ()
-    on_match: tuple[object, ...] = ()
+    on_create: tuple[SetItem, ...] = ()
+    on_match: tuple[SetItem, ...] = ()
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
 
 
@@ -183,8 +184,8 @@ class ForeachClause:
     """One ``FOREACH (x IN list | ...)`` write-only loop over body clauses."""
 
     variable: str
-    iterable: object
-    body: tuple[object, ...]
+    iterable: Expression
+    body: tuple[Clause, ...]
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
 
 
@@ -194,7 +195,7 @@ class CreateConstraint:
 
     label: str
     property_name: str
-    kind: str
+    kind: Literal["unique", "exists"]
     name: str | None = None
 
 
@@ -247,8 +248,8 @@ class PathValue:
     functions) needs it without import cycles.
     """
 
-    nodes: tuple
-    edges: tuple
+    nodes: tuple[object, ...]
+    edges: tuple[object, ...]
 
     @property
     def length(self) -> int:
@@ -260,7 +261,7 @@ class PathValue:
 class WhereClause:
     """A filter in its textual position in the query."""
 
-    expression: object
+    expression: Expression
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
 
 
@@ -276,7 +277,7 @@ class FunctionCall:
     """A function call such as ``count(*)`` or ``collect(n.value)``."""
 
     name: str
-    arguments: tuple[object, ...] = ()
+    arguments: tuple[Expression, ...] = ()
     distinct: bool = False
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
 
@@ -285,7 +286,7 @@ class FunctionCall:
 class ProjectionItem:
     """One projection expression and its optional output alias."""
 
-    expression: object
+    expression: Expression
     alias: str | None = None
     span: SourceSpan | None = field(default=None, compare=False, repr=False)
 
@@ -350,24 +351,24 @@ class Variable:
 class ComparisonExpression:
     """Binary comparison expression for the current Cypher subset."""
 
-    left: object
+    left: Expression
     operator: str
-    right: object
+    right: Expression
 
 
 @dataclass(frozen=True)
 class InExpression:
     """Membership predicate, such as ``n.kind IN ["drug"]``."""
 
-    left: object
-    values: object
+    left: Expression
+    values: Expression
 
 
 @dataclass(frozen=True)
 class NullPredicate:
     """Null check predicate."""
 
-    expression: object
+    expression: Expression
     negated: bool = False
 
 
@@ -375,46 +376,46 @@ class NullPredicate:
 class AndExpression:
     """Conjunction of boolean expressions."""
 
-    expressions: tuple[object, ...]
+    expressions: tuple[Expression, ...]
 
 
 @dataclass(frozen=True)
 class OrExpression:
     """Disjunction of boolean expressions."""
 
-    expressions: tuple[object, ...]
+    expressions: tuple[Expression, ...]
 
 
 @dataclass(frozen=True)
 class XorExpression:
     """Exclusive disjunction of boolean expressions."""
 
-    expressions: tuple[object, ...]
+    expressions: tuple[Expression, ...]
 
 
 @dataclass(frozen=True)
 class NotExpression:
     """Boolean negation."""
 
-    expression: object
+    expression: Expression
 
 
 @dataclass(frozen=True)
 class StringPredicate:
     """Cypher string matching predicate."""
 
-    left: object
+    left: Expression
     operator: str
-    right: object
+    right: Expression
 
 
 @dataclass(frozen=True)
 class ArithmeticExpression:
     """Binary arithmetic expression."""
 
-    left: object
+    left: Expression
     operator: str
-    right: object
+    right: Expression
 
 
 @dataclass(frozen=True)
@@ -422,21 +423,21 @@ class UnaryExpression:
     """Unary arithmetic expression."""
 
     operator: str
-    expression: object
+    expression: Expression
 
 
 @dataclass(frozen=True)
 class ListExpression:
     """List literal containing one or more non-literal expressions."""
 
-    items: tuple[object, ...]
+    items: tuple[Expression, ...]
 
 
 @dataclass(frozen=True)
 class MapExpression:
     """Map literal containing one or more non-literal expressions."""
 
-    items: tuple[tuple[str, object], ...]
+    items: tuple[tuple[str, Expression], ...]
 
 
 @dataclass(frozen=True)
@@ -449,26 +450,26 @@ class CaseExpression:
     value (simple). ``else_value`` is ``None`` when no ``ELSE`` is present.
     """
 
-    whens: tuple[tuple[object, object], ...]
-    else_value: object = None
-    operand: object | None = None
+    whens: tuple[tuple[Expression, Expression], ...]
+    else_value: Expression | None = None
+    operand: Expression | None = None
 
 
 @dataclass(frozen=True)
 class SubscriptExpression:
     """Dynamic element access such as ``xs[0]``, ``m[key]`` or ``n[$prop]``."""
 
-    target: object
-    index: object
+    target: Expression
+    index: Expression
 
 
 @dataclass(frozen=True)
 class SliceExpression:
     """List slicing such as ``xs[1..3]``; ``start``/``end`` may be ``None``."""
 
-    target: object
-    start: object | None = None
-    end: object | None = None
+    target: Expression
+    start: Expression | None = None
+    end: Expression | None = None
 
 
 @dataclass(frozen=True)
@@ -476,9 +477,9 @@ class ListComprehension:
     """A list comprehension such as ``[x IN xs WHERE p | f(x)]``."""
 
     variable: str
-    iterable: object
-    where: object | None = None
-    projection: object | None = None
+    iterable: Expression
+    where: Expression | None = None
+    projection: Expression | None = None
 
 
 @dataclass(frozen=True)
@@ -486,10 +487,10 @@ class ReduceExpression:
     """A reduction such as ``reduce(acc = 0, x IN xs | acc + x)``."""
 
     accumulator: str
-    initial: object
+    initial: Expression
     variable: str
-    iterable: object
-    expression: object
+    iterable: Expression
+    expression: Expression
 
 
 @dataclass(frozen=True)
@@ -501,7 +502,7 @@ class MapProjectionExpression:
     """
 
     variable: str
-    items: tuple[tuple, ...]
+    items: tuple[MapProjectionPart, ...]
 
 
 @dataclass(frozen=True)
@@ -510,22 +511,22 @@ class QuantifiedPredicate:
 
     function: str
     variable: str
-    iterable: object
-    where: object
+    iterable: Expression
+    where: Expression
 
 
 @dataclass(frozen=True)
 class ExistsExpression:
     """An ``exists(n.property)`` existence check."""
 
-    expression: object
+    expression: Expression
 
 
 @dataclass(frozen=True)
 class PropertyAccessExpression:
     """Property access on a computed value, such as ``startNode(r).name``."""
 
-    expression: object
+    expression: Expression
     property_name: str
 
 
@@ -548,7 +549,7 @@ class OrderItem:
 
     expression: str
     descending: bool = False
-    expression_ast: object | None = None
+    expression_ast: Expression | None = None
 
 
 @dataclass(frozen=True)
@@ -558,7 +559,7 @@ class TraversalHop:
     rel_var: str | None
     edge_type: str
     target_var: str
-    direction: str = "out"
+    direction: Literal["out", "in", "any"] = "out"
     edge_types: tuple[str, ...] = ()
 
 
@@ -586,7 +587,7 @@ class PatternHop:
     rel_var: str | None
     edge_types: tuple[str, ...]
     target: NodePattern
-    direction: str = "out"
+    direction: Literal["out", "in", "any"] = "out"
     properties: tuple[tuple[str, object], ...] = ()
     min_length: int = 1
     max_length: int | None = 1
@@ -614,12 +615,12 @@ class MatchQuery:
     hops: tuple[TraversalHop, ...]
     returns: tuple[str, ...]
     limit: int | Parameter | None = None
-    where: object | None = None
+    where: Expression | None = None
     projections: tuple[str, ...] = ()
     order_by: tuple[OrderItem, ...] = ()
     skip: int | Parameter | None = None
     distinct: bool = False
-    projection_expressions: tuple[object, ...] = ()
+    projection_expressions: tuple[Expression, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -642,7 +643,7 @@ class RelationshipPatternClause:
     rel_var: str | None
     edge_type: str
     target_var: str
-    direction: str = "out"
+    direction: Literal["out", "in", "any"] = "out"
     edge_types: tuple[str, ...] = ()
 
 
@@ -659,15 +660,15 @@ class AnchoredPatternClause:
 class MultiMatchQuery:
     """Parsed query containing multiple ``MATCH`` clauses."""
 
-    clauses: tuple[object, ...]
+    clauses: tuple[NodePatternClause | RelationshipPatternClause | AnchoredPatternClause | PathPatternClause, ...]
     returns: tuple[str, ...]
-    where: object | None = None
+    where: Expression | None = None
     projections: tuple[str, ...] = ()
     order_by: tuple[OrderItem, ...] = ()
     skip: int | Parameter | None = None
     limit: int | Parameter | None = None
     distinct: bool = False
-    projection_expressions: tuple[object, ...] = ()
+    projection_expressions: tuple[Expression, ...] = ()
     match_group_ids: tuple[int, ...] = ()
 
 
@@ -705,14 +706,14 @@ class NodeScanQuery:
     property_value: object
     returns: tuple[str, ...]
     limit: int | Parameter | None = None
-    where: object | None = None
+    where: Expression | None = None
     labels: tuple[str, ...] = ()
     projections: tuple[str, ...] = ()
     order_by: tuple[OrderItem, ...] = ()
     skip: int | Parameter | None = None
     distinct: bool = False
     properties: tuple[tuple[str, object], ...] = ()
-    projection_expressions: tuple[object, ...] = ()
+    projection_expressions: tuple[Expression, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -724,12 +725,76 @@ class RelationshipScanQuery:
     edge_type: str
     target_var: str
     returns: tuple[str, ...]
-    direction: str = "out"
+    direction: Literal["out", "in", "any"] = "out"
     edge_types: tuple[str, ...] = ()
-    where: object | None = None
+    where: Expression | None = None
     projections: tuple[str, ...] = ()
     order_by: tuple[OrderItem, ...] = ()
     skip: int | Parameter | None = None
     limit: int | Parameter | None = None
     distinct: bool = False
-    projection_expressions: tuple[object, ...] = ()
+    projection_expressions: tuple[Expression, ...] = ()
+
+
+ScalarValue = Union[str, int, float, bool, None]
+"""Inline literal that may appear directly in an expression position."""
+
+Expression = Union[
+    Parameter,
+    PropertyRef,
+    Variable,
+    FunctionCall,
+    ComparisonExpression,
+    InExpression,
+    NullPredicate,
+    AndExpression,
+    OrExpression,
+    XorExpression,
+    NotExpression,
+    StringPredicate,
+    ArithmeticExpression,
+    UnaryExpression,
+    ListExpression,
+    MapExpression,
+    CaseExpression,
+    SubscriptExpression,
+    SliceExpression,
+    ListComprehension,
+    ReduceExpression,
+    MapProjectionExpression,
+    QuantifiedPredicate,
+    ExistsExpression,
+    PropertyAccessExpression,
+    ShortestPathExpression,
+    ScalarValue, list["Expression"], dict[str, "Expression"],
+    Wildcard,
+]
+"""Anything that may appear where a Cypher value expression is expected.
+
+Structured nodes are the parsed AST; ``ScalarValue`` covers inline literals
+the parser leaves as plain Python values. Property-map values stay ``object`` because temporal scalars may appear there.
+"""
+
+MapProjectionPart = Union[tuple[Literal["all"]], tuple[Literal["property"], str], tuple[Literal["alias"], str, Expression]]
+SetItem = Union[SetProperty, SetLabels, SetMerge, SetReplace]
+"""One ``SET`` mutation item, including ``ON CREATE``/``ON MATCH`` actions."""
+
+RemoveItem = Union[RemoveProperty, RemoveLabels]
+"""One ``REMOVE`` item."""
+
+Clause = Union[
+    MatchClause,
+    OptionalMatchClause,
+    WhereClause,
+    UnwindClause,
+    SubqueryClause,
+    CreateClause,
+    SetClause,
+    RemoveClause,
+    DeleteClause,
+    MergeClause,
+    ForeachClause,
+    WithClause,
+    ReturnClause,
+]
+"""One ordered step of a canonical clause query."""

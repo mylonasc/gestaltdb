@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from heapq import heappop, heappush
-from typing import Callable, Iterable
+from typing import Callable, Iterable, cast
 
 from .engine import _Budget, _Index, _matches, _value
 from .model import EvaluationResult, Fact, Program, ReasoningError, ReasoningLimitError, ReasoningLimits, Variable, check_cancelled
@@ -342,7 +342,8 @@ class PlannedDatalogEngine:
         budget = _Budget(limits)
         observer = _Observer() if collect_telemetry else None
         rules = {rule.rule_id: rule for rule in program.rules}
-        rounds, emitted = [], defaultdict(int)
+        rounds: list[int] = []
+        emitted: dict[str, int] = defaultdict(int)
         iterations = 0
         for component, schedule in zip(plan.components, plan.schedules):
             if not component.rule_ids:
@@ -362,13 +363,13 @@ class PlannedDatalogEngine:
                     break
                 if iterations >= limits.max_iterations:
                     raise ReasoningLimitError("max_iterations exceeded (component delta rounds)")
-                added = set()
+                added: set[Fact] = set()
                 for rule, pivot in active:
                     track = collector is not None and collector.can_record(rule)
                     for bindings, premises in _matches(rule, pivot, full, delta, budget,
                                                        track_premises=track, observer=observer):
-                        conclusion = Fact(_value(rule.head.subject, bindings), rule.head.predicate,
-                                          _value(rule.head.object, bindings))
+                        conclusion = Fact(cast(str, _value(rule.head.subject, bindings)), rule.head.predicate,
+                                          cast(str, _value(rule.head.object, bindings)))
                         if conclusion in full.facts or conclusion in added:
                             continue
                         if len(full.facts) + len(added) >= limits.max_facts:

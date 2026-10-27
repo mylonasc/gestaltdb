@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import re
 from dataclasses import dataclass
+from typing import Any, Iterator, Literal, Sequence, cast
 
 from lark import Lark, Token, Transformer, UnexpectedInput, v_args
 from lark.exceptions import VisitError
@@ -14,6 +15,7 @@ from .ast import (
     AndExpression,
     ArithmeticExpression,
     CaseExpression,
+    Clause,
     ComparisonExpression,
     CreateClause,
     CreateConstraint,
@@ -21,6 +23,7 @@ from .ast import (
     DropConstraint,
     EntailsCall,
     ExistsExpression,
+    Expression,
     ForeachClause,
     FunctionCall,
     InExpression,
@@ -53,11 +56,13 @@ from .ast import (
     RelationshipPatternClause,
     RelationshipScanQuery,
     RemoveClause,
+    RemoveItem,
     RemoveLabels,
     RemoveProperty,
     ReturnClause,
     SampleTypedPathsCall,
     SetClause,
+    SetItem,
     SetLabels,
     SetMerge,
     SetProperty,
@@ -82,6 +87,7 @@ from .ast import (
     XorExpression,
 )
 from .errors import CypherSemanticError, CypherSyntaxError
+from ._parser_types import ErrorT, LegacyPattern, LegacyQuery, MatchOptions, Pagination, PaginationKey, ParsedSource, PendingProjection, RawProcedure, RawUnion, SourceMeta
 from .semantics import QueryAnalysis, analyze_query, render_projection
 
 _GRAMMAR = r"""
@@ -311,35 +317,35 @@ class _MatchPatterns:
 @dataclass(frozen=True)
 class _MergeAction:
     kind: str
-    items: tuple[object, ...]
+    items: tuple[SetItem, ...]
 
 
 @dataclass(frozen=True)
 class _Projection:
-    expression: object
+    expression: Expression
     alias: str | None = None
     span: SourceSpan | None = None
 
 
 @dataclass(frozen=True)
 class _CaseWhen:
-    condition: object
-    value: object
+    condition: Expression
+    value: Expression
 
 
 @dataclass(frozen=True)
 class _CaseElse:
-    value: object
+    value: Expression
 
 
 @dataclass(frozen=True)
 class _CompWhere:
-    value: object
+    value: Expression
 
 
 @dataclass(frozen=True)
 class _CompYield:
-    value: object
+    value: Expression
 
 
 @dataclass(frozen=True)
@@ -352,7 +358,7 @@ class _ParsedPart:
 @dataclass(frozen=True)
 class _ParsedMatch:
     pattern_groups: tuple[tuple[_Pattern, ...], ...]
-    where: object | None
+    where: Expression | None
     projections: tuple[_Projection, ...]
     distinct: bool
     order_by: tuple[OrderItem, ...]
@@ -365,69 +371,69 @@ class _ParsedMatch:
     sequence: tuple[object, ...] = ()
 
 
-class _ASTBuilder(Transformer):
-    def symbolic_name(self, children):
+class _ASTBuilder(Transformer[Token, object]):
+    def symbolic_name(self, children: list[Token]) -> str:
         text = str(children[0])
         return text[1:-1].replace("``", "`") if text.startswith("`") else text
 
-    def rel_name(self, children):
+    def rel_name(self, children: list[Token]) -> str:
         return self.symbolic_name(children)
 
-    def string(self, children):
+    def string(self, children: list[Token]) -> str:
         return _decode_string(str(children[0]))
 
-    def number(self, children):
+    def number(self, children: list[Token]) -> int | float:
         text = str(children[0])
         return float(text) if any(char in text for char in ".eE") else int(text)
 
-    def integer(self, children):
+    def integer(self, children: list[Token]) -> int:
         return int(children[0])
 
-    def true(self, _children):
+    def true(self, _children: list[Token]) -> bool:
         return True
 
-    def false(self, _children):
+    def false(self, _children: list[Token]) -> bool:
         return False
 
-    def null(self, _children):
+    def null(self, _children: list[Token]) -> None:
         return None
 
-    def variable(self, children):
+    def variable(self, children: list[str]) -> Variable:
         return Variable(children[0])
 
-    def property_ref(self, children):
+    def property_ref(self, children: list[str]) -> PropertyRef:
         return PropertyRef(children[0], children[1])
 
-    def property_access(self, children):
+    def property_access(self, children: list[Any]) -> PropertyAccessExpression:
         return PropertyAccessExpression(children[0], children[1])
 
-    def parameter(self, children):
+    def parameter(self, children: list[str]) -> Parameter:
         return Parameter(children[0])
 
-    def list_literal(self, children):
+    def list_literal(self, children: list[Expression]) -> list[Expression] | ListExpression:
         values = list(children)
         return values if all(_is_plain_value(value) for value in values) else ListExpression(tuple(values))
 
-    def property_pair(self, children):
+    def property_pair(self, children: list[Any]) -> tuple[str, Expression]:
         return children[0], children[1]
 
-    def map_literal(self, children):
+    def map_literal(self, children: list[tuple[str, Expression] | None]) -> dict[str, Expression] | MapExpression:
         items = tuple(item for item in children if item is not None)
         return dict(items) if all(_is_plain_value(value) for _, value in items) else MapExpression(items)
 
-    def map_pair(self, children):
+    def map_pair(self, children: list[Any]) -> tuple[str, Expression]:
         return children[0], children[1]
 
-    def parenthesized(self, children):
+    def parenthesized(self, children: list[Expression]) -> Expression:
         return children[0]
 
-    def when_clause(self, children):
+    def when_clause(self, children: list[Expression]) -> _CaseWhen:
         return _CaseWhen(children[0], children[1])
 
-    def else_clause(self, children):
+    def else_clause(self, children: list[Expression]) -> _CaseElse:
         return _CaseElse(children[0])
 
-    def case_simple(self, children):
+    def case_simple(self, children: list[Any]) -> CaseExpression:
         operand = children[0]
         rest = children[1:]
         return CaseExpression(
@@ -436,19 +442,19 @@ class _ASTBuilder(Transformer):
             operand,
         )
 
-    def case_generic(self, children):
+    def case_generic(self, children: list[_CaseWhen | _CaseElse]) -> CaseExpression:
         return CaseExpression(
             tuple((item.condition, item.value) for item in children if isinstance(item, _CaseWhen)),
             next((item.value for item in children if isinstance(item, _CaseElse)), None),
         )
 
-    def comp_where(self, children):
+    def comp_where(self, children: list[Expression]) -> _CompWhere:
         return _CompWhere(children[0])
 
-    def comp_yield(self, children):
+    def comp_yield(self, children: list[Expression]) -> _CompYield:
         return _CompYield(children[0])
 
-    def list_comprehension(self, children):
+    def list_comprehension(self, children: list[Any]) -> ListComprehension:
         return ListComprehension(
             children[0],
             children[1],
@@ -456,26 +462,26 @@ class _ASTBuilder(Transformer):
             next((item.value for item in children[2:] if isinstance(item, _CompYield)), None),
         )
 
-    def quantified_predicate(self, children):
+    def quantified_predicate(self, children: list[Any]) -> QuantifiedPredicate:
         return QuantifiedPredicate(str(children[0]).lower(), children[1], children[2], children[3])
 
-    def exists_expression(self, children):
+    def exists_expression(self, children: list[Expression]) -> ExistsExpression:
         return ExistsExpression(children[0])
 
-    def proj_all(self, _children):
+    def proj_all(self, _children: list[Token]) -> tuple[Literal["all"]]:
         return ("all",)
 
-    def proj_property(self, children):
+    def proj_property(self, children: list[str]) -> tuple[Literal["property"], str]:
         return ("property", children[0])
 
-    def proj_alias(self, children):
+    def proj_alias(self, children: list[Any]) -> tuple[Literal["alias"], str, Expression]:
         return ("alias", children[0], children[1])
 
-    def map_projection(self, children):
+    def map_projection(self, children: list[Any]) -> MapProjectionExpression:
         return MapProjectionExpression(children[0], tuple(children[1:]))
 
     @v_args(meta=True)
-    def reduce_call(self, meta, children):
+    def reduce_call(self, meta: SourceMeta, children: list[Any]) -> ReduceExpression:
         parts = [child for child in children if not isinstance(child, Token)]
         operator = next(child for child in children if isinstance(child, Token))
         if str(operator) != "=":
@@ -488,20 +494,20 @@ class _ASTBuilder(Transformer):
             )
         return ReduceExpression(parts[0], parts[1], parts[2], parts[3], parts[4])
 
-    def index_suffix(self, children):
+    def index_suffix(self, children: list[Expression]) -> tuple[Literal["index"], Expression]:
         return ("index", children[0])
 
-    def slice_both(self, children):
+    def slice_both(self, children: list[Expression]) -> tuple[Literal["slice"], Expression, Expression]:
         return ("slice", children[0], children[1])
 
-    def slice_from(self, children):
+    def slice_from(self, children: list[Expression]) -> tuple[Literal["slice"], Expression, None]:
         return ("slice", children[0], None)
 
-    def slice_to(self, children):
+    def slice_to(self, children: list[Expression]) -> tuple[Literal["slice"], None, Expression]:
         return ("slice", None, children[0])
 
-    def postfix(self, children):
-        node = children[0]
+    def postfix(self, children: list[Any]) -> Expression:
+        node: Expression = children[0]
         for suffix in children[1:]:
             if suffix[0] == "index":
                 node = SubscriptExpression(node, suffix[1])
@@ -510,15 +516,15 @@ class _ASTBuilder(Transformer):
         return node
 
     @v_args(meta=True)
-    def count_star(self, meta, children):
+    def count_star(self, meta: SourceMeta, children: list[Token]) -> FunctionCall:
         span = _source_span(meta)
         return FunctionCall(str(children[0]).lower(), (Wildcard(span=span),), False, span=span)
 
     @v_args(meta=True)
-    def function_call(self, meta, children):
+    def function_call(self, meta: SourceMeta, children: list[Expression | Token]) -> FunctionCall:
         name = str(children[0]).lower()
         distinct = False
-        arguments: list[object] = []
+        arguments: list[Expression] = []
         for child in children[1:]:
             if isinstance(child, Token):
                 distinct = True
@@ -526,7 +532,7 @@ class _ASTBuilder(Transformer):
                 arguments.append(child)
         return FunctionCall(name, tuple(arguments), distinct, span=_source_span(meta))
 
-    def arithmetic_expression(self, children):
+    def arithmetic_expression(self, children: list[Expression]) -> Expression:
         if len(children) == 1:
             return children[0]
         expression = children[0]
@@ -534,43 +540,43 @@ class _ASTBuilder(Transformer):
             expression = ArithmeticExpression(expression, str(children[index]), children[index + 1])
         return expression
 
-    def unary_expression(self, children):
+    def unary_expression(self, children: list[Expression]) -> UnaryExpression:
         return UnaryExpression(str(children[0]), children[1])
 
-    def comparison_expression(self, children):
+    def comparison_expression(self, children: list[Expression]) -> ComparisonExpression:
         return ComparisonExpression(children[0], str(children[1]), children[2])
 
-    def in_expression(self, children):
+    def in_expression(self, children: list[Expression]) -> InExpression:
         return InExpression(children[0], children[1])
 
-    def is_null(self, children):
+    def is_null(self, children: list[Expression]) -> NullPredicate:
         return NullPredicate(children[0])
 
-    def is_not_null(self, children):
+    def is_not_null(self, children: list[Expression]) -> NullPredicate:
         return NullPredicate(children[0], negated=True)
 
-    def starts_with(self, children):
+    def starts_with(self, children: list[Expression]) -> StringPredicate:
         return StringPredicate(children[0], "STARTS WITH", children[1])
 
-    def ends_with(self, children):
+    def ends_with(self, children: list[Expression]) -> StringPredicate:
         return StringPredicate(children[0], "ENDS WITH", children[1])
 
-    def contains(self, children):
+    def contains(self, children: list[Expression]) -> StringPredicate:
         return StringPredicate(children[0], "CONTAINS", children[1])
 
-    def not_expression(self, children):
+    def not_expression(self, children: list[Expression]) -> NotExpression:
         return NotExpression(children[0])
 
-    def and_expression(self, children):
+    def and_expression(self, children: list[Expression]) -> Expression:
         return children[0] if len(children) == 1 else AndExpression(tuple(children))
 
-    def xor_expression(self, children):
+    def xor_expression(self, children: list[Expression]) -> Expression:
         return children[0] if len(children) == 1 else XorExpression(tuple(children))
 
-    def or_expression(self, children):
+    def or_expression(self, children: list[Expression]) -> Expression:
         return children[0] if len(children) == 1 else OrExpression(tuple(children))
 
-    def labels(self, children):
+    def labels(self, children: list[tuple[tuple[bool, str], ...]]) -> _Labels:
         conjunctions = [tuple(child) for child in children]
         if len(conjunctions) == 1 and all(not negated for negated, _ in conjunctions[0]):
             return _Labels(tuple(name for _, name in conjunctions[0]), None)
@@ -585,26 +591,26 @@ class _ASTBuilder(Transformer):
             ),
         )
 
-    def label_conjunction(self, children):
+    def label_conjunction(self, children: list[tuple[bool, str]]) -> tuple[tuple[bool, str], ...]:
         return tuple(children)
 
-    def neg_label(self, children):
+    def neg_label(self, children: list[str]) -> tuple[bool, str]:
         return (True, children[0])
 
-    def pos_label(self, children):
+    def pos_label(self, children: list[str]) -> tuple[bool, str]:
         return (False, children[0])
 
-    def properties(self, children):
+    def properties(self, children: list[tuple[str, Expression]]) -> _Properties:
         return _Properties(tuple(children))
 
-    def node_pattern(self, children):
+    def node_pattern(self, children: list[str | _Labels | _Properties]) -> NodePattern:
         variable = next((item for item in children if isinstance(item, str)), None)
         labels = next((item for item in children if isinstance(item, _Labels)), _Labels((), None))
         properties = next((item.values for item in children if isinstance(item, _Properties)), ())
         return _NodePattern(variable, labels.values, properties, labels.expression)
 
     @v_args(meta=True)
-    def named_pattern(self, meta, children):
+    def named_pattern(self, meta: SourceMeta, children: list[object]) -> PathPatternClause:
         operator = next(child for child in children if isinstance(child, Token))
         if str(operator) != "=":
             raise CypherSyntaxError(
@@ -626,13 +632,13 @@ class _ASTBuilder(Transformer):
             )
         return _Pattern(pattern.source, pattern.hops, variable)
 
-    def rel_types(self, children):
+    def rel_types(self, children: list[str]) -> _RelationshipTypes:
         return _RelationshipTypes(tuple(children))
 
-    def rel_type_spec(self, children):
+    def rel_type_spec(self, children: list[_RelationshipTypes]) -> _RelationshipTypes:
         return children[0]
 
-    def relationship(self, children):
+    def relationship(self, children: list[object]) -> tuple[str | None, tuple[str, ...], tuple[tuple[str, object], ...], tuple[int, int | None]]:
         rel_var = next((item for item in children if isinstance(item, str)), None)
         edge_types = next((item.values for item in children if isinstance(item, _RelationshipTypes)), ())
         properties = next((item.values for item in children if isinstance(item, _Properties)), ())
@@ -642,47 +648,47 @@ class _ASTBuilder(Transformer):
         )
         return rel_var, edge_types, properties, bounds
 
-    def _var_bounds(self, children):
+    def _var_bounds(self, children: list[Token]) -> list[int]:
         return [int(child) for child in children if isinstance(child, Token) and child.type == "INTEGER"]
 
-    def var_bounded(self, children):
+    def var_bounded(self, children: list[Token]) -> _VarLength:
         bounds = self._var_bounds(children)
         return _VarLength(bounds[0], bounds[1])
 
-    def var_lower(self, children):
+    def var_lower(self, children: list[Token]) -> _VarLength:
         bounds = self._var_bounds(children)
         return _VarLength(bounds[0], None)
 
-    def var_upper(self, children):
+    def var_upper(self, children: list[Token]) -> _VarLength:
         bounds = self._var_bounds(children)
         return _VarLength(1, bounds[0])
 
-    def var_exact(self, children):
+    def var_exact(self, children: list[Token]) -> _VarLength:
         bounds = self._var_bounds(children)
         return _VarLength(bounds[0], bounds[0])
 
-    def var_unbounded(self, _children):
+    def var_unbounded(self, _children: list[Token]) -> _VarLength:
         return _VarLength(1, None)
 
-    def out_hop(self, children):
+    def out_hop(self, children: list[Any]) -> PatternHop:
         relationship, node = (children if len(children) == 2 else ((None, (), (), (1, 1)), children[0]))
         return _Hop(relationship[0], relationship[1], node, "out", relationship[2], relationship[3][0], relationship[3][1])
 
-    def in_hop(self, children):
+    def in_hop(self, children: list[Any]) -> PatternHop:
         relationship, node = (children if len(children) == 2 else ((None, (), (), (1, 1)), children[0]))
         return _Hop(relationship[0], relationship[1], node, "in", relationship[2], relationship[3][0], relationship[3][1])
 
-    def any_hop(self, children):
+    def any_hop(self, children: list[Any]) -> PatternHop:
         relationship, node = (children if len(children) == 2 else ((None, (), (), (1, 1)), children[0]))
         return _Hop(relationship[0], relationship[1], node, "any", relationship[2], relationship[3][0], relationship[3][1])
 
-    def pattern(self, children):
+    def pattern(self, children: list[Any]) -> PathPatternClause:
         if len(children) == 1 and isinstance(children[0], _Pattern):
             return children[0]
         return _Pattern(children[0], tuple(children[1:]))
 
     @v_args(meta=True)
-    def match_clause(self, meta, children):
+    def match_clause(self, meta: SourceMeta, children: list[object]) -> _MatchPatterns:
         selector = next((item for item in children if isinstance(item, PathSelector)), None)
         return _MatchPatterns(
             tuple(item for item in children if isinstance(item, _Pattern)),
@@ -693,7 +699,7 @@ class _ASTBuilder(Transformer):
         )
 
     @v_args(meta=True)
-    def optional_match_clause(self, meta, children):
+    def optional_match_clause(self, meta: SourceMeta, children: list[object]) -> _MatchPatterns:
         selector = next((item for item in children if isinstance(item, PathSelector)), None)
         return _MatchPatterns(
             tuple(item for item in children if isinstance(item, _Pattern)),
@@ -704,45 +710,45 @@ class _ASTBuilder(Transformer):
         )
 
     @v_args(meta=True)
-    def valid_time_qualifier(self, meta, children):
+    def valid_time_qualifier(self, meta: SourceMeta, children: list[Expression]) -> TemporalQualifier:
         return TemporalQualifier("valid", children[0], span=_source_span(meta))
 
     @v_args(meta=True)
-    def system_time_qualifier(self, meta, children):
+    def system_time_qualifier(self, meta: SourceMeta, children: list[Expression]) -> TemporalQualifier:
         return TemporalQualifier("system", children[0], span=_source_span(meta))
 
-    def shortest_quantified(self, children):
-        return PathSelector(str(children[0]).lower(), None)
+    def shortest_quantified(self, children: list[Token]) -> PathSelector:
+        return PathSelector(cast(Literal["any", "all"], str(children[0]).lower()), None)
 
-    def shortest_k(self, children):
+    def shortest_k(self, children: list[Token]) -> PathSelector:
         limit = next(
             (child for child in children if isinstance(child, Token) and child.type == "INTEGER"),
             None,
         )
         return PathSelector("any", int(limit) if limit is not None else 1)
 
-    def shortest_single(self, children):
+    def shortest_single(self, children: list[object]) -> ShortestPathExpression:
         pattern = next(child for child in children if isinstance(child, _Pattern))
         return ShortestPathExpression(pattern, False)
 
-    def shortest_all(self, children):
+    def shortest_all(self, children: list[object]) -> ShortestPathExpression:
         pattern = next(child for child in children if isinstance(child, _Pattern))
         return ShortestPathExpression(pattern, True)
 
     @v_args(meta=True)
-    def unwind_clause(self, meta, children):
+    def unwind_clause(self, meta: SourceMeta, children: list[Any]) -> _ParsedPart:
         return _ParsedPart("unwind", (children[0], children[1]), _source_span(meta))
 
     @v_args(meta=True)
-    def call_subquery(self, meta, children):
+    def call_subquery(self, meta: SourceMeta, children: list[_ParsedMatch]) -> _ParsedPart:
         return _ParsedPart("subquery", children[0], _source_span(meta))
 
     @v_args(meta=True)
-    def create_clause(self, meta, children):
+    def create_clause(self, meta: SourceMeta, children: list[PathPatternClause]) -> _ParsedPart:
         return _ParsedPart("create", tuple(children), _source_span(meta))
 
     @v_args(meta=True)
-    def set_property(self, meta, children):
+    def set_property(self, meta: SourceMeta, children: list[Any]) -> SetProperty:
         operator = next(child for child in children if isinstance(child, Token))
         if str(operator) != "=":
             raise CypherSyntaxError(
@@ -755,12 +761,12 @@ class _ASTBuilder(Transformer):
         parts = [child for child in children if not isinstance(child, Token)]
         return SetProperty(parts[0], parts[1], parts[2])
 
-    def set_merge(self, children):
+    def set_merge(self, children: list[Any]) -> SetMerge:
         parts = [child for child in children if not isinstance(child, Token)]
         return SetMerge(parts[0], parts[1])
 
     @v_args(meta=True)
-    def set_replace(self, meta, children):
+    def set_replace(self, meta: SourceMeta, children: list[Any]) -> SetReplace:
         operator = next(child for child in children if isinstance(child, Token))
         if str(operator) != "=":
             raise CypherSyntaxError(
@@ -773,41 +779,41 @@ class _ASTBuilder(Transformer):
         parts = [child for child in children if not isinstance(child, Token)]
         return SetReplace(parts[0], parts[1])
 
-    def set_labels(self, children):
+    def set_labels(self, children: list[str]) -> SetLabels:
         names = [child for child in children if isinstance(child, str)]
         return SetLabels(names[0], tuple(names[1:]))
 
     @v_args(meta=True)
-    def set_clause(self, meta, children):
+    def set_clause(self, meta: SourceMeta, children: list[SetItem]) -> _ParsedPart:
         return _ParsedPart("set", tuple(children), _source_span(meta))
 
-    def remove_property(self, children):
+    def remove_property(self, children: list[str]) -> RemoveProperty:
         return RemoveProperty(children[0], children[1])
 
-    def remove_labels(self, children):
+    def remove_labels(self, children: list[str]) -> RemoveLabels:
         names = [child for child in children if isinstance(child, str)]
         return RemoveLabels(names[0], tuple(names[1:]))
 
     @v_args(meta=True)
-    def remove_clause(self, meta, children):
+    def remove_clause(self, meta: SourceMeta, children: list[RemoveItem]) -> _ParsedPart:
         return _ParsedPart("remove", tuple(children), _source_span(meta))
 
     @v_args(meta=True)
-    def detach_delete(self, meta, children):
+    def detach_delete(self, meta: SourceMeta, children: list[Expression]) -> _ParsedPart:
         return _ParsedPart("delete", (True, tuple(children)), _source_span(meta))
 
     @v_args(meta=True)
-    def plain_delete(self, meta, children):
+    def plain_delete(self, meta: SourceMeta, children: list[Expression]) -> _ParsedPart:
         return _ParsedPart("delete", (False, tuple(children)), _source_span(meta))
 
-    def on_create_action(self, children):
-        return _MergeAction("create", tuple(children))
+    def on_create_action(self, children: list[SetItem]) -> _MergeAction:
+        return _MergeAction("create", tuple(cast(Sequence[SetItem], children)))
 
-    def on_match_action(self, children):
-        return _MergeAction("match", tuple(children))
+    def on_match_action(self, children: list[SetItem]) -> _MergeAction:
+        return _MergeAction("match", tuple(cast(Sequence[SetItem], children)))
 
     @v_args(meta=True)
-    def merge_clause(self, meta, children):
+    def merge_clause(self, meta: SourceMeta, children: list[object]) -> _ParsedPart:
         patterns = tuple(item for item in children if isinstance(item, _Pattern))
         actions = [item for item in children if isinstance(item, _MergeAction)]
         return _ParsedPart(
@@ -817,19 +823,19 @@ class _ASTBuilder(Transformer):
         )
 
     @v_args(meta=True)
-    def foreach_clause(self, meta, children):
+    def foreach_clause(self, meta: SourceMeta, children: list[Any]) -> _ParsedPart:
         return _ParsedPart("foreach", (children[0], children[1], children[-1]), _source_span(meta))
 
-    def foreach_body(self, children):
+    def foreach_body(self, children: list[_ParsedPart]) -> tuple[_ParsedPart, ...]:
         return tuple(children)
 
-    def unique_kind(self, _children):
+    def unique_kind(self, _children: list[Token]) -> Literal["unique"]:
         return "unique"
 
-    def exists_kind(self, _children):
+    def exists_kind(self, _children: list[Token]) -> Literal["exists"]:
         return "exists"
 
-    def create_constraint(self, children):
+    def create_constraint(self, children: list[str]) -> CreateConstraint:
         parts = [child for child in children if isinstance(child, str)]
         kind = parts[-1]
         names = parts[:-1]
@@ -846,81 +852,81 @@ class _ASTBuilder(Transformer):
                 offset=0,
                 source="",
             )
-        return CreateConstraint(label, prop, kind, name)
+        return CreateConstraint(label, prop, cast(Literal["unique", "exists"], kind), name)
 
-    def drop_constraint(self, children):
+    def drop_constraint(self, children: list[str]) -> DropConstraint:
         return DropConstraint(children[0])
 
-    def show_constraints(self, _children):
+    def show_constraints(self, _children: list[Token]) -> ShowConstraints:
         return ShowConstraints()
 
-    def show_indexes(self, _children):
+    def show_indexes(self, _children: list[Token]) -> ShowIndexes:
         return ShowIndexes()
 
-    def union_all(self, _children):
+    def union_all(self, _children: list[Token]) -> bool:
         return True
 
-    def union_distinct(self, _children):
+    def union_distinct(self, _children: list[Token]) -> bool:
         return False
 
-    def union_query(self, children):
+    def union_query(self, children: list[_ParsedMatch | bool]) -> RawUnion:
         return ("union", tuple(children))
 
     @v_args(meta=True)
-    def where_clause(self, meta, children):
+    def where_clause(self, meta: SourceMeta, children: list[Expression]) -> _ParsedPart:
         return _ParsedPart("where", children[0], _source_span(meta))
 
-    def star_projection(self, _children):
+    def star_projection(self, _children: list[Token]) -> str:
         return "*"
 
     @v_args(meta=True)
-    def return_item(self, meta, children):
+    def return_item(self, meta: SourceMeta, children: list[Any]) -> _Projection:
         return _Projection(
             children[0],
             children[1] if len(children) > 1 else None,
             _source_span(meta),
         )
 
-    def return_items(self, children):
+    def return_items(self, children: list[_Projection]) -> tuple[_Projection, ...]:
         return tuple(children)
 
     @v_args(meta=True)
-    def return_clause(self, meta, children):
+    def return_clause(self, meta: SourceMeta, children: list[Any]) -> _ParsedPart:
         distinct = bool(children and str(children[0]).upper() == "DISTINCT")
         return _ParsedPart("return", (children[-1], distinct), _source_span(meta))
 
-    def order_item(self, children):
+    def order_item(self, children: list[Expression]) -> OrderItem:
         expression = children[0]
         direction = str(children[1]).upper() if len(children) > 1 else "ASC"
         return OrderItem(render_projection(expression), direction == "DESC", expression)
 
     @v_args(meta=True)
-    def order_clause(self, meta, children):
+    def order_clause(self, meta: SourceMeta, children: list[OrderItem]) -> _ParsedPart:
         return _ParsedPart("order", tuple(children), _source_span(meta))
 
     @v_args(meta=True)
-    def skip_clause(self, meta, children):
+    def skip_clause(self, meta: SourceMeta, children: list[int | Parameter]) -> _ParsedPart:
         return _ParsedPart("skip", children[0], _source_span(meta))
 
     @v_args(meta=True)
-    def limit_clause(self, meta, children):
+    def limit_clause(self, meta: SourceMeta, children: list[int | Parameter]) -> _ParsedPart:
         return _ParsedPart("limit", children[0], _source_span(meta))
 
-    def call_arguments(self, children):
+    def call_arguments(self, children: list[Expression]) -> tuple[Literal["arguments"], tuple[Expression, ...]]:
         return ("arguments", tuple(item for item in children if item is not None))
 
     @v_args(meta=True)
-    def with_clause(self, meta, children):
+    def with_clause(self, meta: SourceMeta, children: list[Any]) -> _ParsedPart:
         distinct = bool(children and str(children[0]).upper() == "DISTINCT")
         return _ParsedPart("with", (children[-1], distinct), _source_span(meta))
 
-    def with_section(self, children):
+    def with_section(self, children: list[_ParsedPart]) -> tuple[_ParsedPart, ...]:
         return tuple(children)
 
-    def return_full(self, children):
+    def return_full(self, children: list[_ParsedPart]) -> tuple[_ParsedPart, ...]:
         return tuple(children)
 
-    def match_query(self, children):
+    def match_query(self, children: list[object]) -> _ParsedMatch:
         sequence: list[object] = []
         for item in children:
             if isinstance(item, tuple) and item and all(isinstance(part, _ParsedPart) for part in item):
@@ -931,7 +937,7 @@ class _ASTBuilder(Transformer):
         parts = tuple(item for item in sequence if isinstance(item, _ParsedPart))
         where_part = next((item for item in parts if item.kind == "where"), None)
         return_part = next(item for item in parts if item.kind == "return")
-        return_items, distinct = return_part.value
+        return_items, distinct = cast("tuple[tuple[_Projection, ...], bool]", return_part.value)
         modifier_parts = tuple(
             item for item in parts if item.kind in {"order", "skip", "limit"}
         )
@@ -946,12 +952,12 @@ class _ASTBuilder(Transformer):
         )
         return _ParsedMatch(
             tuple(item.values for item in match_groups),
-            where_part.value if where_part is not None else None,
+            cast(Expression, where_part.value) if where_part is not None else None,
             return_items,
             distinct,
-            order_by,
-            skip,
-            limit,
+            cast(tuple[OrderItem, ...], order_by),
+            cast(Pagination, skip),
+            cast(Pagination, limit),
             match_groups,
             where_part,
             return_part,
@@ -959,19 +965,19 @@ class _ASTBuilder(Transformer):
             tuple(sequence),
         )
 
-    def qualified_name(self, children):
+    def qualified_name(self, children: list[str]) -> str:
         return ".".join(children)
 
-    def yield_item(self, children):
+    def yield_item(self, children: list[str]) -> tuple[Literal["yield"], str, str]:
         return ("yield", children[0], children[-1])
 
-    def yield_items(self, children):
+    def yield_items(self, children: list[tuple[Literal["yield"], str, str]]) -> tuple[Literal["yields"], tuple[tuple[Literal["yield"], str, str], ...]]:
         return ("yields", tuple(children))
 
-    def procedure_returns(self, children):
+    def procedure_returns(self, children: list[str]) -> tuple[Literal["returns"], tuple[str, ...]]:
         return ("returns", tuple(children))
 
-    def procedure_call(self, children):
+    def procedure_call(self, children: list[Any]) -> RawProcedure:
         limit = next(
             (
                 item.value
@@ -984,11 +990,10 @@ class _ASTBuilder(Transformer):
         arguments = next(item[1] for item in children if isinstance(item, tuple) and item and item[0] == "arguments")
         yielded = next(item[1] for item in children if isinstance(item, tuple) and item and item[0] == "yields")
         returns = next(item[1] for item in children if isinstance(item, tuple) and item and item[0] == "returns")
-        return ("procedure", name, arguments, yielded, returns, limit)
+        return ("procedure", name, arguments, yielded, returns, cast(Pagination, limit))
 
 
 _BUILDER = _ASTBuilder()
-
 
 def parse(query: str) -> MatchQuery | SampleTypedPathsCall | EntailsCall | NodeScanQuery | RelationshipScanQuery | MultiMatchQuery:
     """Parse the supported Cypher subset into runtime-compatible AST objects."""
@@ -1045,9 +1050,9 @@ def parse_ast(query: str) -> Query | SampleTypedPathsCall | EntailsCall | UnionQ
     if isinstance(parsed, (CreateConstraint, DropConstraint, ShowConstraints, ShowIndexes)):
         return parsed
     if isinstance(parsed, tuple) and parsed and parsed[0] == "union":
-        canonical = _build_union_query(parsed, query)
-        _validate_temporal_contract(canonical, query)
-        return canonical
+        union_canonical = _build_union_query(parsed, query)
+        _validate_temporal_contract(union_canonical, query)
+        return union_canonical
 
     canonical = _build_canonical_query(parsed, query)
     analyze_query(canonical)
@@ -1055,7 +1060,7 @@ def parse_ast(query: str) -> Query | SampleTypedPathsCall | EntailsCall | UnionQ
     return canonical
 
 
-def _walk_queries(value):
+def _walk_queries(value: Query | UnionQuery) -> Iterator[Query]:
     """Yield a canonical query and all nested subquery/FOREACH queries."""
     queries = value.branches if isinstance(value, UnionQuery) else (value,)
     for query in queries:
@@ -1067,7 +1072,7 @@ def _walk_queries(value):
                 yield from _walk_queries(Query(clause.body, query.source))
 
 
-def _validate_temporal_contract(value, source: str) -> None:
+def _validate_temporal_contract(value: Query | UnionQuery, source: str) -> None:
     """Validate query-wide qualifier dependencies and read-only semantics."""
     qualifiers = [
         qualifier
@@ -1099,7 +1104,7 @@ def _validate_temporal_contract(value, source: str) -> None:
         )
 
 
-def _build_union_query(parsed, query: str) -> UnionQuery:
+def _build_union_query(parsed: RawUnion, query: str) -> UnionQuery:
     """Build independently analyzed branch queries for a ``UNION``."""
     branches_raw: list[_ParsedMatch] = []
     flags: list[bool] = []
@@ -1122,8 +1127,8 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
     for patterns in parsed.pattern_groups:
         for pattern in patterns:
             _validate_pattern_literals(pattern, query)
-    clauses: list[object] = []
-    pending: dict[str, object] = {}
+    clauses: list[Clause] = []
+    pending: PendingProjection = {}
     pending_span: SourceSpan | None = None
     pending_kind: str | None = None
     pending_value: object | None = None
@@ -1142,33 +1147,22 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
         nonlocal pending, pending_span, pending_kind, pending_value
         if pending_kind is None:
             return
-        items, distinct = pending_value
+        items, distinct = cast("tuple[tuple[_Projection, ...], bool]", pending_value)
         span = _merge_spans(
-            pending_span,
+            cast(SourceSpan, pending_span),
             *(part.span for part in pending["modifiers"]),
         )
-        if pending_kind == "with":
-            clauses.append(
-                WithClause(
-                    items=projection_items(items),
-                    distinct=distinct,
-                    order_by=pending["order"],
-                    skip=pending["skip"],
-                    limit=pending["limit"],
-                    span=span,
-                )
+        clause_type = WithClause if pending_kind == "with" else ReturnClause
+        clauses.append(
+            clause_type(
+                items=projection_items(items),
+                distinct=distinct,
+                order_by=pending["order"],
+                skip=pending["skip"],
+                limit=pending["limit"],
+                span=span,
             )
-        else:
-            clauses.append(
-                ReturnClause(
-                    items=projection_items(items),
-                    distinct=distinct,
-                    order_by=pending["order"],
-                    skip=pending["skip"],
-                    limit=pending["limit"],
-                    span=span,
-                )
-            )
+        )
         pending = {}
         pending_span = None
         pending_kind = None
@@ -1187,38 +1181,38 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
             # A WHERE following WITH belongs to that WITH stage, so the open
             # projection must be closed first to preserve textual order.
             close_projection()
-            clauses.append(WhereClause(item.value, span=item.span))
+            clauses.append(WhereClause(cast(Expression, item.value), span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind == "unwind":
             close_projection()
-            expression, variable = item.value
+            expression, variable = cast("tuple[Expression, str]", item.value)
             clauses.append(UnwindClause(expression, variable, span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind == "subquery":
             close_projection()
-            clauses.append(SubqueryClause(_build_canonical_query(item.value, query), span=item.span))
+            clauses.append(SubqueryClause(_build_canonical_query(cast(_ParsedMatch, item.value), query), span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind == "create":
             if pending_kind == "return":
                 raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
             close_projection()
-            clauses.append(CreateClause(item.value, span=item.span))
+            clauses.append(CreateClause(cast(tuple[PathPatternClause, ...], item.value), span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind in ("set", "remove"):
             if pending_kind == "return":
                 raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
             close_projection()
             if item.kind == "set":
-                clauses.append(SetClause(item.value, span=item.span))
+                clauses.append(SetClause(cast(tuple[SetItem, ...], item.value), span=item.span))
             else:
-                clauses.append(RemoveClause(item.value, span=item.span))
+                clauses.append(RemoveClause(cast(tuple[RemoveItem, ...], item.value), span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind == "delete":
             if pending_kind == "return":
                 raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
             close_projection()
-            detach, expressions = item.value
+            detach, expressions = cast("tuple[bool, tuple[Expression, ...]]", item.value)
             clauses.append(DeleteClause(expressions, detach, span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind == "merge":
             if pending_kind == "return":
                 raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
             close_projection()
-            patterns, actions = item.value
+            patterns, actions = cast("tuple[tuple[PathPatternClause, ...], list[_MergeAction]]", item.value)
             on_create = tuple(
                 set_item for action in actions if action.kind == "create" for set_item in action.items
             )
@@ -1230,7 +1224,7 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
             if pending_kind == "return":
                 raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
             close_projection()
-            variable, iterable, body = item.value
+            variable, iterable, body = cast("tuple[str, Expression, tuple[object, ...]]", item.value)
             for sub in body:
                 if isinstance(sub, _MatchPatterns):
                     for pattern in sub.values:
@@ -1254,20 +1248,20 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
                 raise _located_error(CypherSemanticError, "ORDER BY, SKIP, and LIMIT must follow WITH or RETURN", query)
             if item.kind == "order" and pending["order"] != ():
                 raise _located_error(CypherSemanticError, "Duplicate ORDER BY clause", query)
-            if item.kind in ("skip", "limit") and pending[item.kind] is not None:
+            if item.kind in ("skip", "limit") and pending[cast(PaginationKey, item.kind)] is not None:
                 raise _located_error(CypherSemanticError, f"Duplicate {item.kind.upper()} clause", query)
             pending["modifiers"].append(item)
             if item.kind == "order":
-                pending["order"] = item.value
+                pending["order"] = cast(tuple[OrderItem, ...], item.value)
             else:
-                pending[item.kind] = item.value
+                pending[cast(PaginationKey, item.kind)] = cast(Pagination, item.value)
         else:  # pragma: no cover - grammar builder invariant
             raise _located_error(CypherSemanticError, "Unsupported Cypher query", query)
     close_projection()
     return Query(tuple(clauses), query, span=_query_span(query))
 
 
-def _parse_source(query: str):
+def _parse_source(query: str) -> ParsedSource:
     try:
         parsed = _BUILDER.transform(_PARSER.parse(query))
     except UnexpectedInput as exc:
@@ -1287,7 +1281,7 @@ def _parse_source(query: str):
             "Unsupported Cypher query",
             line=exc.line,
             column=exc.column,
-            offset=exc.pos_in_stream,
+            offset=cast(int, exc.pos_in_stream),
             source=query,
         ) from exc
     except VisitError as exc:
@@ -1299,10 +1293,10 @@ def _parse_source(query: str):
             raise
         raise _located_error(CypherSyntaxError, f"Invalid Cypher literal: {exc}", query) from exc
 
-    return parsed
+    return cast(ParsedSource, parsed)
 
 
-def _build_sample_call(parsed, query: str) -> SampleTypedPathsCall | EntailsCall:
+def _build_sample_call(parsed: RawProcedure, query: str) -> SampleTypedPathsCall | EntailsCall:
     _, name, arguments, yields, returns, limit = parsed
     procedure = name.lower()
     if procedure not in {"pg.sample_typed_paths", "kg.entails"}:
@@ -1379,21 +1373,20 @@ def _gql_quantifier_hint(query: str) -> tuple[str, int] | None:
     return None
 
 
-def _build_match_query(parsed: _ParsedMatch, query: str, analysis: QueryAnalysis):
-    clauses = []
-    group_ids = []
+def _build_match_query(parsed: _ParsedMatch, query: str, analysis: QueryAnalysis) -> LegacyQuery:
+    clauses: list[LegacyPattern] = []
+    group_ids: list[int] = []
     for group_id, patterns in enumerate(parsed.pattern_groups):
         force_generalized = len(patterns) > 1
         for pattern in patterns:
             clauses.append(_build_clause(pattern, query, force_generalized=force_generalized))
             group_ids.append(group_id)
-    clauses = tuple(clauses)
     resolved = analysis.clauses[-1].projections
     returns = tuple(item.output.name for item in resolved)
     projections = tuple(item.rendered_expression for item in resolved)
     projection_expressions = tuple(item.expression for item in resolved)
 
-    common = {
+    common: MatchOptions = {
         "returns": returns,
         "where": parsed.where,
         "projections": projections,
@@ -1404,7 +1397,7 @@ def _build_match_query(parsed: _ParsedMatch, query: str, analysis: QueryAnalysis
         "distinct": parsed.distinct,
     }
     if len(clauses) > 1:
-        return MultiMatchQuery(clauses=clauses, match_group_ids=tuple(group_ids), **common)
+        return MultiMatchQuery(clauses=tuple(clauses), match_group_ids=tuple(group_ids), **common)
 
     clause = clauses[0]
     if isinstance(clause, NodePatternClause):
@@ -1430,11 +1423,11 @@ def _build_match_query(parsed: _ParsedMatch, query: str, analysis: QueryAnalysis
     if isinstance(clause, AnchoredPatternClause):
         return MatchQuery(source_var=clause.source_var, source_id=clause.source_id, hops=clause.hops, **common)
     if isinstance(clause, PathPatternClause):
-        return MultiMatchQuery(clauses=clauses, match_group_ids=(0,), **common)
+        return MultiMatchQuery(clauses=tuple(clauses), match_group_ids=(0,), **common)
     raise _located_error(CypherSemanticError, "Unsupported Cypher query", query)
 
 
-def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = False):
+def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = False) -> LegacyPattern:
     node = pattern.source
     if not pattern.hops and node.variable is not None and not force_generalized and pattern.name is None:
         first_name, first_value = node.properties[0] if node.properties else (None, None)
@@ -1456,10 +1449,8 @@ def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = Fa
     ):
         hop = pattern.hops[0]
         if hop.direction == "in":
-            source_var, target_var, direction = hop.target.variable, node.variable, "in"
-        else:
-            source_var, target_var, direction = node.variable, hop.target.variable, hop.direction
-        return RelationshipPatternClause(source_var, hop.rel_var, hop.edge_types[0], target_var, direction, hop.edge_types)
+            return RelationshipPatternClause(cast(str, hop.target.variable), hop.rel_var, hop.edge_types[0], cast(str, node.variable), "in", hop.edge_types)
+        return RelationshipPatternClause(cast(str, node.variable), hop.rel_var, hop.edge_types[0], cast(str, hop.target.variable), hop.direction, hop.edge_types)
 
     properties = dict(node.properties)
     if (
@@ -1471,8 +1462,8 @@ def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = Fa
         and isinstance(properties.get("id"), str)
         and all(hop.edge_types and hop.target.variable is not None and not hop.target.labels and not hop.target.properties and not hop.properties and (hop.min_length, hop.max_length) == (1, 1) for hop in pattern.hops)
     ):
-        hops = tuple(TraversalHop(hop.rel_var, hop.edge_types[0], hop.target.variable, hop.direction, hop.edge_types) for hop in pattern.hops)
-        return AnchoredPatternClause(node.variable, properties["id"], hops)
+        hops = tuple(TraversalHop(hop.rel_var, hop.edge_types[0], cast(str, hop.target.variable), hop.direction, hop.edge_types) for hop in pattern.hops)
+        return AnchoredPatternClause(cast(str, node.variable), cast(str, properties["id"]), hops)
     return PathPatternClause(node, pattern.hops, pattern.name)
 
 
@@ -1517,7 +1508,7 @@ def _validate_pattern_literals(pattern: _Pattern, query: str) -> None:
                 raise _located_error(CypherSemanticError, "Invalid Cypher literal", query)
 
 
-def _is_plain_value(value) -> bool:
+def _is_plain_value(value: object) -> bool:
     if isinstance(value, Parameter):
         return True
     if value is None or isinstance(value, (str, int, float, bool)):
@@ -1534,10 +1525,10 @@ def _decode_string(text: str) -> str:
         value = ast.literal_eval(text)
     except (SyntaxError, ValueError) as exc:
         raise ValueError(text) from exc
-    return value
+    return cast(str, value)
 
 
-def parse_literal(literal_text: str):
+def parse_literal(literal_text: str) -> object:
     """Parse a Cypher literal or parameter reference supported by this subset."""
     literal_text = literal_text.strip()
     parameter_match = _PARAMETER_RE.match(literal_text)
@@ -1590,7 +1581,7 @@ def unsupported_query_error(query: str = "") -> CypherSyntaxError:
     return _located_error(CypherSyntaxError, "Unsupported Cypher query", query)
 
 
-def _located_error(error_type, message: str, query: str, needle: str | None = None):
+def _located_error(error_type: type[ErrorT], message: str, query: str, needle: str | None = None) -> ErrorT:
     offset = query.find(needle) if needle else 0
     offset = max(offset, 0)
     line = query.count("\n", 0, offset) + 1
@@ -1598,7 +1589,7 @@ def _located_error(error_type, message: str, query: str, needle: str | None = No
     return error_type(message, line=line, column=offset - line_start + 1, offset=offset, source=query)
 
 
-def _source_span(meta) -> SourceSpan:
+def _source_span(meta: SourceMeta) -> SourceSpan:
     return SourceSpan(
         meta.start_pos,
         meta.end_pos,

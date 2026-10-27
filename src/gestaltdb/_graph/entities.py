@@ -18,7 +18,8 @@ import datetime
 import json
 import struct
 import uuid
-from typing import TYPE_CHECKING
+from collections.abc import Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
 if TYPE_CHECKING:
     from ..serializers import Serializer
@@ -33,8 +34,12 @@ from ..temporal import (
     TemporalTime,
 )
 
+PropertyMap = dict[str, object]
+NodeKeyInput = str | bytes
+EntityTypeName = Literal["Node", "Edge", "AdjacencyList"]
 
-def _normalize_labels(labels):
+
+def _normalize_labels(labels: Iterable[object] | None) -> tuple[str, ...]:
     """Return deterministic string labels without duplicates.
 
     Args:
@@ -52,7 +57,7 @@ def _normalize_labels(labels):
     return tuple(dict.fromkeys(str(label) for label in labels))
 
 
-def node_key_to_bytes(node_key) -> bytes:
+def node_key_to_bytes(node_key: NodeKeyInput) -> bytes:
     """Normalize a node key to bytes.
 
     Args:
@@ -70,7 +75,7 @@ def node_key_to_bytes(node_key) -> bytes:
     return node_key.encode('utf-8')
 
 
-def edge_key_to_bytes(edge_key) -> bytes:
+def edge_key_to_bytes(edge_key: NodeKeyInput) -> bytes:
     """Normalize an edge key to bytes.
 
     Args:
@@ -88,7 +93,7 @@ def edge_key_to_bytes(edge_key) -> bytes:
     return edge_key.encode('utf-8')
 
 
-def key_to_string(key) -> str:
+def key_to_string(key: NodeKeyInput) -> str:
     """Normalize a key to a string.
 
     Args:
@@ -171,7 +176,11 @@ def _property_value_to_range_index_bytes(value) -> bytes | None:
         temporal_kind, temporal_value = b"c", clock.date().toordinal() * 86_400_000_000 + micros
     elif isinstance(value, TemporalDuration):
         temporal_kind, temporal_value = b"u", value.total_microseconds
-    if temporal_value is not None and -(1 << 127) <= temporal_value < (1 << 127):
+    if (
+        temporal_kind is not None
+        and temporal_value is not None
+        and -(1 << 127) <= temporal_value < (1 << 127)
+    ):
         return b"t" + temporal_kind + (temporal_value + (1 << 127)).to_bytes(16, "big")
     return None
 
@@ -233,19 +242,24 @@ class Node:
         ('Drug',)
     """
 
-    def __init__(self, node_id=None, properties=None, labels=None):
+    def __init__(
+        self,
+        node_id: str | None = None,
+        properties: PropertyMap | None = None,
+        labels: Iterable[str] | None = None,
+    ) -> None:
         """Initialize a node, generating a UUID when ``node_id`` is omitted."""
-        self._id = node_id or str(uuid.uuid4())
-        self.properties = properties or {}
-        self.labels = _normalize_labels(labels)
+        self._id: str = node_id or str(uuid.uuid4())
+        self.properties: PropertyMap = properties or {}
+        self.labels: tuple[str, ...] = _normalize_labels(labels)
 
     @property
-    def get_id(self):
+    def get_id(self) -> str:
         """Unique identifier for this node."""
         return self._id
 
     @property
-    def get_id_bytes(self):
+    def get_id_bytes(self) -> bytes:
         """Return the node ID encoded as UTF-8 bytes.
 
         Examples:
@@ -254,7 +268,7 @@ class Node:
         """
         return self._id.encode('utf-8')
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, object]:
         """Convert to a dictionary form for serialization.
 
         Returns:
@@ -271,7 +285,7 @@ class Node:
         }
 
     @classmethod
-    def from_dict(cls, data: dict):
+    def from_dict(cls, data: Mapping[str, object]) -> Node:
         """Create a node from serialized dictionary data.
 
         Args:
@@ -285,7 +299,11 @@ class Node:
             >>> Node.from_dict({"id": "n1", "properties": {}}).labels
             ()
         """
-        return cls(node_id=data['id'], properties=data['properties'], labels=data.get('labels'))
+        return cls(
+            node_id=cast(str, data['id']),
+            properties=cast(PropertyMap, data['properties']),
+            labels=cast(Iterable[str] | None, data.get('labels')),
+        )
 
 class Edge:
     """Directed graph edge with source, target, and properties.
@@ -301,20 +319,26 @@ class Edge:
         'drug-1'
     """
 
-    def __init__(self, edge_id=None, source=None, target=None, properties=None):
+    def __init__(
+        self,
+        edge_id: str | None = None,
+        source: str | Node | None = None,
+        target: str | Node | None = None,
+        properties: PropertyMap | None = None,
+    ) -> None:
         """If no edge_id is provided, generate a UUID."""
-        self._id = edge_id or str(uuid.uuid4())
-        self.source = source  # node_id or Node instance
-        self.target = target  # node_id or Node instance
-        self.properties = properties or {}
+        self._id: str = edge_id or str(uuid.uuid4())
+        self.source: str | Node | None = source  # node_id or Node instance
+        self.target: str | Node | None = target  # node_id or Node instance
+        self.properties: PropertyMap = properties or {}
 
     @property
-    def get_id(self):
+    def get_id(self) -> str:
         """Unique identifier for this edge."""
         return self._id
 
     @property
-    def get_id_bytes(self):
+    def get_id_bytes(self) -> bytes:
         """Return the edge ID encoded as UTF-8 bytes.
 
         Examples:
@@ -324,31 +348,32 @@ class Edge:
         return self._id.encode('utf-8')
 
     @property
-    def get_type(self):
+    def get_type(self) -> str | None:
         """Return the typed traversal edge type.
 
         Examples:
             >>> Edge(properties={"type": "drug-to-protein"}).get_type
             'drug-to-protein'
         """
-        return self.properties.get('type')
+        value = self.properties.get('type')
+        return value if isinstance(value, str) else None
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, object]:
         """Convert to a dictionary for serialization."""
         return {
             'id': self._id,
-            'source': self.source if isinstance(self.source, str) else self.source.get_id,
-            'target': self.target if isinstance(self.target, str) else self.target.get_id,
+            'source': self.source if isinstance(self.source, str) else cast(Node, self.source).get_id,
+            'target': self.target if isinstance(self.target, str) else cast(Node, self.target).get_id,
             'properties': self.properties
         }
 
     @classmethod
-    def from_dict(cls, data: dict):
+    def from_dict(cls, data: Mapping[str, object]) -> Edge:
         """Factory from dictionary."""
-        return cls(edge_id=data['id'],
-                   source=data['source'],
-                   target=data['target'],
-                   properties=data['properties'])
+        return cls(edge_id=cast(str, data['id']),
+                   source=cast(str, data['source']),
+                   target=cast(str, data['target']),
+                   properties=cast(PropertyMap, data['properties']))
 
 class TimeIndexedEdge(Edge):
     """Deprecated edge whose byte key is prefixed by a timestamp.
@@ -368,7 +393,7 @@ class TimeIndexedEdge(Edge):
         True
     """
 
-    def __init__(self, timestamp_dat, *args, **kwargs):
+    def __init__(self, timestamp_dat: datetime.datetime, *args: Any, **kwargs: Any) -> None:
         """Initialize a timestamp-prefixed edge.
 
         Args:
@@ -377,11 +402,11 @@ class TimeIndexedEdge(Edge):
             **kwargs: Keyword arguments passed to ``Edge``.
         """
         super().__init__(*args, **kwargs)
-        self.timestamp_dat = timestamp_dat
-        self.id_string = self.get_id
+        self.timestamp_dat: datetime.datetime = timestamp_dat
+        self.id_string: str = self.get_id
 
     @property
-    def get_id_bytes(self):
+    def get_id_bytes(self) -> bytes:
         """Return timestamp-prefixed edge ID bytes.
 
         Examples:
@@ -394,24 +419,24 @@ class TimeIndexedEdge(Edge):
         b1 = datetime_to_bytes(self.timestamp_dat)
         return b1 + sep + b2
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, object]:
         """Convert to a dictionary for serialization."""
         return {
             'timestamp_dat' : self.timestamp_dat,
             'id': self._id,
-            'source': self.source if isinstance(self.source, str) else self.source.get_id,
-            'target': self.target if isinstance(self.target, str) else self.target.get_id,
+            'source': self.source if isinstance(self.source, str) else cast(Node, self.source).get_id,
+            'target': self.target if isinstance(self.target, str) else cast(Node, self.target).get_id,
             'properties': self.properties
         }
 
     @classmethod
-    def from_dict(cls, data: dict):
+    def from_dict(cls, data: Mapping[str, object]) -> TimeIndexedEdge:
         """Factory from dictionary."""
-        return cls(timestamp_dat = data['timestamp_dat'],
-                   edge_id=data['id'],
-                   source=data['source'],
-                   target=data['target'],
-                   properties=data['properties'])
+        return cls(timestamp_dat=cast(datetime.datetime, data['timestamp_dat']),
+                   edge_id=cast(str, data['id']),
+                   source=cast(str, data['source']),
+                   target=cast(str, data['target']),
+                   properties=cast(PropertyMap, data['properties']))
 
 class GraphEntityDictSerializer:
     """Serialize graph entities through a dictionary-compatible serializer.
@@ -438,7 +463,7 @@ class GraphEntityDictSerializer:
         'AdjacencyList' : lambda x : x
     }
 
-    def __init__(self, serializer : Serializer):
+    def __init__(self, serializer: Serializer) -> None:
         """Initialize the entity serializer wrapper.
 
         Args:
@@ -446,7 +471,13 @@ class GraphEntityDictSerializer:
         """
         self.serializer = serializer
 
-    def serialize(self, entity, entity_type : str):
+    @overload
+    def serialize(self, entity: Node, entity_type: Literal["Node"]) -> bytes: ...
+    @overload
+    def serialize(self, entity: Edge, entity_type: Literal["Edge"]) -> bytes: ...
+    @overload
+    def serialize(self, entity: object, entity_type: Literal["AdjacencyList"]) -> bytes: ...
+    def serialize(self, entity: object, entity_type: EntityTypeName) -> bytes:
         """Serialize a graph entity by entity type.
 
         Args:
@@ -464,7 +495,13 @@ class GraphEntityDictSerializer:
         enc_obj = self._ent_type_encoder[entity_type](entity)
         return self.serializer.serialize(enc_obj)
 
-    def deserialize(self, val, entity_type : str):
+    @overload
+    def deserialize(self, val: bytes, entity_type: Literal["Node"]) -> Node: ...
+    @overload
+    def deserialize(self, val: bytes, entity_type: Literal["Edge"]) -> Edge: ...
+    @overload
+    def deserialize(self, val: bytes, entity_type: Literal["AdjacencyList"]) -> object: ...
+    def deserialize(self, val: bytes, entity_type: EntityTypeName) -> object:
         """ Deserializer (conditional on entity type)
 
         Args:

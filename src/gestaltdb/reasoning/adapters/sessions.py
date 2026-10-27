@@ -19,7 +19,7 @@ it if they need resumes across restarts.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, cast
 
 from ...epistemic import Claim, ClaimObjectKind, ClaimPolarity
 from ...graphdb import GraphDB
@@ -31,7 +31,7 @@ from ..evidence_ledger import AssertionVersion, EvidenceLedger
 from ..maintenance import propagate_insertions, rematerialize, retract_facts
 from ..maintenance import DependencyIndex
 from ..model import ReasoningError, ReasoningLimitError, ReasoningLimits, _text, check_cancelled
-from ..typed import GenericProgram, TypedFact, _sort_key
+from ..typed import GenericProgram, Literal, TypedFact, _sort_key
 from .claims import ClaimMapping, ClaimSelection, _DERIVED_AGENTS
 
 
@@ -105,7 +105,7 @@ class _SkipVersion(Exception):
 
 def _typed_fact(claim: Claim, mapping: ClaimMapping) -> TypedFact:
     predicate = mapping._aliases.get(claim.predicate, claim.predicate)
-    return TypedFact(predicate, (claim.subject, claim.object))
+    return TypedFact(predicate, (claim.subject, cast("str | Literal", claim.object)))
 
 
 def _check_version(version: ClaimVersion, horizon: int, instant: TemporalInstant,
@@ -176,7 +176,7 @@ def _materialize_session(program: GenericProgram, catalog: RuleCatalog, scope: S
                          database_id: str, horizon: int, seen: dict[str, tuple[str, TypedFact]],
                          limits: ReasoningLimits, cancel=None) -> ReasoningSession:
     ledger = EvidenceLedger(f"{database_id}/{scope.world}",
-                            [AssertionVersion(version_id, fact) for version_id, (_, fact) in seen.items()])
+                            tuple(AssertionVersion(version_id, fact) for version_id, (_, fact) in seen.items()))
     materialized = rematerialize(program, ledger.facts, limits=limits, cancel=cancel)
     return ReasoningSession(program, catalog, scope, database_id, horizon, ledger,
                             tuple((version_id, logical_id) for version_id, (logical_id, _) in seen.items()),

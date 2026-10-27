@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
+from typing import NoReturn
 
 from .ast import (
     AndExpression,
@@ -14,6 +15,7 @@ from .ast import (
     CreateClause,
     DeleteClause,
     ExistsExpression,
+    Expression,
     FunctionCall,
     InExpression,
     ListComprehension,
@@ -100,7 +102,7 @@ class ResolvedProjection:
     """A projection expression with its resolved output definition."""
 
     item: ProjectionItem
-    expression: object
+    expression: Expression
     output: Symbol
     rendered_expression: str
 
@@ -283,7 +285,7 @@ def expression_variables(expression: object) -> tuple[str, ...]:
     if isinstance(expression, MapExpression):
         return tuple(variable for _, item in expression.items for variable in expression_variables(item))
     if isinstance(expression, CaseExpression):
-        parts = [expression.operand] if expression.operand is not None else []
+        parts: list[Expression] = [expression.operand] if expression.operand is not None else []
         parts += [item for pair in expression.whens for item in pair]
         if expression.else_value is not None:
             parts.append(expression.else_value)
@@ -291,11 +293,7 @@ def expression_variables(expression: object) -> tuple[str, ...]:
     if isinstance(expression, SubscriptExpression):
         return expression_variables(expression.target) + expression_variables(expression.index)
     if isinstance(expression, SliceExpression):
-        parts = [expression.target]
-        if expression.start is not None:
-            parts.append(expression.start)
-        if expression.end is not None:
-            parts.append(expression.end)
+        parts = [item for item in (expression.target, expression.start, expression.end) if item is not None]
         return tuple(variable for item in parts for variable in expression_variables(item))
     if isinstance(expression, ListComprehension):
         return _free_variables(
@@ -308,9 +306,9 @@ def expression_variables(expression: object) -> tuple[str, ...]:
             {expression.accumulator, expression.variable},
         )
     if isinstance(expression, MapProjectionExpression):
-        parts: list[object] = [Variable(expression.variable)]
-        parts += [item[2] for item in expression.items if item[0] == "alias"]
-        return tuple(variable for item in parts for variable in expression_variables(item))
+        aliased: list[Expression] = [Variable(expression.variable)]
+        aliased += [item[2] for item in expression.items if item[0] == "alias"]
+        return tuple(variable for item in aliased for variable in expression_variables(item))
     if isinstance(expression, QuantifiedPredicate):
         return _free_variables(
             (expression.iterable, expression.where),
@@ -522,7 +520,7 @@ def contains_function_call(expression: object) -> bool:
     if isinstance(expression, MapExpression):
         return any(contains_function_call(item) for _, item in expression.items)
     if isinstance(expression, CaseExpression):
-        parts = [expression.operand] if expression.operand is not None else []
+        parts: list[Expression] = [expression.operand] if expression.operand is not None else []
         parts += [item for pair in expression.whens for item in pair]
         if expression.else_value is not None:
             parts.append(expression.else_value)
@@ -530,11 +528,11 @@ def contains_function_call(expression: object) -> bool:
     if isinstance(expression, SubscriptExpression):
         return contains_function_call(expression.target) or contains_function_call(expression.index)
     if isinstance(expression, SliceExpression):
-        parts = [expression.target, expression.start, expression.end]
-        return any(contains_function_call(item) for item in parts if item is not None)
+        parts = [item for item in (expression.target, expression.start, expression.end) if item is not None]
+        return any(contains_function_call(item) for item in parts)
     if isinstance(expression, ListComprehension):
-        parts = [expression.iterable, expression.where, expression.projection]
-        return any(contains_function_call(item) for item in parts if item is not None)
+        parts = [item for item in (expression.iterable, expression.where, expression.projection) if item is not None]
+        return any(contains_function_call(item) for item in parts)
     if isinstance(expression, ReduceExpression):
         return any(
             contains_function_call(item)
@@ -644,7 +642,7 @@ def contains_aggregate_call(expression: object) -> bool:
 def _child_expressions(expression: object) -> tuple[object, ...]:
     """Return the direct child expressions of an extended expression node."""
     if isinstance(expression, CaseExpression):
-        parts = [expression.operand] if expression.operand is not None else []
+        parts: list[Expression] = [expression.operand] if expression.operand is not None else []
         parts += [item for pair in expression.whens for item in pair]
         if expression.else_value is not None:
             parts.append(expression.else_value)
@@ -762,9 +760,9 @@ def _iter_function_calls(expression: object) -> Iterator[FunctionCall]:
         yield from _iter_function_calls(expression.iterable)
         yield from _iter_function_calls(expression.expression)
     elif isinstance(expression, MapProjectionExpression):
-        for item in expression.items:
-            if item[0] == "alias":
-                yield from _iter_function_calls(item[2])
+        for part in expression.items:
+            if part[0] == "alias":
+                yield from _iter_function_calls(part[2])
     elif isinstance(expression, QuantifiedPredicate):
         yield from _iter_function_calls(expression.iterable)
         yield from _iter_function_calls(expression.where)
@@ -905,7 +903,7 @@ def _analyze_merge(clause: MergeClause, scope: Scope, source: str) -> Scope:
     return scope
 
 
-def _analyze_match(clause: MatchClause, scope: Scope, source: str) -> Scope:
+def _analyze_match(clause: MatchClause | OptionalMatchClause, scope: Scope, source: str) -> Scope:
     symbols = list(scope.symbols)
     by_name = {symbol.name: symbol for symbol in symbols}
 
@@ -1066,7 +1064,7 @@ def _merge_scopes(first: Scope, second: Scope) -> Scope:
     return Scope(tuple(symbols))
 
 
-def _raise_semantic(message: str, source: str, span: SourceSpan | None, needle: str | None = None) -> None:
+def _raise_semantic(message: str, source: str, span: SourceSpan | None, needle: str | None = None) -> NoReturn:
     start = span.start_offset if span is not None else 0
     end = span.end_offset if span is not None else len(source)
     offset = source.find(needle, start, end) if needle else start

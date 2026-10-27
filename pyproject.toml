@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gestaltdb"
-version = "0.14.0rc3"
+version = "0.15.0"
 description = "A pure Python GraphDB for attributed graphs."
 authors = [
     { name = "Mylonas Charilaos", email = "mylonas.charilaos@gmail.com" },
@@ -34,7 +34,7 @@ serializers = ["msgpack>=1.2.1", "protobuf>=6.33.6"]
 bloom = ["pybloom-live"]
 coverage = ["coverage", "pytest"]
 docs = ["myst-parser", "sphinx", "sphinx-rtd-theme"]
-lint = ["ruff==0.17.2"]
+lint = ["ruff==0.17.2", "mypy==2.4.0"]
 rocksdb = ["pyrex-rocksdb>=0.4.1"]
 arrow = ["pyarrow"]
 polars = ["polars", "pyarrow"]
@@ -47,7 +47,54 @@ dev = ["coverage", "lmdb", "msgpack>=1.2.1", "myst-parser", "plyvel>=1.5.1", "pr
 where = ["src"]
 
 [tool.setuptools.package-data]
-gestaltdb = ["agent_skill/**/*.md", "agent_skill/api_index.json", "viz/static/*"]
+gestaltdb = ["agent_skill/**/*.md", "agent_skill/api_index.json", "py.typed", "viz/static/*"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["gestaltdb.sampling._arrays", "gestaltdb.sampling.adjacency", "gestaltdb.sampling.feeder"]
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = [
+    "gestaltdb._graph.temporal_types",
+    "gestaltdb._graph.stored_rule_types",
+    "gestaltdb._graph.temporal_reads",
+    "gestaltdb._graph.temporal_selection",
+    "gestaltdb._graph.temporal_writes",
+    "gestaltdb._graph.temporal_indexes",
+    "gestaltdb._graph.temporal_orphans",
+    "gestaltdb._graph.temporal_entity_writes",
+    "gestaltdb._graph.temporal_sequence",
+    "gestaltdb._graph.stored_rules",
+    "gestaltdb._graph.truth_maintenance",
+    "gestaltdb.temporal_engine",
+    "gestaltdb.history",
+    "gestaltdb.epistemic_engine",
+    "gestaltdb.rules_engine",
+]
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = [
+    "gestaltdb.query_engine.cypher._runtime_types",
+    "gestaltdb.query_engine.cypher._parser_types",
+    "gestaltdb.query_engine.cypher.parser",
+    "gestaltdb.query_engine.cypher.runtime",
+    "gestaltdb.query_engine.cypher.write",
+]
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+warn_return_any = true
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

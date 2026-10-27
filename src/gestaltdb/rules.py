@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import builtins
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, cast
 
 from .temporal import TemporalInstant
 from .versioning import TemporalVersionError, normalize_version_id
@@ -46,12 +47,12 @@ class RuleAtom:
     object: str
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "subject", _term(self.subject))
-        object.__setattr__(self, "predicate", _term(self.predicate, predicate=True))
-        object.__setattr__(self, "object", _term(self.object))
+        builtins.object.__setattr__(self, "subject", _term(self.subject))
+        builtins.object.__setattr__(self, "predicate", _term(self.predicate, predicate=True))
+        builtins.object.__setattr__(self, "object", _term(self.object))
 
     @classmethod
-    def from_value(cls, value: object) -> "RuleAtom":
+    def from_value(cls, value: builtins.object) -> "RuleAtom":
         if not isinstance(value, (tuple, list)) or len(value) != 3:
             raise RuleError("rule atoms must be three-item tuples or lists")
         return cls(value[0], value[1], value[2])
@@ -173,14 +174,14 @@ class RuleVersion:
             if not isinstance(closed, (list, tuple)):
                 raise TypeError
             return cls(
-                rule_id=value["rule_id"],
-                version_id=value["version_id"],
+                rule_id=cast(str, value["rule_id"]),
+                version_id=cast(str, value["version_id"]),
                 when=tuple(RuleAtom.from_value(atom) for atom in when),
                 then=RuleAtom.from_value(value["then"]),
-                system_time=TemporalInstant(value["system_time_us"]),
-                catalog_ordinal=value["catalog_ordinal"],
+                system_time=TemporalInstant(cast(int, value["system_time_us"])),
+                catalog_ordinal=cast(int, value["catalog_ordinal"]),
                 not_when=tuple(RuleAtom.from_value(atom) for atom in not_when),
-                closed=tuple(closed),
+                closed=cast(tuple[str, ...], tuple(closed)),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise RuleError("invalid rule version payload") from exc
@@ -215,9 +216,9 @@ class RuleAbsence:
         for predicate in scope:
             if not isinstance(predicate, str) or not predicate:
                 raise RuleError("absence scope predicates must be non-empty strings")
-        object.__setattr__(self, "scope", tuple(sorted(set(scope))))
+        builtins.object.__setattr__(self, "scope", tuple(sorted(set(scope))))
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(self) -> dict[str, builtins.object]:
         return {
             "position": self.position,
             "predicate": self.predicate,
@@ -227,16 +228,16 @@ class RuleAbsence:
         }
 
     @classmethod
-    def from_dict(cls, value: Mapping[str, object]) -> "RuleAbsence":
+    def from_dict(cls, value: Mapping[str, builtins.object]) -> "RuleAbsence":
         if not isinstance(value, Mapping):
             raise RuleError("absence payload must be an object")
         try:
             return cls(
-                position=value["position"],
-                predicate=value["predicate"],
-                subject=value["subject"],
-                object=value["object"],
-                scope=tuple(value["scope"]),
+                position=cast(int, value["position"]),
+                predicate=cast(str, value["predicate"]),
+                subject=cast(str, value["subject"]),
+                object=cast(str, value["object"]),
+                scope=tuple(cast(Iterable[str], value["scope"])),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise RuleError("invalid absence payload") from exc
@@ -282,7 +283,7 @@ class RuleJustification:
         object.__setattr__(self, "absences", tuple(sorted(absences, key=lambda item: item.position)))
 
     def to_dict(self) -> dict[str, object]:
-        value = {
+        value: dict[str, object] = {
             "rule_version_id": self.rule_version_id,
             "premise_version_ids": list(self.premise_version_ids),
         }
@@ -299,8 +300,8 @@ class RuleJustification:
             if not isinstance(absences, (list, tuple)):
                 raise TypeError
             return cls(
-                rule_version_id=value["rule_version_id"],
-                premise_version_ids=tuple(value["premise_version_ids"]),
+                rule_version_id=cast(str, value["rule_version_id"]),
+                premise_version_ids=tuple(cast(Iterable[str], value["premise_version_ids"])),
                 absences=tuple(RuleAbsence.from_dict(item) for item in absences),
             )
         except (KeyError, TypeError, ValueError) as exc:
@@ -388,14 +389,14 @@ def normalize_rule_definition(
     except TypeError as exc:
         raise RuleError("closed-world scope must be an iterable of predicates") from exc
     return RuleVersion(
-        rule_id=rule_id,
+        rule_id=cast(str, rule_id),
         version_id=version_id,
         when=atoms,
         then=RuleAtom.from_value(then),
         system_time=system_time,
         catalog_ordinal=catalog_ordinal,
         not_when=negated,
-        closed=closed_values,
+        closed=cast(tuple[str, ...], closed_values),
     )
 
 
@@ -456,8 +457,8 @@ def stratify_rules(rules: Iterable[RuleVersion]) -> tuple[tuple[str, ...], ...]:
         pending = [node]
         while pending:
             current = pending.pop()
-            for parent, children in graph.items():
-                if current in children and parent not in visited:
+            for parent, dependents in graph.items():
+                if current in dependents and parent not in visited:
                     visited.add(parent)
                     members.append(parent)
                     pending.append(parent)
@@ -473,9 +474,9 @@ def stratify_rules(rules: Iterable[RuleVersion]) -> tuple[tuple[str, ...], ...]:
             )
     before: dict[int, set[int]] = {index: set() for index in range(len(components))}
     for rule in rules:
-        head = owner[rule.then.predicate]
+        head_index = owner[rule.then.predicate]
         for atom in (*rule.when, *rule.not_when):
-            before[head].add(owner[atom.predicate])
+            before[head_index].add(owner[atom.predicate])
     remaining = {index: set(deps) - {index} for index, deps in before.items()}
     ordered: list[int] = []
     ready = sorted(
@@ -483,11 +484,11 @@ def stratify_rules(rules: Iterable[RuleVersion]) -> tuple[tuple[str, ...], ...]:
         key=lambda index: components[index],
     )
     while ready:
-        current = ready.pop(0)
-        ordered.append(current)
+        current_index = ready.pop(0)
+        ordered.append(current_index)
         for index, deps in remaining.items():
-            if current in deps:
-                deps.discard(current)
+            if current_index in deps:
+                deps.discard(current_index)
                 if not deps and index not in ordered and index not in ready:
                     ready.append(index)
         ready.sort(key=lambda index: components[index])

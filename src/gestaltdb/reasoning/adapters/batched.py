@@ -9,7 +9,7 @@ anything else filters in Python with the pushdown mode recorded in the profile.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Callable, Iterator
+from typing import Callable, Iterator, cast
 
 from ...epistemic import Claim, ClaimObjectKind, ClaimPolarity
 from ...ontology.compiler import CompiledOntology
@@ -212,7 +212,7 @@ class PinnedBatchedClaimSource:
                 derived = marker is not None and claim.provenance.get("derived_by") == marker
                 if derived and not self._selection.include_derived:
                     continue
-                yield Evidence(self._mapping.map(Fact(claim.subject, claim.predicate, claim.object)),
+                yield Evidence(self._mapping.map(Fact(claim.subject, claim.predicate, cast(str, claim.object))),
                                version.version_id)
         self.verify_source()
 

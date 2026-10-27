@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, cast
 
 if TYPE_CHECKING:
     from ..kvstores import KVStore
@@ -21,6 +21,7 @@ from ..versioning import (
     TemporalOrphanArtifact,
     TemporalOrphanReclaimResult,
     TemporalOrphanReport,
+    TemporalVersion,
     normalize_version_id,
 )
 from . import index_maintenance as _index_maintenance
@@ -33,10 +34,11 @@ from .temporal_keys import (
 )
 from .temporal_reads import TemporalReader
 from .temporal_sequence import read_temporal_sequence
+from .temporal_types import RecordCatalog
 
 
-def orphan_details(store: KVStore, decode_version, commit_id: int,
-                   descriptor_payload: bytes):
+def orphan_details(store: KVStore, decode_version: Callable[[bytes], TemporalVersion], commit_id: int,
+                   descriptor_payload: bytes) -> tuple[RecordCatalog, TemporalInstant, tuple[TemporalVersion, ...]]:
     """Decode an unpublished commit descriptor and its present records."""
     try:
         descriptor = json.loads(descriptor_payload.decode("utf-8"))
@@ -90,11 +92,11 @@ def orphan_details(store: KVStore, decode_version, commit_id: int,
         ):
             raise TemporalCorruptionError("unpublished temporal record does not match its descriptor")
         versions.append(version)
-    return descriptor, system_time, tuple(versions)
+    return cast(RecordCatalog, descriptor), system_time, tuple(versions)
 
 
 def list_orphans_locked(store: KVStore, reader: TemporalReader,
-                        through_commit=None) -> TemporalOrphanReport:
+                        through_commit: int | None = None) -> TemporalOrphanReport:
     """Audit allocation gaps and incomplete commits up to a horizon."""
     allocation_horizon, _ = read_temporal_sequence(
         store, reader.sequence_key, reader.store_path, reader.sequence_filename)

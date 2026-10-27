@@ -3,8 +3,36 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TypedDict
 
 import numpy as np
+from ._arrays import BoolArray, FloatArray, IntArray, StringArray
+
+
+class _RequiredNumpyBatch(TypedDict):
+    node_ids_global: IntArray
+    node_type_ids: IntArray
+    senders: IntArray
+    receivers: IntArray
+    edge_ids_global: IntArray
+    edge_relation_ids: IntArray
+    positives: IntArray
+    negatives: IntArray
+
+
+class NumpyBatch(_RequiredNumpyBatch, total=False):
+    """Array export; temporal companions may be absent or explicitly None."""
+
+    graph_node_offsets: IntArray
+    graph_edge_offsets: IntArray
+    edge_version_ids: StringArray
+    valid_from_us: IntArray | None
+    valid_to_us: IntArray | None
+    valid_to_open: BoolArray | None
+    positive_time_us: IntArray
+    negative_time_us: IntArray | None
+    node_weights: FloatArray
+    edge_weights: FloatArray
 
 
 @dataclass(slots=True)
@@ -48,25 +76,25 @@ class SampledSubgraphBatch:
             edge_index = np.stack([arrays["senders"], arrays["receivers"]])
     """
 
-    node_ids_global: np.ndarray
-    node_type_ids: np.ndarray
-    senders: np.ndarray
-    receivers: np.ndarray
-    edge_ids_global: np.ndarray
-    edge_relation_ids: np.ndarray
-    positives: np.ndarray
-    negatives: np.ndarray
-    graph_node_offsets: np.ndarray | None = None
-    graph_edge_offsets: np.ndarray | None = None
-    edge_version_ids: np.ndarray | None = None
-    valid_from_us: np.ndarray | None = None
-    valid_to_us: np.ndarray | None = None
-    valid_to_open: np.ndarray | None = None
-    positive_time_us: np.ndarray | None = None
-    negative_time_us: np.ndarray | None = None
+    node_ids_global: IntArray
+    node_type_ids: IntArray
+    senders: IntArray
+    receivers: IntArray
+    edge_ids_global: IntArray
+    edge_relation_ids: IntArray
+    positives: IntArray
+    negatives: IntArray
+    graph_node_offsets: IntArray | None = None
+    graph_edge_offsets: IntArray | None = None
+    edge_version_ids: StringArray | None = None
+    valid_from_us: IntArray | None = None
+    valid_to_us: IntArray | None = None
+    valid_to_open: BoolArray | None = None
+    positive_time_us: IntArray | None = None
+    negative_time_us: IntArray | None = None
     negative_diagnostics: dict[str, int] | None = None
-    node_weights: np.ndarray | None = None
-    edge_weights: np.ndarray | None = None
+    node_weights: FloatArray | None = None
+    edge_weights: FloatArray | None = None
 
     @property
     def n_nodes(self) -> int:
@@ -76,14 +104,14 @@ class SampledSubgraphBatch:
     def n_edges(self) -> int:
         return int(self.edge_ids_global.size)
 
-    def to_numpy(self) -> dict[str, np.ndarray]:
+    def to_numpy(self) -> NumpyBatch:
         """Return arrays without framework-specific conversion.
 
         Returns:
             Dictionary containing NumPy arrays for nodes, edges, positives, and
-            negatives. Optional graph offsets are included when present.
+            negatives. Partially populated temporal companions can be ``None``.
         """
-        result = {
+        result: NumpyBatch = {
             "node_ids_global": self.node_ids_global,
             "node_type_ids": self.node_type_ids,
             "senders": self.senders,

@@ -268,8 +268,8 @@ def validate_structural(facts: Iterable[TypedFact], suite: StructuralSuite, *,
     violations: list[StructuralViolation] = []
     truncated = False
     closed = set(suite.closed_classes)
-    members: dict[object, set[str]] = {}
-    membership_fact: dict[object, dict[str, TypedFact]] = {}
+    members: dict[str | Literal, set[str]] = {}
+    membership_fact: dict[str | Literal, dict[str, TypedFact]] = {}
     if not closed:
         return StructuralReport((), False, len(ordered))
     for index, fact in enumerate(ordered):
@@ -287,66 +287,66 @@ def validate_structural(facts: Iterable[TypedFact], suite: StructuralSuite, *,
     for entity in sorted(members, key=_entity_key):
         classes = members[entity]
         properties = by_subject.get(entity, {})
-        for constraint in sorted(suite.required, key=lambda item: (item.class_name, item.predicate)):
-            if constraint.class_name not in classes:
+        for required in sorted(suite.required, key=lambda item: (item.class_name, item.predicate)):
+            if required.class_name not in classes:
                 continue
-            if not properties.get(constraint.predicate):
-                member = membership_fact[entity][constraint.class_name]
+            if not properties.get(required.predicate):
+                member = membership_fact[entity][required.class_name]
                 truncated = _emit(violations, max_violations, StructuralViolation(
                     "missing-required", (member,),
-                    (f"required:{constraint.class_name}:{constraint.predicate}",),
-                    f"{entity!r} of class {constraint.class_name!r} "
-                    f"is missing required property {constraint.predicate!r}"))
+                    (f"required:{required.class_name}:{required.predicate}",),
+                    f"{entity!r} of class {required.class_name!r} "
+                    f"is missing required property {required.predicate!r}"))
                 if truncated:
                     return StructuralReport(tuple(violations), True, len(ordered))
-        for constraint in sorted(suite.cardinalities,
+        for cardinality in sorted(suite.cardinalities,
                                  key=lambda item: (item.class_name, item.predicate)):
-            if constraint.class_name not in classes:
+            if cardinality.class_name not in classes:
                 continue
-            count = len(properties.get(constraint.predicate, ()))
-            if count < constraint.min_count or (constraint.max_count is not None
-                                               and count > constraint.max_count):
-                supporting = tuple(properties.get(constraint.predicate, ())) or (
-                    membership_fact[entity][constraint.class_name],)
+            count = len(properties.get(cardinality.predicate, ()))
+            if count < cardinality.min_count or (cardinality.max_count is not None
+                                               and count > cardinality.max_count):
+                supporting = tuple(properties.get(cardinality.predicate, ())) or (
+                    membership_fact[entity][cardinality.class_name],)
                 truncated = _emit(violations, max_violations, StructuralViolation(
                     "cardinality-violation", supporting,
-                    (f"cardinality:{constraint.class_name}:{constraint.predicate}",),
-                    f"{entity!r} of class {constraint.class_name!r} has {count} "
-                    f"{constraint.predicate!r} facts; expected "
-                    f"[{constraint.min_count}, {constraint.max_count if constraint.max_count is not None else '...'}]"))
+                    (f"cardinality:{cardinality.class_name}:{cardinality.predicate}",),
+                    f"{entity!r} of class {cardinality.class_name!r} has {count} "
+                    f"{cardinality.predicate!r} facts; expected "
+                    f"[{cardinality.min_count}, {cardinality.max_count if cardinality.max_count is not None else '...'}]"))
                 if truncated:
                     return StructuralReport(tuple(violations), True, len(ordered))
-        for constraint in sorted(suite.datatypes,
+        for datatype in sorted(suite.datatypes,
                                  key=lambda item: (item.class_name, item.predicate, item.kind)):
-            if constraint.class_name not in classes:
+            if datatype.class_name not in classes:
                 continue
-            for fact in properties.get(constraint.predicate, ()):
+            for fact in properties.get(datatype.predicate, ()):
                 bad = [value for value in fact.values[1:]
-                       if not (isinstance(value, Literal) and value.kind == constraint.kind)]
+                       if not (isinstance(value, Literal) and value.kind == datatype.kind)]
                 if bad:
                     truncated = _emit(violations, max_violations, StructuralViolation(
                         "datatype-violation", (fact,),
-                        (f"datatype:{constraint.class_name}:{constraint.predicate}:{constraint.kind}",),
-                        f"{fact.predicate!r} on {entity!r} of class {constraint.class_name!r} "
-                        f"holds a non-{constraint.kind} value"))
+                        (f"datatype:{datatype.class_name}:{datatype.predicate}:{datatype.kind}",),
+                        f"{fact.predicate!r} on {entity!r} of class {datatype.class_name!r} "
+                        f"holds a non-{datatype.kind} value"))
                     if truncated:
                         return StructuralReport(tuple(violations), True, len(ordered))
-        for constraint in sorted(suite.exclusive,
+        for exclusive in sorted(suite.exclusive,
                                  key=lambda item: (item.class_name, item.predicates, item.mode)):
-            if constraint.class_name not in classes:
+            if exclusive.class_name not in classes:
                 continue
-            present = [predicate for predicate in constraint.predicates
+            present = [predicate for predicate in exclusive.predicates
                        if properties.get(predicate)]
-            ok = (len(present) <= 1) if constraint.mode == "at-most-one" else (len(present) == 1)
+            ok = (len(present) <= 1) if exclusive.mode == "at-most-one" else (len(present) == 1)
             if not ok:
                 supporting = tuple(fact for predicate in present
                                    for fact in properties[predicate])
-                supporting = supporting or (membership_fact[entity][constraint.class_name],)
+                supporting = supporting or (membership_fact[entity][exclusive.class_name],)
                 truncated = _emit(violations, max_violations, StructuralViolation(
                     "exclusive-violation", supporting,
-                    (f"exclusive:{constraint.class_name}:{constraint.mode}",),
-                    f"{entity!r} of class {constraint.class_name!r} violates "
-                    f"{constraint.mode} over {list(constraint.predicates)!r}: "
+                    (f"exclusive:{exclusive.class_name}:{exclusive.mode}",),
+                    f"{entity!r} of class {exclusive.class_name!r} violates "
+                    f"{exclusive.mode} over {list(exclusive.predicates)!r}: "
                     f"present={present!r}"))
                 if truncated:
                     return StructuralReport(tuple(violations), True, len(ordered))

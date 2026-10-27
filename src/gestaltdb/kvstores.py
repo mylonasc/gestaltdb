@@ -1,11 +1,11 @@
-from typing import Optional, Dict, List, Union
+from typing import Any, ContextManager, Dict, Iterable, Iterator, List, NoReturn, Optional, Union
 import base64
 from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
 import os
 import struct
-
+from .ingestion import EdgeList, NodeList
 
 _TYPED_ADJ_SEP = b"\x1f"
 MAX_PORTABLE_INDEX_KEY_BYTES = 511
@@ -29,7 +29,7 @@ def _checked_index_key(key: bytes) -> bytes:
     return key
 
 
-def _to_bytes(value) -> bytes:
+def _to_bytes(value: object) -> bytes:
     """Normalize an index component to bytes.
 
     Args:
@@ -47,7 +47,7 @@ def _to_bytes(value) -> bytes:
     return str(value).encode("utf-8")
 
 
-def _index_part(value) -> bytes:
+def _index_part(value: object) -> bytes:
     """Encode one index key component safely.
 
     Args:
@@ -63,7 +63,7 @@ def _index_part(value) -> bytes:
     return base64.urlsafe_b64encode(_to_bytes(value)).rstrip(b"=")
 
 
-def _index_key(index_name, key_parts, value=b"") -> bytes:
+def _index_key(index_name: str, key_parts: Iterable[bytes], value: bytes = b"") -> bytes:
     """Build a sorted index key.
 
     Args:
@@ -84,7 +84,7 @@ def _index_key(index_name, key_parts, value=b"") -> bytes:
     return _checked_index_key(b"I" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts))
 
 
-def _index_prefix(index_name, key_parts) -> bytes:
+def _index_prefix(index_name: str, key_parts: Iterable[bytes]) -> bytes:
     """Build the prefix used for sorted index scans.
 
     Args:
@@ -105,7 +105,7 @@ def _index_prefix(index_name, key_parts) -> bytes:
     )
 
 
-def _range_index_key(index_name, key_parts, range_value: bytes, value=b"") -> bytes:
+def _range_index_key(index_name: str, key_parts: Iterable[bytes], range_value: bytes, value: bytes = b"") -> bytes:
     """Build a sorted range index key."""
     parts = [_index_part(index_name)]
     parts.extend(_index_part(part) for part in key_parts)
@@ -114,7 +114,7 @@ def _range_index_key(index_name, key_parts, range_value: bytes, value=b"") -> by
     return _checked_index_key(b"R" + _TYPED_ADJ_SEP + _TYPED_ADJ_SEP.join(parts))
 
 
-def _range_index_prefix(index_name, key_parts) -> bytes:
+def _range_index_prefix(index_name: str, key_parts: Iterable[bytes]) -> bytes:
     """Build the prefix used for sorted range index scans."""
     parts = [_index_part(index_name)]
     parts.extend(_index_part(part) for part in key_parts)
@@ -130,7 +130,7 @@ def _validate_range_scan_options(reverse: bool, limit: int | None) -> None:
         raise ValueError("limit must be a positive integer")
 
 
-def _missing_dependency_error(package_name, *, extra_name, feature_name=None):
+def _missing_dependency_error(package_name: str, *, extra_name: str, feature_name: str | None = None) -> ImportError:
     """Build a consistent optional dependency error.
 
     Examples:
@@ -145,7 +145,7 @@ def _missing_dependency_error(package_name, *, extra_name, feature_name=None):
     )
 
 
-def _pack_long_int(int_val):
+def _pack_long_int(int_val: int) -> bytes:
     """Pack an integer as little-endian unsigned long bytes.
 
     Examples:
@@ -154,7 +154,7 @@ def _pack_long_int(int_val):
     """
     return struct.pack('<L', int_val)
 
-def _unpack_long_int(int_val):
+def _unpack_long_int(int_val: bytes) -> int:
     """Unpack little-endian unsigned long bytes.
 
     Examples:
@@ -193,107 +193,122 @@ class KVStore:
     supports_verifiable_read_snapshots = False
 
     # The basic K/V methods:
-    def put(self, key: bytes, value: bytes):
+    def put(self, key: bytes, value: bytes) -> None:
         """Store a raw key/value pair."""
         raise NotImplementedError
 
-    def get(self, key: bytes) -> bytes:
+    def get(self, key: bytes) -> bytes | None:
         """Return a raw value by key."""
         raise NotImplementedError
 
-    def delete(self, key: bytes):
+    def delete(self, key: bytes) -> None:
         """Delete a raw key/value pair."""
         raise NotImplementedError
 
-    def range_iter(self, start_key: bytes, end_key: bytes):
+    def range_iter(self, start_key: bytes, end_key: bytes) -> Iterable[tuple[bytes, bytes]]:
         """Iterate over keys from start_key to end_key (inclusive)."""
         raise NotImplementedError
 
-    def close(self):
+    def close(self) -> None:
         """Close any resources owned by the store."""
         raise NotImplementedError
 
-    def transaction(self, **options):
+    def transaction(self, **options: Any) -> "KVTransaction | LMDBTransactionStore | PyRexTransactionStore":
         """Return a transaction-bound store when supported."""
         raise NotImplementedError("transactions are not supported by this KVStore")
 
-    def read_snapshot(self):
+    def read_snapshot(self) -> ContextManager["LMDBReadSnapshotStore | PyRexReadSnapshotStore"]:
         """Return a context manager yielding a unified read-only store view."""
         raise NotImplementedError("unified read snapshots are not supported by this KVStore")
 
-    def put_metadata(self, key: bytes, value: bytes):
+    def put_metadata(self, key: bytes, value: bytes) -> None:
         """Store a metadata key/value pair."""
         raise NotImplementedError
 
-    def get_metadata(self, key: bytes) -> bytes:
+    def get_metadata(self, key: bytes) -> bytes | None:
         """Return a metadata value by key."""
         raise NotImplementedError
 
-    def delete_metadata(self, key: bytes):
+    def delete_metadata(self, key: bytes) -> None:
         """Delete a metadata key/value pair."""
         raise NotImplementedError
 
     # The specialized node/edge methods:
-    def put_node(self, node_id: str, value: bytes):
+    def put_node(self, node_id: bytes, value: bytes) -> None:
         """Store a node (serialized)."""
         raise NotImplementedError
 
-    def get_node(self, node_id: str) -> bytes:
+    def get_node(self, node_id: bytes) -> bytes | None:
         """Retrieve a node by ID."""
         raise NotImplementedError
 
-    def delete_node(self, node_id: str):
+    def delete_node(self, node_id: bytes) -> None:
         """Delete a node."""
         raise NotImplementedError
 
-    def put_edge(self, edge_id: str, value: bytes):
+    def put_edge(self, edge_id: bytes, value: bytes) -> None:
         """Store an edge (serialized)."""
         raise NotImplementedError
 
-    def get_edge(self, edge_id: str) -> bytes:
+    def get_edge(self, edge_id: bytes) -> bytes | None:
         """Retrieve an edge."""
         raise NotImplementedError
 
-    def delete_edge(self, edge_id: str):
+    def delete_edge(self, edge_id: bytes) -> None:
         """Delete an edge."""
         raise NotImplementedError
 
-    def put_nodes_bulk(self, keys_and_values: dict[str, bytes]):
+    def put_nodes_bulk(self, keys_and_values: dict[bytes, bytes]) -> None:
         """
         Store multiple node (serialized) values in a single batch/transaction if possible.
         """
         raise NotImplementedError
 
-    def get_nodes_bulk(self, node_ids: list[str]) -> dict[str, bytes]:
+    def get_nodes_bulk(self, node_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         """Retrieve multiple serialized nodes by key."""
         raise NotImplementedError
 
-    def put_edges_bulk(self, keys_and_values: dict[str, bytes]):
+    def put_edges_bulk(self, keys_and_values: dict[bytes, bytes]) -> None:
         """Store multiple serialized edges."""
         raise NotImplementedError
-    
-    def get_edges_bulk(self, edge_ids: list[str]) -> dict[str, bytes]:
+
+    def get_edges_bulk(self, edge_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         """Retrieve multiple serialized edges by key."""
         raise NotImplementedError
 
-    def delete_adjacency(self, node_id: bytes):
+    def get_node_keys_generator(self, num_nodes: int | None = None, key_offset: bytes | None = None) -> Iterator[bytes]:
+        raise NotImplementedError
+
+    def get_edge_keys_generator(self, num_edges: int | None = None, key_offset: bytes | None = None) -> Iterator[bytes]:
+        raise NotImplementedError
+
+    def put_adjacency(self, node_id: bytes, value: bytes) -> None:
+        raise NotImplementedError
+
+    def get_adjacency(self, node_id: bytes) -> bytes | None:
+        raise NotImplementedError
+
+    def put_adjacency_bulk(self, adjacencies: dict[bytes, bytes]) -> None:
+        raise NotImplementedError
+
+    def delete_adjacency(self, node_id: bytes) -> None:
         """Delete a serialized adjacency list for a node."""
         raise NotImplementedError
 
-    def put_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
+    def put_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes) -> None:
         """Store typed adjacency records for an edge."""
         raise NotImplementedError
 
-    def put_typed_adjacency_bulk(self, records: list[tuple[bytes, bytes, str, bytes]]):
+    def put_typed_adjacency_bulk(self, records: list[tuple[bytes, bytes, str, bytes]]) -> None:
         """Store typed adjacency records for multiple edges."""
         for source_id, target_id, edge_type, edge_id in records:
             self.put_typed_adjacency(source_id, target_id, edge_type, edge_id)
 
-    def delete_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
+    def delete_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes) -> None:
         """Delete typed adjacency records for an edge."""
         raise NotImplementedError
 
-    def iter_typed_adjacency(self, node_id: bytes, edge_type: str, direction: str = "out"):
+    def iter_typed_adjacency(self, node_id: bytes, edge_type: str, direction: str = "out") -> Iterator[tuple[bytes, bytes]]:
         """Yield typed adjacency records for a node and edge type."""
         raise NotImplementedError
 
@@ -301,82 +316,45 @@ class KVStore:
         """Count typed adjacency records for a node and edge type."""
         return sum(1 for _ in self.iter_typed_adjacency(node_id, edge_type, direction))
 
-    def put_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
-        """Store one sorted index entry.
-
-        Args:
-            index_name: Logical index name, such as ``"node_label"``.
-            key_parts: Ordered components used as the scan prefix.
-            value: Entity ID or payload returned by prefix scans.
-
-        Examples:
-            >>> store.put_index_entry("node_label", [b"Drug"], b"drug-1")  # doctest: +SKIP
-        """
+    def put_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes) -> None:
+        """Store one sorted index entry."""
         raise NotImplementedError
 
-    def put_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes]]):
-        """Store many sorted index entries.
-
-        Args:
-            entries: Tuples of ``(index_name, key_parts, value)``.
-
-        Examples:
-            >>> store.put_index_entries_bulk([("node_label", [b"Drug"], b"drug-1")])  # doctest: +SKIP
-        """
+    def put_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes]]) -> None:
+        """Store many sorted index entries."""
         for index_name, key_parts, value in entries:
             self.put_index_entry(index_name, key_parts, value)
 
-    def delete_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
-        """Delete one sorted index entry.
-
-        Args:
-            index_name: Logical index name.
-            key_parts: Ordered components used when the entry was written.
-            value: Entity ID or payload used when the entry was written.
-
-        Examples:
-            >>> store.delete_index_entry("node_label", [b"Drug"], b"drug-1")  # doctest: +SKIP
-        """
+    def delete_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes) -> None:
+        """Delete one sorted index entry."""
         raise NotImplementedError
 
-    def iter_index_prefix(self, index_name: str, key_parts: list[bytes]):
-        """Yield values whose index key starts with ``key_parts``.
-
-        Args:
-            index_name: Logical index name.
-            key_parts: Ordered prefix components.
-
-        Yields:
-            Values associated with matching index entries.
-
-        Examples:
-            >>> list(store.iter_index_prefix("node_label", [b"Drug"]))  # doctest: +SKIP
-            [b'drug-1']
-        """
+    def iter_index_prefix(self, index_name: str, key_parts: list[bytes]) -> Iterator[bytes]:
+        """Yield values whose index key starts with ``key_parts``."""
         raise NotImplementedError
 
-    def put_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes):
+    def put_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes) -> None:
         """Store one sorted range index entry."""
         raise NotImplementedError
 
-    def put_range_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes, bytes]]):
+    def put_range_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes, bytes]]) -> None:
         """Store many sorted range index entries."""
         for index_name, key_parts, range_value, value in entries:
             self.put_range_index_entry(index_name, key_parts, range_value, value)
 
-    def delete_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes):
+    def delete_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes) -> None:
         """Delete one sorted range index entry."""
         raise NotImplementedError
 
-    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None):
+    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None) -> Iterator[bytes]:
         """Yield bounded range-index values, optionally greatest-first."""
         raise NotImplementedError
 
-    def ingest_nodes_columnar(self, node_list, *, native: bool = True):
+    def ingest_nodes_columnar(self, node_list: NodeList, *, native: bool = True) -> None:
         """Store columnar nodes with caller-provided serialized values."""
         self.put_nodes_bulk(dict(zip(node_list.node_ids, node_list.node_values)))
 
-    def ingest_edges_columnar(self, edge_list, *, append_only: bool = True, native: bool = True, maintain_indexes: bool = True):
+    def ingest_edges_columnar(self, edge_list: EdgeList, *, append_only: bool = True, native: bool = True, maintain_indexes: bool = True) -> None:
         """Store columnar typed edges with caller-provided serialized values."""
         if not append_only:
             raise NotImplementedError("columnar edge ingestion currently requires append_only=True")
@@ -389,6 +367,17 @@ class KVStore:
                 ("edge_type", [edge_type.encode("utf-8")], edge_id)
                 for edge_type, edge_id in zip(edge_list.edge_types, edge_list.edge_ids)
             ])
+
+
+class KVTransaction(KVStore):
+    """A transaction-bound store with explicit commit/rollback coordination."""
+
+    def rollback(self) -> None:
+        raise NotImplementedError
+
+    def commit(self) -> None:
+        raise NotImplementedError
+
 
 # =========================================
 # LMDB Implementation
@@ -469,7 +458,7 @@ class LMDBStore(KVStore):
     supports_verifiable_read_snapshots = True
 
     @staticmethod
-    def ensure_available():
+    def ensure_available() -> Any:
         """Import and return LMDB, or raise installation guidance."""
         try:
             import lmdb
@@ -477,7 +466,7 @@ class LMDBStore(KVStore):
             raise _missing_dependency_error("lmdb", extra_name="lmdb", feature_name="LMDBStore") from exc
         return lmdb
 
-    def __init__(self, path='graph_lmdb', map_size=10_485_760, map_id = True, map_keys = False):
+    def __init__(self, path: str | os.PathLike[str] = 'graph_lmdb', map_size: int = 10_485_760, map_id: bool = True, map_keys: bool = False) -> None:
         """
         Creates/opens an LMDB environment with three named sub-databases:
           - b'nodes' for node data
@@ -505,21 +494,21 @@ class LMDBStore(KVStore):
             self.edge_key_encdec = SimpleKV(b'edge_key_db')
 
     # -- Basic methods (not used by GraphDB if we rely on specialized node/edge methods below)
-    def put(self, key: bytes, value: bytes):
+    def put(self, key: bytes, value: bytes) -> None:
         """Placeholder generic put; graph code uses specialized methods."""
         # For LMDB, we'd need to decide which db to put to. This might remain unused.
         pass
 
-    def get(self, key: bytes) -> bytes:
+    def get(self, key: bytes) -> bytes | None:
         """Placeholder generic get; graph code uses specialized methods."""
         # Not used directly.
         return None
 
-    def delete(self, key: bytes):
+    def delete(self, key: bytes) -> None:
         """Placeholder generic delete; graph code uses specialized methods."""
         pass
 
-    def range_iter(self, start_key: bytes, end_key: bytes):
+    def range_iter(self, start_key: bytes, end_key: bytes) -> Iterator[tuple[bytes, bytes]]:
         """Yield node records whose keys fall within an inclusive range."""
         # For demonstration, let us assume node range queries share a single sub-DB.
         # This might need refining.
@@ -532,11 +521,11 @@ class LMDBStore(KVStore):
                     break
                 yield k, v
 
-    def close(self):
+    def close(self) -> None:
         """Close the LMDB environment."""
         self.env.close()
 
-    def transaction(self, write: bool = True, **options):
+    def transaction(self, write: bool = True, **options: Any) -> "LMDBTransactionStore":
         """Open a transaction spanning all LMDB named databases."""
         return LMDBTransactionStore(self, write=write, **options)
 
@@ -545,7 +534,7 @@ class LMDBStore(KVStore):
         return self.env.info()["last_txnid"]
 
     @contextmanager
-    def read_snapshot(self):
+    def read_snapshot(self) -> Iterator["LMDBReadSnapshotStore"]:
         """Pin all named databases to one LMDB MVCC transaction."""
         snapshot = LMDBReadSnapshotStore(self)
         try:
@@ -553,78 +542,77 @@ class LMDBStore(KVStore):
         finally:
             snapshot.close()
 
-    def put_metadata(self, key: bytes, value: bytes):
+    def put_metadata(self, key: bytes, value: bytes) -> None:
         """Store a metadata key/value pair."""
         with self.env.begin(write=True, db=self.metadata_db) as txn:
             txn.put(key, value)
 
-    def get_metadata(self, key: bytes) -> bytes:
+    def get_metadata(self, key: bytes) -> bytes | None:
         """Return a metadata value by key, or ``None``."""
         with self.env.begin(write=False, db=self.metadata_db) as txn:
             return txn.get(key)
 
-    def delete_metadata(self, key: bytes):
+    def delete_metadata(self, key: bytes) -> None:
         """Delete a metadata key/value pair."""
         with self.env.begin(write=True, db=self.metadata_db) as txn:
             txn.delete(key)
 
     # -- Specialized node methods
-    def put_node(self, node_id: bytes, value: bytes):
+    def put_node(self, node_id: bytes, value: bytes) -> None:
         """Store a serialized node by byte key."""
         with self.env.begin(write=True, db=self.nodes_db) as txn:
             txn.put(node_id, value)
 
-    def get_node(self, node_id: bytes) -> bytes:
+    def get_node(self, node_id: bytes) -> bytes | None:
         """Return serialized node bytes by key, or ``None``."""
         with self.env.begin(write=False, db=self.nodes_db) as txn:
             return txn.get(node_id)
 
-    def delete_node(self, node_id: bytes):
+    def delete_node(self, node_id: bytes) -> None:
         """Delete a node by byte key."""
         with self.env.begin(write=True, db=self.nodes_db) as txn:
             txn.delete(node_id)
 
     # -- Specialized edge methods
-    def put_edge(self, edge_id: bytes, value: bytes):
+    def put_edge(self, edge_id: bytes, value: bytes) -> None:
         """Store a serialized edge by byte key."""
         with self.env.begin(write=True, db=self.edges_db) as txn:
             txn.put(edge_id, value)
 
-    def get_edge(self, edge_id: str) -> bytes:
+    def get_edge(self, edge_id: bytes) -> bytes | None:
         """Return serialized edge bytes by key, or ``None``."""
         with self.env.begin(write=False, db=self.edges_db) as txn:
             return txn.get(edge_id)
 
-    def delete_edge(self, edge_id: str):
+    def delete_edge(self, edge_id: bytes) -> None:
         """Delete an edge by byte key."""
         with self.env.begin(write=True, db=self.edges_db) as txn:
             txn.delete(edge_id)
 
-    def put_nodes_bulk(self, keys_and_values: dict[bytes, bytes]):
+    def put_nodes_bulk(self, keys_and_values: dict[bytes, bytes]) -> None:
         """Write a batch of nodes in a single transaction."""
         with self.env.begin(write=True, db=self.nodes_db) as txn:
             for node_id, val in keys_and_values.items():
                 txn.put(node_id, val)
     
-    def get_nodes_bulk(self, node_ids: list[bytes]) -> dict[bytes, bytes]:
+    def get_nodes_bulk(self, node_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         """Retrieve multiple nodes in one read transaction."""
         results = {}
         with self.env.begin(write=False, db=self.nodes_db) as txn:
             with txn.cursor() as c:
-            # for node_id in node_ids:
-                data = c.getmulti(node_ids)
+                data = c.getmulti(list(node_ids))
                 if data is not None:
                     results.update({k : v for k, v in data})
 
         return results
     
-    def put_edges_bulk(self, keys_and_values: dict[bytes, bytes]):
+    def put_edges_bulk(self, keys_and_values: dict[bytes, bytes]) -> None:
         """Store many serialized edges in one transaction."""
         with self.env.begin(write=True, db=self.edges_db) as txn:
             for edge_id, val in keys_and_values.items():
                 txn.put(edge_id, val)
     
-    def get_edges_bulk(self, edge_ids: list[bytes]) -> dict[bytes, bytes]:
+    def get_edges_bulk(self, edge_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         """Return serialized edges for the requested keys."""
         results = {}
         with self.env.begin(write=False, db=self.edges_db) as txn:
@@ -634,7 +622,7 @@ class LMDBStore(KVStore):
                     results[edge_id] = data
         return results
 
-    def get_edge_keys_generator(self, num_edges = None, key_offset = None):
+    def get_edge_keys_generator(self, num_edges: int | None = None, key_offset: bytes | None = None) -> Iterator[bytes]:
         """Yield edge keys from the edge database."""
         yielded = 0
         with self.env.begin(write=False, db=self.edges_db) as txn:
@@ -647,7 +635,7 @@ class LMDBStore(KVStore):
                     if num_edges is not None and yielded == num_edges:
                         break
     
-    def get_node_keys_generator(self, num_nodes = None, key_offset = None):
+    def get_node_keys_generator(self, num_nodes: int | None = None, key_offset: bytes | None = None) -> Iterator[bytes]:
         """Yield node keys from the node database."""
         yielded = 0
         with self.env.begin(write = False, db = self.nodes_db) as txn:
@@ -674,9 +662,7 @@ class LMDBStore(KVStore):
             else:
                 raise Exception('Get adjacency requires the bytes! (serialized data)')
 
-    # -------------------------------------------------------------------------
-    # Bulk Write: Adjacency
-    # -------------------------------------------------------------------------
+    # -- Bulk Write: Adjacency --
     def put_adjacency_bulk(self, adj_dict: Dict[bytes, bytes]) -> None:
         """
         Insert/update multiple adjacency lists in one transaction.
@@ -702,32 +688,32 @@ class LMDBStore(KVStore):
                     results[node_id] = data
         return results
 
-    def delete_adjacency(self, node_id: bytes):
+    def delete_adjacency(self, node_id: bytes) -> None:
         """Delete a serialized adjacency list for a node."""
         with self.env.begin(write=True, db=self.adj_db) as txn:
             txn.delete(node_id)
 
     # ----- Typed Adjacency Methods -----
-    def put_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
+    def put_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes) -> None:
         """Store forward and reverse typed adjacency records."""
         with self.env.begin(write=True, db=self.typed_adj_db) as txn:
             txn.put(_typed_adjacency_key("out", source_id, edge_type, edge_id), target_id)
             txn.put(_typed_adjacency_key("in", target_id, edge_type, edge_id), source_id)
 
-    def put_typed_adjacency_bulk(self, records: list[tuple[bytes, bytes, str, bytes]]):
+    def put_typed_adjacency_bulk(self, records: list[tuple[bytes, bytes, str, bytes]]) -> None:
         """Store many typed adjacency records in one transaction."""
         with self.env.begin(write=True, db=self.typed_adj_db) as txn:
             for source_id, target_id, edge_type, edge_id in records:
                 txn.put(_typed_adjacency_key("out", source_id, edge_type, edge_id), target_id)
                 txn.put(_typed_adjacency_key("in", target_id, edge_type, edge_id), source_id)
 
-    def delete_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
+    def delete_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes) -> None:
         """Delete forward and reverse typed adjacency records."""
         with self.env.begin(write=True, db=self.typed_adj_db) as txn:
             txn.delete(_typed_adjacency_key("out", source_id, edge_type, edge_id))
             txn.delete(_typed_adjacency_key("in", target_id, edge_type, edge_id))
 
-    def iter_typed_adjacency(self, node_id: bytes, edge_type: str, direction: str = "out"):
+    def iter_typed_adjacency(self, node_id: bytes, edge_type: str, direction: str = "out") -> Iterator[tuple[bytes, bytes]]:
         """Yield typed adjacency ``(edge_id, neighbor_id)`` pairs."""
         prefix = _typed_adjacency_prefix(direction, node_id, edge_type)
         with self.env.begin(write=False, db=self.typed_adj_db) as txn:
@@ -740,23 +726,23 @@ class LMDBStore(KVStore):
                 edge_id = key[len(prefix):]
                 yield edge_id, neighbor_id
 
-    def put_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
+    def put_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes) -> None:
         """Store one sorted index entry."""
         with self.env.begin(write=True, db=self.index_db) as txn:
             txn.put(_index_key(index_name, key_parts, value), value)
 
-    def put_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes]]):
+    def put_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes]]) -> None:
         """Store many sorted index entries in one transaction."""
         with self.env.begin(write=True, db=self.index_db) as txn:
             for index_name, key_parts, value in entries:
                 txn.put(_index_key(index_name, key_parts, value), value)
 
-    def delete_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
+    def delete_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes) -> None:
         """Delete one sorted index entry."""
         with self.env.begin(write=True, db=self.index_db) as txn:
             txn.delete(_index_key(index_name, key_parts, value))
 
-    def iter_index_prefix(self, index_name: str, key_parts: list[bytes]):
+    def iter_index_prefix(self, index_name: str, key_parts: list[bytes]) -> Iterator[bytes]:
         """Yield values whose index key starts with ``key_parts``."""
         prefix = _index_prefix(index_name, key_parts)
         with self.env.begin(write=False, db=self.index_db) as txn:
@@ -768,23 +754,23 @@ class LMDBStore(KVStore):
                     break
                 yield value
 
-    def put_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes):
+    def put_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes) -> None:
         """Store one sorted range index entry."""
         with self.env.begin(write=True, db=self.index_db) as txn:
             txn.put(_range_index_key(index_name, key_parts, range_value, value), value)
 
-    def put_range_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes, bytes]]):
+    def put_range_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes, bytes]]) -> None:
         """Store many sorted range index entries in one transaction."""
         with self.env.begin(write=True, db=self.index_db) as txn:
             for index_name, key_parts, range_value, value in entries:
                 txn.put(_range_index_key(index_name, key_parts, range_value, value), value)
 
-    def delete_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes):
+    def delete_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes) -> None:
         """Delete one sorted range index entry."""
         with self.env.begin(write=True, db=self.index_db) as txn:
             txn.delete(_range_index_key(index_name, key_parts, range_value, value))
 
-    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None):
+    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None) -> Iterator[bytes]:
         """Yield values whose range index key falls between start and end values."""
         _validate_range_scan_options(reverse, limit)
         prefix = _range_index_prefix(index_name, key_parts)
@@ -845,43 +831,43 @@ class LMDBTransactionStore(KVStore):
 
     supports_transactions = True
 
-    def __init__(self, parent: LMDBStore, write: bool = True, **options):
+    def __init__(self, parent: LMDBStore, write: bool = True, **options: Any) -> None:
         self.parent = parent
         self.write = write
         self.txn = parent.env.begin(write=write, **options)
         self._active = True
 
-    def _check_active(self):
+    def _check_active(self) -> None:
         if not self._active:
             raise RuntimeError("transaction is no longer active")
 
-    def commit(self):
+    def commit(self) -> None:
         self._check_active()
         self.txn.commit()
         self._active = False
 
-    def rollback(self):
+    def rollback(self) -> None:
         if self._active:
             self.txn.abort()
             self._active = False
 
-    def close(self):
+    def close(self) -> None:
         self.rollback()
 
-    def transaction(self, **options):
+    def transaction(self, **options: Any) -> NoReturn:
         raise NotImplementedError("nested transactions are not supported")
 
-    def put(self, key: bytes, value: bytes):
+    def put(self, key: bytes, value: bytes) -> None:
         self._check_active()
 
-    def get(self, key: bytes) -> bytes:
+    def get(self, key: bytes) -> bytes | None:
         self._check_active()
         return None
 
-    def delete(self, key: bytes):
+    def delete(self, key: bytes) -> None:
         self._check_active()
 
-    def range_iter(self, start_key: bytes, end_key: bytes):
+    def range_iter(self, start_key: bytes, end_key: bytes) -> Iterator[tuple[bytes, bytes]]:
         self._check_active()
         cursor = self.txn.cursor(db=self.parent.nodes_db)
         if not cursor.set_range(start_key):
@@ -891,48 +877,48 @@ class LMDBTransactionStore(KVStore):
                 break
             yield key, value
 
-    def put_metadata(self, key: bytes, value: bytes):
+    def put_metadata(self, key: bytes, value: bytes) -> None:
         self._check_active()
         self.txn.put(key, value, db=self.parent.metadata_db)
 
-    def get_metadata(self, key: bytes) -> bytes:
+    def get_metadata(self, key: bytes) -> bytes | None:
         self._check_active()
         return self.txn.get(key, db=self.parent.metadata_db)
 
-    def delete_metadata(self, key: bytes):
+    def delete_metadata(self, key: bytes) -> None:
         self._check_active()
         self.txn.delete(key, db=self.parent.metadata_db)
 
-    def put_node(self, node_id: bytes, value: bytes):
+    def put_node(self, node_id: bytes, value: bytes) -> None:
         self._check_active()
         self.txn.put(node_id, value, db=self.parent.nodes_db)
 
-    def get_node(self, node_id: bytes) -> bytes:
+    def get_node(self, node_id: bytes) -> bytes | None:
         self._check_active()
         return self.txn.get(node_id, db=self.parent.nodes_db)
 
-    def delete_node(self, node_id: bytes):
+    def delete_node(self, node_id: bytes) -> None:
         self._check_active()
         self.txn.delete(node_id, db=self.parent.nodes_db)
 
-    def put_edge(self, edge_id: bytes, value: bytes):
+    def put_edge(self, edge_id: bytes, value: bytes) -> None:
         self._check_active()
         self.txn.put(edge_id, value, db=self.parent.edges_db)
 
-    def get_edge(self, edge_id: bytes) -> bytes:
+    def get_edge(self, edge_id: bytes) -> bytes | None:
         self._check_active()
         return self.txn.get(edge_id, db=self.parent.edges_db)
 
-    def delete_edge(self, edge_id: bytes):
+    def delete_edge(self, edge_id: bytes) -> None:
         self._check_active()
         self.txn.delete(edge_id, db=self.parent.edges_db)
 
-    def put_nodes_bulk(self, keys_and_values: dict[bytes, bytes]):
+    def put_nodes_bulk(self, keys_and_values: dict[bytes, bytes]) -> None:
         self._check_active()
         for node_id, value in keys_and_values.items():
             self.txn.put(node_id, value, db=self.parent.nodes_db)
 
-    def get_nodes_bulk(self, node_ids: list[bytes]) -> dict[bytes, bytes]:
+    def get_nodes_bulk(self, node_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         self._check_active()
         results = {}
         for node_id in node_ids:
@@ -941,12 +927,12 @@ class LMDBTransactionStore(KVStore):
                 results[node_id] = value
         return results
 
-    def put_edges_bulk(self, keys_and_values: dict[bytes, bytes]):
+    def put_edges_bulk(self, keys_and_values: dict[bytes, bytes]) -> None:
         self._check_active()
         for edge_id, value in keys_and_values.items():
             self.txn.put(edge_id, value, db=self.parent.edges_db)
 
-    def get_edges_bulk(self, edge_ids: list[bytes]) -> dict[bytes, bytes]:
+    def get_edges_bulk(self, edge_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         self._check_active()
         results = {}
         for edge_id in edge_ids:
@@ -955,13 +941,13 @@ class LMDBTransactionStore(KVStore):
                 results[edge_id] = value
         return results
 
-    def get_edge_keys_generator(self, num_edges=None, key_offset=None):
+    def get_edge_keys_generator(self, num_edges: int | None = None, key_offset: bytes | None = None) -> Iterator[bytes]:
         yield from self._key_generator(self.parent.edges_db, num_edges, key_offset)
 
-    def get_node_keys_generator(self, num_nodes=None, key_offset=None):
+    def get_node_keys_generator(self, num_nodes: int | None = None, key_offset: bytes | None = None) -> Iterator[bytes]:
         yield from self._key_generator(self.parent.nodes_db, num_nodes, key_offset)
 
-    def _key_generator(self, db, limit=None, key_offset=None):
+    def _key_generator(self, db: Any, limit: int | None = None, key_offset: bytes | None = None) -> Iterator[bytes]:
         self._check_active()
         yielded = 0
         cursor = self.txn.cursor(db=db)
@@ -1001,25 +987,25 @@ class LMDBTransactionStore(KVStore):
                 results[node_id] = value
         return results
 
-    def delete_adjacency(self, node_id: bytes):
+    def delete_adjacency(self, node_id: bytes) -> None:
         self._check_active()
         self.txn.delete(node_id, db=self.parent.adj_db)
 
-    def put_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
+    def put_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes) -> None:
         self.put_typed_adjacency_bulk([(source_id, target_id, edge_type, edge_id)])
 
-    def put_typed_adjacency_bulk(self, records: list[tuple[bytes, bytes, str, bytes]]):
+    def put_typed_adjacency_bulk(self, records: list[tuple[bytes, bytes, str, bytes]]) -> None:
         self._check_active()
         for source_id, target_id, edge_type, edge_id in records:
             self.txn.put(_typed_adjacency_key("out", source_id, edge_type, edge_id), target_id, db=self.parent.typed_adj_db)
             self.txn.put(_typed_adjacency_key("in", target_id, edge_type, edge_id), source_id, db=self.parent.typed_adj_db)
 
-    def delete_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
+    def delete_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes) -> None:
         self._check_active()
         self.txn.delete(_typed_adjacency_key("out", source_id, edge_type, edge_id), db=self.parent.typed_adj_db)
         self.txn.delete(_typed_adjacency_key("in", target_id, edge_type, edge_id), db=self.parent.typed_adj_db)
 
-    def iter_typed_adjacency(self, node_id: bytes, edge_type: str, direction: str = "out"):
+    def iter_typed_adjacency(self, node_id: bytes, edge_type: str, direction: str = "out") -> Iterator[tuple[bytes, bytes]]:
         self._check_active()
         prefix = _typed_adjacency_prefix(direction, node_id, edge_type)
         cursor = self.txn.cursor(db=self.parent.typed_adj_db)
@@ -1030,20 +1016,20 @@ class LMDBTransactionStore(KVStore):
                 break
             yield key[len(prefix):], neighbor_id
 
-    def put_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
+    def put_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes) -> None:
         self._check_active()
         self.txn.put(_index_key(index_name, key_parts, value), value, db=self.parent.index_db)
 
-    def put_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes]]):
+    def put_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes]]) -> None:
         self._check_active()
         for index_name, key_parts, value in entries:
             self.txn.put(_index_key(index_name, key_parts, value), value, db=self.parent.index_db)
 
-    def delete_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
+    def delete_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes) -> None:
         self._check_active()
         self.txn.delete(_index_key(index_name, key_parts, value), db=self.parent.index_db)
 
-    def iter_index_prefix(self, index_name: str, key_parts: list[bytes]):
+    def iter_index_prefix(self, index_name: str, key_parts: list[bytes]) -> Iterator[bytes]:
         self._check_active()
         prefix = _index_prefix(index_name, key_parts)
         cursor = self.txn.cursor(db=self.parent.index_db)
@@ -1054,20 +1040,20 @@ class LMDBTransactionStore(KVStore):
                 break
             yield value
 
-    def put_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes):
+    def put_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes) -> None:
         self._check_active()
         self.txn.put(_range_index_key(index_name, key_parts, range_value, value), value, db=self.parent.index_db)
 
-    def put_range_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes, bytes]]):
+    def put_range_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes, bytes]]) -> None:
         self._check_active()
         for index_name, key_parts, range_value, value in entries:
             self.txn.put(_range_index_key(index_name, key_parts, range_value, value), value, db=self.parent.index_db)
 
-    def delete_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes):
+    def delete_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes) -> None:
         self._check_active()
         self.txn.delete(_range_index_key(index_name, key_parts, range_value, value), db=self.parent.index_db)
 
-    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None):
+    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None) -> Iterator[bytes]:
         self._check_active()
         _validate_range_scan_options(reverse, limit)
         prefix = _range_index_prefix(index_name, key_parts)
@@ -1127,7 +1113,7 @@ class LMDBReadSnapshotStore(LMDBTransactionStore):
     supports_read_snapshots = False
     supports_verifiable_read_snapshots = True
 
-    def __init__(self, parent: LMDBStore):
+    def __init__(self, parent: LMDBStore) -> None:
         super().__init__(parent, write=False)
         self.snapshot_identity = ReadSnapshotIdentity(
             backend="lmdb",
@@ -1136,7 +1122,7 @@ class LMDBReadSnapshotStore(LMDBTransactionStore):
             verifiable=True,
         )
 
-    def _read_only(self, *args, **kwargs):
+    def _read_only(self, *args: object, **kwargs: object) -> NoReturn:
         self._check_active()
         raise RuntimeError("read snapshot is read-only")
 
@@ -1148,7 +1134,7 @@ class LMDBReadSnapshotStore(LMDBTransactionStore):
     put_index_entry = put_index_entries_bulk = delete_index_entry = _read_only
     put_range_index_entry = put_range_index_entries_bulk = delete_range_index_entry = _read_only
 
-    def commit(self):
+    def commit(self) -> NoReturn:
         raise RuntimeError("read snapshot cannot be committed")
 
     def state_sha256(self) -> str:
@@ -1198,7 +1184,7 @@ class LevelDBStore(KVStore):
     """
 
     @staticmethod
-    def ensure_available():
+    def ensure_available() -> Any:
         """Import and return Plyvel, or raise installation guidance."""
         try:
             import plyvel
@@ -1206,7 +1192,7 @@ class LevelDBStore(KVStore):
             raise _missing_dependency_error("plyvel", extra_name="leveldb", feature_name="LevelDBStore") from exc
         return plyvel
 
-    def __init__(self, path='graph_leveldb'):
+    def __init__(self, path: str | os.PathLike[str] = 'graph_leveldb') -> None:
         """Create or open a LevelDB store. We'll store nodes/edges by prefix."""
         plyvel = self.ensure_available()
         
@@ -1236,7 +1222,7 @@ class LevelDBStore(KVStore):
 
     # def delete(self, key: bytes):
     #     self.db.delete(key)
-    def get_db_path(self, db_string = 'nodes'):
+    def get_db_path(self, db_string: str = 'nodes') -> str:
         """Return the relative path for a named LevelDB database.
 
         Examples:
@@ -1245,7 +1231,7 @@ class LevelDBStore(KVStore):
         """
         return self.db_paths[db_string]
     
-    def range_iter(self, start_key: bytes, end_key: bytes):
+    def range_iter(self, start_key: bytes, end_key: bytes) -> Iterator[tuple[bytes, bytes]]:
         """Yield records whose keys fall within a range.
 
         Note:
@@ -1255,29 +1241,29 @@ class LevelDBStore(KVStore):
             for k, v in it:
                 yield k, v
 
-    def put_metadata(self, key: bytes, value: bytes):
+    def put_metadata(self, key: bytes, value: bytes) -> None:
         """Store a metadata key/value pair."""
         self.db_metadata.put(key, value)
 
-    def get_metadata(self, key: bytes) -> bytes:
+    def get_metadata(self, key: bytes) -> bytes | None:
         """Return a metadata value by key, or ``None``."""
         return self.db_metadata.get(key)
 
-    def delete_metadata(self, key: bytes):
+    def delete_metadata(self, key: bytes) -> None:
         """Delete a metadata key/value pair."""
         self.db_metadata.delete(key)
 
-    def get_db_iterator(self, which_db = 'nodes'):
+    def get_db_iterator(self, which_db: str = 'nodes') -> Iterator[tuple[bytes, bytes]]:
         """Yield all records from a named sub-database."""
         with self.db_dict[which_db].iterator() as it:
             for k, v in it:
                 yield k, v
 
-    def get_node_keys_iterator(self):
+    def get_node_keys_iterator(self) -> Iterator[tuple[bytes, bytes]]:
         """Yield node database records."""
         return self.get_db_iterator(which_db='nodes')
 
-    def get_node_keys_generator(self, num_nodes = None, key_offset = None):
+    def get_node_keys_generator(self, num_nodes: int | None = None, key_offset: bytes | None = None) -> Iterator[bytes]:
         """Yield node keys from the node database."""
         yielded = 0
         with self.db_nodes.iterator(start=key_offset) as it:
@@ -1287,7 +1273,7 @@ class LevelDBStore(KVStore):
                 if num_nodes is not None and yielded == num_nodes:
                     break
 
-    def get_edge_keys_generator(self, num_edges = None, key_offset = None):
+    def get_edge_keys_generator(self, num_edges: int | None = None, key_offset: bytes | None = None) -> Iterator[bytes]:
         """Yield edge keys from the edge database."""
         yielded = 0
         with self.db_edges.iterator(start=key_offset) as it:
@@ -1299,40 +1285,38 @@ class LevelDBStore(KVStore):
 
 
     # -- Specialized methods for nodes
-    def put_node(self, node_id: bytes, value: bytes):
+    def put_node(self, node_id: bytes, value: bytes) -> None:
         """Store a serialized node by byte key."""
         self.db_nodes.put(node_id,value)
 
-    def get_node(self, node_id: bytes) -> bytes:
+    def get_node(self, node_id: bytes) -> bytes | None:
         """Return serialized node bytes by key, or ``None``."""
         return self.db_nodes.get(node_id)
 
-    def delete_node(self, node_id: bytes):
+    def delete_node(self, node_id: bytes) -> None:
         """Delete a node by byte key."""
         self.db_nodes.delete(node_id)
 
     # -- Specialized methods for edges
-    def put_edge(self, edge_id: bytes, value: bytes):
+    def put_edge(self, edge_id: bytes, value: bytes) -> None:
         """Store a serialized edge by byte key."""
         self.db_edges.put(edge_id, value)
 
-    def get_edge(self, edge_id: bytes) -> bytes:
+    def get_edge(self, edge_id: bytes) -> bytes | None:
         """Return serialized edge bytes by key, or ``None``."""
         return self.db_edges.get(edge_id)
 
-    def delete_edge(self, edge_id: str):
+    def delete_edge(self, edge_id: bytes) -> None:
         """Delete an edge by byte key."""
         self.db_edges.delete(edge_id)
 
-    def put_nodes_bulk(self, keys_and_values: dict[bytes, bytes]):
+    def put_nodes_bulk(self, keys_and_values: dict[bytes, bytes]) -> None:
         """Use a WriteBatch for atomic bulk updates."""
         with self.db_nodes.write_batch() as wb:
             for node_id, val in keys_and_values.items():
-                # s = node_id.decode()
-                # wb.put(f"N:{s}".encode('utf-8'), val)
                 wb.put(node_id, val)
 
-    def get_nodes_bulk(self, node_ids: list[bytes]) -> dict[bytes, bytes]:
+    def get_nodes_bulk(self, node_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         """Return serialized nodes for the requested keys."""
         results = {}
         for node_id in node_ids:
@@ -1341,18 +1325,16 @@ class LevelDBStore(KVStore):
                 results[node_id] = data
         return results
     
-    def put_edges_bulk(self, keys_and_values: dict[bytes, bytes]):
+    def put_edges_bulk(self, keys_and_values: dict[bytes, bytes]) -> None:
         """Store many serialized edges in one write batch."""
         with self.db_edges.write_batch() as wb:
             for edge_id, val in keys_and_values.items():
                 wb.put(edge_id, val)
     
-    def get_edges_bulk(self, edge_ids: list[bytes]) -> dict[bytes, bytes]:
+    def get_edges_bulk(self, edge_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         """Return serialized edges for the requested keys."""
         results = {}
         for edge_id in edge_ids:
-            # s = edge_id.decode()
-            # key = f"E:{s}".encode('utf-8')
             data = self.db_edges.get(edge_id)
             if data is not None:
                 results[edge_id] = data
@@ -1368,10 +1350,8 @@ class LevelDBStore(KVStore):
         """Return a serialized adjacency list for a node."""
         return self.db_adj.get(node_id)
     
-    # -------------------------------------------------------------------------
-    # Bulk Write: Adjacency
-    # -------------------------------------------------------------------------
-    def put_adjacency_bulk(self, adj_dict: Dict[str, bytes]) -> None:
+    # -- Bulk Write: Adjacency --
+    def put_adjacency_bulk(self, adj_dict: Dict[bytes, bytes]) -> None:
         """
         Insert/update multiple adjacency lists in one write batch.
         :param adj_dict: a dict mapping node_id -> serialized adjacency
@@ -1387,38 +1367,36 @@ class LevelDBStore(KVStore):
         """Return serialized adjacency lists for the requested nodes."""
         results = {}
         for node_id in node_ids:
-            # s = node_id.decode()
-            # key = f"A:{s}".encode('utf-8')
             data = self.db_adj.get(node_id)
             if data is not None:
                 results[node_id] = data
         return results
 
-    def delete_adjacency(self, node_id: bytes):
+    def delete_adjacency(self, node_id: bytes) -> None:
         """Delete a serialized adjacency list for a node."""
         self.db_adj.delete(node_id)
 
     # ----- Typed Adjacency Methods -----
-    def put_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
+    def put_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes) -> None:
         """Store forward and reverse typed adjacency records."""
         with self.db_typed_adj.write_batch() as wb:
             wb.put(_typed_adjacency_key("out", source_id, edge_type, edge_id), target_id)
             wb.put(_typed_adjacency_key("in", target_id, edge_type, edge_id), source_id)
 
-    def put_typed_adjacency_bulk(self, records: list[tuple[bytes, bytes, str, bytes]]):
+    def put_typed_adjacency_bulk(self, records: list[tuple[bytes, bytes, str, bytes]]) -> None:
         """Store many typed adjacency records in one write batch."""
         with self.db_typed_adj.write_batch() as wb:
             for source_id, target_id, edge_type, edge_id in records:
                 wb.put(_typed_adjacency_key("out", source_id, edge_type, edge_id), target_id)
                 wb.put(_typed_adjacency_key("in", target_id, edge_type, edge_id), source_id)
 
-    def delete_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
+    def delete_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes) -> None:
         """Delete forward and reverse typed adjacency records."""
         with self.db_typed_adj.write_batch() as wb:
             wb.delete(_typed_adjacency_key("out", source_id, edge_type, edge_id))
             wb.delete(_typed_adjacency_key("in", target_id, edge_type, edge_id))
 
-    def iter_typed_adjacency(self, node_id: bytes, edge_type: str, direction: str = "out"):
+    def iter_typed_adjacency(self, node_id: bytes, edge_type: str, direction: str = "out") -> Iterator[tuple[bytes, bytes]]:
         """Yield typed adjacency ``(edge_id, neighbor_id)`` pairs."""
         prefix = _typed_adjacency_prefix(direction, node_id, edge_type)
         with self.db_typed_adj.iterator(prefix=prefix) as it:
@@ -1426,42 +1404,42 @@ class LevelDBStore(KVStore):
                 edge_id = key[len(prefix):]
                 yield edge_id, neighbor_id
 
-    def put_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
+    def put_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes) -> None:
         """Store one sorted index entry."""
         self.db_index.put(_index_key(index_name, key_parts, value), value)
 
-    def put_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes]]):
+    def put_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes]]) -> None:
         """Store many sorted index entries in one write batch."""
         with self.db_index.write_batch() as wb:
             for index_name, key_parts, value in entries:
                 wb.put(_index_key(index_name, key_parts, value), value)
 
-    def delete_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
+    def delete_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes) -> None:
         """Delete one sorted index entry."""
         self.db_index.delete(_index_key(index_name, key_parts, value))
 
-    def iter_index_prefix(self, index_name: str, key_parts: list[bytes]):
+    def iter_index_prefix(self, index_name: str, key_parts: list[bytes]) -> Iterator[bytes]:
         """Yield values whose index key starts with ``key_parts``."""
         prefix = _index_prefix(index_name, key_parts)
         with self.db_index.iterator(prefix=prefix) as it:
             for _, value in it:
                 yield value
 
-    def put_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes):
+    def put_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes) -> None:
         """Store one sorted range index entry."""
         self.db_index.put(_range_index_key(index_name, key_parts, range_value, value), value)
 
-    def put_range_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes, bytes]]):
+    def put_range_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes, bytes]]) -> None:
         """Store many sorted range index entries in one write batch."""
         with self.db_index.write_batch() as wb:
             for index_name, key_parts, range_value, value in entries:
                 wb.put(_range_index_key(index_name, key_parts, range_value, value), value)
 
-    def delete_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes):
+    def delete_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes) -> None:
         """Delete one sorted range index entry."""
         self.db_index.delete(_range_index_key(index_name, key_parts, range_value, value))
 
-    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None):
+    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None) -> Iterator[bytes]:
         """Yield values whose range index key falls between start and end values."""
         _validate_range_scan_options(reverse, limit)
         prefix = _range_index_prefix(index_name, key_parts)
@@ -1491,7 +1469,7 @@ class LevelDBStore(KVStore):
                 if limit is not None and yielded >= limit:
                     break
 
-    def close(self):
+    def close(self) -> None:
         """Close all LevelDB sub-databases."""
         self.db_metadata.close()
         self.db_index.close()
@@ -1500,7 +1478,7 @@ class LevelDBStore(KVStore):
         self.db_edges.close()
         self.db_nodes.close()
 
-    def read_snapshot(self):
+    def read_snapshot(self) -> NoReturn:
         raise NotImplementedError(
             "LevelDBStore cannot provide a unified snapshot across its independent "
             "node, edge, adjacency, index, and metadata databases"
@@ -1545,7 +1523,7 @@ class PyRexStore(KVStore):
     _SEP = b"\x1f"
 
     @staticmethod
-    def ensure_available():
+    def ensure_available() -> Any:
         """Import and return PyRex, or raise installation guidance."""
         try:
             import pyrex
@@ -1555,15 +1533,15 @@ class PyRexStore(KVStore):
 
     def __init__(
         self,
-        path="graph_rocksdb",
-        parallelism=None,
-        max_background_jobs=None,
-        write_buffer_size=None,
-        bloom_bits_per_key=None,
-        disable_wal=False,
-        transactional=False,
-        transaction_db_options=None,
-    ):
+        path: str | os.PathLike[str] = "graph_rocksdb",
+        parallelism: int | None = None,
+        max_background_jobs: int | None = None,
+        write_buffer_size: int | None = None,
+        bloom_bits_per_key: float | None = None,
+        disable_wal: bool = False,
+        transactional: bool = False,
+        transaction_db_options: Any = None,
+    ) -> None:
         """Open a PyRex/RocksDB store with optional tuning settings."""
         pyrex = self.ensure_available()
 
@@ -1597,7 +1575,7 @@ class PyRexStore(KVStore):
         self.write_options = pyrex.WriteOptions()
         self.write_options.disable_wal = disable_wal
 
-    def transaction(self, transaction_options=None, **options):
+    def transaction(self, transaction_options: Any = None, **options: Any) -> "PyRexTransactionStore":
         """Open a RocksDB transaction-bound store."""
         if not self.transactional:
             raise NotImplementedError("PyRexStore transactions require PyRexStore(transactional=True)")
@@ -1616,7 +1594,7 @@ class PyRexStore(KVStore):
         return None
 
     @contextmanager
-    def read_snapshot(self):
+    def read_snapshot(self) -> Iterator["PyRexReadSnapshotStore"]:
         """Pin reads to one RocksDB transaction snapshot when available."""
         if not self.transactional:
             raise NotImplementedError(
@@ -1672,19 +1650,19 @@ class PyRexStore(KVStore):
         """
         return hasattr(self.db, "scan_arrow") and hasattr(self.db, "create_snapshot")
 
-    def _put_raw(self, key: bytes, value: bytes):
+    def _put_raw(self, key: bytes, value: bytes) -> None:
         self.db.put(key, value, self.write_options)
 
-    def _get_raw(self, key: bytes) -> bytes:
+    def _get_raw(self, key: bytes) -> bytes | None:
         return self.db.get(key)
 
-    def _delete_raw(self, key: bytes):
+    def _delete_raw(self, key: bytes) -> None:
         self.db.delete(key, self.write_options)
 
-    def _write_batch(self, batch):
+    def _write_batch(self, batch: Any) -> None:
         self.db.write(batch, self.write_options)
 
-    def _iter_key_values_from(self, start_key: bytes):
+    def _iter_key_values_from(self, start_key: bytes) -> Iterator[tuple[bytes, bytes]]:
         temp_txn = None
         if hasattr(self.db, "new_iterator"):
             iterator = self.db.new_iterator()
@@ -1701,7 +1679,7 @@ class PyRexStore(KVStore):
             if temp_txn is not None and temp_txn.is_active:
                 temp_txn.rollback()
 
-    def _iter_key_values_reverse_from(self, end_key: bytes):
+    def _iter_key_values_reverse_from(self, end_key: bytes) -> Iterator[tuple[bytes, bytes]]:
         temp_txn = None
         if hasattr(self.db, "new_iterator"):
             iterator = self.db.new_iterator()
@@ -1724,11 +1702,11 @@ class PyRexStore(KVStore):
             if key <= end_key:
                 yield key, value
 
-    def _write_columnar_batch(self, keys: list[bytes], values: list[bytes]) -> None:
+    def _write_columnar_batch(self, keys: list[bytes], values: object) -> None:
         """Write key/value lists through PyRex's native columnar API."""
         self.db.write_columnar_batch(keys, values, write_options=self.write_options)
 
-    def _iter_prefixed_keys(self, prefix: bytes, key_offset=None, limit=None):
+    def _iter_prefixed_keys(self, prefix: bytes, key_offset: bytes | None = None, limit: int | None = None) -> Iterator[bytes]:
         """Yield unprefixed keys for a prefixed key range."""
         yielded = 0
         start_key = prefix if key_offset is None else prefix + key_offset
@@ -1740,61 +1718,61 @@ class PyRexStore(KVStore):
             if limit is not None and yielded == limit:
                 break
 
-    def put(self, key: bytes, value: bytes):
+    def put(self, key: bytes, value: bytes) -> None:
         """Store a raw key/value pair in the shared RocksDB keyspace."""
         self._put_raw(key, value)
 
-    def get(self, key: bytes) -> bytes:
+    def get(self, key: bytes) -> bytes | None:
         """Return a raw value by key."""
         return self._get_raw(key)
 
-    def delete(self, key: bytes):
+    def delete(self, key: bytes) -> None:
         """Delete a raw key/value pair."""
         self._delete_raw(key)
 
-    def range_iter(self, start_key: bytes, end_key: bytes):
+    def range_iter(self, start_key: bytes, end_key: bytes) -> Iterator[tuple[bytes, bytes]]:
         """Yield raw records whose keys fall within an inclusive range."""
         for key, value in self._iter_key_values_from(start_key):
             if key > end_key:
                 break
             yield key, value
 
-    def close(self):
+    def close(self) -> None:
         """Close the RocksDB database."""
         self.db.close()
 
-    def put_metadata(self, key: bytes, value: bytes):
+    def put_metadata(self, key: bytes, value: bytes) -> None:
         """Store a metadata key/value pair."""
         self._put_raw(self._key(b"M", key), value)
 
-    def get_metadata(self, key: bytes) -> bytes:
+    def get_metadata(self, key: bytes) -> bytes | None:
         """Return a metadata value by key, or ``None``."""
         return self._get_raw(self._key(b"M", key))
 
-    def delete_metadata(self, key: bytes):
+    def delete_metadata(self, key: bytes) -> None:
         """Delete a metadata key/value pair."""
         self._delete_raw(self._key(b"M", key))
 
-    def put_node(self, node_id: bytes, value: bytes):
+    def put_node(self, node_id: bytes, value: bytes) -> None:
         """Store a serialized node by byte key."""
         self._put_raw(self._key(b"N", node_id), value)
 
-    def get_node(self, node_id: bytes) -> bytes:
+    def get_node(self, node_id: bytes) -> bytes | None:
         """Return serialized node bytes by key, or ``None``."""
         return self._get_raw(self._key(b"N", node_id))
 
-    def delete_node(self, node_id: bytes):
+    def delete_node(self, node_id: bytes) -> None:
         """Delete a node by byte key."""
         self._delete_raw(self._key(b"N", node_id))
 
-    def put_nodes_bulk(self, keys_and_values: dict[bytes, bytes]):
+    def put_nodes_bulk(self, keys_and_values: dict[bytes, bytes]) -> None:
         """Store many serialized nodes in one RocksDB write batch."""
         batch = self._pyrex.PyWriteBatch()
         for node_id, value in keys_and_values.items():
             batch.put(self._key(b"N", node_id), value)
         self._write_batch(batch)
 
-    def ingest_nodes_columnar(self, node_list, *, native: bool = True):
+    def ingest_nodes_columnar(self, node_list: NodeList, *, native: bool = True) -> None:
         """Store columnar nodes, using native PyRex ingestion when available."""
         if native and self.has_native_columnar_ingestion():
             keys = [self._key(b"N", node_id) for node_id in node_list.node_ids]
@@ -1803,7 +1781,7 @@ class PyRexStore(KVStore):
             return
         self.put_nodes_bulk(dict(zip(node_list.node_ids, node_list.node_values)))
 
-    def get_nodes_bulk(self, node_ids: list[bytes]) -> dict[bytes, bytes]:
+    def get_nodes_bulk(self, node_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         """Return serialized nodes for the requested keys."""
         results = {}
         for node_id in node_ids:
@@ -1812,26 +1790,26 @@ class PyRexStore(KVStore):
                 results[node_id] = data
         return results
 
-    def put_edge(self, edge_id: bytes, value: bytes):
+    def put_edge(self, edge_id: bytes, value: bytes) -> None:
         """Store a serialized edge by byte key."""
         self._put_raw(self._key(b"E", edge_id), value)
 
-    def get_edge(self, edge_id: bytes) -> bytes:
+    def get_edge(self, edge_id: bytes) -> bytes | None:
         """Return serialized edge bytes by key, or ``None``."""
         return self._get_raw(self._key(b"E", edge_id))
 
-    def delete_edge(self, edge_id: bytes):
+    def delete_edge(self, edge_id: bytes) -> None:
         """Delete an edge by byte key."""
         self._delete_raw(self._key(b"E", edge_id))
 
-    def put_edges_bulk(self, keys_and_values: dict[bytes, bytes]):
+    def put_edges_bulk(self, keys_and_values: dict[bytes, bytes]) -> None:
         """Store many serialized edges in one RocksDB write batch."""
         batch = self._pyrex.PyWriteBatch()
         for edge_id, value in keys_and_values.items():
             batch.put(self._key(b"E", edge_id), value)
         self._write_batch(batch)
 
-    def get_edges_bulk(self, edge_ids: list[bytes]) -> dict[bytes, bytes]:
+    def get_edges_bulk(self, edge_ids: Iterable[bytes]) -> dict[bytes, bytes]:
         """Return serialized edges for the requested keys."""
         results = {}
         for edge_id in edge_ids:
@@ -1840,11 +1818,11 @@ class PyRexStore(KVStore):
                 results[edge_id] = data
         return results
 
-    def get_edge_keys_generator(self, num_edges=None, key_offset=None):
+    def get_edge_keys_generator(self, num_edges: int | None = None, key_offset: bytes | None = None) -> Iterator[bytes]:
         """Yield edge keys from the shared RocksDB keyspace."""
         yield from self._iter_prefixed_keys(b"E" + self._SEP, key_offset=key_offset, limit=num_edges)
 
-    def get_node_keys_generator(self, num_nodes=None, key_offset=None):
+    def get_node_keys_generator(self, num_nodes: int | None = None, key_offset: bytes | None = None) -> Iterator[bytes]:
         """Yield node keys from the shared RocksDB keyspace."""
         yield from self._iter_prefixed_keys(b"N" + self._SEP, key_offset=key_offset, limit=num_nodes)
 
@@ -1872,15 +1850,15 @@ class PyRexStore(KVStore):
                 results[node_id] = data
         return results
 
-    def delete_adjacency(self, node_id: bytes):
+    def delete_adjacency(self, node_id: bytes) -> None:
         """Delete a serialized adjacency list for a node."""
         self._delete_raw(self._key(b"A", node_id))
 
-    def put_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
+    def put_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes) -> None:
         """Store forward and reverse typed adjacency records."""
         self.put_typed_adjacency_bulk([(source_id, target_id, edge_type, edge_id)])
 
-    def put_typed_adjacency_bulk(self, records: list[tuple[bytes, bytes, str, bytes]]):
+    def put_typed_adjacency_bulk(self, records: list[tuple[bytes, bytes, str, bytes]]) -> None:
         """Store many typed adjacency records in one RocksDB write batch."""
         batch = self._pyrex.PyWriteBatch()
         for source_id, target_id, edge_type, edge_id in records:
@@ -1888,7 +1866,7 @@ class PyRexStore(KVStore):
             batch.put(self._typed_key("in", target_id, edge_type, edge_id), source_id)
         self._write_batch(batch)
 
-    def ingest_edges_columnar(self, edge_list, *, append_only: bool = True, native: bool = True, maintain_indexes: bool = True):
+    def ingest_edges_columnar(self, edge_list: EdgeList, *, append_only: bool = True, native: bool = True, maintain_indexes: bool = True) -> None:
         """Store columnar typed edges, using native PyRex ingestion when available."""
         if not append_only:
             raise NotImplementedError("native columnar edge ingestion currently requires append_only=True")
@@ -1929,14 +1907,14 @@ class PyRexStore(KVStore):
                 for edge_type, edge_id in zip(edge_list.edge_types, edge_list.edge_ids)
             ])
 
-    def delete_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes):
+    def delete_typed_adjacency(self, source_id: bytes, target_id: bytes, edge_type: str, edge_id: bytes) -> None:
         """Delete forward and reverse typed adjacency records."""
         batch = self._pyrex.PyWriteBatch()
         batch.delete(self._typed_key("out", source_id, edge_type, edge_id))
         batch.delete(self._typed_key("in", target_id, edge_type, edge_id))
         self._write_batch(batch)
 
-    def iter_typed_adjacency(self, node_id: bytes, edge_type: str, direction: str = "out"):
+    def iter_typed_adjacency(self, node_id: bytes, edge_type: str, direction: str = "out") -> Iterator[tuple[bytes, bytes]]:
         """Yield typed adjacency ``(edge_id, neighbor_id)`` pairs."""
         prefix = self._typed_key(direction, node_id, edge_type)
         for key, value in self._iter_key_values_from(prefix):
@@ -1954,22 +1932,22 @@ class PyRexStore(KVStore):
             total += 1
         return total
 
-    def put_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
+    def put_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes) -> None:
         """Store one sorted index entry."""
         self._put_raw(_index_key(index_name, key_parts, value), value)
 
-    def put_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes]]):
+    def put_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes]]) -> None:
         """Store many sorted index entries in one write batch."""
         batch = self._pyrex.PyWriteBatch()
         for index_name, key_parts, value in entries:
             batch.put(_index_key(index_name, key_parts, value), value)
         self._write_batch(batch)
 
-    def delete_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes):
+    def delete_index_entry(self, index_name: str, key_parts: list[bytes], value: bytes) -> None:
         """Delete one sorted index entry."""
         self._delete_raw(_index_key(index_name, key_parts, value))
 
-    def iter_index_prefix(self, index_name: str, key_parts: list[bytes]):
+    def iter_index_prefix(self, index_name: str, key_parts: list[bytes]) -> Iterator[bytes]:
         """Yield values whose index key starts with ``key_parts``."""
         prefix = _index_prefix(index_name, key_parts)
         for key, value in self._iter_key_values_from(prefix):
@@ -1977,22 +1955,22 @@ class PyRexStore(KVStore):
                 break
             yield value
 
-    def put_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes):
+    def put_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes) -> None:
         """Store one sorted range index entry."""
         self._put_raw(_range_index_key(index_name, key_parts, range_value, value), value)
 
-    def put_range_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes, bytes]]):
+    def put_range_index_entries_bulk(self, entries: list[tuple[str, list[bytes], bytes, bytes]]) -> None:
         """Store many sorted range index entries in one write batch."""
         batch = self._pyrex.PyWriteBatch()
         for index_name, key_parts, range_value, value in entries:
             batch.put(_range_index_key(index_name, key_parts, range_value, value), value)
         self._write_batch(batch)
 
-    def delete_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes):
+    def delete_range_index_entry(self, index_name: str, key_parts: list[bytes], range_value: bytes, value: bytes) -> None:
         """Delete one sorted range index entry."""
         self._delete_raw(_range_index_key(index_name, key_parts, range_value, value))
 
-    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None):
+    def iter_range_index(self, index_name: str, key_parts: list[bytes], start_value: bytes | None = None, end_value: bytes | None = None, include_start: bool = True, include_end: bool = True, *, reverse: bool = False, limit: int | None = None) -> Iterator[bytes]:
         """Yield values whose range index key falls between start and end values."""
         _validate_range_scan_options(reverse, limit)
         prefix = _range_index_prefix(index_name, key_parts)
@@ -2029,7 +2007,7 @@ class PyRexTransactionStore(PyRexStore):
 
     supports_transactions = True
 
-    def __init__(self, parent: PyRexStore, txn):
+    def __init__(self, parent: PyRexStore, txn: Any) -> None:
         self.parent = parent
         self.db = parent.db
         self.txn = txn
@@ -2037,44 +2015,44 @@ class PyRexTransactionStore(PyRexStore):
         self.write_options = parent.write_options
         self.transactional = True
 
-    def _check_active(self):
+    def _check_active(self) -> None:
         if not self.txn.is_active:
             raise RuntimeError("transaction is no longer active")
 
-    def commit(self):
+    def commit(self) -> None:
         self._check_active()
         self.txn.commit(self.write_options)
 
-    def rollback(self):
+    def rollback(self) -> None:
         if self.txn.is_active:
             self.txn.rollback()
 
-    def close(self):
+    def close(self) -> None:
         self.rollback()
 
-    def transaction(self, **options):
+    def transaction(self, **options: Any) -> NoReturn:  # type: ignore[override]  # Nested calls intentionally reject positional options.
         raise NotImplementedError("nested transactions are not supported")
 
     def has_native_columnar_ingestion(self) -> bool:
         return False
 
-    def _put_raw(self, key: bytes, value: bytes):
+    def _put_raw(self, key: bytes, value: bytes) -> None:
         self._check_active()
         self.txn.put(key, value)
 
-    def _get_raw(self, key: bytes) -> bytes:
+    def _get_raw(self, key: bytes) -> bytes | None:
         self._check_active()
         return self.txn.get(key)
 
-    def _delete_raw(self, key: bytes):
+    def _delete_raw(self, key: bytes) -> None:
         self._check_active()
         self.txn.delete(key)
 
-    def _write_batch(self, batch):
+    def _write_batch(self, batch: Any) -> None:
         self._check_active()
         self.txn.write(batch)
 
-    def _iter_key_values_from(self, start_key: bytes):
+    def _iter_key_values_from(self, start_key: bytes) -> Iterator[tuple[bytes, bytes]]:
         self._check_active()
         iterator = self.txn.new_iterator()
         iterator.seek(start_key)
@@ -2083,7 +2061,7 @@ class PyRexTransactionStore(PyRexStore):
             iterator.next()
         iterator.check_status()
 
-    def _iter_key_values_reverse_from(self, end_key: bytes):
+    def _iter_key_values_reverse_from(self, end_key: bytes) -> Iterator[tuple[bytes, bytes]]:
         self._check_active()
         iterator = self.txn.new_iterator()
         if hasattr(iterator, "seek_for_prev") and hasattr(iterator, "prev"):
@@ -2099,7 +2077,7 @@ class PyRexTransactionStore(PyRexStore):
                 yield key, value
 
 
-def _pyrex_snapshot_sequence(txn) -> int | None:
+def _pyrex_snapshot_sequence(txn: object) -> int | None:
     """Return a bound RocksDB snapshot sequence when exposed by PyRex."""
     for name in (
         "snapshot_sequence_number",
@@ -2116,7 +2094,7 @@ def _pyrex_snapshot_sequence(txn) -> int | None:
     return None
 
 
-def _update_snapshot_digest(digest, namespace: bytes, key: bytes, value: bytes) -> None:
+def _update_snapshot_digest(digest: "hashlib._Hash", namespace: bytes, key: bytes, value: bytes) -> None:
     for part in (namespace, key, value):
         digest.update(len(part).to_bytes(8, "big"))
         digest.update(part)
@@ -2128,7 +2106,7 @@ class PyRexReadSnapshotStore(PyRexTransactionStore):
     supports_transactions = False
     supports_read_snapshots = False
 
-    def __init__(self, parent: PyRexStore, txn, *, sequence: int | None):
+    def __init__(self, parent: PyRexStore, txn: Any, *, sequence: int | None) -> None:
         super().__init__(parent, txn)
         self.snapshot_identity = ReadSnapshotIdentity(
             backend="pyrex",
@@ -2138,7 +2116,7 @@ class PyRexReadSnapshotStore(PyRexTransactionStore):
         )
         self.supports_verifiable_read_snapshots = sequence is not None
 
-    def _read_only(self, *args, **kwargs):
+    def _read_only(self, *args: object, **kwargs: object) -> NoReturn:
         self._check_active()
         raise RuntimeError("read snapshot is read-only")
 
@@ -2150,7 +2128,7 @@ class PyRexReadSnapshotStore(PyRexTransactionStore):
     put_index_entry = put_index_entries_bulk = delete_index_entry = _read_only
     put_range_index_entry = put_range_index_entries_bulk = delete_range_index_entry = _read_only
 
-    def commit(self):
+    def commit(self) -> NoReturn:
         raise RuntimeError("read snapshot cannot be committed")
 
     def state_sha256(self) -> str:

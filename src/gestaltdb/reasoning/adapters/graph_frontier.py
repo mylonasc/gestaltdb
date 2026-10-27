@@ -61,7 +61,7 @@ def answer_current_graph(view: CurrentGraphReadView, program: Program, goal: Ato
     _text(ontology_revision, "ontology_revision")
     check_cancelled(cancel)
     count = 0
-    accesses = Counter()
+    accesses: Counter[str] = Counter()
     # This source authenticates the immutable store digest once, then checks
     # exact view/store/provenance and active transaction identity on each read.
     with PinnedGraphSource(view, mapping=mapping, limits=source_limits) as source:

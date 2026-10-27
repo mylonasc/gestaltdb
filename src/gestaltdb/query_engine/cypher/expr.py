@@ -10,6 +10,7 @@ expressions exclusively through :func:`evaluate_expression`.
 from __future__ import annotations
 
 import re
+from typing import cast
 
 from ...temporal import TemporalDuration
 from .ast import (
@@ -18,6 +19,7 @@ from .ast import (
     CaseExpression,
     ComparisonExpression,
     ExistsExpression,
+    Expression,
     FunctionCall,
     InExpression,
     ListComprehension,
@@ -51,7 +53,7 @@ from .temporal import (
 )
 
 
-def evaluate_expression(expression, bindings: dict[str, object], context) -> object:
+def evaluate_expression(expression: Expression, bindings: dict[str, object], context) -> object:
     """Evaluate an expression using Cypher null propagation and boolean logic."""
     if isinstance(expression, Parameter):
         return context.resolve(expression)
@@ -118,13 +120,13 @@ def evaluate_expression(expression, bindings: dict[str, object], context) -> obj
         return sum(value is True for value in values) % 2 == 1
     if isinstance(expression, InExpression):
         left_value = evaluate_expression(expression.left, bindings, context)
-        values = evaluate_expression(expression.values, bindings, context)
-        if values is None:
+        haystack = evaluate_expression(expression.values, bindings, context)
+        if haystack is None:
             return None
-        if not isinstance(values, (list, tuple)):
+        if not isinstance(haystack, (list, tuple)):
             raise TypeError("IN expects a list value")
         saw_null = False
-        for value in values:
+        for value in haystack:
             equal = _cypher_equals(left_value, value)
             if equal is True:
                 return True
@@ -151,7 +153,7 @@ def evaluate_expression(expression, bindings: dict[str, object], context) -> obj
             return None
         if isinstance(value, TemporalDuration):
             return value if expression.operator == "+" else TemporalDuration(-value.total_microseconds)
-        _require_number(value, expression.operator)
+        value = _require_number(value, expression.operator)
         return value if expression.operator == "+" else -value
     if isinstance(expression, ArithmeticExpression):
         left_value = evaluate_expression(expression.left, bindings, context)
@@ -170,14 +172,14 @@ def evaluate_expression(expression, bindings: dict[str, object], context) -> obj
             if not isinstance(left_value, str) or not isinstance(right_value, str):
                 raise TypeError("+ expects two strings or two numbers")
             return left_value + right_value
-        _require_number(left_value, expression.operator)
-        _require_number(right_value, expression.operator)
+        left_number = _require_number(left_value, expression.operator)
+        right_number = _require_number(right_value, expression.operator)
         operations = {
-            "+": lambda: left_value + right_value,
-            "-": lambda: left_value - right_value,
-            "*": lambda: left_value * right_value,
-            "/": lambda: left_value / right_value,
-            "%": lambda: left_value % right_value,
+            "+": lambda: left_number + right_number,
+            "-": lambda: left_number - right_number,
+            "*": lambda: left_number * right_number,
+            "/": lambda: left_number / right_number,
+            "%": lambda: left_number % right_number,
         }
         return operations[expression.operator]()
     if isinstance(expression, ComparisonExpression):
@@ -202,10 +204,10 @@ def evaluate_expression(expression, bindings: dict[str, object], context) -> obj
         comparison_right = right_temporal[1] if right_temporal is not None else right_value
         try:
             return {
-                "<": lambda: comparison_left < comparison_right,
-                "<=": lambda: comparison_left <= comparison_right,
-                ">": lambda: comparison_left > comparison_right,
-                ">=": lambda: comparison_left >= comparison_right,
+                "<": lambda: comparison_left < comparison_right,  # type: ignore[operator]
+                "<=": lambda: comparison_left <= comparison_right,  # type: ignore[operator]
+                ">": lambda: comparison_left > comparison_right,  # type: ignore[operator]
+                ">=": lambda: comparison_left >= comparison_right,  # type: ignore[operator]
             }[operator]()
         except TypeError as exc:
             raise TypeError(f"Cannot compare {type(left_value).__name__} and {type(right_value).__name__}") from exc
@@ -326,10 +328,11 @@ def _evaluate_map_projection(expression: MapProjectionExpression, bindings: dict
     base = bindings[expression.variable]
     if base is None:
         return None
+    properties = getattr(base, "properties", None)
     if isinstance(base, dict):
         entries: dict[str, object] = dict(base)
-    elif isinstance(getattr(base, "properties", None), dict):
-        entries = base.properties
+    elif isinstance(properties, dict):
+        entries = properties
     else:
         raise TypeError("Map projection expects a map or node value")
     projected: dict[str, object] = {}
@@ -338,14 +341,14 @@ def _evaluate_map_projection(expression: MapProjectionExpression, bindings: dict
         if kind == "all":
             projected.update(entries)
         elif kind == "property":
-            projected[item[1]] = entries.get(item[1])
+            projected[cast(tuple[str, str], item)[1]] = entries.get(cast(tuple[str, str], item)[1])
         else:
-            _, key, value_expression = item
+            _, key, value_expression = cast(tuple[str, str, Expression], item)
             projected[key] = evaluate_expression(value_expression, bindings, context)
     return projected
 
 
-def _evaluate_quantified(expression: QuantifiedPredicate, bindings: dict[str, object], context) -> object:
+def _evaluate_quantified(expression: QuantifiedPredicate, bindings: dict[str, object], context) -> bool | None:
     """Evaluate ``all/any/none/single(x IN xs WHERE p)`` with null logic."""
     items = evaluate_expression(expression.iterable, bindings, context)
     if items is None:
@@ -406,8 +409,12 @@ def _evaluate_shortest_path(expression: ShortestPathExpression, bindings: dict[s
 
     pattern = expression.pattern
     hop = pattern.hops[0]
-    start = bindings[pattern.source.variable]
-    end = bindings[hop.target.variable]
+    source_var = pattern.source.variable
+    target_var = hop.target.variable
+    if source_var is None or target_var is None:
+        raise TypeError("shortestPath() endpoints must be bound variables")
+    start = bindings[source_var]
+    end = bindings[target_var]
     if start is None or end is None:
         return None if not expression.all_paths else []
     if not _is_node(start) or not _is_node(end):
@@ -511,6 +518,7 @@ def _boolean_value(value):
     raise TypeError(f"Expected boolean expression, got {type(value).__name__}")
 
 
-def _require_number(value, operator: str) -> None:
+def _require_number(value: object, operator: str) -> int | float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{operator} expects numeric operands")
+    return value

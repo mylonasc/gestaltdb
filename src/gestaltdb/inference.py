@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import html
 import json
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from collections.abc import Mapping
+from typing import Any, cast
 
 from .rules import (
     ClaimExplanation,
@@ -72,11 +73,11 @@ def export_inference(explanation: ClaimExplanation, *, max_edges: int = 100_000,
         raise RuleError("ClaimExplanation required")
     _limit(max_edges, "max_edges")
     _limit(max_bytes, "max_bytes")
-    nodes = []
+    nodes: list[dict[str, Any]] = []
     identities = {node.node_id for node in explanation.nodes}
     if len(identities) != len(explanation.nodes) or explanation.root_version_id not in identities:
         raise RuleError("explanation has duplicate nodes or a missing root")
-    supports = []
+    supports: list[dict[str, Any]] = []
     edge_count = 0
     truncated = explanation.truncated
     for node in sorted(explanation.nodes, key=lambda item: item.node_id):
@@ -98,6 +99,8 @@ def export_inference(explanation: ClaimExplanation, *, max_edges: int = 100_000,
         if version.version_id != node.node_id:
             raise RuleError("claim version identity mismatch")
         claim = version.claim
+        if claim is None:
+            raise RuleError("explanation requires exact claim and rule versions")
         model = claim.provenance.get("model_output")
         if model is not None:
             if not isinstance(model, Mapping) or any(
@@ -118,9 +121,9 @@ def export_inference(explanation: ClaimExplanation, *, max_edges: int = 100_000,
         # edges: a rule version can support several conclusions independently.
         if claim.provenance.get("derived_by") != "gestaltdb.rules":
             continue
-        for support in claim.provenance.get("justifications", ()):
+        for support in cast(Iterable[object], claim.provenance.get("justifications", ())):
             try:
-                normalized = RuleJustification.from_dict(support)
+                normalized = RuleJustification.from_dict(cast("Mapping[str, object]", support))
             except RuleError as exc:
                 raise RuleError("invalid recorded inference justification") from exc
             rule_id = normalized.rule_version_id
@@ -137,7 +140,7 @@ def export_inference(explanation: ClaimExplanation, *, max_edges: int = 100_000,
             edge_count += 1 + len(premises) + len(absent)
             if edge_count > max_edges:
                 raise RuleEvaluationLimitError("inference export exceeded max_edges")
-            value = {
+            value: dict[str, Any] = {
                 "conclusion": node.node_id, "rule": rule_id, "premises": premises,
             }
             if absent:

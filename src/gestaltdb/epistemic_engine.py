@@ -10,13 +10,18 @@ never the full graph facade.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Iterator, Mapping
 
 if TYPE_CHECKING:
     from .temporal_engine import TemporalEngine
+    from .readview import GraphReadView
 
-from .epistemic import ClaimObjectKind, ClaimPolarity
-from .modal import ACCESSIBILITY_PREDICATES, AccessibilityKind
+from .epistemic import Claim, ClaimObjectKind, ClaimPolarity, ClaimStatus
+from .modal import ACCESSIBILITY_PREDICATES, AccessibilityKind, ModalEntailmentResult
+from .ingestion import IndexMaintenanceMode
+from .temporal import TemporalIntervalInput
+from .versioning import ClaimVersion
+from ._graph.temporal_types import Hydrator, PointInput
 from ._graph import temporal_entity_writes as _entity_writes
 from ._graph.temporal_selection import _UNSET
 
@@ -24,31 +29,31 @@ from ._graph.temporal_selection import _UNSET
 class EpistemicEngine:
     """Own claim capabilities bound to one temporal scope."""
 
-    def __init__(self, temporal):
+    def __init__(self, temporal: TemporalEngine) -> None:
         self._temporal: TemporalEngine = temporal
 
     # -- scope binding ----------------------------------------------------
 
     @property
-    def temporal(self):
+    def temporal(self) -> TemporalEngine:
         """The backing temporal engine; scope-owned, borrowed for this handle."""
         return self._temporal
 
-    def rebound(self, temporal):
+    def rebound(self, temporal: TemporalEngine) -> EpistemicEngine:
         """Bind a sibling engine to a new temporal scope."""
         return EpistemicEngine(temporal)
 
-    def spawn_transaction_scope(self, temporal):
+    def spawn_transaction_scope(self, temporal: TemporalEngine) -> EpistemicEngine:
         """Bind a transaction-child engine to a new temporal scope."""
         return EpistemicEngine(temporal)
 
     # -- claim writes ------------------------------------------------------
 
-    def assert_claim(self, *, subject, predicate, object, polarity, agent,
-                     source=None, confidence=None, world="default",
-                     provenance=None, object_kind=None, valid=None,
-                     valid_from=None, valid_to=None, version_id=None,
-                     metadata=None, index_mode="maintain"):
+    def assert_claim(self, *, subject: str, predicate: str, object: object, polarity: ClaimPolarity | str, agent: str,
+                     source: str | None = None, confidence: float | None = None, world: str = "default",
+                     provenance: Mapping[str, object] | None = None, object_kind: ClaimObjectKind | str | None = None, valid: TemporalIntervalInput | None = None,
+                     valid_from: PointInput | None = None, valid_to: PointInput | None = None, version_id: str | None = None,
+                     metadata: Mapping[str, object] | None = None, index_mode: str | IndexMaintenanceMode = "maintain") -> ClaimVersion:
         """Append an immutable sourced assertion or denial.
 
         Examples:
@@ -78,10 +83,10 @@ class EpistemicEngine:
             metadata=metadata, index_mode=index_mode,
         )
 
-    def correct_claim(self, claim, *, supersedes_version_id,
-                      confidence=_UNSET, provenance=_UNSET, valid=None,
-                      valid_from=None, valid_to=None, version_id=None,
-                      metadata=None, index_mode="maintain"):
+    def correct_claim(self, claim: Claim | str, *, supersedes_version_id: str,
+                      confidence: object = _UNSET, provenance: object = _UNSET, valid: TemporalIntervalInput | None = None,
+                      valid_from: PointInput | None = None, valid_to: PointInput | None = None, version_id: str | None = None,
+                      metadata: Mapping[str, object] | None = None, index_mode: str | IndexMaintenanceMode = "maintain") -> ClaimVersion:
         """Append corrected confidence/provenance for one claim identity."""
         return _entity_writes.correct_claim(
             self._temporal.reader(), self._temporal.commit_versions, claim,
@@ -91,9 +96,9 @@ class EpistemicEngine:
             metadata=metadata, index_mode=index_mode,
         )
 
-    def retract_claim(self, claim_id, *, valid=None, valid_from=None,
-                      valid_to=None, supersedes_version_id=None, reason=None,
-                      version_id=None, metadata=None, index_mode="maintain"):
+    def retract_claim(self, claim_id: str, *, valid: TemporalIntervalInput | None = None, valid_from: PointInput | None = None,
+                      valid_to: PointInput | None = None, supersedes_version_id: str | None = None, reason: str | None = None,
+                      version_id: str | None = None, metadata: Mapping[str, object] | None = None, index_mode: str | IndexMaintenanceMode = "maintain") -> ClaimVersion:
         """Append a bitemporal retraction without deleting claim history."""
         return _entity_writes.retract_claim(
             self._temporal.commit_versions, claim_id, valid=valid,
@@ -102,11 +107,11 @@ class EpistemicEngine:
             version_id=version_id, metadata=metadata, index_mode=index_mode,
         )
 
-    def assert_world_accessibility(self, *, agent, from_world, to_world, kind,
-                                   valid=None, valid_from=None, valid_to=None,
-                                   source=None, provenance=None,
-                                   version_id=None, metadata=None,
-                                   index_mode="maintain"):
+    def assert_world_accessibility(self, *, agent: str, from_world: str, to_world: str, kind: AccessibilityKind | str,
+                                   valid: TemporalIntervalInput | None = None, valid_from: PointInput | None = None, valid_to: PointInput | None = None,
+                                   source: str | None = None, provenance: Mapping[str, object] | None = None,
+                                   version_id: str | None = None, metadata: Mapping[str, object] | None = None,
+                                   index_mode: str | IndexMaintenanceMode = "maintain") -> ClaimVersion:
         """Append a positive temporal accessibility fact for one agent frame."""
         try:
             frame = AccessibilityKind(kind)
@@ -123,38 +128,38 @@ class EpistemicEngine:
 
     # -- claim reads -------------------------------------------------------
 
-    def get_claim_version(self, version_id, *, system_time=None,
-                           through_commit=None):
+    def get_claim_version(self, version_id: str, *, system_time: PointInput | None = None,
+                           through_commit: int | None = None) -> ClaimVersion | None:
         """Return a visible epistemic claim version by UUID."""
         return self._temporal.history().get_claim_version(
             version_id, system_time=system_time, through_commit=through_commit)
 
-    def iter_claim_versions(self, claim_id=None, *, system_time=None,
-                             through_commit=None):
+    def iter_claim_versions(self, claim_id: str | None = None, *, system_time: PointInput | None = None,
+                             through_commit: int | None = None) -> Iterator[ClaimVersion]:
         """Iterate claim versions, optionally restricted to one claim ID."""
         return self._temporal.history().iter_claim_versions(
             claim_id, system_time=system_time, through_commit=through_commit)
 
-    def get_claim_as_of(self, claim_id, *, valid_time, system_time=None,
-                         through_commit=None, hydrate=None):
+    def get_claim_as_of(self, claim_id: str, *, valid_time: PointInput, system_time: PointInput | None = None,
+                         through_commit: int | None = None, hydrate: Hydrator | None = None) -> ClaimVersion | None:
         """Resolve one claim identity at valid time and a system horizon."""
         return self._temporal.history(hydrate=hydrate).get_claim_as_of(
             claim_id, valid_time=valid_time, system_time=system_time,
             through_commit=through_commit)
 
-    def iter_claims_as_of(self, **filters):
+    def iter_claims_as_of(self, **filters: Any) -> Iterator[ClaimVersion]:
         """Iterate visible claims matching indexed epistemic dimensions."""
         return self._temporal.history().iter_claims_as_of(**filters)
 
-    def claim_status(self, subject, predicate, object, **filters):
+    def claim_status(self, subject: str, predicate: str, object: object, **filters: Any) -> ClaimStatus:
         """Return supported/refuted/both/unknown under open-world semantics."""
         return self._temporal.history().claim_status(
             subject, predicate, object, **filters)
 
     # -- modal evaluation ---------------------------------------------------
 
-    def entails(self, view, agent, proposition, mode, *, world,
-                max_depth=4, max_states=1_000):
+    def entails(self, view: GraphReadView, agent: str, proposition: object, mode: str, *, world: str,
+                max_depth: int = 4, max_states: int = 1_000) -> ModalEntailmentResult:
         """Evaluate a bounded modal proposition under one pinned read view.
 
         Takes an already-pinned view instead of constructing one, so the

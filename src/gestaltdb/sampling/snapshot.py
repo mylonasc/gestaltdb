@@ -10,12 +10,14 @@ import tempfile
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Callable, Iterable, Literal, Sequence, cast
 
 import numpy as np
-
+from ._arrays import Array, BoolArray, FloatArray, IntArray, StringArray
 from .adjacency import CSRAdjacency, build_csr
 from ..hierarchy import LabelHierarchy, RelationHierarchy
+from ..readview import CurrentReadProvenance, ReadViewProvenance, parse_read_provenance
+from ..versioning import EdgeVersion, NodeVersion, VersionOperation, normalize_temporal_instant
 
 
 SNAPSHOT_FORMAT_VERSION = 2
@@ -101,43 +103,43 @@ class SamplerSnapshot:
 
     path: Path
     metadata: dict
-    external_node_ids: np.ndarray
-    node_type_ids: np.ndarray
-    external_edge_ids: np.ndarray
-    external_relation_ids: np.ndarray
-    relation_src_type_ids: np.ndarray
-    relation_dst_type_ids: np.ndarray
-    src_int: np.ndarray
-    dst_int: np.ndarray
-    rel_int: np.ndarray
+    external_node_ids: StringArray
+    node_type_ids: IntArray
+    external_edge_ids: StringArray
+    external_relation_ids: StringArray
+    relation_src_type_ids: IntArray
+    relation_dst_type_ids: IntArray
+    src_int: IntArray
+    dst_int: IntArray
+    rel_int: IntArray
     out: CSRAdjacency
     in_: CSRAdjacency
     incident: CSRAdjacency
     relation_out: CSRAdjacency
     relation_in: CSRAdjacency
-    positive_triples: np.ndarray
-    edge_version_ids: np.ndarray | None = None
-    valid_from_us: np.ndarray | None = None
-    valid_to_us: np.ndarray | None = None
-    valid_to_open: np.ndarray | None = None
-    edge_system_time_us: np.ndarray | None = None
-    edge_commit_ids: np.ndarray | None = None
+    positive_triples: IntArray
+    edge_version_ids: StringArray | None = None
+    valid_from_us: IntArray | None = None
+    valid_to_us: IntArray | None = None
+    valid_to_open: BoolArray | None = None
+    edge_system_time_us: IntArray | None = None
+    edge_commit_ids: IntArray | None = None
     temporal_out: CSRAdjacency | None = None
     temporal_in: CSRAdjacency | None = None
-    positive_history_triples: np.ndarray | None = None
-    positive_history_indptr: np.ndarray | None = None
-    positive_history_edge_indices: np.ndarray | None = None
-    node_history_indptr: np.ndarray | None = None
-    node_valid_from_us: np.ndarray | None = None
-    node_valid_to_us: np.ndarray | None = None
-    node_valid_to_open: np.ndarray | None = None
-    edge_weights: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=np.float64))
-    node_lookup_order: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=np.int64))
-    edge_lookup_order: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=np.int64))
-    relation_lookup_order: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=np.int64))
-    node_lookup_ids: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=str))
-    edge_lookup_ids: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=str))
-    relation_lookup_ids: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=str))
+    positive_history_triples: IntArray | None = None
+    positive_history_indptr: IntArray | None = None
+    positive_history_edge_indices: IntArray | None = None
+    node_history_indptr: IntArray | None = None
+    node_valid_from_us: IntArray | None = None
+    node_valid_to_us: IntArray | None = None
+    node_valid_to_open: BoolArray | None = None
+    edge_weights: FloatArray = field(default_factory=lambda: np.empty(0, dtype=np.float64))
+    node_lookup_order: IntArray = field(default_factory=lambda: np.empty(0, dtype=np.int64))
+    edge_lookup_order: IntArray = field(default_factory=lambda: np.empty(0, dtype=np.int64))
+    relation_lookup_order: IntArray = field(default_factory=lambda: np.empty(0, dtype=np.int64))
+    node_lookup_ids: StringArray = field(default_factory=lambda: np.empty(0, dtype=str))
+    edge_lookup_ids: StringArray = field(default_factory=lambda: np.empty(0, dtype=str))
+    relation_lookup_ids: StringArray = field(default_factory=lambda: np.empty(0, dtype=str))
 
     @property
     def num_nodes(self) -> int:
@@ -156,7 +158,7 @@ class SamplerSnapshot:
         """Return whether this snapshot carries validated temporal arrays."""
         return self.edge_version_ids is not None
 
-    def temporal_candidates(self, node: int, relation: int, valid_time, *, direction: str = "out") -> np.ndarray:
+    def temporal_candidates(self, node: int, relation: int, valid_time, *, direction: str = "out") -> IntArray:
         """Return a start-time-pruned superset for a temporal point query.
 
         No edge valid at ``valid_time`` is omitted, while edges starting after
@@ -169,15 +171,13 @@ class SamplerSnapshot:
             raise ValueError("direction must be 'out' or 'in'")
         if not 0 <= int(node) < self.num_nodes or not 0 <= int(relation) < self.num_relations:
             raise ValueError("node or relation compact ID is out of range")
-        from gestaltdb.versioning import normalize_temporal_instant
-
         instant = normalize_temporal_instant(valid_time).epoch_microseconds
         width = self.metadata["temporal_encoding"]["time_bucket_us"]
         upper = instant if width is None else (instant // width + 1) * width - 1
         adjacency = self.temporal_out if direction == "out" else self.temporal_in
         key = int(node) * self.num_relations + int(relation)
         candidates = adjacency.edge_range(key)
-        starts = self.valid_from_us[candidates]
+        starts = cast(IntArray, self.valid_from_us)[candidates]
         return candidates[: int(np.searchsorted(starts, upper, side="right"))]
 
     @classmethod
@@ -336,8 +336,6 @@ class SamplerSnapshot:
         if source_artifacts is not None:
             metadata["source_artifacts"] = cls._normalize_artifact_references(source_artifacts, path)
         if source_provenance is not None:
-            from gestaltdb.readview import parse_read_provenance
-
             metadata["source_provenance"] = parse_read_provenance(source_provenance).to_dict()
         metadata["snapshot_id"] = uuid.uuid4().hex
         metadata["source_version"] = cls._source_version_of(graph)
@@ -373,8 +371,6 @@ class SamplerSnapshot:
         **metadata_options,
     ) -> "SamplerSnapshot":
         """Build a deterministic temporal-history snapshot from one read view."""
-        from gestaltdb.versioning import VersionOperation
-
         reserved_metadata = {"source_provenance", "temporal_encoding"}.intersection(metadata_options)
         if reserved_metadata:
             names = ", ".join(sorted(reserved_metadata))
@@ -389,8 +385,8 @@ class SamplerSnapshot:
         if layout != "csr":
             raise ValueError("only layout='csr' is currently supported")
 
-        node_payloads = {}
-        node_versions = {}
+        node_payloads: dict[str, NodeVersion] = {}
+        node_versions: dict[str, list[NodeVersion]] = {}
         for version in read_view.iter_node_versions():
             node_versions.setdefault(version.logical_id, []).append(version)
             if version.operation is not VersionOperation.RETRACT and version.node is not None:
@@ -399,11 +395,11 @@ class SamplerSnapshot:
                     node_payloads[version.logical_id] = version
 
         records = []
-        by_logical_id = {}
+        by_logical_id: dict[str, list[EdgeVersion]] = {}
         for version in read_view.iter_edge_versions():
             by_logical_id.setdefault(version.logical_id, []).append(version)
         for logical_id in sorted(by_logical_id):
-            covered = []
+            covered: list[tuple[int, int | None]] = []
             versions = sorted(
                 by_logical_id[logical_id],
                 key=lambda item: (item.commit_id, item.commit_ordinal, item.version_id),
@@ -441,26 +437,28 @@ class SamplerSnapshot:
         for node_id in node_ids:
             covered = []
             available = []
-            versions = sorted(
-                node_versions.get(node_id, ()),
+            node_history = sorted(
+                node_versions.get(node_id, []),
                 key=lambda item: (item.commit_id, item.commit_ordinal, item.version_id),
                 reverse=True,
             )
-            for version in versions:
+            for version in node_history:
                 start = version.valid.start.epoch_microseconds
                 end = None if version.valid.end is None else version.valid.end.epoch_microseconds
                 pieces = _subtract_intervals(start, end, covered)
                 if version.operation is not VersionOperation.RETRACT and version.node is not None:
                     available.extend(pieces)
                 covered = _merge_intervals([*covered, (start, end)])
-            if not versions:
+            if not node_history:
                 available = [
                     (record[4], record[5]) for record in records
                     if str(record[2].source) == node_id or str(record[2].target) == node_id
                 ]
             node_intervals.append(_merge_intervals(available))
         node_type_values = [
-            None if node_id not in node_payloads else node_payloads[node_id].node.properties.get(node_type_property)
+            None
+            if (node := node_payloads[node_id].node if node_id in node_payloads else None) is None
+            else node.properties.get(node_type_property)
             for node_id in node_ids
         ]
         node_type_ids, type_mapping = _encode_type_values(node_type_values, expected_size=len(node_ids))
@@ -518,19 +516,19 @@ class SamplerSnapshot:
         cls,
         output_path: str | Path,
         *,
-        external_node_ids: Sequence[object],
-        external_edge_ids: Sequence[object],
-        external_relation_ids: Sequence[object],
-        src_int,
-        dst_int,
-        rel_int,
-        edge_weights=None,
+        external_node_ids: Sequence[object] | Array,
+        external_edge_ids: Sequence[object] | Array,
+        external_relation_ids: Sequence[object] | Array,
+        src_int: Sequence[int] | Array,
+        dst_int: Sequence[int] | Array,
+        rel_int: Sequence[int] | Array,
+        edge_weights: Sequence[float] | Array | None = None,
         node_type_values: Sequence[object] | None = None,
-        node_type_ids=None,
+        node_type_ids: Sequence[int] | Array | None = None,
         edge_src_type_values: Sequence[object] | None = None,
         edge_dst_type_values: Sequence[object] | None = None,
-        relation_src_type_ids=None,
-        relation_dst_type_ids=None,
+        relation_src_type_ids: Sequence[int] | Array | None = None,
+        relation_dst_type_ids: Sequence[int] | Array | None = None,
         source_db: dict | None = None,
         source_artifacts: dict | None = None,
         metadata: dict | None = None,
@@ -598,9 +596,9 @@ class SamplerSnapshot:
         """
         if node_type_values is not None and node_type_ids is not None:
             raise ValueError("provide either node_type_values or node_type_ids, not both")
-        external_node_ids = np.asarray(external_node_ids, dtype=str)
-        external_edge_ids = np.asarray(external_edge_ids, dtype=str)
-        external_relation_ids = np.asarray(external_relation_ids, dtype=str)
+        external_node_ids = cast(StringArray, np.asarray(external_node_ids, dtype=str))
+        external_edge_ids = cast(StringArray, np.asarray(external_edge_ids, dtype=str))
+        external_relation_ids = cast(StringArray, np.asarray(external_relation_ids, dtype=str))
         src_int = _integer_id_array(src_int, "src_int")
         dst_int = _integer_id_array(dst_int, "dst_int")
         rel_int = _integer_id_array(rel_int, "rel_int")
@@ -611,7 +609,7 @@ class SamplerSnapshot:
         if node_type_values is not None:
             node_type_ids, type_mapping = _encode_type_values(node_type_values, expected_size=external_node_ids.size)
         elif node_type_ids is None:
-            node_type_ids = np.full(external_node_ids.size, -1, dtype=np.int64)
+            node_type_ids = cast(IntArray, np.full(external_node_ids.size, -1, dtype=np.int64))
         else:
             node_type_ids = _integer_id_array(node_type_ids, "node_type_ids")
             if node_type_ids.size != external_node_ids.size:
@@ -857,7 +855,7 @@ class SamplerSnapshot:
             cls._validate_v2_files(path, metadata, metadata_bytes)
         temporal = version == SNAPSHOT_FORMAT_VERSION and metadata.get("temporal") is True
         temporal_history_indexes = temporal and metadata.get("temporal_history_indexes") is True
-        mmap_mode = "r" if mmap else None
+        mmap_mode: Literal["r"] | None = "r" if mmap else None
 
         def load_array(name: str) -> np.ndarray:
             return np.load(path / f"{name}.npy", mmap_mode=mmap_mode, allow_pickle=False)
@@ -891,7 +889,7 @@ class SamplerSnapshot:
                 raise ValueError(f"{entity}_lookup_order must contain one entry per external ID")
             if order.size and (np.issubdtype(order.dtype, np.bool_) or not np.issubdtype(order.dtype, np.integer)):
                 raise ValueError(f"{entity}_lookup_order must contain integer compact IDs")
-            if order.size and (order.min() < 0 or order.max() >= external_ids.size):
+            if order.size and (cast(Callable[[], np.integer], order.min)() < 0 or cast(Callable[[], np.integer], order.max)() >= external_ids.size):
                 raise ValueError(f"{entity}_lookup_order contains invalid compact IDs")
             if lookup_ids.size > 1 and np.any(lookup_ids[1:] < lookup_ids[:-1]):
                 raise ValueError(f"{entity}_lookup_ids must be sorted")
@@ -991,8 +989,6 @@ class SamplerSnapshot:
         value = self.metadata.get("source_provenance")
         if value is None:
             return
-        from gestaltdb.readview import parse_read_provenance
-
         parse_read_provenance(value).verify_source(graph)
 
     @staticmethod
@@ -1307,8 +1303,8 @@ class SamplerSnapshot:
         return {
             "edge_weight_source": source,
             "weight_mean": float(edge_weights.mean()) if edge_weights.size else 1.0,
-            "weight_min": float(edge_weights.min()) if edge_weights.size else 1.0,
-            "weight_max": float(edge_weights.max()) if edge_weights.size else 1.0,
+            "weight_min": float(cast(Callable[[], np.float64], edge_weights.min)()) if edge_weights.size else 1.0,
+            "weight_max": float(cast(Callable[[], np.float64], edge_weights.max)()) if edge_weights.size else 1.0,
             "snapshot_id": metadata["snapshot_id"],
         }
 
@@ -1362,7 +1358,7 @@ class SamplerSnapshot:
         """Resolve one external node ID to its compact integer ID."""
         return int(self.node_ints([external_node_id])[0])
 
-    def node_ints(self, external_node_ids: Sequence[object]) -> np.ndarray:
+    def node_ints(self, external_node_ids: Sequence[object]) -> IntArray:
         """Resolve external node IDs to compact integer IDs."""
         lookup_ids, lookup_order = self._lookup_arrays("node")
         return self._resolve_external_ids(external_node_ids, self.external_node_ids, lookup_ids, lookup_order, "node")
@@ -1371,7 +1367,7 @@ class SamplerSnapshot:
         """Resolve one external edge ID to its compact integer ID."""
         return int(self.edge_ints([external_edge_id])[0])
 
-    def edge_ints(self, external_edge_ids: Sequence[object]) -> np.ndarray:
+    def edge_ints(self, external_edge_ids: Sequence[object]) -> IntArray:
         """Resolve external edge IDs to compact integer IDs."""
         lookup_ids, lookup_order = self._lookup_arrays("edge")
         return self._resolve_external_ids(external_edge_ids, self.external_edge_ids, lookup_ids, lookup_order, "edge")
@@ -1380,12 +1376,12 @@ class SamplerSnapshot:
         """Resolve one external relation ID to its compact integer ID."""
         return int(self.relation_ints([external_relation_id])[0])
 
-    def relation_ints(self, external_relation_ids: Sequence[object]) -> np.ndarray:
+    def relation_ints(self, external_relation_ids: Sequence[object]) -> IntArray:
         """Resolve external relation IDs to compact integer IDs."""
         lookup_ids, lookup_order = self._lookup_arrays("relation")
         return self._resolve_external_ids(external_relation_ids, self.external_relation_ids, lookup_ids, lookup_order, "relation")
 
-    def expand_relations(self, relations: Sequence[str], hierarchy: RelationHierarchy) -> np.ndarray:
+    def expand_relations(self, relations: Sequence[str], hierarchy: RelationHierarchy) -> IntArray:
         """Expand parent relation names through a sub-property hierarchy.
 
         Each name resolves to itself plus all transitive sub-properties,
@@ -1405,7 +1401,7 @@ class SamplerSnapshot:
 
     def expand_node_types(
         self, node_types: Sequence[str], hierarchy: LabelHierarchy
-    ) -> np.ndarray:
+    ) -> IntArray:
         """Expand semantic node-type names through a sub-type hierarchy.
 
         Each name resolves to itself plus all transitive sub-types, then to the
@@ -1446,8 +1442,6 @@ class SamplerSnapshot:
     def get_node(self, graph, node_int):
         provenance = self.metadata.get("source_provenance")
         if provenance is not None:
-            from gestaltdb.readview import CurrentReadProvenance, parse_read_provenance
-
             source = parse_read_provenance(provenance)
             if isinstance(source, CurrentReadProvenance):
                 source.verify_source(graph)
@@ -1466,8 +1460,6 @@ class SamplerSnapshot:
     def get_edge(self, graph, edge_int):
         provenance = self.metadata.get("source_provenance")
         if provenance is not None:
-            from gestaltdb.readview import CurrentReadProvenance, parse_read_provenance
-
             source = parse_read_provenance(provenance)
             if isinstance(source, CurrentReadProvenance):
                 source.verify_source(graph)
@@ -1489,7 +1481,7 @@ class SamplerSnapshot:
             return None if version is None else version.edge
         return graph.get_edge(self.external_edge_id(edge_int).encode("utf-8"))
 
-    def _lookup_arrays(self, entity: str) -> tuple[np.ndarray, np.ndarray]:
+    def _lookup_arrays(self, entity: str) -> tuple[StringArray, IntArray]:
         external_ids = getattr(self, f"external_{entity}_ids")
         lookup_ids = getattr(self, f"{entity}_lookup_ids")
         lookup_order = getattr(self, f"{entity}_lookup_order")
@@ -1501,7 +1493,7 @@ class SamplerSnapshot:
         return lookup_ids, lookup_order
 
     @staticmethod
-    def _resolve_external_ids(values, external_ids: np.ndarray, lookup_ids: np.ndarray, lookup_order: np.ndarray, entity: str) -> np.ndarray:
+    def _resolve_external_ids(values: Sequence[object], external_ids: StringArray, lookup_ids: StringArray, lookup_order: IntArray, entity: str) -> IntArray:
         if isinstance(values, (str, bytes)):
             raise TypeError(f"external {entity} IDs must be a sequence, not a scalar string")
         targets_list = np.asarray(list(values), dtype=str).tolist()
@@ -1545,16 +1537,16 @@ class SamplerSnapshot:
         raise ValueError(f"unknown source_db path_type: {path_type}")
 
     @staticmethod
-    def _validate_edge_arrays(external_node_ids, external_edge_ids, external_relation_ids, src_int, dst_int, rel_int) -> None:
+    def _validate_edge_arrays(external_node_ids: StringArray, external_edge_ids: StringArray, external_relation_ids: StringArray, src_int: IntArray, dst_int: IntArray, rel_int: IntArray) -> None:
         if not (src_int.size == dst_int.size == rel_int.size == external_edge_ids.size):
             raise ValueError("src_int, dst_int, rel_int, and external_edge_ids must have the same length")
         if src_int.size == 0:
             return
-        if src_int.min() < 0 or dst_int.min() < 0 or rel_int.min() < 0:
+        if cast(Callable[[], np.int64], src_int.min)() < 0 or cast(Callable[[], np.int64], dst_int.min)() < 0 or cast(Callable[[], np.int64], rel_int.min)() < 0:
             raise ValueError("compact IDs must be non-negative")
-        if src_int.max() >= external_node_ids.size or dst_int.max() >= external_node_ids.size:
+        if cast(Callable[[], np.int64], src_int.max)() >= external_node_ids.size or cast(Callable[[], np.int64], dst_int.max)() >= external_node_ids.size:
             raise ValueError("src_int and dst_int must reference external_node_ids")
-        if rel_int.max() >= external_relation_ids.size:
+        if cast(Callable[[], np.int64], rel_int.max)() >= external_relation_ids.size:
             raise ValueError("rel_int must reference external_relation_ids")
 
     @classmethod
@@ -1623,8 +1615,6 @@ class SamplerSnapshot:
             if str(array.dtype) != record.get("dtype") or list(array.shape) != record.get("shape"):
                 raise ValueError(f"sampler snapshot artifact schema mismatch: {name}")
         if metadata.get("temporal"):
-            from gestaltdb.readview import ReadViewProvenance
-
             if "source_provenance" not in metadata:
                 raise ValueError("temporal sampler snapshot lacks source provenance")
             ReadViewProvenance.from_dict(metadata["source_provenance"])
@@ -1641,8 +1631,6 @@ class SamplerSnapshot:
             ):
                 raise ValueError("invalid temporal snapshot encoding")
         elif "source_provenance" in metadata:
-            from gestaltdb.readview import parse_read_provenance
-
             parse_read_provenance(metadata["source_provenance"])
 
     def _validate_v2_arrays(self) -> None:
@@ -1696,36 +1684,36 @@ class SamplerSnapshot:
             expected_keys=relation_in_keys,
         )
         if self.temporal:
+            # Narrow optional temporal arrays (all present when temporal holds).
+            edge_version_ids, valid_from_us, valid_to_us, valid_to_open, edge_system_time_us, edge_commit_ids = cast(StringArray, self.edge_version_ids), cast(IntArray, self.valid_from_us), cast(IntArray, self.valid_to_us), cast(BoolArray, self.valid_to_open), cast(IntArray, self.edge_system_time_us), cast(IntArray, self.edge_commit_ids)
             temporal_arrays = (
-                self.edge_version_ids, self.valid_from_us, self.valid_to_us, self.valid_to_open,
-                self.edge_system_time_us, self.edge_commit_ids,
+                edge_version_ids, valid_from_us, valid_to_us, valid_to_open,
+                edge_system_time_us, edge_commit_ids,
             )
             if any(array.shape != (edge_count,) for array in temporal_arrays):
                 raise ValueError("temporal snapshot arrays are misaligned")
-            if self.edge_version_ids.dtype.kind != "U" or self.valid_to_open.dtype != np.dtype("bool"):
+            if edge_version_ids.dtype.kind != "U" or valid_to_open.dtype != np.dtype("bool"):
                 raise ValueError("temporal snapshot arrays use invalid dtypes")
             if any(array.dtype != np.dtype("int64") for array in (
-                self.valid_from_us, self.valid_to_us, self.edge_system_time_us, self.edge_commit_ids
+                valid_from_us, valid_to_us, edge_system_time_us, edge_commit_ids
             )):
                 raise ValueError("temporal snapshot integer arrays must use int64")
-            finite = ~self.valid_to_open
-            if np.any(self.valid_to_us[finite] <= self.valid_from_us[finite]):
+            finite = ~valid_to_open
+            if np.any(valid_to_us[finite] <= valid_from_us[finite]):
                 raise ValueError("temporal snapshot contains an empty or reversed interval")
-            if np.any(self.valid_to_us[self.valid_to_open] != 0):
+            if np.any(valid_to_us[valid_to_open] != 0):
                 raise ValueError("open temporal intervals must use a zero valid-to sentinel")
-            if np.any(self.edge_commit_ids <= 0):
+            if np.any(edge_commit_ids <= 0):
                 raise ValueError("temporal snapshot contains an invalid commit ID")
-            from gestaltdb.readview import ReadViewProvenance
-
             provenance = ReadViewProvenance.from_dict(self.metadata["source_provenance"])
-            if np.any(self.edge_commit_ids > provenance.commit_horizon):
+            if np.any(edge_commit_ids > provenance.commit_horizon):
                 raise ValueError("temporal snapshot contains an edge beyond its source horizon")
             if provenance.commit_system_time_us is None:
                 if edge_count:
                     raise ValueError("empty source history cannot contain temporal edges")
-            elif np.any(self.edge_system_time_us > provenance.commit_system_time_us):
+            elif np.any(edge_system_time_us > provenance.commit_system_time_us):
                 raise ValueError("temporal snapshot contains an edge beyond its source system time")
-            for value in self.edge_version_ids.tolist():
+            for value in edge_version_ids.tolist():
                 try:
                     if str(uuid.UUID(value)) != value:
                         raise ValueError
@@ -1739,52 +1727,54 @@ class SamplerSnapshot:
                 "temporal_in", self.temporal_in, relation_size, edge_count,
                 expected_keys=relation_in_keys,
             )
-            for adjacency in (self.temporal_out, self.temporal_in):
+            for adjacency in (cast(CSRAdjacency, self.temporal_out), cast(CSRAdjacency, self.temporal_in)):
                 for key in range(relation_size):
                     candidates = adjacency.edge_range(key)
-                    if np.any(self.valid_from_us[candidates][1:] < self.valid_from_us[candidates][:-1]):
+                    if np.any(valid_from_us[candidates][1:] < valid_from_us[candidates][:-1]):
                         raise ValueError("temporal snapshot index is not ordered by valid start")
-            history_count = self.positive_history_triples.shape[0]
-            if self.positive_history_triples.ndim != 2 or self.positive_history_triples.shape[1] != 3:
+            history_triples, history_indptr, history_edge_indices = cast(IntArray, self.positive_history_triples), cast(IntArray, self.positive_history_indptr), cast(IntArray, self.positive_history_edge_indices)
+            node_indptr, node_from_us, node_to_us, node_to_open = cast(IntArray, self.node_history_indptr), cast(IntArray, self.node_valid_from_us), cast(IntArray, self.node_valid_to_us), cast(BoolArray, self.node_valid_to_open)
+            history_count = history_triples.shape[0]
+            if history_triples.ndim != 2 or history_triples.shape[1] != 3:
                 raise ValueError("temporal positive-history triples are invalid")
-            if self.positive_history_triples.dtype != np.dtype("int64"):
+            if history_triples.dtype != np.dtype("int64"):
                 raise ValueError("temporal positive-history triples must use int64")
-            if self.positive_history_indptr.shape != (history_count + 1,) or self.positive_history_edge_indices.shape != (edge_count,):
+            if history_indptr.shape != (history_count + 1,) or history_edge_indices.shape != (edge_count,):
                 raise ValueError("temporal positive-history index is misaligned")
             expected_triples, expected_indptr, expected_edges = _build_positive_history_index(
-                self.src_int, self.rel_int, self.dst_int, self.valid_from_us
+                self.src_int, self.rel_int, self.dst_int, valid_from_us
             )
             if not (
-                np.array_equal(self.positive_history_triples, expected_triples)
-                and np.array_equal(self.positive_history_indptr, expected_indptr)
-                and np.array_equal(self.positive_history_edge_indices, expected_edges)
+                np.array_equal(history_triples, expected_triples)
+                and np.array_equal(history_indptr, expected_indptr)
+                and np.array_equal(history_edge_indices, expected_edges)
             ):
                 raise ValueError("temporal positive-history index is inconsistent")
-            node_interval_count = int(self.node_valid_from_us.size)
-            if self.node_history_indptr.shape != (node_count + 1,) or not (
-                self.node_valid_to_us.shape == (node_interval_count,)
-                and self.node_valid_to_open.shape == (node_interval_count,)
-                and self.node_history_indptr[0] == 0
-                and self.node_history_indptr[-1] == node_interval_count
-                and np.all(self.node_history_indptr[1:] >= self.node_history_indptr[:-1])
+            node_interval_count = int(node_from_us.size)
+            if node_indptr.shape != (node_count + 1,) or not (
+                node_to_us.shape == (node_interval_count,)
+                and node_to_open.shape == (node_interval_count,)
+                and node_indptr[0] == 0
+                and node_indptr[-1] == node_interval_count
+                and np.all(node_indptr[1:] >= node_indptr[:-1])
             ):
                 raise ValueError("temporal node-history index is invalid")
             if any(array.dtype != np.dtype("int64") for array in (
-                self.positive_history_indptr, self.positive_history_edge_indices,
-                self.node_history_indptr, self.node_valid_from_us, self.node_valid_to_us,
-            )) or self.node_valid_to_open.dtype != np.dtype("bool"):
+                history_indptr, history_edge_indices,
+                node_indptr, node_from_us, node_to_us,
+            )) or node_to_open.dtype != np.dtype("bool"):
                 raise ValueError("temporal history indexes use invalid dtypes")
-            finite_nodes = ~self.node_valid_to_open
-            if np.any(self.node_valid_to_us[finite_nodes] <= self.node_valid_from_us[finite_nodes]):
+            finite_nodes = ~node_to_open
+            if np.any(node_to_us[finite_nodes] <= node_from_us[finite_nodes]):
                 raise ValueError("temporal node history contains an invalid interval")
-            if np.any(self.node_valid_to_us[self.node_valid_to_open] != 0):
+            if np.any(node_to_us[node_to_open] != 0):
                 raise ValueError("open node intervals must use a zero valid-to sentinel")
             for node in range(node_count):
-                start = int(self.node_history_indptr[node])
-                end = int(self.node_history_indptr[node + 1])
-                starts = self.node_valid_from_us[start:end]
-                ends = self.node_valid_to_us[start:end]
-                open_ends = self.node_valid_to_open[start:end]
+                start = int(node_indptr[node])
+                end = int(node_indptr[node + 1])
+                starts = node_from_us[start:end]
+                ends = node_to_us[start:end]
+                open_ends = node_to_open[start:end]
                 if np.any(starts[1:] < starts[:-1]):
                     raise ValueError("temporal node-history index is not ordered")
                 if len(starts) > 1:
@@ -1793,8 +1783,9 @@ class SamplerSnapshot:
                         raise ValueError("temporal node-history intervals overlap")
 
     def _derive_temporal_history_indexes(self) -> None:
+        valid_from_us, valid_to_open, valid_to_us = cast(IntArray, self.valid_from_us), cast(BoolArray, self.valid_to_open), cast(IntArray, self.valid_to_us)
         triples, indptr, edges = _build_positive_history_index(
-            self.src_int, self.rel_int, self.dst_int, self.valid_from_us
+            self.src_int, self.rel_int, self.dst_int, valid_from_us
         )
         node_indptr = [0]
         node_starts = []
@@ -1803,8 +1794,8 @@ class SamplerSnapshot:
         for node in range(self.num_nodes):
             intervals = _merge_intervals([
                 (
-                    int(self.valid_from_us[edge]),
-                    None if self.valid_to_open[edge] else int(self.valid_to_us[edge]),
+                    int(valid_from_us[edge]),
+                    None if valid_to_open[edge] else int(valid_to_us[edge]),
                 )
                 for edge in range(self.num_edges)
                 if self.src_int[edge] == node or self.dst_int[edge] == node
@@ -1899,7 +1890,7 @@ class SamplerSnapshot:
         return artifacts
 
     @staticmethod
-    def _derive_relation_endpoint_types(node_type_ids, src_int, dst_int, rel_int, relation_count, *, node_type_mapping=None, edge_src_type_values=None, edge_dst_type_values=None):
+    def _derive_relation_endpoint_types(node_type_ids: IntArray, src_int: IntArray, dst_int: IntArray, rel_int: IntArray, relation_count: int, *, node_type_mapping: dict[str, int] | None = None, edge_src_type_values: Sequence[object] | None = None, edge_dst_type_values: Sequence[object] | None = None) -> tuple[IntArray, IntArray]:
         relation_src_type_ids = np.full(relation_count, -1, dtype=np.int64)
         relation_dst_type_ids = np.full(relation_count, -1, dtype=np.int64)
         src_edge_types = _encode_with_mapping(edge_src_type_values, node_type_mapping) if edge_src_type_values is not None and node_type_mapping is not None else None
@@ -2045,7 +2036,7 @@ def _consistency_schema_hash(params: dict) -> str:
     return hashlib.sha256(_canonical_json_bytes(params)).hexdigest()
 
 
-def _build_sampling_indexes(node_count: int, relation_count: int, src_int, dst_int, rel_int):
+def _build_sampling_indexes(node_count: int, relation_count: int, src_int: IntArray, dst_int: IntArray, rel_int: IntArray) -> tuple[CSRAdjacency, CSRAdjacency, CSRAdjacency, CSRAdjacency, CSRAdjacency, IntArray]:
     """Rebuild every CSR adjacency plus positive triples from edge rows."""
     src_int = np.asarray(src_int, dtype=np.int64)
     dst_int = np.asarray(dst_int, dtype=np.int64)
@@ -2065,7 +2056,7 @@ def _build_sampling_indexes(node_count: int, relation_count: int, src_int, dst_i
     return out, in_, incident, relation_out, relation_in, positive_triples
 
 
-def _encode_type_values(values, *, expected_size: int) -> tuple[np.ndarray, dict[str, int]]:
+def _encode_type_values(values: Sequence[object], *, expected_size: int) -> tuple[IntArray, dict[str, int]]:
     values = list(values)
     if len(values) != expected_size:
         raise ValueError("node_type_values length must match external_node_ids")
@@ -2075,7 +2066,7 @@ def _encode_type_values(values, *, expected_size: int) -> tuple[np.ndarray, dict
     return encoded, mapping
 
 
-def _encode_with_mapping(values, mapping: dict[str, int]) -> np.ndarray:
+def _encode_with_mapping(values: Iterable[object], mapping: dict[str, int]) -> IntArray:
     return np.asarray([mapping.get(str(value), -1) if value is not None else -1 for value in values], dtype=np.int64)
 
 
@@ -2093,7 +2084,7 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _build_temporal_csr(keys, valid_from_us, edge_indices, size: int) -> CSRAdjacency:
+def _build_temporal_csr(keys: IntArray, valid_from_us: IntArray, edge_indices: IntArray, size: int) -> CSRAdjacency:
     keys = np.asarray(keys, dtype=np.int64)
     starts = np.asarray(valid_from_us, dtype=np.int64)
     edges = np.asarray(edge_indices, dtype=np.int64)
@@ -2107,7 +2098,7 @@ def _build_temporal_csr(keys, valid_from_us, edge_indices, size: int) -> CSRAdja
     return CSRAdjacency(indptr, edges[order])
 
 
-def _build_positive_history_index(src, rel, dst, valid_from_us):
+def _build_positive_history_index(src: IntArray, rel: IntArray, dst: IntArray, valid_from_us: IntArray) -> tuple[IntArray, IntArray, IntArray]:
     triples = np.stack([src, rel, dst], axis=1) if len(src) else np.empty((0, 3), dtype=np.int64)
     if not len(triples):
         return triples, np.zeros(1, dtype=np.int64), np.empty(0, dtype=np.int64)
@@ -2122,7 +2113,7 @@ def _build_positive_history_index(src, rel, dst, valid_from_us):
     return ordered[group_starts], indptr, edge_indices[order]
 
 
-def _subtract_intervals(start: int, end: int | None, covered) -> list[tuple[int, int | None]]:
+def _subtract_intervals(start: int, end: int | None, covered: Iterable[tuple[int, int | None]]) -> list[tuple[int, int | None]]:
     pieces = [(start, end)]
     for cover_start, cover_end in covered:
         next_pieces = []
@@ -2140,8 +2131,8 @@ def _subtract_intervals(start: int, end: int | None, covered) -> list[tuple[int,
     return pieces
 
 
-def _merge_intervals(intervals) -> list[tuple[int, int | None]]:
-    merged = []
+def _merge_intervals(intervals: Iterable[tuple[int, int | None]]) -> list[tuple[int, int | None]]:
+    merged: list[tuple[int, int | None]] = []
     for start, end in sorted(intervals, key=lambda item: item[0]):
         if not merged:
             merged.append((start, end))
@@ -2167,7 +2158,7 @@ def _validate_weight(value) -> float:
     return weight
 
 
-def _normalize_edge_weights(edge_weights, edge_count: int) -> np.ndarray:
+def _normalize_edge_weights(edge_weights: Sequence[float] | Array | None, edge_count: int) -> FloatArray:
     if edge_weights is None:
         return np.ones(edge_count, dtype=np.float64)
     weights = np.asarray(edge_weights, dtype=np.float64)
@@ -2178,7 +2169,7 @@ def _normalize_edge_weights(edge_weights, edge_count: int) -> np.ndarray:
     return weights
 
 
-def _integer_id_array(values, name: str) -> np.ndarray:
+def _integer_id_array(values: Sequence[int] | Array, name: str) -> IntArray:
     ids = np.asarray(values)
     if ids.ndim != 1:
         raise ValueError(f"{name} must be one-dimensional")
@@ -2187,7 +2178,7 @@ def _integer_id_array(values, name: str) -> np.ndarray:
     return ids.astype(np.int64, copy=False)
 
 
-def _build_lookup_order(external_ids: np.ndarray, entity: str, *, require_unique: bool = True) -> np.ndarray:
+def _build_lookup_order(external_ids: StringArray, entity: str, *, require_unique: bool = True) -> IntArray:
     order = np.argsort(external_ids, kind="stable").astype(np.int64, copy=False)
     if require_unique and order.size > 1:
         sorted_ids = external_ids[order]

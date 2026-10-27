@@ -5,6 +5,7 @@ import pickle
 import json
 import base64
 from datetime import date, datetime
+from typing import Any, cast
 
 from .temporal import (
     TemporalDate,
@@ -37,8 +38,10 @@ _TAGGED_VALUE_TYPES = {
 }
 
 
-def temporal_tagged_value(value, *, canonical_time=False):
+def temporal_tagged_value(value: TemporalDate | TemporalDuration | TemporalInstant | TemporalLocalDateTime | TemporalLocalTime | TemporalTime, *, canonical_time: bool = False) -> dict[str, object]:
     """Return a portable tagged representation for a temporal scalar."""
+    value_type: str
+    payload: object
     if isinstance(value, TemporalDate):
         value_type, payload = "temporal_date", value.value.isoformat()
     elif isinstance(value, TemporalLocalTime):
@@ -60,7 +63,7 @@ def temporal_tagged_value(value, *, canonical_time=False):
     return {_TYPE_KEY: value_type, _VALUE_KEY: payload}
 
 
-def _to_storage_compatible(obj):
+def _to_storage_compatible(obj: object) -> object:
     if isinstance(obj, _TEMPORAL_TYPES):
         return temporal_tagged_value(obj)
     if isinstance(obj, dict):
@@ -77,7 +80,7 @@ def _to_storage_compatible(obj):
     return obj
 
 
-def _from_storage_compatible(obj):
+def _from_storage_compatible(obj: object) -> object:
     if isinstance(obj, dict):
         if set(obj) == {_TYPE_KEY, _VALUE_KEY}:
             value_type = obj[_TYPE_KEY]
@@ -104,7 +107,7 @@ def _from_storage_compatible(obj):
     return obj
 
 
-def _missing_dependency_error(package_name, *, extra_name, feature_name=None):
+def _missing_dependency_error(package_name: str, *, extra_name: str, feature_name: str | None = None) -> ImportError:
     """Build a consistent optional dependency error.
 
     Args:
@@ -169,7 +172,7 @@ class PickleSerializer(Serializer):
             >>> PickleSerializer().deserialize(PickleSerializer().serialize({"a": 1}))
             {'a': 1}
         """
-        return _from_storage_compatible(pickle.loads(data))
+        return cast(dict, _from_storage_compatible(pickle.loads(data)))
 
 
 class JSONSerializer(Serializer):
@@ -204,14 +207,14 @@ class JSONSerializer(Serializer):
             >>> JSONSerializer().deserialize(b'{"a": 1}')
             {'a': 1}
         """
-        return _from_storage_compatible(json.loads(data.decode('utf-8')))
+        return cast(dict, _from_storage_compatible(json.loads(data.decode('utf-8'))))
 
 
 class MessagePackSerializer(Serializer):
     """Uses MessagePack for serialization."""
 
     @staticmethod
-    def ensure_available():
+    def ensure_available() -> Any:
         """Import and return MessagePack, or raise installation guidance."""
         try:
             import msgpack
@@ -243,7 +246,7 @@ class MessagePackSerializer(Serializer):
             {'a': 1}
         """
         msgpack = self.ensure_available()
-        return _from_storage_compatible(msgpack.unpackb(data, raw=False))
+        return cast(dict, _from_storage_compatible(msgpack.unpackb(data, raw=False)))
 
 
 class ProtobufSerializer(Serializer):
@@ -257,7 +260,7 @@ class ProtobufSerializer(Serializer):
     _VALUE_KEY = _VALUE_KEY
 
     @staticmethod
-    def ensure_available():
+    def ensure_available() -> Any:
         """Import and return protobuf helpers, or raise installation guidance."""
         try:
             from google.protobuf import json_format, struct_pb2
@@ -300,9 +303,9 @@ class ProtobufSerializer(Serializer):
         message = struct_pb2.Struct()
         message.ParseFromString(data)
         decoded = self._from_struct_compatible(json_format.MessageToDict(message))
-        return _from_storage_compatible(decoded)
+        return cast(dict, _from_storage_compatible(decoded))
 
-    def _to_struct_compatible(self, obj):
+    def _to_struct_compatible(self, obj: object) -> object:
         """Convert Python-only values into protobuf Struct-compatible values.
 
         Args:
@@ -327,7 +330,7 @@ class ProtobufSerializer(Serializer):
             return [self._to_struct_compatible(value) for value in obj]
         return obj
 
-    def _from_struct_compatible(self, obj):
+    def _from_struct_compatible(self, obj: object) -> object:
         """Restore Python-only values from Struct-compatible tagged values.
 
         Args:

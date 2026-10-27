@@ -12,10 +12,13 @@ intentionally skips legacy adjacency blobs.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Any, Callable, cast
 
 if TYPE_CHECKING:
     from ..kvstores import KVStore
+    from ..serializers import Serializer
+    from .entities import GraphEntityDictSerializer
 
 from ..ingestion import EdgeList, IndexMaintenanceMode
 from ..serializers import JSONSerializer
@@ -32,17 +35,17 @@ from .entities import (
 )
 
 
-def put_edges_bulk(store: KVStore, entity_serializer, raw_serializer,
-                   indexed_edge_properties, adj_cache: dict,
-                   edges: list, check_existing: bool = True) -> None:
+def put_edges_bulk(store: KVStore, entity_serializer: GraphEntityDictSerializer, raw_serializer: Serializer,
+                   indexed_edge_properties: Iterable[str], adj_cache: dict[bytes, int],
+                   edges: Iterable[Edge], check_existing: bool = True) -> None:
     """Store multiple edges and update adjacency and secondary indexes."""
     # 1) Build a dict[edge_id, bytes] to store all edges in one go
-    edge_dict = {}
-    typed_adjacency_records = []
-    index_entries = []
-    range_entries = []
+    edge_dict: dict[bytes, bytes] = {}
+    typed_adjacency_records: list[tuple[bytes, bytes, str, bytes]] = []
+    index_entries: list[tuple[str, list[bytes], bytes]] = []
+    range_entries: list[tuple[str, list[bytes], bytes, bytes]] = []
     # 2) Accumulate adjacency changes in memory: node_id -> set(edge_ids)
-    adjacency_accumulator = {}  # the keys are "nodes" and the values are sets of edges for where the nodes appear as source or destinations (separately).
+    adjacency_accumulator: dict[bytes, dict[str, list[str]]] = {}  # the keys are "nodes" and the values are sets of edges for where the nodes appear as source or destinations (separately).
 
     for e in edges:
         if check_existing:
@@ -52,8 +55,8 @@ def put_edges_bulk(store: KVStore, entity_serializer, raw_serializer,
                 _index_maintenance.delete_edge_indexes(store, indexed_edge_properties, old_edge)
                 remove_edge_from_endpoint_adjacencies(store, raw_serializer, old_edge)
         e_bytes = entity_serializer.serialize(e, 'Edge')
-        _source = node_key_to_bytes(e.source)
-        _target = node_key_to_bytes(e.target)
+        _source = node_key_to_bytes(cast(str, e.source))
+        _target = node_key_to_bytes(cast(str, e.target))
         edge_dict[e.get_id_bytes] = e_bytes
         edge_type = e.get_type
         if edge_type is not None:
@@ -111,6 +114,7 @@ def put_edges_bulk(store: KVStore, entity_serializer, raw_serializer,
     # union with new edges, and store in final_adjacency dict
     for node_id, new_edges_source_target in adjacency_accumulator.items():
         raw_adj = store.get_adjacency(node_id)
+        old_edges: dict[str, Any]
         if raw_adj is None:
             old_edges = {'source': set(), 'target': set()}
         else:
