@@ -87,9 +87,11 @@ from .feeder import AsyncBatchFeeder  # noqa: E402
 from .negatives import HardNegativeConfig  # noqa: E402
 from .snapshot import SamplerSnapshot  # noqa: E402
 from .contexts import ContextPairBatch, iter_context_pairs  # noqa: E402
+from .context_negatives import ContextNegativeSampler  # noqa: E402
 
 
 __all__ = [
+    "ContextNegativeSampler",
     "ContextPairBatch",
     "iter_context_pairs",
     "HardNegativeConfig",

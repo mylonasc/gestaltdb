@@ -13,6 +13,8 @@ from .batch import SampledSubgraphBatch
 from .negatives import HardNegativeConfig
 from .snapshot import SamplerSnapshot
 from .walks import RandomWalkBatch, _external_id_array, iter_walk_batches
+from .rng import split_seed
+from .validation import _integer_array, _validate_count
 
 
 @dataclass(frozen=True)
@@ -296,24 +298,6 @@ class LayeredSampleBatch:
                 }
             )
         return tensor_blocks
-
-
-def split_seed(seed: int | None, num_workers: int) -> tuple[int, ...]:
-    """Derive one deterministic worker seed per training worker.
-
-    Uses ``SeedSequence.spawn`` so sibling workers hold statistically
-    independent streams while the whole split reproduces from ``(seed,
-    num_workers)``. Workers run in separate processes and cannot share
-    ``Generator`` objects, so each worker rebuilds its engine from its own
-    integer seed (see ``SamplerEngine.worker_engine``). ``seed=None`` draws
-    fresh entropy: workers stay independent but the split does not
-    reproduce — pass an explicit seed for deterministic training.
-    """
-    if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
-        raise ValueError("seed must be an integer or None")
-    if isinstance(num_workers, bool) or not isinstance(num_workers, int) or num_workers < 1:
-        raise ValueError("num_workers must be a positive integer")
-    return tuple(int(child.generate_state(1)[0]) for child in np.random.SeedSequence(seed).spawn(num_workers))
 
 
 class SamplerEngine:
@@ -2389,18 +2373,3 @@ class SamplerEngine:
                 self.snapshot.positive_history_triples.tolist()
             )
         }
-
-def _integer_array(values, name: str) -> np.ndarray:
-    ids = np.asarray(values)
-    if ids.ndim != 1:
-        raise ValueError(f"{name} must be one-dimensional")
-    if ids.size and (np.issubdtype(ids.dtype, np.bool_) or not np.issubdtype(ids.dtype, np.integer)):
-        raise ValueError(f"{name} must contain integer IDs")
-    return ids.astype(np.int64, copy=False)
-
-
-def _validate_count(value, name: str) -> None:
-    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
-        raise ValueError(f"{name} must be an integer")
-    if value < 0:
-        raise ValueError(f"{name} must be non-negative")

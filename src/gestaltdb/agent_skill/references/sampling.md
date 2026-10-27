@@ -41,6 +41,12 @@ arrays. Fixed/dynamic windows, inverse-distance weights and explicit frequency
 subsampling are supported. Windows do not cross restart jumps by default and
 never join separate walk rows. Embedding training stays in the caller's framework.
 
+`ContextNegativeSampler` (same import module) draws context-node negatives from
+explicit visit counts or `from_snapshot(snapshot)` incident degrees, raised to
+an exponent (default 0.75). Exclude centers/positive contexts/caller-observed
+contexts explicitly. Uniqueness exhaustion raises or explicitly repeats feasible
+draws; no eligible support always raises. These are not KG triple negatives.
+
 ### Filter Once, Sample Repeatedly
 
 Pass `node_filter`/`edge_filter` to `graph.build_sampler_snapshot` to define an

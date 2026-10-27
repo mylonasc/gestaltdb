@@ -54,3 +54,33 @@ these arrays without copying. No training-framework dependency is needed.
        pairs = list(iter_context_pairs(walks, window_size=1, batch_size=3))
        assert sum(len(batch.weights) for batch in pairs) == 4
        assert pairs[0].center_nodes.tolist() == [0, 1, 1]
+
+RWS-03: embedding-objective negatives
+------------------------------------
+
+``ContextNegativeSampler(frequencies, exponent=0.75, seed=...)`` uses explicit
+corpus counts/frequencies. ``ContextNegativeSampler.from_snapshot(snapshot)``
+instead uses incident degree (self-loops counted twice). Its ``sample``
+method accepts compact centers and optional aligned ``positive_contexts`` and
+returns an integer array shaped (centers, negatives per positive). The caller
+may exclude centers, aligned positive contexts, and all known observed contexts
+via ``excluded_contexts={center: [contexts...]}``. It does not infer these sets
+from the graph or equate missing edges with negative co-occurrences.
+
+Zero-count nodes have zero probability unless all counts are zero (uniform
+fallback), or exponent is zero (uniform). Non-finite/negative inputs fail.
+Exclusions explicitly condition the distribution: cost is O(nodes) per row,
+plus output, rather than an unbounded rejection loop. ``unique=True`` samples
+without replacement. Insufficient support raises before RNG draws by default;
+``exhaustion="repeat"`` cycles a sampled feasible unique set. Empty support
+always raises for a nonzero request. This is separate from KG triple negatives.
+
+.. code-block:: python
+
+   from gestaltdb.sampling import ContextNegativeSampler
+
+   negatives = ContextNegativeSampler([10, 5, 2, 1], seed=7)
+   result = negatives.sample(
+       [0], positive_contexts=[1], negatives_per_positive=2, unique=True,
+   )
+   assert set(result[0]) == {2, 3}
