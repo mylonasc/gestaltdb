@@ -53,6 +53,36 @@ gestaltdb = ["agent_skill/**/*.md", "agent_skill/api_index.json", "py.typed", "v
 python_version = "3.10"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["gestaltdb.sampling._arrays", "gestaltdb.sampling.adjacency", "gestaltdb.sampling.feeder"]
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = [
+    "gestaltdb._graph.temporal_types",
+    "gestaltdb._graph.stored_rule_types",
+    "gestaltdb._graph.temporal_reads",
+    "gestaltdb._graph.temporal_selection",
+    "gestaltdb._graph.temporal_writes",
+    "gestaltdb._graph.temporal_indexes",
+    "gestaltdb._graph.temporal_orphans",
+    "gestaltdb._graph.temporal_entity_writes",
+    "gestaltdb._graph.temporal_sequence",
+    "gestaltdb._graph.stored_rules",
+    "gestaltdb._graph.truth_maintenance",
+    "gestaltdb.temporal_engine",
+    "gestaltdb.history",
+    "gestaltdb.epistemic_engine",
+    "gestaltdb.rules_engine",
+]
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+warn_return_any = true
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]

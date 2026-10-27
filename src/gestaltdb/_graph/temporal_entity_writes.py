@@ -11,13 +11,14 @@ The writer guard and transaction dispatch stay on ``GraphDB``.
 from __future__ import annotations
 
 import struct
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Mapping, cast
 
 if TYPE_CHECKING:
     from ..kvstores import KVStore
 
 from ..epistemic import Claim, ClaimObjectKind, ClaimPolarity
-from ..temporal import TemporalInstant, TemporalInterval
+from ..temporal import TemporalInput, TemporalInstant, TemporalInterval, TemporalIntervalInput
+from ..ingestion import IndexMaintenanceMode
 from ..versioning import (
     ClaimVersion,
     ClaimVersionWrite,
@@ -33,34 +34,35 @@ from ..versioning import (
     normalize_version_id,
 )
 from .edge_records import get_edge
-from .entities import Edge, Node, TimeIndexedEdge
+from .entities import Edge, GraphEntityDictSerializer, Node, TimeIndexedEdge
 from .temporal_reads import TemporalReader, claim_valid_interval
 from .temporal_selection import _UNSET
+from .temporal_types import CommitVersions, PointInput
 
 
-def put_node_version(commit_fn, node: Node, *, valid,
-                     version_id=None, metadata=None, index_mode="maintain"):
+def put_node_version(commit_fn: CommitVersions, node: Node, *, valid: TemporalIntervalInput,
+                     version_id: str | None = None, metadata: Mapping[str, object] | None = None, index_mode: str | IndexMaintenanceMode = "maintain") -> NodeVersion:
     """Append an immutable node assertion without changing the current graph."""
     commit = commit_fn(
         [NodeVersionWrite.assertion(node, valid, version_id=version_id)],
         metadata=metadata, index_mode=index_mode,
     )
-    return commit.versions[0]
+    return cast(NodeVersion, commit.versions[0])
 
 
-def put_edge_version(commit_fn, edge: Edge, *, valid,
-                     version_id=None, metadata=None, index_mode="maintain"):
+def put_edge_version(commit_fn: CommitVersions, edge: Edge, *, valid: TemporalIntervalInput,
+                     version_id: str | None = None, metadata: Mapping[str, object] | None = None, index_mode: str | IndexMaintenanceMode = "maintain") -> EdgeVersion:
     """Append an immutable edge assertion without changing the current graph."""
     commit = commit_fn(
         [EdgeVersionWrite.assertion(edge, valid, version_id=version_id)],
         metadata=metadata, index_mode=index_mode,
     )
-    return commit.versions[0]
+    return cast(EdgeVersion, commit.versions[0])
 
 
-def correct_node_version(commit_fn, node: Node, *,
-                         supersedes_version_id: str, valid=None, version_id=None,
-                         metadata=None, index_mode="maintain"):
+def correct_node_version(commit_fn: CommitVersions, node: Node, *,
+                         supersedes_version_id: str, valid: TemporalIntervalInput | None = None, version_id: str | None = None,
+                         metadata: Mapping[str, object] | None = None, index_mode: str | IndexMaintenanceMode = "maintain") -> NodeVersion:
     """Append a corrected node payload while preserving the superseded version."""
     commit = commit_fn([NodeVersionWrite.correction(
         node,
@@ -68,12 +70,12 @@ def correct_node_version(commit_fn, node: Node, *,
         valid=valid,
         version_id=version_id,
     )], metadata=metadata, index_mode=index_mode)
-    return commit.versions[0]
+    return cast(NodeVersion, commit.versions[0])
 
 
-def correct_edge_version(commit_fn, edge: Edge, *,
-                         supersedes_version_id: str, valid=None, version_id=None,
-                         metadata=None, index_mode="maintain"):
+def correct_edge_version(commit_fn: CommitVersions, edge: Edge, *,
+                         supersedes_version_id: str, valid: TemporalIntervalInput | None = None, version_id: str | None = None,
+                         metadata: Mapping[str, object] | None = None, index_mode: str | IndexMaintenanceMode = "maintain") -> EdgeVersion:
     """Append a corrected edge payload while preserving the superseded version."""
     commit = commit_fn([EdgeVersionWrite.correction(
         edge,
@@ -81,13 +83,13 @@ def correct_edge_version(commit_fn, edge: Edge, *,
         valid=valid,
         version_id=version_id,
     )], metadata=metadata, index_mode=index_mode)
-    return commit.versions[0]
+    return cast(EdgeVersion, commit.versions[0])
 
 
-def retract_node_version(commit_fn, logical_id: str, *, valid=None,
-                         valid_from=None, supersedes_version_id=None,
-                         reason=None, version_id=None, metadata=None,
-                         index_mode="maintain"):
+def retract_node_version(commit_fn: CommitVersions, logical_id: str, *, valid: TemporalIntervalInput | None = None,
+                         valid_from: TemporalInput | None = None, supersedes_version_id: str | None = None,
+                         reason: str | None = None, version_id: str | None = None, metadata: Mapping[str, object] | None = None,
+                         index_mode: str | IndexMaintenanceMode = "maintain") -> NodeVersion:
     """Append a node retraction over an explicit or inherited interval."""
     commit = commit_fn([NodeVersionWrite.retraction(
         logical_id,
@@ -97,13 +99,13 @@ def retract_node_version(commit_fn, logical_id: str, *, valid=None,
         reason=reason,
         version_id=version_id,
     )], metadata=metadata, index_mode=index_mode)
-    return commit.versions[0]
+    return cast(NodeVersion, commit.versions[0])
 
 
-def retract_edge_version(commit_fn, logical_id: str, *, valid=None,
-                         valid_from=None, supersedes_version_id=None,
-                         reason=None, version_id=None, metadata=None,
-                         index_mode="maintain"):
+def retract_edge_version(commit_fn: CommitVersions, logical_id: str, *, valid: TemporalIntervalInput | None = None,
+                         valid_from: TemporalInput | None = None, supersedes_version_id: str | None = None,
+                         reason: str | None = None, version_id: str | None = None, metadata: Mapping[str, object] | None = None,
+                         index_mode: str | IndexMaintenanceMode = "maintain") -> EdgeVersion:
     """Append an edge retraction over an explicit or inherited interval."""
     commit = commit_fn([EdgeVersionWrite.retraction(
         logical_id,
@@ -113,14 +115,14 @@ def retract_edge_version(commit_fn, logical_id: str, *, valid=None,
         reason=reason,
         version_id=version_id,
     )], metadata=metadata, index_mode=index_mode)
-    return commit.versions[0]
+    return cast(EdgeVersion, commit.versions[0])
 
 
-def assert_claim(commit_fn, *, subject, predicate, object, polarity, agent,
-                 source=None, confidence=None, world="default", provenance=None,
-                 object_kind=ClaimObjectKind.ENTITY, valid=None,
-                 valid_from=None, valid_to=None, version_id=None,
-                 metadata=None, index_mode="maintain"):
+def assert_claim(commit_fn: CommitVersions, *, subject: str, predicate: str, object: object, polarity: ClaimPolarity | str, agent: str,
+                 source: str | None = None, confidence: float | None = None, world: str = "default", provenance: Mapping[str, object] | None = None,
+                 object_kind: ClaimObjectKind | str = ClaimObjectKind.ENTITY, valid: TemporalIntervalInput | None = None,
+                 valid_from: PointInput | None = None, valid_to: PointInput | None = None, version_id: str | None = None,
+                 metadata: Mapping[str, object] | None = None, index_mode: str | IndexMaintenanceMode = "maintain") -> ClaimVersion:
     """Append an immutable sourced assertion or denial."""
     interval = claim_valid_interval(valid, valid_from, valid_to, required=True)
     claim = Claim(
@@ -136,17 +138,17 @@ def assert_claim(commit_fn, *, subject, predicate, object, polarity, agent,
         provenance={} if provenance is None else provenance,
     )
     commit = commit_fn(
-        [ClaimVersionWrite.assertion(claim, interval, version_id=version_id)],
+        [ClaimVersionWrite.assertion(claim, cast(TemporalInterval, interval), version_id=version_id)],
         metadata=metadata,
         index_mode=index_mode,
     )
-    return commit.versions[0]
+    return cast(ClaimVersion, commit.versions[0])
 
 
-def correct_claim(reader: TemporalReader, commit_fn, claim, *,
-                  supersedes_version_id, confidence=_UNSET, provenance=_UNSET,
-                  valid=None, valid_from=None, valid_to=None, version_id=None,
-                  metadata=None, index_mode="maintain"):
+def correct_claim(reader: TemporalReader, commit_fn: CommitVersions, claim: Claim | str, *,
+                  supersedes_version_id: str, confidence: object = _UNSET, provenance: object = _UNSET,
+                  valid: TemporalIntervalInput | None = None, valid_from: PointInput | None = None, valid_to: PointInput | None = None, version_id: str | None = None,
+                  metadata: Mapping[str, object] | None = None, index_mode: str | IndexMaintenanceMode = "maintain") -> ClaimVersion:
     """Append corrected confidence/provenance for one claim identity.
 
     Explicit confidence/provenance keywords override the supplied Claim's
@@ -177,12 +179,12 @@ def correct_claim(reader: TemporalReader, commit_fn, claim, *,
         valid=interval,
         version_id=version_id,
     )], metadata=metadata, index_mode=index_mode)
-    return commit.versions[0]
+    return cast(ClaimVersion, commit.versions[0])
 
 
-def retract_claim(commit_fn, claim_id, *, valid=None, valid_from=None,
-                  valid_to=None, supersedes_version_id=None, reason=None,
-                  version_id=None, metadata=None, index_mode="maintain"):
+def retract_claim(commit_fn: CommitVersions, claim_id: str, *, valid: TemporalIntervalInput | None = None, valid_from: PointInput | None = None,
+                  valid_to: PointInput | None = None, supersedes_version_id: str | None = None, reason: str | None = None,
+                  version_id: str | None = None, metadata: Mapping[str, object] | None = None, index_mode: str | IndexMaintenanceMode = "maintain") -> ClaimVersion:
     """Append a bitemporal retraction without deleting claim history."""
     interval = claim_valid_interval(valid, valid_from, valid_to, required=False)
     commit = commit_fn([ClaimVersionWrite.retraction(
@@ -192,13 +194,13 @@ def retract_claim(commit_fn, claim_id, *, valid=None, valid_from=None,
         reason=reason,
         version_id=version_id,
     )], metadata=metadata, index_mode=index_mode)
-    return commit.versions[0]
+    return cast(ClaimVersion, commit.versions[0])
 
 
-def migrate_time_indexed_edges(store: KVStore, entity_serializer,
+def migrate_time_indexed_edges(store: KVStore, entity_serializer: GraphEntityDictSerializer,
                                reader: TemporalReader,
-                               commit_fn, delete_edge_fn, *, metadata=None,
-                               index_mode="maintain", delete_legacy=True):
+                               commit_fn: CommitVersions, delete_edge_fn: Callable[[bytes], None] | None, *, metadata: Mapping[str, object] | None = None,
+                               index_mode: str | IndexMaintenanceMode = "maintain", delete_legacy: bool = True) -> tuple[EdgeVersion, ...]:
     """Append equivalent edge history for legacy timestamp-prefixed edges."""
     grouped: dict[str, list[tuple[bytes, TimeIndexedEdge, TemporalInstant]]] = {}
     for raw_key in store.get_edge_keys_generator():
@@ -280,7 +282,7 @@ def migrate_time_indexed_edges(store: KVStore, entity_serializer,
 
     versions: tuple[EdgeVersion, ...] = ()
     if writes:
-        migration_metadata = {
+        migration_metadata: dict[str, object] = {
             "migration": "TimeIndexedEdge",
             "interval_policy": "successive",
         }
@@ -291,9 +293,9 @@ def migrate_time_indexed_edges(store: KVStore, entity_serializer,
             metadata=migration_metadata,
             index_mode=index_mode,
         )
-        versions = tuple(commit.versions)
+        versions = cast(tuple[EdgeVersion, ...], tuple(commit.versions))
 
     if delete_legacy:
         for raw_key in migrated_keys:
-            delete_edge_fn(raw_key)
+            cast(Callable[[bytes], None], delete_edge_fn)(raw_key)
     return versions

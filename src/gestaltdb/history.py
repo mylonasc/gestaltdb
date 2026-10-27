@@ -10,13 +10,14 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
 from ._graph import temporal_selection as selection
 from ._graph.entities import GraphEntityDictSerializer
 from ._graph.temporal_indexes import INDEX_STATE_KEY
 from ._graph.temporal_keys import _TEMPORAL_SEQUENCE_FILENAME, _TEMPORAL_SEQUENCE_KEY
 from ._graph.temporal_reads import TemporalReader
+from ._graph.temporal_types import Hydrator, LiveStore, PointInput
 from .epistemic import ClaimStatus
 from .versioning import ClaimVersion, EdgeVersion, NodeVersion, TemporalCommit
 
@@ -33,7 +34,7 @@ class TemporalHistory:
     detect rebinding of a mutable owner during grouped claim reads.
     """
 
-    def __init__(self, reader: TemporalReader, *, hydrate: Any = None, live_store: Any = None) -> None:
+    def __init__(self, reader: TemporalReader, *, hydrate: Hydrator | None = None, live_store: LiveStore | None = None) -> None:
         self._reader = reader
         self._hydrate = hydrate
         self._live_store = live_store
@@ -92,9 +93,17 @@ class TemporalHistory:
 
     def get_node_as_of(self, logical_id: str, **point: Any) -> NodeVersion | None:
         """Resolve a node at a valid-time point and optional system horizon."""
-        return selection.entity_as_of(
-            self._reader, "node", logical_id, hydrate=self._hydrate, **point)
+        return cast(NodeVersion | None, selection.entity_as_of(
+            self._reader, "node", logical_id, hydrate=self._hydrate, **point))
 
+    @overload
+    def entity_as_of(self, kind: Literal["node"], logical_id: str, *, valid_time: PointInput, system_time: PointInput | None = None, through_commit: int | None = None) -> NodeVersion | None: ...
+    @overload
+    def entity_as_of(self, kind: Literal["edge"], logical_id: str, *, valid_time: PointInput, system_time: PointInput | None = None, through_commit: int | None = None) -> EdgeVersion | None: ...
+    @overload
+    def entity_as_of(self, kind: Literal["claim"], logical_id: str, *, valid_time: PointInput, system_time: PointInput | None = None, through_commit: int | None = None) -> ClaimVersion | None: ...
+    @overload
+    def entity_as_of(self, kind: str, logical_id: str, *, valid_time: PointInput, system_time: PointInput | None = None, through_commit: int | None = None) -> NodeVersion | EdgeVersion | ClaimVersion | None: ...
     def entity_as_of(self, kind: str, logical_id: str, **point: Any) -> NodeVersion | EdgeVersion | ClaimVersion | None:
         """Resolve one logical node/edge/claim version at a valid time."""
         return selection.entity_as_of(
@@ -102,13 +111,13 @@ class TemporalHistory:
 
     def get_edge_as_of(self, logical_id: str, **point: Any) -> EdgeVersion | None:
         """Resolve an edge at a valid-time point and optional system horizon."""
-        return selection.entity_as_of(
-            self._reader, "edge", logical_id, hydrate=self._hydrate, **point)
+        return cast(EdgeVersion | None, selection.entity_as_of(
+            self._reader, "edge", logical_id, hydrate=self._hydrate, **point))
 
     def get_claim_as_of(self, claim_id: str, **point: Any) -> ClaimVersion | None:
         """Resolve a claim at a valid-time point and optional system horizon."""
-        return selection.entity_as_of(
-            self._reader, "claim", claim_id, hydrate=self._hydrate, **point)
+        return cast(ClaimVersion | None, selection.entity_as_of(
+            self._reader, "claim", claim_id, hydrate=self._hydrate, **point))
 
     def iter_nodes_as_of(self, **point: Any) -> Iterator[NodeVersion]:
         """Iterate nodes visible at a temporal point."""

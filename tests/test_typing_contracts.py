@@ -115,3 +115,77 @@ def test_live_sampling_accepts_random_instances(graph):
     assert graph.traversal.sample_nodes(10, rng=random.Random(7)) != []
     with pytest.raises(ValueError):
         graph.traversal.sample_neighbors("n1", "R", direction="sideways")
+
+
+def test_partial_temporal_batch_export_preserves_optional_companions():
+    import numpy as np
+    from gestaltdb.sampling.batch import SampledSubgraphBatch
+
+    ids = np.asarray([0], dtype=np.int64)
+    triples = np.empty((0, 3), dtype=np.int64)
+    batch = SampledSubgraphBatch(
+        ids, ids, ids, ids, ids, ids, triples, triples,
+        edge_version_ids=np.asarray(["v"], dtype=str),
+        positive_time_us=np.asarray([1], dtype=np.int64),
+    )
+    arrays = batch.to_numpy()
+    assert arrays["senders"] is ids
+    assert arrays["valid_from_us"] is None
+    assert arrays["valid_to_us"] is None
+    assert arrays["valid_to_open"] is None
+    assert arrays["negative_time_us"] is None
+    assert "graph_node_offsets" not in arrays
+
+
+def test_typed_sampling_arrays_preserve_memmaps(tmp_path):
+    import numpy as np
+    from gestaltdb.sampling.snapshot import SamplerSnapshot
+
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "snapshot", external_node_ids=["a", "b"],
+        external_edge_ids=["e"], external_relation_ids=["R"],
+        src_int=[0], dst_int=[1], rel_int=[0],
+    )
+    loaded = SamplerSnapshot.load(snapshot.path, mmap=True)
+    assert isinstance(loaded.src_int, np.memmap)
+    assert loaded.src_int.dtype == np.int64
+    assert loaded.edge_weights.dtype == np.float64
+    assert loaded.external_node_ids.dtype.kind == "U"
+    assert loaded.node_ints(["b", "a"]).tolist() == [1, 0]
+
+
+def test_temporal_kind_contracts_and_detached_cache_payloads(graph):
+    from gestaltdb.versioning import ClaimVersion, EdgeVersion, NodeVersion
+
+    node = graph.temporal.put_node_version(Node("n", properties={"value": 1}), valid=(0, 100))
+    edge = graph.temporal.put_edge_version(Edge("e", "n", "n"), valid=(0, 100))
+    claim = graph.epistemic.assert_claim(
+        subject="n", predicate="p", object="n", agent="test", polarity="positive", valid=(0, 100),
+    )
+    for kind, version, expected_type in [("node", node, NodeVersion), ("edge", edge, EdgeVersion), ("claim", claim, ClaimVersion)]:
+        selected = graph.temporal.entity_as_of(kind, version.logical_id, valid_time=50)
+        historical = graph.temporal.history().entity_as_of(kind, version.logical_id, valid_time=50)
+        assert isinstance(selected, expected_type)
+        assert isinstance(historical, expected_type)
+        assert historical.version_id == selected.version_id
+        assert historical.valid == selected.valid
+    selected_node = graph.temporal.get_node_version(node.version_id)
+    selected_node.node.properties["value"] = 99
+    assert graph.temporal.get_node_version(node.version_id).node.properties["value"] == 1
+    reader = graph.temporal.reader()
+    assert reader.get_commit(node.commit_id) is not None
+    for (store_id, _, _), entry in reader.commit_cache.items():
+        assert store_id == id(entry[0])
+
+
+def test_typed_claim_correction_preserves_unset_versus_none(graph):
+    first = graph.epistemic.assert_claim(
+        subject="n", predicate="p", object="n", agent="test", polarity="positive",
+        confidence=0.75, valid=(0, 100),
+    )
+    inherited = graph.epistemic.correct_claim(first.logical_id, supersedes_version_id=first.version_id)
+    cleared = graph.epistemic.correct_claim(
+        first.logical_id, supersedes_version_id=inherited.version_id, confidence=None,
+    )
+    assert inherited.claim.confidence == 0.75
+    assert cleared.claim.confidence is None

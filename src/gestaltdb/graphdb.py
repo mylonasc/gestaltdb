@@ -1039,8 +1039,8 @@ class GraphDB:
             with self.temporal.open_read_view(
                 self, manifest=self.manifest, database_id=self.database_id,
                 valid_time=0, system_time=system_time,
-            ) as view:
-                return view.build_sampler_snapshot(
+            ) as temporal_view:
+                return temporal_view.build_sampler_snapshot(
                     output_path, temporal=True, time_bucket=time_bucket,
                     **kwargs,
                 )

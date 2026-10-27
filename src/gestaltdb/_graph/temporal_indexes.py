@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Sequence, cast
 
 if TYPE_CHECKING:
     from ..kvstores import KVStore
@@ -22,11 +23,14 @@ from ..versioning import (
     EdgeVersion,
     NodeVersion,
     TemporalCorruptionError,
+    TemporalVersion,
     canonical_json_bytes,
 )
 from . import index_maintenance as _index_maintenance
 from .temporal_keys import temporal_instant_index_value, temporal_locator, temporal_visible_key
 from .temporal_sequence import read_temporal_sequence
+from .temporal_types import ExactEntry, IndexState, IndexWriter, RangeEntry
+from ..epistemic import ClaimObjectKind, ClaimPolarity
 
 INDEX_STATE_KEY = b"temporal:indexes:v1:state"
 VERSION_INDEX = "temporal_v1_version"
@@ -45,7 +49,7 @@ CLAIM_STATEMENT_INDEX = "temporal_v1_claim_statement"
 CLAIM_DIMENSION_INDEX = "temporal_v1_claim_dimension"
 
 
-def load_index_state(store: KVStore, state_key: bytes) -> dict | None:
+def load_index_state(store: KVStore, state_key: bytes) -> IndexState | None:
     """Load and validate the temporal index state record."""
     payload = store.get_metadata(state_key)
     if payload is None:
@@ -73,7 +77,7 @@ def load_index_state(store: KVStore, state_key: bytes) -> dict | None:
             or any(character not in "0123456789abcdef" for character in checksum)
         ):
             raise ValueError
-        return value
+        return cast(IndexState, value)
     except (KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise TemporalCorruptionError("invalid temporal index state") from exc
 
@@ -98,7 +102,7 @@ def index_name(index: str, generation: int) -> str:
 
 
 def visibility_checksum(store: KVStore, through_commit: int, *,
-                        pending_marker=None) -> str:
+                        pending_marker: tuple[int, bytes] | None = None) -> str:
     """Digest commit visibility markers over ``1..through_commit``."""
     markers = []
     for commit_id in range(1, through_commit + 1):
@@ -113,7 +117,7 @@ def visibility_checksum(store: KVStore, through_commit: int, *,
 
 
 def persist_index_state(store: KVStore, state_key: bytes, commit_id: int,
-                        generation: int, *, pending_marker=None) -> None:
+                        generation: int, *, pending_marker: tuple[int, bytes] | None = None) -> None:
     """Publish the temporal index state record."""
     store.put_metadata(
         state_key,
@@ -138,12 +142,12 @@ def ensure_temporal_indexes(store: KVStore, state_key: bytes, stale_key: bytes,
     if indexed is None or indexed < horizon:
         raise RuntimeError("stale indexes require rebuild before query: temporal")
     state = load_index_state(store, state_key)
-    if state["visibility_checksum"] != visibility_checksum(store, indexed):
+    if cast(IndexState, state)["visibility_checksum"] != visibility_checksum(store, indexed):
         raise TemporalCorruptionError("temporal index generation visibility checksum mismatch")
 
 
 def has_visible_temporal_history(store: KVStore, sequence_key: bytes,
-                                 store_path, sequence_filename: str) -> bool:
+                                 store_path: Path | None, sequence_filename: str) -> bool:
     """Return whether any visible commit marker exists."""
     last_commit_id, _ = read_temporal_sequence(store, sequence_key, store_path, sequence_filename)
     return any(
@@ -152,7 +156,7 @@ def has_visible_temporal_history(store: KVStore, sequence_key: bytes,
     )
 
 
-def temporal_index_entries(version, *, generation) -> tuple[list, list]:
+def temporal_index_entries(version: TemporalVersion, *, generation: int) -> tuple[list[ExactEntry], list[RangeEntry]]:
     """Encode the exact and range index entries for one version record."""
     if isinstance(version, NodeVersion):
         kind = b"n"
@@ -161,8 +165,8 @@ def temporal_index_entries(version, *, generation) -> tuple[list, list]:
     else:
         kind = b"c"
     locator = temporal_locator(version.commit_id, version.commit_ordinal)
-    exact = [(VERSION_INDEX, [version.version_id.encode("ascii")], locator)]
-    ranges = [
+    exact: list[ExactEntry] = [(VERSION_INDEX, [version.version_id.encode("ascii")], locator)]
+    ranges: list[RangeEntry] = [
         (LOGICAL_COMMIT_INDEX, [kind, version.logical_id.encode("utf-8")], locator, locator),
         (
             LOGICAL_VALID_INDEX,
@@ -229,8 +233,8 @@ def temporal_index_entries(version, *, generation) -> tuple[list, list]:
             "agent": claim.agent,
             "source": claim.source,
             "world": claim.world,
-            "polarity": claim.polarity.value,
-            "object_kind": claim.object_kind.value,
+            "polarity": cast(ClaimPolarity, claim.polarity).value,
+            "object_kind": cast(ClaimObjectKind, claim.object_kind).value,
         }
         for name, value in dimensions.items():
             ranges.append((
@@ -265,7 +269,7 @@ def temporal_index_entries(version, *, generation) -> tuple[list, list]:
     return exact, ranges
 
 
-def write_temporal_indexes(store, versions, commit_id: int, *, generation) -> dict[str, int]:
+def write_temporal_indexes(store: KVStore, versions: Sequence[TemporalVersion], commit_id: int, *, generation: int) -> dict[str, int]:
     """Write temporal exact/range index entries for committed versions."""
     exact_entries = []
     range_entries = []
@@ -288,8 +292,8 @@ def write_temporal_indexes(store, versions, commit_id: int, *, generation) -> di
     return {"temporal_exact": len(exact_entries), "temporal_range": len(range_entries) + (1 if commit else 0)}
 
 
-def rebuild_temporal_indexes(store, reader: "TemporalReader", state_key: bytes, stale_key: bytes, *,
-                             write_indexes_fn, through_commit=None) -> dict[str, int]:
+def rebuild_temporal_indexes(store: KVStore, reader: "TemporalReader", state_key: bytes, stale_key: bytes, *,
+                             write_indexes_fn: IndexWriter, through_commit: int | None = None) -> dict[str, int]:
     """Rebuild all derived temporal indexes from visible canonical history.
 
     The writer guard stays on the caller. A fresh index generation is
@@ -320,7 +324,7 @@ def rebuild_temporal_indexes(store, reader: "TemporalReader", state_key: bytes, 
     return counts
 
 
-def delete_temporal_index_generation(store, reader: "TemporalReader", generation: int,
+def delete_temporal_index_generation(store: KVStore, reader: "TemporalReader", generation: int,
                                      through_commit: int) -> None:
     """Delete one superseded temporal index generation."""
     for commit in reader.iter_commits(through_commit=through_commit):

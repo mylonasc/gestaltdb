@@ -16,7 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Iterable, Literal, Mapping, Sequence, cast
 
 if TYPE_CHECKING:
     from ..kvstores import KVStore
@@ -44,6 +44,8 @@ from ..ingestion import IndexMaintenanceMode
 from . import index_maintenance as _index_maintenance
 from . import temporal_indexes as _temporal_indexes
 from .entities import Edge, Node
+from .entities import GraphEntityDictSerializer
+from .temporal_types import Clock, EntityKind, PreparedWrite, RetractionIdentity, VersionWrite
 from .temporal_keys import temporal_commit_key, temporal_record_key, temporal_visible_key
 from .temporal_reads import TemporalReader
 from .temporal_sequence import read_temporal_sequence, reserve_temporal_sequence
@@ -52,7 +54,7 @@ from .temporal_sequence import read_temporal_sequence, reserve_temporal_sequence
 
 
 
-def require_retraction_identities(reader: TemporalReader, identities) -> None:
+def require_retraction_identities(reader: TemporalReader, identities: Iterable[RetractionIdentity]) -> None:
     """Validate retractions against published history, not deferred indexes.
 
     Scans once for all unresolved identities in the batch; unpublished
@@ -71,7 +73,7 @@ def require_retraction_identities(reader: TemporalReader, identities) -> None:
         for version in commit.versions:
             if version.operation is VersionOperation.RETRACT:
                 continue
-            kind = "node" if isinstance(version, NodeVersion) else (
+            kind: EntityKind = "node" if isinstance(version, NodeVersion) else (
                 "edge" if isinstance(version, EdgeVersion) else "claim"
             )
             missing.discard((kind, version.logical_id))
@@ -95,10 +97,10 @@ class TemporalCommitter:
     """
 
     store: KVStore
-    entity_serializer: object
+    entity_serializer: GraphEntityDictSerializer
     reader: TemporalReader
-    clock: Callable[[], object]
-    require_retraction_fn: Callable[[object], None]
+    clock: Clock
+    require_retraction_fn: Callable[[Iterable[RetractionIdentity]], None]
 
     # -- validation helpers ---------------------------------------------
 
@@ -139,14 +141,14 @@ class TemporalCommitter:
 
     # -- commit ----------------------------------------------------------
 
-    def commit_direct(self, writes, metadata, index_mode: str) -> TemporalCommit:
+    def commit_direct(self, writes: Sequence[VersionWrite], metadata: Mapping[str, object], index_mode: str) -> TemporalCommit:
         """Validate, sequence, and publish one commit on this scope's store."""
         store = self.store
         entity_serializer = self.entity_serializer
-        prepared_inputs = []
+        prepared_inputs: list[PreparedWrite] = []
         batch_version_ids = set()
-        known_identities = set()
-        retraction_identities = set()
+        known_identities: set[RetractionIdentity] = set()
+        retraction_identities: set[RetractionIdentity] = set()
         for ordinal, write in enumerate(writes):
             if ordinal >= 1 << 32:
                 raise TemporalVersionError("temporal commit contains too many versions")
@@ -174,12 +176,12 @@ class TemporalCommitter:
                 target = self.reader.get_version(supersedes_version_id)
                 if target is None:
                     raise TemporalVersionError("superseded temporal version does not exist")
-                expected_type = {
+                expected_version_type = {
                     NodeVersionWrite: NodeVersion,
                     EdgeVersionWrite: EdgeVersion,
                     ClaimVersionWrite: ClaimVersion,
                 }[type(write)]
-                if not isinstance(target, expected_type) or target.logical_id != logical_id:
+                if not isinstance(target, expected_version_type) or target.logical_id != logical_id:
                     raise TemporalVersionError("superseded temporal version has a different kind or logical ID")
             if write.operation is VersionOperation.ASSERT and write.supersedes_version_id is not None:
                 raise TemporalVersionError("assertions cannot supersede another version")
@@ -194,13 +196,13 @@ class TemporalCommitter:
                 raise TemporalVersionError("a validity interval or superseded version is required")
 
             if isinstance(write, NodeVersionWrite):
-                entity_kind = "node"
-                entity = write.node
+                entity_kind: EntityKind = "node"
+                entity: Node | Edge | Claim | None = write.node
                 if write.operation is not VersionOperation.RETRACT and not isinstance(entity, Node):
                     raise TemporalVersionError("node assertions and corrections require a Node payload")
-                if entity is not None and entity.get_id != logical_id:
+                if entity is not None and cast(Node, entity).get_id != logical_id:
                     raise TemporalVersionError("node payload ID does not match logical ID")
-                payload = b"" if entity is None else entity_serializer.serialize(entity, "Node")
+                payload = b"" if entity is None else entity_serializer.serialize(cast(Node, entity), "Node")
                 entity_type = "Node"
             elif isinstance(write, EdgeVersionWrite):
                 entity_kind = "edge"
@@ -209,7 +211,7 @@ class TemporalCommitter:
                     raise TemporalVersionError("edge assertions and corrections require an Edge payload")
                 if entity is not None and entity.get_id != logical_id:
                     raise TemporalVersionError("edge payload ID does not match logical ID")
-                payload = b"" if entity is None else entity_serializer.serialize(entity, "Edge")
+                payload = b"" if entity is None else entity_serializer.serialize(cast(Edge, entity), "Edge")
                 entity_type = "Edge"
             else:
                 entity_kind = "claim"
@@ -229,14 +231,14 @@ class TemporalCommitter:
                     raise TemporalVersionError("temporal entity payload cannot be empty")
                 if entity_type == "Claim":
                     try:
-                        decoded_entity = Claim.from_dict(json.loads(payload.decode("utf-8")))
+                        decoded_claim = Claim.from_dict(json.loads(payload.decode("utf-8")))
                     except (UnicodeDecodeError, json.JSONDecodeError, TemporalVersionError) as exc:
                         raise TemporalVersionError("cannot decode temporal claim payload") from exc
-                    if decoded_entity.claim_id != logical_id:
+                    if decoded_claim.claim_id != logical_id:
                         raise TemporalVersionError("serialized temporal payload changed its logical ID")
                 else:
                     try:
-                        decoded_entity = entity_serializer.deserialize(payload, entity_type)
+                        decoded_entity = entity_serializer.deserialize(payload, cast("Literal['Node', 'Edge']", entity_type))
                     except Exception as exc:
                         raise TemporalVersionError(
                             "the configured serializer cannot decode its temporal payload"

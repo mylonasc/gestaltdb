@@ -7,22 +7,23 @@ from dataclasses import dataclass
 from typing import Sequence
 
 import numpy as np
+from ._arrays import IntArray
 
 
 @dataclass(frozen=True)
 class CSRAdjacency:
     """Compressed sparse row adjacency over edge indices."""
 
-    indptr: np.ndarray
-    edge_indices: np.ndarray
+    indptr: IntArray
+    edge_indices: IntArray
 
-    def edge_range(self, node: int) -> np.ndarray:
+    def edge_range(self, node: int) -> IntArray:
         start = int(self.indptr[node])
         end = int(self.indptr[node + 1])
         return self.edge_indices[start:end]
 
 
-def build_csr(keys: Sequence[int] | np.ndarray, edge_indices: Sequence[int] | np.ndarray, size: int) -> CSRAdjacency:
+def build_csr(keys: Sequence[int] | IntArray, edge_indices: Sequence[int] | IntArray, size: int) -> CSRAdjacency:
     """Build CSR arrays sorted by integer key."""
     keys = np.asarray(keys, dtype=np.int64)
     edge_indices = np.asarray(edge_indices, dtype=np.int64)

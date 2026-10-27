@@ -47,14 +47,14 @@ def procedure_rows(source: ProcedureSource, context: QueryContext) -> Iterator[B
         ) as entails_view:
             result = graph.epistemic.entails(
                 entails_view,
-                agent,
+                cast(str, agent),
                 proposition,
-                mode,
+                cast(str, mode),
                 world=options["world"],
                 max_depth=options.get("maxDepth", 4),
                 max_states=options.get("maxStates", 1_000),
             )
-        values = {
+        values: dict[str, object] = {
             "status": result.status.value,
             "confidence": result.confidence,
             "explanation": dict(result.explanation),

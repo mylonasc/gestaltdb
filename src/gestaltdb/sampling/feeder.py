@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from queue import Full, Queue
 from threading import Event, Thread
-from typing import Callable, Generic, TypeVar
+from types import TracebackType
+from typing import Callable, Generic, TypeVar, cast
 
 
 T = TypeVar("T")
@@ -15,7 +16,7 @@ class AsyncBatchFeeder(Generic[T]):
 
     _STOP = object()
 
-    def __init__(self, producer: Callable[[], T], *, max_prefetch: int = 2):
+    def __init__(self, producer: Callable[[], T], *, max_prefetch: int = 2) -> None:
         if max_prefetch < 1:
             raise ValueError("max_prefetch must be at least 1")
         self.producer = producer
@@ -49,12 +50,12 @@ class AsyncBatchFeeder(Generic[T]):
             raise RuntimeError("async batch feeder stopped")
         if isinstance(item, BaseException):
             raise item
-        return item
+        return cast(T, item)
 
     def __enter__(self) -> "AsyncBatchFeeder[T]":
         return self.start()
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None) -> None:
         self.stop()
 
     def _run(self) -> None:
