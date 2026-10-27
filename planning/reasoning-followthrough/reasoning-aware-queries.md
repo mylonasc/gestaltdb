@@ -27,7 +27,8 @@ implicitly imported. Selection maps output labels/classes and types/predicates.
       cancellation, unsupported syntax and unchanged base data.
 - [x] Document a runnable workflow and supported/non-supported semantics.
 - [x] Run focused tests, lint, documentation and module-size checks.
-- [ ] Push milestones and open a pull request; update #395 with evidence.
+- [x] Push implementation/documentation milestones to the feature branch.
+- [ ] Open a pull request and update #395: blocked by GitHub token permissions.
 
 ## Resource policy
 
@@ -57,3 +58,14 @@ tracked on GitHub with workload and resource rationale.
 - GitHub issue comment updates are blocked by the configured token (GraphQL
   and REST both return HTTP 403). Checklist updates remain in commits; include
   this evidence and the issue linkage in the eventual pull request.
+- PR creation also rejected by both GraphQL `createPullRequest` and REST
+  `POST /repos/mylonasc/gestaltdb/pulls` with HTTP 403 (resource not accessible
+  by personal access token). No PR was created. Ready-to-submit PR body is
+  saved at `/tmp/opencode/395-pr.md`; no further implementation is blocked.
+  After granting the GitHub CLI token pull-request/issue write permissions:
+
+  ```sh
+  gh pr create --base main --head feature/395-reasoning-aware-queries \
+    --title "feat: generation-pinned reasoning-aware Cypher queries" \
+    --body-file /tmp/opencode/395-pr.md
+  ```
