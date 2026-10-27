@@ -15,14 +15,14 @@ from ...ontology.compiler import CompiledOntology
 from ...ontology.model import TYPE_PREDICATE
 from ...query_engine.cypher.api import QueryResult, parse_ast
 from ...query_engine.cypher.ast import MatchClause, Query, ReturnClause, WhereClause
-from ...query_engine.cypher.plan import plan_staged_query
+from ...query_engine.cypher.plan import LogicalPlan, plan_staged_query
 from ...query_engine.cypher.runtime import QueryContext, execute_plan
 from ...readview import CurrentGraphReadView, ProvenanceMismatchError
 from ..catalog import RuleCatalog
 from ..generation import GenerationIdentity
 from ..model import ReasoningError, ReasoningLimitError, ReasoningLimits, check_cancelled
-from .graph import GraphMapping, GraphSourceLimits, PinnedGraphSource, _digest, _pairs
-from .graph_execution import execute_current_graph
+from .graph import GraphMapping, GraphSourceLimits, _digest, _pairs
+from .inferred_view import open_inferred_view
 from .query_graph import _QueryGraph
 
 QueryMode = Literal["asserted-only", "asserted-plus-inferred"]
@@ -78,7 +78,7 @@ class ReasoningQueryResult:
     mode: QueryMode
 
 
-def _plan(query: str):
+def _plan(query: str) -> LogicalPlan:
     canonical = parse_ast(query)
     if (not isinstance(canonical, Query)
             or len(canonical.clauses) not in (2, 3)
@@ -99,8 +99,8 @@ class ReasoningQueryView:
     """Prepare once from an authenticated snapshot; query while it stays current.
 
     The view is borrowed, never closed by this adapter. Preparation computes the
-    complete binary closure through execute_current_graph and extracts the exact
-    base fact set from the same snapshot. No caller-supplied closure is admitted.
+    complete binary closure and exact base fact set through open_inferred_view.
+    No caller-supplied closure is admitted.
     Source freshness and active view identity are checked before and after every
     query. This is not persistent cache admission or atomic publication.
     """
@@ -109,21 +109,20 @@ class ReasoningQueryView:
                  mapping: GraphMapping, selection: QuerySelection, limits: ReasoningLimits,
                  source_limits: GraphSourceLimits = GraphSourceLimits(),
                  expected_generation: GenerationIdentity | None = None,
-                 cancel: Callable[[], bool] | None = None):
+                 cancel: Callable[[], bool] | None = None) -> None:
         if not isinstance(graph, GraphDB):
             raise ReasoningError("live source GraphDB required")
         if not isinstance(selection, QuerySelection):
             raise ReasoningError("explicit QuerySelection required")
-        execution = execute_current_graph(view, compiled, catalog, mapping=mapping, limits=limits,
-                                          source_limits=source_limits, expected_generation=expected_generation,
-                                          cancel=cancel)
+        inferred = open_inferred_view(view, compiled, catalog, mapping=mapping, limits=limits,
+                                      source_limits=source_limits, expected_generation=expected_generation,
+                                      cancel=cancel)
         self._view, self._graph, self._store = view, graph, view.store
         self._snapshot_graph = view._graph
-        self._binding = execution.binding
+        self._binding = inferred.binding
         self._selection = selection
-        self._facts = execution.outcome.result.facts
-        with PinnedGraphSource(view, mapping=mapping, limits=source_limits) as source:
-            self._base = frozenset(item.fact for item in source._evidence(cancel=cancel))
+        self._facts = inferred.closure
+        self._base = frozenset(inferred.asserted)
         self._check(cancel)
 
     @property
@@ -134,7 +133,7 @@ class ReasoningQueryView:
     def selection(self) -> QuerySelection:
         return self._selection
 
-    def _check(self, cancel) -> None:
+    def _check(self, cancel: Callable[[], bool] | None) -> None:
         check_cancelled(cancel)
         if self._view._graph is not self._snapshot_graph or self._view.store is not self._store:
             raise ProvenanceMismatchError("reasoning query view was rebound")
@@ -169,3 +168,6 @@ class ReasoningQueryView:
             raise ReasoningLimitError("query exceeded max_result_rows")
         self._check(cancel)
         return ReasoningQueryResult(QueryResult(logical_plan.columns, records), self.generation, self.selection, mode)
+
+
+__all__ = ["QueryLimits", "QueryMode", "QuerySelection", "ReasoningQueryResult", "ReasoningQueryView"]

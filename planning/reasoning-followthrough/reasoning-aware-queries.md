@@ -5,7 +5,7 @@ Branch: `feature/395-reasoning-aware-queries`; PR target: `main`.
 ## Contract
 
 An explicit adapter prepares a complete authenticated current-graph closure
-using `execute_current_graph`. It owns the computation (never admits arbitrary
+using `open_inferred_view` / `execute_current_graph`. It owns the computation (never admits arbitrary
 caller-supplied results), borrows the caller's live read view, and exposes a
 read-only Cypher surface over an explicitly selected logical graph. Each query
 requires an exact generation pin; results include generation, selection and
@@ -25,8 +25,8 @@ implicitly imported. Selection maps output labels/classes and types/predicates.
 - [x] Reuse Cypher parser/planner/runtime without changing ordinary queries.
 - [x] Test inferred-only matches, modes, provenance, freshness, limits,
       cancellation, unsupported syntax and unchanged base data.
-- [ ] Document a runnable workflow and supported/non-supported semantics.
-- [ ] Run focused tests, lint, documentation and module-size checks.
+- [x] Document a runnable workflow and supported/non-supported semantics.
+- [x] Run focused tests, lint, documentation and module-size checks.
 - [ ] Push milestones and open a pull request; update #395 with evidence.
 
 ## Resource policy
@@ -42,6 +42,18 @@ tracked on GitHub with workload and resource rationale.
 - Adapter milestone: 36 focused tests passed with LMDB on Python 3.12.
   Preparation explicitly receives both the live source graph (freshness) and
   its borrowed snapshot (authenticated extraction); these are distinct handles.
+- Documentation/failure-hardening milestone: preparation reuses the existing
+  non-Cypher `open_inferred_view` rather than duplicating admission/base scans.
+  Expanded new tests include mutation during execution, closure reuse, stable
+  synthetic IDs, self-loops, asserted+derivable origin and both runnable examples.
+- Validation: 272 passed / 179 optional-backend skips across new tests, inferred
+  views, current admission, Cypher, graph interfaces and sampling. Ruff, module
+  size, documentation drift and Sphinx warnings-as-errors all passed.
+- Expanded regression with LMDB + LevelDB, including every `test_cypher*.py`:
+  **924 passed, 102 optional-dependency skips**, Python 3.12, under one minute.
+- Modular documentation examples: initial failures were missing optional plyvel;
+  rerun with the LevelDB extra passed (5 passed, 3 optional-dependency skips).
+  No production changes were made for missing dependencies.
 - GitHub issue comment updates are blocked by the configured token (GraphQL
   and REST both return HTTP 403). Checklist updates remain in commits; include
   this evidence and the issue linkage in the eventual pull request.

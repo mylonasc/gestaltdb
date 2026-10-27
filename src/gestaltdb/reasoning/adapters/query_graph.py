@@ -7,11 +7,17 @@ entities belong to this invocation only, never to a reusable closure.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator
+from typing import TYPE_CHECKING, Literal, TypeVar
 
 from ..._graph.entities import Edge, Node, key_to_string, node_key_to_bytes
 from ...ontology.model import TYPE_PREDICATE
 from ..model import Fact, ReasoningLimitError, check_cancelled
 from .graph import _digest
+
+if TYPE_CHECKING:
+    from .queries import QueryLimits, QuerySelection
+
+_T = TypeVar("_T")
 
 
 class _QueryGraph:
@@ -19,8 +25,8 @@ class _QueryGraph:
     key_to_string = staticmethod(key_to_string)
     indexed_node_properties: set[str] = set()
 
-    def __init__(self, facts: Iterable[Fact], base: frozenset[Fact], selection,
-                 limits, cancel: Callable[[], bool] | None):
+    def __init__(self, facts: Iterable[Fact], base: frozenset[Fact], selection: QuerySelection,
+                 limits: QueryLimits, cancel: Callable[[], bool] | None) -> None:
         self._limits, self._cancel, self._reads = limits, cancel, 0
         self._nodes: dict[bytes, Node] = {}
         self._edges: dict[bytes, Edge] = {}
@@ -66,7 +72,7 @@ class _QueryGraph:
         if self._reads > self._limits.max_query_reads:
             raise ReasoningLimitError("query exceeded max_query_reads")
 
-    def _iterate(self, items):
+    def _iterate(self, items: Iterable[_T]) -> Iterator[_T]:
         for item in items:
             self._tick()
             yield item
@@ -90,7 +96,8 @@ class _QueryGraph:
     def iter_edge_ids(self) -> Iterator[bytes]:
         return self._iterate(sorted(self._edges))
 
-    def iter_typed_adjacency(self, node_id: bytes, edge_type: str, direction="out"):
+    def iter_typed_adjacency(self, node_id: bytes, edge_type: str,
+                             direction: Literal["out", "in", "any"] = "out") -> Iterator[dict[str, bytes]]:
         seen = set()
         for member in (("out", "in") if direction == "any" else (direction,)):
             for record in self._iterate(self._adjacency.get((node_id, edge_type, member), ())):
@@ -105,11 +112,11 @@ class _QueryGraph:
 
     # These are conservative candidate scans, not indexes. The runtime always
     # checks inline property maps and the residual WHERE on hydrated edges.
-    def iter_edge_ids_by_type_property(self, edge_type, *args):
+    def iter_edge_ids_by_type_property(self, edge_type: str, *args: object) -> Iterator[bytes]:
         return self.iter_edge_ids_by_type(edge_type)
 
-    def iter_edge_ids_by_type_property_range(self, edge_type, *args):
+    def iter_edge_ids_by_type_property_range(self, edge_type: str, *args: object) -> Iterator[bytes]:
         return self.iter_edge_ids_by_type(edge_type)
 
-    def iter_edge_ids_by_property_range(self, *args):
+    def iter_edge_ids_by_property_range(self, *args: object) -> Iterator[bytes]:
         return self.iter_edge_ids()

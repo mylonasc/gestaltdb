@@ -6,6 +6,13 @@
 
 ## 1. Cypher Architecture
 
+Explicit inference uses `gestaltdb.reasoning.adapters.queries.ReasoningQueryView`
+and `docs/reasoning-queries.rst`, not ordinary `GraphDB.query`. It reuses the
+parser/planner/runtime against an ephemeral selected logical graph, limited to
+one node/one-hop MATCH, optional WHERE and RETURN. Exact generation/mode and
+active snapshot/live-source checks are mandatory. No base writes or hidden
+planner rewrites; physical properties and parallel edges are not imported.
+
 GestaltDB includes an embedded Cypher query processor:
 - `graph.query(cypher_str, parameters=None)` returns a `QueryResult(columns, records)`.
 - Iterating over `result` yields dictionaries mapping column names to values.

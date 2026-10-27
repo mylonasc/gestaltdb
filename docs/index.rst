@@ -57,6 +57,7 @@ Filter, Sample, Train
    ontology-graph
    reasoning-current-frontier
    reasoning-current-admission
+   reasoning-queries
    reasoning-range-admission
    reasoning-bound-range-publication
    reasoning-authenticated-sessions

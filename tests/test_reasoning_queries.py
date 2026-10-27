@@ -1,6 +1,8 @@
 """Pinned logical queries are explicit, read-only and generation-bound."""
 
 from dataclasses import replace
+from pathlib import Path
+import textwrap
 
 import pytest
 
@@ -215,3 +217,65 @@ def test_selection_and_argument_validation(graph):
             query(prepared, 'MATCH (n) RETURN n', expected_generation=None)
         with pytest.raises(TypeError):
             prepared.query('MATCH (n) RETURN n')
+
+
+def test_live_source_change_during_query_rejected(graph, monkeypatch):
+    from gestaltdb.reasoning.adapters import queries
+    with graph.current_read_view(require_verifiable=True) as view:
+        prepared = prepare(graph, view)
+        original = queries.execute_plan
+        def execute(*args):
+            records = original(*args)
+            graph.put_node(Node("changed-during-query"))
+            return records
+        monkeypatch.setattr(queries, "execute_plan", execute)
+        with pytest.raises(ProvenanceMismatchError):
+            query(prepared, 'MATCH (n) RETURN n')
+
+
+def test_query_reuses_precomputed_closure_without_reexecution(graph, monkeypatch):
+    from gestaltdb.reasoning.adapters import queries
+    with graph.current_read_view(require_verifiable=True) as view:
+        prepared = prepare(graph, view)
+        def forbidden(*args, **kwargs):
+            pytest.fail("query reran reasoning")
+        monkeypatch.setattr(queries, "open_inferred_view", forbidden)
+        assert len(query(prepared, 'MATCH (a)-[:REACH]->(b) RETURN b').result) == 3
+        assert len(query(prepared, 'MATCH (a)-[:LINK]->(b) RETURN b', mode="asserted-only").result) == 2
+
+
+def test_self_loop_undirected_and_synthetic_ids_stable(graph):
+    graph.put_edge(Edge("aa", "a", "a", {"type": "LINK"}))
+    with graph.current_read_view(require_verifiable=True) as view:
+        prepared = prepare(graph, view)
+        text = 'MATCH (a {id: "a"})-[r:LINK]-(b {id: "a"}) RETURN id(r) AS id'
+        result = query(prepared, text)
+        assert len(result.result) == 1
+        edge_id = result.result.records[0]["id"]
+        assert edge_id.startswith("logical:")
+        assert query(prepared, text, mode="asserted-only").result.records == result.result.records
+
+
+def test_fact_both_asserted_and_derivable_is_asserted(graph):
+    graph.put_edge(Edge("ac", "a", "c", {"type": "REACH"}))
+    mapping = GraphMapping(edge_types=(("LINK", "edge"), ("REACH", "reach")))
+    with graph.current_read_view(require_verifiable=True) as view:
+        prepared = ReasoningQueryView(graph, view, ONTOLOGY, catalog_for_ontology(ONTOLOGY),
+                                      mapping=mapping, selection=SELECTION, limits=ReasoningLimits())
+        text = ('MATCH (a {id: "a"})-[r:REACH]->(b {id: "c"}) '
+                'RETURN r.reasoning_origin AS origin')
+        assert query(prepared, text).result.records == [{"origin": "asserted"}]
+
+
+@pytest.mark.parametrize("kind", ["sphinx", "examples"])
+def test_documented_workflow(kind):
+    pytest.importorskip("lmdb")
+    root = Path(__file__).resolve().parents[1]
+    if kind == "sphinx":
+        text = (root / "docs/reasoning-queries.rst").read_text()
+        block = text.split(".. code-block:: python\n\n", 1)[1].split("\nSelection and", 1)[0]
+        code = textwrap.dedent(block)
+    else:
+        text = (root / "EXAMPLES.md").read_text().split("## Explicit Reasoning-Aware Cypher", 1)[1]
+        code = text.split("```python\n", 1)[1].split("```", 1)[0]
+    exec(compile(code, f"<reasoning-queries-{kind}>", "exec"), {})

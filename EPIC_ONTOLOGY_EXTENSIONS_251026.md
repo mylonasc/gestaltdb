@@ -67,6 +67,14 @@ with selection plus generation pins (reuses
 `adapters/graph_execution.py`); do not intrude into the Cypher planner.
 Cost is a read-only Cypher surface, not engine work.
 
+Implementation follow-through (branch `feature/395-reasoning-aware-queries`):
+the existing `inferred_view` fact/path API now underpins an explicit selected
+Cypher projection in `adapters/queries.py`. Exact generation pins, mandatory
+mode, live-source freshness and active-snapshot authentication accompany the
+read-only node/one-hop subset. See `docs/reasoning-queries.rst` and the task
+checklist in `planning/reasoning-followthrough/reasoning-aware-queries.md`.
+No implicit reasoning, physical-data writes or general multi-hop support.
+
 ### 5. Richer graph-to-fact mappings — [#396](https://github.com/mylonasc/gestaltdb/issues/396) (Medium)
 
 Gap confirmed: `GraphMapping` covers labels, edge types and single-string

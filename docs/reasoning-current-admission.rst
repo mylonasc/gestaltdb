@@ -118,6 +118,10 @@ semantic contracts; see :doc:`reasoning-generation-identity`.
 Opt-in reasoning-aware queries (#395)
 -------------------------------------
 
+For the explicit generation-pinned, read-only Cypher surface over a selected
+logical graph, see :doc:`reasoning-queries`. It reuses the fact-only preparation
+below while additionally requiring a live current source and active snapshot.
+
 ``gestaltdb.reasoning.adapters.inferred_view`` answers triple matches and
 single-hop path patterns from one admitted generation — never through the
 Cypher planner, which stays asserted-only by default. ``open_inferred_view``

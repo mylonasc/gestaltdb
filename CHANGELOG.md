@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added explicit generation-pinned, read-only Cypher over selected logical
+  inference facts via `ReasoningQueryView` (#395). Supports node/one-hop
+  patterns, explicit asserted-only/plus-inferred modes, source freshness,
+  projection/read caps and origin metadata; ordinary Cypher is unchanged.
+
 ## 0.15.0 — native Python typing
 
 - Added native service, entity, storage, temporal, sampling and Cypher typing
