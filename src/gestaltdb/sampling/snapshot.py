@@ -14,7 +14,8 @@ from typing import Callable, Iterable, Literal, Sequence, cast
 
 import numpy as np
 from ._arrays import Array, BoolArray, FloatArray, IntArray, StringArray
-from .adjacency import CSRAdjacency, build_csr
+from .adjacency import CSRAdjacency, build_csr, build_sparse_csr, validate_csr
+from .relation_adjacency import ENCODING, NAMES, TEMPORAL_NAMES, load_relation_adjacency, sparse_arrays, sparse_encoding
 from ..hierarchy import LabelHierarchy, RelationHierarchy
 from ..readview import CurrentReadProvenance, ReadViewProvenance, parse_read_provenance
 from ..versioning import EdgeVersion, NodeVersion, VersionOperation, normalize_temporal_instant
@@ -56,10 +57,10 @@ class SamplerSnapshot:
         out: Source-to-edge CSR adjacency.
         in_: Target-to-edge CSR adjacency.
         incident: Undirected incident edge CSR adjacency.
-        relation_out: Relation-grouped source-to-edge CSR adjacency using keys
-            ``node_id * num_relations + relation_id``.
-        relation_in: Relation-grouped target-to-edge CSR adjacency using keys
-            ``node_id * num_relations + relation_id``.
+        relation_out: Source/relation adjacency keyed by
+            ``node_id * num_relations + relation_id``; use ``edge_range``.
+        relation_in: Target/relation adjacency, with sparse populated-row
+            directories on new snapshots and dense directories on legacy ones.
         positive_triples: Array of ``(src, rel, dst)`` positives.
         edge_version_ids: Temporal edge-version UUIDs aligned with edge arrays,
             or ``None`` for non-temporal and legacy v1 snapshots.
@@ -310,8 +311,8 @@ class SamplerSnapshot:
             len(node_ids),
         )
         relation_size = max(1, len(node_ids) * max(1, len(relations)))
-        relation_out = build_csr(src_int * max(1, len(relations)) + rel_int, edge_indices, relation_size)
-        relation_in = build_csr(dst_int * max(1, len(relations)) + rel_int, edge_indices, relation_size)
+        relation_out = build_sparse_csr(src_int * max(1, len(relations)) + rel_int, edge_indices, relation_size)
+        relation_in = build_sparse_csr(dst_int * max(1, len(relations)) + rel_int, edge_indices, relation_size)
         positive_triples = np.stack([src_int, rel_int, dst_int], axis=1) if src_int.size else np.empty((0, 3), dtype=np.int64)
 
         metadata = {
@@ -851,6 +852,7 @@ class SamplerSnapshot:
         version = metadata.get("format_version")
         if version not in {LEGACY_SNAPSHOT_FORMAT_VERSION, SNAPSHOT_FORMAT_VERSION}:
             raise ValueError("unsupported sampler snapshot format version")
+        sparse = sparse_encoding(metadata)
         if version == SNAPSHOT_FORMAT_VERSION:
             cls._validate_v2_files(path, metadata, metadata_bytes)
         temporal = version == SNAPSHOT_FORMAT_VERSION and metadata.get("temporal") is True
@@ -925,8 +927,8 @@ class SamplerSnapshot:
             out=CSRAdjacency(load_array("out_indptr"), load_array("out_edge_indices")),
             in_=CSRAdjacency(load_array("in_indptr"), load_array("in_edge_indices")),
             incident=CSRAdjacency(load_array("incident_indptr"), load_array("incident_edge_indices")),
-            relation_out=CSRAdjacency(load_array("relation_out_indptr"), load_array("relation_out_edge_indices")),
-            relation_in=CSRAdjacency(load_array("relation_in_indptr"), load_array("relation_in_edge_indices")),
+            relation_out=load_relation_adjacency("relation_out", load_array, sparse=sparse),
+            relation_in=load_relation_adjacency("relation_in", load_array, sparse=sparse),
             positive_triples=load_array("positive_triples"),
             edge_version_ids=load_array("edge_version_ids") if temporal else None,
             valid_from_us=load_array("valid_from_us") if temporal else None,
@@ -935,11 +937,11 @@ class SamplerSnapshot:
             edge_system_time_us=load_array("edge_system_time_us") if temporal else None,
             edge_commit_ids=load_array("edge_commit_ids") if temporal else None,
             temporal_out=(
-                CSRAdjacency(load_array("temporal_out_indptr"), load_array("temporal_out_edge_indices"))
+                load_relation_adjacency("temporal_out", load_array, sparse=sparse)
                 if temporal else None
             ),
             temporal_in=(
-                CSRAdjacency(load_array("temporal_in_indptr"), load_array("temporal_in_edge_indices"))
+                load_relation_adjacency("temporal_in", load_array, sparse=sparse)
                 if temporal else None
             ),
             positive_history_triples=load_array("positive_history_triples") if temporal_history_indexes else None,
@@ -1589,6 +1591,8 @@ class SamplerSnapshot:
                 "edge_system_time_us", "edge_commit_ids", "temporal_out_indptr",
                 "temporal_out_edge_indices", "temporal_in_indptr", "temporal_in_edge_indices",
             })
+        if sparse_encoding(metadata):
+            expected.update(f"{name}_row_keys" for name in NAMES + (TEMPORAL_NAMES if metadata.get("temporal") else ()))
         if metadata.get("temporal_history_indexes") is True:
             expected.update({
                 "positive_history_triples", "positive_history_indptr",
@@ -1728,8 +1732,8 @@ class SamplerSnapshot:
                 expected_keys=relation_in_keys,
             )
             for adjacency in (cast(CSRAdjacency, self.temporal_out), cast(CSRAdjacency, self.temporal_in)):
-                for key in range(relation_size):
-                    candidates = adjacency.edge_range(key)
+                for start, end in zip(adjacency.indptr[:-1], adjacency.indptr[1:]):
+                    candidates = adjacency.edge_indices[int(start):int(end)]
                     if np.any(valid_from_us[candidates][1:] < valid_from_us[candidates][:-1]):
                         raise ValueError("temporal snapshot index is not ordered by valid start")
             history_triples, history_indptr, history_edge_indices = cast(IntArray, self.positive_history_triples), cast(IntArray, self.positive_history_indptr), cast(IntArray, self.positive_history_edge_indices)
@@ -1823,41 +1827,8 @@ class SamplerSnapshot:
         expected_keys,
         expected_edge_indices=None,
     ) -> None:
-        if adjacency is None or adjacency.indptr.dtype != np.dtype("int64") or adjacency.edge_indices.dtype != np.dtype("int64"):
-            raise ValueError(f"invalid {name} CSR dtype")
-        expected_keys = np.asarray(expected_keys, dtype=np.int64)
-        if expected_edge_indices is None:
-            expected_edge_indices = np.arange(edge_count, dtype=np.int64)
-        else:
-            expected_edge_indices = np.asarray(expected_edge_indices, dtype=np.int64)
-        entries = int(expected_edge_indices.size)
-        if expected_keys.shape != (entries,):
-            raise ValueError(f"invalid expected {name} CSR keys")
-        if adjacency.indptr.shape != (size + 1,) or adjacency.edge_indices.shape != (entries,):
-            raise ValueError(f"invalid {name} CSR shape")
-        if adjacency.indptr[0] != 0 or adjacency.indptr[-1] != entries or np.any(adjacency.indptr[1:] < adjacency.indptr[:-1]):
-            raise ValueError(f"invalid {name} CSR bounds")
-        if entries and (adjacency.edge_indices.min() < 0 or adjacency.edge_indices.max() >= edge_count):
-            raise ValueError(f"invalid {name} CSR edge index")
-        actual_keys = np.repeat(np.arange(size, dtype=np.int64), np.diff(adjacency.indptr))
-        if expected_edge_indices.shape == (edge_count,) and np.array_equal(
-            expected_edge_indices, np.arange(edge_count, dtype=np.int64)
-        ):
-            if not np.array_equal(actual_keys, expected_keys[adjacency.edge_indices]):
-                raise ValueError(f"invalid {name} CSR membership")
-            counts = np.bincount(adjacency.edge_indices, minlength=edge_count)
-            if not np.array_equal(counts, np.ones(edge_count, dtype=np.int64)):
-                raise ValueError(f"invalid {name} CSR membership")
-            return
-        actual_order = np.lexsort((adjacency.edge_indices, actual_keys))
-        expected_order = np.lexsort((expected_edge_indices, expected_keys))
-        if not (
-            np.array_equal(actual_keys[actual_order], expected_keys[expected_order])
-            and np.array_equal(
-                adjacency.edge_indices[actual_order], expected_edge_indices[expected_order]
-            )
-        ):
-            raise ValueError(f"invalid {name} CSR membership")
+        validate_csr(name, adjacency, size, edge_count, expected_keys=expected_keys,
+                     expected_edge_indices=expected_edge_indices)
 
     @staticmethod
     def _normalize_source_reference(source_db: dict, snapshot_path: Path) -> dict:
@@ -1953,6 +1924,8 @@ class SamplerSnapshot:
             "edge_lookup_ids": edge_lookup_ids,
             "relation_lookup_ids": relation_lookup_ids,
         }
+        arrays.update(sparse_arrays("relation_out", relation_out))
+        arrays.update(sparse_arrays("relation_in", relation_in))
         if temporal_values is not None:
             edge_version_ids, valid_from_us, valid_to_us, valid_to_open, edge_system_time_us, edge_commit_ids = temporal_values
             edge_indices = np.arange(src_int.size, dtype=np.int64)
@@ -1976,6 +1949,8 @@ class SamplerSnapshot:
                 "temporal_in_indptr": temporal_in.indptr,
                 "temporal_in_edge_indices": temporal_in.edge_indices,
             })
+            arrays.update(sparse_arrays("temporal_out", temporal_out))
+            arrays.update(sparse_arrays("temporal_in", temporal_in))
             history_triples, history_indptr, history_edges = _build_positive_history_index(
                 src_int, rel_int, dst_int, valid_from_us
             )
@@ -2010,6 +1985,7 @@ class SamplerSnapshot:
                     "shape": list(array.shape),
                 }
             metadata = dict(metadata)
+            metadata["relation_adjacency_encoding"] = ENCODING
             metadata["sampling_policy_arrays"] = True
             if temporal_values is not None:
                 metadata["temporal_history_indexes"] = True
@@ -2050,8 +2026,8 @@ def _build_sampling_indexes(node_count: int, relation_count: int, src_int: IntAr
         node_count,
     )
     relation_size = max(1, node_count * max(1, relation_count))
-    relation_out = build_csr(src_int * max(1, relation_count) + rel_int, edge_indices, relation_size)
-    relation_in = build_csr(dst_int * max(1, relation_count) + rel_int, edge_indices, relation_size)
+    relation_out = build_sparse_csr(src_int * max(1, relation_count) + rel_int, edge_indices, relation_size)
+    relation_in = build_sparse_csr(dst_int * max(1, relation_count) + rel_int, edge_indices, relation_size)
     positive_triples = np.stack([src_int, rel_int, dst_int], axis=1) if src_int.size else np.empty((0, 3), dtype=np.int64)
     return out, in_, incident, relation_out, relation_in, positive_triples
 
@@ -2085,17 +2061,7 @@ def _sha256_file(path: Path) -> str:
 
 
 def _build_temporal_csr(keys: IntArray, valid_from_us: IntArray, edge_indices: IntArray, size: int) -> CSRAdjacency:
-    keys = np.asarray(keys, dtype=np.int64)
-    starts = np.asarray(valid_from_us, dtype=np.int64)
-    edges = np.asarray(edge_indices, dtype=np.int64)
-    if keys.size == 0:
-        return CSRAdjacency(np.zeros(size + 1, dtype=np.int64), np.empty(0, dtype=np.int64))
-    order = np.lexsort((edges, starts, keys))
-    counts = np.bincount(keys, minlength=size)
-    indptr = np.empty(size + 1, dtype=np.int64)
-    indptr[0] = 0
-    np.cumsum(counts, out=indptr[1:])
-    return CSRAdjacency(indptr, edges[order])
+    return build_sparse_csr(keys, edge_indices, size, starts=valid_from_us)
 
 
 def _build_positive_history_index(src: IntArray, rel: IntArray, dst: IntArray, valid_from_us: IntArray) -> tuple[IntArray, IntArray, IntArray]:
