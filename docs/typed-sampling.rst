@@ -807,3 +807,47 @@ format-v1 snapshots still load, but have no integrity or temporal guarantees.
 Rebuild v1 snapshots from their source database to migrate to v2; snapshots are
 immutable and have no in-place upgrade path. Unknown format versions and corrupt
 v2 artifacts fail closed.
+
+Memory-mappable positive membership
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+New snapshots identify exact positive membership with
+``positive_membership_encoding="lexicographic-triples-v1"`` in the authenticated
+v2 envelope. Non-temporal builds persist ``positive_membership_triples.npy``:
+sorted unique int64 ``(source, relation, target)`` rows. Temporal snapshots reuse
+their already-persisted ``positive_history_triples``; row numbers identify the
+same interval groups as before, without a second key array or a Python group
+dictionary. ``positive_triples`` remains the edge-aligned array and may contain
+duplicate triples; it is not replaced or reordered.
+
+``SamplerEngine`` borrows the sorted keys directly from its snapshot in RAM or
+memmap mode. It no longer builds Python packed-code sets or temporal lookup
+dictionaries. Binary search compares exact coordinates, not hashes or packed
+uint64 values. This avoids packing overflow and preserves exact rejection,
+temporal gaps, half-open boundaries, overlap/contained window policies, seeded
+RNG sequences and exhaustion behavior. Lookup is O(log U) for U unique triples,
+rather than expected O(1) hash-set lookup, so reduced Python object memory may
+cost latency. The static key payload is 24 * U bytes; this is not an RSS bound.
+
+The loader authenticates the added artifact, schema and exact sorted unique
+membership against canonical edge triples. This validation still allocates
+edge/unique-sized working arrays and reads the artifacts. Engine construction
+does not repeat that membership build for new snapshots. Legacy temporal
+snapshots reuse history keys too, except that pre-history-index v2 compatibility
+loading must first derive those arrays as before. Legacy non-temporal v1/v2
+snapshots without the encoding marker build a sorted array once in RAM at
+engine construction, even in memmap mode; rebuild them to a fresh path to
+persist the new index. Supported non-temporal v2 rewrites also persist it.
+
+Unknown membership encodings and missing/malformed indexes fail closed. Older
+loaders reject new non-temporal artifact catalogs. New temporal files add no
+artifacts beyond existing history arrays and remain compatible with loaders
+that already understand those history indexes. No implicit on-load rewrite
+occurs. No partitioned snapshot or universal zero-copy/constant-memory guarantee
+is introduced.
+
+Membership keys share snapshot ownership/lifetime: retain the engine/snapshot
+while using them, and do not mutate arrays or replace their files under active
+readers. Memmaps are opened read-only. Candidate/result buffers, temporal
+interval checks, weight validation, metadata, OS page cache and legacy admission
+allocations remain; removing the membership sets does not remove these costs.

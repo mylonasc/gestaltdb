@@ -187,6 +187,7 @@ def _as_legacy_snapshot(path):
     """Exercise v1 compatibility without weakening v2 integrity checks."""
     metadata = json.loads((path / "metadata.json").read_text())
     metadata["format_version"] = 1
+    metadata.pop("positive_membership_encoding", None)
     metadata.pop("artifacts", None)
     metadata.pop("sampling_policy_arrays", None)
     (path / "metadata.json").write_text(json.dumps(metadata))

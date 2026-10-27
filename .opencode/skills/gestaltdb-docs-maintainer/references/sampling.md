@@ -78,7 +78,9 @@ Temporal v2 snapshots also authenticate grouped positive-triple interval histori
 
 ### Loading into Engine
 - `SamplerEngine.load(snapshot_path, mode="ram", seed=42)`: Eagerly loads all arrays into process RAM.
-- `SamplerEngine.load(snapshot_path, mode="memmap", seed=42)`: Memory-maps persisted arrays. Candidate/result buffers, positive-membership data, metadata, and page cache still consume memory; benchmark full-process memory and worker behavior.
+- `SamplerEngine.load(snapshot_path, mode="memmap", seed=42)`: Memory-maps persisted arrays. New static membership uses sorted `positive_membership_triples`; temporal membership reuses sorted history keys, without Python code sets/group dictionaries. Legacy static snapshots build sorted RAM keys once. Candidate/result buffers, validation, metadata and page cache still consume memory; benchmark full-process memory and worker behavior.
+
+New v2 snapshots mark membership as `positive_membership_encoding="lexicographic-triples-v1"`. Static key artifacts are authenticated sorted unique int64 triples; temporal history groups retain their old identities and interval policies. Engine membership uses exact O(log U) search, not hashing or uint64 packing. Keys borrow snapshot lifetime; do not mutate arrays or replace files under active engines. New static artifacts require an upgraded loader; legacy snapshots still load with the documented compatibility path.
 
 ### Sampling Primitives
 - `engine.sample_nodes(512, node_types=[type_id])`

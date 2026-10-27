@@ -52,9 +52,11 @@ Performance Boundaries
   snapshot for repeated property-constrained traversal. These callbacks scan
   decoded entities; they are not automatic index pushdown.
 - ``mode="memmap"`` avoids eagerly copying all persisted arrays to RAM, but
-  page cache, candidate/result buffers, metadata, and Python positive-membership
-  structures still consume memory. Loading validates artifacts, so do not assume
-  a zero-I/O startup. Snapshot construction materializes data in memory.
+  page cache, candidate/result buffers, metadata and validation working arrays
+  still consume memory. New positive membership keys remain mapped instead of
+  becoming Python sets; legacy non-temporal snapshots build sorted RAM keys at
+  engine startup. Loading validates artifacts, so do not assume a zero-I/O
+  startup. Snapshot construction materializes data in memory.
 - Current relation CSR directories scale with **node count × relation count**;
   highly heterogeneous graphs need memory measurements, not just edge-count
   estimates. Weighted and temporal policies can inspect candidate arrays before
@@ -68,6 +70,15 @@ Performance Boundaries
 
 Reproduce a Sampler Microbenchmark
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``uv run python -m benchmarks.positive_membership`` compares the membership
+component's old packed-code Python set with persisted sorted triple lookup.
+It reports exact-answer parity, retained set-object bytes, mapped file payload,
+tracemalloc startup peaks and lookup times. The categories are not equivalent:
+mapped payload is not resident memory, and tracemalloc is not peak RSS. The
+measurement excludes snapshot authentication, engine weight checks, page cache,
+candidate buffers and full negative-sampling throughput. Do not extrapolate a
+membership-component startup reduction into a zero-allocation engine load.
 
 From a repository checkout, the sampler runner compares a **synthetic in-memory
 dictionary/reservoir baseline** with batched array sampling:

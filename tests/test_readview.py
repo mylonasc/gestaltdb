@@ -318,6 +318,57 @@ def test_temporal_snapshot_materializes_horizon_intervals_and_time_indexes(memor
     assert engine.is_positive(a, relation, b, temporal=TemporalContext.as_of(30), policy="at_positive_time")
 
 
+@pytest.mark.parametrize("mmap", [False, True])
+def test_temporal_membership_borrows_history_keys_and_preserves_gaps(memory_graph, tmp_path, monkeypatch, mmap):
+    from gestaltdb.sampling import positive_membership
+    from .test_positive_membership import HashMembershipOracle
+
+    _populate_temporal_snapshot_history(memory_graph)
+    snapshot = memory_graph.build_sampler_snapshot(tmp_path / "membership", temporal=True)
+    loaded = SamplerSnapshot.load(snapshot.path, mmap=mmap)
+    assert loaded.positive_membership_triples is None
+    assert "positive_membership_triples" not in loaded.metadata["artifacts"]
+    if mmap:
+        assert isinstance(loaded.positive_history_triples, np.memmap)
+    def forbidden(*args, **kwargs):
+        pytest.fail("temporal engine startup rebuilt membership")
+    monkeypatch.setattr(positive_membership, "build_membership", forbidden)
+    engine = SamplerEngine(loaded)
+    assert engine._positive_membership.triples is loaded.positive_history_triples
+    baseline = SamplerEngine(loaded)
+    baseline._positive_membership = HashMembershipOracle(loaded.positive_history_triples)
+    a, b, r = loaded.node_int("a"), loaded.node_int("b"), loaded.relation_int("KNOWS")
+    for instant, expected in ((-11, False), (-10, True), (19, True), (20, False), (29, False), (30, True)):
+        context = TemporalContext.as_of(instant)
+        assert engine.is_positive(a, r, b, temporal=context, policy="at_positive_time") == expected
+    for src in range(loaded.num_nodes):
+        for dst in range(loaded.num_nodes):
+            for context, policy in ((None, "any_time"), (TemporalContext.as_of(20), "at_positive_time"),
+                                    (TemporalContext.during(20, 30), "window"), (TemporalContext.during(-10, 31), "window")):
+                for window_policy in ("overlap", "contained"):
+                    kwargs = dict(temporal=context, policy=policy, window_policy=window_policy)
+                    assert engine.is_positive(src, r, dst, **kwargs) == baseline.is_positive(src, r, dst, **kwargs)
+
+
+@pytest.mark.parametrize("policy", ["any_time", "at_positive_time", "window"])
+def test_temporal_negative_membership_seeded_hash_oracle_parity(memory_graph, tmp_path, policy):
+    from .test_positive_membership import HashMembershipOracle
+
+    snapshot = _build_runtime_temporal_snapshot(memory_graph, tmp_path / "negative-membership")
+    mapped = SamplerSnapshot.load(snapshot.path, mmap=True)
+    engine, baseline = SamplerEngine(mapped, seed=35), SamplerEngine(mapped, seed=35)
+    baseline._positive_membership = HashMembershipOracle(mapped.positive_history_triples)
+    config = HardNegativeConfig(negatives_per_positive=3, temporal_positive_policy=policy,
+                                exhaustion_policy="repeat", max_retries=15)
+    context = TemporalContext.during(0, 20) if policy == "window" else TemporalContext.as_of(5)
+    positive = [[mapped.node_int("a"), mapped.relation_int("R"), mapped.node_int("b")]]
+    kwargs = dict(positive_times_us=[5], temporal=context, return_diagnostics=True)
+    a, da = engine.sample_hard_negatives(positive, set(range(mapped.num_nodes)), config, **kwargs)
+    b, db = baseline.sample_hard_negatives(positive, set(range(mapped.num_nodes)), config, **kwargs)
+    np.testing.assert_array_equal(a, b)
+    assert da == db
+
+
 def test_temporal_neighbor_sampling_composes_exact_filters(memory_graph, tmp_path):
     snapshot = _build_runtime_temporal_snapshot(memory_graph, tmp_path / "runtime")
     engine = SamplerEngine(snapshot, seed=7)
@@ -793,6 +844,7 @@ def test_pre_tkg09_temporal_v2_snapshot_derives_compatibility_indexes(memory_gra
         for entity in ("node", "edge", "relation"):
             history_arrays.update({f"{entity}_lookup_ids", f"{entity}_lookup_order"})
     metadata.pop("temporal_history_indexes")
+    metadata.pop("positive_membership_encoding", None)
     for name in history_arrays:
         metadata["artifacts"].pop(name)
         (snapshot.path / f"{name}.npy").unlink()
@@ -930,6 +982,7 @@ def test_legacy_v1_snapshot_remains_loadable(memory_graph, tmp_path):
     shutil.copytree(snapshot.path, legacy)
     metadata = json.loads((legacy / "metadata.json").read_text())
     metadata["format_version"] = 1
+    metadata.pop("positive_membership_encoding", None)
     metadata["temporal"] = True
     metadata.pop("artifacts")
     (legacy / "metadata.json").write_text(json.dumps(metadata))

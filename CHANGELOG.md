@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Replaced engine positive-code sets and temporal group dictionaries with exact
+  sorted triple membership (#429). New non-temporal snapshots persist the
+  authenticated memory-mappable index; temporal snapshots reuse history keys.
+  Legacy non-temporal snapshots build a sorted RAM index once. Membership
+  lookup now uses binary search; candidate buffers and validation still allocate.
 ## 0.16.0 — generation-pinned reasoning-aware Cypher
 
 - Raised the optional MessagePack minimum to 1.2.3 and locked 1.2.4 to address
