@@ -11,6 +11,10 @@ otherwise (LevelDB, non-transactional PyRex, and test doubles).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from ..._graph.entities import Edge, Node
 
 from .ast import (
     CreateConstraint,
@@ -178,7 +182,7 @@ def check_node_constraints(graph, labels, properties: dict, exclude_id=None, aga
 def execute_ddl(graph, command) -> tuple[tuple[str, ...], list[dict]]:
     """Execute a constraint command, returning ``(columns, records)``."""
     if isinstance(command, ShowIndexes):
-        records = [
+        records: list[dict[str, object]] = [
             {"entityType": entity_type, "properties": [property_name]}
             for entity_type, property_names in (
                 ("NODE", getattr(graph, "indexed_node_properties", set())),
@@ -381,7 +385,7 @@ def _refresh_entities(row: BindingRow, context) -> BindingRow:
     bindings = dict(row.bindings)
     for variable, value in bindings.items():
         if _is_node(value) or hasattr(value, "properties"):
-            key = context.graph.node_key_to_bytes(value.get_id)
+            key = context.graph.node_key_to_bytes(cast("Node | Edge", value).get_id)
             refreshed = context.get_node(key) if _is_node(value) else context.get_edge(key)
             bindings[variable] = refreshed
     return row.with_bindings(bindings)

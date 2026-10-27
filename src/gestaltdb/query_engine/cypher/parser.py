@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import re
 from dataclasses import dataclass
+from typing import Any, Sequence, cast
 
 from lark import Lark, Token, Transformer, UnexpectedInput, v_args
 from lark.exceptions import VisitError
@@ -14,6 +15,7 @@ from .ast import (
     AndExpression,
     ArithmeticExpression,
     CaseExpression,
+    Clause,
     ComparisonExpression,
     CreateClause,
     CreateConstraint,
@@ -21,6 +23,7 @@ from .ast import (
     DropConstraint,
     EntailsCall,
     ExistsExpression,
+    Expression,
     ForeachClause,
     FunctionCall,
     InExpression,
@@ -53,11 +56,13 @@ from .ast import (
     RelationshipPatternClause,
     RelationshipScanQuery,
     RemoveClause,
+    RemoveItem,
     RemoveLabels,
     RemoveProperty,
     ReturnClause,
     SampleTypedPathsCall,
     SetClause,
+    SetItem,
     SetLabels,
     SetMerge,
     SetProperty,
@@ -311,12 +316,12 @@ class _MatchPatterns:
 @dataclass(frozen=True)
 class _MergeAction:
     kind: str
-    items: tuple[object, ...]
+    items: tuple[SetItem, ...]
 
 
 @dataclass(frozen=True)
 class _Projection:
-    expression: object
+    expression: Expression
     alias: str | None = None
     span: SourceSpan | None = None
 
@@ -801,10 +806,10 @@ class _ASTBuilder(Transformer):
         return _ParsedPart("delete", (False, tuple(children)), _source_span(meta))
 
     def on_create_action(self, children):
-        return _MergeAction("create", tuple(children))
+        return _MergeAction("create", tuple(cast(Sequence[SetItem], children)))
 
     def on_match_action(self, children):
-        return _MergeAction("match", tuple(children))
+        return _MergeAction("match", tuple(cast(Sequence[SetItem], children)))
 
     @v_args(meta=True)
     def merge_clause(self, meta, children):
@@ -1045,9 +1050,9 @@ def parse_ast(query: str) -> Query | SampleTypedPathsCall | EntailsCall | UnionQ
     if isinstance(parsed, (CreateConstraint, DropConstraint, ShowConstraints, ShowIndexes)):
         return parsed
     if isinstance(parsed, tuple) and parsed and parsed[0] == "union":
-        canonical = _build_union_query(parsed, query)
-        _validate_temporal_contract(canonical, query)
-        return canonical
+        union_canonical = _build_union_query(parsed, query)
+        _validate_temporal_contract(union_canonical, query)
+        return union_canonical
 
     canonical = _build_canonical_query(parsed, query)
     analyze_query(canonical)
@@ -1122,8 +1127,8 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
     for patterns in parsed.pattern_groups:
         for pattern in patterns:
             _validate_pattern_literals(pattern, query)
-    clauses: list[object] = []
-    pending: dict[str, object] = {}
+    clauses: list[Clause] = []
+    pending: dict[str, Any] = {}
     pending_span: SourceSpan | None = None
     pending_kind: str | None = None
     pending_value: object | None = None
@@ -1142,33 +1147,22 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
         nonlocal pending, pending_span, pending_kind, pending_value
         if pending_kind is None:
             return
-        items, distinct = pending_value
+        items, distinct = cast("tuple[tuple[_Projection, ...], bool]", pending_value)
         span = _merge_spans(
-            pending_span,
+            cast(SourceSpan, pending_span),
             *(part.span for part in pending["modifiers"]),
         )
-        if pending_kind == "with":
-            clauses.append(
-                WithClause(
-                    items=projection_items(items),
-                    distinct=distinct,
-                    order_by=pending["order"],
-                    skip=pending["skip"],
-                    limit=pending["limit"],
-                    span=span,
-                )
+        clause_type = WithClause if pending_kind == "with" else ReturnClause
+        clauses.append(
+            clause_type(
+                items=projection_items(items),
+                distinct=distinct,
+                order_by=pending["order"],
+                skip=pending["skip"],
+                limit=pending["limit"],
+                span=span,
             )
-        else:
-            clauses.append(
-                ReturnClause(
-                    items=projection_items(items),
-                    distinct=distinct,
-                    order_by=pending["order"],
-                    skip=pending["skip"],
-                    limit=pending["limit"],
-                    span=span,
-                )
-            )
+        )
         pending = {}
         pending_span = None
         pending_kind = None
@@ -1187,38 +1181,38 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
             # A WHERE following WITH belongs to that WITH stage, so the open
             # projection must be closed first to preserve textual order.
             close_projection()
-            clauses.append(WhereClause(item.value, span=item.span))
+            clauses.append(WhereClause(cast(Expression, item.value), span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind == "unwind":
             close_projection()
-            expression, variable = item.value
+            expression, variable = cast("tuple[Expression, str]", item.value)
             clauses.append(UnwindClause(expression, variable, span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind == "subquery":
             close_projection()
-            clauses.append(SubqueryClause(_build_canonical_query(item.value, query), span=item.span))
+            clauses.append(SubqueryClause(_build_canonical_query(cast(_ParsedMatch, item.value), query), span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind == "create":
             if pending_kind == "return":
                 raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
             close_projection()
-            clauses.append(CreateClause(item.value, span=item.span))
+            clauses.append(CreateClause(cast(tuple[PathPatternClause, ...], item.value), span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind in ("set", "remove"):
             if pending_kind == "return":
                 raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
             close_projection()
             if item.kind == "set":
-                clauses.append(SetClause(item.value, span=item.span))
+                clauses.append(SetClause(cast(tuple[SetItem, ...], item.value), span=item.span))
             else:
-                clauses.append(RemoveClause(item.value, span=item.span))
+                clauses.append(RemoveClause(cast(tuple[RemoveItem, ...], item.value), span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind == "delete":
             if pending_kind == "return":
                 raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
             close_projection()
-            detach, expressions = item.value
+            detach, expressions = cast("tuple[bool, tuple[Expression, ...]]", item.value)
             clauses.append(DeleteClause(expressions, detach, span=item.span))
         elif isinstance(item, _ParsedPart) and item.kind == "merge":
             if pending_kind == "return":
                 raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
             close_projection()
-            patterns, actions = item.value
+            patterns, actions = cast("tuple[tuple[PathPatternClause, ...], list[_MergeAction]]", item.value)
             on_create = tuple(
                 set_item for action in actions if action.kind == "create" for set_item in action.items
             )
@@ -1230,7 +1224,7 @@ def _build_canonical_query(parsed: _ParsedMatch, query: str) -> Query:
             if pending_kind == "return":
                 raise _located_error(CypherSemanticError, "RETURN must be the final clause", query)
             close_projection()
-            variable, iterable, body = item.value
+            variable, iterable, body = cast("tuple[str, Expression, tuple[object, ...]]", item.value)
             for sub in body:
                 if isinstance(sub, _MatchPatterns):
                     for pattern in sub.values:
@@ -1287,7 +1281,7 @@ def _parse_source(query: str):
             "Unsupported Cypher query",
             line=exc.line,
             column=exc.column,
-            offset=exc.pos_in_stream,
+            offset=cast(int, exc.pos_in_stream),
             source=query,
         ) from exc
     except VisitError as exc:
@@ -1380,20 +1374,19 @@ def _gql_quantifier_hint(query: str) -> tuple[str, int] | None:
 
 
 def _build_match_query(parsed: _ParsedMatch, query: str, analysis: QueryAnalysis):
-    clauses = []
-    group_ids = []
+    clauses: list[Clause] = []
+    group_ids: list[int] = []
     for group_id, patterns in enumerate(parsed.pattern_groups):
         force_generalized = len(patterns) > 1
         for pattern in patterns:
             clauses.append(_build_clause(pattern, query, force_generalized=force_generalized))
             group_ids.append(group_id)
-    clauses = tuple(clauses)
     resolved = analysis.clauses[-1].projections
     returns = tuple(item.output.name for item in resolved)
     projections = tuple(item.rendered_expression for item in resolved)
     projection_expressions = tuple(item.expression for item in resolved)
 
-    common = {
+    common: dict[str, Any] = {
         "returns": returns,
         "where": parsed.where,
         "projections": projections,
@@ -1404,7 +1397,7 @@ def _build_match_query(parsed: _ParsedMatch, query: str, analysis: QueryAnalysis
         "distinct": parsed.distinct,
     }
     if len(clauses) > 1:
-        return MultiMatchQuery(clauses=clauses, match_group_ids=tuple(group_ids), **common)
+        return MultiMatchQuery(clauses=tuple(clauses), match_group_ids=tuple(group_ids), **common)
 
     clause = clauses[0]
     if isinstance(clause, NodePatternClause):
@@ -1430,7 +1423,7 @@ def _build_match_query(parsed: _ParsedMatch, query: str, analysis: QueryAnalysis
     if isinstance(clause, AnchoredPatternClause):
         return MatchQuery(source_var=clause.source_var, source_id=clause.source_id, hops=clause.hops, **common)
     if isinstance(clause, PathPatternClause):
-        return MultiMatchQuery(clauses=clauses, match_group_ids=(0,), **common)
+        return MultiMatchQuery(clauses=tuple(clauses), match_group_ids=(0,), **common)
     raise _located_error(CypherSemanticError, "Unsupported Cypher query", query)
 
 
@@ -1456,10 +1449,8 @@ def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = Fa
     ):
         hop = pattern.hops[0]
         if hop.direction == "in":
-            source_var, target_var, direction = hop.target.variable, node.variable, "in"
-        else:
-            source_var, target_var, direction = node.variable, hop.target.variable, hop.direction
-        return RelationshipPatternClause(source_var, hop.rel_var, hop.edge_types[0], target_var, direction, hop.edge_types)
+            return RelationshipPatternClause(cast(str, hop.target.variable), hop.rel_var, hop.edge_types[0], cast(str, node.variable), "in", hop.edge_types)
+        return RelationshipPatternClause(cast(str, node.variable), hop.rel_var, hop.edge_types[0], cast(str, hop.target.variable), hop.direction, hop.edge_types)
 
     properties = dict(node.properties)
     if (
@@ -1471,8 +1462,8 @@ def _build_clause(pattern: _Pattern, query: str, *, force_generalized: bool = Fa
         and isinstance(properties.get("id"), str)
         and all(hop.edge_types and hop.target.variable is not None and not hop.target.labels and not hop.target.properties and not hop.properties and (hop.min_length, hop.max_length) == (1, 1) for hop in pattern.hops)
     ):
-        hops = tuple(TraversalHop(hop.rel_var, hop.edge_types[0], hop.target.variable, hop.direction, hop.edge_types) for hop in pattern.hops)
-        return AnchoredPatternClause(node.variable, properties["id"], hops)
+        hops = tuple(TraversalHop(hop.rel_var, hop.edge_types[0], cast(str, hop.target.variable), hop.direction, hop.edge_types) for hop in pattern.hops)
+        return AnchoredPatternClause(cast(str, node.variable), cast(str, properties["id"]), hops)
     return PathPatternClause(node, pattern.hops, pattern.name)
 
 

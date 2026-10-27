@@ -9,9 +9,9 @@ without importing the runtime module.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from .ast import EntailsCall
+from .ast import EntailsCall, Expression
 from .expr import evaluate_expression
 
 if TYPE_CHECKING:
@@ -24,10 +24,10 @@ def procedure_rows(source: ProcedureSource, context: QueryContext) -> Iterator[B
     from .runtime import BindingRow
 
     if isinstance(source.query, EntailsCall):
-        agent = evaluate_expression(source.query.agent, {}, context)
-        proposition = evaluate_expression(source.query.proposition, {}, context)
-        mode = evaluate_expression(source.query.mode, {}, context)
-        options = evaluate_expression(source.query.options, {}, context)
+        agent = evaluate_expression(cast(Expression, source.query.agent), {}, context)
+        proposition = evaluate_expression(cast(Expression, source.query.proposition), {}, context)
+        mode = evaluate_expression(cast(Expression, source.query.mode), {}, context)
+        options = evaluate_expression(cast(Expression, source.query.options), {}, context)
         if not isinstance(options, dict):
             raise ValueError("kg.entails options must be a map")
         allowed_options = {"world", "validTime", "systemTime", "throughCommit", "maxDepth", "maxStates"}

@@ -67,6 +67,14 @@ def test_label_expression_with_property_seek(graph):
     assert {node.get_id for node in (record["n"] for record in result)} == {"a", "b"}
 
 
+def test_multi_stage_with_query_plans_every_stage(graph):
+    graph.put_node(Node("a", labels=["Person"], properties={"name": "Ann"}))
+    graph.put_node(Node("b", labels=["Person"], properties={"name": "Bo"}))
+    result = graph.query("MATCH (p:Person) WITH p AS person RETURN person.name AS name ORDER BY name")
+    assert result.columns == ("name",)
+    assert result.records == [{"name": "Ann"}, {"name": "Bo"}]
+
+
 def test_entity_identity_and_labels():
     node = Node(node_id="n1", labels=["Drug", "Drug"], properties={"kind": "drug"})
     assert node.get_id == "n1"

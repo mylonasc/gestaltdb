@@ -767,6 +767,7 @@ Expression = Union[
     PropertyAccessExpression,
     ShortestPathExpression,
     ScalarValue,
+    Wildcard,
 ]
 """Anything that may appear where a Cypher value expression is expected.
 
