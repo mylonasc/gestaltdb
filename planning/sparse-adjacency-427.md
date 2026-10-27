@@ -22,8 +22,8 @@ reconstruction; no constant-memory or out-of-core build guarantee is claimed.
 
 ## Validation
 
-- Initial full Python 3.12 suite with LMDB, LevelDB and MessagePack:
-  **3177 passed, 652 optional-dependency skips**.
+- Final full Python 3.12 suite with LMDB, LevelDB and MessagePack at
+  implementation revision `74564ad`: **3181 passed, 652 optional-dependency skips**.
 - New sparse tests: **25 passed** on both Python 3.12 / NumPy 2.5.2 and
   Python 3.10 / NumPy 1.23.5, including dense v1/v2 compatibility, RAM/memmap,
   seeded neighbor/walk/multihop/negative batches, empty/absent rows, malformed
@@ -33,6 +33,8 @@ reconstruction; no constant-memory or out-of-core build guarantee is claimed.
 - Ruff, strict adjacency mypy contracts, module-size ratchet, documentation
   drift and Sphinx warnings-as-errors passed. Modular examples: **5 passed,
   3 optional-dependency skips**.
+- Wheel/sdist builds passed, and an installed-wheel smoke outside the checkout
+  verified sparse memmap row keys, absent rows and engine neighbor sampling.
 
 ## Measurement
 
