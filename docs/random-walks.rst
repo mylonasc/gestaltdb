@@ -196,3 +196,47 @@ guarantees still apply. Legacy non-chronological batch formats are unchanged.
        initial_time=0, max_gap_us=1000000, time_selection="interval",
    ))
    assert policy.chronology.order == "nondecreasing"
+
+RWS-07: transition units and node2vec adjacency
+---------------------------------------------
+
+``WalkPolicy(transition_unit="edge")`` samples eligible (arc, edge) alternatives.
+Parallel edges therefore affect endpoint probabilities. ``transition_unit="neighbor"``
+first groups alternatives by endpoint; without weights it samples distinct
+neighbors uniformly, then an eligible edge/arc uniformly within that neighbor.
+With weights, ``neighbor_weight_aggregation="sum"`` (default), ``"mean"`` or
+``"max"`` computes each neighbor's weight. The chosen neighbor's actual edge is
+then sampled proportional to its alternative weights. Sum preserves parallel
+edge mass; mean/max do not multiply a neighbor's weight simply for duplicate
+equal-weight edges. A self-loop is one edge alternative under incident traversal,
+not duplicated for its two endpoints. Batches always retain the selected edge.
+
+``WalkPolicy(node2vec=True, return_factor=p, inout_factor=q)`` adds second-order
+bias. Like the legacy node2vec method, its first step is uniform over alternatives
+unless schema/recency weights apply; ``weighted_first_step=True`` additionally
+opts into static first-step edge weights. Subsequent steps multiply static edge
+weights by the return/in-out bias. ``strategy`` controls static weights for
+non-node2vec policies, not node2vec's legacy first-step rule.
+
+``bias_adjacency="snapshot"`` uses static unfiltered undirected adjacency, as
+the legacy method does. ``"eligible"`` instead uses undirected adjacency under
+the global relation filter, query validity filters, static schema target types
+and relation weights, positive static weights, and the current chronological
+clock when supplied. Avoidance history is not part of this adjacency definition.
+Eligible adjacency fails closed for finite-state schemas and metapaths: a
+path-state-dependent distance graph has no implicit meaning. Use snapshot
+adjacency for those combinations. Both options leave legacy methods unchanged.
+
+.. code-block:: python
+
+   from gestaltdb.sampling import WalkPolicy
+
+   uniform_neighbors = WalkPolicy(transition_unit="neighbor")
+   weighted_neighbors = WalkPolicy(
+       transition_unit="neighbor", strategy="weighted", neighbor_weight_aggregation="mean",
+   )
+   filtered_node2vec = WalkPolicy(
+       node2vec=True, return_factor=2, inout_factor=0.5,
+       bias_adjacency="eligible", weighted_first_step=True,
+   )
+   assert uniform_neighbors.transition_unit == weighted_neighbors.transition_unit

@@ -67,6 +67,13 @@ selection are distinct; backward interval selection requires an initial clock.
 provenance. Restarts reset the clock; ordinary point/window filters alone still
 do not imply chronology. See `docs/random-walks.rst` for interval boundaries.
 
+`WalkPolicy(transition_unit="neighbor")` samples distinct neighbors rather than
+parallel edges. Weighted neighbor aggregation is explicit (`sum`/`mean`/`max`).
+`node2vec=True` enables bias; `weighted_first_step=True` opts into static initial
+weights. `bias_adjacency="eligible"` uses static filters/current chronology for
+distance adjacency and fails closed for state-machine/metapath schemas; the
+default `snapshot` scope preserves legacy unfiltered-distance semantics.
+
 ### Filter Once, Sample Repeatedly
 
 Pass `node_filter`/`edge_filter` to `graph.build_sampler_snapshot` to define an

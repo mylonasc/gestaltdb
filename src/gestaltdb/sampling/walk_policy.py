@@ -13,6 +13,7 @@ from .validation import _validate_count
 from .walks import RandomWalkBatch
 from .walk_schema import WalkSchema
 from .walk_time import TemporalWalkBatch, TemporalWalkPolicy
+from .walk_transitions import choose_transition, node2vec_bias
 
 if TYPE_CHECKING:
     from .engine import SamplerEngine
@@ -34,6 +35,13 @@ class WalkPolicy:
     strategy: str = "uniform"
     schema: WalkSchema | None = None
     chronology: TemporalWalkPolicy | None = None
+    transition_unit: str = "edge"
+    neighbor_weight_aggregation: str = "sum"
+    node2vec: bool = False
+    return_factor: float = 1.0
+    inout_factor: float = 1.0
+    bias_adjacency: str = "snapshot"
+    weighted_first_step: bool = False
 
     def __post_init__(self):
         if not isinstance(self.non_backtracking, bool):
@@ -47,6 +55,26 @@ class WalkPolicy:
             raise TypeError("schema must be a WalkSchema")
         if self.chronology is not None and not isinstance(self.chronology, TemporalWalkPolicy):
             raise TypeError("chronology must be a TemporalWalkPolicy")
+        if self.transition_unit not in {"edge", "neighbor"}:
+            raise ValueError("transition_unit must be edge or neighbor")
+        if self.neighbor_weight_aggregation not in {"sum", "mean", "max"}:
+            raise ValueError("neighbor_weight_aggregation must be sum, mean or max")
+        for name in ("node2vec", "weighted_first_step"):
+            if not isinstance(getattr(self, name), bool):
+                raise ValueError(f"{name} must be a boolean")
+        for name in ("return_factor", "inout_factor"):
+            value = getattr(self, name)
+            if (isinstance(value, (bool, np.bool_))
+                    or not isinstance(value, (int, float, np.integer, np.floating))
+                    or not np.isfinite(value) or value <= 0 or not np.isfinite(1.0 / value)):
+                raise ValueError(f"{name} must be positive finite with finite reciprocal")
+        if self.bias_adjacency not in {"snapshot", "eligible"}:
+            raise ValueError("bias_adjacency must be snapshot or eligible")
+        if self.weighted_first_step and not self.node2vec:
+            raise ValueError("weighted_first_step requires node2vec=True")
+        if self.bias_adjacency == "eligible" and self.schema is not None:
+            if self.schema.transitions or self.schema.metapath is not None:
+                raise ValueError("eligible bias adjacency supports static schemas, not state machines/metapaths")
 
 
 def sample_policy_walks(
@@ -116,13 +144,23 @@ def sample_policy_walks(
                         action = policy.avoidance_exhaustion
                 if candidates.size:
                     weights = schema_weights
-                    if policy.strategy == "weighted":
+                    use_static = (previous is not None or policy.weighted_first_step) if policy.node2vec else (
+                        policy.strategy == "weighted"
+                    )
+                    if use_static:
                         static = engine.snapshot.edge_weights[candidates]
                         weights = weights * (static / (float(static.max()) or 1))
-                    # Keep the default uniform RNG path compatible with legacy walks.
-                    if policy.schema is None and chronology is None and policy.strategy == "uniform":
+                    if policy.node2vec and previous is not None:
+                        weights = weights * node2vec_bias(
+                            engine, previous, endpoints, policy, schema, relation_filter, temporal, window_policy, clock,
+                        )
+                    has_weights = (use_static or (policy.node2vec and previous is not None)
+                                   or bool(schema.relation_weights)
+                                   or any(arc.weight != 1 for arc in schema.transitions)
+                                   or (chronology is not None and chronology.recency_half_life_us is not None))
+                    if not has_weights:
                         weights = None
-                    chosen = int(engine._choose_candidates(np.arange(candidates.size), 1, replace=False, weights=weights)[0])
+                    chosen = choose_transition(engine, candidates, endpoints, weights, policy)
                     edge = int(candidates[chosen])
                     previous, current = current, int(endpoints[chosen])
                     state, position = int(next_states[chosen]), position + 1
