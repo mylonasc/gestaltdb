@@ -20,7 +20,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, cast
 
 from .model import ReasoningError, ReasoningLimits, _text
 from .terms import Literal
@@ -166,14 +166,20 @@ class TypedFactWitness:
 
     def _check_premises(self, premises: tuple[TypedFact, ...]) -> dict:
         bindings: dict = {}
-        for atom, premise in zip(self.rule.body, premises):
+        rule = self.rule
+        if not isinstance(rule, GenericRule):
+            raise ReasoningError("positional premises need a GenericRule")
+        for atom, premise in zip(rule.body, premises):
             if atom.predicate != premise.predicate or len(atom.args) != len(premise.values):
                 raise ReasoningError("witness premise does not match its rule atom")
             updated = _unify(atom, premise, bindings)
             if updated is None:
                 raise ReasoningError("witness premise bindings conflict")
             bindings = updated
-        head = self.rule.head
+        rule = self.rule
+        if not isinstance(rule, GenericRule):
+            raise ReasoningError("positional premises need a GenericRule")
+        head = rule.head
         grounded = []
         for term in head.args:
             if isinstance(term, (str, Literal)):
@@ -182,18 +188,21 @@ class TypedFactWitness:
                 grounded.append(bindings[term])
             else:
                 raise ReasoningError("witness rule does not derive its conclusion")
-        if TypedFact(head.predicate, tuple(grounded)) != self.fact:
+        if TypedFact(cast(str, head.predicate), cast("tuple[str | Literal, ...]", tuple(grounded))) != self.fact:
             raise ReasoningError("witness rule does not derive its conclusion")
         return bindings
 
     def _check_aggregate_head(self, aggregates: tuple[AggregateDerivation, ...]) -> None:
-        group_names = [variable.name for variable in self.rule.group]
+        rule = self.rule
+        if not isinstance(rule, AggregateRule):
+            raise ReasoningError("aggregate evidence needs an AggregateRule")
+        group_names = [variable.name for variable in rule.group]
         for derivation in aggregates:
             if len(derivation.group) != len(group_names):
                 raise ReasoningError("aggregate group does not match its rule")
         scope = dict(zip(group_names, aggregates[0].group)) if aggregates else {}
         targets = {item.target: item.result for item in aggregates}
-        head = self.rule.head
+        head = rule.head
         grounded = []
         for term in head.args:
             if isinstance(term, (str, Literal)):
@@ -204,7 +213,7 @@ class TypedFactWitness:
                 grounded.append(scope[term.name])
             else:
                 raise ReasoningError("aggregate witness leaves a head variable unbound")
-        if TypedFact(head.predicate, tuple(grounded)) != self.fact:
+        if TypedFact(cast(str, head.predicate), cast("tuple[str | Literal, ...]", tuple(grounded))) != self.fact:
             raise ReasoningError("aggregate witness does not derive its conclusion")
 
 
@@ -278,7 +287,7 @@ class TypedProofTrace:
         if not isinstance(self.program, GenericProgram):
             raise ReasoningError("proof program must be a GenericProgram")
         nodes = _canonical_witnesses(self.nodes, self.truncated)
-        rules = {rule.rule_id for rule in (*self.program.rules, *self.program.aggregates)}
+        rules = {rule.rule_id for rule in self.program.rules} | {rule.rule_id for rule in self.program.aggregates}
         if any(node.rule is not None and node.rule.rule_id not in rules for node in nodes):
             raise ReasoningError("proof rules must belong to their program")
         _text(self.horizon, "horizon")
@@ -320,7 +329,7 @@ class TypedProofTrace:
                 else:
                     queued.add(premise)
                     queue.append(premise)
-        return TypedExplanation(fact, nodes, truncated)
+        return TypedExplanation(fact, tuple(nodes), truncated)
 
 
 class _TypedProofCollector:
@@ -358,4 +367,4 @@ class _TypedProofCollector:
         self.edges += cost
 
     def finish(self, horizon: str) -> TypedProofTrace:
-        return TypedProofTrace(self.program, self.nodes, horizon, self.truncated)
+        return TypedProofTrace(self.program, tuple(self.nodes), horizon, self.truncated)

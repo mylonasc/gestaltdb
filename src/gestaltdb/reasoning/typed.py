@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 import itertools
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Iterator, cast
 
 from .model import (
     ReasoningError,
@@ -256,7 +256,7 @@ def normalize_program(rules: Iterable[GenericRule | MultiHeadRule]) -> GenericPr
             flattened.append(rule)
         else:
             raise ReasoningError("rules must be GenericRule or MultiHeadRule values")
-    return GenericProgram(flattened)
+    return GenericProgram(tuple(flattened))
 
 
 def predicate_domain(rules: Iterable[GenericRule], facts: Iterable[TypedFact]) -> tuple[str, ...]:
@@ -425,7 +425,7 @@ class GenericProgram:
             raise ReasoningError("program aggregates must contain only AggregateRule values")
         for predicate in closed:
             _text(predicate, "closed predicate")
-        if len({rule.rule_id for rule in (*rules, *aggregates)}) != len(rules) + len(aggregates):
+        if len({rule.rule_id for rule in rules} | {rule.rule_id for rule in aggregates}) != len(rules) + len(aggregates):
             raise ReasoningError("program rule IDs must be unique")
         for rule in rules:
             for atom in rule.body:
@@ -482,14 +482,14 @@ def _stratify(rules: tuple[GenericRule, ...]) -> tuple[tuple[str, ...], ...]:
     graph: dict[str, set[str]] = {}
     negative: dict[str, set[str]] = {}
     for rule in rules:
-        head = rule.head.predicate
+        head = cast(str, rule.head.predicate)
         graph.setdefault(head, set())
         negative.setdefault(head, set())
         for atom in rule.body:
-            graph.setdefault(atom.predicate, set()).add(head)
+            graph.setdefault(cast(str, atom.predicate), set()).add(head)
         for atom in rule.negated:
-            negative[head].add(atom.predicate)
-            graph.setdefault(atom.predicate, set())
+            negative[head].add(cast(str, atom.predicate))
+            graph.setdefault(cast(str, atom.predicate), set())
     visited: set[str] = set()
     finished: list[str] = []
     for node in sorted(graph):
@@ -517,8 +517,8 @@ def _stratify(rules: tuple[GenericRule, ...]) -> tuple[tuple[str, ...], ...]:
         pending = [node]
         while pending:
             current = pending.pop()
-            for parent, children in graph.items():
-                if current in children and parent not in visited:
+            for parent, followers in graph.items():
+                if current in followers and parent not in visited:
                     visited.add(parent)
                     members.append(parent)
                     pending.append(parent)
@@ -531,19 +531,19 @@ def _stratify(rules: tuple[GenericRule, ...]) -> tuple[tuple[str, ...], ...]:
                 f"negative dependency cycle: {head!r} negatively depends on its own stratum")
     before: dict[int, set[int]] = {index: set() for index in range(len(components))}
     for rule in rules:
-        head = owner[rule.head.predicate]
+        head_id = owner[cast(str, rule.head.predicate)]
         for atom in (*rule.body, *rule.negated):
-            before[head].add(owner[atom.predicate])
+            before[head_id].add(owner[cast(str, atom.predicate)])
     remaining = {index: set(deps) - {index} for index, deps in before.items()}
     ordered: list[int] = []
     ready = sorted([index for index, deps in remaining.items() if not deps],
                    key=lambda index: components[index])
     while ready:
-        current = ready.pop(0)
-        ordered.append(current)
+        current_index = ready.pop(0)
+        ordered.append(current_index)
         for index, deps in remaining.items():
-            if current in deps:
-                deps.discard(current)
+            if current_index in deps:
+                deps.discard(current_index)
                 if not deps and index not in ordered and index not in ready:
                     ready.append(index)
         ready.sort(key=lambda index: components[index])
@@ -606,13 +606,13 @@ class _TypedIndex:
     def candidates(self, atom: TypedAtom, bindings: dict[Variable, object]) -> tuple[TypedFact, ...]:
         ground = [bindings.get(term, term) if isinstance(term, Variable) else term for term in atom.args]
         if all(not isinstance(value, Variable) for value in ground):
-            exact = TypedFact(atom.predicate, tuple(ground))
+            exact = TypedFact(cast(str, atom.predicate), cast("tuple[str | Literal, ...]", tuple(ground)))
             return (exact,) if exact in self.facts else ()
-        buckets = [self.by_position[atom.predicate, position, self._key(value)]
+        buckets: list[list[TypedFact]] = [self.by_position[cast(str, atom.predicate), position, self._key(value)]
                    for position, value in enumerate(ground) if not isinstance(value, Variable)]
         if not buckets:
-            return tuple(self.by_predicate.get(atom.predicate, ()))
-        return tuple(min(buckets, key=len))
+            return tuple(self.by_predicate.get(cast(str, atom.predicate), ()))
+        return tuple(buckets[min(range(len(buckets)), key=lambda index: len(buckets[index]))])
 
 
 def _unify(atom: TypedAtom, fact: TypedFact, bindings: dict) -> dict | None:
@@ -731,7 +731,7 @@ class GenericEngine:
             seen: set[TypedAtom] = set()
             for position, atom in enumerate(rule.body):
                 if atom not in seen:
-                    dispatch[atom.predicate].append((rule, position))
+                    dispatch[cast(str, atom.predicate)].append((rule, position))
                     seen.add(atom)
         iterations = 0
         budget = _TypedBudget(limits)
@@ -749,14 +749,14 @@ class GenericEngine:
                 track = collector is not None
                 for matched in self._matches(rule, pivot, full, delta, budget, track_premises=track):
                     bindings, premises = matched if track else (matched, ())
-                    conclusion = TypedFact(rule.head.predicate, tuple(
-                        bindings[term] if isinstance(term, Variable) else term for term in rule.head.args))
+                    conclusion = TypedFact(cast(str, rule.head.predicate), cast("tuple[str | Literal, ...]", tuple(
+                        bindings[term] if isinstance(term, Variable) else term for term in rule.head.args)))
                     if conclusion in full.facts or conclusion in added:
                         continue
                     if len(full.facts) + len(added) >= limits.max_facts:
                         raise ReasoningLimitError(f"evaluation exceeded max_facts={limits.max_facts}")
                     added.add(conclusion)
-                    if track:
+                    if track and collector is not None:
                         held = tuple(Comparison(item.op,
                                                 bindings.get(item.left, item.left)
                                                 if isinstance(item.left, Variable) else item.left,
@@ -861,7 +861,7 @@ class GenericEngine:
                 seen: set[TypedAtom] = set()
                 for position, atom in enumerate(rule.body):
                     if atom not in seen:
-                        dispatch[atom.predicate].append((rule, position))
+                        dispatch[cast(str, atom.predicate)].append((rule, position))
                         seen.add(atom)
             delta = _TypedIndex(sorted(full.facts, key=_sort_key))
             local_rounds = 0
@@ -887,15 +887,15 @@ class GenericEngine:
                         if bindings is None:
                             truncated = True
                             continue
-                        conclusion = TypedFact(rule.head.predicate, tuple(
+                        conclusion = TypedFact(cast(str, rule.head.predicate), cast("tuple[str | Literal, ...]", tuple(
                             bindings[term] if isinstance(term, Variable) else term
-                            for term in rule.head.args))
+                            for term in rule.head.args)))
                         if conclusion in full.facts or conclusion in added:
                             continue
                         if len(full.facts) + len(added) >= limits.max_facts:
                             raise ReasoningLimitError(f"evaluation exceeded max_facts={limits.max_facts}")
                         added.add(conclusion)
-                        if track:
+                        if track and collector is not None:
                             held = tuple(Comparison(
                                 item.op,
                                 bindings.get(item.left, item.left)
@@ -930,7 +930,7 @@ class GenericEngine:
     def _matches_stratified(self, rule, pivot, full, delta, budget, scope, horizon,
                             collect_trace, trace, limits, track_proofs: bool = False):
         remaining = tuple(index for index in range(len(rule.body)) if index != pivot)
-        stack = [(dict(), remaining, pivot, iter(delta.candidates(rule.body[pivot], dict())), {})]
+        stack: list[tuple[dict, tuple[int, ...], int, Iterator[TypedFact], dict]] = [(dict(), remaining, pivot, iter(delta.candidates(rule.body[pivot], dict())), {})]
         while stack:
             bindings, remaining, position, candidates, support = stack[-1]
             try:
@@ -983,8 +983,8 @@ class GenericEngine:
                            for term in atom.args)
             if any(isinstance(value, Variable) for value in ground):
                 raise ReasoningError("negation evaluated with unbound variables")
-            probe = TypedAtom(atom.predicate, [bindings.get(term, term) if isinstance(term, Variable) else term
-                                               for term in atom.args])
+            probe = TypedAtom(cast(str, atom.predicate), tuple(bindings.get(term, term) if isinstance(term, Variable) else term
+                                               for term in atom.args))
             if full.candidates(probe, bindings):
                 return True, NegationWitness(rule.rule_id, position, atom.predicate, ground, scope, horizon), ()
             if probe_absence:
@@ -1071,7 +1071,7 @@ class GenericEngine:
 
     def _matches(self, rule, pivot, full, delta, budget, track_premises: bool = False):
         remaining = tuple(index for index in range(len(rule.body)) if index != pivot)
-        stack = [(dict(), remaining, pivot, iter(delta.candidates(rule.body[pivot], dict())), {})]
+        stack: list[tuple[dict, tuple[int, ...], int, Iterator[TypedFact], dict]] = [(dict(), remaining, pivot, iter(delta.candidates(rule.body[pivot], dict())), {})]
         while stack:
             bindings, remaining, position, candidates, support = stack[-1]
             try:
