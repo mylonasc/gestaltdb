@@ -42,7 +42,11 @@ from .explanations import CHECKPOINT_FORMAT_VERSION, RankedWitness, checkpoint_c
 from .profiles import ConstructEntry, MATRIX, NAMED_SUBSETS, approval_checklist, check_construct, matrix_digest, subset_constructs
 from .scale import OPERATOR_API_VERSION, SpillBudget, WorkerPolicy, backend_scale_notes, check_operator_api
 from .scopes import CalculusPolicy, CalculusRegistry, CalculusSpec, InheritanceGrant, InheritancePolicy, ModalBoundary, ModalScope, approval_gates as scope_approval_gates
-from .temporal_closure import TemporalClosure, TemporalDerivation, TemporalFact, RangeUpdate, ClosureVerification, canonicalize_segments, change_segments, evaluate_range, update_range, verify_closure
+from .temporal_closure import (
+    ClosureVerification, RangeUpdate, TemporalClosure, TemporalConclusion,
+    TemporalDerivation, TemporalFact, TemporalProofTruncatedWarning,
+    canonicalize_segments, change_segments, evaluate_range, update_range, verify_closure,
+)
 from .maintenance import DependencyIndex, Materialization, PropagationResult, RetractionResult, Support, build_index, propagate_insertions, rematerialize, retract_facts
 from .validation import Denial, ValidationReport, ValidationSuite, Violation, find_unsatisfiable, validate
 from .structural import (
@@ -73,7 +77,8 @@ __all__ = [
     "CatalogEntry", "PinnedGeneration", "RuleCatalog",
     "catalog_legacy_parity_gates", "migrate_dict", "pin_generation",
     "Interval", "IntervalError", "IntervalSet", "SupportSegment", "coalesce_segments",
-    "TemporalClosure", "TemporalDerivation", "TemporalFact", "RangeUpdate", "ClosureVerification",
+    "TemporalClosure", "TemporalConclusion", "TemporalDerivation", "TemporalFact",
+    "RangeUpdate", "ClosureVerification", "TemporalProofTruncatedWarning",
     "canonicalize_segments", "change_segments", "evaluate_range", "update_range", "verify_closure",
     "ConstructEntry", "MATRIX", "NAMED_SUBSETS",
     "approval_checklist", "check_construct", "matrix_digest", "subset_constructs",

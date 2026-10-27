@@ -18,6 +18,7 @@ evidence. Per-point evaluation parity holds by construction.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
@@ -85,22 +86,67 @@ class TemporalDerivation:
             raise ReasoningError("premises must be non-empty without aggregate evidence")
 
 
+def _segment_key(segment: Interval) -> tuple:
+    return (segment.start is not None, segment.start, segment.end is None, segment.end)
+
+
+@dataclass(frozen=True)
+class TemporalConclusion:
+    """One logical conclusion holding on one elementary segment.
+
+    Conclusions are independent of proof availability: exhausting witness
+    budgets removes explanations, never logical answers. A conclusion with no
+    matching :class:`TemporalDerivation` is deliberately reported through
+    ``TemporalClosure.proofs_truncated`` rather than silently disappearing.
+    """
+
+    fact: TypedFact
+    segment: Interval
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.fact, TypedFact):
+            raise ReasoningError("conclusion fact must be a TypedFact")
+        if not isinstance(self.segment, Interval):
+            raise ReasoningError("conclusion segment must be an Interval")
+
+
+class TemporalProofTruncatedWarning(UserWarning):
+    """Range conclusions are complete, but their explanations are partial."""
+
+
+def _warn_proofs_truncated() -> None:
+    warnings.warn(
+        "range evaluation exhausted proof budgets (max_proof_nodes/max_proof_edges); "
+        "logical conclusions are complete, but their explanations are partial. "
+        "Raise the proof limits or call verify_closure for logical conformance.",
+        TemporalProofTruncatedWarning,
+        stacklevel=3,
+    )
+
+
 @dataclass(frozen=True)
 class TemporalClosure:
-    """Range closure: segments, base validity and per-interval derivations."""
+    """Range closure: segments, base validity, conclusions and evidence.
+
+    ``conclusions`` are the complete logical result on each segment.
+    ``derivations`` are the available supports; when a proof budget truncated,
+    they may cover only part of the conclusions and ``proofs_truncated`` is
+    true. Constructing a closure without explicit conclusions derives them
+    from ``derivations`` for backward compatibility.
+    """
 
     segments: tuple[Interval, ...]
     base: tuple[TemporalFact, ...]
     derivations: tuple[TemporalDerivation, ...]
     program_digest: str | None = None
+    conclusions: tuple[TemporalConclusion, ...] | None = None
+    proofs_truncated: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.segments, (tuple, list)) or not all(
                 isinstance(item, Interval) for item in self.segments):
             raise ReasoningError("segments must contain only Interval values")
-        object.__setattr__(self, "segments", tuple(sorted(set(self.segments),
-                                                           key=lambda i: (i.start is not None, i.start,
-                                                                          i.end is None, i.end))))
+        object.__setattr__(self, "segments", tuple(sorted(set(self.segments), key=_segment_key)))
         if not isinstance(self.base, (tuple, list)) or not all(
                 isinstance(item, TemporalFact) for item in self.base):
             raise ReasoningError("base must contain only TemporalFact values")
@@ -109,15 +155,31 @@ class TemporalClosure:
                 isinstance(item, TemporalDerivation) for item in self.derivations):
             raise ReasoningError("derivations must contain only TemporalDerivation values")
         object.__setattr__(self, "derivations", tuple(self.derivations))
+        if not isinstance(self.proofs_truncated, bool):
+            raise ReasoningError("proofs_truncated must be a bool")
         if self.program_digest is not None:
             _text(self.program_digest, "program_digest")
+        explicit = self.conclusions is not None
+        if explicit and (not isinstance(self.conclusions, (tuple, list)) or not all(
+                isinstance(item, TemporalConclusion) for item in self.conclusions)):
+            raise ReasoningError("conclusions must contain only TemporalConclusion values")
+        derived = tuple(TemporalConclusion(item.fact, item.segment) for item in self.derivations)
+        conclusions = derived if self.conclusions is None else tuple(self.conclusions)
+        known = {(item.fact, item.segment) for item in conclusions}
+        missing = [(item.fact, item.segment) for item in self.derivations
+                   if (item.fact, item.segment) not in known]
+        if missing:
+            raise ReasoningError("conclusions must cover every recorded derivation")
+        object.__setattr__(self, "conclusions", tuple(sorted(set(conclusions),
+                                                             key=lambda item: (_sort_key(item.fact),
+                                                                               _segment_key(item.segment)))))
 
     def answers(self, fact: TypedFact) -> IntervalSet:
         """Exact validity of ``fact``: base ranges plus derived segments."""
         if not isinstance(fact, TypedFact):
             raise ReasoningError("fact must be a TypedFact")
         parts = [item.valid for item in self.base if item.fact == fact]
-        parts.extend(IntervalSet([item.segment]) for item in self.derivations if item.fact == fact)
+        parts.extend(IntervalSet([item.segment]) for item in self.conclusions if item.fact == fact)
         out = IntervalSet([])
         for part in parts:
             out = out.union(part)
@@ -128,14 +190,20 @@ class TemporalClosure:
         if isinstance(point, bool) or not isinstance(point, int):
             raise ReasoningError("point must be an integer microsecond")
         found = {item.fact for item in self.base if point in item.valid}
-        found.update(item.fact for item in self.derivations if item.segment.contains(point))
+        found.update(item.fact for item in self.conclusions if item.segment.contains(point))
         return tuple(sorted(found, key=_sort_key))
 
     def evidence(self, fact: TypedFact) -> tuple[TemporalDerivation, ...]:
-        """Exact per-interval supports for one derived fact."""
+        """Available exact per-interval supports for one derived fact."""
         if not isinstance(fact, TypedFact):
             raise ReasoningError("fact must be a TypedFact")
         return tuple(item for item in self.derivations if item.fact == fact)
+
+    def missing_evidence(self) -> tuple[TemporalConclusion, ...]:
+        """Conclusions whose explanations were dropped by proof budgets."""
+        witnessed = {(item.fact, item.segment) for item in self.derivations}
+        return tuple(item for item in self.conclusions if (item.fact, item.segment) not in witnessed)
+
 
 
 def change_segments(facts: Iterable[TemporalFact], *, max_segments: int = 10_000) -> tuple[Interval, ...]:
@@ -209,12 +277,16 @@ class ClosureVerification:
     segments: int
     derivations: int
     points_checked: int
+    proofs_truncated: bool = False
 
     def __post_init__(self) -> None:
         for name in ("segments", "derivations", "points_checked"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 raise ReasoningError(f"{name} must be a non-negative integer")
+        if not isinstance(self.proofs_truncated, bool):
+            raise ReasoningError("proofs_truncated must be a bool")
+
 
 
 def verify_closure(program: GenericProgram, closure: TemporalClosure, *,
@@ -282,7 +354,11 @@ def verify_closure(program: GenericProgram, closure: TemporalClosure, *,
         uncovered = item.valid.difference(closure.answers(item.fact))
         if uncovered.intervals:
             raise ReasoningError("base validity not covered by closure answers")
-    return ClosureVerification(len(closure.segments), len(closure.derivations), points)
+    if not closure.proofs_truncated and closure.missing_evidence():
+        raise ReasoningError("untruncated closure is missing derivations; rematerialize explicitly")
+    return ClosureVerification(len(closure.segments), len(closure.derivations), points,
+                               closure.proofs_truncated)
+
 
 
 def _sample(segment: Interval) -> int:
@@ -307,8 +383,13 @@ def _range_needs_trace(program: GenericProgram) -> bool:
 
 def _segment_derivations(program: GenericProgram, active: list[TypedFact], segment: Interval, *,
                          limits: ReasoningLimits, max_supports: int, work: list,
-                         cancel=None) -> list[TemporalDerivation]:
-    """Per-segment closure with evidence; legacy or trace path by program shape."""
+                         cancel=None) -> tuple[list[TemporalConclusion], list[TemporalDerivation], bool]:
+    """Per-segment closure with conclusions and available evidence.
+
+    Logical conclusions come from the evaluation itself and are therefore
+    unaffected by proof budgets. Evidence collection may truncate; the flag
+    tells callers that explanations are partial while answers remain complete.
+    """
     use_stratified = bool(program.closed) or any(rule.negated for rule in program.rules)
     need_trace = _range_needs_trace(program)
     if use_stratified:
@@ -324,23 +405,29 @@ def _segment_derivations(program: GenericProgram, active: list[TypedFact], segme
         trace = None
     fresh = set(result.facts) - set(active)
     if not fresh:
-        return []
+        return [], [], bool(getattr(trace, "truncated", False))
+    conclusions = [TemporalConclusion(fact, segment) for fact in sorted(fresh, key=_sort_key)]
     if not need_trace:
         full = _TypedIndex(sorted(set(result.facts), key=_sort_key))
         supports: list = []
         for target in sorted(fresh, key=_sort_key):
             _find_all_supports(program, full, target, limits=limits, max_supports=max_supports,
                                work=work, seen=set(), supports=supports, cancel=cancel)
-        return [TemporalDerivation(support.fact, segment, support.rule_id, support.premises)
-                for support in supports]
+        return (conclusions,
+                [TemporalDerivation(support.fact, segment, support.rule_id, support.premises)
+                 for support in supports],
+                False)
     assert trace is not None
     derivations = []
+    witnessed = set()
     for node in trace.nodes:
         if node.rule is None or node.fact not in fresh:
             continue
         derivations.append(TemporalDerivation(node.fact, segment, node.rule.rule_id,
                                               node.premises, node.absence, node.aggregates))
-    return derivations
+        witnessed.add(node.fact)
+    return conclusions, derivations, bool(trace.truncated) or len(witnessed) < len(fresh)
+
 
 
 def _scheduled_active(items: list, *, max_rows: int, max_events: int,
@@ -362,6 +449,12 @@ def _scheduled_active(items: list, *, max_rows: int, max_events: int,
                                              max_memberships=max_memberships, cancel=cancel)]
 
 
+def _closure_facts(closure: TemporalClosure) -> set[TypedFact]:
+    """Every logical fact in a closure: base assertions plus conclusions."""
+    return ({item.fact for item in closure.base}
+            | {item.fact for item in closure.conclusions})
+
+
 def update_range(program: GenericProgram, closure: TemporalClosure, new_base: Iterable[TemporalFact], *,
                  limits: ReasoningLimits, max_segments: int = 10_000,
                  max_supports: int = 100_000, incremental: bool = True,
@@ -370,14 +463,15 @@ def update_range(program: GenericProgram, closure: TemporalClosure, new_base: It
                  cancel: Callable[[], bool] | None = None) -> RangeUpdate:
     """Propagate changed validity ranges with segment memoization.
 
-    Segments whose active base set is unchanged reuse the previous
-    derivations verbatim; only changed segments re-evaluate. Removals are
-    support-aware: a derived fact disappears only when its last supporting
+    Segments whose active base set is unchanged reuse their previous
+    conclusions and derivations; only changed segments re-evaluate. Removals
+    are support-aware: a derived fact disappears only when its last supporting
     segment goes, and every removal traces to changed premises. With
-    ``incremental=False`` — or whenever the previous generation is stale —
-    the update falls back to a full ``evaluate_range`` instead of degrading.
-    Point/range parity holds by construction: reused and recomputed segments
-    use the same engine over the same active inputs.
+    ``incremental=False`` — or whenever the previous generation is stale or
+    its evidence was truncated — the update falls back to a full
+    ``evaluate_range`` instead of degrading. Point/range parity holds by
+    construction: reused and recomputed segments use the same engine over the
+    same active inputs.
 
     Active inputs on the new base are scheduled once with an interval event
     sweep (see ``evaluate_range``); segment memoization keys are unchanged.
@@ -397,13 +491,16 @@ def update_range(program: GenericProgram, closure: TemporalClosure, new_base: It
         raise ReasoningError("new_base must be iterable") from exc
     if not all(isinstance(item, TemporalFact) for item in items):
         raise ReasoningError("new_base must contain only TemporalFact values")
-    if not incremental or closure.program_digest != program.digest:
+    # A truncated prior closure has partial explanations, not partial answers.
+    # Reusing it would keep partial evidence even if the caller raised budgets;
+    # rematerialize instead of silently preserving an incomplete memo entry.
+    if not incremental or closure.program_digest != program.digest or closure.proofs_truncated:
         fresh = evaluate_range(program, items, limits=limits, max_segments=max_segments,
                                max_supports=max_supports,
                                max_sweep_rows=max_sweep_rows, max_sweep_events=max_sweep_events,
                                max_sweep_memberships=max_sweep_memberships, cancel=cancel)
-        old_all = {item.fact for item in closure.base} | {item.fact for item in closure.derivations}
-        new_all = {item.fact for item in fresh.base} | {item.fact for item in fresh.derivations}
+        old_all = _closure_facts(closure)
+        new_all = _closure_facts(fresh)
         return RangeUpdate(fresh, 0, len(fresh.segments),
                            tuple(new_all - old_all), tuple(old_all - new_all), 0)
     scheduled = _scheduled_active(items, max_rows=max_sweep_rows, max_events=max_sweep_events,
@@ -412,22 +509,35 @@ def update_range(program: GenericProgram, closure: TemporalClosure, new_base: It
     segments = tuple(interval for interval, _ in scheduled)
     # Memo key is sound: segments tile maximal constant-active intervals, and
     # closure evaluation is a pure set function of (program, active facts).
-    # Reused derivations are re-segmented to the new interval (entry carries
+    # Reused entries are re-segmented to the new interval (entry carries
     # `segment`), so equal active sets share fact/rule/premise content only.
-    old_by_active: dict[frozenset, list[TemporalDerivation]] = {}
+    old_conclusions: dict[frozenset, list[TemporalConclusion]] = {}
+    old_derivations: dict[frozenset, list[TemporalDerivation]] = {}
+    for conclusion in closure.conclusions:
+        sample = _sample(conclusion.segment)
+        active = frozenset(item.fact for item in closure.base if sample in item.valid)
+        old_conclusions.setdefault(active, []).append(conclusion)
     for derivation in closure.derivations:
         sample = _sample(derivation.segment)
         active = frozenset(item.fact for item in closure.base if sample in item.valid)
-        old_by_active.setdefault(active, []).append(derivation)
+        old_derivations.setdefault(active, []).append(derivation)
+    conclusions: list[TemporalConclusion] = []
     derivations: list[TemporalDerivation] = []
+    seen_conclusions: set[tuple] = set()
     seen: set[tuple] = set()
     work = [0]
     reused = recomputed = 0
+    proofs_truncated = False
     for segment, active in scheduled:
         check_cancelled(cancel)
         key = frozenset(active)
-        if key in old_by_active:
-            for derivation in old_by_active[key]:
+        if key in old_conclusions:
+            for conclusion in old_conclusions[key]:
+                entry = (conclusion.fact, segment)
+                if entry not in seen_conclusions:
+                    seen_conclusions.add(entry)
+                    conclusions.append(TemporalConclusion(*entry))
+            for derivation in old_derivations.get(key, ()):
                 entry = (derivation.fact, segment, derivation.rule_id, derivation.premises,
                          derivation.absence, derivation.aggregates)
                 if entry not in seen:
@@ -436,8 +546,18 @@ def update_range(program: GenericProgram, closure: TemporalClosure, new_base: It
             reused += 1
             continue
         recomputed += 1
-        for derivation in _segment_derivations(program, active, segment, limits=limits,
-                                              max_supports=max_supports, work=work, cancel=cancel):
+        new_conclusions, new_derivations, truncated = _segment_derivations(
+            program, active, segment, limits=limits, max_supports=max_supports,
+            work=work, cancel=cancel)
+        proofs_truncated = proofs_truncated or truncated
+        for conclusion in new_conclusions:
+            entry = (conclusion.fact, conclusion.segment)
+            if entry not in seen_conclusions:
+                seen_conclusions.add(entry)
+                conclusions.append(conclusion)
+                if len(conclusions) > max_supports:
+                    raise ReasoningLimitError("range update exceeded max_supports")
+        for derivation in new_derivations:
             entry = (derivation.fact, derivation.segment, derivation.rule_id,
                      derivation.premises, derivation.absence, derivation.aggregates)
             if entry not in seen:
@@ -445,9 +565,13 @@ def update_range(program: GenericProgram, closure: TemporalClosure, new_base: It
                 derivations.append(derivation)
                 if len(derivations) > max_supports:
                     raise ReasoningLimitError("range update exceeded max_supports")
-    fresh_closure = TemporalClosure(segments, tuple(items), tuple(derivations), program.digest)
-    old_all = {item.fact for item in closure.base} | {item.fact for item in closure.derivations}
-    new_all = {item.fact for item in fresh_closure.base} | {item.fact for item in fresh_closure.derivations}
+    fresh_closure = TemporalClosure(segments, tuple(items), tuple(derivations), program.digest,
+                                    conclusions=tuple(conclusions),
+                                    proofs_truncated=proofs_truncated)
+    if proofs_truncated:
+        _warn_proofs_truncated()
+    old_all = _closure_facts(closure)
+    new_all = _closure_facts(fresh_closure)
     return RangeUpdate(fresh_closure, reused, recomputed,
                        tuple(new_all - old_all), tuple(old_all - new_all), work[0])
 
@@ -509,13 +633,26 @@ def evaluate_range(program: GenericProgram, facts: Iterable[TemporalFact], *,
                                   max_segments=max_segments, max_memberships=max_sweep_memberships,
                                   cancel=cancel)
     segments = tuple(interval for interval, _ in scheduled)
+    conclusions: list[TemporalConclusion] = []
     derivations: list[TemporalDerivation] = []
+    seen_conclusions: set[tuple] = set()
     seen: set[tuple] = set()
     work = [0]
+    proofs_truncated = False
     for segment, active in scheduled:
         check_cancelled(cancel)
-        for derivation in _segment_derivations(program, active, segment, limits=limits,
-                                              max_supports=max_supports, work=work, cancel=cancel):
+        new_conclusions, new_derivations, truncated = _segment_derivations(
+            program, active, segment, limits=limits, max_supports=max_supports,
+            work=work, cancel=cancel)
+        proofs_truncated = proofs_truncated or truncated
+        for conclusion in new_conclusions:
+            key = (conclusion.fact, conclusion.segment)
+            if key not in seen_conclusions:
+                seen_conclusions.add(key)
+                conclusions.append(conclusion)
+                if len(conclusions) > max_supports:
+                    raise ReasoningLimitError("range evaluation exceeded max_supports")
+        for derivation in new_derivations:
             key = (derivation.fact, derivation.segment, derivation.rule_id,
                    derivation.premises, derivation.absence, derivation.aggregates)
             if key not in seen:
@@ -523,7 +660,11 @@ def evaluate_range(program: GenericProgram, facts: Iterable[TemporalFact], *,
                 derivations.append(derivation)
                 if len(derivations) > max_supports:
                     raise ReasoningLimitError("range evaluation exceeded max_supports")
-    return TemporalClosure(segments, tuple(items), tuple(derivations), program.digest)
+    if proofs_truncated:
+        _warn_proofs_truncated()
+    return TemporalClosure(segments, tuple(items), tuple(derivations), program.digest,
+                           conclusions=tuple(conclusions),
+                           proofs_truncated=proofs_truncated)
 
 
 def canonicalize_segments(active_per_segment: Iterable[Iterable[TypedFact]], links=(), *,

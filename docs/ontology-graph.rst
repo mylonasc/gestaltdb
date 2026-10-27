@@ -79,11 +79,18 @@ closed), expands list values element-wise under ``TypedSourceLimits``
 (one fact per element; overruns fail closed, never truncate), and projects
 edge attributes as n-ary ``predicate(source, target, value)`` facts.
 ``node_identity=[(label, property)]`` renames node subjects to a property
-value; edge endpoints resolve through the same identity map inside
-``PinnedTypedGraphSource``. Every projected fact carries a readable
-``typed:<kind>:<record>:<field>[:<index>]`` reference, and
-``source.context(revision)`` pins the v2 ``mapping_id`` so a mapping change
-yields a new generation token and stale caches cannot match.
+value; edge endpoints resolve through the same record-to-subject map inside
+``PinnedTypedGraphSource``. Two distinct records mapping to one subject is an
+identity collision: the default ``identity_collision="error"`` fails closed and
+names both records. Pass ``identity_collision="merge"`` only for intentional
+entity resolution; facts then merge, while each projected assertion keeps its
+own source reference and no logical equivalence is asserted. Every projected
+fact carries an unambiguous JSON reference such as
+``typed:node-attribute:["a","name"]`` (list elements append an index); because
+components are encoded separately, IDs and property names containing ``:``
+cannot alias. ``source.context(revision)`` pins the v3 ``mapping_id``,
+including the collision policy, so a mapping change yields a new generation
+token and stale caches cannot match.
 
 .. code-block:: python
 

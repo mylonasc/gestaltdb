@@ -17,6 +17,7 @@ from the node pass; callers of the pure helpers pass an explicit resolver.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Callable
 
@@ -49,13 +50,25 @@ def _entity(value, what: str) -> str:
     return value
 
 
+def _reference(kind: str, *parts) -> str:
+    """Unambiguous source reference: JSON components, never delimiter joins.
+
+    Node IDs and property names may contain ``:``. Joining them textually makes
+    ``("a:b", "c")`` and ``("a", "b:c")`` indistinguishable; canonical JSON
+    keeps every component separate while staying readable and deterministic.
+    """
+    return f"typed:{kind}:" + json.dumps(list(parts), ensure_ascii=True, separators=(",", ":"))
+
+
+
 @dataclass(frozen=True)
 class TypedEvidence:
     """One projected typed fact with a traceable source reference.
 
-    ``reference_id`` names the record and field (``typed:node-attribute:<id>:<prop>``,
-    list elements append ``:<index>``), so every projected assertion traces to
-    its exact source without a separate lookup.
+    ``reference_id`` is canonical JSON after a ``typed:<kind>:`` prefix, e.g.
+    ``typed:node-attribute:["id","name"]``; list elements append their index.
+    Components are never joined by a delimiter, so IDs or property names that
+    contain ``:`` cannot alias another record's reference.
     """
 
     fact: TypedFact
@@ -81,8 +94,13 @@ class TypedGraphMapping:
     ``node_identity`` holds ``(label, property)`` pairs: nodes carrying that
     label project under their property value instead of the node ID. At most
     one identity rule may match a node; missing or mistyped identity values
-    fail closed. Collisions (two records, one identity) merge into one entity
-    by design; references keep the sources distinct.
+    fail closed.
+
+    ``identity_collision`` controls what happens when two distinct records map
+    to one subject. The default ``"error"`` fails closed, naming both records.
+    ``"merge"`` is an explicit entity-resolution choice: facts merge, while
+    each projected assertion keeps its own source reference. Merging is never
+    inferred and never equated with logical ``sameAs``.
     """
 
     labels: tuple[tuple[str, str], ...] = ()
@@ -95,19 +113,24 @@ class TypedGraphMapping:
     edge_lists: tuple[tuple[str, str], ...] = ()
     edge_reference_lists: tuple[tuple[str, str], ...] = ()
     node_identity: tuple[tuple[str, str], ...] = ()
+    identity_collision: str = "error"
 
     def __post_init__(self):
         for name in ("labels", "edge_types", "node_properties", "node_attributes",
                      "node_lists", "node_reference_lists", "edge_attributes",
                      "edge_lists", "edge_reference_lists", "node_identity"):
             object.__setattr__(self, name, _pairs(getattr(self, name), name))
+        if self.identity_collision not in ("error", "merge"):
+            raise ReasoningError("identity_collision must be 'error' or 'merge'")
 
     @property
     def mapping_id(self) -> str:
-        return _digest(["current-typed-graph-mapping-v2", self.labels, self.edge_types,
+        return _digest(["current-typed-graph-mapping-v3", self.labels, self.edge_types,
                         self.node_properties, self.node_attributes, self.node_lists,
                         self.node_reference_lists, self.edge_attributes, self.edge_lists,
-                        self.edge_reference_lists, self.node_identity])
+                        self.edge_reference_lists, self.node_identity,
+                        self.identity_collision])
+
 
 
 @dataclass(frozen=True)
@@ -143,24 +166,25 @@ def _expand_list(value, what: str, max_elements: int) -> tuple:
     return tuple(value)
 
 
-def _typed_node_evidence(record, mapping: TypedGraphMapping, limits: TypedSourceLimits):
+def _typed_node_evidence(record, mapping: TypedGraphMapping, limits: TypedSourceLimits,
+                         *, subject: str | None = None):
     """Project one node record; pure over duck-typed records for testability."""
-    subject = _subject(record, mapping)
+    subject = _subject(record, mapping) if subject is None else subject
     labels = dict(mapping.labels)
     for label in record.labels:
         if label in labels:
             yield TypedEvidence(TypedFact(TYPE_PREDICATE, (subject, labels[label])),
-                                f"typed:node-label:{record.get_id}:{label}")
+                                _reference("node-label", record.get_id, label))
     for prop, predicate in mapping.node_properties:
         if prop in record.properties:
             yield TypedEvidence(TypedFact(predicate, (subject, _entity(
                 record.properties[prop], f"mapped entity property {prop!r} on {record.get_id!r}"))),
-                f"typed:node-property:{record.get_id}:{prop}")
+                _reference("node-property", record.get_id, prop))
     for prop, predicate in mapping.node_attributes:
         if prop in record.properties:
             yield TypedEvidence(TypedFact(predicate, (subject, _literal(
                 record.properties[prop], f"mapped attribute {prop!r} on {record.get_id!r}"))),
-                f"typed:node-attribute:{record.get_id}:{prop}")
+                _reference("node-attribute", record.get_id, prop))
     for prop, predicate in mapping.node_lists:
         if prop in record.properties:
             for index, item in enumerate(_expand_list(
@@ -168,7 +192,7 @@ def _typed_node_evidence(record, mapping: TypedGraphMapping, limits: TypedSource
                     limits.max_elements_per_value)):
                 yield TypedEvidence(TypedFact(predicate, (subject, _literal(
                     item, f"mapped list {prop!r}[{index}] on {record.get_id!r}"))),
-                    f"typed:node-list:{record.get_id}:{prop}:{index}")
+                    _reference("node-list", record.get_id, prop, index))
     for prop, predicate in mapping.node_reference_lists:
         if prop in record.properties:
             for index, item in enumerate(_expand_list(
@@ -176,7 +200,8 @@ def _typed_node_evidence(record, mapping: TypedGraphMapping, limits: TypedSource
                     limits.max_elements_per_value)):
                 yield TypedEvidence(TypedFact(predicate, (subject, _entity(
                     item, f"mapped reference list {prop!r}[{index}] on {record.get_id!r}"))),
-                    f"typed:node-reference-list:{record.get_id}:{prop}:{index}")
+                    _reference("node-reference-list", record.get_id, prop, index))
+
 
 
 def _typed_edge_evidence(record, mapping: TypedGraphMapping, limits: TypedSourceLimits,
@@ -188,12 +213,12 @@ def _typed_edge_evidence(record, mapping: TypedGraphMapping, limits: TypedSource
     edge_type = record.properties.get("type")
     if isinstance(edge_type, str) and edge_type in types:
         yield TypedEvidence(TypedFact(types[edge_type], (source, target)),
-                            f"typed:edge:{record.get_id}")
+                            _reference("edge", record.get_id))
         for attr, predicate in mapping.edge_attributes:
             if attr in record.properties:
                 yield TypedEvidence(TypedFact(predicate, (source, target, _literal(
                     record.properties[attr], f"mapped edge attribute {attr!r} on {record.get_id!r}"))),
-                    f"typed:edge-attribute:{record.get_id}:{attr}")
+                    _reference("edge-attribute", record.get_id, attr))
         for attr, predicate in mapping.edge_lists:
             if attr in record.properties:
                 for index, item in enumerate(_expand_list(
@@ -201,7 +226,7 @@ def _typed_edge_evidence(record, mapping: TypedGraphMapping, limits: TypedSource
                         limits.max_elements_per_value)):
                     yield TypedEvidence(TypedFact(predicate, (source, target, _literal(
                         item, f"mapped edge list {attr!r}[{index}] on {record.get_id!r}"))),
-                        f"typed:edge-list:{record.get_id}:{attr}:{index}")
+                        _reference("edge-list", record.get_id, attr, index))
         for attr, predicate in mapping.edge_reference_lists:
             if attr in record.properties:
                 for index, item in enumerate(_expand_list(
@@ -209,7 +234,7 @@ def _typed_edge_evidence(record, mapping: TypedGraphMapping, limits: TypedSource
                         limits.max_elements_per_value)):
                     yield TypedEvidence(TypedFact(predicate, (source, target, _entity(
                         item, f"mapped edge reference list {attr!r}[{index}] on {record.get_id!r}"))),
-                        f"typed:edge-reference-list:{record.get_id}:{attr}:{index}")
+                        _reference("edge-reference-list", record.get_id, attr, index))
     elif mapping.edge_attributes or mapping.edge_lists or mapping.edge_reference_lists:
         attrs = [attr for attr, _ in (*mapping.edge_attributes, *mapping.edge_lists,
                                       *mapping.edge_reference_lists) if attr in record.properties]
@@ -270,10 +295,19 @@ class PinnedTypedGraphSource:
             raise ProvenanceMismatchError("current snapshot database identity mismatch")
 
     def iter_evidence(self, *, cancel: Callable[[], bool] | None = None):
-        """Yield TypedEvidence in store order; limits fail closed, never truncate."""
+        """Yield TypedEvidence in store order; limits fail closed, never truncate.
+
+        Every node resolves to one subject before projecting, so identity
+        mapping applies even to nodes with no mapped properties. A subject
+        owned by two distinct records is an identity collision: it fails closed
+        by default, or merges when the caller set ``identity_collision="merge"``.
+        Edges resolve endpoints through the record-id -> subject map, including
+        when an identity-derived subject coincides with another record's ID.
+        """
         self._check()
         count = 0
-        identities: dict[str, str] = {}
+        owners: dict[str, str] = {}
+        subject_by_id: dict[str, str] = {}
         node_keys = list(self._view.store.get_node_keys_generator())
         for key in node_keys:
             check_cancelled(cancel)
@@ -286,9 +320,20 @@ class PinnedTypedGraphSource:
             self._check()
             if record is None:
                 raise ReasoningError("snapshot record disappeared")
-            for evidence in _typed_node_evidence(record, self._mapping, self._limits):
-                identities.setdefault(record.get_id, evidence.fact.values[0])
-                yield evidence
+            node_id = record.get_id
+            subject = _subject(record, self._mapping)
+            owner = owners.get(subject)
+            if owner is not None and owner != node_id:
+                if self._mapping.identity_collision == "error":
+                    raise ReasoningError(
+                        f"identity collision: records {owner!r} and {node_id!r} both "
+                        f"project subject {subject!r}; set identity_collision='merge' "
+                        f"for intentional entity resolution")
+            else:
+                owners[subject] = node_id
+            subject_by_id[node_id] = subject
+            yield from _typed_node_evidence(record, self._mapping, self._limits,
+                                            subject=subject)
         for key in self._view.store.get_edge_keys_generator():
             check_cancelled(cancel)
             self._check()
@@ -301,7 +346,8 @@ class PinnedTypedGraphSource:
             if record is None:
                 raise ReasoningError("snapshot record disappeared")
             yield from _typed_edge_evidence(record, self._mapping, self._limits,
-                                            resolve=lambda endpoint: identities.get(endpoint, endpoint))
+                                            resolve=lambda endpoint: subject_by_id.get(endpoint,
+                                                                                      endpoint))
         self._check()
 
     def context(self, revision: str) -> InputContext:
