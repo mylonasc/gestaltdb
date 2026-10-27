@@ -412,6 +412,9 @@ temporal filters by design.
 Streaming walk corpora (RWS-01)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+For context-pair generation and the embedding pipeline extensions, see
+:doc:`random-walks`.
+
 ``engine.iter_random_walks`` yields ordinary ``RandomWalkBatch`` objects without
 building the complete corpus. Each round visits every seed position once;
 ``walks_per_node`` controls the number of rounds. Omit ``start_nodes`` to visit

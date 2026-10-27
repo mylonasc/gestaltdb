@@ -86,9 +86,12 @@ from .importance import IMPORTANCE_POLICIES, derive_edge_weights  # noqa: E402
 from .feeder import AsyncBatchFeeder  # noqa: E402
 from .negatives import HardNegativeConfig  # noqa: E402
 from .snapshot import SamplerSnapshot  # noqa: E402
+from .contexts import ContextPairBatch, iter_context_pairs  # noqa: E402
 
 
 __all__ = [
+    "ContextPairBatch",
+    "iter_context_pairs",
     "HardNegativeConfig",
     "IMPORTANCE_POLICIES",
     "AsyncBatchFeeder",

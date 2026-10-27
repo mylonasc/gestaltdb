@@ -201,6 +201,8 @@ Resolve external IDs with `snapshot.node_int(...)`, `snapshot.edge_int(...)`, an
 
 Walk corpus iteration: `engine.iter_random_walks(..., walks_per_node=..., batch_size=..., walk_type="random"|"node2vec")` yields ordinary batches, visiting all nodes when seeds are omitted. Unshuffled all-node seed buffers are batch-sized; global round shuffling uses O(seed count) storage. Implementation: `sampling/walks.py`; roadmap: GitHub #416 (`RWS-01`–`RWS-08`).
 
+DeepWalk context inputs: `gestaltdb.sampling.iter_context_pairs` yields bounded framework-neutral center/context arrays with restart-aware windows, optional distance weights and frequency subsampling. See `docs/random-walks.rst`; embedding training stays external.
+
 ## Visualization
 
 - Packaged offline viz lives in `src/gestaltdb/viz/` (Python, stdlib only) plus `web/` (React + D3 + Vite source, build-time only). The prebuilt bundle is committed at `src/gestaltdb/viz/static/` and shipped via `package-data`.

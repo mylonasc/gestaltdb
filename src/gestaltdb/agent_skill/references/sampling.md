@@ -35,6 +35,12 @@ Use `SamplerSnapshot` and `SamplerEngine` for ML training pipelines. These APIs 
 - `sample_multihop` / `sample_subgraph`: multi-hop topology and edge-seeded batches with positives and negatives.
 - `sample_hard_negatives`: endpoint-type/relation constraints, positive rejection, temporal policies.
 
+For DeepWalk training inputs, import `iter_context_pairs` from `gestaltdb.sampling`.
+It consumes walk batches and yields bounded center/context ID, distance and weight
+arrays. Fixed/dynamic windows, inverse-distance weights and explicit frequency
+subsampling are supported. Windows do not cross restart jumps by default and
+never join separate walk rows. Embedding training stays in the caller's framework.
+
 ### Filter Once, Sample Repeatedly
 
 Pass `node_filter`/`edge_filter` to `graph.build_sampler_snapshot` to define an

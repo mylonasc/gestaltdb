@@ -115,6 +115,13 @@ concatenated walks. Reuse `worker_engine` for independent streams; no automatic
 parallelism, cohort partitioning, or worker-count invariance is implied.
 
 ### Mapping IDs Back to External Graph
+
+`gestaltdb.sampling.iter_context_pairs` (RWS-02) converts a walk batch or stream
+to bounded `ContextPairBatch` arrays: center/context IDs, distances and weights.
+Fixed/dynamic windows, inverse-distance weights and explicit frequency-based
+subsampling are supported. Restart jumps split sequences by default; separate
+walk rows never join. Full pipeline contracts: `docs/random-walks.rst`.
+
 `SampledSubgraphBatch` local arrays index nodes locally within the batch (`senders`, `receivers`, `positives`, `negatives`).
 - `batch.node_ids_global`: Maps local batch index to compact global snapshot ID.
 - `snapshot.external_node_id(compact_id)`: Maps compact global snapshot ID to original external string ID.
