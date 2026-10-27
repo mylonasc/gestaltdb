@@ -105,8 +105,15 @@ class WalkSchema:
             types.extend(arc.source_types or ())
             types.extend(arc.target_types or ())
         engine._validated_ids(relations, engine.snapshot.num_relations, "schema relations")
-        known = set(np.unique(engine.snapshot.node_type_ids).tolist()) - {-1} if types else set()
-        if set(types) - known:
+        # Probe in bounded chunks; validation must not materialize every node's
+        # type while iterating a small seed batch over a large memmap snapshot.
+        missing = set(types)
+        values = engine.snapshot.node_type_ids
+        for offset in range(0, values.size, 4096) if missing else ():
+            missing.difference_update(np.unique(values[offset:offset + 4096]).tolist())
+            if not missing:
+                break
+        if missing:
             raise ValueError("schema contains unknown node type IDs")
 
     def candidates(self, engine, current, state, position, direction, relations, temporal, window_policy):

@@ -92,3 +92,25 @@ def test_extreme_composing_weights_do_not_underflow_before_cancellation(engine):
     schema = WalkSchema(relation_weights={0: 1e-300, 1: 1e300})
     batch = engine.sample_policy_walks([0] * 3000, 1, policy=WalkPolicy(strategy="weighted", schema=schema))
     assert abs(np.mean(batch.node_ids[:, 1] == 1) - .5) < .035
+
+
+def test_type_validation_uses_bounded_chunks(tmp_path, monkeypatch):
+    size = 10000
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        tmp_path / "many_types", external_node_ids=[f"n{i}" for i in range(size)],
+        external_edge_ids=[], external_relation_ids=[], src_int=[], dst_int=[], rel_int=[],
+        node_type_ids=np.arange(size),
+    )
+    engine = SamplerEngine.load(snapshot.path, mode="memmap")
+    original = np.unique
+    chunks = []
+
+    def unique(values, *args, **kwargs):
+        chunks.append(values.size)
+        return original(values, *args, **kwargs)
+
+    monkeypatch.setattr("gestaltdb.sampling.walk_schema.np.unique", unique)
+    WalkSchema(node_types=[size - 1]).validate_snapshot(engine)
+    assert chunks == [4096, 4096, 1808]
+    with pytest.raises(ValueError, match="unknown node type"):
+        WalkSchema(node_types=[size]).validate_snapshot(engine)
