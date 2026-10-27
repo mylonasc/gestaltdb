@@ -29,6 +29,12 @@ def test_distribution_and_reproducibility():
     np.testing.assert_allclose(ContextNegativeSampler([0, 4], exponent=0).probabilities, [.5, .5])
 
 
+def test_extreme_counts_preserve_representable_power_law_support():
+    sampler = ContextNegativeSampler([1e-300, 1e300], exponent=.1)
+    assert sampler.probabilities[0] > 0
+    np.testing.assert_allclose(sampler.probabilities[0], 1e-60, rtol=1e-12, atol=0)
+
+
 def test_exhaustion_preflight_preserves_rng():
     sampler = ContextNegativeSampler([1, 1], seed=8)
     with pytest.raises(ValueError, match="exhausted"):

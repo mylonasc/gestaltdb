@@ -201,7 +201,7 @@ Resolve external IDs with `snapshot.node_int(...)`, `snapshot.edge_int(...)`, an
 
 Walk corpus iteration: `engine.iter_random_walks(..., walks_per_node=..., batch_size=..., walk_type="random"|"node2vec")` yields ordinary batches, visiting all nodes when seeds are omitted. Unshuffled all-node seed buffers are batch-sized; global round shuffling uses O(seed count) storage. Implementation: `sampling/walks.py`; roadmap: GitHub #416 (`RWS-01`–`RWS-08`).
 
-DeepWalk context inputs: `gestaltdb.sampling.iter_context_pairs` yields bounded framework-neutral center/context arrays with restart-aware windows, optional distance weights and frequency subsampling. See `docs/random-walks.rst`; embedding training stays external.
+DeepWalk extensions: `gestaltdb.sampling.iter_context_pairs` yields bounded restart-aware context arrays; `ContextNegativeSampler` supplies embedding-objective negatives. `engine.sample_policy_walks` / streamed `walk_type="policy"` compose `WalkPolicy`, typed/FSM `WalkSchema`/`WalkTransition`, and interval/event `TemporalWalkPolicy`; temporal outputs retain masked times/version IDs and copied provenance. See `docs/random-walks.rst`. Embedding training stays external; RWS-08 cache/native adoption is explicitly deferred by measurements (prototype is benchmark-only).
 
 ## Visualization
 

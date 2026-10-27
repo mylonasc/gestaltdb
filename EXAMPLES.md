@@ -793,6 +793,44 @@ requests because they cannot expose one unified verifiable source snapshot.
 Read-only Cypher accepts the same option, and `graph.current_read_view()` keeps
 several direct graph reads on one horizon.
 
+## Stream DeepWalk Training Inputs (RWS-01–RWS-07)
+
+```python
+from tempfile import TemporaryDirectory
+from gestaltdb.sampling import (
+    ContextNegativeSampler, SamplerEngine, SamplerSnapshot,
+    WalkPolicy, WalkSchema, iter_context_pairs,
+)
+
+with TemporaryDirectory() as root:
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        root + "/snapshot", external_node_ids=["a", "b", "c", "d"],
+        external_edge_ids=["ab", "bc", "cd"], external_relation_ids=["R"],
+        src_int=[0, 1, 2], dst_int=[1, 2, 3], rel_int=[0, 0, 0],
+    )
+    engine = SamplerEngine.load(snapshot.path, mode="memmap", seed=7)
+    walks = engine.iter_random_walks(
+        [0], walk_length=3, walks_per_node=2, batch_size=1,
+        walk_type="policy", policy=WalkPolicy(
+            non_backtracking=True, transition_unit="neighbor",
+            schema=WalkSchema(metapath=[0]),
+        ),
+    )
+    negative_sampler = ContextNegativeSampler.from_snapshot(snapshot, seed=11)
+    for pairs in iter_context_pairs(walks, window_size=1, batch_size=3):
+        negatives = negative_sampler.sample(
+            pairs.center_nodes, positive_contexts=pairs.context_nodes,
+            negatives_per_positive=2,
+        )
+        assert negatives.shape == (len(pairs.weights), 2)
+        # Feed the positive pairs/weights and negatives to an external trainer.
+```
+
+Restart-aware windows do not join separate walk rows. Context negatives are not
+KG triple negatives. For finite-state schemas, chronological interval/event walks,
+explicit transition semantics and measured performance boundaries, see
+`docs/random-walks.rst`. Embedding training is deliberately external.
+
 ## Visualize Graphs
 
 GestaltDB ships offline interactive visualization: the D3.js + React front

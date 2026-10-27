@@ -123,7 +123,7 @@ def sample_policy_walks(
                     )
                     candidates, endpoints, next_states, schema_weights, candidate_times = (
                         values[feasible] for values in (
-                            candidates, endpoints, next_states, schema_weights * time_weights, candidate_times
+                            candidates, endpoints, next_states, schema_weights + time_weights, candidate_times
                         )
                     )
                 action = dead_end
@@ -144,23 +144,29 @@ def sample_policy_walks(
                             candidates = candidates[:0]
                             action = policy.avoidance_exhaustion
                 if candidates.size:
-                    weights = schema_weights
+                    log_weights = schema_weights.copy()
                     use_static = (previous is not None or policy.weighted_first_step) if policy.node2vec else (
                         policy.strategy == "weighted"
                     )
                     if use_static:
                         static = engine.snapshot.edge_weights[candidates]
-                        weights = weights * (static / (float(static.max()) or 1))
+                        with np.errstate(divide="ignore"):
+                            log_weights += np.log(static)
                     if policy.node2vec and previous is not None:
-                        weights = weights * node2vec_bias(
+                        log_weights += node2vec_bias(
                             engine, previous, endpoints, policy, schema, relation_filter, temporal, window_policy, clock,
                         )
                     has_weights = (use_static or (policy.node2vec and previous is not None)
                                    or bool(schema.relation_weights)
                                    or any(arc.weight != 1 for arc in schema.transitions)
                                    or (chronology is not None and chronology.recency_half_life_us is not None))
-                    if not has_weights:
-                        weights = None
+                    weights = None
+                    if has_weights:
+                        maximum = float(log_weights.max())
+                        if not np.isfinite(maximum):
+                            raise ValueError("sampling weights must contain a positive value in the candidate set")
+                        with np.errstate(under="ignore"):
+                            weights = np.exp(log_weights - maximum)
                     chosen = choose_transition(engine, candidates, endpoints, weights, policy)
                     edge = int(candidates[chosen])
                     previous, current = current, int(endpoints[chosen])

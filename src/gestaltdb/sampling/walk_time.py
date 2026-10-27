@@ -51,7 +51,7 @@ class TemporalWalkPolicy:
                 raise ValueError("recency weighting requires reference_time")
 
     def candidates(self, snapshot, edges, clock, query):
-        """Return a feasibility mask, chosen microseconds and proximity weights."""
+        """Return feasibility, chosen microseconds and LOG-proximity weights."""
         times = np.zeros(edges.size, dtype=np.int64)
         allowed = np.zeros(edges.size, dtype=bool)
         for index, edge in enumerate(edges):
@@ -82,12 +82,12 @@ class TemporalWalkPolicy:
                 if self.max_gap_us is not None and abs(chosen - clock) > self.max_gap_us:
                     continue
             times[index], allowed[index] = chosen, True
-        weights = np.ones(edges.size)
+        weights = np.zeros(edges.size)
         if self.recency_half_life_us is not None and np.any(allowed):
             distances = np.array([abs(int(time) - self.reference_time) for time in times[allowed]], dtype=float)
             # A common factor cancels; subtract minimum to retain a unit maximum.
             with np.errstate(over="ignore", under="ignore"):
-                weights[allowed] = np.exp2(-(distances - distances.min()) / self.recency_half_life_us)
+                weights[allowed] = -np.log(2) * (distances - distances.min()) / self.recency_half_life_us
         return allowed, times, weights
 
 

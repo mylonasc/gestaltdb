@@ -703,10 +703,10 @@ class SamplerEngine:
     ) -> RandomWalkBatch:
         """Sample opt-in constrained walks without changing legacy defaults.
 
-        ``WalkPolicy`` defines hard non-backtracking/recent-history avoidance.
-        Common direction, relation, temporal, restart and dead-end options go
-        to the policy kernel. Stream with ``iter_random_walks(walk_type="policy",
-        policy=...)``. IDs and restart/padding conventions match other walks.
+        ``WalkPolicy`` composes avoidance, typed/state-machine schemas, explicit
+        chronology and transition units. Direction/relation/query-time/restart
+        options go to the kernel. Stream with ``iter_random_walks(walk_type="policy",
+        policy=...)``. Temporal policies add masked times/version IDs/provenance.
         """
         return sample_policy_walks(self, start_nodes, walk_length, policy=policy, **walk_options)
 

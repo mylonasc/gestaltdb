@@ -122,6 +122,15 @@ Fixed/dynamic windows, inverse-distance weights and explicit frequency-based
 subsampling are supported. Restart jumps split sequences by default; separate
 walk rows never join. Full pipeline contracts: `docs/random-walks.rst`.
 
+`ContextNegativeSampler` supplies corpus-count/degree-power context negatives
+with explicit exclusions and uniqueness/exhaustion policies (not KG negatives).
+`engine.sample_policy_walks` and streamed `walk_type="policy"` compose hard
+avoidance, typed/metapath/FSM `WalkSchema`/`WalkTransition`, interval/event
+`TemporalWalkPolicy`, and edge/distinct-neighbor transition units. Legacy kernels
+and batch defaults remain unchanged; temporal policy batches add masked times,
+version IDs and copied snapshot provenance. RWS-08 cache/native adoption was
+measured and deferred; prototypes stay under `benchmarks/`, not runtime APIs.
+
 `SampledSubgraphBatch` local arrays index nodes locally within the batch (`senders`, `receivers`, `positives`, `negatives`).
 - `batch.node_ids_global`: Maps local batch index to compact global snapshot ID.
 - `snapshot.external_node_id(compact_id)`: Maps compact global snapshot ID to original external string ID.

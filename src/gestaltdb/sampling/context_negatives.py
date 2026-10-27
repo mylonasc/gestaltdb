@@ -30,7 +30,12 @@ class ContextNegativeSampler:
         if exponent == 0 or (counts.size and counts.max() == 0):
             weights = np.ones(counts.size)
         else:
-            weights = (counts / counts.max()) ** exponent if counts.size else counts
+            weights = np.zeros(counts.size)
+            if counts.size:
+                positive = counts > 0
+                log_counts = np.log(counts[positive])
+                with np.errstate(over="ignore", under="ignore"):
+                    weights[positive] = np.exp(exponent * (log_counts - log_counts.max()))
         self.probabilities = weights / weights.sum() if weights.size else weights
         self.probabilities.flags.writeable = False
         self.rng = np.random.default_rng(seed)

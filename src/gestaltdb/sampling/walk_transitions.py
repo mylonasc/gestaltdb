@@ -28,7 +28,7 @@ def choose_transition(engine, candidates, endpoints, weights, policy):
 
 
 def node2vec_bias(engine, previous, endpoints, policy, schema, relation_filter, temporal, window_policy, clock):
-    """Bias by return, distance one, or farther under explicit adjacency scope."""
+    """Log-bias by return/distance one/farther under explicit adjacency scope."""
     if policy.bias_adjacency == "snapshot":
         incident = engine.snapshot.incident.edge_range(previous)
         neighbors = set(engine.snapshot.src_int[incident].tolist()) | set(engine.snapshot.dst_int[incident].tolist())
@@ -43,8 +43,8 @@ def node2vec_bias(engine, previous, endpoints, policy, schema, relation_filter, 
             feasible, _, _ = policy.chronology.candidates(engine.snapshot, edges, clock, temporal)
             mask &= feasible
         neighbors = set(adjacent[mask].tolist())
-    bias = np.ones(endpoints.size)
+    bias = np.zeros(endpoints.size)
     returning = endpoints == previous
-    bias[returning] = 1 / policy.return_factor
-    bias[~returning & ~np.isin(endpoints, list(neighbors))] = 1 / policy.inout_factor
-    return bias / float(bias.max())
+    bias[returning] = -np.log(policy.return_factor)
+    bias[~returning & ~np.isin(endpoints, list(neighbors))] = -np.log(policy.inout_factor)
+    return bias

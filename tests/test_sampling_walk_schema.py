@@ -80,3 +80,15 @@ def test_schema_copies_caller_collections():
     assert schema.relation_weights[0] == 1
     with pytest.raises(TypeError):
         schema.relation_weights[0] = 0
+
+
+def test_extreme_composing_weights_do_not_underflow_before_cancellation(engine):
+    schema = WalkSchema(relation_weights={0: 1e-300, 1: 1e300}, transitions=[
+        WalkTransition(0, 0, 0, weight=1e300), WalkTransition(0, 0, 1, weight=1e-300),
+    ])
+    batch = engine.sample_policy_walks([0] * 3000, 1, policy=WalkPolicy(schema=schema))
+    assert abs(np.mean(batch.node_ids[:, 1] == 1) - .5) < .035
+    engine.snapshot.edge_weights[:2] = [1e300, 1e-300]
+    schema = WalkSchema(relation_weights={0: 1e-300, 1: 1e300})
+    batch = engine.sample_policy_walks([0] * 3000, 1, policy=WalkPolicy(strategy="weighted", schema=schema))
+    assert abs(np.mean(batch.node_ids[:, 1] == 1) - .5) < .035

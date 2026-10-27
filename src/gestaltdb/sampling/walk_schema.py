@@ -110,11 +110,13 @@ class WalkSchema:
             raise ValueError("schema contains unknown node type IDs")
 
     def candidates(self, engine, current, state, position, direction, relations, temporal, window_policy):
-        """Return aligned edge, endpoint, next-state and schema-weight arrays."""
+        """Return aligned edge, endpoint, next-state and LOG-weight arrays."""
         snapshot = engine.snapshot
         chunks = []
         arcs = [arc for arc in self.transitions if arc.source_state == state] if self.transitions else [None]
         for arc in arcs:
+            if arc is not None and arc.weight == 0:
+                continue
             step_relations = relations
             relation = arc.relation if arc is not None else (
                 self.metapath[position % len(self.metapath)] if self.metapath else None
@@ -135,20 +137,18 @@ class WalkSchema:
             weights = np.array([self.relation_weights.get(int(rel), 1.0) for rel in snapshot.rel_int[edges]]) if (
                 self.relation_weights
             ) else np.ones(edges.size)
-            # Scale both factors before multiplying to avoid overflow.
             arc_weight = arc.weight if arc is not None else 1.0
-            chunks.append((edges, endpoints, arc.target_state if arc is not None else state, weights, arc_weight))
+            positive = weights > 0
+            chunks.append((edges[positive], endpoints[positive],
+                           arc.target_state if arc is not None else state,
+                           np.log(weights[positive]) + np.log(arc_weight)))
         if not chunks:
             empty = np.empty(0, dtype=np.int64)
             return empty, empty, empty, np.empty(0)
-        max_relation = max((float(weights.max()) for _, _, _, weights, _ in chunks if weights.size), default=1.0)
-        max_arc = max((weight for *_, weight in chunks), default=1.0)
         edge_parts, endpoint_parts, states, weights_parts = [], [], [], []
-        for edges, endpoints, state, weights, arc_weight in chunks:
-            weights = weights / (max_relation or 1) * (arc_weight / (max_arc or 1))
-            positive = weights > 0
-            edge_parts.append(edges[positive])
-            endpoint_parts.append(endpoints[positive])
-            states.append(np.full(np.count_nonzero(positive), state, dtype=np.int64))
-            weights_parts.append(weights[positive])
+        for edges, endpoints, state, log_weights in chunks:
+            edge_parts.append(edges)
+            endpoint_parts.append(endpoints)
+            states.append(np.full(edges.size, state, dtype=np.int64))
+            weights_parts.append(log_weights)
         return tuple(np.concatenate(parts) for parts in (edge_parts, endpoint_parts, states, weights_parts))

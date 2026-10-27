@@ -138,6 +138,8 @@ exclusive. Both reset to their initial position/state on every restart.
 Alternatives are (arc, edge) pairs: overlapping arcs deliberately count as
 separate choices and may lead to different states. Arc and relation weights
 multiply optional static edge weights (``WalkPolicy(strategy="weighted")``).
+Positive factors compose in log space before normalization, so extreme finite
+factors that offset each other do not prematurely lose representable support.
 Types refer to ``snapshot.node_type_ids``, not native label IDs. Untyped -1
 nodes do not match an explicit typed constraint. The default schema does not
 implicitly expand hierarchies.
@@ -276,7 +278,8 @@ Python allocation tracing is not native NumPy/RSS accounting. Process RSS is a
 cumulative high-water mark, not a per-case allocation measurement.
 
 On the development host (Python 3.12.3, NumPy 2.5.2), seed 7, batch size 64,
-4 MiB cache payload cap / 1024 entries:
+4 MiB cache payload cap / 1024 entries, at commit ``e4cc1b6`` (before subsequent
+log-space numerical hardening; rerun the commands for current timings):
 
 .. csv-table:: Observed transitions/second, rounded
    :header: "Layout/workload", "Walk", "Legacy", "Policy reference", "Cache prototype"
