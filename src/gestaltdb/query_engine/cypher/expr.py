@@ -10,6 +10,7 @@ expressions exclusively through :func:`evaluate_expression`.
 from __future__ import annotations
 
 import re
+from typing import cast
 
 from ...temporal import TemporalDuration
 from .ast import (
@@ -340,9 +341,9 @@ def _evaluate_map_projection(expression: MapProjectionExpression, bindings: dict
         if kind == "all":
             projected.update(entries)
         elif kind == "property":
-            projected[item[1]] = entries.get(item[1])
+            projected[cast(tuple[str, str], item)[1]] = entries.get(cast(tuple[str, str], item)[1])
         else:
-            _, key, value_expression = item
+            _, key, value_expression = cast(tuple[str, str, Expression], item)
             projected[key] = evaluate_expression(value_expression, bindings, context)
     return projected
 

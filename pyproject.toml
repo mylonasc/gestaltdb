@@ -86,6 +86,8 @@ warn_return_any = true
 [[tool.mypy.overrides]]
 module = [
     "gestaltdb.query_engine.cypher._runtime_types",
+    "gestaltdb.query_engine.cypher._parser_types",
+    "gestaltdb.query_engine.cypher.parser",
     "gestaltdb.query_engine.cypher.runtime",
     "gestaltdb.query_engine.cypher.write",
 ]

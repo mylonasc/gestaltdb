@@ -502,7 +502,7 @@ class MapProjectionExpression:
     """
 
     variable: str
-    items: tuple[tuple, ...]
+    items: tuple[MapProjectionPart, ...]
 
 
 @dataclass(frozen=True)
@@ -660,7 +660,7 @@ class AnchoredPatternClause:
 class MultiMatchQuery:
     """Parsed query containing multiple ``MATCH`` clauses."""
 
-    clauses: tuple[Clause, ...]
+    clauses: tuple[NodePatternClause | RelationshipPatternClause | AnchoredPatternClause | PathPatternClause, ...]
     returns: tuple[str, ...]
     where: Expression | None = None
     projections: tuple[str, ...] = ()
@@ -766,16 +766,16 @@ Expression = Union[
     ExistsExpression,
     PropertyAccessExpression,
     ShortestPathExpression,
-    ScalarValue,
+    ScalarValue, list["Expression"], dict[str, "Expression"],
     Wildcard,
 ]
 """Anything that may appear where a Cypher value expression is expected.
 
 Structured nodes are the parsed AST; ``ScalarValue`` covers inline literals
-the parser leaves as plain Python values. Property-map values stay ``object``
-because temporal scalars may appear there.
+the parser leaves as plain Python values. Property-map values stay ``object`` because temporal scalars may appear there.
 """
 
+MapProjectionPart = Union[tuple[Literal["all"]], tuple[Literal["property"], str], tuple[Literal["alias"], str, Expression]]
 SetItem = Union[SetProperty, SetLabels, SetMerge, SetReplace]
 """One ``SET`` mutation item, including ``ON CREATE``/``ON MATCH`` actions."""
 

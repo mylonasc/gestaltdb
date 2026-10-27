@@ -1,8 +1,48 @@
 # Typing review and implementation proposal (#410)
 
 Review date: 2026-10-27. Baseline: the current `issue-410-typing` worktree,
-including its uncommitted typing slice. This is a proposal, not a claim that
-the work below has been implemented.
+including its then-uncommitted typing slice. The review measurements and ranked
+opportunities below are historical; implementation results follow later.
+
+## Wrap-up: parser contracts and final checkpoint
+
+Typing work is paused after the parser slice at the user's request. Relative to
+the original review baseline, precision rose from **61.7248% to 75.3423%** and
+diagnostics fell from **107 in 29 files to 71 in 19 files**. This is incremental
+typing hardening, not a claim of a clean whole-library mypy run.
+
+The final parser slice types transformer outputs, homogeneous grammar children,
+source metadata, tagged procedure/union records, projection state and legacy
+query normalization. Heterogeneous positional child lists retain explicit Any
+boundaries. Recursive plain list/map expressions and map-projection parts now
+describe existing runtime values. Literal-eval's broad return boundary and the
+existing null-argument filter remain unchanged. Parser and expression evaluator
+normalized AST comparisons confirm unchanged runtime algorithms.
+
+| Measure | Before parser slice | Final checkpoint |
+| --- | ---: | ---: |
+| Precise lines | 23,822 | 24,380 |
+| Imprecise lines | 1,305 | 1,313 |
+| Any lines | 7,186 | 6,666 |
+| Unanalyzed lines | 400 | 398 |
+| Eligible denominator | 32,313 | 32,359 |
+| Precision | 73.7227% | 75.3423% |
+| Diagnostics | 71 / 19 files | 71 / 19 files |
+
+Parser precision is **965 / 1,048 eligible lines**; its exact 1,626-line size
+budget remains unchanged. Parser/helper modules now enforce the existing
+untyped-definition, generic-argument and Any-return ratchets. No new runtime
+dependencies or precision exclusions were introduced.
+
+Validation: **3,496 passed / 137 skipped** with PyArrow; all six static-consumer
+and parser-boundary test cases also pass on Python 3.10 / NumPy 1.23.5. Ruff,
+module-size, API-index freshness and documentation drift checks pass.
+
+Remaining follow-ups are deliberately deferred: read-view forwarding and
+remaining GraphDB facade contracts; optional external data/framework adapters;
+reasoning/temporal diagnostic cleanup; and remaining visualization/dynamic
+normalization boundaries. Preserve honest arbitrary-property/native-object
+boundaries rather than using blanket ignores or exclusions to raise coverage.
 
 ## Measurement and conclusions
 

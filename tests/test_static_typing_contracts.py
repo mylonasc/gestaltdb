@@ -17,6 +17,7 @@ def test_static_consumer_contracts():
             "tests/typing/storage_sampling.py",
             "tests/typing/temporal.py",
             "tests/typing/cypher_execution.py",
+            "tests/typing/cypher_parser.py",
         ],
         cwd=root, capture_output=True, text=True,
     )
