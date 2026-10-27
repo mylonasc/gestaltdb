@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Callable, Iterable, Sequence, cast
+from typing import Callable, Iterable, Iterator, Sequence, cast
 
 import numpy as np
 from ._arrays import Array, BoolArray, FloatArray, IntArray, ScalarT, StringArray, TypedArray
@@ -12,56 +12,11 @@ from ..temporal import TemporalContext, TemporalInput, TemporalInstant, Temporal
 from .batch import SampledSubgraphBatch
 from .negatives import HardNegativeConfig
 from .snapshot import SamplerSnapshot
-
-
-@dataclass(frozen=True)
-class NeighborSamplingSpec:
-    """Sampling policy for one layer of neighborhood expansion."""
-
-    fanout: int
-    direction: str = "out"
-    relations: Sequence[int] | Array | None = None
-    replace: bool = False
-    strategy: str = "uniform"
-    balanced: bool = False
-
-    def __post_init__(self) -> None:
-        _validate_count(self.fanout, "fanout")
-        if self.direction not in {"out", "in", "any"}:
-            raise ValueError("direction must be 'out', 'in', or 'any'")
-        if self.strategy not in {"uniform", "weighted"}:
-            raise ValueError("strategy must be 'uniform' or 'weighted'")
-        if not isinstance(self.balanced, bool):
-            raise ValueError("balanced must be a boolean")
-        if self.relations is not None:
-            relations = _integer_array(self.relations, "relations")
-            object.__setattr__(self, "relations", tuple(int(rel) for rel in relations))
-
-
-@dataclass(frozen=True)
-class ExternalNeighborSamplingSpec:
-    """Sampling policy using external relation IDs for one layer."""
-
-    fanout: int
-    direction: str = "out"
-    relations: Sequence[object] | None = None
-    replace: bool = False
-    strategy: str = "uniform"
-    balanced: bool = False
-
-    def __post_init__(self) -> None:
-        _validate_count(self.fanout, "fanout")
-        if self.direction not in {"out", "in", "any"}:
-            raise ValueError("direction must be 'out', 'in', or 'any'")
-        if self.strategy not in {"uniform", "weighted"}:
-            raise ValueError("strategy must be 'uniform' or 'weighted'")
-        if not isinstance(self.balanced, bool):
-            raise ValueError("balanced must be a boolean")
-        if self.relations is not None:
-            if isinstance(self.relations, (str, bytes)):
-                raise TypeError("relations must be a sequence, not a scalar string")
-            normalized = np.asarray(list(self.relations), dtype=str).tolist()
-            object.__setattr__(self, "relations", tuple(normalized))
+from .walks import RandomWalkBatch, _external_id_array, iter_walk_batches
+from .rng import split_seed
+from .validation import _integer_array, _validate_count
+from .specs import ExternalNeighborSamplingSpec, NeighborSamplingSpec
+from .walk_policy import WalkPolicy, sample_policy_walks
 
 
 @dataclass(slots=True)
@@ -295,58 +250,6 @@ class LayeredSampleBatch:
                 }
             )
         return tensor_blocks
-
-
-@dataclass(slots=True)
-class RandomWalkBatch:
-    """Fixed-width random walks over compact snapshot IDs.
-
-    ``node_ids`` has shape ``(walks, walk_length + 1)``. ``edge_indices`` and
-    ``relation_ids`` have shape ``(walks, walk_length)``. Unused positions and
-    restart transitions use ``-1`` edge and relation IDs. ``lengths`` counts
-    populated transitions, including restart transitions.
-    """
-
-    node_ids: IntArray
-    edge_indices: IntArray
-    relation_ids: IntArray
-    lengths: IntArray
-
-    def to_numpy(self) -> dict[str, IntArray]:
-        """Return the walk arrays without copying them."""
-        return {
-            "node_ids": self.node_ids,
-            "edge_indices": self.edge_indices,
-            "relation_ids": self.relation_ids,
-            "lengths": self.lengths,
-        }
-
-    def to_external(self, snapshot: SamplerSnapshot) -> dict[str, Array]:
-        """Convert compact walk IDs to external IDs, preserving ``None`` gaps."""
-        return {
-            "node_ids": _external_id_array(self.node_ids, snapshot.external_node_ids),
-            "edge_ids": _external_id_array(self.edge_indices, snapshot.external_edge_ids),
-            "relation_ids": _external_id_array(self.relation_ids, snapshot.external_relation_ids),
-            "lengths": self.lengths,
-        }
-
-
-def split_seed(seed: int | None, num_workers: int) -> tuple[int, ...]:
-    """Derive one deterministic worker seed per training worker.
-
-    Uses ``SeedSequence.spawn`` so sibling workers hold statistically
-    independent streams while the whole split reproduces from ``(seed,
-    num_workers)``. Workers run in separate processes and cannot share
-    ``Generator`` objects, so each worker rebuilds its engine from its own
-    integer seed (see ``SamplerEngine.worker_engine``). ``seed=None`` draws
-    fresh entropy: workers stay independent but the split does not
-    reproduce — pass an explicit seed for deterministic training.
-    """
-    if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
-        raise ValueError("seed must be an integer or None")
-    if isinstance(num_workers, bool) or not isinstance(num_workers, int) or num_workers < 1:
-        raise ValueError("num_workers must be a positive integer")
-    return tuple(int(child.generate_state(1)[0]) for child in np.random.SeedSequence(seed).spawn(num_workers))
 
 
 class SamplerEngine:
@@ -792,6 +695,47 @@ class SamplerEngine:
         return self.sample_layers(
             self.snapshot.node_ints(seed_nodes), compact_layers,
             temporal=temporal, window_policy=window_policy,
+        )
+
+    def sample_policy_walks(
+        self, start_nodes: Sequence[int] | np.ndarray, walk_length: int, *,
+        policy: WalkPolicy | None = None, **walk_options,
+    ) -> RandomWalkBatch:
+        """Sample opt-in constrained walks without changing legacy defaults.
+
+        ``WalkPolicy`` composes avoidance, typed/state-machine schemas, explicit
+        chronology and transition units. Direction/relation/query-time/restart
+        options go to the kernel. Stream with ``iter_random_walks(walk_type="policy",
+        policy=...)``. Temporal policies add masked times/version IDs/provenance.
+        """
+        return sample_policy_walks(self, start_nodes, walk_length, policy=policy, **walk_options)
+
+    def iter_random_walks(
+        self, start_nodes: Sequence[int] | np.ndarray | None = None,
+        walk_length: int = 40, *, walks_per_node: int = 1, batch_size: int = 1024,
+        shuffle: bool = False, walk_type: str = "random", **walk_options,
+    ) -> Iterator[RandomWalkBatch]:
+        """Stream walk batches, one seed pass per round (RWS-01).
+
+        ``None`` seeds means every snapshot node; explicit compact IDs retain
+        order and duplicates. Each round optionally shuffles seed positions.
+        ``walk_type`` selects ``random``, ``node2vec`` or ``policy``; extra keywords
+        go to that kernel. Validation is eager, generation lazy. Unshuffled
+        all-node iteration uses batch-sized seed buffers; explicit seeds are
+        copied once, and global shuffling needs O(seed count) order storage.
+        Results need O(batch_size * walk_length) storage, in addition to
+        existing kernel candidate buffers. Consume/discard batches to bound
+        corpus memory. Keep the snapshot alive throughout iteration.
+
+        Uses this engine's RNG: replay requires the same initial state, seed
+        cohort, options and consumption order. Batch size alone does not change
+        concatenated walks. Do not interleave other RNG users for this promise.
+        Use ``worker_engine`` for independent streams; no parallel execution
+        or invariance across worker counts is implied.
+        """
+        return iter_walk_batches(
+            self, start_nodes, walk_length, walks_per_node=walks_per_node,
+            batch_size=batch_size, shuffle=shuffle, walk_type=walk_type, **walk_options,
         )
 
     def sample_random_walks(
@@ -2394,30 +2338,3 @@ class SamplerEngine:
                 cast(IntArray, self.snapshot.positive_history_triples).tolist()
             )
         }
-
-def _integer_array(values: Sequence[int] | Array, name: str) -> IntArray:
-    ids = np.asarray(values)
-    if ids.ndim != 1:
-        raise ValueError(f"{name} must be one-dimensional")
-    if ids.size and (np.issubdtype(ids.dtype, np.bool_) or not np.issubdtype(ids.dtype, np.integer)):
-        raise ValueError(f"{name} must contain integer IDs")
-    return ids.astype(np.int64, copy=False)
-
-
-def _validate_count(value: object, name: str) -> None:
-    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
-        raise ValueError(f"{name} must be an integer")
-    if value < 0:
-        raise ValueError(f"{name} must be non-negative")
-
-
-def _external_id_array(compact_ids: IntArray, external_ids: StringArray) -> Array:
-    compact_ids = np.asarray(compact_ids, dtype=np.int64)
-    result = np.full(compact_ids.shape, None, dtype=object)
-    valid = compact_ids >= 0
-    if np.any(valid):
-        selected = compact_ids[valid]
-        if cast(Callable[[], np.int64], selected.max)() >= external_ids.size:
-            raise ValueError("compact IDs are outside the snapshot ID range")
-        result[valid] = external_ids[selected]
-    return result

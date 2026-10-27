@@ -1,6 +1,9 @@
 Performance and Benchmarks
 ==========================
 
+For random-walk extension profiles, bounded-cache experiments and the explicit
+no-cache/no-native-adoption decision, see :doc:`random-walks` (RWS-08).
+
 GestaltDB includes benchmark scripts for ingestion, traversal, sampling, RocksDB
 tuning, and external graph database comparisons. Treat the included results as
 directional examples, not universal claims.

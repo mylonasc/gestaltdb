@@ -36,6 +36,7 @@ Filter, Sample, Train
 
    property-filtering
    typed-sampling
+   random-walks
    sampling-consistency
 
 .. toctree::

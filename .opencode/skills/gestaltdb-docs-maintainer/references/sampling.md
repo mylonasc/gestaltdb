@@ -102,7 +102,35 @@ transitions with edge and relation IDs set to `-1`, so consumers can distinguish
 teleports from graph edges. Metapath relations repeat cyclically and advance only
 when an edge is traversed.
 
+`engine.iter_random_walks(start_nodes=None, walk_length=40, walks_per_node=1,
+batch_size=1024, shuffle=False, walk_type="random", **walk_options)` streams
+ordinary walk batches in seed rounds (RWS-01). `None` visits all nodes; explicit
+compact cohorts retain duplicates and are copied once. Use `walk_type="node2vec"`
+to forward options to the biased kernel. Validation is eager, generation lazy.
+Unshuffled all-node seed buffers are batch-sized; shuffling needs an O(seed count)
+permutation. Output memory is O(batch size × walk length), plus kernel candidate
+buffers. Consume/discard batches and keep the snapshot alive. Given the same
+initial RNG state and no interleaved RNG operations, changing batch size preserves
+concatenated walks. Reuse `worker_engine` for independent streams; no automatic
+parallelism, cohort partitioning, or worker-count invariance is implied.
+
 ### Mapping IDs Back to External Graph
+
+`gestaltdb.sampling.iter_context_pairs` (RWS-02) converts a walk batch or stream
+to bounded `ContextPairBatch` arrays: center/context IDs, distances and weights.
+Fixed/dynamic windows, inverse-distance weights and explicit frequency-based
+subsampling are supported. Restart jumps split sequences by default; separate
+walk rows never join. Full pipeline contracts: `docs/random-walks.rst`.
+
+`ContextNegativeSampler` supplies corpus-count/degree-power context negatives
+with explicit exclusions and uniqueness/exhaustion policies (not KG negatives).
+`engine.sample_policy_walks` and streamed `walk_type="policy"` compose hard
+avoidance, typed/metapath/FSM `WalkSchema`/`WalkTransition`, interval/event
+`TemporalWalkPolicy`, and edge/distinct-neighbor transition units. Legacy kernels
+and batch defaults remain unchanged; temporal policy batches add masked times,
+version IDs and copied snapshot provenance. RWS-08 cache/native adoption was
+measured and deferred; prototypes stay under `benchmarks/`, not runtime APIs.
+
 `SampledSubgraphBatch` local arrays index nodes locally within the batch (`senders`, `receivers`, `positives`, `negatives`).
 - `batch.node_ids_global`: Maps local batch index to compact global snapshot ID.
 - `snapshot.external_node_id(compact_id)`: Maps compact global snapshot ID to original external string ID.

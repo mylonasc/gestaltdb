@@ -31,8 +31,48 @@ Use `SamplerSnapshot` and `SamplerEngine` for ML training pipelines. These APIs 
 - `sample_neighbors`: batched uniform/weighted neighbors, direction/relation filters, per-seed offsets.
 - `sample_layers`: independent fanout, direction, relation, replacement, and strategy per layer.
 - `sample_random_walks`: uniform/weighted first-order walks, repeating metapaths, restarts and dead-end policies.
+- `iter_random_walks`: lazy batches over all nodes (`start_nodes=None`) or explicit compact seeds, with `walks_per_node`, `batch_size`, optional round shuffling, and `walk_type="random"|"node2vec"`. Extra options go to the selected kernel. Explicit seeds are copied; global shuffling needs O(seed count) storage. Consume/discard batches and retain the snapshot lifetime. The same initial RNG state/options give batch-size-independent concatenated walks only without interleaved RNG users. Reuse `worker_engine` for independent streams; no automatic workers or partitioning.
 - `sample_multihop` / `sample_subgraph`: multi-hop topology and edge-seeded batches with positives and negatives.
 - `sample_hard_negatives`: endpoint-type/relation constraints, positive rejection, temporal policies.
+
+For DeepWalk training inputs, import `iter_context_pairs` from `gestaltdb.sampling`.
+It consumes walk batches and yields bounded center/context ID, distance and weight
+arrays. Fixed/dynamic windows, inverse-distance weights and explicit frequency
+subsampling are supported. Windows do not cross restart jumps by default and
+never join separate walk rows. Embedding training stays in the caller's framework.
+
+`ContextNegativeSampler` (same import module) draws context-node negatives from
+explicit visit counts or `from_snapshot(snapshot)` incident degrees, raised to
+an exponent (default 0.75). Exclude centers/positive contexts/caller-observed
+contexts explicitly. Uniqueness exhaustion raises or explicitly repeats feasible
+draws; no eligible support always raises. These are not KG triple negatives.
+
+`WalkPolicy(non_backtracking=True, avoid_recent=k)` with
+`engine.sample_policy_walks(seeds, length, policy=...)` adds hard avoidance.
+Recent history includes the current node; k=1 excludes self-loops. Exhaustion
+explicitly terminates/restarts/relaxes avoidance; other filters never relax.
+Stream with `engine.iter_random_walks(walk_type="policy", policy=...)`.
+
+`WalkSchema` adds target type constraints, cyclic relation metapaths, relation
+weights, or bounded `WalkTransition` state-machine arcs with per-arc direction,
+source/target types and weights. Unknown compact IDs fail closed. State/metapath
+progress resets on restart. Overlapping arcs are distinct (arc, edge) choices;
+global relation filters always intersect schema restrictions.
+
+`WalkPolicy(chronology=TemporalWalkPolicy(...))` requires temporal snapshots and
+enforces nondecreasing/nonincreasing chosen traversal times, optional maximum
+gaps and explicit-reference recency weights. Interval-time and valid-start event
+selection are distinct; backward interval selection requires an initial clock.
+`TemporalWalkBatch` carries masked times, edge-version IDs and copied snapshot
+provenance. Restarts reset the clock; ordinary point/window filters alone still
+do not imply chronology. See `docs/random-walks.rst` for interval boundaries.
+
+`WalkPolicy(transition_unit="neighbor")` samples distinct neighbors rather than
+parallel edges. Weighted neighbor aggregation is explicit (`sum`/`mean`/`max`).
+`node2vec=True` enables bias; `weighted_first_step=True` opts into static initial
+weights. `bias_adjacency="eligible"` uses static filters/current chronology for
+distance adjacency and fails closed for state-machine/metapath schemas; the
+default `snapshot` scope preserves legacy unfiltered-distance semantics.
 
 ### Filter Once, Sample Repeatedly
 
