@@ -348,3 +348,54 @@ The next large cluster is Cypher runtime/write/parser typing. Read-view forwardi
 snapshot metadata, optional framework conversions and remaining native boundary
 schemas are still follow-up opportunities; this is not a claim of complete
 whole-library typing.
+
+## Implementation progress: Cypher execution contracts
+
+Typed the runtime and write handlers without changing their algorithms:
+
+* QueryContext caches distinguish nodes, edges, missing values and associated
+  temporal versions. Parameter resolution retains an honest object-valued
+  boundary rather than inventing a closed set of user values.
+* Binding/projection streams, aggregate work records, tagged exact/range edge
+  seeks, named trails and BFS trail results now have concrete contracts.
+* A structural NodeShape type guard preserves existing duck-typed bindings;
+  it does not replace the guard with an isinstance(Node) requirement.
+* Clause handlers accept the corresponding logical plan steps and yield typed
+  binding rows. Write capabilities remain separate from GraphQueryScope;
+  optional bulk/transaction/test-double fallbacks remain unchanged.
+* Consumer fixtures caught facade annotation drift: delete_edge already accepts
+  bytes through the repository, and sample_typed_paths already accepts iterable
+  hop definitions. Their annotations now match those existing behaviors. Node
+  and Edge are explicit static re-exports from their documented graphdb path.
+
+| Measure | Before Cypher slice | After Cypher slice |
+| --- | ---: | ---: |
+| Precise lines | 22,899 | 23,822 |
+| Imprecise lines | 1,349 | 1,305 |
+| Any lines | 8,029 | 7,186 |
+| Unanalyzed lines | 398 | 400 |
+| Eligible denominator | 32,277 | 32,313 |
+| Precision | 70.9453% | 73.7227% |
+| Diagnostics | 72 / 20 files | 71 / 19 files |
+
+Runtime precision is 1,281 / 1,321 eligible lines; write handling is 438 / 471.
+The runtime and GraphDB files retain their exact module-size budgets. Three
+additional modules enforce the same untyped-definition, omitted-generic and
+Any-return ratchets used by the preceding slices. No precision scope exclusions
+or new runtime dependencies were introduced.
+
+New static consumer cases and runtime regressions cover stream/step contracts,
+typed caches, read/write scope separation, duck-typed copy-on-write bindings,
+cached misses and index-seek parameter/bound preservation. These pass on both
+the current environment and Python 3.10 / NumPy 1.23.5. A normalized AST comparison
+confirms unchanged runtime structure in runtime.py, write.py and graphdb.py,
+excluding annotations, casts, imports and a local loop-variable rename.
+
+Validation: **3,491 passed / 137 skipped** with pyarrow available. Ruff,
+module-size, API-index freshness and documentation drift checks pass. Executable
+docs have 6 passes / 2 optional-dependency skips; all four consumer/runtime
+contract tests pass on Python 3.10 / NumPy 1.23.5 as well.
+
+Next: grammar transformer outputs and the parser's normalization boundary;
+read-view forwarding and optional external data/framework boundaries remain
+independent follow-ups.

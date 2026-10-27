@@ -1,7 +1,7 @@
 {
   "generated_from": {
     "path": "src/gestaltdb/graphdb.py",
-    "sha256": "7af8b5a8777a29d6c5e767a667234aa1104bbdc16af2d5cdbd6bb45cfc1f8c90"
+    "sha256": "a3944ed309ffbfa2f794647a92d473141037385c8601f291be15021f34af6ab2"
   },
   "methods": [
     {
@@ -285,7 +285,7 @@
       "line": 1637,
       "name": "delete_edge",
       "returns": "",
-      "signature": "delete_edge(edge_id: str, edge_key_serializer=lambda x: x.encode('utf-8'))",
+      "signature": "delete_edge(edge_id: NodeKeyInput, edge_key_serializer: Callable[[str], bytes]=lambda x: x.encode('utf-8'))",
       "summary": "Removes the edge from the edge store, and from adjacency",
       "topic": "quickstart"
     },
@@ -294,7 +294,7 @@
       "line": 536,
       "name": "delete_node",
       "returns": "",
-      "signature": "delete_node(node_id)",
+      "signature": "delete_node(node_id: NodeKeyInput)",
       "summary": "Delete a node by byte key.",
       "topic": "quickstart"
     },
@@ -1112,7 +1112,7 @@
       "line": 1249,
       "name": "sample_typed_paths",
       "returns": "List of dictionaries with ``seed`` and sampled ``path`` records.",
-      "signature": "sample_typed_paths(seed_ids: Iterable[NodeKeyInput], pattern: Union[SamplingPattern, list[dict]], rng: RandomLike | None=None, relation_hierarchy: RelationHierarchy | None=None)",
+      "signature": "sample_typed_paths(seed_ids: Iterable[NodeKeyInput], pattern: SamplingPattern | Iterable[SamplingHop | Mapping[str, object]], rng: RandomLike | None=None, relation_hierarchy: RelationHierarchy | None=None)",
       "summary": "Sample paths that follow an ordered typed edge pattern.",
       "topic": "sampling"
     },

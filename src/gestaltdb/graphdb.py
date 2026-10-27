@@ -49,7 +49,7 @@ from .rules import (
     normalize_rule_definition,
     stratify_rules,
 )
-from .sampling import RelationHierarchy, SamplingPattern, as_sampling_pattern
+from .sampling import RelationHierarchy, SamplingHop, SamplingPattern, as_sampling_pattern
 from .serializers import JSONSerializer, temporal_tagged_value
 from .temporal import (
     TemporalDate,
@@ -134,9 +134,9 @@ from ._graph.registry import (
     utc_now_iso as _utc_now_iso,
 )
 from ._graph.entities import (
-    Edge,
+    Edge as Edge,
     GraphEntityDictSerializer,
-    Node,
+    Node as Node,
     NodeKeyInput,
     TimeIndexedEdge,
     _normalize_labels,
@@ -533,7 +533,7 @@ class GraphDB:
         """
         return self.nodes.get(node_id)
 
-    def delete_node(self, node_id):
+    def delete_node(self, node_id: NodeKeyInput) -> None:
         """Delete a node by byte key.
 
         Args:
@@ -1246,7 +1246,7 @@ class GraphDB:
             sample_size=sample_size, rng=rng, relation_hierarchy=relation_hierarchy,
         )
 
-    def sample_typed_paths(self, seed_ids: Iterable[NodeKeyInput], pattern: Union[SamplingPattern, list[dict]], rng: RandomLike | None = None, *, relation_hierarchy: RelationHierarchy | None = None) -> list[SampledPath]:
+    def sample_typed_paths(self, seed_ids: Iterable[NodeKeyInput], pattern: SamplingPattern | Iterable[SamplingHop | Mapping[str, object]], rng: RandomLike | None = None, *, relation_hierarchy: RelationHierarchy | None = None) -> list[SampledPath]:
         """Sample paths that follow an ordered typed edge pattern.
 
         Args:
@@ -1634,7 +1634,7 @@ class GraphDB:
     # -----------------------
     # Deletion (Optional)
     # -----------------------
-    def delete_edge(self, edge_id: str, edge_key_serializer= lambda x:  x.encode('utf-8')):
+    def delete_edge(self, edge_id: NodeKeyInput, edge_key_serializer: Callable[[str], bytes] = lambda x: x.encode('utf-8')) -> None:
         """
         Removes the edge from the edge store, and from adjacency
         of both source and target nodes. If either node doesn't exist,

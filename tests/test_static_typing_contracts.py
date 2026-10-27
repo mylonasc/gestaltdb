@@ -16,6 +16,7 @@ def test_static_consumer_contracts():
             "--strict", "--no-incremental", "--cache-dir=/dev/null",
             "tests/typing/storage_sampling.py",
             "tests/typing/temporal.py",
+            "tests/typing/cypher_execution.py",
         ],
         cwd=root, capture_output=True, text=True,
     )

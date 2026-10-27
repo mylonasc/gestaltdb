@@ -5,12 +5,12 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from itertools import islice
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Callable, Collection, Protocol, Sequence, TypeGuard, cast
 
 from .ast import (
     AndExpression,
     ComparisonExpression,
-    EntailsCall,
+    EntailsCall, PathSelector,
     NodePattern,
     NodeScanQuery,
     OrderItem,
@@ -26,7 +26,7 @@ from .procedures import procedure_rows as _procedure_rows
 from .temporal import normalize_parameter, temporal_compare_key
 from .plan import Aggregate as LogicalAggregate
 from .plan import (
-    CallSubquery,
+    CallSubquery, AggregateCall,
     CreateStep,
     DeleteStep,
     ForeachStep,
@@ -50,65 +50,65 @@ from .plan import Skip as LogicalSkip
 from .plan import Sort as LogicalSort
 
 if TYPE_CHECKING:
-    from ..._graph.entities import Edge, Node
+    from ..._graph.entities import Edge, Node, NodeKeyInput
     from ...hierarchy import LabelHierarchy, RelationHierarchy
     from ...readview import GraphReadView
     from .ast import Expression
     from .scope import GraphQueryScope
-
-
+    from ...versioning import EdgeVersion, NodeVersion
+from ._runtime_types import AggregateGroup, BfsTrail, EdgeSeek, NamedTrail, NodeRangeBounds, NodeShape, ProjectionMetadata, PropertyItems
 @dataclass
 class QueryContext:
     """Runtime state shared by physical operators during one query."""
 
     graph: GraphQueryScope
     parameters: dict[str, object] = field(default_factory=dict)
-    node_cache: dict[bytes, object] = field(default_factory=dict)
-    edge_cache: dict[bytes, object] = field(default_factory=dict)
+    node_cache: dict[bytes, Node | None] = field(default_factory=dict)
+    edge_cache: dict[bytes, Edge | None] = field(default_factory=dict)
     label_cardinalities: dict[str, int] = field(default_factory=dict)
     label_hierarchy: LabelHierarchy | None = None
     relation_hierarchy: RelationHierarchy | None = None
     read_view: GraphReadView | None = None
-    entity_versions: dict[int, object] = field(default_factory=dict)
+    entity_versions: dict[int, NodeVersion | EdgeVersion] = field(default_factory=dict)
 
-    def node_key_to_bytes(self, node_key):
+    def node_key_to_bytes(self, node_key: NodeKeyInput) -> bytes:
         return self.graph.node_key_to_bytes(node_key)
 
-    def get_node(self, node_id: bytes):
+    def get_node(self, node_id: bytes) -> Node | None:
         if node_id not in self.node_cache:
             if self.read_view is None:
                 self.node_cache[node_id] = self.graph.get_node(node_id)
             else:
                 logical_id = self.graph.key_to_string(node_id)
-                version = self.read_view.get_node_as_of(logical_id)
+                version = cast("NodeVersion | None", self.read_view.get_node_as_of(logical_id))
                 value = None if version is None else version.node
                 if value is not None:
-                    self.entity_versions[id(value)] = version
+                    self.entity_versions[id(value)] = cast("NodeVersion", version)
                 self.node_cache[node_id] = value
         return self.node_cache[node_id]
 
-    def get_edge(self, edge_id: bytes):
+    def get_edge(self, edge_id: bytes) -> Edge | None:
         if edge_id not in self.edge_cache:
             if self.read_view is None:
                 self.edge_cache[edge_id] = self.graph.get_edge(edge_id)
             else:
                 logical_id = self.graph.key_to_string(edge_id)
-                version = self.read_view.get_edge_as_of(logical_id)
+                version = cast("EdgeVersion | None", self.read_view.get_edge_as_of(logical_id))
                 value = None if version is None else version.edge
                 if value is not None:
-                    self.entity_versions[id(value)] = version
+                    self.entity_versions[id(value)] = cast("EdgeVersion", version)
                 self.edge_cache[edge_id] = value
         return self.edge_cache[edge_id]
 
-    def iter_temporal_node_ids(self):
-        for version in cast("GraphReadView", self.read_view).iter_nodes_as_of():
+    def iter_temporal_node_ids(self) -> Iterator[bytes]:
+        for version in cast("Iterator[NodeVersion]", cast("GraphReadView", self.read_view).iter_nodes_as_of()):
             node = version.node
             self.entity_versions[id(node)] = version
             node_id = self.node_key_to_bytes(version.logical_id)
             self.node_cache[node_id] = node
             yield node_id
 
-    def iter_temporal_adjacency(self, node_id: bytes, edge_types, direction: str):
+    def iter_temporal_adjacency(self, node_id: bytes, edge_types: tuple[str, ...], direction: str) -> Iterator[dict[str, bytes]]:
         logical_id = self.graph.key_to_string(node_id)
         directions = ("out", "in") if direction == "any" else (direction,)
         types = edge_types or (None,)
@@ -116,13 +116,13 @@ class QueryContext:
         for current_direction in directions:
             for edge_type in types:
                 kwargs = {"source": logical_id} if current_direction == "out" else {"target": logical_id}
-                for version in cast("GraphReadView", self.read_view).iter_edges_as_of(
+                for version in cast("Iterator[EdgeVersion]", cast("GraphReadView", self.read_view).iter_edges_as_of(
                     edge_type=edge_type, direction=current_direction, **kwargs
-                ):
-                    edge = version.edge
+                )):
+                    edge = cast("Edge", version.edge)
                     edge_id = self.node_key_to_bytes(version.logical_id)
                     neighbor = edge.target if current_direction == "out" else edge.source
-                    occurrence = (edge_id, self.node_key_to_bytes(neighbor))
+                    occurrence = (edge_id, self.node_key_to_bytes(cast(str, neighbor)))
                     if occurrence in seen:
                         continue
                     seen.add(occurrence)
@@ -133,10 +133,10 @@ class QueryContext:
                         "neighbor_id": occurrence[1],
                     }
 
-    def version_for(self, entity):
+    def version_for(self, entity: object) -> NodeVersion | EdgeVersion | None:
         return None if entity is None else self.entity_versions.get(id(entity))
 
-    def resolve(self, value):
+    def resolve(self, value: object) -> object:
         if isinstance(value, Parameter):
             if value.name not in self.parameters:
                 raise ValueError(f"Missing Cypher parameter: ${value.name}")
@@ -287,8 +287,8 @@ class ProjectionView:
 class SortOperator:
     """Materialize and stably sort projected rows by Cypher order items."""
 
-    items: tuple[object, ...]
-    parsed: object
+    items: tuple[OrderItem, ...]
+    parsed: ProjectionMetadata
 
     def execute(
         self, rows: Iterable[ProjectedRow], context: QueryContext
@@ -447,7 +447,7 @@ def apply_optional_match_step(
             yield _null_fill_row(row, step.patterns)
 
 
-def _null_fill_row(row: BindingRow, patterns) -> BindingRow:
+def _null_fill_row(row: BindingRow, patterns: Iterable[PathPatternClause]) -> BindingRow:
     """Return ``row`` with pattern-introduced variables bound to ``None``."""
     bindings = dict(row.bindings)
     for pattern in patterns:
@@ -527,7 +527,7 @@ class AggregateOperator:
     def execute(
         self, rows: Iterable[BindingRow], context: QueryContext
     ) -> Iterator[ProjectedRow]:
-        groups: dict[tuple[object, ...], dict[str, object]] = {}
+        groups: dict[tuple[object, ...], AggregateGroup] = {}
         order: list[tuple[object, ...]] = []
         for source_row in rows:
             bindings = bindings_of(source_row)
@@ -535,14 +535,14 @@ class AggregateOperator:
                 evaluate_expression(expression, bindings, context)
                 for _, expression in self.aggregate.keys
             ]
-            key = tuple(cypher_value_key(value) for value in key_values)
+            key: tuple[object, ...] = tuple(cypher_value_key(value) for value in key_values)
             group = groups.get(key)
             if group is None:
                 group = {"key_values": key_values, "row_count": 0, "arguments": []}
                 groups[key] = group
                 order.append(key)
             group["row_count"] = cast(int, group["row_count"]) + 1
-            cast(list, group["arguments"]).append(
+            cast(list[list[object]], group["arguments"]).append(
                 [
                     evaluate_expression(call.argument, bindings, context)
                     if call.argument is not None
@@ -551,7 +551,7 @@ class AggregateOperator:
                 ]
             )
         if not order and not self.aggregate.keys:
-            empty = {"key_values": [], "row_count": 0, "arguments": []}
+            empty: AggregateGroup = {"key_values": [], "row_count": 0, "arguments": []}
             groups[()] = empty
             order.append(())
         for key in order:
@@ -574,7 +574,7 @@ class AggregateOperator:
             yield ProjectedRow(values=record, source_bindings=dict(record))
 
 
-def _apply_aggregate(call, values: list[object], row_count: int) -> object:
+def _apply_aggregate(call: AggregateCall, values: list[object], row_count: int) -> object:
     """Apply one aggregate call to its collected per-row argument values."""
     if call.function == "count" and call.argument is None:
         return row_count
@@ -746,20 +746,20 @@ def _require_projected(projected: bool, operator: object) -> None:
         )
 
 
-def _reset_used_relationships(rows):
+def _reset_used_relationships(rows: Iterable[BindingRow | Mapping[str, object]]) -> Iterator[BindingRow]:
     for row in rows:
         typed_row = BindingRow.from_row(row)
         yield typed_row.with_bindings(dict(typed_row.bindings), used_relationship_ids=frozenset())
 
 
-def _label_matches(node_labels, label, hierarchy) -> bool:
+def _label_matches(node_labels: Collection[str], label: str, hierarchy: LabelHierarchy | None) -> bool:
     """Return whether literal node labels satisfy ``label`` under a hierarchy."""
     if hierarchy is None:
         return label in node_labels
     return any(member in node_labels for member in hierarchy.closure(label))
 
 
-def _labels_satisfy(node_labels, required, excluded, hierarchy) -> bool:
+def _labels_satisfy(node_labels: Collection[str], required: Iterable[str], excluded: Iterable[str], hierarchy: LabelHierarchy | None) -> bool:
     """Return whether a node satisfies all required and no excluded labels."""
     return (
         all(_label_matches(node_labels, label, hierarchy) for label in required)
@@ -767,20 +767,20 @@ def _labels_satisfy(node_labels, required, excluded, hierarchy) -> bool:
     )
 
 
-def _label_id_sets(labels, context: QueryContext, lookup):
+def _label_id_sets(labels: Iterable[str], context: QueryContext, lookup: Callable[[str], Iterable[bytes]]) -> list[set[bytes]]:
     """Return one ID set per required label, expanded through the hierarchy."""
     hierarchy = context.label_hierarchy
     sets = []
     for label in labels:
         members = hierarchy.closure(label) if hierarchy is not None else (label,)
-        current = set()
+        current: set[bytes] = set()
         for member in members:
             current.update(lookup(member))
         sets.append(current)
     return sets
 
 
-def node_scan_ids(parsed: NodeScanQuery, context: QueryContext):
+def node_scan_ids(parsed: NodeScanQuery, context: QueryContext) -> Iterator[bytes]:
     """Yield node IDs for a label scan, using property indexes when available."""
     if parsed.limit == 0:
         return iter(())
@@ -805,7 +805,7 @@ def node_scan_ids(parsed: NodeScanQuery, context: QueryContext):
                 labels,
                 context,
                 lambda label: context.graph.iter_node_ids_by_label_property(
-                    label, parsed.property_name, property_value
+                    label, cast(str, parsed.property_name), property_value
                 ),
             )
             node_ids = sets[0]
@@ -816,7 +816,7 @@ def node_scan_ids(parsed: NodeScanQuery, context: QueryContext):
     return iter(sorted(set(label_ids).intersection(property_ids)))
 
 
-def _node_range_scan(parsed: NodeScanQuery, context: QueryContext):
+def _node_range_scan(parsed: NodeScanQuery, context: QueryContext) -> Iterator[bytes] | None:
     bounds = _range_bounds_for_node_scan(parsed, context)
     if bounds is None:
         return None
@@ -844,7 +844,7 @@ def _node_range_scan(parsed: NodeScanQuery, context: QueryContext):
     return None
 
 
-def _range_bounds_for_node_scan(parsed: NodeScanQuery, context: QueryContext):
+def _range_bounds_for_node_scan(parsed: NodeScanQuery, context: QueryContext) -> NodeRangeBounds | None:
     if parsed.where is None:
         return None
     expressions = parsed.where.expressions if isinstance(parsed.where, AndExpression) else (parsed.where,)
@@ -881,10 +881,10 @@ def _range_bounds_for_node_scan(parsed: NodeScanQuery, context: QueryContext):
             include_end = expression.operator == "<="
     if not found:
         return None
-    return property_name, start_value, end_value, include_start, include_end
+    return cast(str, property_name), start_value, end_value, include_start, include_end
 
 
-def _node_ids_for_labels(parsed: NodeScanQuery, context: QueryContext):
+def _node_ids_for_labels(parsed: NodeScanQuery, context: QueryContext) -> Iterator[bytes]:
     labels = parsed.labels or (parsed.label,)
     labels = tuple(label for label in labels if label is not None)
     if not labels:
@@ -900,7 +900,7 @@ def _node_ids_for_labels(parsed: NodeScanQuery, context: QueryContext):
     return iter(sorted(matching_ids or set()))
 
 
-def apply_path_pattern_clause(rows, clause: PathPatternClause, context: QueryContext, where=None, selector=None):
+def apply_path_pattern_clause(rows: Iterable[BindingRow | Mapping[str, object]], clause: PathPatternClause, context: QueryContext, where: Expression | None = None, selector: PathSelector | None = None) -> Iterator[BindingRow]:
     """Apply a generalized fixed-length path pattern to incoming rows.
 
     When the clause-local ``WHERE`` holds an index-eligible predicate on the
@@ -929,16 +929,16 @@ def apply_path_pattern_clause(rows, clause: PathPatternClause, context: QueryCon
         yield from expanded
 
 
-def _match_named_pattern(row: BindingRow, pattern: PathPatternClause, context: QueryContext, where, selector):
+def _match_named_pattern(row: BindingRow, pattern: PathPatternClause, context: QueryContext, where: Expression | None, selector: PathSelector | None) -> Iterator[BindingRow]:
     """Match one named pattern, binding its name to a path value per match."""
-    trails: list[tuple[BindingRow, list[Node | None], list[Edge]]] = []
+    trails: list[NamedTrail] = []
     for start in _path_start_rows(row, pattern, context, where):
         if pattern.source.variable is not None:
-            start_node = start.bindings.get(pattern.source.variable)
+            start_node = cast(NodeShape | None, start.bindings.get(pattern.source.variable))
             if start_node is None:
                 continue
         else:
-            start_node = context.get_node(start.current_node_id)
+            start_node = context.get_node(cast(bytes, start.current_node_id))
             if start_node is None:
                 continue
         trails.append((start, [start_node], []))
@@ -958,9 +958,9 @@ def _match_named_pattern(row: BindingRow, pattern: PathPatternClause, context: Q
         yield final.with_bindings(bindings)
 
 
-def _extend_named_trails(context: QueryContext, trails: list[tuple[BindingRow, list[Node | None], list[Edge]]], hop: PatternHop, selector):
+def _extend_named_trails(context: QueryContext, trails: list[NamedTrail], hop: PatternHop, selector: PathSelector | None) -> list[NamedTrail]:
     """Extend named-pattern trails across one hop, fixed or variable-length."""
-    extended: list[tuple[BindingRow, list[Node | None], list[Edge]]] = []
+    extended: list[NamedTrail] = []
     for start, nodes, edges in trails:
         if (hop.min_length, hop.max_length) == (1, 1):
             for bindings, neighbor_id, edge_id, edge in _expand_fixed_step(context, start, hop, set()):
@@ -979,7 +979,7 @@ def _extend_named_trails(context: QueryContext, trails: list[tuple[BindingRow, l
     return extended
 
 
-def _bind_trail_row(start: BindingRow, bindings, neighbor_id, used_ids):
+def _bind_trail_row(start: BindingRow, bindings: dict[str, object], neighbor_id: bytes, used_ids: frozenset[bytes]) -> BindingRow:
     """Build the next trail row with bindings, cursor, and isomorphism state."""
     return start.with_bindings(
         bindings,
@@ -989,7 +989,7 @@ def _bind_trail_row(start: BindingRow, bindings, neighbor_id, used_ids):
     )
 
 
-def _extend_named_variable(context: QueryContext, start: BindingRow, nodes, edges, hop: PatternHop):
+def _extend_named_variable(context: QueryContext, start: BindingRow, nodes: list[NodeShape | None], edges: list[Edge], hop: PatternHop) -> Iterator[NamedTrail]:
     """Extend named trails across a variable-length hop, binding rel lists."""
     if hop.min_length == 0:
         bindings = dict(start.bindings)
@@ -1021,7 +1021,7 @@ def _extend_named_variable(context: QueryContext, start: BindingRow, nodes, edge
         yield trail_row, trail_nodes, edges + path_edges
 
 
-def _extend_named_shortest(context: QueryContext, start: BindingRow, nodes, edges, hop, selector):
+def _extend_named_shortest(context: QueryContext, start: BindingRow, nodes: list[NodeShape | None], edges: list[Edge], hop: PatternHop, selector: PathSelector) -> Iterator[NamedTrail]:
     """Extend named trails across a ``SHORTEST`` variable-length hop."""
     mode, limit = selector.mode, selector.limit
     emitted = 0
@@ -1068,7 +1068,7 @@ def _extend_named_shortest(context: QueryContext, start: BindingRow, nodes, edge
             return
 
 
-def _indexed_first_hop_rows(row, clause: PathPatternClause, context: QueryContext, where):
+def _indexed_first_hop_rows(row: BindingRow, clause: PathPatternClause, context: QueryContext, where: Expression | None) -> Iterator[BindingRow] | None:
     """Yield first-hop rows from an edge property index, or ``None``.
 
     Returns ``None`` when the pattern cannot use the composite type/property
@@ -1094,7 +1094,7 @@ def _indexed_first_hop_rows(row, clause: PathPatternClause, context: QueryContex
     return _iter_indexed_first_hop(row, clause, hop, context, spec)
 
 
-def _iter_indexed_first_hop(row, clause: PathPatternClause, hop: PatternHop, context: QueryContext, spec):
+def _iter_indexed_first_hop(row: BindingRow, clause: PathPatternClause, hop: PatternHop, context: QueryContext, spec: EdgeSeek) -> Iterator[BindingRow]:
     """Iterate index-backed candidate edges for the first pattern hop."""
     seen = set()
     for edge_type in _expanded_edge_types(hop.edge_types, context.relation_hierarchy):
@@ -1113,15 +1113,15 @@ def _iter_indexed_first_hop(row, clause: PathPatternClause, hop: PatternHop, con
             yield from _hydrate_indexed_edge(row, clause, hop, context, edge_id)
 
 
-def _hydrate_indexed_edge(row, clause: PathPatternClause, hop: PatternHop, context: QueryContext, edge_id: bytes):
+def _hydrate_indexed_edge(row: BindingRow, clause: PathPatternClause, hop: PatternHop, context: QueryContext, edge_id: bytes) -> Iterator[BindingRow]:
     """Bind one indexed edge to its endpoint nodes following hop direction."""
     edge = context.get_edge(edge_id)
     if edge is None:
         return
     if hop.properties and not _edge_matches_properties(edge, hop.properties, context):
         return
-    source_id = context.node_key_to_bytes(edge.source)
-    target_id = context.node_key_to_bytes(edge.target)
+    source_id = context.node_key_to_bytes(cast(str, edge.source))
+    target_id = context.node_key_to_bytes(cast(str, edge.target))
     source_node = context.get_node(source_id)
     target_node = context.get_node(target_id)
     if source_node is None or target_node is None:
@@ -1163,7 +1163,7 @@ def _hydrate_indexed_edge(row, clause: PathPatternClause, hop: PatternHop, conte
         )
 
 
-def _edge_seek_spec(rel_var: str | None, properties, where, context: QueryContext):
+def _edge_seek_spec(rel_var: str | None, properties: PropertyItems, where: Expression | None, context: QueryContext) -> EdgeSeek | None:
     """Return an edge property index scan spec for one relationship variable.
 
     Only ``AND``-ed exact (``=``) or single-property range predicates against
@@ -1171,13 +1171,13 @@ def _edge_seek_spec(rel_var: str | None, properties, where, context: QueryContex
     use the composite type/property index.
     """
     indexed: set[str] = getattr(context.graph, "indexed_edge_properties", set())
-    for property_name, value in properties:
+    for inline_name, value in properties:
         if (
-            property_name in indexed
+            inline_name in indexed
             and _is_seek_value(value)
             and hasattr(context.graph, "iter_edge_ids_by_type_property")
         ):
-            return ("exact", property_name, context.resolve(value))
+            return ("exact", inline_name, context.resolve(value))
     if where is None or rel_var is None:
         return None
     expressions = where.expressions if isinstance(where, AndExpression) else (where,)
@@ -1193,8 +1193,8 @@ def _edge_seek_spec(rel_var: str | None, properties, where, context: QueryContex
         ):
             return ("exact", expression.left.property_name, context.resolve(expression.right))
     property_name = None
-    start_value = None
-    end_value = None
+    start_value: object = None
+    end_value: object = None
     include_start = True
     include_end = True
     found = False
@@ -1225,14 +1225,14 @@ def _edge_seek_spec(rel_var: str | None, properties, where, context: QueryContex
             include_end = expression.operator == "<="
     if not found or not hasattr(context.graph, "iter_edge_ids_by_type_property_range"):
         return None
-    return ("range", property_name, start_value, end_value, include_start, include_end)
+    return ("range", cast(str, property_name), start_value, end_value, include_start, include_end)
 
 
-def _is_seek_value(value) -> bool:
+def _is_seek_value(value: object) -> bool:
     return value is None or isinstance(value, (Parameter, str, int, float, bool, list, dict))
 
 
-def _path_start_rows(row, clause: PathPatternClause, context: QueryContext, where=None):
+def _path_start_rows(row: BindingRow, clause: PathPatternClause, context: QueryContext, where: Expression | None = None) -> Iterator[BindingRow]:
     source = clause.source
     identity = next((value for name, value in source.properties if name == "id"), None)
     properties = tuple(item for item in source.properties if item[0] != "id") if identity is not None else source.properties
@@ -1244,7 +1244,7 @@ def _path_start_rows(row, clause: PathPatternClause, context: QueryContext, wher
     ):
         return
     if bound_node is not None:
-        identity_matches = identity is None or _cypher_equals(bound_node.get_id, context.resolve(identity)) is True
+        identity_matches = identity is None or _cypher_equals(cast(NodeShape, bound_node).get_id, context.resolve(identity)) is True
         if _is_node(bound_node) and identity_matches and _node_pattern_matches(bound_node, source, properties, context):
             yield row.with_bindings(
                 dict(row.bindings),
@@ -1254,7 +1254,7 @@ def _path_start_rows(row, clause: PathPatternClause, context: QueryContext, wher
         return
 
     if identity is not None:
-        node_id = context.node_key_to_bytes(context.resolve(identity))
+        node_id = context.node_key_to_bytes(cast("NodeKeyInput", context.resolve(identity)))
         node = context.get_node(node_id)
         if node is not None and _node_pattern_matches(node, source, properties, context):
             bindings = dict(row.bindings)
@@ -1304,7 +1304,7 @@ def _path_start_rows(row, clause: PathPatternClause, context: QueryContext, wher
         yield row.with_bindings(bindings, current_node_id=node_id, preserve_current_node=False)
 
 
-def _expand_pattern_hop(context: QueryContext, rows, hop: PatternHop, selector=None):
+def _expand_pattern_hop(context: QueryContext, rows: Iterable[BindingRow], hop: PatternHop, selector: PathSelector | None = None) -> Iterator[BindingRow]:
     if (hop.min_length, hop.max_length) != (1, 1):
         yield from _expand_variable_hop(context, rows, hop, selector)
         return
@@ -1322,7 +1322,7 @@ def _expand_pattern_hop(context: QueryContext, rows, hop: PatternHop, selector=N
             )
 
 
-def _expand_fixed_step(context: QueryContext, row: BindingRow, hop: PatternHop, seen: set[tuple[bytes, bytes]]):
+def _expand_fixed_step(context: QueryContext, row: BindingRow, hop: PatternHop, seen: set[tuple[bytes, bytes]]) -> Iterator[tuple[dict[str, object], bytes, bytes, Edge]]:
     """Yield ``(bindings, neighbor_id, edge_id, edge)`` for one fixed hop."""
     for adjacency in _iter_pattern_adjacency(context, cast(bytes, row.current_node_id), hop):
         edge_id = adjacency["edge_id"]
@@ -1355,16 +1355,16 @@ def _expand_fixed_step(context: QueryContext, row: BindingRow, hop: PatternHop, 
         yield bindings, neighbor_id, edge_id, edge
 
 
-def _edge_matches_properties(edge, properties, context: QueryContext) -> bool:
+def _edge_matches_properties(edge: object, properties: PropertyItems, context: QueryContext) -> bool:
     """Return whether an edge satisfies inline relationship properties."""
-    edge_properties = getattr(edge, "properties", {}) or {}
+    edge_properties = cast(Mapping[str, object], getattr(edge, "properties", {}) or {})
     for name, expected in properties:
         if _cypher_equals(edge_properties.get(name), context.resolve(expected)) is not True:
             return False
     return True
 
 
-def _expand_variable_hop(context: QueryContext, rows, hop: PatternHop, selector=None):
+def _expand_variable_hop(context: QueryContext, rows: Iterable[BindingRow], hop: PatternHop, selector: PathSelector | None = None) -> Iterator[BindingRow]:
     """Expand variable-length hops with trail semantics (no repeated edges)."""
     for row in rows:
         row = BindingRow.from_row(row)
@@ -1376,7 +1376,7 @@ def _expand_variable_hop(context: QueryContext, rows, hop: PatternHop, selector=
             yield from _shortest_paths(context, row, hop, selector)
 
 
-def _variable_paths(context: QueryContext, row: BindingRow, hop: PatternHop):
+def _variable_paths(context: QueryContext, row: BindingRow, hop: PatternHop) -> Iterator[BindingRow]:
     """Breadth-first enumerate ``min_length..max_length`` trails from a row."""
     start_id = row.current_node_id
     if start_id is None:
@@ -1419,7 +1419,7 @@ def _variable_paths(context: QueryContext, row: BindingRow, hop: PatternHop):
             )
 
 
-def _bfs_trails(context: QueryContext, start_id: bytes, hop: PatternHop, used_ids):
+def _bfs_trails(context: QueryContext, start_id: bytes, hop: PatternHop, used_ids: frozenset[bytes]) -> Iterator[BfsTrail]:
     """Breadth-first yield ``(neighbor_id, target, edges, used, node_ids)`` trails.
 
     Trails never repeat a relationship; frontier order guarantees
@@ -1451,7 +1451,7 @@ def _bfs_trails(context: QueryContext, start_id: bytes, hop: PatternHop, used_id
         frontier = next_frontier
 
 
-def _shortest_paths(context: QueryContext, row: BindingRow, hop: PatternHop, selector):
+def _shortest_paths(context: QueryContext, row: BindingRow, hop: PatternHop, selector: PathSelector) -> Iterator[BindingRow]:
     """Enumerate shortest trails for a ``SHORTEST`` selector.
 
     ``mode "any"`` emits up to ``limit`` shortest matches; ``mode "all"``
@@ -1515,7 +1515,7 @@ def _shortest_paths(context: QueryContext, row: BindingRow, hop: PatternHop, sel
             return
 
 
-def _shortest_between(context: QueryContext, source_pattern, start, hop: PatternHop, target, all_paths: bool):
+def _shortest_between(context: QueryContext, source_pattern: NodePattern, start: NodeShape, hop: PatternHop, target: NodeShape, all_paths: bool) -> PathValue | list[PathValue] | None:
     """Evaluate ``shortestPath`` between two bound nodes.
 
     Returns a node list (single shortest trail) or a list of node lists, or
@@ -1546,7 +1546,7 @@ def _shortest_between(context: QueryContext, source_pattern, start, hop: Pattern
         nodes = [context.get_node(node_id) for node_id in node_ids]
         if any(node is None for node in nodes):
             continue
-        if not _node_pattern_matches(nodes[-1], hop.target, hop.target.properties, context):
+        if not _node_pattern_matches(cast(NodeShape, nodes[-1]), hop.target, hop.target.properties, context):
             continue
         path = PathValue(tuple(nodes), tuple(path_edges))
         if not all_paths:
@@ -1559,7 +1559,7 @@ def _shortest_between(context: QueryContext, source_pattern, start, hop: Pattern
     return matches if all_paths else None
 
 
-def _endpoint_matches_pattern(context: QueryContext, pattern, node) -> bool:
+def _endpoint_matches_pattern(context: QueryContext, pattern: NodePattern, node: NodeShape) -> bool:
     """Return whether a bound endpoint satisfies inline labels and properties."""
     properties = tuple(item for item in pattern.properties if item[0] != "id")
     identity = next((value for name, value in pattern.properties if name == "id"), None)
@@ -1589,7 +1589,7 @@ def _is_null_bound(row: BindingRow, variable: str | None) -> bool:
     return variable is not None and variable in row.bindings and row.bindings[variable] is None
 
 
-def _expanded_edge_types(edge_types, hierarchy):
+def _expanded_edge_types(edge_types: tuple[str, ...], hierarchy: RelationHierarchy | None) -> tuple[str, ...]:
     """Expand requested relationship types through an opt-in hierarchy."""
     if hierarchy is None or not edge_types:
         return edge_types
@@ -1601,7 +1601,7 @@ def _expanded_edge_types(edge_types, hierarchy):
     return tuple(expanded)
 
 
-def _iter_pattern_adjacency(context: QueryContext, node_id: bytes, hop: PatternHop):
+def _iter_pattern_adjacency(context: QueryContext, node_id: bytes, hop: PatternHop) -> Iterator[dict[str, bytes]]:
     edge_types = _expanded_edge_types(hop.edge_types, context.relation_hierarchy)
     if context.read_view is not None:
         yield from context.iter_temporal_adjacency(node_id, edge_types, hop.direction)
@@ -1614,8 +1614,8 @@ def _iter_pattern_adjacency(context: QueryContext, node_id: bytes, hop: PatternH
         edge = context.get_edge(edge_id)
         if edge is None:
             continue
-        source_id = context.node_key_to_bytes(edge.source)
-        target_id = context.node_key_to_bytes(edge.target)
+        source_id = context.node_key_to_bytes(cast(str, edge.source))
+        target_id = context.node_key_to_bytes(cast(str, edge.target))
         if hop.direction in {"out", "any"} and source_id == node_id:
             yield {"edge_id": edge_id, "neighbor_id": target_id}
         if (
@@ -1625,13 +1625,13 @@ def _iter_pattern_adjacency(context: QueryContext, node_id: bytes, hop: PatternH
             yield {"edge_id": edge_id, "neighbor_id": source_id}
 
 
-def _node_pattern_matches(node, pattern: NodePattern, properties, context: QueryContext) -> bool:
+def _node_pattern_matches(node: NodeShape, pattern: NodePattern, properties: PropertyItems, context: QueryContext) -> bool:
     """Return whether a node satisfies labels, label expressions, and properties.
 
     An ``id`` entry always addresses the stable entity ID, in every pattern
     position; all other entries match stored properties.
     """
-    node_labels = set(getattr(node, "labels", ()))
+    node_labels: set[str] = set(getattr(node, "labels", ()))
     hierarchy = context.label_hierarchy
     if pattern.label_expression is not None:
         if not any(
@@ -1652,7 +1652,7 @@ def _node_pattern_matches(node, pattern: NodePattern, properties, context: Query
     return True
 
 
-def _where_exact_seek(variable: str, where, context: QueryContext):
+def _where_exact_seek(variable: str, where: Expression | None, context: QueryContext) -> tuple[str | None, object]:
     """Extract an indexed exact-equality predicate for one variable from ``WHERE``.
 
     Returns ``(property_name, value)`` for the first eligible ``=`` predicate,
@@ -1675,7 +1675,7 @@ def _where_exact_seek(variable: str, where, context: QueryContext):
     return None, None
 
 
-def _inline_exact_seek(properties, context: QueryContext):
+def _inline_exact_seek(properties: PropertyItems, context: QueryContext) -> tuple[str | None, object]:
     """Return the first index-eligible exact predicate from an inline map."""
     indexed: set[str] = context.graph.indexed_node_properties
     for property_name, value in properties:
@@ -1684,7 +1684,7 @@ def _inline_exact_seek(properties, context: QueryContext):
     return None, None
 
 
-def _order_match_patterns(patterns, context: QueryContext):
+def _order_match_patterns(patterns: Sequence[PathPatternClause], context: QueryContext) -> Sequence[PathPatternClause]:
     """Put the smallest independent labeled node scan first.
 
     Path components retain textual order because reversing or moving them can
@@ -1697,7 +1697,7 @@ def _order_match_patterns(patterns, context: QueryContext):
     if any(variable is None for variable in variables) or len(set(variables)) != len(variables):
         return patterns
 
-    def estimate(item):
+    def estimate(item: tuple[int, PathPatternClause]) -> tuple[int, int | float, int]:
         position, pattern = item
         if any(name == "id" for name, _ in pattern.source.properties):
             return (0, 1, position)
@@ -1724,16 +1724,16 @@ def _order_match_patterns(patterns, context: QueryContext):
     return tuple(pattern for _, pattern in sorted(enumerate(patterns), key=estimate))
 
 
-def _node_ids_for_label_expression(source: NodePattern, context: QueryContext):
+def _node_ids_for_label_expression(source: NodePattern, context: QueryContext) -> Iterator[bytes]:
     """Seed candidate IDs for a label-expression scan."""
-    required: set = set()
+    required: set[str] = set()
     for alternative_required, _ in source.label_expression or ():
         if not alternative_required:
             return context.graph.get_node_keys_generator()
         required.update(alternative_required)
     if not required:
         return context.graph.get_node_keys_generator()
-    matching: set = set()
+    matching: set[bytes] = set()
     hierarchy = context.label_hierarchy
     for label in required:
         members = hierarchy.closure(label) if hierarchy is not None else (label,)
@@ -1742,11 +1742,11 @@ def _node_ids_for_label_expression(source: NodePattern, context: QueryContext):
     return iter(sorted(matching))
 
 
-def _is_node(value) -> bool:
+def _is_node(value: object) -> TypeGuard[NodeShape]:
     return hasattr(value, "labels") and hasattr(value, "properties") and hasattr(value, "get_id")
 
 
-def filter_expression(rows, expression, context: QueryContext):
+def filter_expression(rows: Iterable[BindingRow | Mapping[str, object]], expression: Expression, context: QueryContext) -> Iterator[BindingRow]:
     """Yield rows that satisfy a supported boolean expression."""
     for row in rows:
         row = BindingRow.from_row(row)
@@ -1754,7 +1754,7 @@ def filter_expression(rows, expression, context: QueryContext):
             yield row
 
 
-def _order_value(row: ProjectedRow, order_item, parsed, context):
+def _order_value(row: ProjectedRow, order_item: OrderItem, parsed: ProjectionMetadata, context: QueryContext) -> object:
     bindings = row.source_bindings or {}
     expression = getattr(order_item, "expression_ast", None)
     alias = None
@@ -1772,7 +1772,7 @@ def _order_value(row: ProjectedRow, order_item, parsed, context):
     return project_value(bindings, order_item.expression)
 
 
-def _resolve_pagination(value, context: QueryContext, clause: str) -> int | None:
+def _resolve_pagination(value: object, context: QueryContext, clause: str) -> int | None:
     if value is None:
         return None
     resolved = context.resolve(value)
@@ -1781,7 +1781,7 @@ def _resolve_pagination(value, context: QueryContext, clause: str) -> int | None
     return resolved
 
 
-def _sortable_value(value):
+def _sortable_value(value: object) -> tuple[object, ...]:
     """Return a recursively comparable key using Cypher's value hierarchy."""
     if isinstance(value, dict):
         return (0, len(value), tuple((key, _sortable_value(item)) for key, item in sorted(value.items())))
@@ -1808,7 +1808,7 @@ def _sortable_value(value):
     raise TypeError(f"Cannot order value of type {type(value).__name__}")
 
 
-def cypher_value_key(value):
+def cypher_value_key(value: object) -> tuple[object, ...]:
     """Return a hashable identity key for grouping and deduplication.
 
     Booleans are tagged separately from numbers so ``True`` and ``1`` stay
@@ -1863,7 +1863,7 @@ def _distinct_records(records: list[dict[str, object]], columns: tuple[str, ...]
     return distinct
 
 
-def same_entity(left, right) -> bool:
+def same_entity(left: object, right: object) -> bool:
     """Return whether two graph entities represent the same stored entity."""
     left_id = getattr(left, "get_id", None)
     right_id = getattr(right, "get_id", None)

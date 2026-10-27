@@ -11,10 +11,11 @@ otherwise (LevelDB, non-transactional PyRex, and test doubles).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Iterable, Iterator, Mapping, Sequence, cast
 
 if TYPE_CHECKING:
     from ..._graph.entities import Edge, Node
+    from .scope import GraphQueryScope
 
 from .ast import (
     CreateConstraint,
@@ -28,17 +29,23 @@ from .ast import (
     SetMerge,
     SetProperty,
     SetReplace,
+    SetItem,
+    RemoveItem,
+    Expression,
     ShowIndexes,
     ShowConstraints,
 )
 from .expr import PathValue, _cypher_equals, evaluate_expression
 from .runtime import (
     BindingRow,
+    QueryContext,
     _execute_staged,
     _is_node,
     _reset_used_relationships,
     apply_path_pattern_clause,
 )
+from .plan import CreateStep, DeleteStep, ForeachStep, MergeStep, RemoveStep, SetStep
+from ._runtime_types import EdgeShape, GraphWriteScope, NodeShape, PropertyItems
 from ...graphdb import Edge, Node
 
 
@@ -59,7 +66,7 @@ class WriteBatch:
         """Stage an edge put."""
         self.edges.append(edge)
 
-    def apply(self, context) -> None:
+    def apply(self, context: QueryContext) -> None:
         """Write staged entities and refresh the query caches.
 
         Puts go through ``put_nodes``/``put_edges_bulk`` when available so
@@ -68,7 +75,7 @@ class WriteBatch:
         graph handles. Cached entities are replaced so later clauses in
         the same query read the new versions.
         """
-        graph = context.graph
+        graph = cast(GraphWriteScope, context.graph)
         nodes = list({graph.node_key_to_bytes(node.get_id): node for node in self.nodes}.values())
         edges = list({graph.node_key_to_bytes(edge.get_id): edge for edge in self.edges}.values())
         checked: list[Node] = []
@@ -107,7 +114,7 @@ class WriteBatch:
             context.node_cache.pop(graph.node_key_to_bytes(node_id), None)
 
 
-def transaction_supported(graph) -> bool:
+def transaction_supported(graph: object) -> bool:
     """Probe whether a graph handle supports transactions, without writes."""
     factory = getattr(graph, "transaction", None)
     if factory is None:
@@ -120,23 +127,23 @@ def transaction_supported(graph) -> bool:
     return True
 
 
-def _snapshot(rows):
+def _snapshot(rows: Iterable[BindingRow | Mapping[str, object]]) -> list[BindingRow | Mapping[str, object]]:
     """Materialize upstream rows before writing (snapshot semantics)."""
     return list(rows)
 
 
-def get_constraints(graph) -> list[dict[str, str]]:
+def get_constraints(graph: GraphWriteScope) -> list[dict[str, str]]:
     """Return the node constraint catalog, including test-double fallback."""
     if not hasattr(graph, "node_constraints"):
         graph.node_constraints = []
     return graph.node_constraints
 
 
-def _constraint_value(constraint, name: str):
-    return constraint[name] if isinstance(constraint, dict) else getattr(constraint, name)
+def _constraint_value(constraint: object, name: str) -> str:
+    return cast(str, constraint[name] if isinstance(constraint, dict) else getattr(constraint, name))
 
 
-def check_node_constraints(graph, labels, properties: dict, exclude_id=None, against=()) -> None:
+def check_node_constraints(graph: GraphWriteScope, labels: Iterable[str], properties: Mapping[str, object], exclude_id: str | None = None, against: Iterable[Node] = ()) -> None:
     """Enforce uniqueness and existence constraints for a staged node put."""
     constraints = get_constraints(graph)
     if not constraints:
@@ -179,14 +186,14 @@ def check_node_constraints(graph, labels, properties: dict, exclude_id=None, aga
                     )
 
 
-def execute_ddl(graph, command) -> tuple[tuple[str, ...], list[dict]]:
+def execute_ddl(graph: GraphQueryScope, command: CreateConstraint | DropConstraint | ShowConstraints | ShowIndexes) -> tuple[tuple[str, ...], list[dict[str, object]]]:
     """Execute a constraint command, returning ``(columns, records)``."""
     if isinstance(command, ShowIndexes):
         records: list[dict[str, object]] = [
             {"entityType": entity_type, "properties": [property_name]}
             for entity_type, property_names in (
-                ("NODE", getattr(graph, "indexed_node_properties", set())),
-                ("RELATIONSHIP", getattr(graph, "indexed_edge_properties", set())),
+                ("NODE", cast(Iterable[str], getattr(graph, "indexed_node_properties", set()))),
+                ("RELATIONSHIP", cast(Iterable[str], getattr(graph, "indexed_edge_properties", set()))),
             )
             for property_name in sorted(property_names)
         ]
@@ -201,18 +208,18 @@ def execute_ddl(graph, command) -> tuple[tuple[str, ...], list[dict]]:
                     "label": constraint["label"],
                     "property": constraint["property"],
                 }
-                for constraint in get_constraints(graph)
+                for constraint in get_constraints(cast(GraphWriteScope, graph))
             ],
         )
     if isinstance(command, DropConstraint):
-        constraints = get_constraints(graph)
+        constraints = get_constraints(cast(GraphWriteScope, graph))
         remaining = [item for item in constraints if item["name"] != command.name]
         if len(remaining) == len(constraints):
             raise ValueError(f"No such constraint: {command.name}")
-        _store_constraints(graph, remaining)
+        _store_constraints(cast(GraphWriteScope, graph), remaining)
         return (), []
     name = command.name or f"{command.label}_{command.property_name}_{command.kind}"
-    catalog = get_constraints(graph)
+    catalog = get_constraints(cast(GraphWriteScope, graph))
     if any(item["name"] == name for item in catalog):
         raise ValueError(f"Constraint already exists: {name}")
     if any(
@@ -226,7 +233,7 @@ def execute_ddl(graph, command) -> tuple[tuple[str, ...], list[dict]]:
         )
     _validate_existing_nodes(graph, command)
     _store_constraints(
-        graph,
+        cast(GraphWriteScope, graph),
         [
             *catalog,
             {
@@ -240,7 +247,7 @@ def execute_ddl(graph, command) -> tuple[tuple[str, ...], list[dict]]:
     return (), []
 
 
-def _store_constraints(graph, constraints: list[dict[str, str]]) -> None:
+def _store_constraints(graph: GraphWriteScope, constraints: list[dict[str, str]]) -> None:
     setter = getattr(graph, "set_node_constraints", None)
     if setter is not None:
         setter(constraints)
@@ -248,7 +255,7 @@ def _store_constraints(graph, constraints: list[dict[str, str]]) -> None:
         graph.node_constraints = [dict(constraint) for constraint in constraints]
 
 
-def _validate_existing_nodes(graph, command: CreateConstraint) -> None:
+def _validate_existing_nodes(graph: GraphQueryScope, command: CreateConstraint) -> None:
     """Reject a new constraint when existing labeled nodes violate it."""
     seen: list[object] = []
     for node_id in graph.iter_node_ids_by_label(command.label):
@@ -273,7 +280,7 @@ def _validate_existing_nodes(graph, command: CreateConstraint) -> None:
         seen.append(value)
 
 
-def _resolve_pattern(pattern: PathPatternClause, bindings: dict, context) -> PathPatternClause:
+def _resolve_pattern(pattern: PathPatternClause, bindings: dict[str, object], context: QueryContext) -> PathPatternClause:
     """Evaluate computed property values against row bindings.
 
     ``CREATE``/``MERGE`` maps accept general expressions (variables,
@@ -281,8 +288,8 @@ def _resolve_pattern(pattern: PathPatternClause, bindings: dict, context) -> Pat
     resolved plain values.
     """
 
-    def resolved(properties):
-        return tuple((name, evaluate_expression(value, bindings, context)) for name, value in properties)
+    def resolved(properties: PropertyItems) -> PropertyItems:
+        return tuple((name, evaluate_expression(cast("Expression", value), bindings, context)) for name, value in properties)
 
     source = pattern.source
     resolved_source = NodePattern(
@@ -308,7 +315,7 @@ def _resolve_pattern(pattern: PathPatternClause, bindings: dict, context) -> Pat
     return PathPatternClause(resolved_source, hops, pattern.name)
 
 
-def apply_create(rows, step, context):
+def apply_create(rows: Iterable[BindingRow | Mapping[str, object]], step: CreateStep, context: QueryContext) -> Iterator[BindingRow]:
     """Execute one ``CREATE`` clause, binding created entities per row."""
     for row in _snapshot(rows):
         row = BindingRow.from_row(row)
@@ -320,7 +327,7 @@ def apply_create(rows, step, context):
         yield row.with_bindings(bindings)
 
 
-def apply_merge(rows, step, context):
+def apply_merge(rows: Iterable[BindingRow | Mapping[str, object]], step: MergeStep, context: QueryContext) -> Iterator[BindingRow]:
     """Execute one ``MERGE`` clause: match the patterns or create them.
 
     Each input row matches independently with a fresh isomorphism scope.
@@ -354,7 +361,7 @@ def apply_merge(rows, step, context):
             yield row.with_bindings(bindings)
 
 
-def apply_foreach(rows, step, context):
+def apply_foreach(rows: Iterable[BindingRow | Mapping[str, object]], step: ForeachStep, context: QueryContext) -> Iterator[BindingRow]:
     """Execute one ``FOREACH`` loop, passing input rows through unchanged.
 
     The body plan runs per row and list element for side effects only; the
@@ -380,7 +387,7 @@ def apply_foreach(rows, step, context):
         yield _refresh_entities(row, context)
 
 
-def _refresh_entities(row: BindingRow, context) -> BindingRow:
+def _refresh_entities(row: BindingRow, context: QueryContext) -> BindingRow:
     """Re-read entity bindings so later clauses observe loop writes."""
     bindings = dict(row.bindings)
     for variable, value in bindings.items():
@@ -391,11 +398,11 @@ def _refresh_entities(row: BindingRow, context) -> BindingRow:
     return row.with_bindings(bindings)
 
 
-def _create_pattern(bindings: dict, batch: WriteBatch, pattern, context) -> None:
+def _create_pattern(bindings: dict[str, object], batch: WriteBatch, pattern: PathPatternClause, context: QueryContext) -> None:
     """Create one pattern's nodes and edges, extending ``bindings``."""
     source_id, _ = _create_or_reuse_node(bindings, batch, pattern.source, context)
     node_ids = [source_id]
-    edge_ids: list = []
+    edge_ids: list[str] = []
     previous_id = source_id
     for hop in pattern.hops:
         if len(hop.edge_types) != 1 or (hop.min_length, hop.max_length) != (1, 1):
@@ -411,7 +418,7 @@ def _create_pattern(bindings: dict, batch: WriteBatch, pattern, context) -> None
         bindings[pattern.name] = PathValue(tuple(nodes), tuple(edges))
 
 
-def _create_or_reuse_node(bindings: dict, batch: WriteBatch, node_pattern, context):
+def _create_or_reuse_node(bindings: dict[str, object], batch: WriteBatch, node_pattern: NodePattern, context: QueryContext) -> tuple[str, Node]:
     """Create or reuse one ``CREATE`` node pattern, returning its ID and node."""
     variable = node_pattern.variable
     properties = {name: context.resolve(value) for name, value in node_pattern.properties}
@@ -439,7 +446,7 @@ def _create_or_reuse_node(bindings: dict, batch: WriteBatch, node_pattern, conte
     return node.get_id, node
 
 
-def _create_edge(bindings: dict, batch: WriteBatch, hop, source_id: str, target_id: str, context):
+def _create_edge(bindings: dict[str, object], batch: WriteBatch, hop: PatternHop, source_id: str, target_id: str, context: QueryContext) -> Edge:
     """Create one ``CREATE`` relationship, returning the edge."""
     rel_var = hop.rel_var
     bound = bindings.get(rel_var) if rel_var is not None else None
@@ -466,7 +473,7 @@ def _create_edge(bindings: dict, batch: WriteBatch, hop, source_id: str, target_
     return edge
 
 
-def apply_set(rows, step, context):
+def apply_set(rows: Iterable[BindingRow | Mapping[str, object]], step: SetStep, context: QueryContext) -> Iterator[BindingRow]:
     """Execute one ``SET`` clause with copy-on-write per row."""
     for row in _snapshot(rows):
         row = BindingRow.from_row(row)
@@ -478,7 +485,7 @@ def apply_set(rows, step, context):
         yield row.with_bindings(bindings)
 
 
-def _apply_set_item(bindings: dict, batch: WriteBatch, item, context) -> None:
+def _apply_set_item(bindings: dict[str, object], batch: WriteBatch, item: SetItem, context: QueryContext) -> None:
     """Apply one ``SET`` item; ``None`` targets are a null-safe no-op."""
     target = bindings.get(item.variable)
     if target is None:
@@ -488,7 +495,7 @@ def _apply_set_item(bindings: dict, batch: WriteBatch, item, context) -> None:
         _store_entity(batch, bindings, item.variable, _with_properties(target, {item.property_name: value}))
     elif isinstance(item, SetLabels):
         _require_node(target, item.variable, "SET labels")
-        _store_entity(batch, bindings, item.variable, _with_labels(target, item.labels, add=True))
+        _store_entity(batch, bindings, item.variable, _with_labels(cast(NodeShape, target), item.labels, add=True))
     elif isinstance(item, SetMerge):
         value = evaluate_expression(item.expression, bindings, context)
         if value is None:
@@ -507,7 +514,7 @@ def _apply_set_item(bindings: dict, batch: WriteBatch, item, context) -> None:
         raise TypeError(f"Unsupported SET item: {type(item).__name__}")
 
 
-def apply_remove(rows, step, context):
+def apply_remove(rows: Iterable[BindingRow | Mapping[str, object]], step: RemoveStep, context: QueryContext) -> Iterator[BindingRow]:
     """Execute one ``REMOVE`` clause with copy-on-write per row."""
     for row in _snapshot(rows):
         row = BindingRow.from_row(row)
@@ -519,7 +526,7 @@ def apply_remove(rows, step, context):
         yield row.with_bindings(bindings)
 
 
-def apply_delete(rows, step, context):
+def apply_delete(rows: Iterable[BindingRow | Mapping[str, object]], step: DeleteStep, context: QueryContext) -> Iterator[BindingRow]:
     """Execute one ``DELETE`` clause, checking relationships unless detaching."""
     for row in _snapshot(rows):
         row = BindingRow.from_row(row)
@@ -559,7 +566,7 @@ def apply_delete(rows, step, context):
         yield row.with_bindings(bindings)
 
 
-def _has_live_incident_edges(context, node_id: bytes, deleted_edge_ids: set[bytes]) -> bool:
+def _has_live_incident_edges(context: QueryContext, node_id: bytes, deleted_edge_ids: set[bytes]) -> bool:
     """Return whether stored edges beyond deleted ones touch a node."""
     for edge_key in _iter_edge_keys(context.graph):
         if edge_key in deleted_edge_ids:
@@ -568,14 +575,14 @@ def _has_live_incident_edges(context, node_id: bytes, deleted_edge_ids: set[byte
         if edge is None:
             continue
         if (
-            context.graph.node_key_to_bytes(edge.source) == node_id
-            or context.graph.node_key_to_bytes(edge.target) == node_id
+            context.graph.node_key_to_bytes(cast(str, edge.source)) == node_id
+            or context.graph.node_key_to_bytes(cast(str, edge.target)) == node_id
         ):
             return True
     return False
 
 
-def _iter_edge_keys(graph):
+def _iter_edge_keys(graph: object) -> Iterator[bytes]:
     """Yield stored edge keys across graph handle shapes."""
     generator = getattr(graph, "get_edge_keys_generator", None)
     if generator is not None:
@@ -586,7 +593,7 @@ def _iter_edge_keys(graph):
         yield from store.get_edge_keys_generator()
 
 
-def _apply_remove_item(bindings: dict, batch: WriteBatch, item, context) -> None:
+def _apply_remove_item(bindings: dict[str, object], batch: WriteBatch, item: RemoveItem, context: QueryContext) -> None:
     """Apply one ``REMOVE`` item; ``None`` targets are a null-safe no-op."""
     target = bindings.get(item.variable)
     if target is None:
@@ -599,12 +606,12 @@ def _apply_remove_item(bindings: dict, batch: WriteBatch, item, context) -> None
         _store_entity(batch, bindings, item.variable, _replace_properties(target, updated))
     elif isinstance(item, RemoveLabels):
         _require_node(target, item.variable, "REMOVE labels")
-        _store_entity(batch, bindings, item.variable, _with_labels(target, item.labels, add=False))
+        _store_entity(batch, bindings, item.variable, _with_labels(cast(NodeShape, target), item.labels, add=False))
     else:  # pragma: no cover - planner invariant
         raise TypeError(f"Unsupported REMOVE item: {type(item).__name__}")
 
 
-def _entity_properties(target, variable: str, clause: str) -> dict:
+def _entity_properties(target: object, variable: str, clause: str) -> dict[str, object]:
     """Return a copy of an entity's or map's properties."""
     if isinstance(target, dict):
         return dict(target)
@@ -615,7 +622,7 @@ def _entity_properties(target, variable: str, clause: str) -> dict:
     raise TypeError(f"{clause} expects a map, node, or relationship for {variable}")
 
 
-def _with_properties(target, updates: dict):
+def _with_properties(target: object, updates: dict[str, object]) -> Node | Edge | dict[str, object]:
     """Return a copy of an entity or map with merged properties."""
     if isinstance(target, dict):
         merged = dict(target)
@@ -625,15 +632,15 @@ def _with_properties(target, updates: dict):
         return Node(node_id=target.get_id, properties={**target.properties, **updates}, labels=list(target.labels))
     if hasattr(target, "properties"):
         return Edge(
-            edge_id=target.get_id,
-            source=target.source,
-            target=target.target,
-            properties={**target.properties, **updates},
+            edge_id=cast(EdgeShape, target).get_id,
+            source=cast(EdgeShape, target).source,
+            target=cast(EdgeShape, target).target,
+            properties={**cast(EdgeShape, target).properties, **updates},
         )
     raise TypeError(f"SET expects a map, node, or relationship, got {type(target).__name__}")
 
 
-def _replace_properties(target, properties: dict):
+def _replace_properties(target: object, properties: dict[str, object]) -> Node | Edge | dict[str, object]:
     """Return a copy of an entity or map with replaced properties."""
     if isinstance(target, dict):
         return dict(properties)
@@ -641,15 +648,15 @@ def _replace_properties(target, properties: dict):
         return Node(node_id=target.get_id, properties=dict(properties), labels=list(target.labels))
     if hasattr(target, "properties"):
         return Edge(
-            edge_id=target.get_id,
-            source=target.source,
-            target=target.target,
+            edge_id=cast(EdgeShape, target).get_id,
+            source=cast(EdgeShape, target).source,
+            target=cast(EdgeShape, target).target,
             properties=dict(properties),
         )
     raise TypeError(f"SET expects a map, node, or relationship, got {type(target).__name__}")
 
 
-def _with_labels(target, labels, *, add: bool):
+def _with_labels(target: NodeShape, labels: Sequence[str], *, add: bool) -> Node:
     """Return a node copy with labels added or removed (target pre-validated)."""
     current = list(target.labels)
     if add:
@@ -661,18 +668,18 @@ def _with_labels(target, labels, *, add: bool):
     return Node(node_id=target.get_id, properties=dict(target.properties), labels=current)
 
 
-def _require_node(target, variable: str, clause: str) -> None:
+def _require_node(target: object, variable: str, clause: str) -> None:
     """Raise a ``TypeError`` unless a target is a node."""
     if not _is_node(target):
         where = f" for {variable}" if variable else ""
         raise TypeError(f"{clause} requires a node variable{where}")
 
 
-def _store_entity(batch: WriteBatch, bindings: dict, variable: str, value) -> None:
+def _store_entity(batch: WriteBatch, bindings: dict[str, object], variable: str, value: Node | Edge | dict[str, object]) -> None:
     """Rebind an updated value, staging stored entities for writing."""
     bindings[variable] = value
     if _is_node(value) or hasattr(value, "properties"):
         if _is_node(value):
-            batch.add_node(value)
+            batch.add_node(cast("Node", value))
         else:
-            batch.add_edge(value)
+            batch.add_edge(cast("Edge", value))
