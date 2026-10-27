@@ -21,9 +21,9 @@ implicitly imported. Selection maps output labels/classes and types/predicates.
 
 ## Tasks
 
-- [ ] Implement bounded, authenticated preparation and explicit selection.
-- [ ] Reuse Cypher parser/planner/runtime without changing ordinary queries.
-- [ ] Test inferred-only matches, modes, provenance, freshness, limits,
+- [x] Implement bounded, authenticated preparation and explicit selection.
+- [x] Reuse Cypher parser/planner/runtime without changing ordinary queries.
+- [x] Test inferred-only matches, modes, provenance, freshness, limits,
       cancellation, unsupported syntax and unchanged base data.
 - [ ] Document a runnable workflow and supported/non-supported semantics.
 - [ ] Run focused tests, lint, documentation and module-size checks.
@@ -36,3 +36,12 @@ adapter, not a query-optimizer or speedup claim. Projection/query record limits
 are not hard RSS/time limits; snapshot hashing and scalar expression allocation
 retain their existing boundaries. Any scale benchmarking needed later must be
 tracked on GitHub with workload and resource rationale.
+
+## Progress
+
+- Adapter milestone: 36 focused tests passed with LMDB on Python 3.12.
+  Preparation explicitly receives both the live source graph (freshness) and
+  its borrowed snapshot (authenticated extraction); these are distinct handles.
+- GitHub issue comment updates are blocked by the configured token (GraphQL
+  and REST both return HTTP 403). Checklist updates remain in commits; include
+  this evidence and the issue linkage in the eventual pull request.
