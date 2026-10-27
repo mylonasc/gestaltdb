@@ -15,56 +15,8 @@ from .snapshot import SamplerSnapshot
 from .walks import RandomWalkBatch, _external_id_array, iter_walk_batches
 from .rng import split_seed
 from .validation import _integer_array, _validate_count
-
-
-@dataclass(frozen=True)
-class NeighborSamplingSpec:
-    """Sampling policy for one layer of neighborhood expansion."""
-
-    fanout: int
-    direction: str = "out"
-    relations: Sequence[int] | None = None
-    replace: bool = False
-    strategy: str = "uniform"
-    balanced: bool = False
-
-    def __post_init__(self):
-        _validate_count(self.fanout, "fanout")
-        if self.direction not in {"out", "in", "any"}:
-            raise ValueError("direction must be 'out', 'in', or 'any'")
-        if self.strategy not in {"uniform", "weighted"}:
-            raise ValueError("strategy must be 'uniform' or 'weighted'")
-        if not isinstance(self.balanced, bool):
-            raise ValueError("balanced must be a boolean")
-        if self.relations is not None:
-            relations = _integer_array(self.relations, "relations")
-            object.__setattr__(self, "relations", tuple(int(rel) for rel in relations))
-
-
-@dataclass(frozen=True)
-class ExternalNeighborSamplingSpec:
-    """Sampling policy using external relation IDs for one layer."""
-
-    fanout: int
-    direction: str = "out"
-    relations: Sequence[object] | None = None
-    replace: bool = False
-    strategy: str = "uniform"
-    balanced: bool = False
-
-    def __post_init__(self):
-        _validate_count(self.fanout, "fanout")
-        if self.direction not in {"out", "in", "any"}:
-            raise ValueError("direction must be 'out', 'in', or 'any'")
-        if self.strategy not in {"uniform", "weighted"}:
-            raise ValueError("strategy must be 'uniform' or 'weighted'")
-        if not isinstance(self.balanced, bool):
-            raise ValueError("balanced must be a boolean")
-        if self.relations is not None:
-            if isinstance(self.relations, (str, bytes)):
-                raise TypeError("relations must be a sequence, not a scalar string")
-            normalized = np.asarray(list(self.relations), dtype=str).tolist()
-            object.__setattr__(self, "relations", tuple(normalized))
+from .specs import ExternalNeighborSamplingSpec, NeighborSamplingSpec
+from .walk_policy import WalkPolicy, sample_policy_walks
 
 
 @dataclass(slots=True)
@@ -745,6 +697,19 @@ class SamplerEngine:
             temporal=temporal, window_policy=window_policy,
         )
 
+    def sample_policy_walks(
+        self, start_nodes: Sequence[int] | np.ndarray, walk_length: int, *,
+        policy: WalkPolicy | None = None, **walk_options,
+    ) -> RandomWalkBatch:
+        """Sample opt-in constrained walks without changing legacy defaults.
+
+        ``WalkPolicy`` defines hard non-backtracking/recent-history avoidance.
+        Common direction, relation, temporal, restart and dead-end options go
+        to the policy kernel. Stream with ``iter_random_walks(walk_type="policy",
+        policy=...)``. IDs and restart/padding conventions match other walks.
+        """
+        return sample_policy_walks(self, start_nodes, walk_length, policy=policy, **walk_options)
+
     def iter_random_walks(
         self, start_nodes: Sequence[int] | np.ndarray | None = None,
         walk_length: int = 40, *, walks_per_node: int = 1, batch_size: int = 1024,
@@ -754,7 +719,7 @@ class SamplerEngine:
 
         ``None`` seeds means every snapshot node; explicit compact IDs retain
         order and duplicates. Each round optionally shuffles seed positions.
-        ``walk_type`` selects ``random`` or ``node2vec``; remaining keywords
+        ``walk_type`` selects ``random``, ``node2vec`` or ``policy``; extra keywords
         go to that kernel. Validation is eager, generation lazy. Unshuffled
         all-node iteration uses batch-sized seed buffers; explicit seeds are
         copied once, and global shuffling needs O(seed count) order storage.

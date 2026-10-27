@@ -84,3 +84,35 @@ always raises for a nonzero request. This is separate from KG triple negatives.
        [0], positive_contexts=[1], negatives_per_positive=2, unique=True,
    )
    assert set(result[0]) == {2, 3}
+
+RWS-04: non-backtracking and recent-history avoidance
+---------------------------------------------------
+
+``engine.sample_policy_walks(seeds, length, policy=WalkPolicy(...))`` is an
+opt-in kernel; legacy first-order/node2vec defaults are unchanged. Use
+``engine.iter_random_walks(walk_type="policy", policy=...)`` to stream it.
+
+``non_backtracking=True`` forbids returning to the previous node, including via
+another parallel edge. ``avoid_recent=k`` forbids endpoints among the last k
+visited nodes, including the current node: k=1 forbids self-loops, k=2 also
+forbids immediate returns. History is bounded by max(k, 2), not corpus size.
+``avoidance_exhaustion`` chooses ``terminate`` (default), ``restart``, or
+``relax``. Relaxation drops only avoidance, never relation/temporal restrictions.
+Restart jumps clear history and use ordinary -1 edge/relation markers.
+True graph dead ends use the separate ``dead_end`` option. ``strategy="weighted"``
+on the policy uses static edge weights; invalid all-zero candidate weights raise.
+
+.. code-block:: python
+
+   from tempfile import TemporaryDirectory
+   from gestaltdb.sampling import SamplerEngine, SamplerSnapshot, WalkPolicy
+
+   with TemporaryDirectory() as root:
+       snapshot = SamplerSnapshot.from_edge_arrays(
+           root + "/snapshot", external_node_ids=["a", "b"],
+           external_edge_ids=["ab", "ba"], external_relation_ids=["R"],
+           src_int=[0, 1], dst_int=[1, 0], rel_int=[0, 0],
+       )
+       engine = SamplerEngine(snapshot, seed=7)
+       batch = engine.sample_policy_walks([0], 4, policy=WalkPolicy(non_backtracking=True))
+       assert batch.lengths.tolist() == [1]

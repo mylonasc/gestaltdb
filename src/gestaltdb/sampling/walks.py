@@ -78,9 +78,11 @@ def iter_walk_batches(
             raise ValueError(f"{name} must be {'positive' if name == 'batch_size' else 'non-negative'}")
     if not isinstance(shuffle, bool):
         raise ValueError("shuffle must be a boolean")
-    if walk_type not in {"random", "node2vec"}:
-        raise ValueError("walk_type must be 'random' or 'node2vec'")
-    sample = engine.sample_random_walks if walk_type == "random" else engine.sample_node2vec_walks
+    kernels = {"random": engine.sample_random_walks, "node2vec": engine.sample_node2vec_walks,
+               "policy": engine.sample_policy_walks}
+    if walk_type not in kernels:
+        raise ValueError("walk_type must be 'random', 'node2vec' or 'policy'")
+    sample = kernels[walk_type]
     # Reuse kernel validation even for empty cohorts/zero rounds. This draws no RNG.
     sample([], walk_length, **walk_options)
     seeds = None if start_nodes is None else engine._validated_ids(

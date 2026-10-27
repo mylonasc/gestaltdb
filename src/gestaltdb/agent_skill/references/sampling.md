@@ -47,6 +47,12 @@ an exponent (default 0.75). Exclude centers/positive contexts/caller-observed
 contexts explicitly. Uniqueness exhaustion raises or explicitly repeats feasible
 draws; no eligible support always raises. These are not KG triple negatives.
 
+`WalkPolicy(non_backtracking=True, avoid_recent=k)` with
+`engine.sample_policy_walks(seeds, length, policy=...)` adds hard avoidance.
+Recent history includes the current node; k=1 excludes self-loops. Exhaustion
+explicitly terminates/restarts/relaxes avoidance; other filters never relax.
+Stream with `engine.iter_random_walks(walk_type="policy", policy=...)`.
+
 ### Filter Once, Sample Repeatedly
 
 Pass `node_filter`/`edge_filter` to `graph.build_sampler_snapshot` to define an
