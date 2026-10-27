@@ -53,6 +53,12 @@ Recent history includes the current node; k=1 excludes self-loops. Exhaustion
 explicitly terminates/restarts/relaxes avoidance; other filters never relax.
 Stream with `engine.iter_random_walks(walk_type="policy", policy=...)`.
 
+`WalkSchema` adds target type constraints, cyclic relation metapaths, relation
+weights, or bounded `WalkTransition` state-machine arcs with per-arc direction,
+source/target types and weights. Unknown compact IDs fail closed. State/metapath
+progress resets on restart. Overlapping arcs are distinct (arc, edge) choices;
+global relation filters always intersect schema restrictions.
+
 ### Filter Once, Sample Repeatedly
 
 Pass `node_filter`/`edge_filter` to `graph.build_sampler_snapshot` to define an

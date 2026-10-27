@@ -89,9 +89,12 @@ from .snapshot import SamplerSnapshot  # noqa: E402
 from .contexts import ContextPairBatch, iter_context_pairs  # noqa: E402
 from .context_negatives import ContextNegativeSampler  # noqa: E402
 from .walk_policy import WalkPolicy  # noqa: E402
+from .walk_schema import WalkSchema, WalkTransition  # noqa: E402
 
 
 __all__ = [
+    "WalkSchema",
+    "WalkTransition",
     "WalkPolicy",
     "ContextNegativeSampler",
     "ContextPairBatch",

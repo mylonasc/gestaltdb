@@ -10,6 +10,7 @@ import numpy as np
 
 from .validation import _validate_count
 from .walks import RandomWalkBatch
+from .walk_schema import WalkSchema
 
 if TYPE_CHECKING:
     from .engine import SamplerEngine
@@ -29,6 +30,7 @@ class WalkPolicy:
     avoid_recent: int = 0
     avoidance_exhaustion: str = "terminate"
     strategy: str = "uniform"
+    schema: WalkSchema | None = None
 
     def __post_init__(self):
         if not isinstance(self.non_backtracking, bool):
@@ -38,6 +40,8 @@ class WalkPolicy:
             raise ValueError("avoidance_exhaustion must be terminate, restart or relax")
         if self.strategy not in {"uniform", "weighted"}:
             raise ValueError("strategy must be uniform or weighted")
+        if self.schema is not None and not isinstance(self.schema, WalkSchema):
+            raise TypeError("schema must be a WalkSchema")
 
 
 def sample_policy_walks(
@@ -57,6 +61,8 @@ def sample_policy_walks(
     relation_filter = None if relations is None else set(
         engine._validated_ids(relations, engine.snapshot.num_relations, "relations").tolist()
     )
+    schema = policy.schema or WalkSchema()
+    schema.validate_snapshot(engine)
     nodes = np.full((starts.size, walk_length + 1), -1, dtype=np.int64)
     edges = np.full((starts.size, walk_length), -1, dtype=np.int64)
     rels = np.full_like(edges, -1)
@@ -64,28 +70,40 @@ def sample_policy_walks(
     nodes[:, 0] = starts
     for row, start in enumerate(starts.tolist()):
         current, previous = start, None
+        state, position = schema.initial_state, 0
         history = deque([start], maxlen=max(2, policy.avoid_recent))
         for step in range(walk_length):
             restart = restart_probability > 0 and engine.rng.random() < restart_probability
             if not restart:
-                candidates = engine._candidate_edges(current, direction, relation_filter, temporal, window_policy)
+                candidates, endpoints, next_states, schema_weights = schema.candidates(
+                    engine, current, state, position, direction, relation_filter, temporal, window_policy,
+                )
                 action = dead_end
                 if candidates.size:
-                    endpoints = engine._neighbors_for_edges(current, candidates, direction)
                     forbidden = set(list(history)[-policy.avoid_recent:]) if policy.avoid_recent else set()
                     if policy.non_backtracking and previous is not None:
                         forbidden.add(previous)
                     allowed = ~np.isin(endpoints, list(forbidden))
                     if np.any(allowed):
                         candidates = candidates[allowed]
+                        endpoints, next_states, schema_weights = (
+                            values[allowed] for values in (endpoints, next_states, schema_weights)
+                        )
                     elif policy.avoidance_exhaustion != "relax":
                         candidates = candidates[:0]
                         action = policy.avoidance_exhaustion
                 if candidates.size:
-                    weights = engine.snapshot.edge_weights[candidates] if policy.strategy == "weighted" else None
-                    chosen = engine._choose_candidates(candidates, 1, replace=False, weights=weights)
-                    edge = int(chosen[0])
-                    previous, current = current, int(engine._neighbors_for_edges(current, chosen, direction)[0])
+                    weights = schema_weights
+                    if policy.strategy == "weighted":
+                        static = engine.snapshot.edge_weights[candidates]
+                        weights = weights * (static / (float(static.max()) or 1))
+                    # Keep the default uniform RNG path compatible with legacy walks.
+                    if policy.schema is None and policy.strategy == "uniform":
+                        weights = None
+                    chosen = int(engine._choose_candidates(np.arange(candidates.size), 1, replace=False, weights=weights)[0])
+                    edge = int(candidates[chosen])
+                    previous, current = current, int(endpoints[chosen])
+                    state, position = int(next_states[chosen]), position + 1
                     history.append(current)
                     edges[row, step] = edge
                     rels[row, step] = int(engine.snapshot.rel_int[edge])
@@ -95,6 +113,7 @@ def sample_policy_walks(
                     break
             if restart:
                 current, previous = start, None
+                state, position = schema.initial_state, 0
                 history.clear()
                 history.append(start)
             nodes[row, step + 1] = current

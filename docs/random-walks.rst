@@ -116,3 +116,38 @@ on the policy uses static edge weights; invalid all-zero candidate weights raise
        engine = SamplerEngine(snapshot, seed=7)
        batch = engine.sample_policy_walks([0], 4, policy=WalkPolicy(non_backtracking=True))
        assert batch.lengths.tolist() == [1]
+
+RWS-05: heterogeneous and finite-state walks
+------------------------------------------
+
+Pass ``WalkPolicy(schema=WalkSchema(...))`` to the policy kernel. ``node_types``
+restricts candidate target types; ``metapath`` is a cyclic compact relation-ID
+sequence. ``relation_weights`` multiplies probabilities (unspecified relations
+have weight one; zero disables a relation). Global ``relations`` intersects
+schema restrictions. Unknown type/relation IDs fail before sampling, including
+for empty seed lists.
+
+Alternatively, supply ``transitions=[WalkTransition(...), ...]``. Each arc has
+source/target state, optional relation, source/target node types, direction
+relative to the current node, and non-negative weight. The arc's direction
+replaces the global direction for that step. A missing outgoing arc is a dead
+end. States and arcs are bounded by explicit ``max_states`` (default 256) and
+``max_transitions`` (default 4096). Metapaths and state machines are mutually
+exclusive. Both reset to their initial position/state on every restart.
+
+Alternatives are (arc, edge) pairs: overlapping arcs deliberately count as
+separate choices and may lead to different states. Arc and relation weights
+multiply optional static edge weights (``WalkPolicy(strategy="weighted")``).
+Types refer to ``snapshot.node_type_ids``, not native label IDs. Untyped -1
+nodes do not match an explicit typed constraint. The default schema does not
+implicitly expand hierarchies.
+
+.. code-block:: python
+
+   from gestaltdb.sampling import WalkPolicy, WalkSchema, WalkTransition
+
+   policy = WalkPolicy(schema=WalkSchema(transitions=[
+       WalkTransition(0, 1, relation=0, target_types=[1]),
+       WalkTransition(1, 0, relation=1, direction="in", target_types=[0]),
+   ]))
+   assert policy.schema.initial_state == 0
