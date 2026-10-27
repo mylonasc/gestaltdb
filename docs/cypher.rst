@@ -11,6 +11,10 @@ clauses, writes, and a persisted node-constraint catalog.
 Relationship types come from ``edge.properties["type"]``. Node labels are stored
 on ``Node(labels=[...])``.
 
+For generation-pinned read-only Cypher over selected inference facts, see
+:doc:`reasoning-queries` (a smaller single-pattern subset). Ordinary queries
+continue to read physical records only.
+
 For a task-oriented guide to exact/range indexes, ID-only cohort selection,
 and filtering a graph before repeated sampling, see :doc:`property-filtering`.
 ``WHERE`` selects query results; it is not a property callback inside

@@ -13,11 +13,11 @@ Ontology and reasoning components add semantic classification, temporal evidence
 
 Documentation: https://mylonasc.github.io/gestaltdb/
 
-**Development version:** `0.15.0` adds native Python typing across public
-services, entities, storage, sampling, temporal APIs and Cypher (#410), building
-on the `0.14.0rc3` reasoning correctness fixes. Typing remains incremental, not
-whole-library strict coverage. See the [testing guide](docs/reasoning-testing.rst)
-for compatibility boundaries.
+**Development version:** `0.16.0` adds explicit generation-pinned, read-only
+[reasoning-aware Cypher](docs/reasoning-queries.rst) (#395), building on the
+native Python typing in `0.15.0`. Ordinary Cypher behavior is unchanged.
+Typing remains incremental, not whole-library strict coverage. See the
+[testing guide](docs/reasoning-testing.rst) for compatibility boundaries.
 
 ## Components and Applications
 

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.16.0 — generation-pinned reasoning-aware Cypher
+
+- Raised the optional MessagePack minimum to 1.2.3 and locked 1.2.4 to address
+  CVE-2026-114613 (map-deserialization memory-leak denial of service).
+- Added explicit generation-pinned, read-only Cypher over selected logical
+  inference facts via `ReasoningQueryView` (#395). Supports node/one-hop
+  patterns, explicit asserted-only/plus-inferred modes, source freshness,
+  projection/read caps and origin metadata; ordinary Cypher is unchanged.
+
 ## 0.15.0 — native Python typing
 
 - Added native service, entity, storage, temporal, sampling and Cypher typing

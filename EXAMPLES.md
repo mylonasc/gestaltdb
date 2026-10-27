@@ -438,6 +438,41 @@ with TemporaryDirectory() as tmpdir:
         graph.close()
 ```
 
+## Explicit Reasoning-Aware Cypher
+
+This is a selected logical projection, not physical-record Cypher. Requires
+the `lmdb` extra; keep the live graph and authenticated snapshot open. See
+`docs/reasoning-queries.rst` for the supported node/one-hop subset and limits.
+
+```python
+from tempfile import TemporaryDirectory
+from gestaltdb.graphdb import Edge, GraphDB, Node
+from gestaltdb.ontology import Ontology, SubPropertyOf, compile_ontology
+from gestaltdb.reasoning import ReasoningLimits
+from gestaltdb.reasoning.adapters.generation import catalog_for_ontology
+from gestaltdb.reasoning.adapters.graph import GraphMapping
+from gestaltdb.reasoning.adapters.queries import QuerySelection, ReasoningQueryView
+
+compiled = compile_ontology(Ontology("relations", [SubPropertyOf("link", "related")]))
+with TemporaryDirectory() as path:
+    graph = GraphDB.create(path + "/db", backend="lmdb", serializer="json")
+    try:
+        graph.put_nodes([Node("a"), Node("b")])
+        graph.put_edge(Edge("ab", "a", "b", {"type": "LINK"}))
+        with graph.current_read_view(require_verifiable=True) as view:
+            queries = ReasoningQueryView(
+                graph, view, compiled, catalog_for_ontology(compiled),
+                mapping=GraphMapping(edge_types=(("LINK", "link"),)),
+                selection=QuerySelection(edge_types=(("RELATED", "related"),)),
+                limits=ReasoningLimits())
+            answer = queries.query(
+                'MATCH (a)-[:RELATED]->(b) RETURN id(b) AS target',
+                expected_generation=queries.generation, mode="asserted-plus-inferred")
+            assert answer.result.records == [{"target": "b"}]
+    finally:
+        graph.close()
+```
+
 ## Read and Write with Cypher
 
 ```python

@@ -26,7 +26,19 @@ Use `graph.query(cypher, parameters=None)` for Cypher reads and writes. It retur
 - `versionId(entity)`, `validFrom(entity)`, `validTo(entity)`, and `systemFrom(entity)` expose matched temporal version metadata. They return null for null or unqualified current entities, and `validTo` returns null for open intervals.
 - Temporal matches use one stable read view and require current temporal indexes; rebuild deferred indexes first.
 
-## Unsupported
+## Explicit inferred queries
+
+`gestaltdb.reasoning.adapters.queries.ReasoningQueryView` prepares a closure
+from a live graph and its authenticated current read view. Supply input
+`GraphMapping`, output `QuerySelection`, and `ReasoningLimits`; keep both handles
+open. Its `query` requires an exact `expected_generation` and explicit mode
+(`asserted-only` or `asserted-plus-inferred`). Read rows from `answer.result`;
+generation and selection accompany them. Only one node/one-hop `MATCH`, optional
+`WHERE`, and `RETURN` with modifiers are supported. Logical edges have set
+semantics, synthetic IDs and `reasoning_origin`; arbitrary physical properties
+are not copied. Source movement rejects reuse. Ordinary `graph.query` is unchanged.
+
+## Unsupported ordinary Cypher
 
 Do not use pattern comprehensions, pattern arguments to `exists()`, GQL quantified path patterns, relationship or multi-property constraints, or procedures beyond the documented sampling call. GQL quantifier errors suggest the supported legacy `*min..max` form.
 
