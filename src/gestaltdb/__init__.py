@@ -63,7 +63,10 @@ Important usage notes for agents and developers:
    array-native seed, weighted-neighbor, layered, and random-walk sampling.
 * Selecting filtered seeds is not filtering every sampled hop. Build a filtered
   snapshot with ``node_filter``/``edge_filter``; callbacks run during source scans,
-  not as automatic index pushdown or per-draw property callbacks.
+   not as automatic index pushdown or per-draw property callbacks.
+* ``gestaltdb.sampling`` also exposes streaming walk corpora, restart-aware
+  context pairs, embedding-context negatives and opt-in typed/chronological
+  ``WalkPolicy`` composition. Embedding training remains external.
 
 GestaltDB also ships offline interactive visualization. Import ``VizOptions``
 and ``visualize_*`` from ``gestaltdb.viz.api`` for property labels, attribute

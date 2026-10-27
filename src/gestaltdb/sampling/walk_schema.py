@@ -132,7 +132,9 @@ class WalkSchema:
                 if types is not None:
                     mask &= np.isin(snapshot.node_type_ids[endpoints], types)
             edges, endpoints = edges[mask], endpoints[mask]
-            weights = np.array([self.relation_weights.get(int(rel), 1.0) for rel in snapshot.rel_int[edges]])
+            weights = np.array([self.relation_weights.get(int(rel), 1.0) for rel in snapshot.rel_int[edges]]) if (
+                self.relation_weights
+            ) else np.ones(edges.size)
             # Scale both factors before multiplying to avoid overflow.
             arc_weight = arc.weight if arc is not None else 1.0
             chunks.append((edges, endpoints, arc.target_state if arc is not None else state, weights, arc_weight))

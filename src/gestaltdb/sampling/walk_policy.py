@@ -131,17 +131,18 @@ def sample_policy_walks(
                     forbidden = set(list(history)[-policy.avoid_recent:]) if policy.avoid_recent else set()
                     if policy.non_backtracking and previous is not None:
                         forbidden.add(previous)
-                    allowed = ~np.isin(endpoints, list(forbidden))
-                    if np.any(allowed):
-                        candidates = candidates[allowed]
-                        endpoints, next_states, schema_weights = (
-                            values[allowed] for values in (endpoints, next_states, schema_weights)
-                        )
-                        if candidate_times is not None:
-                            candidate_times = candidate_times[allowed]
-                    elif policy.avoidance_exhaustion != "relax":
-                        candidates = candidates[:0]
-                        action = policy.avoidance_exhaustion
+                    if forbidden:
+                        allowed = ~np.isin(endpoints, list(forbidden))
+                        if np.any(allowed):
+                            candidates = candidates[allowed]
+                            endpoints, next_states, schema_weights = (
+                                values[allowed] for values in (endpoints, next_states, schema_weights)
+                            )
+                            if candidate_times is not None:
+                                candidate_times = candidate_times[allowed]
+                        elif policy.avoidance_exhaustion != "relax":
+                            candidates = candidates[:0]
+                            action = policy.avoidance_exhaustion
                 if candidates.size:
                     weights = schema_weights
                     use_static = (previous is not None or policy.weighted_first_step) if policy.node2vec else (

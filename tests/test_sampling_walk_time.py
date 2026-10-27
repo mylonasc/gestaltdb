@@ -95,3 +95,18 @@ def test_recency_weights_favor_reference(snapshot):
 def test_temporal_policy_validation(options):
     with pytest.raises((ValueError, TypeError)):
         TemporalWalkPolicy(**options)
+
+
+def test_cache_prototype_does_not_reuse_wrong_clock_or_filter(snapshot):
+    from benchmarks.walk_cache import WalkTransitionCache, cache_transitions
+
+    cache = WalkTransitionCache(max_entries=8, max_bytes=1024)
+    for context in (None, TemporalContext.during(6, 9)):
+        options = dict(policy=WalkPolicy(chronology=TemporalWalkPolicy()),
+                       temporal=context, dead_end="restart")
+        expected = SamplerEngine(snapshot, seed=8).sample_policy_walks([0, 1, 2], 8, **options)
+        with cache_transitions(cache):
+            actual = SamplerEngine(snapshot, seed=8).sample_policy_walks([0, 1, 2], 8, **options)
+        for name in expected.to_numpy():
+            np.testing.assert_array_equal(actual.to_numpy()[name], expected.to_numpy()[name])
+    assert cache.stats()["payload_bytes"] <= 1024

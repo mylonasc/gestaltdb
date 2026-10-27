@@ -1,5 +1,5 @@
 Random-walk embedding pipelines
-==============================
+======================================================================
 
 GestaltDB generates walk corpora and framework-neutral training inputs; it does
 not train embedding models. The RWS-01–RWS-08 roadmap is tracked in GitHub #416.
@@ -7,7 +7,7 @@ All node, edge, relation and type IDs below are compact IDs from the exact same
 sampler snapshot. Do not mix IDs from different snapshots.
 
 RWS-01: streaming corpora
-------------------------
+----------------------------------------------------------------------
 
 ``engine.iter_random_walks`` streams ordinary ``RandomWalkBatch`` objects over
 all snapshot nodes or explicit seeds. See :doc:`typed-sampling` for memory,
@@ -15,7 +15,7 @@ restart, seed-round and reproducibility contracts. Consume batches rather than
 collecting the full iterator. Existing walk methods and defaults are unchanged.
 
 RWS-02: Skip-gram context pairs
-------------------------------
+----------------------------------------------------------------------
 
 ``iter_context_pairs`` consumes a walk batch or an iterable of batches. It yields
 ``ContextPairBatch`` objects containing aligned ``center_nodes``,
@@ -56,7 +56,7 @@ these arrays without copying. No training-framework dependency is needed.
        assert pairs[0].center_nodes.tolist() == [0, 1, 1]
 
 RWS-03: embedding-objective negatives
-------------------------------------
+----------------------------------------------------------------------
 
 ``ContextNegativeSampler(frequencies, exponent=0.75, seed=...)`` uses explicit
 corpus counts/frequencies. ``ContextNegativeSampler.from_snapshot(snapshot)``
@@ -86,7 +86,7 @@ always raises for a nonzero request. This is separate from KG triple negatives.
    assert set(result[0]) == {2, 3}
 
 RWS-04: non-backtracking and recent-history avoidance
----------------------------------------------------
+----------------------------------------------------------------------
 
 ``engine.sample_policy_walks(seeds, length, policy=WalkPolicy(...))`` is an
 opt-in kernel; legacy first-order/node2vec defaults are unchanged. Use
@@ -118,7 +118,7 @@ on the policy uses static edge weights; invalid all-zero candidate weights raise
        assert batch.lengths.tolist() == [1]
 
 RWS-05: heterogeneous and finite-state walks
-------------------------------------------
+----------------------------------------------------------------------
 
 Pass ``WalkPolicy(schema=WalkSchema(...))`` to the policy kernel. ``node_types``
 restricts candidate target types; ``metapath`` is a cyclic compact relation-ID
@@ -153,7 +153,7 @@ implicitly expand hierarchies.
    assert policy.schema.initial_state == 0
 
 RWS-06: chronological interval/event walks
-----------------------------------------
+----------------------------------------------------------------------
 
 ``WalkPolicy(chronology=TemporalWalkPolicy(...))`` requires a temporal snapshot.
 It is separate from ordinary point/window eligibility filters, which remain in
@@ -198,7 +198,7 @@ guarantees still apply. Legacy non-chronological batch formats are unchanged.
    assert policy.chronology.order == "nondecreasing"
 
 RWS-07: transition units and node2vec adjacency
----------------------------------------------
+----------------------------------------------------------------------
 
 ``WalkPolicy(transition_unit="edge")`` samples eligible (arc, edge) alternatives.
 Parallel edges therefore affect endpoint probabilities. ``transition_unit="neighbor"``
@@ -240,3 +240,64 @@ adjacency for those combinations. Both options leave legacy methods unchanged.
        bias_adjacency="eligible", weighted_first_step=True,
    )
    assert uniform_neighbors.transition_unit == weighted_neighbors.transition_unit
+
+RWS-08: measured acceleration decision
+----------------------------------------------------------------------
+
+The pure-Python reference stays the runtime executor. Profiling identified schema
+candidate construction, weighted choice and node2vec adjacency/``isin`` work as
+major costs. The implementation avoids per-edge dictionary lookups when relation
+weights are absent, and skips avoidance membership tests/copies when the forbidden
+set is empty. These retain seeded parity and do not add another executor.
+
+A bounded distribution-LRU prototype lives ONLY in ``benchmarks/walk_cache.py``.
+It keys exact ordered candidate IDs and effective weight bytes, retaining at most
+the configured entries and key/array payload bytes. It covers static first-order
+distributions and bounded node2vec transition states without conflating filters,
+clock states or changed weights. Tests cover evictions, oversize-entry bypass,
+changed-weight keys, snapshot rebinding, temporal-filter/clock parity, and exact
+seeded output. Neighbor-group choices bypass it. It is not a public runtime API.
+
+Reproduce the screening experiment (no optional backend is needed):
+
+.. code-block:: console
+
+   uv run python -m benchmarks.random_walks --nodes 100 --edges 600 --walks 100 --length 10 --cache --profile
+   uv run python -m benchmarks.random_walks --nodes 100 --edges 600 --walks 100 --length 10 --cache --mode memmap
+   uv run python -m benchmarks.random_walks --nodes 100 --edges 12000 --walks 150 --length 10 --workload hub --cache
+
+JSON includes actual transitions/walks per second, Python-traced peak allocation,
+cumulative process peak RSS (Linux KiB), output bytes, exact output hashes, cache
+hits/misses/evictions/payload, parameters, Python/NumPy versions and optional
+profile hotspots. Both the legacy kernel and equivalent opt-in policy are checked
+against cached output. Timing includes streaming result hashing and tracemalloc;
+these are small single-run screening measurements, not statistical speed claims.
+Python allocation tracing is not native NumPy/RSS accounting. Process RSS is a
+cumulative high-water mark, not a per-case allocation measurement.
+
+On the development host (Python 3.12.3, NumPy 2.5.2), seed 7, batch size 64,
+4 MiB cache payload cap / 1024 entries:
+
+.. csv-table:: Observed transitions/second, rounded
+   :header: "Layout/workload", "Walk", "Legacy", "Policy reference", "Cache prototype"
+
+   "RAM / uniform, 600 edges", First-order, 8980, 5116, 4793
+   "RAM / uniform, 600 edges", Node2vec, 5224, 3780, 3522
+   "RAM / hub, 600 edges", First-order, 8191, 4590, 4493
+   "RAM / hub, 600 edges", Node2vec, 4516, 3280, 3199
+   "Memmap / uniform, 600 edges", First-order, 8193, 4725, 4556
+   "Memmap / uniform, 600 edges", Node2vec, 4813, 3627, 3307
+   "Memmap / hub, 600 edges", First-order, 7393, 4388, 4283
+   "Memmap / hub, 600 edges", Node2vec, 4121, 3076, 3018
+   "RAM / hub, 12000 edges", First-order, 4128, 2683, 2542
+   "RAM / hub, 12000 edges", Node2vec, 2077, 1687, 1621
+
+Retained prototype payloads were 32–57 kB for small graphs and 661/991 kB for
+the large hub first-order/node2vec runs. Python-traced peak allocations on that
+hub grew from roughly 1.58/1.48 MB without cache to 2.23/2.55 MB with it.
+High hit rates did not offset exact-key overhead: the cache was slower in every
+screened case. **Decision:** do not adopt the cache or introduce native kernels
+based on this evidence. Keep the bounded prototype for future workload-driven
+experiments, coordinated with #123. Use the legacy kernels when no extended
+policy is needed; policy composition itself has measurable overhead. Revisit
+only with representative repeated measurements and unchanged correctness gates.
