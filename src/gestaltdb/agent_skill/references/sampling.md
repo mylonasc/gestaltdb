@@ -31,6 +31,7 @@ Use `SamplerSnapshot` and `SamplerEngine` for ML training pipelines. These APIs 
 - `sample_neighbors`: batched uniform/weighted neighbors, direction/relation filters, per-seed offsets.
 - `sample_layers`: independent fanout, direction, relation, replacement, and strategy per layer.
 - `sample_random_walks`: uniform/weighted first-order walks, repeating metapaths, restarts and dead-end policies.
+- `iter_random_walks`: lazy batches over all nodes (`start_nodes=None`) or explicit compact seeds, with `walks_per_node`, `batch_size`, optional round shuffling, and `walk_type="random"|"node2vec"`. Extra options go to the selected kernel. Explicit seeds are copied; global shuffling needs O(seed count) storage. Consume/discard batches and retain the snapshot lifetime. The same initial RNG state/options give batch-size-independent concatenated walks only without interleaved RNG users. Reuse `worker_engine` for independent streams; no automatic workers or partitioning.
 - `sample_multihop` / `sample_subgraph`: multi-hop topology and edge-seeded batches with positives and negatives.
 - `sample_hard_negatives`: endpoint-type/relation constraints, positive rejection, temporal policies.
 

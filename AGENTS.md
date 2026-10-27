@@ -199,6 +199,8 @@ Temporal snapshots also index node availability and positive-triple intervals. `
 
 Resolve external IDs with `snapshot.node_int(...)`, `snapshot.edge_int(...)`, and `snapshot.relation_int(...)`; plural variants preserve input order. Convenience methods ending in `_external` accept external node, edge, and relation IDs while retaining compact array-native results. Use `to_external(snapshot)` on neighbor, layered, and random-walk batches when external output IDs are needed. Temporal edge IDs can be ambiguous across versions; use compact edge rows in that case.
 
+Walk corpus iteration: `engine.iter_random_walks(..., walks_per_node=..., batch_size=..., walk_type="random"|"node2vec")` yields ordinary batches, visiting all nodes when seeds are omitted. Unshuffled all-node seed buffers are batch-sized; global round shuffling uses O(seed count) storage. Implementation: `sampling/walks.py`; roadmap: GitHub #416 (`RWS-01`–`RWS-08`).
+
 ## Visualization
 
 - Packaged offline viz lives in `src/gestaltdb/viz/` (Python, stdlib only) plus `web/` (React + D3 + Vite source, build-time only). The prebuilt bundle is committed at `src/gestaltdb/viz/static/` and shipped via `package-data`.

@@ -409,6 +409,64 @@ undirected incident adjacency; the first transition is uniform and static
 snapshot edge weights multiply the bias. Distances ignore relation and
 temporal filters by design.
 
+Streaming walk corpora (RWS-01)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``engine.iter_random_walks`` yields ordinary ``RandomWalkBatch`` objects without
+building the complete corpus. Each round visits every seed position once;
+``walks_per_node`` controls the number of rounds. Omit ``start_nodes`` to visit
+all compact snapshot nodes, or pass a compact-ID cohort (duplicates are retained).
+Resolve external cohorts with ``snapshot.node_ints(...)``.
+
+.. code-block:: python
+
+   from tempfile import TemporaryDirectory
+   from gestaltdb.sampling import SamplerEngine, SamplerSnapshot
+
+   with TemporaryDirectory() as root:
+       snapshot = SamplerSnapshot.from_edge_arrays(
+           root + "/snapshot", external_node_ids=["a", "b"],
+           external_edge_ids=["ab"], external_relation_ids=["R"],
+           src_int=[0], dst_int=[1], rel_int=[0],
+       )
+       engine = SamplerEngine.load(snapshot.path, mode="memmap", seed=7)
+       count = 0
+       for batch in engine.iter_random_walks(
+           walk_length=4, walks_per_node=3, batch_size=2,
+           direction="any", shuffle=True,
+       ):
+           count += len(batch.lengths)
+           # Feed valid node prefixes to an external embedding trainer.
+           for nodes, length in zip(batch.node_ids, batch.lengths):
+               sequence = nodes[:int(length) + 1]
+       assert count == 6
+
+Use ``walk_type="node2vec"`` with ``return_factor``/``inout_factor`` for biased
+walks; otherwise extra keywords go to ``sample_random_walks`` unchanged,
+including weights, metapaths, restarts, and temporal filters. Padding, restart
+markers, and transition-count lengths retain the existing batch conventions.
+Arguments are validated when the iterator is created, even for zero rounds or
+empty cohorts. Generation is lazy; zero rounds or empty cohorts yield no batches.
+
+Unshuffled all-node iteration allocates only batch-sized seed buffers. Explicit
+cohorts are copied once, and ``shuffle=True`` allocates an O(seed count) global
+permutation for each round; it is not constant-memory shuffling. Output storage
+is O(batch size times walk length), in addition to the existing kernel candidate
+buffers. Consume/discard batches rather than collecting the iterator into a list.
+Keep the snapshot alive throughout iteration, including with memory mapping.
+
+Replay requires the same initial engine RNG state, snapshot, seed cohort, options,
+and consumption order. Changing only batch size preserves concatenated walks,
+including shuffled rounds; interleaving other operations on that RNG voids this
+guarantee. Existing ``worker_engine(worker_id, num_workers=...)`` provides
+independent worker streams. Iteration does not launch workers, partition seed
+cohorts automatically, or promise invariance across worker counts. Embedding
+training, context-pair generation, and embedding-objective negatives remain
+external to this API.
+
+Layer exports
+~~~~~~~~~~~~~
+
 ``LayeredSampleBatch`` preserves each layer's ``SampledNeighbors`` block and
 deduplicates the next frontier. ``to_blocks(snapshot)`` additionally repackages
 each layer as a framework-neutral bipartite message-passing block: unique

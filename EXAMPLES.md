@@ -749,6 +749,14 @@ with TemporaryDirectory() as tmpdir:
         external_walks = walks.to_external(snapshot)
         print(external_walks["node_ids"][0, : walks.lengths[0] + 1].tolist())
 
+        # RWS-01: consume bounded walk batches rather than a whole corpus.
+        for walk_batch in engine.iter_random_walks(
+            walk_length=4, walks_per_node=2, batch_size=2, direction="any"
+        ):
+            for nodes, length in zip(walk_batch.node_ids, walk_batch.lengths):
+                sequence = nodes[:int(length) + 1]
+                assert len(sequence) >= 1
+
         batch = engine.sample_subgraph_external(
             ["d1-p1"],
             fanouts=[10, 5],

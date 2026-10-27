@@ -102,6 +102,18 @@ transitions with edge and relation IDs set to `-1`, so consumers can distinguish
 teleports from graph edges. Metapath relations repeat cyclically and advance only
 when an edge is traversed.
 
+`engine.iter_random_walks(start_nodes=None, walk_length=40, walks_per_node=1,
+batch_size=1024, shuffle=False, walk_type="random", **walk_options)` streams
+ordinary walk batches in seed rounds (RWS-01). `None` visits all nodes; explicit
+compact cohorts retain duplicates and are copied once. Use `walk_type="node2vec"`
+to forward options to the biased kernel. Validation is eager, generation lazy.
+Unshuffled all-node seed buffers are batch-sized; shuffling needs an O(seed count)
+permutation. Output memory is O(batch size × walk length), plus kernel candidate
+buffers. Consume/discard batches and keep the snapshot alive. Given the same
+initial RNG state and no interleaved RNG operations, changing batch size preserves
+concatenated walks. Reuse `worker_engine` for independent streams; no automatic
+parallelism, cohort partitioning, or worker-count invariance is implied.
+
 ### Mapping IDs Back to External Graph
 `SampledSubgraphBatch` local arrays index nodes locally within the batch (`senders`, `receivers`, `positives`, `negatives`).
 - `batch.node_ids_global`: Maps local batch index to compact global snapshot ID.
