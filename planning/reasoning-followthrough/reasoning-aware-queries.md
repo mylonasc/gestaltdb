@@ -28,7 +28,7 @@ implicitly imported. Selection maps output labels/classes and types/predicates.
 - [x] Document a runnable workflow and supported/non-supported semantics.
 - [x] Run focused tests, lint, documentation and module-size checks.
 - [x] Push implementation/documentation milestones to the feature branch.
-- [ ] Open a pull request and update #395: blocked by GitHub token permissions.
+- [x] Open a pull request linked to #395: PR #426.
 
 ## Resource policy
 
@@ -40,6 +40,12 @@ tracked on GitHub with workload and resource rationale.
 
 ## Progress
 
+- PR #426 review: no blocking findings in the read-only query subset, logical
+  projection or before/after generation/source authentication. Fresh local
+  regression on Python 3.12 with LMDB and LevelDB: **759 passed, 44 optional
+  skips** (query adapter, inferred views, admission and every Cypher test).
+  Version advanced from 0.15.0 to 0.16.0 for the additive public API; no tag or
+  PyPI publication is part of this merge.
 - Adapter milestone: 36 focused tests passed with LMDB on Python 3.12.
   Preparation explicitly receives both the live source graph (freshness) and
   its borrowed snapshot (authenticated extraction); these are distinct handles.
@@ -55,7 +61,8 @@ tracked on GitHub with workload and resource rationale.
 - Modular documentation examples: initial failures were missing optional plyvel;
   rerun with the LevelDB extra passed (5 passed, 3 optional-dependency skips).
   No production changes were made for missing dependencies.
-- GitHub issue comment updates are blocked by the configured token (GraphQL
+- Historical submission blocker (resolved when PR #426 was created):
+  GitHub issue comment updates were blocked by the configured token (GraphQL
   and REST both return HTTP 403). Checklist updates remain in commits; include
   this evidence and the issue linkage in the eventual pull request.
 - PR creation also rejected by both GraphQL `createPullRequest` and REST

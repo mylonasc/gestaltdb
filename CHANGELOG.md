@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.16.0 — generation-pinned reasoning-aware Cypher
+
 - Added explicit generation-pinned, read-only Cypher over selected logical
   inference facts via `ReasoningQueryView` (#395). Supports node/one-hop
   patterns, explicit asserted-only/plus-inferred modes, source freshness,
