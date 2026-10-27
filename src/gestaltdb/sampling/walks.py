@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Iterator, Sequence
+from typing import TYPE_CHECKING, Callable, Iterator, Sequence, cast
 
 import numpy as np
 
 from .snapshot import SamplerSnapshot
+from ._arrays import Array, IntArray, StringArray
 
 if TYPE_CHECKING:
     from .engine import SamplerEngine
@@ -23,12 +24,12 @@ class RandomWalkBatch:
     populated transitions, including restart transitions.
     """
 
-    node_ids: np.ndarray
-    edge_indices: np.ndarray
-    relation_ids: np.ndarray
-    lengths: np.ndarray
+    node_ids: IntArray
+    edge_indices: IntArray
+    relation_ids: IntArray
+    lengths: IntArray
 
-    def to_numpy(self) -> dict[str, np.ndarray]:
+    def to_numpy(self) -> dict[str, IntArray]:
         """Return the walk arrays without copying them."""
         return {
             "node_ids": self.node_ids,
@@ -37,7 +38,7 @@ class RandomWalkBatch:
             "lengths": self.lengths,
         }
 
-    def to_external(self, snapshot: SamplerSnapshot) -> dict[str, np.ndarray]:
+    def to_external(self, snapshot: SamplerSnapshot) -> dict[str, Array]:
         """Convert compact walk IDs to external IDs, preserving ``None`` gaps."""
         return {
             "node_ids": _external_id_array(self.node_ids, snapshot.external_node_ids),
@@ -47,13 +48,13 @@ class RandomWalkBatch:
         }
 
 
-def _external_id_array(compact_ids: np.ndarray, external_ids: np.ndarray) -> np.ndarray:
+def _external_id_array(compact_ids: IntArray, external_ids: StringArray) -> Array:
     compact_ids = np.asarray(compact_ids, dtype=np.int64)
     result = np.full(compact_ids.shape, None, dtype=object)
     valid = compact_ids >= 0
     if np.any(valid):
         selected = compact_ids[valid]
-        if selected.max() >= external_ids.size:
+        if cast(Callable[[], np.int64], selected.max)() >= external_ids.size:
             raise ValueError("compact IDs are outside the snapshot ID range")
         result[valid] = external_ids[selected]
     return result

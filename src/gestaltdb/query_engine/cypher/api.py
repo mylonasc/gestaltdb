@@ -15,15 +15,16 @@ from .ast import (
     CreateConstraint,
     DropConstraint,
     EntailsCall,
-    Query,
-    SampleTypedPathsCall,
-    ShowIndexes,
-    ShowConstraints,
-    UnionQuery,
+    ForeachClause,
     MatchClause,
     OptionalMatchClause,
+    Query,
+    SampleTypedPathsCall,
+    ShowConstraints,
+    ShowIndexes,
     SubqueryClause,
-    ForeachClause,
+    TemporalQualifier,
+    UnionQuery,
 )
 from .parser import parse as _parse_query
 from .parser import parse_ast as _parse_ast
@@ -165,7 +166,7 @@ def execute(
         logical_plan = plan_staged_query(canonical)
     if read_snapshot is True and _plan_has_writes(logical_plan):
         raise ValueError("read_snapshot=True cannot be used with Cypher writes")
-    qualifiers = _temporal_qualifiers(canonical)
+    qualifiers = _temporal_qualifiers(canonical) if isinstance(canonical, (Query, UnionQuery)) else ()
     if qualifiers:
         from gestaltdb.temporal import TemporalInstant
         from .expr import evaluate_expression
@@ -243,10 +244,10 @@ def execute(
     return QueryResult(columns=logical_plan.columns, records=records)
 
 
-def _temporal_qualifiers(value) -> tuple[object, ...]:
+def _temporal_qualifiers(value: Query | UnionQuery) -> tuple[TemporalQualifier, ...]:
     if not isinstance(value, (Query, UnionQuery)):
         return ()
-    qualifiers = []
+    qualifiers: list[TemporalQualifier] = []
     queries = value.branches if isinstance(value, UnionQuery) else (value,)
     for branch in queries:
         for clause in branch.clauses:

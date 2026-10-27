@@ -19,14 +19,15 @@ import hashlib
 import json
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Iterator, Mapping, cast
 
 if TYPE_CHECKING:
     from ..kvstores import KVStore
+    from ..readview import GraphReadView
 
 from ..epistemic import Claim
 
-from ..temporal import TemporalInstant, TemporalInterval
+from ..temporal import TemporalInstant, TemporalInterval, TemporalIntervalInput
 from ..versioning import (
     ClaimVersion,
     EdgeVersion,
@@ -34,6 +35,7 @@ from ..versioning import (
     TemporalCommit,
     TemporalCorruptionError,
     TemporalVersionError,
+    TemporalVersion,
     VersionOperation,
     canonical_json_bytes,
     decode_version_envelope,
@@ -53,7 +55,8 @@ from .temporal_keys import (
     temporal_visible_key,
 )
 from .temporal_sequence import read_temporal_sequence
-
+from .entities import Edge, GraphEntityDictSerializer, Node
+from .temporal_types import CommitCache, PointInput, TemporalReadSource, VersionFields, VersionT
 
 
 @dataclass
@@ -61,8 +64,8 @@ class TemporalReader:
     """Store-bound historical read capability for one graph scope."""
 
     store: KVStore
-    entity_serializer: object
-    commit_cache: dict
+    entity_serializer: GraphEntityDictSerializer
+    commit_cache: CommitCache
     sequence_key: bytes
     store_path: Path | None
     sequence_filename: str
@@ -71,7 +74,7 @@ class TemporalReader:
 
     # -- version decoding ---------------------------------------------
 
-    def decode_version(self, envelope: bytes):
+    def decode_version(self, envelope: bytes) -> TemporalVersion:
         """Decode one version envelope, verifying payload identity."""
         header, payload = decode_version_envelope(envelope)
         required = {
@@ -94,7 +97,7 @@ class TemporalReader:
             ):
                 raise TypeError
             valid = TemporalInterval.from_values(header["valid_from_us"], header["valid_to_us"])
-            common = {
+            common: VersionFields = {
                 "version_id": normalize_version_id(header["version_id"]),
                 "logical_id": normalize_logical_id(header["logical_id"]),
                 "valid": valid,
@@ -128,7 +131,7 @@ class TemporalReader:
         if operation is VersionOperation.RETRACT:
             if payload:
                 raise TemporalCorruptionError("temporal retraction unexpectedly contains a payload")
-            entity = None
+            entity: Node | Edge | Claim | None = None
         elif not payload:
             raise TemporalCorruptionError("temporal assertion or correction has no payload")
         elif header["entity_kind"] == "node":
@@ -153,26 +156,26 @@ class TemporalReader:
             if entity_id != common["logical_id"]:
                 raise TemporalCorruptionError("temporal payload ID does not match its logical ID")
         if header["entity_kind"] == "node":
-            return NodeVersion(**common, node=entity)
+            return NodeVersion(**common, node=cast(Node | None, entity))
         if header["entity_kind"] == "edge":
-            return EdgeVersion(**common, edge=entity)
+            return EdgeVersion(**common, edge=cast(Edge | None, entity))
         if header["entity_kind"] == "claim":
-            return ClaimVersion(**common, claim=entity)
+            return ClaimVersion(**common, claim=cast(Claim | None, entity))
         raise TemporalCorruptionError("unknown temporal entity kind")
 
     @staticmethod
-    def copy_payload(version):
+    def copy_payload(version: VersionT) -> VersionT:
         """Detach mutable entity payloads from a cached version."""
         if isinstance(version, NodeVersion) and version.node is not None:
-            return replace(version, node=copy.deepcopy(version.node))
+            return cast(VersionT, replace(version, node=copy.deepcopy(version.node)))
         if isinstance(version, EdgeVersion) and version.edge is not None:
-            return replace(version, edge=copy.deepcopy(version.edge))
+            return cast(VersionT, replace(version, edge=copy.deepcopy(version.edge)))
         # Claim and its recursively frozen provenance are immutable values.
         return version
 
     # -- commit reads -------------------------------------------------
 
-    def get_commit(self, commit_id: int, *, _validate_supersession: bool = True):
+    def get_commit(self, commit_id: int, *, _validate_supersession: bool = True) -> TemporalCommit | None:
         """Return a validated visible commit with detached mutable entities.
 
         Decode reuse is bounded and scoped to the exact store object. Pinned
@@ -185,7 +188,7 @@ class TemporalReader:
         return replace(commit, versions=tuple(self.copy_payload(v) for v in commit.versions))
 
     def get_commit_cached(self, commit_id: int, *,
-                          _validate_supersession: bool = True):
+                          _validate_supersession: bool = True) -> TemporalCommit | None:
         """Return a cached validated commit, rechecking store markers."""
         if isinstance(commit_id, bool) or not isinstance(commit_id, int) or commit_id < 1:
             raise ValueError("commit_id must be a positive integer")
@@ -202,9 +205,9 @@ class TemporalReader:
         if descriptor_payload is None or marker != hashlib.sha256(descriptor_payload).digest():
             raise TemporalCorruptionError("temporal commit marker does not match its descriptor")
         if cached is not None and cached[1] == descriptor_payload:
-            envelopes = tuple(self.store.get_metadata(temporal_record_key(commit_id, ordinal))
+            cached_envelopes = tuple(self.store.get_metadata(temporal_record_key(commit_id, ordinal))
                               for ordinal in range(len(cached[2])))
-            if envelopes != cached[2]:
+            if cached_envelopes != cached[2]:
                 raise TemporalCorruptionError("temporal commit record is missing or corrupt")
             # Supersession targets can change on mutable stores too. Only
             # reuse the non-supersession validation result in this path.
@@ -252,8 +255,8 @@ class TemporalReader:
             metadata = immutable_metadata(descriptor_metadata)
         except (KeyError, TypeError, ValueError) as exc:
             raise TemporalCorruptionError("invalid temporal commit metadata") from exc
-        versions = []
-        envelopes = []
+        versions: list[TemporalVersion] = []
+        envelopes: list[bytes] = []
         for ordinal, (version_id, expected_digest) in enumerate(zip(version_ids, record_digests)):
             envelope = self.store.get_metadata(temporal_record_key(commit_id, ordinal))
             if envelope is None or hashlib.sha256(envelope).hexdigest() != expected_digest:
@@ -285,7 +288,7 @@ class TemporalReader:
         self.commit_cache[cache_key] = (self.store, descriptor_payload, tuple(envelopes), commit)
         return commit
 
-    def iter_commits(self, *, through_commit=None):
+    def iter_commits(self, *, through_commit: int | None = None) -> Iterator[TemporalCommit]:
         """Iterate visible commits in commit order, skipping incomplete commits."""
         last_commit_id, _ = read_temporal_sequence(
             self.store, self.sequence_key, self.store_path, self.sequence_filename)
@@ -297,13 +300,13 @@ class TemporalReader:
 
     # -- version lookups ----------------------------------------------
 
-    def get_version(self, version_id: str):
+    def get_version(self, version_id: str) -> TemporalVersion | None:
         """Return the latest visible version with an ID, scanning all commits."""
         last_commit_id, _ = read_temporal_sequence(
             self.store, self.sequence_key, self.store_path, self.sequence_filename)
         return self.get_version_through(version_id, last_commit_id)
 
-    def get_version_at(self, locator: bytes):
+    def get_version_at(self, locator: bytes) -> TemporalVersion | None:
         """Return the version addressed by an opaque index locator."""
         commit_id, ordinal = decode_temporal_locator(locator)
         commit = self.get_commit_cached(commit_id, _validate_supersession=False)
@@ -313,7 +316,7 @@ class TemporalReader:
             raise TemporalCorruptionError("temporal index locator ordinal is out of range")
         return self.copy_payload(commit.versions[ordinal])
 
-    def get_version_through(self, version_id: str, through_commit: int):
+    def get_version_through(self, version_id: str, through_commit: int) -> TemporalVersion | None:
         """Return the latest version with an ID up to a commit horizon."""
         version_id = normalize_version_id(version_id)
         for commit_id in range(1, through_commit + 1):
@@ -325,7 +328,7 @@ class TemporalReader:
                     return self.copy_payload(version)
         return None
 
-    def system_horizon(self, *, system_time=None, through_commit=None) -> int:
+    def system_horizon(self, *, system_time: PointInput | None = None, through_commit: int | None = None) -> int:
         """Resolve a system-time/through-commit selection to a commit horizon."""
         if system_time is not None and through_commit is not None:
             raise ValueError("provide either system_time or through_commit, not both")
@@ -369,8 +372,8 @@ class TemporalReader:
 
     # -- typed version entry points ------------------------------------
 
-    def _version_by_id(self, version_id: str, kind, *, system_time=None,
-                       through_commit=None):
+    def _version_by_id(self, version_id: str, kind: type[VersionT], *, system_time: PointInput | None = None,
+                       through_commit: int | None = None) -> VersionT | None:
         horizon = self.system_horizon(system_time=system_time, through_commit=through_commit)
         _temporal_indexes.ensure_temporal_indexes(
             self.store, self.state_key, self.stale_key, horizon)
@@ -386,20 +389,20 @@ class TemporalReader:
             return None
         return version if isinstance(version, kind) else None
 
-    def get_node_version(self, version_id: str, *, system_time=None,
-                         through_commit=None):
+    def get_node_version(self, version_id: str, *, system_time: PointInput | None = None,
+                         through_commit: int | None = None) -> NodeVersion | None:
         """Return a visible node version by UUID using the temporal index."""
         return self._version_by_id(version_id, NodeVersion, system_time=system_time,
                                    through_commit=through_commit)
 
-    def get_edge_version(self, version_id: str, *, system_time=None,
-                         through_commit=None):
+    def get_edge_version(self, version_id: str, *, system_time: PointInput | None = None,
+                         through_commit: int | None = None) -> EdgeVersion | None:
         """Return a visible edge version by UUID using the temporal index."""
         return self._version_by_id(version_id, EdgeVersion, system_time=system_time,
                                    through_commit=through_commit)
 
-    def get_claim_version(self, version_id: str, *, system_time=None,
-                          through_commit=None):
+    def get_claim_version(self, version_id: str, *, system_time: PointInput | None = None,
+                          through_commit: int | None = None) -> ClaimVersion | None:
         """Return a visible epistemic claim version by UUID."""
         return self._version_by_id(version_id, ClaimVersion, system_time=system_time,
                                    through_commit=through_commit)
@@ -408,7 +411,7 @@ class TemporalReader:
     # -- point-in-time selection ------------------------------------------
 
 
-def claim_valid_interval(valid, valid_from, valid_to, *, required):
+def claim_valid_interval(valid: TemporalIntervalInput | None, valid_from: PointInput | None, valid_to: PointInput | None, *, required: bool) -> TemporalInterval | None:
     """Normalize claim validity inputs to at most one half-open interval."""
     if valid is not None and (valid_from is not None or valid_to is not None):
         raise TemporalVersionError("provide either valid or valid_from/valid_to, not both")
@@ -426,9 +429,9 @@ def claim_valid_interval(valid, valid_from, valid_to, *, required):
     )
 
 
-def open_temporal_view(graph, reader: "TemporalReader", *, manifest: dict,
-                       database_id: str, valid_time, system_time=None,
-                       through_commit=None):
+def open_temporal_view(graph: TemporalReadSource, reader: "TemporalReader", *, manifest: Mapping[str, Any],
+                       database_id: str, valid_time: PointInput, system_time: PointInput | None = None,
+                       through_commit: int | None = None) -> Iterator[GraphReadView]:
     """Yield a temporal read view pinned to one visible commit horizon.
 
     ``graph`` is the live handle the returned view binds to; all history
@@ -452,7 +455,7 @@ def open_temporal_view(graph, reader: "TemporalReader", *, manifest: dict,
                 continue
             break
         marker_candidate = reader.store.get_metadata(temporal_visible_key(commit_id))
-        markers.append(commit_id.to_bytes(8, "big") + marker_candidate)
+        markers.append(commit_id.to_bytes(8, "big") + cast(bytes, marker_candidate))
         latest = commit_id
     if system_time is not None:
         through_commit = min(

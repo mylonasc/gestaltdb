@@ -276,6 +276,8 @@ def admit_range_result(view: GraphReadView, result: RangeReasoningResult, progra
         if size > maximum:
             raise ReasoningLimitError(f"range admission exceeded {name}")
     binding, interval = result.binding, result.binding.identity.source
+    if not isinstance(interval, TemporalRangeSourceIdentity):
+        raise ProvenanceMismatchError("range admission requires a temporal-range source")
     for rows in (result.evidence, result.closure.base):
         pieces = 0
         for row in rows:

@@ -21,9 +21,10 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Callable, Iterable, Mapping
+from typing import Callable, Iterable, Mapping, cast
 
 from .model import ReasoningError, ReasoningLimitError, ReasoningLimits, Variable, _text, check_cancelled
+from .terms import Literal
 from .typed import (
     GenericProgram,
     GenericRule,
@@ -94,7 +95,9 @@ class DependencyIndex:
         object.__setattr__(self, "supports", tuple(sorted(set(self.supports),
                                                             key=lambda s: (s.fact.predicate, s.rule_id,
                                                                            _sort_key(s.fact)))))
-        forward, reverse, premises = defaultdict(list), defaultdict(set), defaultdict(set)
+        forward: dict[TypedFact, list[Support]] = defaultdict(list)
+        reverse: dict[TypedFact, set[TypedFact]] = defaultdict(set)
+        premises: dict[TypedFact, set[TypedFact]] = defaultdict(set)
         for support in self.supports:
             forward[support.fact].append(support)
             premises[support.fact].update(support.premises)
@@ -203,7 +206,7 @@ def _affected_predicates(program: GenericProgram, changed: set[str]) -> set[str]
     downstream: dict[str, set[str]] = defaultdict(set)
     for rule in program.rules:
         for atom in rule.body:
-            downstream[atom.predicate].add(rule.head.predicate)
+            downstream[cast(str, atom.predicate)].add(cast(str, rule.head.predicate))
     affected = set(changed)
     queue = list(changed)
     while queue:
@@ -270,7 +273,7 @@ def propagate_insertions(program: GenericProgram, closure: Iterable[TypedFact], 
         seen: set = set()
         for position, atom in enumerate(rule.body):
             if atom not in seen:
-                by_predicate[atom.predicate].append((rule, position))
+                by_predicate[cast(str, atom.predicate)].append((rule, position))
                 seen.add(atom)
     supports: list[Support] = list(existing_supports)
     seen_supports = {(item.fact, item.rule_id, item.premises) for item in supports}
@@ -295,7 +298,7 @@ def propagate_insertions(program: GenericProgram, closure: Iterable[TypedFact], 
                 if work > limits.max_candidate_rows:
                     raise ReasoningLimitError("propagation exceeded max_candidate_rows")
                 values = tuple(bindings[term] if term in bindings else term for term in rule.head.args)
-                conclusion = TypedFact(rule.head.predicate, values)
+                conclusion = TypedFact(cast(str, rule.head.predicate), cast("tuple[str | Literal, ...]", values))
                 key = (conclusion, rule.rule_id, tuple(sorted(premises, key=_sort_key)))
                 if key not in seen_supports:
                     seen_supports.add(key)
@@ -413,7 +416,8 @@ def _find_all_supports(program: GenericProgram, full: _TypedIndex, target: Typed
     for rule in program.rules:
         if rule.head.predicate != target.predicate or len(rule.head.args) != len(target.values):
             continue
-        bindings, compatible = {}, True
+        bindings: dict[Variable, object] = {}
+        compatible = True
         for term, value in zip(rule.head.args, target.values):
             if isinstance(term, Variable):
                 if term in bindings and bindings[term] != value:
@@ -427,12 +431,12 @@ def _find_all_supports(program: GenericProgram, full: _TypedIndex, target: Typed
             continue
         # The requested conclusion supplies bindings for indexed body probes.
         # Do not enumerate the entire unbound join once per output fact.
-        stack = [(bindings, dict(), tuple(range(len(rule.body))))]
+        stack: list[tuple[dict[Variable, object], dict[int, TypedFact], tuple[int, ...]]] = [(bindings, dict(), tuple(range(len(rule.body))))]
         while stack:
             check_cancelled(cancel)
             bindings, used, remaining = stack.pop()
             if not remaining:
-                values = tuple(bindings.get(term, term) for term in rule.head.args)
+                values = tuple(bindings.get(cast(Variable, term), term) for term in rule.head.args)
                 if tuple(values) != tuple(target.values):
                     continue
                 premises = tuple(sorted((used[index] for index in sorted(used)), key=_sort_key))

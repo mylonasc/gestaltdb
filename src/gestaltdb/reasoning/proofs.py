@@ -40,7 +40,7 @@ class FactWitness:
             return
         if not isinstance(self.rule, Rule) or len(self.premises) != len(self.rule.body) or self.evidence:
             raise ReasoningError("derived witnesses need one premise per body atom and no input reference")
-        bindings = {}
+        bindings: dict[Variable, str] = {}
         for atom, premise in zip(self.rule.body, self.premises):
             if atom.predicate != premise.predicate:
                 raise ReasoningError("witness premise does not match its rule")
@@ -153,7 +153,7 @@ class ProofTrace:
                 else:
                     queued.add(premise)
                     queue.append(premise)
-        return Explanation(fact, nodes, truncated)
+        return Explanation(fact, tuple(nodes), truncated)
 
 
 @dataclass(frozen=True)
@@ -194,7 +194,7 @@ class _ProofCollector:
 
     def start(self) -> None:
         for fact, reference in sorted(self._inputs.items()):
-            evidence = ()
+            evidence: tuple[str, ...] = ()
             if reference is not None:
                 if self.edges < self.limits.max_proof_edges:
                     evidence = (reference,)
@@ -218,4 +218,4 @@ class _ProofCollector:
                 and self.edges + len(rule.body) <= self.limits.max_proof_edges)
 
     def finish(self) -> ProofTrace:
-        return ProofTrace(self.program, self.nodes, self.truncated)
+        return ProofTrace(self.program, tuple(self.nodes), self.truncated)

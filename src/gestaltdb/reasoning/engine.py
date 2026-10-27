@@ -9,7 +9,7 @@ intermediate join tables. All run state belongs to one ``evaluate`` invocation.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Callable, Iterable, Iterator
+from typing import Callable, Iterable, Iterator, cast
 
 from .model import (
     Atom, EvaluationResult, Fact, Program, ReasoningError, ReasoningLimitError,
@@ -106,12 +106,12 @@ def _matches(
     remaining = tuple(index for index in range(len(rule.body)) if index != pivot)
     # One invocation-local path buffer, not a copy per intermediate binding.
     # Consumers must snapshot it before requesting another match.
-    premises = [None] * len(rule.body) if track_premises else None
+    premises: list[Fact | None] | None = [None] * len(rule.body) if track_premises else None
     # Frames retain only the current DFS path; relation buckets are not copied.
     first = delta.candidates(rule.body[pivot], {})
     if observer is not None:
         observer.lookup(rule, pivot, True, {}, first)
-    stack = [({}, remaining, pivot, iter(first))]
+    stack: list[tuple[dict[Variable, str], tuple[int, ...], int, Iterator[Fact]]] = [({}, remaining, pivot, iter(first))]
     while stack:
         bindings, remaining, position, candidates = stack[-1]
         try:
@@ -238,7 +238,7 @@ class DatalogEngine:
                     # Safe heads ensure every Variable has a binding here.
                     subject = _value(rule.head.subject, bindings)
                     object_value = _value(rule.head.object, bindings)
-                    conclusion = Fact(subject, rule.head.predicate, object_value)
+                    conclusion = Fact(cast(str, subject), rule.head.predicate, cast(str, object_value))
                     if conclusion in full.facts or conclusion in added:
                         continue
                     if len(full.facts) + len(added) >= limits.max_facts:

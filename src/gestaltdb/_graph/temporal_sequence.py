@@ -12,13 +12,14 @@ import json
 import os
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..kvstores import KVStore
 
 from ..temporal import TemporalInstant
 from ..versioning import TemporalCorruptionError, TemporalVersionError, canonical_json_bytes
+from .temporal_types import Clock
 
 
 def decode_temporal_sequence(payload: bytes) -> tuple[int, TemporalInstant]:
@@ -62,7 +63,7 @@ def read_temporal_sequence(store: KVStore, key: bytes, store_path: Path | None,
     return sidecar
 
 
-def next_temporal_system_time(clock: Callable[[], object],
+def next_temporal_system_time(clock: Clock,
                               previous: TemporalInstant | None) -> TemporalInstant:
     """Return a system time strictly after ``previous`` (microsecond bump)."""
     current = clock()
@@ -77,7 +78,7 @@ def next_temporal_system_time(clock: Callable[[], object],
 
 def reserve_temporal_sequence(store: KVStore, key: bytes, store_path: Path | None,
                               sequence_filename: str,
-                              clock: Callable[[], object]) -> tuple[int, TemporalInstant]:
+                              clock: Clock) -> tuple[int, TemporalInstant]:
     """Reserve the next commit ID and persist the sequence durably."""
     previous_commit_id, previous_system_time = read_temporal_sequence(
         store, key, store_path, sequence_filename)

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Iterator, cast
 
 from .engine import _Index, _unify, _value
 from .model import Atom, Fact, Program, ReasoningError, ReasoningLimitError, ReasoningLimits, Variable, check_cancelled
@@ -140,13 +140,13 @@ def evaluate_frontier(program: Program, goal: Atom,
                 if initial is None:
                     continue
                 # DFS frames bound intermediate memory to the body depth.
-                stack = [(0, initial, None)]
+                stack: list[tuple[int, dict[Variable, str], Iterator[Fact] | None]] = [(0, initial, None)]
                 while stack:
                     tick()
                     position, bindings, candidates = stack[-1]
                     if position == len(rule.body):
-                        fact = Fact(_value(rule.head.subject, bindings), rule.head.predicate,
-                                    _value(rule.head.object, bindings))
+                        fact = Fact(cast(str, _value(rule.head.subject, bindings)), rule.head.predicate,
+                                    cast(str, _value(rule.head.object, bindings)))
                         if fact not in index.facts and fact not in added:
                             if len(index.facts) + len(added) >= limits.max_facts:
                                 raise ReasoningLimitError("frontier exceeded max_facts")

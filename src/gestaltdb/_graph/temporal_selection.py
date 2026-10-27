@@ -9,13 +9,17 @@ facade-level instrumentation keeps working.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import builtins
+from typing import Iterable, Iterator, Literal, cast, overload
 
 from ..epistemic import Claim, ClaimObjectKind, ClaimPolarity, ClaimStatus, claim_statement_id
+from ..temporal import TemporalInstant
 from ..versioning import (
     ClaimVersion,
     EdgeVersion,
     NodeVersion,
+    TemporalCommit,
+    TemporalVersion,
     TemporalCorruptionError,
     VersionOperation,
     canonical_json_bytes,
@@ -30,13 +34,15 @@ from .temporal_keys import (
     temporal_visible_key,
 )
 from .temporal_reads import TemporalReader
+from .entities import Edge
+from .temporal_types import Hydrator, LiveStore, PointInput, VersionT
 
 
 #: Sentinel for "argument not provided", distinct from ``None``.
 _UNSET = object()
 
 
-def interval_locators(reader, index_name, parts, instant):
+def interval_locators(reader: TemporalReader, index_name: str, parts: list[bytes], instant: TemporalInstant) -> tuple[bytes, ...]:
     """Return index locators started but not yet ended at an instant."""
     generation = _temporal_indexes.index_state_generation(reader.store, reader.state_key)
     encoded = temporal_instant_index_value(instant)
@@ -60,8 +66,16 @@ def interval_locators(reader, index_name, parts, instant):
     ))
     return tuple(sorted(started.intersection(unexpired)))
 
-def entity_as_of(reader, kind, logical_id, *, valid_time, system_time=None,
-                 through_commit=None, hydrate=None):
+@overload
+def entity_as_of(reader: TemporalReader, kind: Literal["node"], logical_id: str, *, valid_time: PointInput, system_time: PointInput | None = None, through_commit: int | None = None, hydrate: Hydrator | None = None) -> NodeVersion | None: ...
+@overload
+def entity_as_of(reader: TemporalReader, kind: Literal["edge"], logical_id: str, *, valid_time: PointInput, system_time: PointInput | None = None, through_commit: int | None = None, hydrate: Hydrator | None = None) -> EdgeVersion | None: ...
+@overload
+def entity_as_of(reader: TemporalReader, kind: Literal["claim"], logical_id: str, *, valid_time: PointInput, system_time: PointInput | None = None, through_commit: int | None = None, hydrate: Hydrator | None = None) -> ClaimVersion | None: ...
+@overload
+def entity_as_of(reader: TemporalReader, kind: str, logical_id: str, *, valid_time: PointInput, system_time: PointInput | None = None, through_commit: int | None = None, hydrate: Hydrator | None = None) -> TemporalVersion | None: ...
+def entity_as_of(reader: TemporalReader, kind: str, logical_id: str, *, valid_time: PointInput, system_time: PointInput | None = None,
+                 through_commit: int | None = None, hydrate: Hydrator | None = None) -> TemporalVersion | None:
     """Resolve one logical node/edge/claim version at a valid time.
 
     ``hydrate`` decodes one locator; callers pass the facade hook so
@@ -79,7 +93,7 @@ def entity_as_of(reader, kind, logical_id, *, valid_time, system_time=None,
         [kind_bytes, logical_id.encode("utf-8")],
         instant,
     )
-    winner = None
+    winner: TemporalVersion | None = None
     for locator in locators:
         version = hydrate(locator)
         if version is not None and version.commit_id <= horizon and version.valid.contains(instant):
@@ -89,8 +103,8 @@ def entity_as_of(reader, kind, logical_id, *, valid_time, system_time=None,
         return None
     return winner
 
-def iter_nodes_as_of(reader, *, valid_time, system_time=None, through_commit=None,
-                       hydrate=None):
+def iter_nodes_as_of(reader: TemporalReader, *, valid_time: PointInput, system_time: PointInput | None = None, through_commit: int | None = None,
+                       hydrate: Hydrator | None = None) -> Iterator[NodeVersion]:
     """Iterate node versions visible at one valid and system-time point."""
     hydrate = hydrate or reader.get_version_at
     instant = normalize_temporal_instant(valid_time)
@@ -112,9 +126,9 @@ def iter_nodes_as_of(reader, *, valid_time, system_time=None, through_commit=Non
         if version is not None:
             yield version
 
-def iter_edges_as_of(reader, *, edge_type=None, direction="out", source=None,
-                     target=None, valid_time, system_time=None,
-                     through_commit=None, hydrate=None):
+def iter_edges_as_of(reader: TemporalReader, *, edge_type: str | None = None, direction: str = "out", source: str | None = None,
+                     target: str | None = None, valid_time: PointInput, system_time: PointInput | None = None,
+                     through_commit: int | None = None, hydrate: Hydrator | None = None) -> Iterator[EdgeVersion]:
     """Iterate endpoint edges visible at valid time and a system horizon."""
     hydrate = hydrate or reader.get_version_at
     if direction not in {"out", "in"}:
@@ -152,32 +166,32 @@ def iter_edges_as_of(reader, *, edge_type=None, direction="out", source=None,
             hydrate=hydrate,
         )
         if version is None or (
-            edge_type is not None and version.edge.properties.get("type") != edge_type
+            edge_type is not None and cast(Edge, version.edge).properties.get("type") != edge_type
         ):
             continue
-        if direction == "out" and str(version.edge.source) != str(source):
+        if direction == "out" and str(cast(Edge, version.edge).source) != str(source):
             continue
-        if direction == "in" and str(version.edge.target) != str(target):
+        if direction == "in" and str(cast(Edge, version.edge).target) != str(target):
             continue
         yield version
 
 def iter_claims_as_of(
-    reader,
+    reader: TemporalReader,
     *,
-    valid_time,
-    statement_id=None,
-    subject=None,
-    predicate=None,
-    object=_UNSET,
-    object_kind=None,
-    agent=None,
-    source=_UNSET,
-    world=None,
-    polarity=None,
-    system_time=None,
-    through_commit=None,
-    live_store=None,
-):
+    valid_time: PointInput,
+    statement_id: str | None = None,
+    subject: str | None = None,
+    predicate: str | None = None,
+    object: object = _UNSET,
+    object_kind: ClaimObjectKind | str | None = None,
+    agent: str | None = None,
+    source: object = _UNSET,
+    world: str | None = None,
+    polarity: ClaimPolarity | str | None = None,
+    system_time: PointInput | None = None,
+    through_commit: int | None = None,
+    live_store: LiveStore | None = None,
+) -> Iterator[ClaimVersion]:
     """Iterate visible claims matching indexed epistemic dimensions.
 
     Locator reads are grouped by commit, with full commit validation per
@@ -210,9 +224,9 @@ def iter_claims_as_of(
     )
     if object is not _UNSET and statement_id is None and subject is not None and predicate is not None:
         statement_id = claim_statement_id(
-            subject, predicate, object, object_kind=effective_object_kind
+            subject, predicate, object, object_kind=cast(ClaimObjectKind | str, effective_object_kind)
         )
-    dimension_filters = {
+    dimension_filters: dict[str, builtins.object] = {
         "subject": subject,
         "predicate": predicate,
         "agent": agent,
@@ -244,9 +258,9 @@ def iter_claims_as_of(
     # cache entries as immutable. Every group still takes the existing full
     # descriptor/marker/envelope validation path. Retain only marker identity
     # and selected winners, not an unbounded second cache of whole commits.
-    admitted_markers = {}
+    admitted_markers: dict[int, bytes | None] = {}
 
-    def admit_commit(commit_id):
+    def admit_commit(commit_id: int) -> TemporalCommit | None:
         if live() is not read_store:
             raise TemporalCorruptionError("claim read store changed during iteration")
         marker = read_store.get_metadata(temporal_visible_key(commit_id))
@@ -258,8 +272,8 @@ def iter_claims_as_of(
         admitted_markers[commit_id] = marker
         return commit
 
-    def read_locators(locators):
-        groups = {}
+    def read_locators(locators: Iterable[bytes]) -> Iterator[TemporalVersion]:
+        groups: dict[int, set[int]] = {}
         for locator in locators:
             commit_id, ordinal = decode_temporal_locator(locator)
             if commit_id <= horizon:
@@ -284,19 +298,19 @@ def iter_claims_as_of(
     # not just the originally selected dimension: a later correction or
     # retraction must still win. Do not repeatedly recompute/validate the
     # latest system horizon for each logical ID.
-    def logical_locators():
+    def logical_locators() -> Iterator[bytes]:
         for claim_id in sorted(logical_ids):
             yield from interval_locators(reader, 
                 _temporal_indexes.LOGICAL_VALID_INDEX, [b"c", claim_id.encode("utf-8")], instant
             )
 
-    winners = {}
-    for version in read_locators(logical_locators()):
-        if (isinstance(version, ClaimVersion) and version.logical_id in logical_ids
-                and version.commit_id <= horizon and version.valid.contains(instant)):
-            previous = winners.get(version.logical_id)
-            if previous is None or (version.commit_id, version.commit_ordinal) > (previous.commit_id, previous.commit_ordinal):
-                winners[version.logical_id] = version
+    winners: dict[str, ClaimVersion] = {}
+    for candidate_version in read_locators(logical_locators()):
+        if (isinstance(candidate_version, ClaimVersion) and candidate_version.logical_id in logical_ids
+                and candidate_version.commit_id <= horizon and candidate_version.valid.contains(instant)):
+            previous = winners.get(candidate_version.logical_id)
+            if previous is None or (candidate_version.commit_id, candidate_version.commit_ordinal) > (previous.commit_id, previous.commit_ordinal):
+                winners[candidate_version.logical_id] = candidate_version
     for claim_id in sorted(logical_ids):
         version = winners.get(claim_id)
         if version is None or version.operation is VersionOperation.RETRACT or version.claim is None:
@@ -315,7 +329,7 @@ def iter_claims_as_of(
             subject=claim.subject,
             predicate=claim.predicate,
             object=object,
-            object_kind=effective_object_kind,
+            object_kind=cast(ClaimObjectKind | str, effective_object_kind),
             polarity=claim.polarity,
             agent=claim.agent,
             source=claim.source,
@@ -331,22 +345,22 @@ def iter_claims_as_of(
         admit_commit(commit_id)
 
 def claim_status(
-    reader,
-    subject,
-    predicate,
-    object,
+    reader: TemporalReader,
+    subject: str,
+    predicate: str,
+    object: object,
     *,
-    valid_time,
-    object_kind=ClaimObjectKind.ENTITY,
-    agent=None,
-    source=_UNSET,
-    world=None,
-    system_time=None,
-    through_commit=None,
+    valid_time: PointInput,
+    object_kind: ClaimObjectKind | str = ClaimObjectKind.ENTITY,
+    agent: str | None = None,
+    source: object = _UNSET,
+    world: str | None = None,
+    system_time: PointInput | None = None,
+    through_commit: int | None = None,
 ) -> ClaimStatus:
     """Return supported/refuted/both/unknown under open-world semantics."""
     polarities = {
-        version.claim.polarity
+        cast(Claim, version.claim).polarity
         for version in iter_claims_as_of(reader, 
             valid_time=valid_time,
             statement_id=claim_statement_id(
@@ -371,8 +385,8 @@ def claim_status(
 
 # -- version history iteration ------------------------------------------
 
-def _iter_versions_by_logical_id(reader, kind, kind_byte, logical_id, *,
-                                 system_time=None, through_commit=None):
+def _iter_versions_by_logical_id(reader: TemporalReader, kind: type[VersionT], kind_byte: bytes, logical_id: str, *,
+                                 system_time: PointInput | None = None, through_commit: int | None = None) -> Iterator[VersionT]:
     logical_id = normalize_logical_id(logical_id)
     horizon = reader.system_horizon(system_time=system_time, through_commit=through_commit)
     _temporal_indexes.ensure_temporal_indexes(
@@ -393,8 +407,8 @@ def _iter_versions_by_logical_id(reader, kind, kind_byte, logical_id, *,
         if isinstance(version, kind):
             yield version
 
-def iter_node_versions(reader, logical_id=None, *, system_time=None,
-                       through_commit=None):
+def iter_node_versions(reader: TemporalReader, logical_id: str | None = None, *, system_time: PointInput | None = None,
+                       through_commit: int | None = None) -> Iterator[NodeVersion]:
     """Iterate node versions, using the logical-history index when filtered."""
     if logical_id is None:
         horizon = reader.system_horizon(system_time=system_time, through_commit=through_commit)
@@ -407,8 +421,8 @@ def iter_node_versions(reader, logical_id=None, *, system_time=None,
         NodeVersion, b"n", logical_id, system_time=system_time,
         through_commit=through_commit)
 
-def iter_edge_versions(reader, logical_id=None, *, system_time=None,
-                       through_commit=None):
+def iter_edge_versions(reader: TemporalReader, logical_id: str | None = None, *, system_time: PointInput | None = None,
+                       through_commit: int | None = None) -> Iterator[EdgeVersion]:
     """Iterate edge versions, using the logical-history index when filtered."""
     if logical_id is None:
         horizon = reader.system_horizon(system_time=system_time, through_commit=through_commit)
@@ -421,8 +435,8 @@ def iter_edge_versions(reader, logical_id=None, *, system_time=None,
         EdgeVersion, b"e", logical_id, system_time=system_time,
         through_commit=through_commit)
 
-def iter_claim_versions(reader, claim_id=None, *, system_time=None,
-                        through_commit=None):
+def iter_claim_versions(reader: TemporalReader, claim_id: str | None = None, *, system_time: PointInput | None = None,
+                        through_commit: int | None = None) -> Iterator[ClaimVersion]:
     """Iterate claim versions, optionally restricted to one deterministic claim ID."""
     if claim_id is None:
         horizon = reader.system_horizon(system_time=system_time, through_commit=through_commit)

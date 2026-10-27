@@ -11,6 +11,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from ..temporal_engine import TemporalEngine
 from ..epistemic import Claim, ClaimObjectKind, ClaimPolarity
 from ..ingestion import IndexMaintenanceMode
 from ..rules import (
@@ -19,11 +23,14 @@ from ..rules import (
     ExplanationNode,
     RuleEvaluationLimitError,
     RuleJustification,
+    RuleAbsence,
+    RuleVersion,
     TruthMaintenanceResult,
     absence_node_id,
 )
 from ..temporal import TemporalInstant, TemporalInterval
 from ..versioning import (
+    ClaimVersion,
     ClaimVersionWrite,
     TemporalCorruptionError,
     canonical_json_bytes,
@@ -40,11 +47,13 @@ from .stored_rules import (
     rule_scope,
 )
 from .temporal_selection import _UNSET
+from .temporal_types import PointInput
+from .stored_rule_types import ConclusionKey, EncodedJustification, JoinRow, Justification, MaintenanceFact, MaintenanceOutput, SupportReference
 
 TRUTH_MAINTENANCE_STATE_KEY = b"rules:truth-maintenance:v1"
 
 
-def last_truth_maintenance_instant(temporal, state_key: bytes) -> object:
+def last_truth_maintenance_instant(temporal: TemporalEngine, state_key: bytes) -> TemporalInstant | None:
     """Return the valid time of the most recent rule run or maintenance pass."""
     store, reader = temporal.store, temporal.reader()
     payload = store.get_metadata(state_key)
@@ -75,10 +84,10 @@ def last_truth_maintenance_instant(temporal, state_key: bytes) -> object:
     return state_instant
 
 
-def maintain_truth(temporal, truth_state_key: bytes, *,
-                 as_of=None, system_time=None, world=None,
-                 max_iterations=100, max_derivations=10_000, max_justifications=100_000,
-                 index_mode=IndexMaintenanceMode.MAINTAIN):
+def maintain_truth(temporal: TemporalEngine, truth_state_key: bytes, *,
+                 as_of: PointInput | None = None, system_time: PointInput | None = None, world: str | None = None,
+                 max_iterations: int = 100, max_derivations: int = 10_000, max_justifications: int = 100_000,
+                 index_mode: str | IndexMaintenanceMode = IndexMaintenanceMode.MAINTAIN) -> TruthMaintenanceResult:
     """Incrementally reconcile derived claims with the current rule fixpoint.
 
     The authoritative base excludes claims emitted by the rule engine, so a
@@ -108,19 +117,19 @@ def maintain_truth(temporal, truth_state_key: bytes, *,
         rules, strata = rule_program(temporal.store, system_time=system_time)
         scope = rule_scope(rules)
 
-        facts = []
-        facts_by_predicate = {}
-        existing = {}
+        facts: list[MaintenanceFact] = []
+        facts_by_predicate: dict[str, list[MaintenanceFact]] = {}
+        existing: dict[ConclusionKey, ClaimVersion] = {}
 
-        def conclusion_key(subject, predicate, object_value, claim_world):
-            return subject, predicate, object_value, claim_world
+        def conclusion_key(subject: str, predicate: str, object_value: object, claim_world: str) -> ConclusionKey:
+            return subject, predicate, cast(str, object_value), claim_world
 
-        def add_fact(reference, subject, predicate, object_value, claim_world, valid):
-            fact = {
+        def add_fact(reference: SupportReference, subject: str, predicate: str, object_value: object, claim_world: str, valid: TemporalInterval) -> MaintenanceFact:
+            fact: MaintenanceFact = {
                 "ref": reference,
                 "subject": subject,
                 "predicate": predicate,
-                "object": object_value,
+                "object": cast(str, object_value),
                 "world": claim_world,
                 "valid": valid,
             }
@@ -150,12 +159,12 @@ def maintain_truth(temporal, truth_state_key: bytes, *,
                 version.valid,
             )
 
-        def union_validity(left, right):
+        def union_validity(left: TemporalInterval, right: TemporalInterval) -> TemporalInterval:
             start = min(left.start, right.start)
             end = None if left.end is None or right.end is None else max(left.end, right.end)
             return TemporalInterval(start, end)
 
-        def unify(term, value, bindings):
+        def unify(term: str, value: str, bindings: dict[str, str]) -> dict[str, str] | None:
             if not term.startswith("?"):
                 return bindings if term == value else None
             current = bindings.get(term, _UNSET)
@@ -165,7 +174,7 @@ def maintain_truth(temporal, truth_state_key: bytes, *,
             updated[term] = value
             return updated
 
-        outputs = {}
+        outputs: dict[ConclusionKey, MaintenanceOutput] = {}
         iterations = 0
         support_count = 0
         for stratum in strata:
@@ -180,11 +189,11 @@ def maintain_truth(temporal, truth_state_key: bytes, *,
                     raise RuleEvaluationLimitError(
                         f"truth maintenance exceeded max_iterations={max_iterations}"
                     )
-                next_delta = {}
+                next_delta: dict[ConclusionKey, MaintenanceOutput] = {}
                 for rule in stratum_rules:
-                    rows = [({}, (), None, None, False)]
+                    rows: list[JoinRow[SupportReference]] = [({}, (), None, None, False)]
                     for atom in rule.when:
-                        joined = []
+                        joined: list[JoinRow[SupportReference]] = []
                         for bindings, premises, valid, row_world, used_delta in rows:
                             for fact in facts_by_predicate.get(atom.predicate, ()):
                                 if row_world is not None and fact["world"] != row_world:
@@ -211,6 +220,7 @@ def maintain_truth(temporal, truth_state_key: bytes, *,
                     for bindings, premises, valid, row_world, used_delta in rows:
                         if not used_delta:
                             continue
+                        valid, row_world = cast(TemporalInterval, valid), cast(str, row_world)
                         absences = absence_checks(
                             rule, bindings, valid, row_world, facts_by_predicate, scope
                         )
@@ -251,9 +261,9 @@ def maintain_truth(temporal, truth_state_key: bytes, *,
                 iterations += 1
                 added = []
                 for key, output in next_delta.items():
-                    fact = output["fact"]
-                    if fact is None:
-                        fact = add_fact(
+                    output_fact = output["fact"]
+                    if output_fact is None:
+                        output_fact = add_fact(
                             ("derived", key),
                             output["subject"],
                             output["predicate"],
@@ -261,13 +271,13 @@ def maintain_truth(temporal, truth_state_key: bytes, *,
                             output["world"],
                             output["valid"],
                         )
-                        output["fact"] = fact
+                        output["fact"] = output_fact
                     else:
-                        fact["valid"] = output["valid"]
-                    added.append(fact)
+                        output_fact["valid"] = output["valid"]
+                    added.append(output_fact)
                 delta = {fact["ref"] for fact in added}
 
-        def semantic_premise(version_id):
+        def semantic_premise(version_id: str) -> SupportReference:
             premise = temporal.history().get_claim_version(version_id, through_commit=input_horizon)
             if (
                 premise is not None
@@ -281,7 +291,7 @@ def maintain_truth(temporal, truth_state_key: bytes, *,
                 ))
             return ("version", version_id)
 
-        def existing_semantic_supports(version):
+        def existing_semantic_supports(version: ClaimVersion) -> set[Justification[SupportReference]]:
             return {
                 (
                     rule_id,
@@ -289,7 +299,7 @@ def maintain_truth(temporal, truth_state_key: bytes, *,
                     absences,
                 )
                 for rule_id, premises, absences in rule_justifications(
-                    version.claim.provenance
+                    cast(Claim, version.claim).provenance
                 )
             }
 
@@ -325,7 +335,7 @@ def maintain_truth(temporal, truth_state_key: bytes, *,
                 else current.version_id
             )
 
-        def encoded_supports(output):
+        def encoded_supports(output: MaintenanceOutput) -> list[EncodedJustification]:
             encoded = []
             for rule_id, premises, absences in sorted(
                 output["supports"], key=justification_order
@@ -336,7 +346,7 @@ def maintain_truth(temporal, truth_state_key: bytes, *,
                     else result_ids[reference[1]] for reference in premises
                 )
                 encoded.append(
-                    RuleJustification(rule_id, premise_ids, absences).to_dict()
+                    cast(EncodedJustification, RuleJustification(rule_id, premise_ids, absences).to_dict())
                 )
             return encoded
 
@@ -417,8 +427,8 @@ def maintain_truth(temporal, truth_state_key: bytes, *,
                 index_mode=index_mode,
             )
 
-        premise_dependents = {}
-        rule_dependents = {}
+        premise_dependents: dict[str, set[str]] = {}
+        rule_dependents: dict[str, set[str]] = {}
         derived = {}
         for key, output in outputs.items():
             claim = Claim(
@@ -458,8 +468,8 @@ def maintain_truth(temporal, truth_state_key: bytes, *,
         )
 
 
-def explain_claim(temporal, *, claim_id, valid_time,
-                system_time=None, max_depth=100, max_nodes=10_000):
+def explain_claim(temporal: TemporalEngine, *, claim_id: str, valid_time: PointInput,
+                system_time: PointInput | None = None, max_depth: int = 100, max_nodes: int = 10_000) -> ClaimExplanation | None:
     """Return a finite derivation graph for a visible historical claim."""
     if isinstance(max_depth, bool) or not isinstance(max_depth, int) or max_depth < 0:
         raise ValueError("max_depth must be a non-negative integer")
@@ -474,12 +484,12 @@ def explain_claim(temporal, *, claim_id, valid_time,
     if commit is None:
         raise TemporalCorruptionError("explanation horizon has no visible commit")
     rules = {rule.version_id: rule for rule in iter_rule_versions(temporal.store)}
-    nodes = {}
-    edges = set()
-    expanded = set()
+    nodes: dict[str, ExplanationNode] = {}
+    edges: set[ExplanationEdge] = set()
+    expanded: set[str] = set()
     truncated = False
 
-    def add_node(node_id, kind, value):
+    def add_node(node_id: str, kind: str, value: ClaimVersion | RuleVersion | RuleAbsence) -> bool:
         nonlocal truncated
         if node_id in nodes:
             return True
@@ -489,14 +499,14 @@ def explain_claim(temporal, *, claim_id, valid_time,
         nodes[node_id] = ExplanationNode(node_id, kind, value)
         return True
 
-    def visit(version, depth):
+    def visit(version: ClaimVersion, depth: int) -> None:
         nonlocal truncated
         if not add_node(version.version_id, "claim", version):
             return
         if version.version_id in expanded:
             return
         expanded.add(version.version_id)
-        supports = rule_justifications(version.claim.provenance)
+        supports = rule_justifications(cast(Claim, version.claim).provenance)
         if not supports:
             return
         if depth >= max_depth:

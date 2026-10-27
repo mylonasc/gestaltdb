@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime, time, timedelta, timezone
+from typing import cast
 
 from ...temporal import (
     TemporalDate,
@@ -86,7 +87,7 @@ def normalize_parameter(value: object) -> object:
 
 def temporal_property(value: object, name: str) -> tuple[bool, object]:
     """Return whether ``name`` is a temporal component and its value."""
-    parts: dict[str, object]
+    parts: dict[str, int | float]
     if isinstance(value, TemporalDate):
         parts = _date_parts(value.value)
     elif isinstance(value, TemporalLocalDateTime):
@@ -154,15 +155,15 @@ def temporal_arithmetic(operator: str, left: object, right: object) -> tuple[boo
             return True, result
     if operator == "-" and type(left) is type(right):
         if isinstance(left, TemporalDate):
-            return True, TemporalDuration((left.value - right.value).days * MICROS_PER_DAY)
+            return True, TemporalDuration((left.value - cast(TemporalDate, right).value).days * MICROS_PER_DAY)
         if isinstance(left, TemporalLocalDateTime):
-            return True, TemporalDuration.from_timedelta(left.value - right.value)
+            return True, TemporalDuration.from_timedelta(left.value - cast(TemporalLocalDateTime, right).value)
         if isinstance(left, TemporalInstant):
-            return True, TemporalDuration(left.epoch_microseconds - right.epoch_microseconds)
+            return True, TemporalDuration(left.epoch_microseconds - cast(TemporalInstant, right).epoch_microseconds)
         if isinstance(left, TemporalLocalTime):
-            return True, TemporalDuration(left.microseconds - right.microseconds)
+            return True, TemporalDuration(left.microseconds - cast(TemporalLocalTime, right).microseconds)
         if isinstance(left, TemporalTime):
-            return True, TemporalDuration(left.utc_microseconds - right.utc_microseconds)
+            return True, TemporalDuration(left.utc_microseconds - cast(TemporalTime, right).utc_microseconds)
     return isinstance(left, TEMPORAL_TYPES) or isinstance(right, TEMPORAL_TYPES), None
 
 
@@ -321,7 +322,7 @@ def _number(values: dict, name: str, default: int) -> int | float:
     return value
 
 
-def _datetime_components(values: dict) -> tuple[int, ...]:
+def _datetime_components(values: dict) -> tuple[int, int, int, int, int, int, int]:
     allowed = {"year", "month", "day", "hour", "minute", "second", "microsecond", "offset"}
     if not values.keys() <= allowed:
         raise ValueError("unknown datetime component")

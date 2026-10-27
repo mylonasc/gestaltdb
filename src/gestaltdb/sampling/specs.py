@@ -8,6 +8,7 @@ from typing import Sequence
 import numpy as np
 
 from .validation import _integer_array, _validate_count
+from ._arrays import Array
 
 
 @dataclass(frozen=True)
@@ -16,12 +17,12 @@ class NeighborSamplingSpec:
 
     fanout: int
     direction: str = "out"
-    relations: Sequence[int] | None = None
+    relations: Sequence[int] | Array | None = None
     replace: bool = False
     strategy: str = "uniform"
     balanced: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         _validate_count(self.fanout, "fanout")
         if self.direction not in {"out", "in", "any"}:
             raise ValueError("direction must be 'out', 'in', or 'any'")
@@ -45,7 +46,7 @@ class ExternalNeighborSamplingSpec:
     strategy: str = "uniform"
     balanced: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         _validate_count(self.fanout, "fanout")
         if self.direction not in {"out", "in", "any"}:
             raise ValueError("direction must be 'out', 'in', or 'any'")

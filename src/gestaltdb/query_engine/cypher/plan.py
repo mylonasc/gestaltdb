@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields, is_dataclass, replace
+from typing import Any, cast
 
 from .ast import (
     CreateClause,
     DeleteClause,
     EntailsCall,
+    Expression,
     ForeachClause,
     FunctionCall,
     MatchClause,
@@ -19,10 +21,13 @@ from .ast import (
     PropertyRef,
     Query,
     RemoveClause,
+    RemoveItem,
     ReturnClause,
     SampleTypedPathsCall,
     SetClause,
+    SetItem,
     SubqueryClause,
+    TemporalQualifier,
     UnionQuery,
     UnwindClause,
     Variable,
@@ -56,9 +61,9 @@ class MatchStep:
 
     patterns: tuple[PathPatternClause, ...]
     group_id: int
-    where: object = None
+    where: Expression | None = None
     selector: PathSelector | None = None
-    qualifiers: tuple[object, ...] = ()
+    qualifiers: tuple[TemporalQualifier, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -72,16 +77,16 @@ class OptionalMatchStep:
 
     patterns: tuple[PathPatternClause, ...]
     group_id: int
-    where: object = None
+    where: Expression | None = None
     selector: PathSelector | None = None
-    qualifiers: tuple[object, ...] = ()
+    qualifiers: tuple[TemporalQualifier, ...] = ()
 
 
 @dataclass(frozen=True)
 class Unwind:
     """Expand each input row into one row per element of a list expression."""
 
-    expression: object
+    expression: Expression
     variable: str
 
 
@@ -104,21 +109,21 @@ class CreateStep:
 class SetStep:
     """Apply one textual ``SET`` per input row with copy-on-write."""
 
-    items: tuple[object, ...]
+    items: tuple[SetItem, ...]
 
 
 @dataclass(frozen=True)
 class RemoveStep:
     """Apply one textual ``REMOVE`` per input row with copy-on-write."""
 
-    items: tuple[object, ...]
+    items: tuple[RemoveItem, ...]
 
 
 @dataclass(frozen=True)
 class DeleteStep:
     """Delete the entities of one textual ``DELETE`` per input row."""
 
-    expressions: tuple[object, ...]
+    expressions: tuple[Expression, ...]
     detach: bool = False
 
 
@@ -127,8 +132,8 @@ class MergeStep:
     """Match a pattern per input row or create it, running ``ON`` actions."""
 
     patterns: tuple[PathPatternClause, ...]
-    on_create: tuple[object, ...] = ()
-    on_match: tuple[object, ...] = ()
+    on_create: tuple[SetItem, ...] = ()
+    on_match: tuple[SetItem, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -136,7 +141,7 @@ class ForeachStep:
     """Run a write-only inner plan per input row and list element."""
 
     variable: str
-    iterable: object
+    iterable: Expression
     plan: LogicalPlan
 
 
@@ -154,7 +159,7 @@ class ProjectItems:
     """Project one ``WITH`` or ``RETURN`` clause from resolved expressions."""
 
     returns: tuple[str, ...]
-    expressions: tuple[object, ...] = ()
+    expressions: tuple[Expression, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -162,7 +167,7 @@ class AggregateCall:
     """One aggregate invocation; a ``None`` argument counts every row."""
 
     function: str
-    argument: object | None = None
+    argument: Expression | None = None
     distinct: bool = False
 
 
@@ -171,9 +176,9 @@ class Aggregate:
     """Group binding rows by key expressions and apply aggregate calls."""
 
     returns: tuple[str, ...]
-    keys: tuple[tuple[str, object], ...] = ()
+    keys: tuple[tuple[str, Expression], ...] = ()
     calls: tuple[tuple[str, AggregateCall], ...] = ()
-    expressions: tuple[object, ...] = ()
+    expressions: tuple[Expression, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -187,7 +192,7 @@ class ProcedureSource:
 class FilterExpression:
     """Filter rows by a boolean expression."""
 
-    expression: object
+    expression: Expression
 
 
 @dataclass(frozen=True)
@@ -206,7 +211,7 @@ class Distinct:
 class Sort:
     """Sort rows by the query's ORDER BY items."""
 
-    items: tuple[object, ...]
+    items: tuple[OrderItem, ...]
 
 
 @dataclass(frozen=True)
@@ -287,8 +292,10 @@ def plan_staged_query(query: Query, scope=None, require_return: bool = True) -> 
         clause = clauses[index]
         if isinstance(clause, (MatchClause, OptionalMatchClause)):
             attached_where = None
-            if index + 1 < len(clauses) and isinstance(clauses[index + 1], WhereClause):
-                attached_where = clauses[index + 1].expression
+            if index + 1 < len(clauses):
+                following = clauses[index + 1]
+                if isinstance(following, WhereClause):
+                    attached_where = following.expression
             if isinstance(clause, OptionalMatchClause):
                 operators.append(OptionalMatchStep(clause.patterns, group_id, attached_where, clause.selector, clause.qualifiers))
             else:
@@ -329,9 +336,11 @@ def plan_staged_query(query: Query, scope=None, require_return: bool = True) -> 
                 operators.append(ProjectItems(returns=outputs, expressions=expressions))
             if clause.distinct:
                 operators.append(Distinct())
-            if index + 1 < len(clauses) and isinstance(clauses[index + 1], WhereClause):
-                operators.append(FilterExpression(clauses[index + 1].expression))
-                index += 1
+            if index + 1 < len(clauses):
+                following = clauses[index + 1]
+                if isinstance(following, WhereClause):
+                    operators.append(FilterExpression(following.expression))
+                    index += 1
             if clause.order_by:
                 if _has_aggregate_call(expressions):
                     operators.append(
@@ -349,7 +358,7 @@ def plan_staged_query(query: Query, scope=None, require_return: bool = True) -> 
     return LogicalPlan(tuple(operators), None, analysis.output_names, True)
 
 
-def _has_aggregate_call(expressions: tuple[object, ...]) -> bool:
+def _has_aggregate_call(expressions: tuple[Expression, ...]) -> bool:
     """Return whether any projection expression contains an aggregate call."""
     from .semantics import contains_aggregate_call
 
@@ -360,7 +369,7 @@ def _plan_aggregate(
     source: str,
     clause: WithClause | ReturnClause,
     outputs: tuple[str, ...],
-    expressions: tuple[object, ...],
+    expressions: tuple[Expression, ...],
 ) -> Aggregate:
     """Build an ``Aggregate`` operator with implicit grouping keys.
 
@@ -370,7 +379,7 @@ def _plan_aggregate(
     """
     from .semantics import contains_aggregate_call, expression_variables
 
-    keys: list[tuple[str, object]] = []
+    keys: list[tuple[str, Expression]] = []
     calls: list[tuple[str, AggregateCall]] = []
     projected: list[object] = []
     slot_number = 0
@@ -401,7 +410,7 @@ def _plan_aggregate(
         if not contains_aggregate_call(expression):
             if expression_variables(expression):
                 name = output or slot_name("group")
-                keys.append((name, expression))
+                keys.append((name, cast(Expression, expression)))
                 return Variable(name)
             return expression
         if isinstance(expression, list):
@@ -410,7 +419,7 @@ def _plan_aggregate(
             return {name: rewrite_expression(value) for name, value in expression.items()}
         if is_dataclass(expression):
             return replace(
-                expression,
+                cast(Any, expression),
                 **{
                     item.name: rewrite_expression(getattr(expression, item.name))
                     for item in fields(expression)
@@ -429,7 +438,7 @@ def _plan_aggregate(
         returns=outputs,
         keys=tuple(keys),
         calls=tuple(calls),
-        expressions=tuple(projected),
+        expressions=tuple(cast(list[Expression], projected)),
     )
 
 

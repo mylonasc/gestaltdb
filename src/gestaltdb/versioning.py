@@ -15,7 +15,7 @@ from enum import Enum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Iterable, Mapping, Optional, Tuple, Union
 
-from .temporal import TemporalInput, TemporalInstant, TemporalInterval, as_temporal_interval
+from .temporal import TemporalInput, TemporalInstant, TemporalInterval, TemporalIntervalInput, as_temporal_interval
 
 if TYPE_CHECKING:
     from .epistemic import Claim
@@ -199,7 +199,7 @@ class NodeVersionWrite:
     reason: Optional[str] = None
 
     @classmethod
-    def assertion(cls, node: "Node", valid, *, version_id=None) -> "NodeVersionWrite":
+    def assertion(cls, node: "Node", valid: TemporalIntervalInput, *, version_id: str | None = None) -> "NodeVersionWrite":
         return cls(
             VersionOperation.ASSERT,
             normalize_logical_id(node.get_id),
@@ -210,7 +210,7 @@ class NodeVersionWrite:
 
     @classmethod
     def correction(
-        cls, node: "Node", *, supersedes_version_id: str, valid=None, version_id=None
+        cls, node: "Node", *, supersedes_version_id: str, valid: TemporalIntervalInput | None = None, version_id: str | None = None
     ) -> "NodeVersionWrite":
         return cls(
             VersionOperation.CORRECT,
@@ -226,11 +226,11 @@ class NodeVersionWrite:
         cls,
         logical_id: str,
         *,
-        valid=None,
-        valid_from=None,
-        supersedes_version_id=None,
-        reason=None,
-        version_id=None,
+        valid: TemporalIntervalInput | None = None,
+        valid_from: TemporalInput | None = None,
+        supersedes_version_id: str | None = None,
+        reason: str | None = None,
+        version_id: str | None = None,
     ) -> "NodeVersionWrite":
         return cls(
             VersionOperation.RETRACT,
@@ -257,7 +257,7 @@ class EdgeVersionWrite:
     reason: Optional[str] = None
 
     @classmethod
-    def assertion(cls, edge: "Edge", valid, *, version_id=None) -> "EdgeVersionWrite":
+    def assertion(cls, edge: "Edge", valid: TemporalIntervalInput, *, version_id: str | None = None) -> "EdgeVersionWrite":
         return cls(
             VersionOperation.ASSERT,
             normalize_logical_id(edge.get_id),
@@ -268,7 +268,7 @@ class EdgeVersionWrite:
 
     @classmethod
     def correction(
-        cls, edge: "Edge", *, supersedes_version_id: str, valid=None, version_id=None
+        cls, edge: "Edge", *, supersedes_version_id: str, valid: TemporalIntervalInput | None = None, version_id: str | None = None
     ) -> "EdgeVersionWrite":
         return cls(
             VersionOperation.CORRECT,
@@ -284,11 +284,11 @@ class EdgeVersionWrite:
         cls,
         logical_id: str,
         *,
-        valid=None,
-        valid_from=None,
-        supersedes_version_id=None,
-        reason=None,
-        version_id=None,
+        valid: TemporalIntervalInput | None = None,
+        valid_from: TemporalInput | None = None,
+        supersedes_version_id: str | None = None,
+        reason: str | None = None,
+        version_id: str | None = None,
     ) -> "EdgeVersionWrite":
         return cls(
             VersionOperation.RETRACT,
@@ -315,7 +315,7 @@ class ClaimVersionWrite:
     reason: Optional[str] = None
 
     @classmethod
-    def assertion(cls, claim: "Claim", valid, *, version_id=None) -> "ClaimVersionWrite":
+    def assertion(cls, claim: "Claim", valid: TemporalIntervalInput, *, version_id: str | None = None) -> "ClaimVersionWrite":
         return cls(
             VersionOperation.ASSERT,
             normalize_logical_id(claim.claim_id),
@@ -326,7 +326,7 @@ class ClaimVersionWrite:
 
     @classmethod
     def correction(
-        cls, claim: "Claim", *, supersedes_version_id: str, valid=None, version_id=None
+        cls, claim: "Claim", *, supersedes_version_id: str, valid: TemporalIntervalInput | None = None, version_id: str | None = None
     ) -> "ClaimVersionWrite":
         return cls(
             VersionOperation.CORRECT,
@@ -342,11 +342,11 @@ class ClaimVersionWrite:
         cls,
         claim_id: str,
         *,
-        valid=None,
-        valid_from=None,
-        supersedes_version_id=None,
-        reason=None,
-        version_id=None,
+        valid: TemporalIntervalInput | None = None,
+        valid_from: TemporalInput | None = None,
+        supersedes_version_id: str | None = None,
+        reason: str | None = None,
+        version_id: str | None = None,
     ) -> "ClaimVersionWrite":
         return cls(
             VersionOperation.RETRACT,
@@ -363,7 +363,7 @@ class ClaimVersionWrite:
 TemporalVersionWrite = Union[NodeVersionWrite, EdgeVersionWrite, ClaimVersionWrite]
 
 
-def _retraction_interval(valid, valid_from) -> Optional[TemporalInterval]:
+def _retraction_interval(valid: TemporalIntervalInput | None, valid_from: TemporalInput | None) -> Optional[TemporalInterval]:
     if valid is not None and valid_from is not None:
         raise TemporalVersionError("provide either valid or valid_from, not both")
     if valid is not None:

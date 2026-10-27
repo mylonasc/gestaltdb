@@ -225,6 +225,7 @@ DeepWalk extensions: `gestaltdb.sampling.iter_context_pairs` yields bounded rest
 ## Development Commands
 
 - Lint library correctness: `uv run --extra lint ruff check .`
+- Refresh the typing badge: `uv run --extra lint --with 'numpy>=1.23' --with 'lark>=1.2' python scripts/update_typing_badge.py`.
 - Enforce module-size ratchet: `uv run python scripts/check_code_quality.py`.
   New library modules are limited to 800 physical lines; existing exceptions
   cannot grow, and shrinking files must lower/remove their recorded budget.

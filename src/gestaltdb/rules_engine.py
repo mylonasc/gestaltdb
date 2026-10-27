@@ -10,12 +10,16 @@ directly) instead of the full graph facade.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable, Iterator
 
 if TYPE_CHECKING:
     from .temporal_engine import TemporalEngine
 
 from ._graph import stored_rules as _stored_rules
+from ._graph.temporal_types import PointInput
+from .ingestion import IndexMaintenanceMode
+from .rules import ClaimExplanation, RuleRunResult, RuleVersion, TruthMaintenanceResult
+from .temporal import TemporalInstant
 from ._graph import truth_maintenance as _truth_maintenance
 from ._graph.truth_maintenance import (
     TRUTH_MAINTENANCE_STATE_KEY as _TRUTH_STATE_KEY,
@@ -25,7 +29,7 @@ from ._graph.truth_maintenance import (
 class RulesEngine:
     """Own rule capabilities bound to one temporal scope."""
 
-    def __init__(self, temporal, *, truth_state_key=None):
+    def __init__(self, temporal: TemporalEngine, *, truth_state_key: bytes | None = None) -> None:
         self._temporal: TemporalEngine = temporal
         self._truth_state_key = (
             _TRUTH_STATE_KEY if truth_state_key is None else truth_state_key
@@ -34,26 +38,26 @@ class RulesEngine:
     # -- scope binding ----------------------------------------------------
 
     @property
-    def temporal(self):
+    def temporal(self) -> TemporalEngine:
         """The backing temporal engine; scope-owned, borrowed for this handle."""
         return self._temporal
 
-    def rebound(self, temporal):
+    def rebound(self, temporal: TemporalEngine) -> RulesEngine:
         """Bind a sibling engine to a new temporal scope."""
         return RulesEngine(temporal, truth_state_key=self._truth_state_key)
 
-    def spawn_transaction_scope(self, temporal):
+    def spawn_transaction_scope(self, temporal: TemporalEngine) -> RulesEngine:
         """Bind a transaction-child engine to a new temporal scope."""
         return RulesEngine(temporal, truth_state_key=self._truth_state_key)
 
     # -- catalog -----------------------------------------------------------
 
-    def load_catalog(self):
+    def load_catalog(self) -> tuple[RuleVersion, ...]:
         """Load validated rule versions in catalog order."""
         return _stored_rules.load_rule_catalog(self._temporal.store)
 
-    def create_rule(self, rule_id, *, when, then, not_when=(),
-                    closed_world=(), version_id=None):
+    def create_rule(self, rule_id: str, *, when: Iterable[object], then: object, not_when: Iterable[object] = (),
+                    closed_world: Iterable[object] = (), version_id: str | None = None) -> RuleVersion:
         """Validate and append one immutable version of a Horn rule."""
         return _stored_rules.create_rule(
             self._temporal, rule_id, when=when, then=then,
@@ -61,26 +65,26 @@ class RulesEngine:
             version_id=version_id,
         )
 
-    def iter_rule_versions(self, rule_id=None, *, system_time=None):
+    def iter_rule_versions(self, rule_id: str | None = None, *, system_time: PointInput | None = None) -> Iterator[RuleVersion]:
         """Iterate immutable rule versions at a system-time horizon."""
         return _stored_rules.iter_rule_versions(
             self._temporal.store, rule_id, system_time=system_time)
 
-    def get_rule(self, rule_id, *, system_time=None):
+    def get_rule(self, rule_id: str, *, system_time: PointInput | None = None) -> RuleVersion | None:
         """Return the latest version of a named rule at a horizon."""
         return _stored_rules.get_rule(
             self._temporal.store, rule_id, system_time=system_time)
 
-    def program(self, *, system_time):
+    def program(self, *, system_time: PointInput | None) -> tuple[tuple[RuleVersion, ...], tuple[tuple[str, ...], ...]]:
         """Return active rule versions and their stratification schedule."""
         return _stored_rules.rule_program(
             self._temporal.store, system_time=system_time)
 
     # -- evaluation --------------------------------------------------------
 
-    def run(self, *, as_of, system_time=None, world=None,
-            max_iterations=100, max_derivations=10_000,
-            max_justifications=100_000, index_mode="maintain"):
+    def run(self, *, as_of: PointInput, system_time: PointInput | None = None, world: str | None = None,
+            max_iterations: int = 100, max_derivations: int = 10_000,
+            max_justifications: int = 100_000, index_mode: str | IndexMaintenanceMode = "maintain") -> RuleRunResult:
         """Evaluate active rules semi-naively and persist a bounded fixpoint.
 
         Examples:
@@ -112,14 +116,14 @@ class RulesEngine:
             max_justifications=max_justifications, index_mode=index_mode,
         )
 
-    def last_maintenance_instant(self):
+    def last_maintenance_instant(self) -> TemporalInstant | None:
         """Return the valid time of the most recent run or maintenance pass."""
         return _truth_maintenance.last_truth_maintenance_instant(
             self._temporal, self._truth_state_key)
 
-    def maintain(self, *, as_of=None, system_time=None, world=None,
-                 max_iterations=100, max_derivations=10_000,
-                 max_justifications=100_000, index_mode="maintain"):
+    def maintain(self, *, as_of: PointInput | None = None, system_time: PointInput | None = None, world: str | None = None,
+                 max_iterations: int = 100, max_derivations: int = 10_000,
+                 max_justifications: int = 100_000, index_mode: str | IndexMaintenanceMode = "maintain") -> TruthMaintenanceResult:
         """Reconcile derived claims with the current rule fixpoint."""
         return _truth_maintenance.maintain_truth(
             self._temporal, self._truth_state_key, as_of=as_of,
@@ -128,8 +132,8 @@ class RulesEngine:
             max_justifications=max_justifications, index_mode=index_mode,
         )
 
-    def explain(self, claim_id, *, valid_time, system_time=None,
-                max_depth=100, max_nodes=10_000):
+    def explain(self, claim_id: str, *, valid_time: PointInput, system_time: PointInput | None = None,
+                max_depth: int = 100, max_nodes: int = 10_000) -> ClaimExplanation | None:
         """Return a finite derivation graph for a visible historical claim."""
         return _truth_maintenance.explain_claim(
             self._temporal, claim_id=claim_id, valid_time=valid_time,

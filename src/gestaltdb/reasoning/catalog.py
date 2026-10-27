@@ -20,7 +20,7 @@ the default and this catalog is opt-in binding metadata only.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, cast
 
 from .model import ReasoningError, _text
 
@@ -56,7 +56,7 @@ class CatalogEntry:
             raise ReasoningError("catalog entry must be a mapping")
         try:
             return cls(str(value["rule_key"]), str(value["version_id"]),
-                       str(value["content_digest"]), int(value["ordinal"]))
+                       str(value["content_digest"]), int(cast("str | int", value["ordinal"])))
         except (KeyError, TypeError, ValueError) as exc:
             raise ReasoningError(f"invalid catalog entry: {exc}") from exc
 
@@ -112,7 +112,7 @@ class RuleCatalog:
         if version != CATALOG_FORMAT_VERSION:
             raise ReasoningError(f"unsupported catalog format_version: {version!r}")
         try:
-            entries = [CatalogEntry.from_dict(item) for item in value["entries"]]
+            entries = [CatalogEntry.from_dict(item) for item in cast(Iterable[object], value["entries"])]
         except (KeyError, TypeError) as exc:
             raise ReasoningError(f"invalid catalog: {exc}") from exc
         return cls(tuple(entries))
@@ -140,7 +140,7 @@ def migrate_dict(value: dict[str, object]) -> dict[str, object]:
     if version != 1:
         raise ReasoningError(f"unsupported catalog format_version: {version!r}")
     try:
-        raw = list(value["entries"])
+        raw = list(cast(Iterable[object], value["entries"]))
     except (KeyError, TypeError) as exc:
         raise ReasoningError(f"invalid v1 catalog: {exc}") from exc
     entries = []
