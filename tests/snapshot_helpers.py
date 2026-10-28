@@ -16,7 +16,8 @@ def reseal(path, metadata=None):
         catalog[name] = {"sha256": hashlib.sha256(file.read_bytes()).hexdigest(),
                          "dtype": str(array.dtype), "shape": list(array.shape)}
     metadata["artifacts"] = catalog
-    encode = lambda value: json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    def encode(value):
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     raw = encode(metadata)
     (path / "metadata.json").write_bytes(raw)
     (path / "completion.json").write_bytes(encode({
