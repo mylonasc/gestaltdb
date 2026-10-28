@@ -126,7 +126,16 @@ Install every optional integration, including ingestion and benchmark clients:
 python -m pip install "gestaltdb[all]"
 ```
 
-Optional extras include `lmdb`, `leveldb`, `rocksdb`, `backends`, `msgpack`, `protobuf`, `serializers`, `arrow`, `polars`, `fast-ingest`, `bloom`, `docs`, `dev`, and `all`.
+Optional extras include `lmdb`, `leveldb`, `rocksdb`, `backends`, `msgpack`, `protobuf`, `serializers`, `arrow`, `polars`, `fast-ingest`, `networkx`, `bloom`, `docs`, `dev`, and `all`.
+
+### NetworkX and GEXF
+
+Install `gestaltdb[networkx]` for `from_networkx`, `to_networkx`, and `load_gexf`
+from `gestaltdb.integrations.networkx`. Convert directed attributed multigraphs,
+run NetworkX algorithms on materialized exports, or load static GEXF files
+(including compressed paths). Undirected input requires explicit bidirectional
+conversion; dynamic GEXF is rejected. See the [mapping and loading guide](docs/networkx.rst)
+for examples, collision policies, XML protections and memory/atomicity limits.
 
 ## Basic Example
 

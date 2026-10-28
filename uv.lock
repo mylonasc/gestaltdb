@@ -651,6 +651,15 @@ wheels = [
 ]
 
 [[package]]
+name = "defusedxml"
+version = "0.7.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0f/d5/c66da9b79e5bdb124974bfe172b4daf3c984ebd9c2a06e2b8a4dc7331c72/defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69", size = 75520, upload-time = "2021-03-08T10:59:26.269Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61", size = 25604, upload-time = "2021-03-08T10:59:24.45Z" },
+]
+
+[[package]]
 name = "docutils"
 version = "0.21.2"
 source = { registry = "https://pypi.org/simple" }
@@ -800,6 +809,7 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "arcadedb-embedded" },
+    { name = "defusedxml" },
     { name = "gqlalchemy", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
     { name = "gqlalchemy", version = "1.10.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
     { name = "ladybug" },
@@ -807,6 +817,8 @@ all = [
     { name = "lmdb" },
     { name = "msgpack" },
     { name = "neo4j" },
+    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "plyvel" },
     { name = "polars" },
     { name = "protobuf" },
@@ -833,6 +845,7 @@ coverage = [
 dev = [
     { name = "arcadedb-embedded" },
     { name = "coverage" },
+    { name = "defusedxml" },
     { name = "gqlalchemy", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
     { name = "gqlalchemy", version = "1.10.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
     { name = "ladybug" },
@@ -842,6 +855,8 @@ dev = [
     { name = "myst-parser", version = "4.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "myst-parser", version = "5.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "neo4j" },
+    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "plyvel" },
     { name = "polars" },
     { name = "protobuf" },
@@ -890,6 +905,11 @@ lmdb = [
 msgpack = [
     { name = "msgpack" },
 ]
+networkx = [
+    { name = "defusedxml" },
+    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
 polars = [
     { name = "polars" },
     { name = "pyarrow" },
@@ -923,6 +943,9 @@ requires-dist = [
     { name = "arcadedb-embedded", marker = "python_full_version >= '3.10' and extra == 'external-bench'" },
     { name = "coverage", marker = "extra == 'coverage'" },
     { name = "coverage", marker = "extra == 'dev'" },
+    { name = "defusedxml", marker = "extra == 'all'", specifier = ">=0.7.1" },
+    { name = "defusedxml", marker = "extra == 'dev'", specifier = ">=0.7.1" },
+    { name = "defusedxml", marker = "extra == 'networkx'", specifier = ">=0.7.1" },
     { name = "gqlalchemy", marker = "extra == 'all'" },
     { name = "gqlalchemy", marker = "extra == 'dev'" },
     { name = "gqlalchemy", marker = "extra == 'external-bench'" },
@@ -947,6 +970,9 @@ requires-dist = [
     { name = "neo4j", marker = "extra == 'all'" },
     { name = "neo4j", marker = "extra == 'dev'" },
     { name = "neo4j", marker = "extra == 'external-bench'" },
+    { name = "networkx", marker = "extra == 'all'", specifier = ">=3.2,<4" },
+    { name = "networkx", marker = "extra == 'dev'", specifier = ">=3.2,<4" },
+    { name = "networkx", marker = "extra == 'networkx'", specifier = ">=3.2,<4" },
     { name = "numpy", specifier = ">=1.23" },
     { name = "plyvel", marker = "extra == 'all'", specifier = ">=1.5.1" },
     { name = "plyvel", marker = "extra == 'backends'", specifier = ">=1.5.1" },
@@ -985,7 +1011,7 @@ requires-dist = [
     { name = "sphinx-rtd-theme", marker = "extra == 'dev'" },
     { name = "sphinx-rtd-theme", marker = "extra == 'docs'" },
 ]
-provides-extras = ["rdf", "lmdb", "leveldb", "msgpack", "protobuf", "backends", "serializers", "bloom", "coverage", "docs", "lint", "rocksdb", "arrow", "polars", "fast-ingest", "external-bench", "all", "dev"]
+provides-extras = ["rdf", "networkx", "lmdb", "leveldb", "msgpack", "protobuf", "backends", "serializers", "bloom", "coverage", "docs", "lint", "rocksdb", "arrow", "polars", "fast-ingest", "external-bench", "all", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
