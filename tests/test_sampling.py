@@ -185,6 +185,15 @@ def test_sampler_snapshot_resolves_external_ids_in_ram_and_memmap_modes(tmp_path
 
 def _as_legacy_snapshot(path):
     """Exercise v1 compatibility without weakening v2 integrity checks."""
+    from .snapshot_helpers import dense_snapshot
+
+    # Real v1 snapshots contain dense directories, not sparse arrays with a
+    # downgraded version tag. Some tests have already removed optional arrays.
+    metadata = json.loads((path / "metadata.json").read_text())
+    metadata["artifacts"] = {name: record for name, record in metadata["artifacts"].items()
+                             if (path / f"{name}.npy").exists()}
+    (path / "metadata.json").write_text(json.dumps(metadata))
+    dense_snapshot(path)
     metadata = json.loads((path / "metadata.json").read_text())
     metadata["format_version"] = 1
     metadata.pop("artifacts", None)

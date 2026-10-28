@@ -55,9 +55,11 @@ Performance Boundaries
   page cache, candidate/result buffers, metadata, and Python positive-membership
   structures still consume memory. Loading validates artifacts, so do not assume
   a zero-I/O startup. Snapshot construction materializes data in memory.
-- Current relation CSR directories scale with **node count × relation count**;
-  highly heterogeneous graphs need memory measurements, not just edge-count
-  estimates. Weighted and temporal policies can inspect candidate arrays before
+- New relation CSR directories store **populated endpoint/relation pairs**,
+  including temporal directories. Legacy dense snapshots still scale with
+  **node count × relation count** until explicitly rebuilt or rewritten.
+  Sparse lookup uses binary search rather than direct offset addressing, so
+  memory savings do not imply faster sampling. Weighted and temporal policies can inspect candidate arrays before
   drawing; a small output fanout does not bound all temporary work.
 - Reuse one seeded engine for a sequence of batches. Recreating it per call
   repeats setup costs and resets its RNG. External-ID conversion also allocates;
@@ -68,6 +70,13 @@ Performance Boundaries
 
 Reproduce a Sampler Microbenchmark
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For a small relation-directory comparison with exact candidate-order parity,
+run ``uv run python -m benchmarks.sparse_adjacency``. It reports directory
+payload bytes, build time, lookup latency and lookup-plus-uniform-fanout latency
+for identical keys. It is an in-memory microbenchmark, not full-engine
+throughput, peak RSS, cold-cache or multi-worker evidence. Positive-membership
+sets are unchanged by the sparse-directory work.
 
 From a repository checkout, the sampler runner compares a **synthetic in-memory
 dictionary/reservoir baseline** with batched array sampling:

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added versioned sparse sampler relation/temporal directories (#427), avoiding
+  dense node × relation offsets on new builds while retaining legacy dense
+  v1/v2 loading and seeded candidate order. Binary-search lookup trades latency
+  for directory memory; engine positive-membership sets are unchanged.
 - Hardened serializer decoding of malformed tagged payloads: JSON and
   MessagePack deserialization now raise `ValueError` instead of leaking
   `AttributeError`/`KeyError`, and serialization tolerates non-string tag values.

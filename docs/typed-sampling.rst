@@ -807,3 +807,37 @@ format-v1 snapshots still load, but have no integrity or temporal guarantees.
 Rebuild v1 snapshots from their source database to migrate to v2; snapshots are
 immutable and have no in-place upgrade path. Unknown format versions and corrupt
 v2 artifacts fail closed.
+
+Sparse relation directories
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+New builds identify their directory encoding with
+``relation_adjacency_encoding="sparse-rows-v1"`` inside the authenticated v2
+envelope. ``relation_out``, ``relation_in`` and, for temporal snapshots,
+``temporal_out`` / ``temporal_in`` persist sorted int64 ``*_row_keys`` arrays
+containing only populated ``node * num_relations + relation`` keys. Their
+``indptr`` arrays address these populated rows, not every possible key.
+Use ``adjacency.edge_range(key)`` instead of indexing ``indptr[key]``; absent
+keys return empty slices. Dense node-only adjacency is unchanged.
+
+A directory with P populated pairs uses ``8 * (2 * P + 1)`` payload bytes
+for row keys and offsets, instead of ``8 * (N * R + 1)`` dense offset bytes.
+Edge-index payloads are unchanged. This is most useful when P is much smaller
+than N * R; sparse rows can cost more on densely populated relation grids.
+Lookup changes from direct indexing to binary search over populated keys.
+Within each row, stable edge order and temporal valid-start/edge-row tie order
+are preserved, retaining seeded sampling behavior.
+
+RAM and memmap loading validate row-key uniqueness/order/range, nonempty rows,
+offsets, exact membership, checksums and schemas. No dense relation directory
+is reconstructed for sparse artifacts. Validation still allocates edge-sized
+working arrays; construction still materializes the graph. Engine positive
+membership sets, candidate buffers and page-cache costs are unchanged.
+
+The loader still accepts dense v1/v2 snapshots without an encoding marker.
+Unknown encodings fail closed. Older GestaltDB loaders reject new snapshots
+because their authenticated artifact catalogs contain unfamiliar row-key
+arrays; they must be upgraded before reading them. No implicit on-load rewrite
+occurs. Rebuild to a fresh path to migrate; existing supported non-temporal v2
+append/compact/weight rewrites also publish sparse directories. Existing
+temporal in-place rewrite restrictions remain unchanged.
