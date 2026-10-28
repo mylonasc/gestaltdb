@@ -6,9 +6,9 @@ fixtures are backend), stub framework tests stay unlabeled, and the summary
 script reports collection and JUnit evidence by category.
 """
 
+import re
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
 from .category_markers import categories_for
@@ -18,9 +18,10 @@ EXPECTED_MARKERS = {"backend", "framework", "native", "fault", "subprocess", "un
 
 
 def _registered_markers():
-    with open(ROOT / "pyproject.toml", "rb") as handle:
-        markers = tomllib.load(handle)["tool"]["pytest"]["ini_options"]["markers"]
-    return {entry.split(":", 1)[0].strip() for entry in markers}
+    text = (ROOT / "pyproject.toml").read_text()
+    block = re.search(r"(?ms)^markers = \[(.*?)^\]", text)
+    assert block is not None, "markers block not found in pyproject.toml"
+    return {line.split(":", 1)[0].strip().strip('"') for line in block.group(1).splitlines() if ":" in line}
 
 
 def test_all_category_markers_are_registered():
