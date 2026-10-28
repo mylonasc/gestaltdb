@@ -369,6 +369,30 @@ def test_temporal_negative_membership_seeded_hash_oracle_parity(memory_graph, tm
     assert da == db
 
 
+@pytest.mark.parametrize("mmap", [False, True])
+def test_sparse_temporal_directory_matches_legacy_dense(memory_graph, tmp_path, mmap):
+    from .snapshot_helpers import dense_snapshot
+    from .test_sparse_adjacency import assert_batches_equal
+
+    snapshot = _build_runtime_temporal_snapshot(memory_graph, tmp_path / "sparse")
+    shutil.copytree(snapshot.path, tmp_path / "dense")
+    dense_snapshot(tmp_path / "dense")
+    dense = SamplerSnapshot.load(tmp_path / "dense", mmap=mmap)
+    sparse = SamplerSnapshot.load(snapshot.path, mmap=mmap)
+    for name in ("temporal_out", "temporal_in"):
+        adjacency = getattr(sparse, name)
+        assert adjacency.row_keys is not None
+        if mmap:
+            assert isinstance(adjacency.row_keys, np.memmap)
+    for context in (TemporalContext.as_of(10), TemporalContext.during(0, 20), TemporalContext.as_of(-20)):
+        for direction in ("out", "in", "any"):
+            for policy in ("overlap", "contained"):
+                a, b = SamplerEngine(sparse, seed=51), SamplerEngine(dense, seed=51)
+                kwargs = dict(direction=direction, temporal=context, window_policy=policy)
+                assert_batches_equal(a.sample_neighbors([0, 1, 2], 2, **kwargs),
+                                     b.sample_neighbors([0, 1, 2], 2, **kwargs))
+
+
 def test_temporal_neighbor_sampling_composes_exact_filters(memory_graph, tmp_path):
     snapshot = _build_runtime_temporal_snapshot(memory_graph, tmp_path / "runtime")
     engine = SamplerEngine(snapshot, seed=7)
@@ -873,7 +897,8 @@ def test_empty_temporal_snapshot_is_complete_and_loadable(memory_graph, tmp_path
 
     assert snapshot.temporal
     assert snapshot.num_nodes == snapshot.num_edges == 0
-    assert snapshot.temporal_out.indptr.tolist() == [0, 0]
+    assert snapshot.temporal_out.indptr.tolist() == [0]
+    assert snapshot.temporal_out.row_keys.tolist() == []
     assert (snapshot.path / "completion.json").is_file()
 
 
@@ -980,6 +1005,8 @@ def test_legacy_v1_snapshot_remains_loadable(memory_graph, tmp_path):
     )
     legacy = tmp_path / "v1"
     shutil.copytree(snapshot.path, legacy)
+    from .snapshot_helpers import dense_snapshot
+    dense_snapshot(legacy)
     metadata = json.loads((legacy / "metadata.json").read_text())
     metadata["format_version"] = 1
     metadata.pop("positive_membership_encoding", None)

@@ -7,6 +7,10 @@
   authenticated memory-mappable index; temporal snapshots reuse history keys.
   Legacy non-temporal snapshots build a sorted RAM index once. Membership
   lookup now uses binary search; candidate buffers and validation still allocate.
+- Added versioned sparse sampler relation/temporal directories (#427), avoiding
+  dense node × relation offsets on new builds while retaining legacy dense
+  v1/v2 loading and seeded candidate order. Binary-search lookup trades latency
+  for directory memory. Exact positive membership is handled separately above.
 - Hardened serializer decoding of malformed tagged payloads: JSON and
   MessagePack deserialization now raise `ValueError` instead of leaking
   `AttributeError`/`KeyError`, and serialization tolerates non-string tag values.

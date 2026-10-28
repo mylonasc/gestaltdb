@@ -840,9 +840,9 @@ engine construction, even in memmap mode; rebuild them to a fresh path to
 persist the new index. Supported non-temporal v2 rewrites also persist it.
 
 Unknown membership encodings and missing/malformed indexes fail closed. Older
-loaders reject new non-temporal artifact catalogs. New temporal files add no
-artifacts beyond existing history arrays and remain compatible with loaders
-that already understand those history indexes. No implicit on-load rewrite
+loaders reject new non-temporal artifact catalogs. The membership feature adds
+no temporal artifacts beyond existing history arrays, but new builds also use
+sparse relation directories (below), which older loaders reject. No implicit on-load rewrite
 occurs. No partitioned snapshot or universal zero-copy/constant-memory guarantee
 is introduced.
 
@@ -851,3 +851,37 @@ while using them, and do not mutate arrays or replace their files under active
 readers. Memmaps are opened read-only. Candidate/result buffers, temporal
 interval checks, weight validation, metadata, OS page cache and legacy admission
 allocations remain; removing the membership sets does not remove these costs.
+
+Sparse relation directories
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+New builds identify their directory encoding with
+``relation_adjacency_encoding="sparse-rows-v1"`` inside the authenticated v2
+envelope. ``relation_out``, ``relation_in`` and, for temporal snapshots,
+``temporal_out`` / ``temporal_in`` persist sorted int64 ``*_row_keys`` arrays
+containing only populated ``node * num_relations + relation`` keys. Their
+``indptr`` arrays address these populated rows, not every possible key.
+Use ``adjacency.edge_range(key)`` instead of indexing ``indptr[key]``; absent
+keys return empty slices. Dense node-only adjacency is unchanged.
+
+A directory with P populated pairs uses ``8 * (2 * P + 1)`` payload bytes
+for row keys and offsets, instead of ``8 * (N * R + 1)`` dense offset bytes.
+Edge-index payloads are unchanged. This is most useful when P is much smaller
+than N * R; sparse rows can cost more on densely populated relation grids.
+Lookup changes from direct indexing to binary search over populated keys.
+Within each row, stable edge order and temporal valid-start/edge-row tie order
+are preserved, retaining seeded sampling behavior.
+
+RAM and memmap loading validate row-key uniqueness/order/range, nonempty rows,
+offsets, exact membership, checksums and schemas. No dense relation directory
+is reconstructed for sparse artifacts. Validation still allocates edge-sized
+working arrays; construction still materializes the graph. Candidate buffers
+and page-cache costs remain; positive membership is handled separately above.
+
+The loader still accepts dense v1/v2 snapshots without an encoding marker.
+Unknown encodings fail closed. Older GestaltDB loaders reject new snapshots
+because their authenticated artifact catalogs contain unfamiliar row-key
+arrays; they must be upgraded before reading them. No implicit on-load rewrite
+occurs. Rebuild to a fresh path to migrate; existing supported non-temporal v2
+append/compact/weight rewrites also publish sparse directories. Existing
+temporal in-place rewrite restrictions remain unchanged.

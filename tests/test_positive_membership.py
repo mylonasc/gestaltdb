@@ -90,6 +90,10 @@ def test_legacy_static_membership_fallback_once(tmp_path, monkeypatch, version, 
     (snapshot.path / "positive_membership_triples.npy").unlink()
     reseal(snapshot.path, metadata)
     if version == 1:
+        from .snapshot_helpers import dense_snapshot
+
+        dense_snapshot(snapshot.path)
+        metadata = json.loads((snapshot.path / "metadata.json").read_text())
         metadata["format_version"] = 1
         metadata.pop("artifacts")
         (snapshot.path / "metadata.json").write_text(json.dumps(metadata))
@@ -221,6 +225,12 @@ def test_append_prune_and_weight_rewrites_refresh_persisted_membership(tmp_path)
     snapshot.set_edge_weights(snapshot.edge_weights.copy(), source="test")
     assert snapshot.metadata["positive_membership_encoding"] == "lexicographic-triples-v1"
     np.testing.assert_array_equal(snapshot.positive_membership_triples, build_membership(snapshot.positive_triples))
+    # Rewrites must publish both encodings after the sparse-directory merge.
+    mapped = SamplerSnapshot.load(snapshot.path, mmap=True)
+    assert mapped.metadata["relation_adjacency_encoding"] == "sparse-rows-v1"
+    assert isinstance(mapped.relation_out.row_keys, np.memmap)
+    assert isinstance(mapped.positive_membership_triples, np.memmap)
+    assert not SamplerEngine(mapped).is_positive(*key)
 
 
 @pytest.mark.parametrize("name", ["dense_v1", "dense_v2", "temporal_v2"])

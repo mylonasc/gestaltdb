@@ -1,0 +1,33 @@
+{
+  "source_revision": "74564ad",
+  "command": "uv run --python 3.12 python -m benchmarks.sparse_adjacency",
+  "python": "3.12.3",
+  "numpy": "2.5.2",
+  "seed": 427,
+  "nodes": 2000,
+  "relations": 128,
+  "edges": 5000,
+  "lookups": 5000,
+  "repeats": 5,
+  "results": [
+    {
+      "encoding": "dense",
+      "directory_bytes": 2048008,
+      "edge_index_bytes": 40000,
+      "build_seconds": 0.0015072820242494345,
+      "median_lookup_seconds": 0.001479861995903775,
+      "candidate_count": 2589,
+      "median_lookup_plus_fanout_seconds": 0.010559248010395095
+    },
+    {
+      "encoding": "sparse",
+      "directory_bytes": 79256,
+      "edge_index_bytes": 40000,
+      "build_seconds": 0.00043370999628677964,
+      "median_lookup_seconds": 0.005484179011546075,
+      "candidate_count": 2589,
+      "median_lookup_plus_fanout_seconds": 0.014350997022120282
+    }
+  ],
+  "scope": "In-memory adjacency microbenchmark; excludes snapshot loading, validation, RSS and engine positive sets. Exact candidate ordering checked. Timings are workload/host-specific, not a throughput improvement claim."
+}
