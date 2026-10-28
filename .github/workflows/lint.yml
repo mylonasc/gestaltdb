@@ -6,7 +6,10 @@ on:
     paths:
       - 'src/**/*.py'
       - 'scripts/check_code_quality.py'
+      - 'scripts/check_typing.py'
       - 'tests/test_code_quality.py'
+      - 'tests/test_static_typing_contracts.py'
+      - 'tests/typing/**/*.py'
       - 'planning/code-quality/module-size-baseline.json'
       - 'pyproject.toml'
       - 'uv.lock'
@@ -16,7 +19,10 @@ on:
     paths:
       - 'src/**/*.py'
       - 'scripts/check_code_quality.py'
+      - 'scripts/check_typing.py'
       - 'tests/test_code_quality.py'
+      - 'tests/test_static_typing_contracts.py'
+      - 'tests/typing/**/*.py'
       - 'planning/code-quality/module-size-baseline.json'
       - 'pyproject.toml'
       - 'uv.lock'
@@ -44,5 +50,9 @@ jobs:
         run: python -m ruff check .
       - name: Reject oversized library modules and stale budgets
         run: python scripts/check_code_quality.py
+      - name: Static typing ratchet for strictly typed library modules
+        run: python scripts/check_typing.py
+      - name: Static typing gate for consumer fixtures
+        run: python -m pytest tests/test_static_typing_contracts.py -q
       - name: Test quality gate
         run: python -m pytest tests/test_code_quality.py -q

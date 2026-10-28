@@ -7,6 +7,7 @@ directions, RNG) that static types now describe.
 """
 
 import random
+from types import SimpleNamespace
 
 import pytest
 
@@ -24,16 +25,28 @@ def graph(tmp_path, request):
     from gestaltdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
     from gestaltdb.serializers import JSONSerializer
 
+    # Skip only when the optional package is genuinely absent. A constructor
+    # failure while the package is importable is a regression and must fail.
+    pytest.importorskip({"lmdb": "lmdb", "leveldb": "plyvel", "pyrex": "pyrex"}[request.param])
     stores = {"lmdb": LMDBStore, "leveldb": LevelDBStore, "pyrex": PyRexStore}
-    try:
-        store = stores[request.param](path=str(tmp_path / "graph"))
-    except Exception as exc:  # pragma: no cover - missing system dependency
-        pytest.skip(f"{request.param} backend unavailable: {exc}")
+    store = stores[request.param](path=str(tmp_path / "graph"))
     handle = GraphDB(store, JSONSerializer())
     try:
         yield handle
     finally:
         handle.close()
+
+
+def test_backend_fixture_fails_on_constructor_regression(tmp_path, monkeypatch):
+    pytest.importorskip("lmdb")
+    from gestaltdb.kvstores import LMDBStore
+
+    def broken_init(self, *args, **kwargs):
+        raise RuntimeError("simulated backend constructor regression")
+
+    monkeypatch.setattr(LMDBStore, "__init__", broken_init)
+    with pytest.raises(RuntimeError, match="simulated backend constructor regression"):
+        next(graph.__wrapped__(tmp_path, SimpleNamespace(param="lmdb")))
 
 
 def test_missing_lookups_return_none(graph):
