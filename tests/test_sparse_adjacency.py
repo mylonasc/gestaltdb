@@ -84,6 +84,7 @@ def test_legacy_v1_v2_load_and_seeded_parity(tmp_path, mmap):
                                      b.sample_neighbors([0, 1, 2, 30], 3, **kwargs))
     metadata = dense.metadata.copy()
     metadata["format_version"] = 1
+    metadata.pop("positive_membership_encoding", None)
     metadata.pop("artifacts")
     (dense.path / "metadata.json").write_text(json.dumps(metadata))
     legacy = SamplerSnapshot.load(dense.path, mmap=mmap)

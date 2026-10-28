@@ -11,6 +11,7 @@ from ._arrays import Array, BoolArray, FloatArray, IntArray, ScalarT, StringArra
 from ..temporal import TemporalContext, TemporalInput, TemporalInstant, TemporalInterval
 from .batch import SampledSubgraphBatch
 from .negatives import HardNegativeConfig
+from .positive_membership import snapshot_membership
 from .snapshot import SamplerSnapshot
 from .walks import RandomWalkBatch, _external_id_array, iter_walk_batches
 from .rng import split_seed
@@ -293,8 +294,7 @@ class SamplerEngine:
         else:
             snapshot.edge_weights = self._validated_weights(snapshot.edge_weights, snapshot.num_edges, "snapshot.edge_weights")
         self.rng = np.random.default_rng(seed)
-        self._positive_codes = self._build_positive_codes()
-        self._positive_history_groups = self._build_positive_history_groups()
+        self._positive_membership = snapshot_membership(snapshot)
 
     @classmethod
     def load(cls, path: str | Path, *, mode: str = "ram", seed: int | None = None, **_kwargs) -> "SamplerEngine":
@@ -1685,14 +1685,13 @@ class SamplerEngine:
             raise ValueError("policy must be 'any_time', 'at_positive_time', or 'window'")
         if window_policy not in {"overlap", "contained"}:
             raise ValueError("window_policy must be 'overlap' or 'contained'")
-        code = int(self._pack_triple(src, rel, dst))
+        group = self._positive_membership.find(src, rel, dst)
         if policy == "any_time":
-            return code in self._positive_codes
+            return group is not None
         if temporal is None:
             raise ValueError("temporal positive membership requires a temporal context")
         if not self.snapshot.temporal:
             raise ValueError("temporal positive membership requires a format-v2 temporal snapshot")
-        group = self._positive_history_groups.get(code)
         if group is None:
             return False
         start, end = cast(IntArray, self.snapshot.positive_history_indptr)[group:group + 2]
@@ -2313,28 +2312,3 @@ class SamplerEngine:
             negative_time_us=negative_times,
             negative_diagnostics=negative_diagnostics,
         )
-
-    def _pack_triple(self, src: int, rel: int, dst: int) -> np.uint64:
-        num_relations = max(1, self.snapshot.num_relations)
-        num_nodes = max(1, self.snapshot.num_nodes)
-        return np.uint64((int(src) * num_relations + int(rel)) * num_nodes + int(dst))
-
-    def _build_positive_codes(self) -> set[int]:
-        triples = self.snapshot.positive_triples
-        if triples.size == 0:
-            return set()
-        max_code = (self.snapshot.num_nodes * max(1, self.snapshot.num_relations) * self.snapshot.num_nodes) - 1
-        if max_code > np.iinfo(np.uint64).max:
-            raise OverflowError("positive triple packing exceeds uint64")
-        codes = [int(self._pack_triple(src, rel, dst)) for src, rel, dst in triples.tolist()]
-        return set(codes)
-
-    def _build_positive_history_groups(self) -> dict[int, int]:
-        if not self.snapshot.temporal:
-            return {}
-        return {
-            int(self._pack_triple(src, rel, dst)): index
-            for index, (src, rel, dst) in enumerate(
-                cast(IntArray, self.snapshot.positive_history_triples).tolist()
-            )
-        }

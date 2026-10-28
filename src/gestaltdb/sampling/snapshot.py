@@ -15,6 +15,8 @@ from typing import Callable, Iterable, Literal, Sequence, cast
 import numpy as np
 from ._arrays import Array, BoolArray, FloatArray, IntArray, StringArray
 from .adjacency import CSRAdjacency, build_csr, build_sparse_csr, validate_csr
+from .positive_membership import ARTIFACT as MEMBERSHIP_ARTIFACT, ENCODING as MEMBERSHIP_ENCODING, build_membership, has_membership_encoding, validate_membership
+from .positive_membership import build_positive_history_index as _build_positive_history_index
 from .relation_adjacency import ENCODING, NAMES, TEMPORAL_NAMES, load_relation_adjacency, sparse_arrays, sparse_encoding
 from ..hierarchy import LabelHierarchy, RelationHierarchy
 from ..readview import CurrentReadProvenance, ReadViewProvenance, parse_read_provenance
@@ -62,6 +64,8 @@ class SamplerSnapshot:
         relation_in: Target/relation adjacency, with sparse populated-row
             directories on new snapshots and dense directories on legacy ones.
         positive_triples: Array of ``(src, rel, dst)`` positives.
+        positive_membership_triples: Sorted unique static membership keys;
+            temporal snapshots reuse ``positive_history_triples`` instead.
         edge_version_ids: Temporal edge-version UUIDs aligned with edge arrays,
             or ``None`` for non-temporal and legacy v1 snapshots.
         valid_from_us: Inclusive valid-time starts in UTC epoch microseconds.
@@ -141,6 +145,7 @@ class SamplerSnapshot:
     node_lookup_ids: StringArray = field(default_factory=lambda: np.empty(0, dtype=str))
     edge_lookup_ids: StringArray = field(default_factory=lambda: np.empty(0, dtype=str))
     relation_lookup_ids: StringArray = field(default_factory=lambda: np.empty(0, dtype=str))
+    positive_membership_triples: IntArray | None = None
 
     @property
     def num_nodes(self) -> int:
@@ -852,6 +857,7 @@ class SamplerSnapshot:
         version = metadata.get("format_version")
         if version not in {LEGACY_SNAPSHOT_FORMAT_VERSION, SNAPSHOT_FORMAT_VERSION}:
             raise ValueError("unsupported sampler snapshot format version")
+        membership = has_membership_encoding(metadata)
         sparse = sparse_encoding(metadata)
         if version == SNAPSHOT_FORMAT_VERSION:
             cls._validate_v2_files(path, metadata, metadata_bytes)
@@ -930,6 +936,7 @@ class SamplerSnapshot:
             relation_out=load_relation_adjacency("relation_out", load_array, sparse=sparse),
             relation_in=load_relation_adjacency("relation_in", load_array, sparse=sparse),
             positive_triples=load_array("positive_triples"),
+            positive_membership_triples=load_array(MEMBERSHIP_ARTIFACT) if membership and not temporal else None,
             edge_version_ids=load_array("edge_version_ids") if temporal else None,
             valid_from_us=load_array("valid_from_us") if temporal else None,
             valid_to_us=load_array("valid_to_us") if temporal else None,
@@ -1601,6 +1608,8 @@ class SamplerSnapshot:
             })
         elif metadata.get("temporal_history_indexes") not in {None, False}:
             raise ValueError("invalid temporal history index flag")
+        if has_membership_encoding(metadata) and not metadata.get("temporal"):
+            expected.add(MEMBERSHIP_ARTIFACT)
         if set(catalog) != expected:
             raise ValueError("sampler snapshot artifact catalog is incomplete or contains unknown arrays")
         for name, record in catalog.items():
@@ -1664,6 +1673,8 @@ class SamplerSnapshot:
             np.stack([self.src_int, self.rel_int, self.dst_int], axis=1) if edge_count else np.empty((0, 3), dtype=np.int64),
         ):
             raise ValueError("sampler snapshot positive triples are inconsistent")
+        if has_membership_encoding(self.metadata) and not self.temporal:
+            validate_membership(self.positive_membership_triples, self.positive_triples)
         relation_size = max(1, node_count * max(1, relation_count))
         edge_indices = np.arange(edge_count, dtype=np.int64)
         relation_multiplier = max(1, relation_count)
@@ -1924,6 +1935,8 @@ class SamplerSnapshot:
             "edge_lookup_ids": edge_lookup_ids,
             "relation_lookup_ids": relation_lookup_ids,
         }
+        if temporal_values is None:
+            arrays[MEMBERSHIP_ARTIFACT] = build_membership(positive_triples)
         arrays.update(sparse_arrays("relation_out", relation_out))
         arrays.update(sparse_arrays("relation_in", relation_in))
         if temporal_values is not None:
@@ -1985,6 +1998,7 @@ class SamplerSnapshot:
                     "shape": list(array.shape),
                 }
             metadata = dict(metadata)
+            metadata["positive_membership_encoding"] = MEMBERSHIP_ENCODING
             metadata["relation_adjacency_encoding"] = ENCODING
             metadata["sampling_policy_arrays"] = True
             if temporal_values is not None:
@@ -2062,21 +2076,6 @@ def _sha256_file(path: Path) -> str:
 
 def _build_temporal_csr(keys: IntArray, valid_from_us: IntArray, edge_indices: IntArray, size: int) -> CSRAdjacency:
     return build_sparse_csr(keys, edge_indices, size, starts=valid_from_us)
-
-
-def _build_positive_history_index(src: IntArray, rel: IntArray, dst: IntArray, valid_from_us: IntArray) -> tuple[IntArray, IntArray, IntArray]:
-    triples = np.stack([src, rel, dst], axis=1) if len(src) else np.empty((0, 3), dtype=np.int64)
-    if not len(triples):
-        return triples, np.zeros(1, dtype=np.int64), np.empty(0, dtype=np.int64)
-    edge_indices = np.arange(len(triples), dtype=np.int64)
-    order = np.lexsort((edge_indices, valid_from_us, dst, rel, src))
-    ordered = triples[order]
-    starts = np.empty(len(ordered), dtype=np.bool_)
-    starts[0] = True
-    starts[1:] = np.any(ordered[1:] != ordered[:-1], axis=1)
-    group_starts = np.flatnonzero(starts).astype(np.int64)
-    indptr = np.concatenate([group_starts, np.asarray([len(ordered)], dtype=np.int64)])
-    return ordered[group_starts], indptr, edge_indices[order]
 
 
 def _subtract_intervals(start: int, end: int | None, covered: Iterable[tuple[int, int | None]]) -> list[tuple[int, int | None]]:

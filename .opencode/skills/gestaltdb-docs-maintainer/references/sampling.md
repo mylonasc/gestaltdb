@@ -72,7 +72,7 @@ partial mapping checks remain unverified. See `docs/reasoning-authenticated-infe
 
 Format v2 is atomically published with a completion manifest and a SHA-256/dtype/shape record for every array. The loader validates those records, CSR bounds, aligned lengths, interval invariants, and provenance before exposing RAM or memmap arrays. Format-v1 snapshots remain loadable without these guarantees.
 
-New v2 builds use `relation_adjacency_encoding="sparse-rows-v1"`: relation and temporal directories persist sorted populated `row_keys` plus offsets. Call `edge_range(key)`; `indptr` no longer addresses every possible node/relation pair. RAM/memmap loads keep the sparse layout and still accept legacy dense snapshots. Old loaders reject the new artifact catalogs. Dense node-only adjacency and Python positive-membership sets are unchanged.
+New v2 builds use `relation_adjacency_encoding="sparse-rows-v1"`: relation and temporal directories persist sorted populated `row_keys` plus offsets. Call `edge_range(key)`; `indptr` no longer addresses every possible node/relation pair. RAM/memmap loads keep the sparse layout and still accept legacy dense snapshots. Old loaders reject the new artifact catalogs. Dense node-only adjacency is unchanged; positive membership uses the separate sorted index described below.
 
 Temporal snapshots expose `edge_version_ids`, `valid_from_us`, `valid_to_us`, `valid_to_open`, `edge_system_time_us`, and `edge_commit_ids`, all aligned with compact edge rows. `temporal_out` and `temporal_in` group rows by endpoint/relation and valid start. `SamplerEngine` uses those indexes and then applies exact half-open point/window predicates before random selection. Pass `temporal=TemporalContext.as_of(...)` or `TemporalContext.during(...)`; windows support `window_policy="overlap"` and `"contained"`, and multihop/subgraph calls support `causal_policy="none"`, `"nondecreasing"`, or `"nonincreasing"`. Temporal neighbor and batch results carry aligned edge-version and validity arrays.
 
@@ -80,7 +80,9 @@ Temporal v2 snapshots also authenticate grouped positive-triple interval histori
 
 ### Loading into Engine
 - `SamplerEngine.load(snapshot_path, mode="ram", seed=42)`: Eagerly loads all arrays into process RAM.
-- `SamplerEngine.load(snapshot_path, mode="memmap", seed=42)`: Memory-maps persisted arrays. Candidate/result buffers, positive-membership data, metadata, and page cache still consume memory; benchmark full-process memory and worker behavior.
+- `SamplerEngine.load(snapshot_path, mode="memmap", seed=42)`: Memory-maps persisted arrays. New static membership uses sorted `positive_membership_triples`; temporal membership reuses sorted history keys, without Python code sets/group dictionaries. Legacy static snapshots build sorted RAM keys once. Candidate/result buffers, validation, metadata and page cache still consume memory; benchmark full-process memory and worker behavior.
+
+New v2 snapshots mark membership as `positive_membership_encoding="lexicographic-triples-v1"`. Static key artifacts are authenticated sorted unique int64 triples; temporal history groups retain their old identities and interval policies. Engine membership uses exact O(log U) search, not hashing or uint64 packing. Keys borrow snapshot lifetime; do not mutate arrays or replace files under active engines. New static artifacts require an upgraded loader; legacy snapshots still load with the documented compatibility path.
 
 ### Sampling Primitives
 - `engine.sample_nodes(512, node_types=[type_id])`

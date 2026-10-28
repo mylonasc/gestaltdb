@@ -52,9 +52,11 @@ Performance Boundaries
   snapshot for repeated property-constrained traversal. These callbacks scan
   decoded entities; they are not automatic index pushdown.
 - ``mode="memmap"`` avoids eagerly copying all persisted arrays to RAM, but
-  page cache, candidate/result buffers, metadata, and Python positive-membership
-  structures still consume memory. Loading validates artifacts, so do not assume
-  a zero-I/O startup. Snapshot construction materializes data in memory.
+  page cache, candidate/result buffers, metadata and validation working arrays
+  still consume memory. New positive membership keys remain mapped instead of
+  becoming Python sets; legacy non-temporal snapshots build sorted RAM keys at
+  engine startup. Loading validates artifacts, so do not assume a zero-I/O
+  startup. Snapshot construction materializes data in memory.
 - New relation CSR directories store **populated endpoint/relation pairs**,
   including temporal directories. Legacy dense snapshots still scale with
   **node count × relation count** until explicitly rebuilt or rewritten.
@@ -71,12 +73,21 @@ Performance Boundaries
 Reproduce a Sampler Microbenchmark
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+``uv run python -m benchmarks.positive_membership`` compares the membership
+component's old packed-code Python set with persisted sorted triple lookup.
+It reports exact-answer parity, retained set-object bytes, mapped file payload,
+tracemalloc startup peaks and lookup times. The categories are not equivalent:
+mapped payload is not resident memory, and tracemalloc is not peak RSS. The
+measurement excludes snapshot authentication, engine weight checks, page cache,
+candidate buffers and full negative-sampling throughput. Do not extrapolate a
+membership-component startup reduction into a zero-allocation engine load.
+
 For a small relation-directory comparison with exact candidate-order parity,
 run ``uv run python -m benchmarks.sparse_adjacency``. It reports directory
 payload bytes, build time, lookup latency and lookup-plus-uniform-fanout latency
 for identical keys. It is an in-memory microbenchmark, not full-engine
 throughput, peak RSS, cold-cache or multi-worker evidence. Positive-membership
-sets are unchanged by the sparse-directory work.
+costs are measured separately by the membership runner above.
 
 From a repository checkout, the sampler runner compares a **synthetic in-memory
 dictionary/reservoir baseline** with batched array sampling:
