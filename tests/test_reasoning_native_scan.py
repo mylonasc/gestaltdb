@@ -88,7 +88,7 @@ def test_batch_limits_overflow_and_single_use(tmp_path):
     scan.close()
     raw = db.scan_arrow()
     pyarrow.RecordBatchReader.from_stream(raw)
-    with pytest.raises(Exception, match="[Ss]ingle-consumer|already"):
+    with pytest.raises(RuntimeError, match="[Ss]ingle-consumer|already"):
         pyarrow.RecordBatchReader.from_stream(raw)
 
 

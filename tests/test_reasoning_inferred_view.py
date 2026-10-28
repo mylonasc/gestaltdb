@@ -4,6 +4,7 @@ import pytest
 
 from gestaltdb.graphdb import Edge, GraphDB, Node
 from gestaltdb.ontology import Ontology, SubPropertyOf, compile_ontology
+from gestaltdb.readview import ProvenanceMismatchError
 from gestaltdb.reasoning import ReasoningError, ReasoningLimits
 from gestaltdb.reasoning.adapters.generation import catalog_for_ontology
 from gestaltdb.reasoning.adapters.graph import GraphMapping
@@ -82,7 +83,7 @@ def test_assert_current_rejects_snapshot_movement(graph, tmp_path):
     try:
         second.put_nodes([Node("a", labels=["Person"])])
         with second.current_read_view(require_verifiable=True) as foreign:
-            with pytest.raises(Exception):
+            with pytest.raises(ProvenanceMismatchError, match="identity mismatch"):
                 view.assert_current(foreign)
     finally:
         second.close()

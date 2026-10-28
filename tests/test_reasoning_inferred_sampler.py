@@ -7,7 +7,7 @@ from gestaltdb.reasoning.adapters.claims import ClaimMapping, ClaimSelection
 from gestaltdb.reasoning.adapters.inferred_sampler import build_inferred_snapshot
 from gestaltdb.reasoning.adapters.sessions import SessionScope, advance_session, start_session
 from gestaltdb.reasoning.catalog import CatalogEntry, RuleCatalog
-from gestaltdb.reasoning.model import ReasoningLimits, Variable
+from gestaltdb.reasoning.model import ReasoningError, ReasoningLimits, Variable
 from gestaltdb.reasoning.typed import GenericProgram, GenericRule, TypedAtom
 from gestaltdb.sampling.snapshot import SamplerSnapshot
 
@@ -74,13 +74,13 @@ def test_build_rebuild_stability_and_mismatch(tmp_path, backend, module):
         assert all_batch.neighbor_nodes.size == 2
 
         # Generation mismatch fails before writing.
-        with pytest.raises(Exception, match="generation/view mismatch"):
+        with pytest.raises(ReasoningError, match="generation/view mismatch"):
             build_inferred_snapshot(session, tmp_path / "mismatch",
                                     expected_generation={"commit_horizon": session.commit_horizon + 100})
         assert not (tmp_path / "mismatch").exists()
 
         # Populated output path fails closed.
-        with pytest.raises(Exception, match="already holds a snapshot"):
+        with pytest.raises(ReasoningError, match="already holds a snapshot"):
             build_inferred_snapshot(session, first_dir)
 
         # Retract the final version for "a": new generation, new path, old artifact stable.
@@ -112,7 +112,7 @@ def test_explicit_selection_contract(tmp_path):
                                         node_predicate="noSuchPredicate")
         assert empty.num_edges == 0
         assert empty.metadata["reasoning_generation"]["inferred_node_count"] == 0
-        with pytest.raises(Exception, match="edge_predicates must name"):
+        with pytest.raises(ReasoningError, match="edge_predicates must name"):
             build_inferred_snapshot(session, tmp_path / "bad", edge_predicates=())
     finally:
         graph.close()
