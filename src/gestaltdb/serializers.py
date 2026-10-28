@@ -27,15 +27,15 @@ _TEMPORAL_TYPES = (
     TemporalLocalTime,
     TemporalTime,
 )
-_TAGGED_VALUE_TYPES = {
+_TEMPORAL_VALUE_TYPES = {
     "temporal_date",
     "temporal_duration",
     "temporal_instant",
     "temporal_local_datetime",
     "temporal_local_time",
     "temporal_time",
-    "escaped_dict",
 }
+_TAGGED_VALUE_TYPES = _TEMPORAL_VALUE_TYPES | {"escaped_dict"}
 
 
 def temporal_tagged_value(value: TemporalDate | TemporalDuration | TemporalInstant | TemporalLocalDateTime | TemporalLocalTime | TemporalTime, *, canonical_time: bool = False) -> dict[str, object]:
@@ -67,7 +67,11 @@ def _to_storage_compatible(obj: object) -> object:
     if isinstance(obj, _TEMPORAL_TYPES):
         return temporal_tagged_value(obj)
     if isinstance(obj, dict):
-        if set(obj) == {_TYPE_KEY, _VALUE_KEY} and obj[_TYPE_KEY] in _TAGGED_VALUE_TYPES:
+        if (
+            set(obj) == {_TYPE_KEY, _VALUE_KEY}
+            and isinstance(obj[_TYPE_KEY], str)
+            and obj[_TYPE_KEY] in _TAGGED_VALUE_TYPES
+        ):
             return {
                 _TYPE_KEY: "escaped_dict",
                 _VALUE_KEY: {key: _to_storage_compatible(value) for key, value in obj.items()},
@@ -80,25 +84,36 @@ def _to_storage_compatible(obj: object) -> object:
     return obj
 
 
+def _decode_temporal_tag(value_type: str, value: Any) -> object:
+    try:
+        if value_type == "temporal_date":
+            return TemporalDate(date.fromisoformat(value))
+        if value_type == "temporal_local_time":
+            return TemporalLocalTime(value)
+        if value_type == "temporal_time":
+            return TemporalTime(value["local_microseconds"], value["offset_seconds"])
+        if value_type == "temporal_instant":
+            return TemporalInstant(value)
+        if value_type == "temporal_local_datetime":
+            return TemporalLocalDateTime(datetime.fromisoformat(value))
+        if value_type == "temporal_duration":
+            return TemporalDuration(value)
+    except (AttributeError, KeyError, OverflowError, TypeError, ValueError) as exc:
+        raise ValueError(f"malformed {value_type} payload in serialized data") from exc
+    raise AssertionError(f"unhandled tagged value type {value_type!r}")
+
+
 def _from_storage_compatible(obj: object) -> object:
     if isinstance(obj, dict):
         if set(obj) == {_TYPE_KEY, _VALUE_KEY}:
             value_type = obj[_TYPE_KEY]
             value = obj[_VALUE_KEY]
-            if value_type == "temporal_date":
-                return TemporalDate(date.fromisoformat(value))
-            if value_type == "temporal_local_time":
-                return TemporalLocalTime(value)
-            if value_type == "temporal_time":
-                return TemporalTime(value["local_microseconds"], value["offset_seconds"])
-            if value_type == "temporal_instant":
-                return TemporalInstant(value)
-            if value_type == "temporal_local_datetime":
-                return TemporalLocalDateTime(datetime.fromisoformat(value))
-            if value_type == "temporal_duration":
-                return TemporalDuration(value)
             if value_type == "escaped_dict":
+                if not isinstance(value, dict):
+                    raise ValueError("malformed escaped_dict payload in serialized data")
                 return {key: _from_storage_compatible(item) for key, item in value.items()}
+            if isinstance(value_type, str) and value_type in _TEMPORAL_VALUE_TYPES:
+                return _decode_temporal_tag(value_type, value)
         return {key: _from_storage_compatible(value) for key, value in obj.items()}
     if isinstance(obj, list):
         return [_from_storage_compatible(value) for value in obj]

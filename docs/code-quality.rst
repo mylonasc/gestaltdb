@@ -5,11 +5,24 @@ Run the lightweight gates before submitting library changes::
 
     uv run --extra lint ruff check .
     uv run python scripts/check_code_quality.py
+    uv run --extra lint python scripts/check_typing.py
+    uv run --extra lint pytest tests/test_static_typing_contracts.py -q
     uv run pytest tests/test_code_quality.py -q
 
 The ``Lint`` workflow runs these checks for library/configuration/gate changes
 on pull requests and pushes to main. It does not install database backends or
 run a Python-version matrix. Prose-only edits do not select it.
+
+Static typing ratchet
+---------------------
+
+``scripts/check_typing.py`` reads every ``[[tool.mypy.overrides]]`` block in
+``pyproject.toml`` that enables ``disallow_untyped_defs`` and type-checks those
+modules with ``--follow-imports=silent``. The consumer fixtures under
+``tests/typing/`` are checked separately with ``--strict``. Both run in the
+``Lint`` workflow with mypy installed, so a ratchet cannot regress silently by
+skipping an optional import. Whole-library mypy is not yet clean; modules listed
+in the overrides are the explicit, growing gate.
 
 Ruff scope and rollout
 ----------------------

@@ -7,6 +7,15 @@
   authenticated memory-mappable index; temporal snapshots reuse history keys.
   Legacy non-temporal snapshots build a sorted RAM index once. Membership
   lookup now uses binary search; candidate buffers and validation still allocate.
+- Hardened serializer decoding of malformed tagged payloads: JSON and
+  MessagePack deserialization now raise `ValueError` instead of leaking
+  `AttributeError`/`KeyError`, and serialization tolerates non-string tag values.
+- Tightened test false-greens: the serializer fuzz target no longer swallows
+  unexpected codec errors or silent roundtrip drift, the lint workflow now runs
+  the strict consumer typing test and the typed-module mypy ratchet, backend
+  fixtures no longer convert constructor regressions into skips, and broad
+  session/inference exception assertions now require their domain error types.
+
 ## 0.16.0 — generation-pinned reasoning-aware Cypher
 
 - Raised the optional MessagePack minimum to 1.2.3 and locked 1.2.4 to address

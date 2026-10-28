@@ -28,24 +28,59 @@ class FakeCypherGraph:
 
     def put_node(self, node):
         node_id = node.get_id_bytes
+        previous = self.nodes.get(node_id)
+        if previous is not None:
+            for label in previous.labels:
+                self._drop_label_membership(label, node_id)
         self.nodes[node_id] = node
         for label in node.labels:
-            self.labels.setdefault(label, []).append(node_id)
+            ids = self.labels.setdefault(label, [])
+            if node_id not in ids:
+                ids.append(node_id)
+
+    def _drop_label_membership(self, label, node_id):
+        ids = self.labels.get(label)
+        if ids is None:
+            return
+        while node_id in ids:
+            ids.remove(node_id)
+        if not ids:
+            del self.labels[label]
 
     def put_edge(self, edge):
         edge_id = edge.get_id_bytes
+        if edge_id in self.edges:
+            self._drop_edge_adjacency(edge_id)
         self.edges[edge_id] = edge
         edge_type = edge.get_type
-        self.adjacency.setdefault((edge.source.encode("utf-8"), edge_type, "out"), []).append((edge_id, edge.target.encode("utf-8")))
-        self.adjacency.setdefault((edge.target.encode("utf-8"), edge_type, "in"), []).append((edge_id, edge.source.encode("utf-8")))
+        self._append_adjacency(
+            (edge.source.encode("utf-8"), edge_type, "out"),
+            (edge_id, edge.target.encode("utf-8")),
+        )
+        self._append_adjacency(
+            (edge.target.encode("utf-8"), edge_type, "in"),
+            (edge_id, edge.source.encode("utf-8")),
+        )
+
+    def _drop_edge_adjacency(self, edge_id):
+        for key, entries in list(self.adjacency.items()):
+            kept = [entry for entry in entries if entry[0] != edge_id]
+            if kept:
+                self.adjacency[key] = kept
+            else:
+                del self.adjacency[key]
+
+    def _append_adjacency(self, key, entry):
+        entries = self.adjacency.setdefault(key, [])
+        if entry not in entries:
+            entries.append(entry)
 
     def delete_edge(self, edge_id):
         edge_id = self.node_key_to_bytes(edge_id)
         edge = self.edges.pop(edge_id, None)
         if edge is None:
             return
-        for key, entries in self.adjacency.items():
-            self.adjacency[key] = [entry for entry in entries if entry[0] != edge_id]
+        self._drop_edge_adjacency(edge_id)
 
     def delete_node(self, node_id):
         node_id = self.node_key_to_bytes(node_id)
@@ -53,9 +88,7 @@ class FakeCypherGraph:
         if node is None:
             return
         for label in node.labels:
-            ids = self.labels.get(label, [])
-            while node_id in ids:
-                ids.remove(node_id)
+            self._drop_label_membership(label, node_id)
         for edge_id, edge in list(self.edges.items()):
             if edge.source.encode("utf-8") == node_id or edge.target.encode("utf-8") == node_id:
                 self.delete_edge(edge_id)

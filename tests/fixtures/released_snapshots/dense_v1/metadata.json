@@ -1,0 +1,17 @@
+{
+  "dtypes": {
+    "ids": "str",
+    "indices": "int64"
+  },
+  "edge_count": 8,
+  "format_version": 1,
+  "layout": "csr",
+  "node_count": 6,
+  "node_type_count": 2,
+  "node_type_values": {
+    "0": "Org",
+    "1": "Person"
+  },
+  "relation_count": 2,
+  "storage": "npy"
+}
