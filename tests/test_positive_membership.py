@@ -27,7 +27,8 @@ def make_snapshot(path, triples=None):
 def reseal(path, metadata=None):
     if metadata is None:
         metadata = json.loads((path / "metadata.json").read_text())
-    encode = lambda value: json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    def encode(value):
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     for name in metadata["artifacts"]:
         file = path / f"{name}.npy"
         array = np.load(file, allow_pickle=False)
