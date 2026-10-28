@@ -69,6 +69,7 @@ Filter, Sample, Train
    ontology-publication
    cypher
    visualization
+   networkx
    performance
    notebooks
 

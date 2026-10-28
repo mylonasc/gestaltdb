@@ -51,6 +51,8 @@ Embedded backends and binary serializers are optional, independent extras. For
 example, install ``gestaltdb[leveldb,msgpack]`` to combine LevelDB with
 MessagePack or ``gestaltdb[lmdb,protobuf]`` to combine LMDB with Protobuf.
 Pickle and JSON are built in; a base installation does not install a KV backend.
+Optional NetworkX import/export and static GEXF loading live in
+``gestaltdb.integrations.networkx``; install ``gestaltdb[networkx]`` to use them.
 
 Important usage notes for agents and developers:
 

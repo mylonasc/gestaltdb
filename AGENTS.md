@@ -18,6 +18,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Read-only temporal capability: `src/gestaltdb/history.py` (`graph.temporal.history()` or `TemporalHistory.from_store`). Borrows store lifetime; no writes, identity initialization, index repair, source authentication or automatic pinning. `GraphReadView` uses it for historical queries.
 - Storage backends: `src/gestaltdb/kvstores.py`
 - Serializers: `src/gestaltdb/serializers.py`
+- Optional NetworkX import/export and static GEXF loading: `src/gestaltdb/integrations/networkx.py`; mapping/security contracts: `docs/networkx.rst` (install `gestaltdb[networkx]`).
 - Columnar ingestion containers and enums: `src/gestaltdb/ingestion.py`
 - Canonical temporal values and selection semantics: `src/gestaltdb/temporal.py`
 - Immutable temporal version records and write descriptors: `src/gestaltdb/versioning.py`

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added optional NetworkX import/export and static GEXF 1.1draft/1.2draft
+  loading (#437), including parallel-edge preservation, explicit ID/label/type
+  mappings, opt-in undirected expansion, hardened bounded XML parsing, and
+  preflight validation with structured partial-write reporting.
 - Replaced engine positive-code sets and temporal group dictionaries with exact
   sorted triple membership (#429). New non-temporal snapshots persist the
   authenticated memory-mappable index; temporal snapshots reuse history keys.

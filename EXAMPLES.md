@@ -140,6 +140,30 @@ with TemporaryDirectory() as tmpdir:
         graph.close()
 ```
 
+## Convert NetworkX Graphs
+
+Requires `gestaltdb[networkx,lmdb]`. Static GEXF can also be imported with
+`load_gexf(path_or_binary_stream, graph)`; see [the integration guide](docs/networkx.rst).
+
+```python
+from tempfile import TemporaryDirectory
+import networkx as nx
+from gestaltdb.graphdb import GraphDB
+from gestaltdb.integrations.networkx import from_networkx, to_networkx
+
+source = nx.MultiDiGraph()
+source.add_edge("alice", "bob", key="friend", id="e1", type="KNOWS")
+with TemporaryDirectory() as tmpdir:
+    graph = GraphDB.create(f"{tmpdir}/graph", backend="lmdb", serializer="json")
+    try:
+        imported = from_networkx(source, graph)
+        exported = to_networkx(graph)
+        assert imported.imported_edges == 1
+        assert nx.shortest_path(exported, "alice", "bob") == ["alice", "bob"]
+    finally:
+        graph.close()
+```
+
 ## Record Contradictory Epistemic Claims
 
 Claims keep polarity separate from confidence and preserve contradictory
