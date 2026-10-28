@@ -60,6 +60,9 @@ jobs:
       - name: Require real backend and serializer persistence (no skips)
         run: python scripts/check_release_backends.py
       - run: python -m pytest -q -ra --junitxml=release-tests.xml
+      - name: Report test evidence by category
+        if: always()
+        run: python scripts/pytest_category_summary.py --junitxml=release-tests.xml
       - name: Preserve test execution and skip evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

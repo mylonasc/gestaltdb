@@ -100,7 +100,12 @@ warn_return_any = true
 pythonpath = ["src"]
 testpaths = ["tests"]
 markers = [
-    "framework: real optional-dependency conversions (torch/dgl/tensorflow/pyarrow)",
+    "backend: opens a real backend store (LMDB/LevelDB/PyRex or managed graph)",
+    "framework: requires a real optional framework conversion (torch/DGL/TensorFlow/PyG/PyArrow)",
+    "native: exercises Arrow/Polars or other native handles",
+    "fault: fault injection, cancellation, CAS contention, locks, or crash windows",
+    "subprocess: spawns child processes or coordinates across processes",
+    "unit: fast pure-algorithm coverage needing no backend, framework, or subprocess",
 ]
 
 [tool.ruff]
