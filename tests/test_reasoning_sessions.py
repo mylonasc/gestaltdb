@@ -12,7 +12,7 @@ from gestaltdb.reasoning.adapters.sessions import (
 from gestaltdb.reasoning.catalog import CatalogEntry, RuleCatalog
 from gestaltdb.reasoning.evidence_ledger import AssertionVersion, EvidenceLedger
 from gestaltdb.reasoning.maintenance import rematerialize
-from gestaltdb.reasoning.model import ReasoningLimits, Variable
+from gestaltdb.reasoning.model import ReasoningError, ReasoningLimits, Variable
 from gestaltdb.reasoning.typed import GenericProgram, GenericRule, TypedAtom, TypedFact
 from gestaltdb.versioning import VersionOperation
 
@@ -192,10 +192,10 @@ def test_session_rejects_uncovered_rules_and_foreign_database(tmp_path):
         assert_member(graph, "a")
         rules = program()
         partial = RuleCatalog((CatalogEntry("r1", "v1", GenericProgram([rules.rules[0]]).digest, 1),))
-        with pytest.raises(Exception, match="catalog does not cover"):
+        with pytest.raises(ReasoningError, match="catalog does not cover"):
             start_session(graph, rules, partial, scope=scope(), limits=ReasoningLimits())
         session = start(graph, rules)
-        with pytest.raises(Exception, match="different database"):
+        with pytest.raises(ReasoningError, match="different database"):
             advance_session(other, session, limits=ReasoningLimits())
     finally:
         graph.close()

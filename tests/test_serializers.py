@@ -1,4 +1,5 @@
 from datetime import date, datetime
+import json
 
 import pytest
 
@@ -64,6 +65,38 @@ def test_serializers_escape_user_dictionaries_that_look_like_temporal_tags(seria
         "__gestaltdb_type__": "temporal_date",
         "value": "not-a-storage-tag",
     }
+
+    assert serializer.deserialize(serializer.serialize(payload)) == payload
+
+
+def _raw_storage_bytes(serializer, payload):
+    if isinstance(serializer, JSONSerializer):
+        return json.dumps(payload).encode("utf-8")
+    return MessagePackSerializer.ensure_available().packb(payload, use_bin_type=True)
+
+
+MALFORMED_TAGGED_PAYLOADS = [
+    pytest.param({"__gestaltdb_type__": "escaped_dict", "value": 5}, id="escaped-dict"),
+    pytest.param({"__gestaltdb_type__": "temporal_date", "value": 5}, id="date-type"),
+    pytest.param({"__gestaltdb_type__": "temporal_date", "value": "not-a-date"}, id="date-value"),
+    pytest.param({"__gestaltdb_type__": "temporal_instant", "value": "not-an-int"}, id="instant"),
+    pytest.param({"__gestaltdb_type__": "temporal_local_datetime", "value": []}, id="datetime"),
+    pytest.param({"__gestaltdb_type__": "temporal_duration", "value": {}}, id="duration"),
+    pytest.param({"__gestaltdb_type__": "temporal_time", "value": {}}, id="time-missing"),
+    pytest.param({"__gestaltdb_type__": "temporal_time", "value": {"local_microseconds": "x", "offset_seconds": 0}}, id="time-types"),
+]
+
+
+@pytest.mark.parametrize("serializer", SERIALIZER_PARAMS[1:3])
+@pytest.mark.parametrize("payload", MALFORMED_TAGGED_PAYLOADS)
+def test_deserialize_rejects_malformed_tagged_values(serializer, payload):
+    with pytest.raises(ValueError, match="malformed"):
+        serializer.deserialize(_raw_storage_bytes(serializer, payload))
+
+
+@pytest.mark.parametrize("serializer", SERIALIZER_PARAMS[1:3])
+def test_roundtrip_tolerates_non_string_tag_values(serializer):
+    payload = {"__gestaltdb_type__": ["not", "a", "tag"], "value": 1}
 
     assert serializer.deserialize(serializer.serialize(payload)) == payload
 

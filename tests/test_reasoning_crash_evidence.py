@@ -7,6 +7,8 @@ What this pins (and what it does not):
 - SIGKILL between session tmp flush/fsync and ``os.replace`` leaves the
   old session file intact and loadable; the stray tmp is never installed
   (the loader only reads the target) and never auto-deleted per contract.
+  This runs the real ``save_session`` with only ``os.replace`` paused, so
+  the kill lands at the production install boundary.
 - A cross-process ``assert_claim`` between range staging and publication
   fails closed with ``GenerationStaleError``; restaging publishes cleanly.
 
@@ -24,6 +26,7 @@ RocksDB take a process-exclusive database lock); that boundary is already
 documented in ``docs/storage-backends.rst``.
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -38,7 +41,12 @@ from gestaltdb.reasoning.adapters.range_publication import (
     publish_range_generation,
 )
 from gestaltdb.reasoning.adapters.session_generation import catalog_for_typed_program
-from gestaltdb.reasoning.adapters.session_store import load_session, session_to_dict, _digest
+from gestaltdb.reasoning.adapters.session_store import (
+    load_session,
+    save_session,
+    session_to_dict,
+    _digest,
+)
 from gestaltdb.reasoning.adapters.sessions import SessionScope, start_session
 from gestaltdb.reasoning.model import ReasoningLimits, Variable
 from gestaltdb.reasoning.typed import GenericProgram, GenericRule, TypedAtom
@@ -112,6 +120,16 @@ def test_sigkill_between_reserve_and_commit_leaves_gap(db_path):
 
 
 def test_sigkill_before_session_replace_preserves_old_file(db_path):
+    """Kill a child that is blocked *inside* the production save_session.
+
+    The child calls ``session_store.save_session`` and only intercepts
+    ``os.replace`` to report that the temp file has been written, flushed, and
+    fsynced and that the install is about to happen. SIGKILL then lands at the
+    real pre-replace boundary rather than at a hand-recreated approximation of
+    it. Afterwards the old file must still win, the complete-but-uninstalled
+    temp must stay loader-invisible, and a later save must succeed without a
+    poisoned lock.
+    """
     path, backend = db_path
     session_file = path.parent / "session.json"
     graph = GraphDB.create(path, backend=backend, serializer="json")
@@ -121,60 +139,62 @@ def test_sigkill_before_session_replace_preserves_old_file(db_path):
                             scope=SessionScope("default", 50, ClaimSelection(), ClaimMapping()),
                             limits=ReasoningLimits())
     old_digest = _digest(session_to_dict(session))
-    from gestaltdb.reasoning.adapters.session_store import save_session as _save
-    _save(session, session_file)
+    save_session(session, session_file)
     graph.epistemic.assert_claim(subject="b", predicate="memberOf", object="g2", agent="new",
                        polarity="positive", valid=(0, 100))
     graph.close()
     before = session_file.read_bytes()
     code = (
         "import sys, time\n"
-        "from pathlib import Path\n"
         "from gestaltdb.graphdb import GraphDB\n"
+        "from gestaltdb.reasoning.adapters import session_store\n"
         "from gestaltdb.reasoning.adapters.claims import ClaimMapping, ClaimSelection\n"
         "from gestaltdb.reasoning.adapters.session_generation import catalog_for_typed_program\n"
-        "from gestaltdb.reasoning.adapters.session_store import _encoded_bytes\n"
         "from gestaltdb.reasoning.adapters.sessions import SessionScope, start_session\n"
         "from gestaltdb.reasoning.model import ReasoningLimits\n"
         "from gestaltdb.reasoning.typed import GenericProgram, GenericRule, TypedAtom, Variable\n"
         "X, Y = Variable('x'), Variable('y')\n"
         "program = GenericProgram([GenericRule('r', [TypedAtom('memberOf', [X, Y])], [], TypedAtom('person', [X]))])\n"
         "graph = GraphDB.open(sys.argv[1])\n"
-        "try:\n"
-        "    latest = start_session(graph, program, catalog_for_typed_program(program),\n"
-        "        scope=SessionScope('default', 50, ClaimSelection(), ClaimMapping()), limits=ReasoningLimits())\n"
-        "    target = Path(sys.argv[2])\n"
-        "    tmp = target.parent / (f'.{target.name}.tmp.{__import__(\"os\").getpid()}.staged')\n"
-        "    with tmp.open('wb') as handle:\n"
-        "        handle.write(_encoded_bytes(latest))\n"
-        "        handle.flush()\n"
-        "        __import__('os').fsync(handle.fileno())\n"
-        "    print('staged', flush=True)\n"
+        "latest = start_session(graph, program, catalog_for_typed_program(program),\n"
+        "    scope=SessionScope('default', 50, ClaimSelection(), ClaimMapping()), limits=ReasoningLimits())\n"
+        "real_replace = session_store.os.replace\n"
+        "def paused_replace(src, dst, *args, **kwargs):\n"
+        "    print('pre-replace', flush=True)\n"
         "    time.sleep(60)\n"
-        "finally:\n"
-        "    pass\n"
+        "    return real_replace(src, dst, *args, **kwargs)\n"
+        "session_store.os.replace = paused_replace\n"
+        "session_store.save_session(latest, sys.argv[2])\n"
+        "print('unreachable', flush=True)\n"
     )
     child = subprocess.Popen([sys.executable, "-c", code, str(path), str(session_file)],
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
-        assert child.stdout.readline().strip() == "staged"
+        assert child.stdout.readline().strip() == "pre-replace"
     finally:
         child.kill()  # SIGKILL after tmp flush/fsync, before os.replace.
         child.wait(timeout=30)
     assert child.returncode == -9, child.stderr.read()
-    # Old file intact and loadable under its old digest; stray tmp never installed.
+    # Old file intact and loadable under its old digest; the staged tmp was
+    # complete before the kill but is never installed by the loader.
     assert session_file.read_bytes() == before
     loaded = load_session(session_file)
     assert _digest(session_to_dict(loaded)) == old_digest
     strays = list(session_file.parent.glob(f".{session_file.name}.tmp.*"))
     assert len(strays) == 1  # contract: unused tmps are never auto-deleted.
+    staged = json.loads(strays[0].read_bytes().decode("utf-8"))
+    staged_digest = staged.pop("session_digest")
+    assert staged_digest == _digest(staged)
+    assert staged["commit_horizon"] == 2
+    assert staged_digest != old_digest
+    # A later writer is not blocked by the dead process's flock and installs
+    # the newer state through the same production path.
     graph = GraphDB.open(path)
     try:
-        from gestaltdb.reasoning.adapters.session_store import save_session as _save2
         latest = start_session(graph, MEMBER_PROGRAM, catalog_for_typed_program(MEMBER_PROGRAM),
                                scope=SessionScope("default", 50, ClaimSelection(), ClaimMapping()),
                                limits=ReasoningLimits())
-        _save2(latest, session_file)
+        save_session(latest, session_file)
         assert _digest(session_to_dict(load_session(session_file))) != old_digest
     finally:
         graph.close()

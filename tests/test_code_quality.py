@@ -36,6 +36,26 @@ def test_workflow_runs_lint_and_module_gate():
     assert "contents: read" in workflow
 
 
+def test_workflow_runs_static_typing_gates():
+    workflow = (ROOT / ".github/workflows/lint.yml").read_text(encoding="utf-8")
+    for command in ("python scripts/check_typing.py",
+                    "python -m pytest tests/test_static_typing_contracts.py -q"):
+        assert command in workflow
+    for path in ("scripts/check_typing.py", "tests/test_static_typing_contracts.py",
+                 "tests/typing/**/*.py"):
+        assert path in workflow
+
+
+def test_typing_gate_covers_strict_overrides():
+    spec = importlib.util.spec_from_file_location("check_typing", ROOT / "scripts/check_typing.py")
+    checking = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(checking)
+    modules = checking.strict_modules((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert {"gestaltdb.sampling.adjacency", "gestaltdb.query_engine.cypher.write"} <= set(modules)
+    for module in modules:
+        assert checking.module_path(module).is_file(), module
+
+
 def test_empty_library_fails(tmp_path):
     root = make_tree(tmp_path)
     (root / "src/gestaltdb/example.py").unlink()

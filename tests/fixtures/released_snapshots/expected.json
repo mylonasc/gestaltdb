@@ -1,0 +1,278 @@
+{
+  "fixtures": {
+    "dense_v1": {
+      "files": {
+        "dst_int.npy": "ccf291415fc2f322830dc11bb8e8f6c183ad2415b78f4e036eb60bbb5f22e7dd",
+        "external_edge_ids.npy": "771308bf243e182b4c6090029d7ba602e4f3cfcab4d618f264d06ad210d8ef51",
+        "external_node_ids.npy": "353fcf3e7491cd8a0198b12b5175685e6a6b4aacda7cbe7127df4a7039fabe1f",
+        "external_relation_ids.npy": "8c8318cb384cf4c8ef294dbd17dbf0a2c1ab4fbd7c41fe84bf2bbc740c345723",
+        "in_edge_indices.npy": "c56ad94adce8d24db1874610103d76ca3e2c46b7cfc62c110d20862eaee75edf",
+        "in_indptr.npy": "0fcbf065cf91f18f1019041aea5b981df1aec4f58a0285aa04fdc92391a35bac",
+        "incident_edge_indices.npy": "28d80e09a1756c4725b3876a734920ca1a56810ca236968cec30614ecefddab2",
+        "incident_indptr.npy": "0fa19554a8e2785b22f2378cc877c369d2de8de0a02f00c877a501ea978475df",
+        "metadata.json": "1f0c89b856920da28a28ba98875fa0a4a89bec707b7cce12c499176d99b07dff",
+        "node_type_ids.npy": "90e3af7a0986ac00b8adab8c6efe76c4f4a0c060f9be9b205b1d61cb84430b34",
+        "out_edge_indices.npy": "13f00e7bb2cd8bd0bb6b10f7f544211f9e1fb916222f247790400a7c4af475ef",
+        "out_indptr.npy": "54175d74efd5cb03347e5b067141d218e8d69275f7cafc75c323e705bcfdf837",
+        "positive_triples.npy": "754287220e2592b9375118f2cca7e7bb5dd07f443d61eb7fbb2ad2f63a787f4f",
+        "rel_int.npy": "48ac15504d106f011ac0e2f03fc8f83bc80912a992ecb83f832ba21f8d69711f",
+        "relation_dst_type_ids.npy": "f5c214683ef792c6fdcc0a3c4efd22a748b0df4af4c26df0181beb7423d6a3a3",
+        "relation_in_edge_indices.npy": "43bbdcbfe73d44fd45d77eabba81af821c6f650b946d69b08b350d1108adf071",
+        "relation_in_indptr.npy": "96a76359f3e85f3558315d2f67e7387a475e8eeee543510d92b7f20251f59046",
+        "relation_out_edge_indices.npy": "13f00e7bb2cd8bd0bb6b10f7f544211f9e1fb916222f247790400a7c4af475ef",
+        "relation_out_indptr.npy": "2cef373453eddd662b4b6fde23c7bfd7e5085f2f2fa19619a472f0180a4e3ee0",
+        "relation_src_type_ids.npy": "f5c214683ef792c6fdcc0a3c4efd22a748b0df4af4c26df0181beb7423d6a3a3",
+        "src_int.npy": "12183f83231a8caa8b4032994ca84378dc85f7b25c254965d77701990b4d76b1"
+      },
+      "format_version": 1,
+      "gestaltdb_version": "0.10.2",
+      "num_edges": 8,
+      "num_nodes": 6,
+      "num_relations": 2,
+      "relation_filtered": {
+        "edge_indices": [
+          2
+        ],
+        "input_nodes": [
+          0
+        ],
+        "neighbor_nodes": [
+          3
+        ]
+      },
+      "sampled": {
+        "edge_indices": [
+          1,
+          2,
+          3
+        ],
+        "input_nodes": [
+          0,
+          1
+        ],
+        "neighbor_nodes": [
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    "dense_v2": {
+      "files": {
+        "completion.json": "2e2f5c7b4ace54de0640733a287bb44c9b509ef0bd98910a39fbffc61d3a213a",
+        "dst_int.npy": "ccf291415fc2f322830dc11bb8e8f6c183ad2415b78f4e036eb60bbb5f22e7dd",
+        "edge_lookup_ids.npy": "771308bf243e182b4c6090029d7ba602e4f3cfcab4d618f264d06ad210d8ef51",
+        "edge_lookup_order.npy": "13f00e7bb2cd8bd0bb6b10f7f544211f9e1fb916222f247790400a7c4af475ef",
+        "edge_weights.npy": "f25f05a8ef5d6eb3ed97adedd61679b737c0a8bee6c256dfacf79611c487bc44",
+        "external_edge_ids.npy": "771308bf243e182b4c6090029d7ba602e4f3cfcab4d618f264d06ad210d8ef51",
+        "external_node_ids.npy": "353fcf3e7491cd8a0198b12b5175685e6a6b4aacda7cbe7127df4a7039fabe1f",
+        "external_relation_ids.npy": "8c8318cb384cf4c8ef294dbd17dbf0a2c1ab4fbd7c41fe84bf2bbc740c345723",
+        "in_edge_indices.npy": "c56ad94adce8d24db1874610103d76ca3e2c46b7cfc62c110d20862eaee75edf",
+        "in_indptr.npy": "0fcbf065cf91f18f1019041aea5b981df1aec4f58a0285aa04fdc92391a35bac",
+        "incident_edge_indices.npy": "28d80e09a1756c4725b3876a734920ca1a56810ca236968cec30614ecefddab2",
+        "incident_indptr.npy": "0fa19554a8e2785b22f2378cc877c369d2de8de0a02f00c877a501ea978475df",
+        "metadata.json": "9986b1736aed169e4f491ad48afa0d1773998098f3fba1f8ac4c6a407b037778",
+        "node_lookup_ids.npy": "353fcf3e7491cd8a0198b12b5175685e6a6b4aacda7cbe7127df4a7039fabe1f",
+        "node_lookup_order.npy": "6d08883eb5b05b9da4664a1bf8eb352f7b8afdfa7528a0f493b57b0b79d36761",
+        "node_type_ids.npy": "90e3af7a0986ac00b8adab8c6efe76c4f4a0c060f9be9b205b1d61cb84430b34",
+        "out_edge_indices.npy": "13f00e7bb2cd8bd0bb6b10f7f544211f9e1fb916222f247790400a7c4af475ef",
+        "out_indptr.npy": "54175d74efd5cb03347e5b067141d218e8d69275f7cafc75c323e705bcfdf837",
+        "positive_triples.npy": "754287220e2592b9375118f2cca7e7bb5dd07f443d61eb7fbb2ad2f63a787f4f",
+        "rel_int.npy": "48ac15504d106f011ac0e2f03fc8f83bc80912a992ecb83f832ba21f8d69711f",
+        "relation_dst_type_ids.npy": "f5c214683ef792c6fdcc0a3c4efd22a748b0df4af4c26df0181beb7423d6a3a3",
+        "relation_in_edge_indices.npy": "43bbdcbfe73d44fd45d77eabba81af821c6f650b946d69b08b350d1108adf071",
+        "relation_in_indptr.npy": "96a76359f3e85f3558315d2f67e7387a475e8eeee543510d92b7f20251f59046",
+        "relation_lookup_ids.npy": "8c8318cb384cf4c8ef294dbd17dbf0a2c1ab4fbd7c41fe84bf2bbc740c345723",
+        "relation_lookup_order.npy": "edf57b3e7cc4d837db7a3b400e84ffa2cc07b6adc347edef9feabbc11c5183cb",
+        "relation_out_edge_indices.npy": "13f00e7bb2cd8bd0bb6b10f7f544211f9e1fb916222f247790400a7c4af475ef",
+        "relation_out_indptr.npy": "2cef373453eddd662b4b6fde23c7bfd7e5085f2f2fa19619a472f0180a4e3ee0",
+        "relation_src_type_ids.npy": "f5c214683ef792c6fdcc0a3c4efd22a748b0df4af4c26df0181beb7423d6a3a3",
+        "src_int.npy": "12183f83231a8caa8b4032994ca84378dc85f7b25c254965d77701990b4d76b1"
+      },
+      "format_version": 2,
+      "gestaltdb_version": "0.12.1",
+      "node_lookup": {
+        "n0": 0,
+        "n5": 5
+      },
+      "num_edges": 8,
+      "num_nodes": 6,
+      "num_relations": 2,
+      "relation_filtered": {
+        "edge_indices": [
+          2
+        ],
+        "input_nodes": [
+          0
+        ],
+        "neighbor_nodes": [
+          3
+        ]
+      },
+      "relation_lookup": {
+        "KNOWS": 0,
+        "WORKS_AT": 1
+      },
+      "sampled": {
+        "edge_indices": [
+          1,
+          2,
+          3
+        ],
+        "input_nodes": [
+          0,
+          1
+        ],
+        "neighbor_nodes": [
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    "temporal_v2": {
+      "cases": {
+        "at_100": {
+          "edge_indices": [
+            2,
+            0,
+            3
+          ],
+          "edge_version_ids": [
+            "df6adc31-10c8-47d6-bed8-e6c65a41fd3e",
+            "4fbb3c49-49dd-4e4e-bcd6-56f6bd6812ed",
+            "1da95388-f735-4219-bde6-8560a2bb96bf"
+          ],
+          "input_nodes": [
+            0
+          ],
+          "neighbor_nodes": [
+            2,
+            1,
+            3
+          ]
+        },
+        "at_150": {
+          "edge_indices": [
+            2,
+            0
+          ],
+          "edge_version_ids": [
+            "df6adc31-10c8-47d6-bed8-e6c65a41fd3e",
+            "4fbb3c49-49dd-4e4e-bcd6-56f6bd6812ed"
+          ],
+          "input_nodes": [
+            0
+          ],
+          "neighbor_nodes": [
+            2,
+            1
+          ]
+        },
+        "at_200": {
+          "edge_indices": [],
+          "edge_version_ids": [],
+          "input_nodes": [
+            0
+          ],
+          "neighbor_nodes": []
+        },
+        "at_50": {
+          "edge_indices": [
+            1,
+            2,
+            3
+          ],
+          "edge_version_ids": [
+            "68bf01b5-4082-4ab0-a822-1375f29ece85",
+            "df6adc31-10c8-47d6-bed8-e6c65a41fd3e",
+            "1da95388-f735-4219-bde6-8560a2bb96bf"
+          ],
+          "input_nodes": [
+            0
+          ],
+          "neighbor_nodes": [
+            1,
+            2,
+            3
+          ]
+        },
+        "window_120_160": {
+          "edge_indices": [
+            2,
+            0,
+            3
+          ],
+          "edge_version_ids": [
+            "df6adc31-10c8-47d6-bed8-e6c65a41fd3e",
+            "4fbb3c49-49dd-4e4e-bcd6-56f6bd6812ed",
+            "1da95388-f735-4219-bde6-8560a2bb96bf"
+          ],
+          "input_nodes": [
+            0
+          ],
+          "neighbor_nodes": [
+            2,
+            1,
+            3
+          ]
+        }
+      },
+      "files": {
+        "completion.json": "5645615870dbfc7cea16c1d1f076113ef4bafa54115bf2084e866de5239e7ff7",
+        "dst_int.npy": "a01b4dff368cbe142a0849a899a7cc61fd25ee5a53b9bc301ddc8f44338cf881",
+        "edge_commit_ids.npy": "722156545e90b818af1983babcb800c7ecf9aa6e61b6a60fc12ede2af9b9ca88",
+        "edge_lookup_ids.npy": "a8c4863d5d383fc06a78a1570193a69570dada976fbddd38bc6d30b00fc0b63b",
+        "edge_lookup_order.npy": "dc5de563b86c3210ee39b3adc9c39934ef72b87a5c20f475ccc78e336ea75a7e",
+        "edge_system_time_us.npy": "a586386adaf4c73be1b3b657056c2a1ac728b2c95d3613be84c26c8994dc3da8",
+        "edge_version_ids.npy": "74d7edf8f9e3625da315f172d62e98eac5d3a44b793a83f32b0e55d4520707ab",
+        "edge_weights.npy": "9ea5025cdac62ede1358dbf313b35feaeb67a687d001aca9005d886a2934c32b",
+        "external_edge_ids.npy": "a8c4863d5d383fc06a78a1570193a69570dada976fbddd38bc6d30b00fc0b63b",
+        "external_node_ids.npy": "de5c5693b42dc70635a5e8fb72565d3d65976700a55718caf7474bbf2c22ccbb",
+        "external_relation_ids.npy": "8c8318cb384cf4c8ef294dbd17dbf0a2c1ab4fbd7c41fe84bf2bbc740c345723",
+        "in_edge_indices.npy": "dc5de563b86c3210ee39b3adc9c39934ef72b87a5c20f475ccc78e336ea75a7e",
+        "in_indptr.npy": "d822446e5ab41f2eb06430f4e4fd271f90921a3dfbd465f6522d571f85d52d09",
+        "incident_edge_indices.npy": "3e17097e33c4c47124a8f03fb5e48009f714ec855b0b2c9f87d00fd468d21ad6",
+        "incident_indptr.npy": "27063c5a9deefac4db183dadb97037b3812982c79763068261887818330746bf",
+        "metadata.json": "fc83ec2f33e02744b9857ef6c70d58a4a3093f5db94aed468e1dd1a3598505a6",
+        "node_history_indptr.npy": "e24087dfc0efa40c8b280f8839dbdac487c5be2456ee63b23a284df057d01a6e",
+        "node_lookup_ids.npy": "de5c5693b42dc70635a5e8fb72565d3d65976700a55718caf7474bbf2c22ccbb",
+        "node_lookup_order.npy": "dc5de563b86c3210ee39b3adc9c39934ef72b87a5c20f475ccc78e336ea75a7e",
+        "node_type_ids.npy": "f6ca3226b94999316702b5e0ea0dd137654fcdf4a356334d31d3a895cad72714",
+        "node_valid_from_us.npy": "e753e5647b435118f96d03ca957926ba5ae6d9b3ff538ffb1f9af3623bb854a3",
+        "node_valid_to_open.npy": "bd1c891828ac58cfdbba1dd662cdd3fdfaf246570e3b36550e86983be9e0bf95",
+        "node_valid_to_us.npy": "fb7c66f6bbccb5a6604cf7e5c2c1ace4f17bbd590e509c76f58832607a529c0a",
+        "out_edge_indices.npy": "dc5de563b86c3210ee39b3adc9c39934ef72b87a5c20f475ccc78e336ea75a7e",
+        "out_indptr.npy": "4bf36a8f0cf74e338ccd27c5429a70e67b4ce3aca83364decf89d7cde6ccf109",
+        "positive_history_edge_indices.npy": "5b06c10f8955db2a8bf67ba60e0983dad119ff6aa326577c7c0cea1b166826cb",
+        "positive_history_indptr.npy": "8034095386a07f8a9c32f7b024e7acdae4ef7434f63bdf6d9749942873d6a4ca",
+        "positive_history_triples.npy": "2374e1dd12e6a7ad2e27da991afdd3d1023707812405a7cd0c4113c5efc11d9c",
+        "positive_triples.npy": "89dd53f93fe3d10fa2b60aa4cfdc633e17b7de1be5a9814d4b7418ce4e389096",
+        "rel_int.npy": "d11a7b040e3a704c56754c4f756888ff527103c026a1d692329e5d8f58c4da06",
+        "relation_dst_type_ids.npy": "f5c214683ef792c6fdcc0a3c4efd22a748b0df4af4c26df0181beb7423d6a3a3",
+        "relation_in_edge_indices.npy": "dc5de563b86c3210ee39b3adc9c39934ef72b87a5c20f475ccc78e336ea75a7e",
+        "relation_in_indptr.npy": "be35a9f3c9086ec3d006daab3c26241b8fb62923b43583f0d3b86377b5cc0fd3",
+        "relation_lookup_ids.npy": "8c8318cb384cf4c8ef294dbd17dbf0a2c1ab4fbd7c41fe84bf2bbc740c345723",
+        "relation_lookup_order.npy": "edf57b3e7cc4d837db7a3b400e84ffa2cc07b6adc347edef9feabbc11c5183cb",
+        "relation_out_edge_indices.npy": "dc5de563b86c3210ee39b3adc9c39934ef72b87a5c20f475ccc78e336ea75a7e",
+        "relation_out_indptr.npy": "ed86c6fd4fa76e6fb0027429046b7f9ee87509637e102104d7e6ec47a763812c",
+        "relation_src_type_ids.npy": "f5c214683ef792c6fdcc0a3c4efd22a748b0df4af4c26df0181beb7423d6a3a3",
+        "src_int.npy": "2167f2928073f74762594a1cbb4965bc351157da2ba3b07d58d6baf4ba16636a",
+        "temporal_in_edge_indices.npy": "5b06c10f8955db2a8bf67ba60e0983dad119ff6aa326577c7c0cea1b166826cb",
+        "temporal_in_indptr.npy": "be35a9f3c9086ec3d006daab3c26241b8fb62923b43583f0d3b86377b5cc0fd3",
+        "temporal_out_edge_indices.npy": "089fd54a0538902557beb33019645fe9cb343d95fba58b7902f72eeb8134c878",
+        "temporal_out_indptr.npy": "ed86c6fd4fa76e6fb0027429046b7f9ee87509637e102104d7e6ec47a763812c",
+        "valid_from_us.npy": "f326f8a333d3da77e80437cdd7dd9f858841fc62211ef83b4b2974d0e395464e",
+        "valid_to_open.npy": "bd1c891828ac58cfdbba1dd662cdd3fdfaf246570e3b36550e86983be9e0bf95",
+        "valid_to_us.npy": "4e226d6bc12128f8d9bc8f0d5df8aeb159e7c467fb3db5ce80827a0ad031fd50"
+      },
+      "format_version": 2,
+      "gestaltdb_version": "0.12.1",
+      "num_edge_versions": 4,
+      "num_nodes": 4,
+      "temporal": true
+    }
+  },
+  "numpy": "2.5.4",
+  "python": "3.12.3"
+}
