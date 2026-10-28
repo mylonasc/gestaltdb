@@ -3,6 +3,7 @@
 import hashlib
 import json
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -219,3 +220,50 @@ def test_append_prune_and_weight_rewrites_refresh_persisted_membership(tmp_path)
     snapshot.set_edge_weights(snapshot.edge_weights.copy(), source="test")
     assert snapshot.metadata["positive_membership_encoding"] == "lexicographic-triples-v1"
     np.testing.assert_array_equal(snapshot.positive_membership_triples, build_membership(snapshot.positive_triples))
+
+
+@pytest.mark.parametrize("name", ["dense_v1", "dense_v2", "temporal_v2"])
+@pytest.mark.parametrize("mmap", [False, True])
+def test_released_wheel_membership_matches_direct_edge_scan(name, mmap):
+    """Exercise legacy admission with actual released bytes, not downgrades."""
+    from gestaltdb import TemporalContext
+
+    path = Path(__file__).parent / "fixtures" / "released_snapshots" / name
+    snapshot = SamplerSnapshot.load(path, mmap=mmap)
+    engine = SamplerEngine(snapshot, seed=7)
+    triples = snapshot.positive_triples.tolist()
+    if snapshot.temporal:
+        assert engine._positive_membership.triples is snapshot.positive_history_triples
+    else:
+        assert snapshot.positive_membership_triples is None
+
+    for src in range(snapshot.num_nodes):
+        for rel in range(snapshot.num_relations):
+            for dst in range(snapshot.num_nodes):
+                matching = [i for i, triple in enumerate(triples) if triple == [src, rel, dst]]
+                assert engine.is_positive(src, rel, dst) == bool(matching)
+                if not snapshot.temporal:
+                    continue
+                for instant in (0, 50, 100, 150, 200):
+                    expected = any(
+                        snapshot.valid_from_us[i] <= instant
+                        and (snapshot.valid_to_open[i] or instant < snapshot.valid_to_us[i])
+                        for i in matching
+                    )
+                    assert engine.is_positive(
+                        src, rel, dst, policy="at_positive_time",
+                        temporal=TemporalContext.as_of(instant),
+                    ) == expected
+                for policy in ("overlap", "contained"):
+                    expected = any(
+                        (snapshot.valid_from_us[i] < 160
+                         and (snapshot.valid_to_open[i] or 120 < snapshot.valid_to_us[i]))
+                        if policy == "overlap" else
+                        (120 <= snapshot.valid_from_us[i]
+                         and not snapshot.valid_to_open[i] and snapshot.valid_to_us[i] <= 160)
+                        for i in matching
+                    )
+                    assert engine.is_positive(
+                        src, rel, dst, policy="window", window_policy=policy,
+                        temporal=TemporalContext.during(120, 160),
+                    ) == expected
