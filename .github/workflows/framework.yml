@@ -44,13 +44,14 @@ jobs:
         run: python -m pip install -e ".[coverage]"
 
       - name: Install real CPU framework dependencies
-        # CPU-only Torch keeps install cost bounded. DGL/TensorFlow stay
-        # importorskip-covered: their smokes run when available but are not
-        # required here.
+        # CPU-only Torch and TensorFlow keep install cost bounded; DGL stays
+        # importorskip-covered (its prebuilt library lags current Torch, so it
+        # would need a separately pinned Torch to run here).
         run: >-
           python -m pip install
           --index-url https://download.pytorch.org/whl/cpu
-          torch pyarrow
+          --extra-index-url https://pypi.org/simple
+          torch pyarrow tensorflow-cpu
 
       - name: Run real framework conversion smokes
         run: python -m pytest tests/test_sampling_real_frameworks.py -q -ra

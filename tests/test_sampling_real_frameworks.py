@@ -150,6 +150,41 @@ def test_tf_gnns_uses_real_tensors(snapshot):
     assert isinstance(labels["positives"], tf.Tensor)
 
 
+def test_tf_gnns_preserves_temporal_weights_and_times_with_real_tensors():
+    tf = pytest.importorskip("tensorflow")
+    batch = SampledSubgraphBatch(
+        node_ids_global=np.array([0, 1], dtype=np.int64),
+        node_type_ids=np.array([-1, -1], dtype=np.int64),
+        senders=np.array([0], dtype=np.int64),
+        receivers=np.array([1], dtype=np.int64),
+        edge_ids_global=np.array([3], dtype=np.int64),
+        edge_relation_ids=np.array([0], dtype=np.int64),
+        positives=np.array([[0, 0, 1]], dtype=np.int64),
+        negatives=np.array([[[0, 0, 0]]], dtype=np.int64),
+        edge_version_ids=np.array(["00000000-0000-0000-0000-000000000003"]),
+        valid_from_us=np.array([10], dtype=np.int64),
+        valid_to_us=np.array([20], dtype=np.int64),
+        valid_to_open=np.array([False]),
+        positive_time_us=np.array([10], dtype=np.int64),
+        negative_time_us=np.array([[10]], dtype=np.int64),
+        node_weights=np.array([0.5, 1.5], dtype=np.float64),
+        edge_weights=np.array([2.0], dtype=np.float64),
+    )
+
+    graph, labels = batch.to_tf_gnns()
+
+    assert graph["edge_version_ids"].dtype == tf.string
+    assert [item.decode() for item in graph["edge_version_ids"].numpy().tolist()] == [
+        "00000000-0000-0000-0000-000000000003"]
+    assert graph["valid_to_open"].dtype == tf.bool
+    assert graph["valid_from_us"].numpy().tolist() == [10]
+    assert graph["node_weights"].dtype == tf.float64
+    assert graph["edge_weights"].numpy().tolist() == [2.0]
+    assert labels["positive_time_us"].dtype == tf.int64
+    assert labels["negative_time_us"].numpy().tolist() == [[10]]
+    np.testing.assert_array_equal(labels["positives"].numpy(), [[0, 0, 1]])
+
+
 def test_arrow_uses_real_tables(snapshot):
     pa = pytest.importorskip("pyarrow")
     engine = SamplerEngine(snapshot, seed=3)
