@@ -14,16 +14,19 @@ import io
 import json
 import math
 from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Iterable
 from xml.etree import ElementTree
 
-from gestaltdb.graphdb import (
-    Edge, GraphDB, Node, _property_value_to_index_bytes,
-    _property_value_to_range_index_bytes,
+from gestaltdb.graphdb import Edge, GraphDB, Node
+from gestaltdb._graph.entities import (
+    _property_value_to_index_bytes, _property_value_to_range_index_bytes,
 )
 from gestaltdb.kvstores import (
     _checked_index_key, _index_key, _range_index_key, _typed_adjacency_key,
 )
+
+if TYPE_CHECKING:
+    import networkx as nx
 
 __all__ = ["ImportResult", "ImportWriteError", "from_networkx", "to_networkx", "load_gexf"]
 
@@ -50,9 +53,9 @@ class ImportResult:
     source_edges: int
     imported_nodes: int = 0
     imported_edges: int = 0
-    node_ids: dict = field(default_factory=dict)
-    edge_ids: dict = field(default_factory=dict)
-    graph_attributes: dict = field(default_factory=dict)
+    node_ids: dict[Any, str] = field(default_factory=dict)
+    edge_ids: dict[tuple[Any, Any, Any], tuple[str, ...]] = field(default_factory=dict)
+    graph_attributes: dict[str, Any] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     direction_conversion: str = "none"
 
@@ -198,7 +201,7 @@ def _preflight_entity(target, entity):
 
 
 def from_networkx(
-    graph,
+    graph: nx.Graph,
     target: GraphDB,
     *,
     node_id: Callable[[Any], str] | None = None,
@@ -247,7 +250,7 @@ def from_networkx(
         else:
             token = _key_token(key)
             identifier = _identifier(exported["id"] if exported else key if isinstance(key, str) else "nx:" + _digest(token))
-        if identifier in node_ids or target.get_node(identifier.encode("utf-8")) is not None:
+        if identifier in node_ids or target.nodes.get(identifier.encode("utf-8")) is not None:
             raise ValueError(f"Node ID collision: {identifier!r}")
         node_ids.add(identifier)
         result.node_ids[key] = identifier
@@ -288,7 +291,7 @@ def from_networkx(
             pairs.append((v, u, "nx:r:" + _digest([identifier, v, u])))
         mapped = []
         for a, b, eid in pairs:
-            if eid in edge_ids or target.get_edge(eid.encode("utf-8")) is not None:
+            if eid in edge_ids or target.edges.get(eid.encode("utf-8")) is not None:
                 raise ValueError(f"Edge ID collision: {eid!r}")
             edge_ids.add(eid)
             props = deepcopy(attrs)
@@ -300,7 +303,7 @@ def from_networkx(
     for entity in nodes + edges:
         _preflight_entity(target, entity)
     for phase, entities, writer in (
-        ("nodes", nodes, target.put_nodes), ("edges", edges, target.put_edges_bulk),
+        ("nodes", nodes, target.nodes.put_many), ("edges", edges, target.edges.put_many),
     ):
         for offset in range(0, len(entities), batch_size):
             batch = entities[offset:offset + batch_size]
@@ -318,11 +321,11 @@ def from_networkx(
 def to_networkx(
     graph: GraphDB,
     *,
-    node_ids=None,
-    edge_ids=None,
+    node_ids: Iterable[str | bytes] | None = None,
+    edge_ids: Iterable[str | bytes] | None = None,
     multigraph: bool = True,
-    graph_attributes: dict | None = None,
-):
+    graph_attributes: dict[str, Any] | None = None,
+) -> nx.MultiDiGraph | nx.DiGraph:
     """Export current records to a MultiDiGraph (or lossless DiGraph).
 
     ``node_ids`` selects an induced subgraph. ``edge_ids`` selects edges, adding
@@ -334,10 +337,10 @@ def to_networkx(
     output = nx.MultiDiGraph() if multigraph else nx.DiGraph()
     output.graph.update(deepcopy(graph_attributes or {}))
     selected = {graph.key_to_string(key) for key in node_ids} if node_ids is not None else None
-    edge_keys = edge_ids if edge_ids is not None else graph.store.get_edge_keys_generator()
+    edge_keys = edge_ids if edge_ids is not None else graph.edges.keys()
     edges = []
     for key in edge_keys:
-        edge = graph.get_edge(graph.node_key_to_bytes(key))
+        edge = graph.edges.get(graph.node_key_to_bytes(key))
         if edge is None:
             raise ValueError(f"Missing edge: {key!r}")
         if selected is not None and (edge.source not in selected or edge.target not in selected):
@@ -347,11 +350,11 @@ def to_networkx(
         edges.append(edge)
     if selected is None:
         selected = {endpoint for edge in edges for endpoint in (edge.source, edge.target)} if edge_ids is not None else {
-            graph.key_to_string(key) for key in graph.get_node_keys_generator()
+            graph.key_to_string(key) for key in graph.nodes.keys()
         }
     mapped = {}
     for identifier in sorted(selected):
-        node = graph.get_node(graph.node_key_to_bytes(identifier))
+        node = graph.nodes.get(graph.node_key_to_bytes(identifier))
         if node is None:
             raise ValueError(f"Missing node: {identifier!r}")
         attrs = deepcopy(node.properties)

@@ -3,6 +3,7 @@ from copy import deepcopy
 import gzip
 import io
 import bz2
+from xml.etree.ElementTree import ParseError
 
 import pytest
 
@@ -24,6 +25,7 @@ def adapter_db(request, tmp_path):
 
 
 @pytest.mark.parametrize("serializer", SERIALIZER_PARAMS)
+@pytest.mark.backend
 def test_roundtrip(adapter_db, serializer):
     db = adapter_db(serializer)
     try:
@@ -145,12 +147,13 @@ def test_selections(lmdb_graph_db):
             to_networkx(lmdb_graph_db, **kwargs)
 
 
+@pytest.mark.fault
 def test_write_failure(lmdb_graph_db, monkeypatch):
     graph = nx.DiGraph()
     graph.add_edge("a", "b")
     def fail(_):
         raise OSError("disk full")
-    monkeypatch.setattr(lmdb_graph_db, "put_edges_bulk", fail)
+    monkeypatch.setattr(lmdb_graph_db.edges, "put_many", fail)
     with pytest.raises(ImportWriteError) as exc:
         from_networkx(graph, lmdb_graph_db, batch_size=1)
     assert exc.value.result.imported_nodes == 2
@@ -210,7 +213,8 @@ def test_gexf_compressed_viz(lmdb_graph_db, tmp_path):
     b'<broken',
 ])
 def test_gexf_rejects_before_writes(data, lmdb_graph_db):
-    with pytest.raises(Exception):
+    from defusedxml.common import DefusedXmlException
+    with pytest.raises((ValueError, ParseError, DefusedXmlException)):
         load_gexf(io.BytesIO(data), lmdb_graph_db)
     assert list(lmdb_graph_db.get_node_keys_generator()) == []
 
@@ -249,6 +253,7 @@ def test_index_limits_preflight(field, lmdb_graph_db):
     assert list(lmdb_graph_db.get_node_keys_generator()) == []
 
 
+@pytest.mark.fault
 def test_serializer_preflight(lmdb_graph_db, monkeypatch):
     source = nx.DiGraph()
     source.add_edge("a", "b")
@@ -291,6 +296,7 @@ def test_gexf_rejects_silent_reader_loss(body, lmdb_graph_db):
     assert list(lmdb_graph_db.get_node_keys_generator()) == []
 
 
+@pytest.mark.subprocess
 def test_dependency_import_isolation():
     import subprocess
     import sys
@@ -330,3 +336,22 @@ def test_gexf_undirected_defaults(lmdb_graph_db):
     result = load_gexf(io.BytesIO(data), lmdb_graph_db, undirected="bidirectional")
     assert result.imported_edges == 2
     assert lmdb_graph_db.get_edge(b"e").properties["score"] == 3.5
+
+
+@pytest.mark.backend
+def test_documented_workflows():
+    from pathlib import Path
+    from textwrap import dedent
+    import re
+
+    pytest.importorskip("lmdb")
+    root = Path(__file__).resolve().parents[1]
+    text = (root / "docs/networkx.rst").read_text()
+    blocks = re.findall(r'\.\. code-block:: python\n\n((?:   .*\n|\n)+)', text)
+    assert len(blocks) == 2
+    for block in blocks:
+        exec(compile(dedent(block), "docs/networkx.rst", "exec"), {})
+    text = (root / "EXAMPLES.md").read_text().split("## Convert NetworkX Graphs", 1)[1].split("\n## ", 1)[0]
+    block = re.search(r"```python\n(.*?)```", text, re.S)
+    assert block is not None
+    exec(compile(block.group(1), "EXAMPLES.md", "exec"), {})

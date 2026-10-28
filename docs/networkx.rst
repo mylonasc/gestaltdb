@@ -161,7 +161,7 @@ graphs use key ``None``), graph attributes, warnings, and direction conversion.
 Imports prepare all records and check mappings, existing IDs, attributes,
 serializer compatibility and encoded index-key limits before writing. Native
 label, relationship-type, adjacency and configured property indexes are
-maintained through ``put_nodes``/``put_edges_bulk``; no deferred rebuild is
+maintained through ``graph.nodes.put_many``/``graph.edges.put_many``; no deferred rebuild is
 needed. Configure explicit property indexes before import when required.
 
 Writes use ``batch_size=1000`` by default. Each batch inherits the backend's
