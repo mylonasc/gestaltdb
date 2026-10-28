@@ -1,0 +1,33 @@
+{
+  "source_revision": "40024de",
+  "command": "uv run --python 3.12 python -m benchmarks.positive_membership",
+  "python": "3.12.3",
+  "numpy": "2.5.2",
+  "seed": 429,
+  "nodes": 2000,
+  "relations": 16,
+  "edges": 10000,
+  "unique_triples": 9999,
+  "lookups": 1000,
+  "repeats": 3,
+  "python_set_retained_bytes": 804476,
+  "mapped_array_payload_bytes": 239976,
+  "python_set_startup_seconds": 0.029275153996422887,
+  "mapped_index_startup_seconds": 0.0000047869980335235596,
+  "python_set_startup_tracemalloc_peak_bytes": 1843696,
+  "mapped_index_startup_tracemalloc_peak_bytes": 312,
+  "offline_key_build_seconds": 0.006724342005327344,
+  "results": [
+    {
+      "encoding": "python-packed-set",
+      "median_lookup_seconds": 0.0006752379995305091,
+      "hits": 500
+    },
+    {
+      "encoding": "mapped-sorted-triples",
+      "median_lookup_seconds": 0.007410704012727365,
+      "hits": 500
+    }
+  ],
+  "scope": "Membership component only; excludes snapshot/engine load, authentication, page cache and RSS. Startup times/peaks are collected with tracemalloc enabled. Set retained bytes and mapped file payload are different memory categories. No full-engine startup, throughput or RSS improvement is claimed."
+}
