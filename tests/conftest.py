@@ -13,6 +13,29 @@ from gestaltdb.serializers import (
     ProtobufSerializer,
 )
 
+from .category_markers import categories_for
+
+
+def pytest_collection_modifyitems(items):
+    """Describe each test with category markers; markers never skip or gate."""
+    import inspect
+    from pathlib import Path
+
+    for item in items:
+        filename = Path(str(getattr(item, "fspath", ""))).name
+        try:
+            source = inspect.getsource(item.function)
+        except (OSError, TypeError):
+            source = None
+        for category in categories_for(
+            filename,
+            fixturenames=getattr(item, "fixturenames", ()),
+            test_id=item.nodeid,
+            module=item.module,
+            source=source,
+        ):
+            item.add_marker(category)
+
 
 @contextmanager
 def blocked_import(package_name):
