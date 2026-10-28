@@ -15,7 +15,7 @@ from gestaltdb.reasoning.adapters.session_store import (
 )
 from gestaltdb.reasoning.adapters.sessions import SessionScope, advance_session, start_session
 from gestaltdb.reasoning.catalog import CatalogEntry, RuleCatalog
-from gestaltdb.reasoning.model import ReasoningLimits, Variable
+from gestaltdb.reasoning.model import ReasoningError, ReasoningLimits, Variable
 from gestaltdb.reasoning.typed import (
     AggregateRule,
     Aggregation,
@@ -201,9 +201,9 @@ def test_cas_and_expected_horizon(tmp_path):
         path = tmp_path / "session.json"
         session = start(graph)
         save_session(session, path)
-        with pytest.raises(Exception, match="changed underneath|expected_horizon"):
+        with pytest.raises(ReasoningError, match="changed underneath|expected_horizon"):
             save_session(session, path, expected_horizon=session.commit_horizon + 100)
-        with pytest.raises(Exception, match="expected_horizon"):
+        with pytest.raises(ReasoningError, match="expected_horizon"):
             advance_persisted_session(graph, path, limits=ReasoningLimits(), expected_horizon=9999)
         # Concurrent change between load and persist fails closed.
         assert_member(graph, "b")
@@ -211,7 +211,7 @@ def test_cas_and_expected_horizon(tmp_path):
         stale = load_session(path)
         assert_member(graph, "c")
         advance_persisted_session(graph, path, limits=ReasoningLimits())
-        with pytest.raises(Exception, match="changed underneath|reload and retry"):
+        with pytest.raises(ReasoningError, match="changed underneath|reload and retry"):
             save_session(stale, path, expected_horizon=stale.commit_horizon)
     finally:
         graph.close()
@@ -229,17 +229,17 @@ def test_corrupt_and_drift_rejected(tmp_path):
         tampered["commit_horizon"] = raw["commit_horizon"] + 5
         bad = tmp_path / "bad.json"
         bad.write_text(json.dumps(tampered))
-        with pytest.raises(Exception, match="digest mismatch"):
+        with pytest.raises(ReasoningError, match="digest mismatch"):
             load_session(bad)
         truncated = tmp_path / "truncated.json"
         truncated.write_bytes(path.read_bytes()[:100])
-        with pytest.raises(Exception, match="cannot decode|digest|mapping|format"):
+        with pytest.raises(ReasoningError, match="cannot decode|digest|mapping|format"):
             load_session(truncated)
         unknown = dict(raw)
         unknown["format_version"] = 999
         unknown_path = tmp_path / "unknown.json"
         unknown_path.write_text(json.dumps(unknown))
-        with pytest.raises(Exception, match="unsupported session format"):
+        with pytest.raises(ReasoningError, match="unsupported session format"):
             load_session(unknown_path)
         drifted = session_to_dict(start(graph))
         import hashlib as _hashlib
@@ -250,7 +250,7 @@ def test_corrupt_and_drift_rejected(tmp_path):
             ensure_ascii=True, separators=(",", ":"), sort_keys=True,
         ).encode()
         drifted["session_digest"] = "sha256:" + _hashlib.sha256(canonical).hexdigest()
-        with pytest.raises(Exception, match="program digest drifted"):
+        with pytest.raises(ReasoningError, match="program digest drifted"):
             session_from_dict(drifted)
     finally:
         graph.close()
@@ -264,7 +264,7 @@ def test_foreign_database_and_backwards_horizon_rejected(tmp_path):
         assert_member(graph, "a")
         path = tmp_path / "session.json"
         save_session(start(graph), path)
-        with pytest.raises(Exception, match="different database"):
+        with pytest.raises(ReasoningError, match="different database"):
             advance_persisted_session(other, path, limits=ReasoningLimits())
     finally:
         graph.close()

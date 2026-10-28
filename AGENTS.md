@@ -235,6 +235,7 @@ DeepWalk extensions: `gestaltdb.sampling.iter_context_pairs` yields bounded rest
 - Run tests: `uv run pytest`
 - Run a focused test: `uv run pytest tests/test_cypher.py -q`
 - Run the deterministic temporal smoke: `uv run python -m benchmarks temporal --nodes 100 --edges 500 --queries 100`
+- Run the strict typing ratchet: `uv run --extra lint python scripts/check_typing.py`
 - Check documentation & API drift: `uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/check_docs.py`
 - Test documentation examples: `uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py test-examples`
 - Build Sphinx docs: `uv run sphinx-build -b html docs docs/_build/html`
