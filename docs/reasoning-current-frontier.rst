@@ -74,9 +74,10 @@ outside the view. Normal maintained index invariants are required: authenticatio
 of stored bytes is not an independent index-completeness proof. Unreachable
 records' mapped values are not independently audited.
 
-LMDB supplies the required snapshot. Other backends are admitted only when
+LMDB supplies the required snapshot, as does transactional PyRex with
+``pyrex-rocksdb>=0.7.0``. Other backends are admitted only when
 their current-read API provides this contract; unsupported LevelDB and
-unverifiable PyRex requests never fall back to unpinned reads.
+older unverifiable PyRex requests never fall back to unpinned reads.
 
 ``GraphSourceLimits.max_records`` bounds cumulative candidate lookups before
 decoding. ``ReasoningLimits`` and ``max_requests`` retain cumulative scheduler

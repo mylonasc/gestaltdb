@@ -187,7 +187,8 @@ The example has no concurrent writers. If cohort IDs are selected before a
 snapshot build, they are not automatically pinned to its later source horizon.
 Quiesce writers for the full selection/build workflow, or express the property
 conditions directly in callbacks within a pinned build. ``read_snapshot=True``
-requires a verifiable coherent mutable source snapshot (supported by LMDB);
+requires a verifiable coherent mutable source snapshot (supported by LMDB and
+by transactional PyRex with ``pyrex-rocksdb>=0.7.0``);
 unsupported backends fail that explicit request rather than silently weakening
 it. The default uses this guarantee automatically where available.
 

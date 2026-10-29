@@ -1096,7 +1096,7 @@ class GraphDB:
                 )
             if require_verifiable and provenance is None:
                 raise NotImplementedError(
-                    "the configured backend can pin reads but cannot expose a verifiable snapshot identity"
+                    "the configured backend can pin reads but cannot expose a verifiable snapshot identity; for PyRex use PyRexStore(transactional=True) with pyrex-rocksdb>=0.7.0"
                 )
             snapshot_graph = copy.copy(self)
             snapshot_graph.store = snapshot_store

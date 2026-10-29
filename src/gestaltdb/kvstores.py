@@ -1571,7 +1571,7 @@ class PyRexStore(KVStore):
             self.db = pyrex.PyRocksDB(path, options)
             self.supports_transactions = False
             self.supports_read_snapshots = False
-        self.supports_verifiable_read_snapshots = False
+        self.supports_verifiable_read_snapshots = bool(self.transactional and hasattr(getattr(pyrex, "Transaction", None), "snapshot_sequence_number") and hasattr(getattr(pyrex, "TransactionDB", None), "latest_sequence_number"))
         self.write_options = pyrex.WriteOptions()
         self.write_options.disable_wal = disable_wal
 
