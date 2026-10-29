@@ -465,10 +465,17 @@ Operational guidance:
 - Use default ``PyRexStore`` for reloadable bulk loads and columnar append-only
   ingestion.
 - Use ``PyRexStore(transactional=True)`` when mutations must be atomic across
-  nodes, edges, adjacency, secondary indexes, and metadata.
+  nodes, edges, adjacency, secondary indexes, and metadata, or when verifiable
+  snapshots are required (needs ``pyrex-rocksdb>=0.7.0``).
 - If transaction-capable bulk ingestion needs native columnar throughput, PyRex
   should expose ``TransactionDB.write_columnar_batch`` so GestaltDB can keep the
   same fast path in transactional mode.
+- Upgrading PyRex from 0.4.1 to 0.7.0 enables verifiable snapshots but showed a
+  repeatable single-threaded point-read latency increase in local GestaltDB
+  microbenchmarks (roughly +6-8% per decoded ``get_node``). Bulk edge ingestion
+  was essentially unchanged. See `mylonasc/pyrex#36
+  <https://github.com/mylonasc/pyrex/issues/36>`_ and GestaltDB #439 before
+  treating 0.7.0 as performance-neutral.
 
 RocksDB Tuning and Compaction Benchmarks
 ----------------------------------------
