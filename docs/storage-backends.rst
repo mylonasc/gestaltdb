@@ -303,9 +303,11 @@ not pay that hashing cost; pass ``read_snapshot=True`` to require the view or
        provenance = view.provenance
 
 Transactional ``PyRexStore`` pins point reads and iterators to one RocksDB
-transaction snapshot. A verifiable provenance record is available only when the
-installed PyRex binding exposes that snapshot's sequence number. Default
-non-transactional PyRex has no snapshot handle. ``LevelDBStore`` deliberately
+transaction snapshot. With ``PyRexStore(transactional=True)`` and
+``pyrex-rocksdb>=0.7.0``, a verifiable provenance record is available from the
+snapshot's sequence number plus a full-state digest. Older PyRex runtimes pin
+reads but cannot expose that sequence; default non-transactional PyRex has no
+snapshot handle. ``LevelDBStore`` deliberately
 raises ``NotImplementedError`` for explicit snapshot requests because its node,
 edge, adjacency, index, and metadata databases cannot be captured at one atomic
 sequence.

@@ -107,7 +107,8 @@ Complete canonical projection does not depend on secondary indexes, including
 when those indexes are marked stale; this is not permission to use stale indexes
 in the separate frontier adapter. Full-state authentication can dominate work
 and uses memory; this integration makes no performance or constant-time claim.
-LMDB provides verifiable snapshots; unsupported backend requests fail closed
+LMDB provides verifiable snapshots, as does transactional PyRex with
+``pyrex-rocksdb>=0.7.0``; unsupported backend requests fail closed
 rather than using unpinned reads.
 
 This completes one current-graph admission/execution consumer, not persistent

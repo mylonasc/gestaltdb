@@ -25,7 +25,9 @@ Read-only queries automatically use one unified mutable-state backend snapshot
 when supported, preventing index scans, entity hydration, and traversal from
 mixing horizons. Pass ``read_snapshot=True`` to require the guarantee or
 ``False`` to opt out. LMDB supports verifiable snapshots; transactional PyRex
-supports pinned reads; LevelDB and default PyRex fail explicit requests closed.
+with ``pyrex-rocksdb>=0.7.0`` supports verifiable snapshots while older
+transactional runtimes support pinned reads only; LevelDB and default PyRex
+fail explicit requests closed.
 
 Basic Result Shape
 ------------------
