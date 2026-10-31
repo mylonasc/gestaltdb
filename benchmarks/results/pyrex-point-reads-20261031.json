@@ -1,0 +1,1175 @@
+{
+  "date": "2026-10-31",
+  "gestaltdb_revision": "d7f7ab51372d032a3c979216699306c7511adebd",
+  "host_cpu": "Intel Core i7-13700F",
+  "source_build_run": 41202891729,
+  "successful_publish_run": 41210846573,
+  "process_orders": [
+    [
+      "0.4.1",
+      "0.7.0",
+      "0.7.1"
+    ],
+    [
+      "0.7.1",
+      "0.7.0",
+      "0.4.1"
+    ],
+    [
+      "0.7.0",
+      "0.7.1",
+      "0.4.1"
+    ]
+  ],
+  "method": "Three fresh processes/version; seven samples/process, median of process medians. Published wheel builds are not identical-toolchain source builds. Warmed hits only; no flush, cold-cache, concurrency or whole-query claim. 0.7.1 artifact SHA256 matches PyPI.",
+  "wheels": {
+    "0.4.1": {
+      "filename": "pyrex_rocksdb-0.4.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "aa0090fdb2a0b19cbd8f90c5a2cb18f3a71104fdf11533e72b9f5f524346b192"
+    },
+    "0.7.0": {
+      "filename": "pyrex_rocksdb-0.7.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "e680459873689de84d20626fed9ef79b38801432d56e2cee7680d892c6efbb09"
+    },
+    "0.7.1": {
+      "filename": "pyrex_rocksdb-0.7.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "3a58b971e031c899a676874e1b5e7e9d4d6b798b93989d5f4f2f2f22446e96bc"
+    }
+  },
+  "summary": {
+    "default": {
+      "native_get": {
+        "0.4.1": {
+          "median_us": 0.6775058,
+          "process_medians_us": [
+            0.6523474499999999,
+            0.6802012,
+            0.6775058
+          ]
+        },
+        "0.7.0": {
+          "median_us": 0.809576575,
+          "process_medians_us": [
+            0.8605095250000001,
+            0.806016975,
+            0.809576575
+          ]
+        },
+        "0.7.1": {
+          "median_us": 0.5568175,
+          "process_medians_us": [
+            0.57651135,
+            0.5568175,
+            0.5484199999999999
+          ]
+        }
+      },
+      "store_get_node": {
+        "0.4.1": {
+          "median_us": 0.82337375,
+          "process_medians_us": [
+            0.7975269500000001,
+            0.82337375,
+            0.824737175
+          ]
+        },
+        "0.7.0": {
+          "median_us": 0.96065935,
+          "process_medians_us": [
+            1.0164123,
+            0.96065935,
+            0.9441359250000001
+          ]
+        },
+        "0.7.1": {
+          "median_us": 0.6954560249999999,
+          "process_medians_us": [
+            0.715886125,
+            0.6954560249999999,
+            0.68942925
+          ]
+        }
+      },
+      "graph_get_node": {
+        "0.4.1": {
+          "median_us": 5.600020375,
+          "process_medians_us": [
+            5.510468025,
+            5.687694499999999,
+            5.600020375
+          ]
+        },
+        "0.7.0": {
+          "median_us": 5.6989923,
+          "process_medians_us": [
+            5.8861682,
+            5.6989923,
+            5.6860266
+          ]
+        },
+        "0.7.1": {
+          "median_us": 5.379580925,
+          "process_medians_us": [
+            5.379580925,
+            5.3278111500000005,
+            5.38219895
+          ]
+        }
+      }
+    },
+    "transactional": {
+      "native_get": {
+        "0.4.1": {
+          "median_us": 0.643789925,
+          "process_medians_us": [
+            0.612282475,
+            0.667016475,
+            0.643789925
+          ]
+        },
+        "0.7.0": {
+          "median_us": 0.83533755,
+          "process_medians_us": [
+            0.851165925,
+            0.83533755,
+            0.827984775
+          ]
+        },
+        "0.7.1": {
+          "median_us": 0.58375875,
+          "process_medians_us": [
+            0.61348645,
+            0.58375875,
+            0.5507435
+          ]
+        }
+      },
+      "store_get_node": {
+        "0.4.1": {
+          "median_us": 0.7886144500000001,
+          "process_medians_us": [
+            0.754290325,
+            0.805305425,
+            0.7886144500000001
+          ]
+        },
+        "0.7.0": {
+          "median_us": 0.9780780250000001,
+          "process_medians_us": [
+            0.9922534500000001,
+            0.9780780250000001,
+            0.968722325
+          ]
+        },
+        "0.7.1": {
+          "median_us": 0.7209070000000001,
+          "process_medians_us": [
+            0.75432855,
+            0.7209070000000001,
+            0.689797575
+          ]
+        }
+      },
+      "graph_get_node": {
+        "0.4.1": {
+          "median_us": 5.571305325,
+          "process_medians_us": [
+            5.430932825,
+            5.618572075,
+            5.571305325
+          ]
+        },
+        "0.7.0": {
+          "median_us": 5.770237325,
+          "process_medians_us": [
+            5.834630225,
+            5.770237325,
+            5.71543185
+          ]
+        },
+        "0.7.1": {
+          "median_us": 5.451722,
+          "process_medians_us": [
+            5.418278924999999,
+            5.451722,
+            5.453178875
+          ]
+        }
+      }
+    }
+  },
+  "processes": [
+    {
+      "pyrex_version": "0.4.1",
+      "pyrex_module": "/tmp/opencode/gestaltdb-pyrex-0.4.1/lib/python3.12/site-packages/pyrex/__init__.py",
+      "pyrex_extension": "/tmp/opencode/gestaltdb-pyrex-0.4.1/lib/python3.12/site-packages/pyrex/_pyrex.cpython-312-x86_64-linux-gnu.so",
+      "gestaltdb_version": "0.16.0",
+      "python": "3.12.3",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+      "affinity": [
+        2
+      ],
+      "nodes": 5000,
+      "reads": 40000,
+      "warmup": 1000,
+      "trials": 7,
+      "serializer": "json",
+      "payload_characters": 100,
+      "scope": "single-thread warmed hits; no flush or cold-cache claim",
+      "results": {
+        "default": {
+          "native_get": {
+            "samples_us": [
+              0.6534521,
+              0.6503095499999999,
+              0.650867075,
+              0.6527877999999999,
+              0.6523474499999999,
+              0.653914075,
+              0.6503095499999999
+            ],
+            "median_us": 0.6523474499999999,
+            "min_us": 0.6503095499999999,
+            "max_us": 0.653914075
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.7965304,
+              0.7975269500000001,
+              0.79895695,
+              0.7975671750000001,
+              0.7980531750000001,
+              0.7975239749999999,
+              0.79592045
+            ],
+            "median_us": 0.7975269500000001,
+            "min_us": 0.79592045,
+            "max_us": 0.79895695
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.510468025,
+              5.5077644,
+              5.523732525000001,
+              5.519831975,
+              5.522819475,
+              5.4852283,
+              5.502990025
+            ],
+            "median_us": 5.510468025,
+            "min_us": 5.4852283,
+            "max_us": 5.523732525000001
+          }
+        },
+        "transactional": {
+          "native_get": {
+            "samples_us": [
+              0.612839325,
+              0.61105655,
+              0.612282475,
+              0.6125342,
+              0.611894375,
+              0.612368775,
+              0.6065330999999999
+            ],
+            "median_us": 0.612282475,
+            "min_us": 0.6065330999999999,
+            "max_us": 0.612839325
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.7563660999999999,
+              0.75392965,
+              0.754290325,
+              0.75451965,
+              0.755328675,
+              0.7530213250000001,
+              0.751887125
+            ],
+            "median_us": 0.754290325,
+            "min_us": 0.751887125,
+            "max_us": 0.7563660999999999
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.430932825,
+              5.4198695,
+              5.43271155,
+              5.4440873000000005,
+              5.412544075,
+              5.41134875,
+              5.468273625
+            ],
+            "median_us": 5.430932825,
+            "min_us": 5.41134875,
+            "max_us": 5.468273625
+          }
+        }
+      }
+    },
+    {
+      "pyrex_version": "0.7.0",
+      "pyrex_module": "/tmp/opencode/gestaltdb-pyrex-0.7.0/lib/python3.12/site-packages/pyrex/__init__.py",
+      "pyrex_extension": "/tmp/opencode/gestaltdb-pyrex-0.7.0/lib/python3.12/site-packages/pyrex/_pyrex.cpython-312-x86_64-linux-gnu.so",
+      "gestaltdb_version": "0.16.0",
+      "python": "3.12.3",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+      "affinity": [
+        2
+      ],
+      "nodes": 5000,
+      "reads": 40000,
+      "warmup": 1000,
+      "trials": 7,
+      "serializer": "json",
+      "payload_characters": 100,
+      "scope": "single-thread warmed hits; no flush or cold-cache claim",
+      "results": {
+        "default": {
+          "native_get": {
+            "samples_us": [
+              0.8605095250000001,
+              0.8567721,
+              0.8657644,
+              0.86853265,
+              0.858633075,
+              0.859435175,
+              0.8669489
+            ],
+            "median_us": 0.8605095250000001,
+            "min_us": 0.8567721,
+            "max_us": 0.86853265
+          },
+          "store_get_node": {
+            "samples_us": [
+              1.0122934000000001,
+              1.0164629,
+              1.017249825,
+              1.017447225,
+              1.014896575,
+              1.009930375,
+              1.0164123
+            ],
+            "median_us": 1.0164123,
+            "min_us": 1.009930375,
+            "max_us": 1.017447225
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.8861682,
+              5.85607905,
+              5.8882221,
+              5.865982025,
+              5.902930424999999,
+              5.878426125,
+              5.8928907
+            ],
+            "median_us": 5.8861682,
+            "min_us": 5.85607905,
+            "max_us": 5.902930424999999
+          }
+        },
+        "transactional": {
+          "native_get": {
+            "samples_us": [
+              0.8511879,
+              0.8484683,
+              0.852479275,
+              0.8453661,
+              0.851165925,
+              0.8465653999999999,
+              0.851620575
+            ],
+            "median_us": 0.851165925,
+            "min_us": 0.8453661,
+            "max_us": 0.852479275
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.99208115,
+              0.992067125,
+              0.9955011500000001,
+              0.995429575,
+              0.99500285,
+              0.9899343,
+              0.9922534500000001
+            ],
+            "median_us": 0.9922534500000001,
+            "min_us": 0.9899343,
+            "max_us": 0.9955011500000001
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.872750625,
+              5.866636175,
+              5.8654565000000005,
+              5.834630225,
+              5.813278075,
+              5.810973175,
+              5.82187985
+            ],
+            "median_us": 5.834630225,
+            "min_us": 5.810973175,
+            "max_us": 5.872750625
+          }
+        }
+      }
+    },
+    {
+      "pyrex_version": "0.7.1",
+      "pyrex_module": "/tmp/opencode/gestaltdb-pyrex-0.7.1/lib/python3.12/site-packages/pyrex/__init__.py",
+      "pyrex_extension": "/tmp/opencode/gestaltdb-pyrex-0.7.1/lib/python3.12/site-packages/pyrex/_pyrex.cpython-312-x86_64-linux-gnu.so",
+      "gestaltdb_version": "0.16.0",
+      "python": "3.12.3",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+      "affinity": [
+        2
+      ],
+      "nodes": 5000,
+      "reads": 40000,
+      "warmup": 1000,
+      "trials": 7,
+      "serializer": "json",
+      "payload_characters": 100,
+      "scope": "single-thread warmed hits; no flush or cold-cache claim",
+      "results": {
+        "default": {
+          "native_get": {
+            "samples_us": [
+              0.577930125,
+              0.5774593499999999,
+              0.580267775,
+              0.57651135,
+              0.5762047250000001,
+              0.5752671,
+              0.5760377250000001
+            ],
+            "median_us": 0.57651135,
+            "min_us": 0.5752671,
+            "max_us": 0.580267775
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.716610575,
+              0.71719015,
+              0.7149200499999999,
+              0.715886125,
+              0.716866525,
+              0.712567975,
+              0.71264245
+            ],
+            "median_us": 0.715886125,
+            "min_us": 0.712567975,
+            "max_us": 0.71719015
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.379580925,
+              5.42065455,
+              5.375644125,
+              5.444264175,
+              5.389353,
+              5.349375325,
+              5.340077024999999
+            ],
+            "median_us": 5.379580925,
+            "min_us": 5.340077024999999,
+            "max_us": 5.444264175
+          }
+        },
+        "transactional": {
+          "native_get": {
+            "samples_us": [
+              0.6139924250000001,
+              0.611744725,
+              0.615320925,
+              0.614089475,
+              0.6116589,
+              0.61348645,
+              0.6122549749999999
+            ],
+            "median_us": 0.61348645,
+            "min_us": 0.6116589,
+            "max_us": 0.615320925
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.75331185,
+              0.7552071499999999,
+              0.759114425,
+              0.75432855,
+              0.7557683,
+              0.747375925,
+              0.7509433249999999
+            ],
+            "median_us": 0.75432855,
+            "min_us": 0.747375925,
+            "max_us": 0.759114425
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.6087764,
+              5.422583700000001,
+              5.437571425,
+              5.418278924999999,
+              5.40164625,
+              5.38207445,
+              5.389351
+            ],
+            "median_us": 5.418278924999999,
+            "min_us": 5.38207445,
+            "max_us": 5.6087764
+          }
+        }
+      }
+    },
+    {
+      "pyrex_version": "0.7.1",
+      "pyrex_module": "/tmp/opencode/gestaltdb-pyrex-0.7.1/lib/python3.12/site-packages/pyrex/__init__.py",
+      "pyrex_extension": "/tmp/opencode/gestaltdb-pyrex-0.7.1/lib/python3.12/site-packages/pyrex/_pyrex.cpython-312-x86_64-linux-gnu.so",
+      "gestaltdb_version": "0.16.0",
+      "python": "3.12.3",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+      "affinity": [
+        2
+      ],
+      "nodes": 5000,
+      "reads": 40000,
+      "warmup": 1000,
+      "trials": 7,
+      "serializer": "json",
+      "payload_characters": 100,
+      "scope": "single-thread warmed hits; no flush or cold-cache claim",
+      "results": {
+        "default": {
+          "native_get": {
+            "samples_us": [
+              0.55636685,
+              0.557978975,
+              0.5565182,
+              0.555908575,
+              0.5578182749999999,
+              0.5568175,
+              0.557989125
+            ],
+            "median_us": 0.5568175,
+            "min_us": 0.555908575,
+            "max_us": 0.557989125
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.6939354499999999,
+              0.69596795,
+              0.69506795,
+              0.698009,
+              0.6975253,
+              0.6954560249999999,
+              0.69473405
+            ],
+            "median_us": 0.6954560249999999,
+            "min_us": 0.6939354499999999,
+            "max_us": 0.698009
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.336086,
+              5.33563095,
+              5.3278111500000005,
+              5.33544235,
+              5.2945055000000005,
+              5.314754775,
+              5.30008975
+            ],
+            "median_us": 5.3278111500000005,
+            "min_us": 5.2945055000000005,
+            "max_us": 5.336086
+          }
+        },
+        "transactional": {
+          "native_get": {
+            "samples_us": [
+              0.5835005999999999,
+              0.58392385,
+              0.581824225,
+              0.5826507249999999,
+              0.5845518749999999,
+              0.584123475,
+              0.58375875
+            ],
+            "median_us": 0.58375875,
+            "min_us": 0.581824225,
+            "max_us": 0.5845518749999999
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.7213786,
+              0.72060875,
+              0.71913415,
+              0.7204143249999999,
+              0.7209070000000001,
+              0.72234865,
+              0.722714725
+            ],
+            "median_us": 0.7209070000000001,
+            "min_us": 0.71913415,
+            "max_us": 0.722714725
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.451722,
+              5.460324025,
+              5.6393719,
+              5.464778725,
+              5.451264275000001,
+              5.437588225000001,
+              5.428861950000001
+            ],
+            "median_us": 5.451722,
+            "min_us": 5.428861950000001,
+            "max_us": 5.6393719
+          }
+        }
+      }
+    },
+    {
+      "pyrex_version": "0.7.0",
+      "pyrex_module": "/tmp/opencode/gestaltdb-pyrex-0.7.0/lib/python3.12/site-packages/pyrex/__init__.py",
+      "pyrex_extension": "/tmp/opencode/gestaltdb-pyrex-0.7.0/lib/python3.12/site-packages/pyrex/_pyrex.cpython-312-x86_64-linux-gnu.so",
+      "gestaltdb_version": "0.16.0",
+      "python": "3.12.3",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+      "affinity": [
+        2
+      ],
+      "nodes": 5000,
+      "reads": 40000,
+      "warmup": 1000,
+      "trials": 7,
+      "serializer": "json",
+      "payload_characters": 100,
+      "scope": "single-thread warmed hits; no flush or cold-cache claim",
+      "results": {
+        "default": {
+          "native_get": {
+            "samples_us": [
+              0.8044407,
+              0.801879725,
+              0.8180714,
+              0.8121104,
+              0.806016975,
+              0.806151025,
+              0.805810275
+            ],
+            "median_us": 0.806016975,
+            "min_us": 0.801879725,
+            "max_us": 0.8180714
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.960537125,
+              0.95748805,
+              0.970796375,
+              0.968041575,
+              0.967661075,
+              0.9583148,
+              0.96065935
+            ],
+            "median_us": 0.96065935,
+            "min_us": 0.95748805,
+            "max_us": 0.970796375
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.702635325,
+              5.6989923,
+              5.688044075,
+              5.69088145,
+              5.710024424999999,
+              5.691392325,
+              5.823939875
+            ],
+            "median_us": 5.6989923,
+            "min_us": 5.688044075,
+            "max_us": 5.823939875
+          }
+        },
+        "transactional": {
+          "native_get": {
+            "samples_us": [
+              0.8369477000000001,
+              0.838883125,
+              0.83932975,
+              0.8317335,
+              0.83533755,
+              0.8332297750000001,
+              0.831770075
+            ],
+            "median_us": 0.83533755,
+            "min_us": 0.8317335,
+            "max_us": 0.83932975
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.983565475,
+              0.982277475,
+              0.9852199,
+              0.977813425,
+              0.9780780250000001,
+              0.9754227,
+              0.9742082249999999
+            ],
+            "median_us": 0.9780780250000001,
+            "min_us": 0.9742082249999999,
+            "max_us": 0.9852199
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.7708675750000005,
+              5.770237325,
+              5.773351725,
+              5.775395275,
+              5.731165949999999,
+              5.717696275000001,
+              5.72072595
+            ],
+            "median_us": 5.770237325,
+            "min_us": 5.717696275000001,
+            "max_us": 5.775395275
+          }
+        }
+      }
+    },
+    {
+      "pyrex_version": "0.4.1",
+      "pyrex_module": "/tmp/opencode/gestaltdb-pyrex-0.4.1/lib/python3.12/site-packages/pyrex/__init__.py",
+      "pyrex_extension": "/tmp/opencode/gestaltdb-pyrex-0.4.1/lib/python3.12/site-packages/pyrex/_pyrex.cpython-312-x86_64-linux-gnu.so",
+      "gestaltdb_version": "0.16.0",
+      "python": "3.12.3",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+      "affinity": [
+        2
+      ],
+      "nodes": 5000,
+      "reads": 40000,
+      "warmup": 1000,
+      "trials": 7,
+      "serializer": "json",
+      "payload_characters": 100,
+      "scope": "single-thread warmed hits; no flush or cold-cache claim",
+      "results": {
+        "default": {
+          "native_get": {
+            "samples_us": [
+              0.6637086249999999,
+              0.6750459,
+              0.68286235,
+              0.68677045,
+              0.6802012,
+              0.6827693,
+              0.679219475
+            ],
+            "median_us": 0.6802012,
+            "min_us": 0.6637086249999999,
+            "max_us": 0.68677045
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.80445345,
+              0.871571375,
+              0.8231615000000001,
+              0.82337375,
+              0.8251364250000001,
+              0.8420405,
+              0.82119245
+            ],
+            "median_us": 0.82337375,
+            "min_us": 0.80445345,
+            "max_us": 0.871571375
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.687694499999999,
+              5.88037035,
+              5.6325316999999995,
+              5.59644145,
+              5.894863725,
+              5.8175460249999995,
+              5.595143975
+            ],
+            "median_us": 5.687694499999999,
+            "min_us": 5.595143975,
+            "max_us": 5.894863725
+          }
+        },
+        "transactional": {
+          "native_get": {
+            "samples_us": [
+              0.667016475,
+              0.662702375,
+              0.66464705,
+              0.663768775,
+              0.66923005,
+              0.6689733,
+              0.6672418
+            ],
+            "median_us": 0.667016475,
+            "min_us": 0.662702375,
+            "max_us": 0.66923005
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.8057281749999999,
+              0.8080060499999999,
+              0.8072325499999999,
+              0.801628425,
+              0.805305425,
+              0.8026238,
+              0.8011698249999999
+            ],
+            "median_us": 0.805305425,
+            "min_us": 0.8011698249999999,
+            "max_us": 0.8080060499999999
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.618572075,
+              5.6319565,
+              5.627410475,
+              5.6268933,
+              5.614567875,
+              5.589040450000001,
+              5.56951615
+            ],
+            "median_us": 5.618572075,
+            "min_us": 5.56951615,
+            "max_us": 5.6319565
+          }
+        }
+      }
+    },
+    {
+      "pyrex_version": "0.7.0",
+      "pyrex_module": "/tmp/opencode/gestaltdb-pyrex-0.7.0/lib/python3.12/site-packages/pyrex/__init__.py",
+      "pyrex_extension": "/tmp/opencode/gestaltdb-pyrex-0.7.0/lib/python3.12/site-packages/pyrex/_pyrex.cpython-312-x86_64-linux-gnu.so",
+      "gestaltdb_version": "0.16.0",
+      "python": "3.12.3",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+      "affinity": [
+        2
+      ],
+      "nodes": 5000,
+      "reads": 40000,
+      "warmup": 1000,
+      "trials": 7,
+      "serializer": "json",
+      "payload_characters": 100,
+      "scope": "single-thread warmed hits; no flush or cold-cache claim",
+      "results": {
+        "default": {
+          "native_get": {
+            "samples_us": [
+              0.802141875,
+              0.808032075,
+              0.816778675,
+              0.80754375,
+              0.8113518000000001,
+              0.8140348249999999,
+              0.809576575
+            ],
+            "median_us": 0.809576575,
+            "min_us": 0.802141875,
+            "max_us": 0.816778675
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.939846175,
+              0.9441359250000001,
+              0.95666995,
+              0.9395372999999999,
+              0.9412810500000001,
+              0.947336475,
+              0.9496483
+            ],
+            "median_us": 0.9441359250000001,
+            "min_us": 0.9395372999999999,
+            "max_us": 0.95666995
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.994944749999999,
+              5.659269500000001,
+              5.663577125,
+              5.685947725,
+              5.758095825000001,
+              5.692118225,
+              5.6860266
+            ],
+            "median_us": 5.6860266,
+            "min_us": 5.659269500000001,
+            "max_us": 5.994944749999999
+          }
+        },
+        "transactional": {
+          "native_get": {
+            "samples_us": [
+              0.829962625,
+              0.85929135,
+              0.821958975,
+              0.8288655250000001,
+              0.82375055,
+              0.8252465999999999,
+              0.827984775
+            ],
+            "median_us": 0.827984775,
+            "min_us": 0.821958975,
+            "max_us": 0.85929135
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.981464325,
+              0.965769275,
+              0.9722291000000001,
+              0.9678553000000001,
+              0.969310025,
+              0.96865465,
+              0.968722325
+            ],
+            "median_us": 0.968722325,
+            "min_us": 0.965769275,
+            "max_us": 0.981464325
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.78536005,
+              5.816998525,
+              5.71543185,
+              5.824299575,
+              5.715067625,
+              5.670734599999999,
+              5.684369074999999
+            ],
+            "median_us": 5.71543185,
+            "min_us": 5.670734599999999,
+            "max_us": 5.824299575
+          }
+        }
+      }
+    },
+    {
+      "pyrex_version": "0.7.1",
+      "pyrex_module": "/tmp/opencode/gestaltdb-pyrex-0.7.1/lib/python3.12/site-packages/pyrex/__init__.py",
+      "pyrex_extension": "/tmp/opencode/gestaltdb-pyrex-0.7.1/lib/python3.12/site-packages/pyrex/_pyrex.cpython-312-x86_64-linux-gnu.so",
+      "gestaltdb_version": "0.16.0",
+      "python": "3.12.3",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+      "affinity": [
+        2
+      ],
+      "nodes": 5000,
+      "reads": 40000,
+      "warmup": 1000,
+      "trials": 7,
+      "serializer": "json",
+      "payload_characters": 100,
+      "scope": "single-thread warmed hits; no flush or cold-cache claim",
+      "results": {
+        "default": {
+          "native_get": {
+            "samples_us": [
+              0.549967,
+              0.54752765,
+              0.5484199999999999,
+              0.547378275,
+              0.548860425,
+              0.5474177,
+              0.5507657
+            ],
+            "median_us": 0.5484199999999999,
+            "min_us": 0.547378275,
+            "max_us": 0.5507657
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.685469825,
+              0.69054015,
+              0.68942925,
+              0.689824125,
+              0.686747,
+              0.690055675,
+              0.6875817
+            ],
+            "median_us": 0.68942925,
+            "min_us": 0.685469825,
+            "max_us": 0.69054015
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.38219895,
+              5.373866775000001,
+              5.383602925,
+              5.37514015,
+              5.3759087,
+              5.3986397749999995,
+              5.3873106250000005
+            ],
+            "median_us": 5.38219895,
+            "min_us": 5.373866775000001,
+            "max_us": 5.3986397749999995
+          }
+        },
+        "transactional": {
+          "native_get": {
+            "samples_us": [
+              0.551232025,
+              0.5511067749999999,
+              0.5502253500000001,
+              0.549406425,
+              0.550308225,
+              0.552382425,
+              0.5507435
+            ],
+            "median_us": 0.5507435,
+            "min_us": 0.549406425,
+            "max_us": 0.552382425
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.6890701,
+              0.6916049000000001,
+              0.69063595,
+              0.6897586250000001,
+              0.6917418750000001,
+              0.689797575,
+              0.687724675
+            ],
+            "median_us": 0.689797575,
+            "min_us": 0.687724675,
+            "max_us": 0.6917418750000001
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.470242375,
+              5.4632577499999995,
+              5.453178875,
+              5.46583805,
+              5.4274311,
+              5.429501825,
+              5.4190427
+            ],
+            "median_us": 5.453178875,
+            "min_us": 5.4190427,
+            "max_us": 5.470242375
+          }
+        }
+      }
+    },
+    {
+      "pyrex_version": "0.4.1",
+      "pyrex_module": "/tmp/opencode/gestaltdb-pyrex-0.4.1/lib/python3.12/site-packages/pyrex/__init__.py",
+      "pyrex_extension": "/tmp/opencode/gestaltdb-pyrex-0.4.1/lib/python3.12/site-packages/pyrex/_pyrex.cpython-312-x86_64-linux-gnu.so",
+      "gestaltdb_version": "0.16.0",
+      "python": "3.12.3",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+      "affinity": [
+        2
+      ],
+      "nodes": 5000,
+      "reads": 40000,
+      "warmup": 1000,
+      "trials": 7,
+      "serializer": "json",
+      "payload_characters": 100,
+      "scope": "single-thread warmed hits; no flush or cold-cache claim",
+      "results": {
+        "default": {
+          "native_get": {
+            "samples_us": [
+              0.679772,
+              0.67713945,
+              0.676641575,
+              0.6775058,
+              0.6776907750000001,
+              0.677159975,
+              0.6786099
+            ],
+            "median_us": 0.6775058,
+            "min_us": 0.676641575,
+            "max_us": 0.679772
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.82773695,
+              0.8254908000000001,
+              0.8229407,
+              0.8238771,
+              0.825039,
+              0.82446065,
+              0.824737175
+            ],
+            "median_us": 0.824737175,
+            "min_us": 0.8229407,
+            "max_us": 0.82773695
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.612105625,
+              5.579298875,
+              5.59939065,
+              5.58472575,
+              5.608804675,
+              5.600020375,
+              5.608765225
+            ],
+            "median_us": 5.600020375,
+            "min_us": 5.579298875,
+            "max_us": 5.612105625
+          }
+        },
+        "transactional": {
+          "native_get": {
+            "samples_us": [
+              0.6425273,
+              0.6478556999999999,
+              0.6416570749999999,
+              0.6450895249999999,
+              0.645800775,
+              0.641897975,
+              0.643789925
+            ],
+            "median_us": 0.643789925,
+            "min_us": 0.6416570749999999,
+            "max_us": 0.6478556999999999
+          },
+          "store_get_node": {
+            "samples_us": [
+              0.78759145,
+              0.789218125,
+              0.7886144500000001,
+              0.812745,
+              0.788893175,
+              0.786532075,
+              0.7827950499999999
+            ],
+            "median_us": 0.7886144500000001,
+            "min_us": 0.7827950499999999,
+            "max_us": 0.812745
+          },
+          "graph_get_node": {
+            "samples_us": [
+              5.594076075,
+              5.571305325,
+              5.59527125,
+              5.5629301,
+              5.6227481500000005,
+              5.543957825000001,
+              5.5393607000000005
+            ],
+            "median_us": 5.571305325,
+            "min_us": 5.5393607000000005,
+            "max_us": 5.6227481500000005
+          }
+        }
+      }
+    }
+  ]
+}

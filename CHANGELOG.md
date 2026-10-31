@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Raised the PyRex dependency floor to 0.7.1 across all RocksDB-containing
+  extras and refreshed the lockfile after verified PyPI publication (#439).
+  Added a repeatable native/adapter/decoded read benchmark and recorded its
+  complete samples: warmed decoded reads improved 5.6% (default) / 5.5%
+  (transactional) versus 0.7.0, recovering the 0.4.1 baseline in this workload.
+  These are warmed-hit measurements, not cold-cache or whole-query guarantees.
 - Added optional NetworkX import/export and static GEXF 1.1draft/1.2draft
   loading (#437), including parallel-edge preservation, explicit ID/label/type
   mappings, opt-in undirected expansion, hardened bounded XML parsing, and

@@ -248,7 +248,14 @@ PyRex Point-Read Regression
 The PyRex 0.7.0 regression tracked in
 `GestaltDB #439 <https://github.com/mylonasc/gestaltdb/issues/439>`_ was fixed
 upstream in `PyRex PR #37 <https://github.com/mylonasc/pyrex/pull/37>`_
-(commit ``f54fa4b04743dc3c1828a55016f88fe2bd5f2526``), intended for 0.7.1.
+(commit ``f54fa4b04743dc3c1828a55016f88fe2bd5f2526``), released in
+`PyRex 0.7.1 <https://pypi.org/project/pyrex-rocksdb/0.7.1/>`_ on 2026-10-31.
+All RocksDB-containing extras now require ``pyrex-rocksdb>=0.7.1`` and the
+lockfile selects 0.7.1. The
+`publication run <https://github.com/mylonasc/pyrex/actions/runs/41210846573>`_
+passed all 13 wheel-test jobs and strict Twine checks. Its guarded recovery
+reused original tag-built wheels after a macOS 14 runner brownout; the
+release tag was not moved and macOS tests passed on macOS 15.
 The original GestaltDB decoded ``GraphDB.get_node()`` comparison measured
 4.046 to 4.358 microseconds/read (+7.7%) for default PyRex, and 4.084 to
 4.317 microseconds/read (+5.7%) for transactional PyRex, comparing 0.4.1
@@ -280,6 +287,62 @@ certification. Misses remained variable and not all explicit-options/CF
 paths recovered the historical baseline. See the
 `upstream benchmark report <https://github.com/mylonasc/pyrex/blob/f54fa4b04743dc3c1828a55016f88fe2bd5f2526/benchmarks/point_reads.md>`_
 for distributions, methodology, and limitations.
+
+Downstream published-wheel validation (2026-10-31)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The downstream probe below independently reproduced the ordinary-hit recovery
+using released cp312 manylinux x86_64 wheels. The 0.7.1 artifact's SHA-256
+was verified against PyPI. Results are microseconds/read, median of three
+fresh-process medians (seven samples per process):
+
+.. list-table:: Warmed point reads over identical stored JSON nodes
+   :header-rows: 1
+
+   * - Mode / layer
+     - 0.4.1
+     - 0.7.0
+     - 0.7.1
+   * - Default / native
+     - 0.678
+     - 0.810
+     - 0.557
+   * - Default / store adapter
+     - 0.823
+     - 0.961
+     - 0.695
+   * - Default / decoded graph
+     - 5.600
+     - 5.699
+     - 5.380
+   * - Transactional / native
+     - 0.644
+     - 0.835
+     - 0.584
+   * - Transactional / store adapter
+     - 0.789
+     - 0.978
+     - 0.721
+   * - Transactional / decoded graph
+     - 5.571
+     - 5.770
+     - 5.452
+
+Decoded graph reads improved **5.6% / 5.5%** over 0.7.0 (default /
+transactional), and **3.9% / 2.1%** over 0.4.1; native reads improved
+31.2% / 30.1% over 0.7.0. This supports recovery for the measured warmed-hit
+workload, not all access patterns. The absolute decoded times differ from
+the original report because this uses the current GestaltDB 0.16.0 code and
+a newly specified workload; do not compare them as a library-version speedup.
+
+Environment: Linux x86_64, Intel i7-13700F, CPython 3.12.3, CPU 2 pinned;
+5,000 16-byte node IDs, 100-character payload property, JSON serialization,
+1,000 warmups and 40,000 reads/sample. Version order alternated across
+processes; no other local tests/builds ran concurrently. Published wheels
+can differ in compiler/build configuration, so this is an installed-runtime
+comparison, not identical-toolchain code attribution. Complete samples,
+process medians, version order and wheel hashes are retained in
+``benchmarks/results/pyrex-point-reads-20261031.json``.
 
 Repeatable downstream measurement
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
