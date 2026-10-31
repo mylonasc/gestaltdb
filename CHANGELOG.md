@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Hardened typed explanations (#392): require complete grounded filter/absence
+  evidence, exact program rule definitions and closed scopes, consistent
+  aggregate metadata, and reject absence contradicted by retained or full
+  closure facts. Result proof validation now indexes the closure once instead
+  of rebuilding its fact set for every proof edge; documented the supported
+  bounded first-witness API and freshness requirements.
 - Hardened structural validation (#394): complete versioned JSON constraint
   identifiers replace ambiguous colon-joined labels, class-scoped violations
   retain membership evidence, tied reports sort deterministically, and

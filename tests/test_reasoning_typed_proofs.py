@@ -1,5 +1,7 @@
 """#392 derivation tracking for typed reasoning."""
 
+from dataclasses import replace
+
 import pytest
 
 from gestaltdb.reasoning.model import ReasoningError, ReasoningLimits, Variable
@@ -210,3 +212,153 @@ assert result.proofs.explain(TypedFact('q', ['a'])).nodes
 assert not any(name.startswith(('gestaltdb', 'numpy')) for name in sys.modules)
 """
     subprocess.run([sys.executable, "-I", "-S", "-c", script], check=True, capture_output=True, text=True)
+
+
+@pytest.mark.parametrize("mode", ["missing", "unrelated", "ungrounded"])
+def test_comparison_evidence_must_match_every_rule_filter(mode):
+    rule = GenericRule("adult", [TypedAtom("age", [X, Y])],
+                       [Comparison(">=", Y, Literal("integer", 18))], TypedAtom("adult", [X]))
+    result = GenericEngine().evaluate(GenericProgram([rule]),
+        [TypedFact("age", ["a", Literal("integer", 30)])], limits=LIMITS, collect_proofs=True)
+    node = result.proofs._by_fact[TypedFact("adult", ["a"])]
+    checks = {"missing": (),
+              "unrelated": (Comparison("==", Literal("integer", 1), Literal("integer", 1)),),
+              "ungrounded": rule.filters}[mode]
+    with pytest.raises(ReasoningError, match="comparison"):
+        replace(node, comparisons=checks)
+
+
+@pytest.mark.parametrize("mode", ["missing", "duplicate", "wrong-scope"])
+def test_absence_evidence_must_cover_each_rule_negation(mode):
+    rule = GenericRule("ok", [TypedAtom("person", [X])], [], TypedAtom("ok", [X]),
+                       negated=[TypedAtom("banned", [X]), TypedAtom("suspended", [X])])
+    program = GenericProgram([rule], closed=["banned", "suspended"])
+    run = GenericEngine().evaluate_stratified(program, [TypedFact("person", ["a"])],
+                                             limits=LIMITS, collect_proofs=True)
+    node = run.proofs._by_fact[TypedFact("ok", ["a"])]
+    checks = {"missing": node.absence[:1],
+              "duplicate": (node.absence[0], node.absence[0]),
+              "wrong-scope": (replace(node.absence[0], scope=("unrelated",)), node.absence[1])}
+    with pytest.raises(ReasoningError, match="absence"):
+        replace(node, absence=checks[mode])
+
+
+def test_trace_rejects_same_id_with_a_different_rule_definition():
+    original = GenericRule("r", [TypedAtom("p", [X])], [], TypedAtom("q", [X]))
+    program = GenericProgram([original])
+    result = GenericEngine().evaluate(program, [TypedFact("p", ["a"])],
+                                      limits=LIMITS, collect_proofs=True)
+    impostor = GenericRule("r", [TypedAtom("p", [X])], [], TypedAtom("other", [X]))
+    forged = TypedFactWitness(TypedFact("other", ["a"]), impostor, (TypedFact("p", ["a"]),))
+    with pytest.raises(ReasoningError, match="rule"):
+        replace(result.proofs, nodes=(*[n for n in result.proofs.nodes if n.rule is None], forged))
+
+
+def test_trace_rejects_absence_scope_different_from_program():
+    rule = GenericRule("ok", [TypedAtom("person", [X])], [], TypedAtom("ok", [X]),
+                       negated=[TypedAtom("banned", [X])])
+    program = GenericProgram([rule], closed=["banned", "suspended"])
+    run = GenericEngine().evaluate_stratified(program, [TypedFact("person", ["a"])],
+                                             limits=LIMITS, collect_proofs=True)
+    node = run.proofs._by_fact[TypedFact("ok", ["a"])]
+    changed = replace(node, absence=(replace(node.absence[0], scope=("banned",)),))
+    with pytest.raises(ReasoningError, match="scope"):
+        replace(run.proofs, nodes=(*[n for n in run.proofs.nodes if n.rule is None], changed))
+
+
+def test_trace_rejects_absence_contradicted_by_retained_fact():
+    rule = GenericRule("ok", [TypedAtom("person", [X])], [], TypedAtom("ok", [X]),
+                       negated=[TypedAtom("banned", [X])])
+    program = GenericProgram([rule], closed=["banned"])
+    run = GenericEngine().evaluate_stratified(program, [TypedFact("person", ["a"])],
+                                             limits=LIMITS, collect_proofs=True)
+    blocker = TypedFactWitness(TypedFact("banned", ["a"]), None)
+    with pytest.raises(ReasoningError, match="absence"):
+        replace(run.proofs, nodes=(*run.proofs.nodes, blocker), truncated=True)
+
+
+def test_aggregate_metadata_must_match_the_rule():
+    rule = AggregateRule("cnt", [TypedAtom("edge", [X, Y])], (X,),
+                         (Aggregation("count", Y, N),), TypedAtom("deg", [X, N]))
+    result = GenericEngine().evaluate(GenericProgram([], aggregates=[rule]),
+        [TypedFact("edge", ["a", "x"])], limits=LIMITS, collect_proofs=True)
+    node = result.proofs._by_fact[TypedFact("deg", ["a", Literal("integer", 1)])]
+    with pytest.raises(ReasoningError, match="aggregate"):
+        replace(node, aggregates=(replace(node.aggregates[0], op="sum"),))
+
+
+@pytest.mark.parametrize("stratified", [False, True])
+def test_proof_validation_does_not_rebuild_closure_set_per_membership(monkeypatch, stratified):
+    def costly_contains(*args):
+        pytest.fail("proof validation must index the closure once, not call __contains__ per edge")
+
+    monkeypatch.setattr(GenericResult, "__contains__", costly_contains)
+    engine = GenericEngine()
+    evaluate = engine.evaluate_stratified if stratified else engine.evaluate
+    result = evaluate(parent_program(), [TypedFact("parent", ["a", "b"])],
+                      limits=LIMITS, collect_proofs=True)
+    assert result.proofs is not None
+
+
+@pytest.mark.parametrize("stratified", [False, True])
+def test_truncated_proof_absence_is_checked_against_the_full_result(stratified):
+    rule = GenericRule("ok", [TypedAtom("person", [X])], [], TypedAtom("ok", [X]),
+                       negated=[TypedAtom("banned", [X])])
+    program = GenericProgram([rule], closed=["banned"])
+    run = GenericEngine().evaluate_stratified(program, [TypedFact("person", ["a"])],
+                                             limits=LIMITS, collect_proofs=True)
+    trace = replace(run.proofs, truncated=True)
+    facts = (*run.result.facts, TypedFact("banned", ["a"]))
+    with pytest.raises(ReasoningError, match="absence"):
+        if stratified:
+            replace(run, result=replace(run.result, facts=facts), proofs=trace)
+        else:
+            replace(run.result, facts=facts, proofs=trace)
+
+
+@pytest.mark.parametrize("stratified", [False, True])
+@pytest.mark.parametrize("max_edges", [1, 2, 3])
+def test_edge_budgets_preserve_closure_with_filtered_derivations(stratified, max_edges):
+    rule = GenericRule("adult", [TypedAtom("age", [X, Y])],
+                       [Comparison(">=", Y, Literal("integer", 18))], TypedAtom("adult", [X]))
+    program = GenericProgram([rule])
+    facts = [TypedFact("age", ["a", Literal("integer", 30)])]
+    engine = GenericEngine()
+    evaluate = engine.evaluate_stratified if stratified else engine.evaluate
+    full = evaluate(program, facts, limits=LIMITS)
+    partial = evaluate(program, facts, limits=ReasoningLimits(max_proof_edges=max_edges),
+                       collect_proofs=True)
+    assert (partial.result.facts if stratified else partial.facts) == (
+        full.result.facts if stratified else full.facts)
+    assert partial.proofs.truncated == (max_edges < 2)
+
+
+@pytest.mark.parametrize("mode", ["missing", "duplicate", "group", "operands", "extra-filter"])
+def test_aggregate_evidence_covers_one_consistent_group(mode):
+    total = Variable("total")
+    rule = AggregateRule("stats", [TypedAtom("value", [X, Y])], (X,),
+                         (Aggregation("count", Y, N), Aggregation("sum", Y, total)),
+                         TypedAtom("stats", [X, N, total]))
+    fact = TypedFact("value", ["a", Literal("integer", 3)])
+    result = GenericEngine().evaluate(GenericProgram([], aggregates=[rule]), [fact],
+                                      limits=LIMITS, collect_proofs=True)
+    node = result.proofs._by_fact[TypedFact("stats", ["a", Literal("integer", 1), Literal("integer", 3)])]
+    changes = {
+        "missing": {"aggregates": node.aggregates[:1]},
+        "duplicate": {"aggregates": (node.aggregates[0], node.aggregates[0])},
+        "group": {"aggregates": (node.aggregates[0], replace(node.aggregates[1], group=("b",)))},
+        "operands": {"aggregates": (node.aggregates[0], replace(node.aggregates[1], operands=(
+            TypedFact("value", ["b", Literal("integer", 3)]),)))},
+        "extra-filter": {"comparisons": (Comparison("==", Literal("integer", 1), Literal("integer", 1)),)},
+    }
+    with pytest.raises(ReasoningError, match="aggregate"):
+        replace(node, **changes[mode])
+
+
+def test_program_change_invalidates_the_trace_even_with_unchanged_inputs():
+    facts = [TypedFact("parent", ["a", "b"])]
+    program = parent_program()
+    result = GenericEngine().evaluate(program, facts, limits=LIMITS, collect_proofs=True)
+    changed = GenericProgram([replace(program.rules[0], head=TypedAtom("other", [Y]))])
+    assert not result.proofs.is_current_for(changed, facts)
+    assert result.proofs.is_current_for(program, facts)

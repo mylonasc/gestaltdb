@@ -17,6 +17,27 @@ if TYPE_CHECKING:
     from .typed_proofs import TypedProofTrace
 
 
+def _validate_proofs(proofs: TypedProofTrace, facts: tuple[TypedFact, ...], program_digest: str) -> None:
+    """Validate retained evidence using one closure index, including truncated traces."""
+    from .typed import TypedFact
+    from .typed_proofs import TypedProofTrace
+
+    if not isinstance(proofs, TypedProofTrace):
+        raise ReasoningError("proofs must be a TypedProofTrace or None")
+    if proofs.program.digest != program_digest:
+        raise ReasoningError("proof program does not match the result")
+    known = set(facts)
+    for node in proofs.nodes:
+        if (node.fact not in known or any(premise not in known for premise in node.premises)
+                or any(operand not in known for derivation in node.aggregates
+                       for operand in derivation.operands)):
+            raise ReasoningError("proof facts must belong to the result closure")
+        if any(TypedFact(probe.predicate, probe.args) in known for probe in node.absence):
+            raise ReasoningError("absence check is contradicted by the result closure")
+    if not proofs.truncated and len(proofs.nodes) != len(known):
+        raise ReasoningError("untruncated proofs must cover the result closure")
+
+
 @dataclass(frozen=True)
 class GenericResult:
     """Complete closure in canonical order; evaluators never return partial runs."""
@@ -38,19 +59,7 @@ class GenericResult:
         _text(self.program_digest, "program_digest")
         object.__setattr__(self, "facts", tuple(sorted(set(self.facts), key=_sort_key)))
         if self.proofs is not None:
-            from .typed_proofs import TypedProofTrace
-
-            if not isinstance(self.proofs, TypedProofTrace):
-                raise ReasoningError("proofs must be a TypedProofTrace or None")
-            if self.proofs.program.digest != self.program_digest:
-                raise ReasoningError("proof program does not match the result")
-            if any(node.fact not in self or any(premise not in self for premise in node.premises)
-                   or any(operand not in self for derivation in node.aggregates
-                          for operand in derivation.operands)
-                   for node in self.proofs.nodes):
-                raise ReasoningError("proof facts must belong to the result closure")
-            if not self.proofs.truncated and len(self.proofs.nodes) != len(self.facts):
-                raise ReasoningError("untruncated proofs must cover the result closure")
+            _validate_proofs(self.proofs, self.facts, self.program_digest)
 
     def __contains__(self, fact: object) -> bool:
         from .typed import TypedFact
@@ -132,16 +141,4 @@ class StratifiedRun:
         if not isinstance(self.truncated, bool):
             raise ReasoningError("truncated must be a bool")
         if self.proofs is not None:
-            from .typed_proofs import TypedProofTrace
-
-            if not isinstance(self.proofs, TypedProofTrace):
-                raise ReasoningError("proofs must be a TypedProofTrace or None")
-            if self.proofs.program.digest != self.result.program_digest:
-                raise ReasoningError("proof program does not match the result")
-            if any(node.fact not in self.result or any(premise not in self.result for premise in node.premises)
-                   or any(operand not in self.result for derivation in node.aggregates
-                          for operand in derivation.operands)
-                   for node in self.proofs.nodes):
-                raise ReasoningError("proof facts must belong to the result closure")
-            if not self.proofs.truncated and len(self.proofs.nodes) != len(self.result.facts):
-                raise ReasoningError("untruncated proofs must cover the result closure")
+            _validate_proofs(self.proofs, self.result.facts, self.result.program_digest)
