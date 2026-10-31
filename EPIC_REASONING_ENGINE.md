@@ -1,5 +1,25 @@
 # Reasoning engine roadmap — reviewed against `onto-dev`
 
+## Current disposition (2026-11-01)
+
+The RE-01–RE-27 slices and all five phase epics (#157–#161) are closed and
+included in the released v0.16.0 line. The original branch, candidate and
+release instructions below are **historical**; do not use them to schedule work
+or infer permission to publish another release. #156 is a completed roadmap,
+not a promise of full OWL, probabilistic rules or a native executor. Optional
+native extraction #194 remains an independent follow-up.
+
+The later composability program #391 (typed explanations, structural validation,
+selected temporal negation/aggregates, inferred queries and graph-to-fact
+mappings) has shipped within its documented fragments; see
+`EPIC_ONTOLOGY_EXTENSIONS_251026.md` for the outcome and non-goals. Other work
+is tracked on its own issues, including #388 (remaining service coupling), #410
+(typing), #106 (sampling options) and #409 (CDM application work). Historical
+audit snapshots in `planning/reasoning-engine/` are evidence for their dated
+revisions, not live status tables; recheck GitHub before acting on them.
+
+## Historical planning record
+
 Review date: 2026-10-20. Baseline: `onto-dev` / `origin/onto-dev` at
 `c71f0433fc40251b7dcec08b60370e80b40d36d8` (completed #131).
 Planning/integration branch: **`feature/onto-dev-epic-2`**, inherited from that

@@ -1,7 +1,27 @@
 # Ontology extensions: composable typed, temporal and structural reasoning
 
+## Delivery disposition (2026-11-01)
+
+The five #391 enhancements are implemented on `main` and included in the
+v0.16.0 release, within deliberately bounded fragments:
+
+| Issue | Delivered scope | Boundary |
+| --- | --- | --- |
+| #392 | Optional generation-bound typed first-witness traces (including comparisons, scoped absence and aggregate operands); acceptance hardening in #449 | Reevaluate after support changes; not automatic all-support maintenance or independent proof certification. |
+| #393 | Change-segment range closure with scoped stratified negation and nonrecursive aggregates; update/rematerialization, point/range verification and bounded/truncated evidence | Supported combinations only; no arbitrary recursive aggregates or unrestricted temporal absence. See `docs/reasoning-temporal.rst`. |
+| #394 | Bounded read-only structural validation, including class-scoped cardinality and datatype/choice checks; acceptance hardening in #448 | Completeness is explicitly selected; not full SHACL. |
+| #395 | Opt-in generation-pinned asserted/inferred read-only Cypher projection | Supported node and one-hop logical patterns only; no implicit change to ordinary Cypher or physical-edge multiplicity. |
+| #396 | Explicit typed graph mappings for supported attributes, collection expansion, n-ary edges and canonical identity/evidence; collision hardening in #408 | Legacy `GraphMapping` remains separate; collision merging requires explicit opt-in and does not imply `sameAs`. |
+
+The proposal analysis below describes **gaps at the 0.14.0rc1 baseline**, not
+current missing features. Future CDM workflows (#409) and tutorial publication
+(#273) are separate from completion of these five library enhancements.
+
+## Historical proposal analysis (2026-10-26)
+
 Review date: 2026-10-26. Parent epic:
-[#391](https://github.com/mylonasc/gestaltdb/issues/391) (open). This file
+[#391](https://github.com/mylonasc/gestaltdb/issues/391) (open at this review;
+closed after v0.16.0 reconciliation). This file
 records the proposal context plus the support/effort analysis performed
 against `main` at `0.14.0rc1`. It complements, and does not replace,
 `EPIC_REASONING_ENGINE.md`, whose RE-01…RE-27 index is closed and

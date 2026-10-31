@@ -1,5 +1,10 @@
 # Reasoning testing-release readiness
 
+> Historical rc1/release-readiness evidence (last reviewed 2026-10-25), not a
+> live blocker list. #370/#371 and the phase epics later closed; v0.16.0 is
+> released. Consult current GitHub issues and `EPIC_REASONING_ENGINE.md` for
+> current scope. Preserve the dated checklists below for audit, not execution.
+
 Priority: ship a bounded, honest reasoning milestone for external testing soon,
 not the entire enhancement backlog. Parent: #156; policy:
 [`EPIC_REASONING_ENGINE.md`](../../EPIC_REASONING_ENGINE.md).

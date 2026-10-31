@@ -1,5 +1,10 @@
 # Next release candidate — #385
 
+> Historical preparation snapshot: PR #386 subsequently merged into `main`;
+> the package has since shipped through v0.16.0. The unchecked candidate gates
+> and old branch/version recommendations below are not current release tasks.
+> #385 was reconciled and closed as superseded on 2026-11-01.
+
 Preparation branch: `release/reasoning-next-candidate`.
 Inputs: integration `b5d21bd` and main `72e320f`. Main integrated without
 conflicts; its retired `ONTO-EPIC.md` deletion and replacement references remain.

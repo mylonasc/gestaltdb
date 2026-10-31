@@ -1,5 +1,19 @@
 # GraphDB Refactoring Epic (#388)
 
+## Current disposition (2026-11-01)
+
+The initial extraction and scope-owned temporal, epistemic, rules, current
+repository, index, ingestion, traversal and lookup services are released in
+v0.16.0; see `docs/architecture.rst` and `AGENTS.md` for their current APIs.
+The original branch/line counts and progress log below are historical. #388
+remains open for concrete residual coupling (legacy adjacency/BFS and update
+composition, key/serializer helpers, and GraphDB's query, visualization,
+transaction, current-read-view, sampler-build and close orchestration). Close it
+only against explicit boundary tests and the issue's remaining acceptance, not
+because the facade shrank. Avoid reverting the already shipped service APIs.
+
+## Historical implementation plan
+
 Tracking issue: https://github.com/mylonasc/gestaltdb/issues/388
 Branch: `feature/graphdb-refactor-388`
 Base: `release/reasoning-next-candidate` at `4bcd071`
