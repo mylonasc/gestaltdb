@@ -243,7 +243,7 @@ shape:
       --output-dir benchmark_results/transactions_rocksdb_YYYYMMDD
 
 PyRex Point-Read Regression
---------------------------
+----------------------------------------
 
 The PyRex 0.7.0 regression tracked in
 `GestaltDB #439 <https://github.com/mylonasc/gestaltdb/issues/439>`_ was fixed
@@ -282,7 +282,7 @@ paths recovered the historical baseline. See the
 for distributions, methodology, and limitations.
 
 Repeatable downstream measurement
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``benchmarks.pyrex_point_reads`` isolates native ``db.get``, serialized
 ``PyRexStore.get_node`` and decoded ``GraphDB.get_node`` over the same

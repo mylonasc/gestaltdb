@@ -42,6 +42,8 @@ def _measure(nodes, reads, warmup, trials):
     report = {
         "pyrex_version": importlib.metadata.version("pyrex-rocksdb"),
         "pyrex_module": pyrex.__file__,
+        "pyrex_extension": pyrex._pyrex.__file__,
+        "gestaltdb_version": importlib.metadata.version("gestaltdb"),
         "python": platform.python_version(),
         "platform": platform.platform(),
         "affinity": sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
@@ -70,7 +72,9 @@ def _measure(nodes, reads, warmup, trials):
                 }
                 for key, raw_key in zip(keys, raw_keys):
                     assert store.db.get(raw_key) == store.get_node(key)
-                    assert graph.get_node(key).properties == {"payload": "x" * 100}
+                    node = graph.get_node(key)
+                    assert node.get_id == key.decode()
+                    assert node.properties == {"payload": "x" * 100}
                 samples = {name: [] for name in operations}
                 names = list(operations)
                 for trial in range(trials):
