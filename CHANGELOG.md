@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Hardened structural validation (#394): complete versioned JSON constraint
+  identifiers replace ambiguous colon-joined labels, class-scoped violations
+  retain membership evidence, tied reports sort deterministically, and
+  cancellation is checked during input consumption and constraint evaluation.
 - Raised the PyRex dependency floor to 0.7.1 across all RocksDB-containing
   extras and refreshed the lockfile after verified PyPI publication (#439).
   Added a repeatable native/adapter/decoded read benchmark and recorded its
