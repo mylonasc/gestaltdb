@@ -242,6 +242,66 @@ shape:
       --sample-size 5 \
       --output-dir benchmark_results/transactions_rocksdb_YYYYMMDD
 
+PyRex Point-Read Regression
+--------------------------
+
+The PyRex 0.7.0 regression tracked in
+`GestaltDB #439 <https://github.com/mylonasc/gestaltdb/issues/439>`_ was fixed
+upstream in `PyRex PR #37 <https://github.com/mylonasc/pyrex/pull/37>`_
+(commit ``f54fa4b04743dc3c1828a55016f88fe2bd5f2526``), intended for 0.7.1.
+The original GestaltDB decoded ``GraphDB.get_node()`` comparison measured
+4.046 to 4.358 microseconds/read (+7.7%) for default PyRex, and 4.084 to
+4.317 microseconds/read (+5.7%) for transactional PyRex, comparing 0.4.1
+with 0.7.0. Upstream located the introduction between 0.5.0 and 0.6.0,
+not in the 0.7.0 sequence accessors.
+
+Upstream recorded the following warmed Python-to-native ``db.get()`` hit
+latencies (microseconds/read; median of three process medians):
+
+================ ============ ============ =================
+DB kind          0.4.1 source 0.7.0 source 0.7.1 candidate
+================ ============ ============ =================
+Plain            0.631        0.780        0.536
+Extended         0.646        0.791        0.549
+TransactionDB    0.583        0.775        0.540
+================ ============ ============ =================
+
+These ordinary hits were about 30-31% faster than 0.7.0 and recovered the
+0.4.1 baseline in this workload. The comparison used identical source-build
+toolchains (CPython 3.12.3, GCC 13.3, RocksDB 10.7.5), a pinned CPU,
+5,000 16-byte keys, 100-byte values, and seven 40,000-read samples per
+process. Shared lifecycle protection and GIL release were retained.
+Upstream correctness validation reported 167 passed and one skipped for
+the regression fix, before the subsequent Arrow feature integration.
+
+These are upstream binding microbenchmarks, **not a rerun of GestaltDB's
+end-to-end measurements**, cold-cache tests, or concurrent-throughput
+certification. Misses remained variable and not all explicit-options/CF
+paths recovered the historical baseline. See the
+`upstream benchmark report <https://github.com/mylonasc/pyrex/blob/f54fa4b04743dc3c1828a55016f88fe2bd5f2526/benchmarks/point_reads.md>`_
+for distributions, methodology, and limitations.
+
+Repeatable downstream measurement
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``benchmarks.pyrex_point_reads`` isolates native ``db.get``, serialized
+``PyRexStore.get_node`` and decoded ``GraphDB.get_node`` over the same
+stored JSON entities, in both default and transactional modes:
+
+.. code-block:: sh
+
+   python -m benchmarks.pyrex_point_reads --cpu 2 > reads.json
+
+Run each dependency version in its own environment, with the same Python
+and GestaltDB revision. Alternate version order across fresh processes
+and compare process medians, not a single best sample. JSON output includes
+all samples, dependency version, platform, affinity and workload parameters.
+All layers are checked before timing; timing loops include the same Python
+loop/index overhead. These are warmed hits without a flush, not disk-backed
+or cold-cache certification. CPU affinity is optional and requires OS support;
+choose a CPU available to your process. No noisy shared-runner timing
+threshold is imposed on correctness tests.
+
 Columnar Ingestion Benchmarks
 -----------------------------
 
