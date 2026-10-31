@@ -26,6 +26,7 @@ benchmarks/
 ├── compaction.py           # LSM overwrite & compaction pressure benchmark
 ├── sampler.py              # SamplerEngine array sampler vs baseline graph traversal
 ├── temporal.py             # Temporal storage/query/sampling/reasoning hardening smoke
+├── pyrex_point_reads.py     # Native/adapter/decoded warmed reads across PyRex versions
 ├── ontology.py             # Isolated ontology solvers, staged costs and footprint
 ├── embedded.py             # Embedded graph databases: GestaltDB vs LatticeDB vs LadybugDB
 ├── external.py             # External graph databases: GestaltDB vs Neo4j, Memgraph, ArcadeDB, AGE
@@ -55,6 +56,20 @@ uv sync --extra all
 ---
 
 ## Running Benchmarks
+
+For PyRex point-read regressions, run the standalone module in isolated
+dependency environments and alternate versions across fresh processes:
+
+```bash
+python -m benchmarks.pyrex_point_reads --cpu 2 > reads.json
+```
+
+It checks native, store-adapter and decoded graph reads before timing and
+reports every sample for both default and transactional PyRex. CPU pinning
+is optional; choose an allowed CPU. See `docs/performance.rst` for methodology
+and recorded results. This warmed-hit probe does not measure cold-cache IO,
+Cypher, ingestion or concurrent throughput, and correctness tests impose no
+wall-clock performance threshold.
 
 You can run benchmarks in two ways:
 
