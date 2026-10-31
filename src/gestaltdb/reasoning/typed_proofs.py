@@ -9,11 +9,11 @@ facts. ``TypedProofTrace`` keeps one witness per closure fact under explicit
 budgets and answers ``explain`` with a bounded derivation DAG.
 
 A trace is bound to one generation — program digest plus input-fact
-horizon. Explanations never invent derivations: unknown facts explain to an
-explicitly truncated empty result, and a trace whose horizon no longer
-matches the live closure reports itself as superseded instead of
-misattributing support. Re-explain after retract/rematerialize; the
-maintenance index already invalidates on program or horizon drift.
+horizon. Unknown facts explain to an explicitly truncated empty result.
+Call ``is_current_for`` before treating a historical trace as current, and
+reevaluate after program or input changes; ``explain`` alone does not consult
+live inputs or automatically maintain support. Constructors check structural
+consistency, not source authentication or independent closure correctness.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Iterable, Mapping, cast
 
-from .model import ReasoningError, ReasoningLimits, _text
+from .model import ReasoningError, ReasoningLimits, Variable, _text
 from .terms import Literal
 from .typed import (
     AggregateRule,
@@ -137,6 +137,8 @@ class TypedFactWitness:
                 raise ReasoningError("aggregate evidence needs an AggregateRule")
             if premises:
                 raise ReasoningError("aggregate conclusions carry operands, not positional premises")
+            if comparisons or absence:
+                raise ReasoningError("aggregate witnesses cannot carry comparison or absence checks")
             if any(item.rule_id != self.rule.rule_id for item in aggregates):
                 raise ReasoningError("aggregate evidence must reference its rule")
             self._check_aggregate_head(aggregates)
@@ -146,12 +148,23 @@ class TypedFactWitness:
             if len(premises) != len(self.rule.body):
                 raise ReasoningError("derived witnesses need one premise per body atom")
             bindings = self._check_premises(premises)
+            expected = tuple(Comparison(
+                item.op,
+                bindings[item.left] if isinstance(item.left, Variable) else item.left,
+                bindings[item.right] if isinstance(item.right, Variable) else item.right)
+                for item in self.rule.filters)
+            if comparisons != expected:
+                raise ReasoningError("witness comparisons must match every grounded rule filter")
             for check in comparisons:
                 if not check.holds(bindings):
                     raise ReasoningError("witness comparison does not hold")
-            for probe in absence:
-                if probe.position >= len(self.rule.negated):
-                    raise ReasoningError("absence position exceeds rule negations")
+            if len(absence) != len(self.rule.negated):
+                raise ReasoningError("witness absence checks must cover every rule negation")
+            for position, probe in enumerate(absence):
+                if probe.position != position:
+                    raise ReasoningError("absence positions must cover rule negations in order")
+                if probe.predicate not in probe.scope:
+                    raise ReasoningError("absence scope must include the checked predicate")
                 atom = self.rule.negated[probe.position]
                 if atom.predicate != probe.predicate:
                     raise ReasoningError("absence predicate does not match its rule atom")
@@ -197,9 +210,15 @@ class TypedFactWitness:
         if not isinstance(rule, AggregateRule):
             raise ReasoningError("aggregate evidence needs an AggregateRule")
         group_names = [variable.name for variable in rule.group]
-        for derivation in aggregates:
+        if len(aggregates) != len(rule.aggregations):
+            raise ReasoningError("aggregate evidence must cover every rule aggregation")
+        for derivation, aggregation in zip(aggregates, rule.aggregations):
+            if derivation.op != aggregation.op or derivation.target != aggregation.target.name:
+                raise ReasoningError("aggregate operation and target must match the rule")
             if len(derivation.group) != len(group_names):
                 raise ReasoningError("aggregate group does not match its rule")
+            if derivation.group != aggregates[0].group or derivation.operands != aggregates[0].operands:
+                raise ReasoningError("aggregate evidence must share one group and operand set")
         scope = dict(zip(group_names, aggregates[0].group)) if aggregates else {}
         targets = {item.target: item.result for item in aggregates}
         head = rule.head
@@ -287,9 +306,17 @@ class TypedProofTrace:
         if not isinstance(self.program, GenericProgram):
             raise ReasoningError("proof program must be a GenericProgram")
         nodes = _canonical_witnesses(self.nodes, self.truncated)
-        rules = {rule.rule_id for rule in self.program.rules} | {rule.rule_id for rule in self.program.aggregates}
-        if any(node.rule is not None and node.rule.rule_id not in rules for node in nodes):
+        rules = {rule.rule_id: rule for rule in (*self.program.rules, *self.program.aggregates)}
+        if any(node.rule is not None and node.rule != rules.get(node.rule.rule_id) for node in nodes):
             raise ReasoningError("proof rules must belong to their program")
+        known = {node.fact for node in nodes}
+        scope = tuple(sorted(self.program.closed))
+        for node in nodes:
+            for probe in node.absence:
+                if probe.scope != scope:
+                    raise ReasoningError("absence scope must match the proof program")
+                if TypedFact(probe.predicate, probe.args) in known:
+                    raise ReasoningError("absence check is contradicted by a proof fact")
         _text(self.horizon, "horizon")
         object.__setattr__(self, "nodes", nodes)
         object.__setattr__(self, "_by_fact", MappingProxyType({node.fact: node for node in nodes}))
