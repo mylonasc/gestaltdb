@@ -35,7 +35,7 @@ serializers = ["msgpack>=1.2.3", "protobuf>=6.33.6"]
 bloom = ["pybloom-live"]
 coverage = ["coverage", "pytest"]
 docs = ["myst-parser", "sphinx", "sphinx-rtd-theme"]
-lint = ["ruff==0.17.2", "mypy==2.4.0"]
+lint = ["ruff==0.17.3", "mypy==2.4.0"]
 rocksdb = ["pyrex-rocksdb>=0.7.1"]
 arrow = ["pyarrow"]
 polars = ["polars", "pyarrow"]
@@ -120,7 +120,7 @@ select = ["E4", "E7", "E9", "F63", "F7", "F82"]
 
 [dependency-groups]
 dev = [
-    "ruff==0.17.2",
+    "ruff==0.17.3",
     "coverage>=7.10.7",
     "jinja2>=3.1",
     "pytest>=8.0",
