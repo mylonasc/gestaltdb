@@ -49,7 +49,7 @@ def test_required_and_open_world_silence():
     report = validate_structural(facts, suite)
     assert not report.clean
     assert [item.kind for item in report.violations] == ["missing-required"]
-    assert report.violations[0].sources == ("required:Trade:tradeId",)
+    assert report.violations[0].sources == ('structural:v2:required:["Trade","tradeId"]',)
     # Same shape outside the closed scope stays silent.
     assert validate_structural(
         [TypedFact(TYPE, ["m", "Other"])], suite).clean
@@ -72,9 +72,11 @@ def test_cardinality_datatype_and_exclusive_groups():
     kinds = {item.kind for item in report.violations}
     assert kinds == {"cardinality-violation", "datatype-violation", "exclusive-violation"}
     by_kind = {item.kind: item for item in report.violations}
-    assert by_kind["cardinality-violation"].sources == ("cardinality:Trade:leg",)
-    assert by_kind["datatype-violation"].sources == ("datatype:Trade:price:text",)
-    assert by_kind["exclusive-violation"].sources == ("exclusive:Trade:at-most-one",)
+    assert by_kind["cardinality-violation"].sources == ('structural:v2:cardinality:["Trade","leg",0,1]',)
+    assert by_kind["datatype-violation"].sources == ('structural:v2:datatype:["Trade","price","text"]',)
+    assert by_kind["exclusive-violation"].sources == (
+        'structural:v2:exclusive:["Trade",["cash","physical"],"at-most-one"]',)
+    assert all(facts[0] in v.facts for v in report.violations)
     # Exactly-one-of with nothing present also violates.
     one_of = validate_structural(
         [TypedFact(TYPE, ["m", "Trade"])],
@@ -143,3 +145,131 @@ assert [v.kind for v in report.violations] == ['missing-required']
 assert not any(name.startswith(('gestaltdb', 'numpy')) for name in sys.modules)
 """
     subprocess.run([sys.executable, "-I", "-S", "-c", script], check=True, capture_output=True, text=True)
+
+
+def test_constraint_identities_distinguish_complete_constraints():
+    facts = [TypedFact(TYPE, ["n", "C"])]
+    suite = StructuralSuite(
+        TYPE, closed_classes=["C"],
+        cardinalities=[CardinalityBound("C", "p", 1, 2), CardinalityBound("C", "p", 2, 3)],
+        exclusive=[ExclusiveGroup("C", ["a", "b"]), ExclusiveGroup("C", ["a", "c"])])
+    report = validate_structural(facts, suite)
+    assert len(report.violations) == 4
+    assert len({v.sources for v in report.violations}) == 4
+
+
+def test_constraint_identities_do_not_alias_delimiters():
+    facts = [TypedFact(TYPE, ["n", "A:B"]), TypedFact(TYPE, ["n", "A"])]
+    suite = StructuralSuite(TYPE, closed_classes=["A:B", "A"], required=[
+        RequiredField("A:B", "C"), RequiredField("A", "B:C")])
+    report = validate_structural(facts, suite)
+    assert len({v.sources for v in report.violations}) == 2
+
+
+def test_report_ties_have_a_total_order():
+    fact = TypedFact(TYPE, ["n", "C"])
+    first = StructuralViolation("missing-required", (fact,), ("a",), "first")
+    second = StructuralViolation("missing-required", (fact,), ("b",), "second")
+    third = StructuralViolation("missing-required", (fact,), ("b",), "third")
+    report = StructuralReport((third, second, first), False, 1)
+    assert report.violations == (first, second, third)
+
+
+def test_cancellation_during_input_consumption():
+    consumed = []
+
+    def facts():
+        for i in range(5000):
+            consumed.append(i)
+            yield TypedFact(TYPE, [f"n{i}", "C"])
+
+    with pytest.raises(ReasoningCancelledError):
+        validate_structural(facts(), StructuralSuite(TYPE, closed_classes=["C"]),
+                            cancel=lambda: len(consumed) >= 10)
+    assert len(consumed) < 5000
+
+
+@pytest.mark.parametrize("count", [0, 1, 2, 3])
+def test_minimum_and_maximum_cardinality_with_duplicate_input(count):
+    member = TypedFact(TYPE, ["n", "C"])
+    properties = [TypedFact("p", ["n", f"v{i}"]) for i in range(count)]
+    facts = [member, *properties, *properties]
+    suite = StructuralSuite(TYPE, closed_classes=["C"],
+                            cardinalities=[CardinalityBound("C", "p", 1, 2)])
+    report = validate_structural(facts, suite)
+    assert report.clean == (1 <= count <= 2)
+    if not report.clean:
+        assert member in report.violations[0].facts
+        assert set(properties) <= set(report.violations[0].facts)
+
+
+def test_bounded_reports_do_not_depend_on_constraint_order():
+    facts = [TypedFact(TYPE, ["n", "C"])]
+    bounds = [CardinalityBound("C", "p", 2, None), CardinalityBound("C", "p", 1, 2)]
+    reports = [validate_structural(facts, StructuralSuite(
+        TYPE, closed_classes=["C"], cardinalities=items), max_violations=1)
+        for items in (bounds, list(reversed(bounds)))]
+    assert reports[0] == reports[1]
+
+
+def test_cancellation_during_constraint_checks():
+    calls = 0
+
+    def cancel():
+        nonlocal calls
+        calls += 1
+        return calls >= 20
+
+    suite = StructuralSuite(TYPE, closed_classes=["C"],
+                            required=[RequiredField("C", f"p{i}") for i in range(100)])
+    with pytest.raises(ReasoningCancelledError):
+        validate_structural([TypedFact(TYPE, ["n", "C"])], suite, cancel=cancel)
+
+
+@pytest.mark.parametrize("mode", ["one-of", "at-most-one"])
+@pytest.mark.parametrize("present", [(), ("a",), ("a", "b")])
+def test_exclusivity_counts_predicates_not_property_facts(mode, present):
+    member = TypedFact(TYPE, ["n", "C"])
+    facts = [member, *(TypedFact(p, ["n", str(i)]) for p in present for i in range(2))]
+    suite = StructuralSuite(TYPE, closed_classes=["C"],
+                            exclusive=[ExclusiveGroup("C", ["a", "b"], mode)])
+    report = validate_structural(facts, suite)
+    assert report.clean == (len(present) == 1 if mode == "one-of" else len(present) <= 1)
+    if not report.clean:
+        assert set(report.violations[0].facts) == set(facts)
+
+
+def test_report_is_identical_across_hash_seeds():
+    import os
+    import subprocess
+    import sys
+
+    script = """
+from gestaltdb.reasoning.structural import StructuralReport, StructuralViolation
+from gestaltdb.reasoning.typed import TypedFact
+fact = TypedFact('type', ['n', 'C'])
+print(StructuralReport(tuple(StructuralViolation('missing-required', (fact,), (s,), s)
+    for s in ('c', 'a', 'b')), False, 1))
+"""
+    outputs = [subprocess.check_output([sys.executable, "-c", script], text=True,
+                                      env={**os.environ, "PYTHONHASHSEED": str(seed)})
+               for seed in (1, 2, 3)]
+    assert len(set(outputs)) == 1
+
+
+@pytest.mark.parametrize("kind,value", [
+    ("boolean", True), ("integer", 1), ("float", 1.0), ("text", "x"),
+    ("bytes", b"x"), ("instant", 1), ("null", None),
+])
+def test_datatype_checks_all_object_arguments_without_coercion(kind, value):
+    member = TypedFact(TYPE, ["n", "C"])
+    literal = Literal(kind, value)
+    good = TypedFact("p", ["n", literal, literal])
+    bad = TypedFact("p", ["n", literal, "entity-reference"])
+    suite = StructuralSuite(TYPE, closed_classes=["C"],
+                            datatypes=[DatatypeConstraint("C", "p", kind)])
+    assert validate_structural([member, good], suite).clean
+    report = validate_structural([member, bad], suite)
+    assert len(report.violations) == 1
+    assert set(report.violations[0].facts) == {member, bad}
+    assert validate_structural([TypedFact(TYPE, ["n", "Open"]), bad], suite).clean
