@@ -203,3 +203,39 @@ and measured worker function bodies are unchanged, but later worker processes ma
 import the updated module; retain this provenance qualification rather than
 presenting that matrix as a wholly immutable-source experiment. No workbook or
 implementation-roadmap file was edited by this continuation.
+
+## Technical-debt handoff: #451
+
+Performance remediation is now explicitly tracked in
+https://github.com/mylonasc/gestaltdb/issues/451, labelled `tech-debt` and
+`enhancement`. Issue #194 links to it as its technical-debt resolution follow-up.
+The new issue records observed low-performing slices, profiling/source-based
+bottleneck hypotheses, proposed performance goals (not guarantees), remediations
+and correctness-preserving exit criteria. Neither issue has been closed.
+
+The sparse-history 100K pilot has now produced six successful exact-evidence
+parity observations at valid time 30, while its full matrix remains incomplete:
+
+| Selection | Source | Authenticated pipeline (s) | Worker peak RSS (MiB) |
+|---|---|---:|---:|
+| subject | ordinary | 5.328 | 425.1 |
+| subject | authenticated locator | 14.521 | 832.9 |
+| subject | native full-record | 15.167 | 800.7 |
+| predicate | ordinary | 6.588 | 438.9 |
+| predicate | authenticated locator | 16.747 | 834.0 |
+| predicate | native full-record | 15.226 | 800.2 |
+
+This is clean-source `48b7d53` at launch, `--history-rows 1000`, 100,343 total
+historical records, with fixture load 21.86 s. For the one-subject locator read,
+the adapter authenticated 100,343 records, visited 125,254 index rows, found one
+candidate and materialized two records in four scans. Predicate selection opened
+25,002 scans for 25,000 candidates. These counters and the earlier profile
+motivate #451; they do not prove an exact allocation attribution or universal
+backend ranking. Single observations, uncontrolled caches/host contention,
+whole-worker RSS and separate dense/sparse workloads remain important limitations.
+
+**Current performance disposition: defer automatic native locator adoption.**
+Keep ordinary extraction as the default and native sources explicit. Retain the
+correctness implementation. Optimization belongs to #451; completing and
+preserving #194's measurement/documentation/integration review remains PR #450's
+scope. No completed repeated/nonselective matrix or final PR acceptance is implied.
