@@ -1,7 +1,10 @@
 {
-  "reviewed_integration": "3f330f944135567ffafefddccc97c4a738178be9",
-  "review_date": "2026-10-25",
-  "note": "Update 4: D2-D6 disposed at 3f330f9 (#383); #371 and review umbrella #200 closed. Open: #194 only.",
+  "status_authority": "EPIC_REASONING_ENGINE.md",
+  "reviewed_integration": "3403530adf186cf79d6426829d3be8bf8898f6f3",
+  "review_date": "2026-11-01",
+  "reviewed_at": "2026-11-01T11:27:42Z",
+  "roadmap": {"issue": 156, "state": "closed"},
+  "note": "Current snapshot: #156 and all five phases closed; #391 and #392-#396 closed. #194 remains open for actual authenticated locator measurements/decision, not missing implementation. See epic for adjacent programs and release boundaries.",
   "phases": {
     "RE-E1": {
       "issue": 157,
@@ -16,17 +19,17 @@
     "RE-E3": {
       "issue": 159,
       "state": "closed",
-      "disposition": "open sub-issue #370 carries durable crash/concurrency evidence gate"
+      "disposition": "complete; durable crash/concurrency gate #370 closed with evidence and explicit #381 deferral"
     },
     "RE-E4": {
       "issue": 160,
       "state": "closed",
-      "disposition": "blocked by #159, transitively covering #370"
+      "disposition": "complete; #159 prerequisite and #370 bounded interval-publication evidence gate closed"
     },
     "RE-E5": {
       "issue": 161,
       "state": "closed",
-      "disposition": "bounded delivery reviewed; sequentially blocked by #160"
+      "disposition": "complete; sequential #160 prerequisite closed; experimental/deferred outcomes remain explicit"
     }
   },
   "followups": {
@@ -35,7 +38,7 @@
     },
     "200": {
       "state": "closed",
-      "open_sub_issue": 371
+      "disposition_issue": 371
     },
     "248": {
       "state": "closed"
@@ -83,7 +86,17 @@
     "381": {
       "state": "closed",
       "parent": 370
-    }
+    },
+    "385": {
+      "state": "closed",
+      "parent": 156
+    },
+    "391": {"state": "closed"},
+    "392": {"state": "closed"},
+    "393": {"state": "closed"},
+    "394": {"state": "closed"},
+    "395": {"state": "closed"},
+    "396": {"state": "closed"}
   },
   "expected_sub_issues": {
     "156": [
@@ -91,7 +104,8 @@
       158,
       159,
       160,
-      161
+      161,
+      385
     ],
     "157": [
       162,
