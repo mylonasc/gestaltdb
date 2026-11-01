@@ -222,3 +222,18 @@ def test_stage_delta_reports_peaks_and_inclusive_boundaries():
     assert delta["commit_cache_entries_peak"] == 5
     assert delta["metadata_read_s_by_category"]["commit_descriptor"] == pytest.approx(0.75)
     assert "inclusive" in delta["timing_boundary"]
+
+
+def test_instrumentation_restores_production_classes():
+    from gestaltdb._graph.temporal_reads import TemporalReader
+    original = TemporalReader.get_commit_cached
+    with instrument() as recorder:
+        assert TemporalReader.get_commit_cached is not original
+        assert recorder.snapshot()["metadata_reads"] == 0
+    assert TemporalReader.get_commit_cached is original
+
+
+@pytest.mark.parametrize("commit_batch", [0, -1, True, 1.5])
+def test_fixture_rejects_invalid_commit_batch(tmp_path, commit_batch):
+    with pytest.raises(ValueError, match="commit_batch"):
+        fixture(tmp_path / "db", 36, commit_batch=commit_batch)

@@ -140,6 +140,7 @@ Actual-adapter measurement harness
 .. code-block:: sh
 
    uv run --extra rocksdb --extra arrow python -m benchmarks.reasoning_locator_pipeline --rows 1000 --times 10 30 50 70 90 --repeats 1 --output /tmp/opencode/locator-smoke.json
+   uv run --extra rocksdb --extra arrow python -m benchmarks.reasoning_locator_pipeline --rows 1000 --commit-batch 250 --instrument --times 30 50 --repeats 3 --output /tmp/opencode/locator-attributed.json
    uv run --extra rocksdb --extra arrow python -m benchmarks.reasoning_locator_pipeline --rows 100000 --times 30 50 --repeats 3 --timeout 600 --output /tmp/opencode/locator-100k.json
 
 For a separately labelled sparse-history scale study, add
@@ -168,6 +169,153 @@ method; neither fresh workers nor reopened handles imply OS-cold caches. Failed 
 timed-out workers retain stage diagnostics in incomplete reports without quantiles
 or an adoption decision. These commands are a measurement protocol, not evidence
 that a successful 100K locator comparison or speedup has already been obtained.
+
+HSA-01 opt-in attribution and committed baselines
+-------------------------------------------------
+
+HSA-01 adds **benchmark-only attribution** behind ``--instrument``. It does not
+change production code, default budgets, verification, historical winners or
+evidence. Wrappers are installed only for the selected benchmark process and
+cover every concrete store class in ``gestaltdb.kvstores``, including
+transaction-bound children, so counters are not limited to the parent facade.
+Ordinary extraction remains the default and no optimization or adoption claim is
+made here; HSA-02 and later work own remediation.
+
+The opt-in counters distinguish:
+
+* physical commit-descriptor, visibility-marker, record-envelope, sequence and
+  index-state metadata reads/writes, by concrete store scope and category;
+* exact/range index scan openings and rows, native scan openings/batches/rows and
+  native preparation/transfer time;
+* commit authentication, version decoding, supersession-target fallback passes,
+  commit visits per fallback, distinct target version IDs and retained commit-cache
+  entries;
+* visibility-checksum calls and marker visits;
+* construction commit, validation-target, retraction-validation, sequence
+  reservation, index writing/publication and stale-mark phases.
+
+``--commit-batch`` controls assertion records per fixture commit independently of
+row count; a batch larger than the row count is a single commit. Fixture
+construction emits flushed ``PIPELINE_PROGRESS`` checkpoints for assertion,
+correction, retraction, oracle, commit/validation start, sequence-reservation,
+index-write, publication and completion phases. A timed-out construction worker
+therefore retains its last durable stage. ``fixture.construction`` contains stage
+timings, while reports add ``fixture_attribution`` and an extraction
+``attribution`` summary. Attribution
+timings are inclusive and non-exclusive: nested work contributes to more than one
+bucket and does not sum to end-to-end time. Counter presence is not an RSS,
+backend-read or elapsed-time guarantee.
+
+Committed HSA-01 baseline reports live under
+``benchmarks/results/reasoning-457-hsa-01-*`` and retain their exact command,
+source revision, harness hashes and measured configuration. They are single
+observations except where repeats are stated; OS caches were uncontrolled and
+different runs are not a controlled scaling curve.
+
+.. list-table:: Committed HSA-01 baselines (source 94d53d3)
+   :header-rows: 1
+
+   * - Report
+     - Rows / history
+     - Commit batch
+     - Fixture load s
+     - Status
+   * - ``1k-dense-b1000``
+     - 1,000 / 1,000
+     - 1,000
+     - 1.37
+     - complete
+   * - ``1k-dense-b250``
+     - 1,000 / 1,000
+     - 250
+     - 1.14
+     - complete
+   * - ``1k-dense-r3``
+     - 1,000 / 1,000
+     - 1,000
+     - 1.30
+     - complete, 3 repeats
+   * - ``10k-dense``
+     - 10,000 / 10,000
+     - 1,000
+     - 86.81
+     - complete
+   * - ``10k-sparse``
+     - 10,000 / 1,000
+     - 1,000
+     - 3.12
+     - complete
+   * - ``100k-sparse``
+     - 100,000 / 1,000
+     - 1,000
+     - 22.66
+     - complete
+   * - ``100k-dense-timeout``
+     - 100,000 / 100,000
+     - 1,000
+     - not reached
+     - fixture timeout at 900 s, last stage ``fixture-commit``
+
+Later reports in the table were written while earlier result files were
+untracked, so their recorded ``dirty`` flag is true even though the recorded
+harness hashes match revision ``94d53d3``. Preserve that qualification rather
+than relabelling them clean-source evidence. The companion
+``benchmarks/results/reasoning-457-hsa-01-baseline-index.json`` is a compact,
+checksummed index of every HSA-01 report, its command, fixture stages and a
+representative attribution group.
+
+The ``1k-dense-r3`` report repeats the three sources three times for the
+``all`` selection at valid times 30 and 50. At time 50 the authenticated pipeline
+p50/p95 was 1.89/2.03 seconds ordinary, 4.02/4.09 seconds full-record native and
+3.40/3.67 seconds authenticated locator. The physical counters were identical
+across repeats because work is deterministic; that is not a claim that latency
+is deterministic. These small repeated samples are a local noise check, not a
+general latency distribution.
+
+Dense history dominates construction. For the 10K dense fixture, 1.91 seconds of
+assertion commits were followed by 48.47 seconds of corrections and 36.22 seconds
+of retractions. Construction performed 48.67 million metadata reads, of which
+48.44 million were record envelopes, and resolved 3,429 distinct supersession
+targets across 6,858 fallback passes. The 10K sparse fixture with the same
+assertion count but amendments only in the first 1,000 rows constructed several
+orders of magnitude more cheaply, and its extraction did not repeat the dense
+target fallback work.
+
+Extraction attribution separates transfer from authentication. At 10K dense,
+valid time 50, ``all`` selection produced approximately:
+
+.. list-table:: Single observations at 10K dense, valid time 50
+   :header-rows: 1
+
+   * - Source
+     - Pipeline s
+     - Metadata reads
+     - Commit auth calls
+     - Target fallbacks
+     - Native rows
+   * - Ordinary
+     - 31.14
+     - 13,340,758
+     - 28,523
+     - 1,001
+     - 0
+   * - Native full-record
+     - 151.89
+     - 67,693,694
+     - 140,776
+     - 8,288
+     - 13,429
+   * - Authenticated locator
+     - 99.40
+     - 43,370,488
+     - 90,744
+     - 4,859
+     - 25,429
+
+These counts identify where amplification sits; they are not an allocation
+profile or a claim that a particular fix is sufficient. The dense-history 100K
+construction attempt retains the existing 900-second timeout and is recorded as
+a failed construction gate, not as extraction, RSS or quantile evidence.
 
 Measured decision: defer automatic adoption
 -------------------------------------------
