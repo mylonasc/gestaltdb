@@ -73,7 +73,7 @@ horizon; they are not claim versions, negative facts or independent proof that
 the closed-world declaration was justified. Evidence is untrusted data and can contain sensitive metadata;
 review it before sharing. JSON serialization does not authenticate the report.
 
-``max_depth`` and ``max_nodes`` use the existing ``explain_claim`` traversal
+``max_depth`` and ``max_nodes`` use the existing ``graph.rules.explain`` traversal
 bounds. Missing/depth-limited evidence sets ``truncated=true``; incomplete
 justifications are omitted, never presented as proofs. Additional ``max_edges``
 and ``max_bytes`` bound the exported justification links and serialized JSON;

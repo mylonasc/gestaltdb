@@ -13,7 +13,7 @@ from pathlib import Path
 import re
 import shutil
 import sys
-from typing import NamedTuple, Sequence
+from typing import NamedTuple, Sequence, TypedDict, cast
 
 
 class Topic(NamedTuple):
@@ -21,6 +21,18 @@ class Topic(NamedTuple):
     title: str
     when_to_read: str
     resource: str
+
+
+class ApiCard(TypedDict):
+    """One generated public-API search card."""
+
+    name: str
+    signature: str
+    summary: str
+    returns: str
+    topic: str
+    line: int
+    examples: list[dict[str, object]]
 
 
 TOPICS: dict[str, Topic] = {
@@ -108,7 +120,8 @@ def install_opencode_skill(target_dir: str | Path = ".", *, skill_name: str = "g
     for resource in source_root.iterdir():
         destination = target / resource.name
         if resource.is_dir():
-            shutil.copytree(resource, destination, dirs_exist_ok=True)
+            with resources.as_file(resource) as source_path:
+                shutil.copytree(source_path, destination, dirs_exist_ok=True)
         else:
             with resources.as_file(resource) as source_path:
                 shutil.copy2(source_path, destination)
@@ -174,10 +187,15 @@ def cmd_get(args: argparse.Namespace) -> int:
     return 0
 
 
-def read_api_index() -> dict:
+def read_api_index() -> dict[str, object]:
     """Return the generated GraphDB API index, or an empty mapping if unavailable."""
     try:
-        return json.loads((resources.files("gestaltdb.agent_skill") / "api_index.json").read_text(encoding="utf-8"))
+        decoded = json.loads(
+            (resources.files("gestaltdb.agent_skill") / "api_index.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        return cast(dict[str, object], decoded) if isinstance(decoded, dict) else {}
     except (FileNotFoundError, json.JSONDecodeError, TypeError):
         return {}
 
@@ -209,7 +227,9 @@ def cmd_search(args: argparse.Namespace) -> int:
     api_cards = _api_cards(pattern)
     for card in api_cards[:5]:
         print()
-        print(f"API: GraphDB.{card['signature']}")
+        signature = card['signature']
+        label = f"graph.{signature}" if "." in signature.split("(")[0] else f"GraphDB.{signature}"
+        print(f"API: {label}")
         if card["summary"]:
             print(f"  {card['summary']}")
         if card["returns"]:
@@ -264,12 +284,50 @@ def cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
-def _api_cards(pattern: "re.Pattern[str]") -> list[dict]:
+_API_ALIASES: dict[str, str] = {
+    "read_view": "temporal.open_read_view",
+    "open_read_view": "temporal.open_read_view",
+    "run_rules": "rules.run",
+    "maintain_truth": "rules.maintain",
+    "explain_claim": "rules.explain",
+    "create_rule": "rules.create_rule",
+    "assert_claim": "epistemic.assert_claim",
+    "claim_status": "epistemic.claim_status",
+}
+
+
+def _api_cards(pattern: "re.Pattern[str]") -> list[ApiCard]:
     index = read_api_index()
     methods = index.get("methods") if isinstance(index, dict) else None
-    if not methods:
+    if not isinstance(methods, list):
         return []
-    return [entry for entry in methods if pattern.search(entry.get("name", ""))]
+    entries = cast(list[ApiCard], methods)
+    query = pattern.pattern.strip()
+    aliased: re.Pattern[str] | None = None
+    for alias, target in _API_ALIASES.items():
+        try:
+            if re.search(alias, query, re.IGNORECASE):
+                aliased = re.compile(re.escape(target), re.IGNORECASE)
+                break
+        except re.error:
+            continue
+    scored: list[tuple[int, ApiCard]] = []
+    for entry in entries:
+        haystack = " ".join([
+            entry.get("name", ""),
+            entry.get("signature", ""),
+            entry.get("summary", ""),
+            entry.get("returns", ""),
+            entry.get("topic", ""),
+        ])
+        if pattern.search(entry.get("name", "")):
+            scored.append((0, entry))
+        elif pattern.search(haystack):
+            scored.append((1, entry))
+        elif aliased is not None and aliased.search(haystack):
+            scored.append((2, entry))
+    scored.sort(key=lambda item: (item[0], item[1].get("name", "")))
+    return [entry for _, entry in scored]
 
 
 def cmd_install_opencode_skill(args: argparse.Namespace) -> int:

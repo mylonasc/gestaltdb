@@ -60,7 +60,7 @@ def test_standalone_lookup_never_redispatches(graph, monkeypatch):
 
     lookup._session.store = RangeStore()
     lookup._session.store.get_node = lambda node_id: graph.store.get_node(
-        node_id.encode("utf-8"))
+        node_id.encode("utf-8") if isinstance(node_id, str) else node_id)
     try:
         assert [node.get_id for node in lookup.range_query_nodes("age", 30, 30)] == ["a"]
     finally:

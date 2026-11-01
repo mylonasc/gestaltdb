@@ -4,23 +4,30 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Mapping
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Literal, Mapping, cast
 
 import numpy as np
 
+from ._arrays import FloatArray, IntArray
+from ..temporal import TemporalContext
 from .validation import _integer_array, _validate_count
 
 
-def _ids(values, name):
+if TYPE_CHECKING:
+    from .engine import SamplerEngine
+
+
+def _ids(values: Sequence[int] | np.ndarray | None, name: str) -> tuple[int, ...] | None:
     if values is None:
         return None
     values = _integer_array(values, name)
-    if values.size and values.min() < 0:
+    if values.size and int(np.min(values)) < 0:
         raise ValueError(f"{name} must contain non-negative IDs")
     return tuple(int(value) for value in values)
 
 
-def _weight(value, name):
+def _weight(value: object, name: str) -> float:
     if (isinstance(value, (bool, np.bool_))
             or not isinstance(value, (int, float, np.integer, np.floating))
             or not np.isfinite(value) or value < 0):
@@ -30,17 +37,33 @@ def _weight(value, name):
 
 @dataclass(frozen=True)
 class WalkTransition:
-    """One state-machine arc; direction is relative to the current walk node."""
+    """One state-machine arc; direction is relative to the current walk node.
+
+    Attributes:
+        source_state: State this arc leaves.
+        target_state: State this arc enters.
+        relation: Required compact relation ID, or ``None`` for any relation
+            (still intersected with global relation filters).
+        source_types: Allowed compact source node types, or ``None``.
+        target_types: Allowed compact target node types, or ``None``.
+        direction: ``"out"``, ``"in"``, or ``"any"``; overrides the walk
+            direction for this arc only.
+        weight: Non-negative arc weight; ``0`` skips the arc. Arc weights
+            multiply relation weights and optional static edge weights.
+
+    See Also:
+        ``docs/random-walks.rst`` RWS-05 for a runnable state-machine example.
+    """
 
     source_state: int
     target_state: int
     relation: int | None = None
     source_types: tuple[int, ...] | None = None
     target_types: tuple[int, ...] | None = None
-    direction: str = "out"
+    direction: Literal["out", "in", "any"] = "out"
     weight: float = 1.0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         for name in ("source_state", "target_state"):
             _validate_count(getattr(self, name), name)
         if self.relation is not None:
@@ -59,7 +82,21 @@ class WalkSchema:
     State machines sample (transition, edge) alternatives. Overlapping arcs
     intentionally count as separate choices and may lead to different states.
     Arc weights multiply relation weights and optional static edge weights.
-    Schema progress resets on every restart. IDs are compact snapshot IDs.
+    Schema progress resets on every restart. All IDs are compact snapshot IDs;
+    ``relation_weights`` defaults to 1.0 and ``0`` disables a relation.
+
+    Attributes:
+        node_types: Allowed compact target node types for every step.
+        metapath: Cyclic compact relation IDs (mutually exclusive with
+            ``transitions``). The relation advances only on edge steps.
+        relation_weights: Per-relation multipliers (default 1.0).
+        transitions: Finite-state arcs (mutually exclusive with ``metapath``).
+        initial_state: Starting state.
+        max_states: State bound; arc states must be below it.
+        max_transitions: Arc-count bound.
+
+    See Also:
+        ``docs/random-walks.rst`` RWS-05 for metapath/state-machine examples.
     """
 
     node_types: tuple[int, ...] | None = None
@@ -70,7 +107,7 @@ class WalkSchema:
     max_states: int = 256
     max_transitions: int = 4096
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         for name in ("node_types", "metapath"):
             object.__setattr__(self, name, _ids(getattr(self, name), name))
         if self.metapath is not None and not self.metapath:
@@ -95,9 +132,9 @@ class WalkSchema:
             weights[int(relation)] = _weight(weight, "relation weight")
         object.__setattr__(self, "relation_weights", MappingProxyType(weights))
 
-    def validate_snapshot(self, engine):
+    def validate_snapshot(self, engine: SamplerEngine) -> None:
         """Fail on unknown compact relations/types before any walk draws."""
-        relations = list(self.metapath or ()) + list(self.relation_weights)
+        relations = list(self.metapath or ()) + list(self.relation_weights or {})
         types = list(self.node_types or ())
         for arc in self.transitions:
             if arc.relation is not None:
@@ -116,8 +153,16 @@ class WalkSchema:
         if missing:
             raise ValueError("schema contains unknown node type IDs")
 
-    def candidates(self, engine, current, state, position, direction, relations, temporal, window_policy):
-        """Return aligned edge, endpoint, next-state and LOG-weight arrays."""
+    def candidates(
+        self, engine: SamplerEngine, current: int, state: int, position: int,
+        direction: str, relations: set[int] | None, temporal: TemporalContext | None,
+        window_policy: str,
+    ) -> tuple[IntArray, IntArray, IntArray, FloatArray]:
+        """Return aligned edge, endpoint, next-state and LOG-weight arrays.
+
+        Weights are log-space so relation, arc, static, node2vec, and recency
+        terms compose without underflow; callers exponentiate after masking.
+        """
         snapshot = engine.snapshot
         chunks = []
         arcs = [arc for arc in self.transitions if arc.source_state == state] if self.transitions else [None]
@@ -158,4 +203,10 @@ class WalkSchema:
             endpoint_parts.append(endpoints)
             states.append(np.full(edges.size, state, dtype=np.int64))
             weights_parts.append(log_weights)
-        return tuple(np.concatenate(parts) for parts in (edge_parts, endpoint_parts, states, weights_parts))
+        return cast(
+            tuple[IntArray, IntArray, IntArray, FloatArray],
+            tuple(
+                np.concatenate(parts)
+                for parts in (edge_parts, endpoint_parts, states, weights_parts)
+            ),
+        )

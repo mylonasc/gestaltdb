@@ -1,10 +1,10 @@
 {
-  "src/gestaltdb/graphdb.py": 1909,
+  "src/gestaltdb/graphdb.py": 1897,
   "src/gestaltdb/kvstores.py": 2202,
   "src/gestaltdb/query_engine/cypher/parser.py": 1626,
   "src/gestaltdb/query_engine/cypher/runtime.py": 1872,
   "src/gestaltdb/query_engine/cypher/semantics.py": 1081,
   "src/gestaltdb/reasoning/typed.py": 1105,
-  "src/gestaltdb/sampling/engine.py": 2314,
+  "src/gestaltdb/sampling/engine.py": 2313,
   "src/gestaltdb/sampling/snapshot.py": 2154
 }

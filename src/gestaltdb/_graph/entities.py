@@ -229,6 +229,11 @@ def bytes_to_datetime(b: bytes, tzinfo = datetime.timezone.utc) -> datetime.date
 class Node:
     """Graph node with an ID, native labels, and arbitrary properties.
 
+    Identity is the ``get_id`` property (also available as the ``id`` alias
+    and ``to_dict()["id"]``). ``get_id`` is a property, not a method: use
+    ``node.get_id``, not ``node.get_id()``. There is no ``node.id = ...``
+    setter; pass ``node_id=`` to the constructor.
+
     Args:
         node_id: Optional stable node identifier. A UUID is generated when omitted.
         properties: Optional dictionary of node attributes.
@@ -255,8 +260,25 @@ class Node:
 
     @property
     def get_id(self) -> str:
-        """Unique identifier for this node."""
+        """Unique identifier for this node.
+
+        This is a property: use ``node.get_id`` (or the ``id`` alias), not
+        ``node.get_id()``.
+        """
         return self._id
+
+    @property
+    def id(self) -> str:
+        """Alias for :attr:`get_id` for Cypher-familiar attribute access."""
+        return self._id
+
+    def __repr__(self) -> str:
+        """Return a summarizing repr with ID, labels, and property keys."""
+        try:
+            keys = sorted(self.properties)
+        except Exception:  # noqa: BLE001 - repr must never fail.
+            keys = ["<unorderable>"]
+        return f"Node(id={self._id!r}, labels={list(self.labels)!r}, properties={keys!r})"
 
     @property
     def get_id_bytes(self) -> bytes:
@@ -308,6 +330,10 @@ class Node:
 class Edge:
     """Directed graph edge with source, target, and properties.
 
+    Identity is the ``get_id`` property (also available as the ``id`` alias
+    and ``to_dict()["id"]``). ``get_id`` is a property, not a method: use
+    ``edge.get_id``, not ``edge.get_id()``.
+
     Args:
         edge_id: Optional stable edge identifier. A UUID is generated when omitted.
         source: Source node ID or ``Node`` instance.
@@ -334,8 +360,20 @@ class Edge:
 
     @property
     def get_id(self) -> str:
-        """Unique identifier for this edge."""
+        """Unique identifier for this edge (property, not a method)."""
         return self._id
+
+    @property
+    def id(self) -> str:
+        """Alias for :attr:`get_id` for Cypher-familiar attribute access."""
+        return self._id
+
+    def __repr__(self) -> str:
+        """Return a summarizing repr with ID, endpoints, and edge type."""
+        return (
+            f"Edge(id={self._id!r}, source={self.source!r}, "
+            f"target={self.target!r}, type={self.get_type!r})"
+        )
 
     @property
     def get_id_bytes(self) -> bytes:

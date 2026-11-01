@@ -1,0 +1,489 @@
+{
+  "python": "3.12.3",
+  "package_file": "/tmp/opencode/gestaltdb-ergonomics-venv/lib/python3.12/site-packages/gestaltdb/graphdb.py",
+  "distributions": {
+    "plyvel": "1.5.1",
+    "pyrex-rocksdb": "0.7.1",
+    "lark": "1.3.1",
+    "defusedxml": "0.7.1",
+    "networkx": "3.7",
+    "polars-runtime-32": "2.1.0",
+    "pyarrow": "26.0.0",
+    "polars": "2.1.0",
+    "lmdb": "3.0.0",
+    "gestaltdb": "0.16.0",
+    "numpy": "2.5.4"
+  },
+  "packaged_examples": [
+    {
+      "topic": "quickstart",
+      "example": 1,
+      "status": "passed",
+      "stdout": ""
+    },
+    {
+      "topic": "backends",
+      "example": 1,
+      "status": "passed",
+      "stdout": ""
+    },
+    {
+      "topic": "backends",
+      "example": 2,
+      "status": "passed",
+      "stdout": ""
+    },
+    {
+      "topic": "backends",
+      "example": 3,
+      "status": "passed",
+      "stdout": ""
+    },
+    {
+      "topic": "cypher",
+      "example": 1,
+      "status": "passed",
+      "stdout": ""
+    },
+    {
+      "topic": "indexing",
+      "example": 1,
+      "status": "passed",
+      "stdout": ""
+    },
+    {
+      "topic": "sampling",
+      "example": 1,
+      "status": "passed",
+      "stdout": ""
+    },
+    {
+      "topic": "sampling",
+      "example": 2,
+      "status": "passed",
+      "stdout": ""
+    },
+    {
+      "topic": "sampling",
+      "example": 3,
+      "status": "passed",
+      "stdout": ""
+    },
+    {
+      "topic": "sampling",
+      "example": 4,
+      "status": "passed",
+      "stdout": ""
+    },
+    {
+      "topic": "ingestion",
+      "example": 1,
+      "status": "passed",
+      "stdout": ""
+    },
+    {
+      "topic": "visualization",
+      "example": 1,
+      "status": "passed",
+      "stdout": ""
+    },
+    {
+      "topic": "visualization",
+      "example": 2,
+      "status": "passed",
+      "stdout": ""
+    },
+    {
+      "topic": "visualization",
+      "example": 3,
+      "status": "passed",
+      "stdout": ""
+    },
+    {
+      "topic": "epistemic",
+      "example": 1,
+      "status": "passed",
+      "stdout": ""
+    },
+    {
+      "topic": "temporal",
+      "example": 1,
+      "status": "failed",
+      "exception": "ValueError",
+      "message": "migrate_time_indexed_edges requires an explicit current-edge delete",
+      "stdout": ""
+    },
+    {
+      "topic": "ontology",
+      "example": 1,
+      "status": "passed",
+      "stdout": ""
+    }
+  ],
+  "observations": [
+    {
+      "name": "get_node_string",
+      "exception": "TypeError",
+      "message": "Won't implicitly convert Unicode to bytes; use .encode()"
+    },
+    {
+      "name": "get_node_bytes",
+      "value": {
+        "id": "alice",
+        "properties": {
+          "name": "Alice",
+          "age": 34
+        },
+        "labels": [
+          "Person"
+        ]
+      }
+    },
+    {
+      "name": "node_repr",
+      "value": "<gestaltdb.graphdb.Node object at 0x7b925f9c2450>"
+    },
+    {
+      "name": "node_dot_id",
+      "exception": "AttributeError",
+      "message": "'Node' object has no attribute 'id'"
+    },
+    {
+      "name": "node_call_get_id",
+      "exception": "TypeError",
+      "message": "'str' object is not callable"
+    },
+    {
+      "name": "node_property_get_id",
+      "value": "alice"
+    },
+    {
+      "name": "all_node_keys",
+      "value": [
+        {
+          "bytes_utf8": "alice"
+        },
+        {
+          "bytes_utf8": "bob"
+        },
+        {
+          "bytes_utf8": "unlabeled"
+        }
+      ]
+    },
+    {
+      "name": "all_edge_keys",
+      "value": [
+        {
+          "bytes_utf8": "e1"
+        }
+      ]
+    },
+    {
+      "name": "iterate_node_repository",
+      "exception": "TypeError",
+      "message": "'NodeRepository' object is not iterable"
+    },
+    {
+      "name": "unconfigured_node_exact",
+      "value": []
+    },
+    {
+      "name": "unconfigured_node_count",
+      "value": 0
+    },
+    {
+      "name": "unconfigured_edge_exact",
+      "value": []
+    },
+    {
+      "name": "unconfigured_node_range",
+      "value": []
+    },
+    {
+      "name": "index_statistics",
+      "value": {
+        "indexed_node_properties": [],
+        "indexed_edge_properties": []
+      }
+    },
+    {
+      "name": "manifest_counts",
+      "value": {
+        "node_count": null,
+        "edge_count": null,
+        "indexed_node_properties": [],
+        "indexed_edge_properties": [],
+        "temporal_versions_format": 1
+      }
+    },
+    {
+      "name": "context_manager_support",
+      "value": false
+    },
+    {
+      "name": "old_read_view_exists",
+      "value": false
+    },
+    {
+      "name": "old_run_rules_exists",
+      "value": false
+    },
+    {
+      "name": "old_maintain_truth_exists",
+      "value": false
+    },
+    {
+      "name": "old_explain_claim_exists",
+      "value": false
+    },
+    {
+      "name": "MATCH (n) RETURN n LIMIT 2",
+      "value": [
+        {
+          "n": "<gestaltdb.graphdb.Node object at 0x7b925f9c33e0>"
+        },
+        {
+          "n": "<gestaltdb.graphdb.Node object at 0x7b925f9c2bd0>"
+        }
+      ]
+    },
+    {
+      "name": "MATCH (n) RETURN count(n) AS nodes",
+      "value": [
+        {
+          "nodes": 3
+        }
+      ]
+    },
+    {
+      "name": "MATCH ()-[r]->() RETURN count(r) AS edges",
+      "value": [
+        {
+          "edges": 1
+        }
+      ]
+    },
+    {
+      "name": "MATCH (n) UNWIND labels(n) AS label RETURN DISTINCT label",
+      "value": [
+        {
+          "label": "Person"
+        }
+      ]
+    },
+    {
+      "name": "MATCH ()-[r]->() RETURN DISTINCT type(r) AS type",
+      "value": [
+        {
+          "type": "KNOWS"
+        }
+      ]
+    },
+    {
+      "name": "MATCH (n) UNWIND keys(n) AS key RETURN DISTINCT key",
+      "value": [
+        {
+          "key": "name"
+        },
+        {
+          "key": "age"
+        }
+      ]
+    },
+    {
+      "name": "MATCH (n) RETURN id(n) AS id, labels(n) AS labels, properties(n) AS properties LIMIT 2",
+      "value": [
+        {
+          "id": "alice",
+          "labels": [
+            "Person"
+          ],
+          "properties": {
+            "name": "Alice",
+            "age": 34
+          }
+        },
+        {
+          "id": "bob",
+          "labels": [
+            "Person"
+          ],
+          "properties": {
+            "name": "Bob"
+          }
+        }
+      ]
+    },
+    {
+      "name": "SHOW LABELS",
+      "exception": "CypherSyntaxError",
+      "message": "Unsupported Cypher query (line 1, column 6)"
+    },
+    {
+      "name": "CALL db.labels()",
+      "exception": "CypherSyntaxError",
+      "message": "Unsupported Cypher query (line 1, column 16)"
+    },
+    {
+      "name": "SHOW INDEXES",
+      "value": []
+    },
+    {
+      "name": "RETURN 1 AS n",
+      "exception": "CypherSyntaxError",
+      "message": "Unsupported Cypher query (line 1, column 1)"
+    },
+    {
+      "name": "MATCH (n:Person {name: \"Alice\"}) RETURN n.name AS name",
+      "value": [
+        {
+          "name": "Alice"
+        }
+      ]
+    },
+    {
+      "name": "configured_node_exact",
+      "value": [
+        {
+          "id": "alice",
+          "properties": {
+            "name": "Alice",
+            "age": 34
+          },
+          "labels": [
+            "Person"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "configured_node_range",
+      "value": [
+        {
+          "id": "alice",
+          "properties": {
+            "name": "Alice",
+            "age": 34
+          },
+          "labels": [
+            "Person"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "legacy_range_query_nodes",
+      "value": []
+    },
+    {
+      "name": "configured_edge_exact",
+      "value": [
+        {
+          "id": "e1",
+          "source": "alice",
+          "target": "bob",
+          "properties": {
+            "type": "KNOWS",
+            "score": 0.9
+          }
+        }
+      ]
+    },
+    {
+      "name": "index_statistics_after",
+      "value": {
+        "indexed_node_properties": [
+          "age",
+          "name"
+        ],
+        "indexed_edge_properties": [
+          "score"
+        ]
+      }
+    },
+    {
+      "name": "index_definitions_query",
+      "value": [
+        {
+          "entityType": "NODE",
+          "properties": [
+            "age"
+          ]
+        },
+        {
+          "entityType": "NODE",
+          "properties": [
+            "name"
+          ]
+        },
+        {
+          "entityType": "RELATIONSHIP",
+          "properties": [
+            "score"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "neighbors",
+      "value": [
+        {
+          "bytes_utf8": "bob"
+        }
+      ]
+    },
+    {
+      "name": "offline_html_written",
+      "value": true
+    },
+    {
+      "name": "static_svg",
+      "value": true
+    },
+    {
+      "name": "history_separate_from_current",
+      "value": true
+    },
+    {
+      "name": "replacement_temporal_view",
+      "value": "historical"
+    },
+    {
+      "name": "reopened_node",
+      "value": {
+        "id": "alice",
+        "properties": {
+          "name": "Alice",
+          "age": 34
+        },
+        "labels": [
+          "Person"
+        ]
+      }
+    },
+    {
+      "name": "reopened_index_statistics",
+      "value": {
+        "indexed_node_properties": [
+          "age",
+          "name"
+        ],
+        "indexed_edge_properties": [
+          "score"
+        ]
+      }
+    }
+  ],
+  "docstrings": {
+    "create": "Create a self-describing graph store and return an open handle.",
+    "open": "Open a self-describing graph store from a directory.",
+    "get_node": "Return a node by byte key.\n\nArgs:\n    node_id: Node ID bytes as stored in the backend.\n\nReturns:\n    The decoded node, or ``None`` when absent.\n\nExamples:\n    >>> graph_db.get_node(b\"drug-1\")  # doctest: +SKIP",
+    "get_nodes": "Return decoded nodes in request order (``None`` for missing IDs).",
+    "index_statistics": "Return persisted index definitions visible to the query planner.",
+    "get_node_keys_generator": "Yield node keys from the backing store.\n\nArgs:\n    num_nodes: Optional maximum number of keys to yield.\n    key_offset: Optional starting key.\n\nReturns:\n    Generator of node key bytes.\n\nExamples:\n    >>> list(graph_db.get_node_keys_generator(num_nodes=10))  # doctest: +SKIP",
+    "iter_edge_ids": "Yield all canonical edge IDs from the backing store.\n\nArgs:\n    num_edges: Optional maximum number of edge IDs to yield.\n    key_offset: Optional starting key.\n\nYields:\n    Edge ID bytes in backend key order.\n\nExamples:\n    >>> list(graph_db.iter_edge_ids())  # doctest: +SKIP\n    [b'd1-p1']",
+    "range_query_nodes": "Example stub: You might rely on the underlying store to handle indexing for nodes."
+  },
+  "limits": "No source reads, raw store access, concurrency, scale or browser interaction tests."
+}
