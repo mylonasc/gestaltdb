@@ -65,6 +65,7 @@ warn_return_any = true
 module = [
     "gestaltdb._graph.temporal_types",
     "gestaltdb._graph.stored_rule_types",
+    "gestaltdb.reasoning.adapters.native_batching",
     "gestaltdb._graph.temporal_reads",
     "gestaltdb._graph.temporal_selection",
     "gestaltdb._graph.temporal_writes",

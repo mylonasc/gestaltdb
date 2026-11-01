@@ -25,7 +25,12 @@ def history(tmp_path):
 def test_actual_adapters_historical_evidence_parity(history, selection, valid_time):
     path, manifest = history
     results = [worker(path, 36, method, selection, valid_time, "first") for method in METHODS]
+    grouped = worker(path, 36, METHODS[-1], selection, valid_time, "first", locator_history_batch_size=8)
     assert len({r["evidence_digest"] for r in results}) == 1
+    assert grouped["evidence_digest"] == results[-1]["evidence_digest"]
+    assert grouped["native_profile"]["raw_index_rows"] == results[-1]["native_profile"]["raw_index_rows"]
+    assert grouped["native_profile"]["scans"] <= results[-1]["native_profile"]["scans"]
+    assert grouped["native_profile"]["point_rows"] == grouped["native_profile"]["materialized_records"]
     assert all(r["status"] == "ok" for r in results)
     profile = results[-1]["native_profile"]
     assert profile["authenticated_records"] == manifest["versions"]
@@ -45,6 +50,25 @@ def test_priming_preserves_exact_version_parity(history):
     warm = worker(path, 36, METHODS[-1], "predicate", 70, "warm")
     assert first["evidence_digest"] == warm["evidence_digest"]
     assert first["native_profile"] == warm["native_profile"]
+
+
+def test_cli_explicit_history_batching_is_recorded_and_not_default(tmp_path):
+    pytest.importorskip("pyrex")
+    pytest.importorskip("pyarrow")
+    path = tmp_path / "batched.json"
+    result = subprocess.run([sys.executable, "-m", "benchmarks.reasoning_locator_pipeline",
+        "--rows", "36", "--methods", "native-authenticated-locator", "--selections", "all",
+        "--times", "50", "--caches", "first", "--repeats", "1", "--instrument",
+        "--locator-history-batch-size", "8", "--output", str(path)],
+        capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    report = json.loads(path.read_text())
+    assert report["configuration"]["locator_history_batch_size"] == 8
+    assert report["complete"] and report["all_parity_verified"]
+    sample = report["samples"][0]
+    assert sample["locator_history_batch_size"] == 8
+    assert sample["native_profile"]["scans"] == 6  # world plus five history unions
+    assert sample["native_profile"]["point_fetches"] == 5
 
 
 def test_wrong_oracle_fails_instead_of_timing_success(history):

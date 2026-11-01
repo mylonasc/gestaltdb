@@ -118,12 +118,13 @@ agent/source policy and derived-claim policy remain post-selection filters.
 physical. Logical ``InputContext`` identity stays identical to ordinary
 extraction for the same effective request, mapping, policy, ontology and view.
 
-Full catalog authentication still reads and decodes all pinned records,
+Full catalog authentication still covers all pinned records (with bounded decode reuse),
 including unrelated worlds, literals, negatives and other record kinds. The
 unfiltered canonical conformance read is retained too. Native index transfer
 can be selective without making total extraction selective or avoiding Python
-decoding. One logical-history native scan per candidate has overhead of its
-own. This implementation makes **no speedup, RSS, scale or adoption claim**;
+decoding. The default one-logical-history-scan-per-candidate path has overhead
+of its own. Explicit batching below changes this physical plan only.
+This implementation makes **no universal speedup, RSS, scale or adoption claim**;
 the existing assertion-only ``native-locator`` benchmark does not measure it,
 and earlier full-record native results cannot be transferred to this source.
 Any measurement must use this actual adapter and charge authentication,
@@ -140,6 +141,44 @@ independent. Commit authentication and backend calls are not interrupted
 mid-operation: a commit is validated before its length is charged, so none of
 these limits is a hard RSS, backend-read or elapsed-time guarantee.
 Existing ``ClaimSourceLimits`` and request output bounds still apply separately.
+
+Explicit batched logical histories (HSA-04)
+--------------------------------------------------------------------
+
+Pass ``history_batch_size=64`` to ``PinnedNativeLocatorClaimSource`` to request
+bounded native range unions plus Arrow point fetches. The default ``None``
+retains the existing scalar-history path. Explicit requests require the actual
+``scan_arrow_ranges`` and ``multi_get_arrow`` capabilities (validated against
+plain PyRex 0.7.1); unsupported requests fail closed, without scalar fallback.
+The size is a logical-history count, between 1 and 65536, not an output-row cap.
+
+Every chunk constructs exact half-open raw-key ranges from the existing encoded
+logical-index prefixes, including starts equal to the query point. Returned
+keys must be ordered and match the complete expected membership. Native overlap
+deduplication does not authorize omitting any expected member. Required record
+keys are then fetched in bounded chunks under the **same native snapshot**;
+order, cardinality and decoded claim-version equality are checked independently.
+Missing values, reordered/substituted rows and missing retractions fail before
+evidence. Full catalog authentication, broad world membership, grouped canonical
+conformance and live-source verification remain mandatory; a native snapshot
+alone is not an authenticated canonical history.
+
+Point requests contain at most ``min(batch_rows, 65536)`` keys. Existing
+``batch_rows``/``max_batch_bytes`` also bound returned Arrow batches. Additional
+``NativeLocatorLimits.max_point_rows`` (default 1000000) and ``max_point_bytes``
+(default 64 MiB) count cumulative returned point rows and raw key-plus-payload
+bytes across all chunks. These bounds are independent of catalog/index/output
+limits and apply to the opt-in batched point path. They do not measure native
+I/O, Arrow overhead or RSS and cannot interrupt a native call mid-operation.
+Native batch byte overflow fails closed rather than allowing oversized rows.
+
+The native profile adds ``point_rows``, ``point_bytes`` and ``point_fetches``;
+``scans`` and ``raw_index_rows`` still count only dimension/history index work,
+not point fetches. These point counters are zero on the default scalar path.
+Cancellation/failure closes active streams and releases the shared snapshot;
+abandoned output iterators must still be explicitly closed to release the writer
+guard and retained output values. Context identity and exact evidence are
+unchanged; ordinary extraction remains the default.
 
 ``native_profile`` is a ``NativeLocatorProfile``, intentionally different from
 the full-record ``NativeClaimProfile``. It reports all authenticated records,
@@ -161,6 +200,7 @@ Actual-adapter measurement harness
 
    uv run --extra rocksdb --extra arrow python -m benchmarks.reasoning_locator_pipeline --rows 1000 --times 10 30 50 70 90 --repeats 1 --output /tmp/opencode/locator-smoke.json
    uv run --extra rocksdb --extra arrow python -m benchmarks.reasoning_locator_pipeline --rows 1000 --commit-batch 250 --instrument --times 30 50 --repeats 3 --output /tmp/opencode/locator-attributed.json
+   uv run --extra rocksdb --extra arrow python -m benchmarks.reasoning_locator_pipeline --rows 1000 --instrument --locator-history-batch-size 64 --times 30 50 --repeats 3 --output /tmp/opencode/locator-batched.json
    uv run --extra rocksdb --extra arrow python -m benchmarks.reasoning_locator_pipeline --rows 100000 --times 30 50 --repeats 3 --timeout 600 --output /tmp/opencode/locator-100k.json
 
 For a separately labelled sparse-history scale study, add

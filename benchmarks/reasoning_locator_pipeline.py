@@ -187,7 +187,8 @@ def fixture(path, rows, history_rows=None, commit_batch=1000, instrumented=False
             instrument_manager.__exit__(None, None, None)
 
 
-def worker(path, rows, method, selection, valid_time, cache, instrumented=False):
+def worker(path, rows, method, selection, valid_time, cache, instrumented=False,
+           locator_history_batch_size=None):
     from gestaltdb.graphdb import GraphDB
     from gestaltdb.reasoning.adapters.batched import PinnedBatchedClaimSource
     from gestaltdb.reasoning.adapters.claims import ClaimMapping, ClaimSelection, ClaimSourceLimits
@@ -216,7 +217,8 @@ def worker(path, rows, method, selection, valid_time, cache, instrumented=False)
                                                max_logical_claims=rows + 1)
         if method == "native-authenticated-locator":
             options["native_limits"] = replace(options["native_limits"],
-                                                max_authenticated_records=manifest["versions"] + 1)
+                                                 max_authenticated_records=manifest["versions"] + 1)
+            options["history_batch_size"] = locator_history_batch_size
 
     def measure():
         metrics = {}
@@ -275,7 +277,8 @@ def worker(path, rows, method, selection, valid_time, cache, instrumented=False)
                 "instrumentation": stage_counters if instrumented else None,
                 "evaluator_s": None,
                 "evaluator_boundary": "not measured: this harness does not evaluate rules",
-                "source_contract": method, "valid_time": valid_time, "selection": selection,
+                 "source_contract": method, "valid_time": valid_time, "selection": selection,
+                 "locator_history_batch_size": locator_history_batch_size if method == "native-authenticated-locator" else None,
                 "rss_peak_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss *
                                   (1 if sys.platform == "darwin" else 1024),
                 "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
@@ -295,6 +298,8 @@ def main():
                         help="assertion records per fixture commit; independent of row count")
     parser.add_argument("--instrument", action="store_true",
                         help="record opt-in benchmark-only physical-I/O and target-resolution counters")
+    parser.add_argument("--locator-history-batch-size", type=int,
+                        help="explicit locator range-union/point-fetch batching; default retains scalar history reads")
     parser.add_argument("--methods", nargs="+", choices=METHODS, default=list(METHODS))
     parser.add_argument("--selections", nargs="+", choices=SELECTIONS, default=list(SELECTIONS))
     parser.add_argument("--times", nargs="+", type=int, choices=TIMES, default=[50])
@@ -311,6 +316,8 @@ def main():
         parser.error("history-rows must be between 1 and rows")
     if args.commit_batch < 1:
         parser.error("commit-batch must be a positive integer")
+    if args.locator_history_batch_size is not None and not 1 <= args.locator_history_batch_size <= 65536:
+        parser.error("locator-history-batch-size must be between 1 and 65536")
     # A batch larger than the row count is one commit; record the effective size.
     args.commit_batch = min(args.commit_batch, args.rows)
     if args.worker:
@@ -320,7 +327,8 @@ def main():
                           commit_batch=args.commit_batch, instrumented=args.instrument)
                   if args.worker == "load" else worker(
                       args.fixture, args.rows, args.worker, args.selections[0],
-                      args.times[0], args.caches[0], instrumented=args.instrument))
+                       args.times[0], args.caches[0], instrumented=args.instrument,
+                       locator_history_batch_size=args.locator_history_batch_size))
         print(json.dumps(result))
         return
     root = Path(__file__).resolve().parents[1]
@@ -365,6 +373,8 @@ def main():
             common += ["--history-rows", str(args.history_rows)]
         if args.instrument:
             common.append("--instrument")
+        if args.locator_history_batch_size is not None:
+            common += ["--locator-history-batch-size", str(args.locator_history_batch_size)]
         loaded = call_worker([*common, "--worker", "load"], args.timeout)
         report["fixture"] = loaded
         save()
