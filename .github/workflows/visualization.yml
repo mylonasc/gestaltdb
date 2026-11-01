@@ -4,15 +4,28 @@ on:
   pull_request:
     paths:
       - 'web/**'
+      - '!web/**/*.md'
+      # Every web/src file participates in the bundle source digest.
+      - 'web/src/**'
       - 'src/gestaltdb/viz/**'
-      - 'tests/test_viz*'
+      - '!src/gestaltdb/viz/**/*.md'
+      - 'src/gestaltdb/viz/static/**'
+      - 'tests/test_viz*.py'
+      - 'pyproject.toml'
+      - 'uv.lock'
       - '.github/workflows/visualization.yml'
   push:
     branches: [main]
     paths:
       - 'web/**'
+      - '!web/**/*.md'
+      - 'web/src/**'
       - 'src/gestaltdb/viz/**'
-      - 'tests/test_viz*'
+      - '!src/gestaltdb/viz/**/*.md'
+      - 'src/gestaltdb/viz/static/**'
+      - 'tests/test_viz*.py'
+      - 'pyproject.toml'
+      - 'uv.lock'
       - '.github/workflows/visualization.yml'
   workflow_dispatch:
 

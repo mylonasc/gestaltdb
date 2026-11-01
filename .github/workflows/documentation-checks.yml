@@ -1,0 +1,75 @@
+name: Documentation and roadmap checks
+
+# Prose/tracker validation is intentionally separate from Sphinx/package builds
+# and the backend test matrices. Each path below is read by these checks.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'AGENTS.md'
+      - 'EXAMPLES.md'
+      - 'EPIC_REASONING_ENGINE.md'
+      - 'gestaltdb_reasoning_feature_tracker.xlsx'
+      - 'src/gestaltdb/**/*.py'
+      - 'src/gestaltdb/agent_skill/**'
+      - 'docs/**/*.rst'
+      - '.opencode/skills/gestaltdb-docs-maintainer/references/*.md'
+      - '.opencode/skills/gestaltdb-docs-maintainer/scripts/*.py'
+      - 'planning/reasoning-engine/*.py'
+      - 'planning/reasoning-engine/baseline-review.json'
+      - 'planning/reasoning-engine/roadmap.json'
+      - 'planning/reasoning-engine/issues.json'
+      - 'planning/reasoning-engine/tracking-status.json'
+      - 'planning/reasoning-engine/source-assessment.md'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/documentation-checks.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'AGENTS.md'
+      - 'EXAMPLES.md'
+      - 'EPIC_REASONING_ENGINE.md'
+      - 'gestaltdb_reasoning_feature_tracker.xlsx'
+      - 'src/gestaltdb/**/*.py'
+      - 'src/gestaltdb/agent_skill/**'
+      - 'docs/**/*.rst'
+      - '.opencode/skills/gestaltdb-docs-maintainer/references/*.md'
+      - '.opencode/skills/gestaltdb-docs-maintainer/scripts/*.py'
+      - 'planning/reasoning-engine/*.py'
+      - 'planning/reasoning-engine/baseline-review.json'
+      - 'planning/reasoning-engine/roadmap.json'
+      - 'planning/reasoning-engine/issues.json'
+      - 'planning/reasoning-engine/tracking-status.json'
+      - 'planning/reasoning-engine/source-assessment.md'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/documentation-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  references:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Install checker dependencies without building the project
+        run: >-
+          python -m pip install --only-binary=:all:
+          'numpy>=1.23' 'lark>=1.2' openpyxl
+      - name: Check documentation and roadmap references without builds
+        run: |
+          python .opencode/skills/gestaltdb-docs-maintainer/scripts/check_docs.py
+          python planning/reasoning-engine/check_roadmap.py
+          python planning/reasoning-engine/check_tracking.py
+          python planning/reasoning-engine/sync_tracker.py --check

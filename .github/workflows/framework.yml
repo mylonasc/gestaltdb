@@ -4,16 +4,24 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'src/gestaltdb/sampling/**'
-      - 'tests/test_sampling*.py'
+      - 'src/gestaltdb/sampling/**/*.py'
+      - 'tests/test_sampling_real_frameworks.py'
+      - 'tests/test_sampling_pyg_blocks.py'
+      - 'tests/test_sampling.py'
+      - 'tests/conftest.py'
+      - 'tests/category_markers.py'
       - 'pyproject.toml'
       - 'uv.lock'
       - '.github/workflows/framework.yml'
   push:
     branches: [main]
     paths:
-      - 'src/gestaltdb/sampling/**'
-      - 'tests/test_sampling*.py'
+      - 'src/gestaltdb/sampling/**/*.py'
+      - 'tests/test_sampling_real_frameworks.py'
+      - 'tests/test_sampling_pyg_blocks.py'
+      - 'tests/test_sampling.py'
+      - 'tests/conftest.py'
+      - 'tests/category_markers.py'
       - 'pyproject.toml'
       - 'uv.lock'
       - '.github/workflows/framework.yml'

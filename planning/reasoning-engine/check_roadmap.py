@@ -3,9 +3,11 @@
 import hashlib
 import json
 from pathlib import Path
+import posixpath
 import re
 import xml.etree.ElementTree as ET
 import zipfile
+from sync_tracker import load_review
 
 
 def main():
@@ -37,6 +39,33 @@ def main():
     for name, expected in plan["source_sha256"].items():
         path = here / name if name == "source-assessment.md" else root / name
         assert hashlib.sha256(path.read_bytes()).hexdigest() == expected, name
+
+    # Freeze canonical original audit rows inside the workbook. This remains
+    # verifiable in shallow CI/source exports, without fetching old git objects.
+    # The historical binary hash/revision remain provenance, not a live-file pin.
+    historical = plan["historical_workbook"]
+    original_rows = workbook_rows(workbook, sheet_name="Original audit")
+    original_digest = hashlib.sha256(json.dumps(original_rows, ensure_ascii=False,
+        separators=(",", ":")).encode()).hexdigest()
+    assert original_digest == historical["original_audit_rows_sha256"], "Original audit rows changed"
+    review = load_review(root)
+    assert plan["status_authority"] == "EPIC_REASONING_ENGINE.md"
+    assert plan["reviewed_source"] == review.revision and plan["reviewed_at"] == review.timestamp
+    # openpyxl is optional: the normal gate remains stdlib-only. The explicit
+    # sync_tracker --check gate checks every generated cell when installed.
+    current_rows = workbook_rows(workbook)
+    assert len(current_rows) == len(original_rows) == 137
+    for current, previous, row in zip(current_rows[1:], original_rows[1:], review.features):
+        for column in (0, 1, 2, 4, 5, 6):
+            assert current[column] == previous[column], (row[0], "Original acceptance/identity changed", column)
+        assert current[3] == row[2], (row[0], "Workbook status drift")
+        assert current[11] == previous[3], (row[0], "Original audit status drift")
+        assert current[12:14] == [review.timestamp, review.revision], (row[0], "Review identity drift")
+        assert row[4] in current[8], (row[0], "Boundary drift")
+    assert all(item["status"] == "integrated" for item in plan["delivery"].values())
+    for key, _, _, _, pr_commit, _ in review.roadmap[:27]:
+        delivery = plan["delivery"][key]
+        assert pr_commit == f"#{delivery['pr']} / {delivery['integration_commit']}", (key, "Delivery metadata drift")
 
     epics = {item["id"]: item for item in plan["epics"]}
     features = {item["id"]: item for item in plan["features"]}
@@ -101,8 +130,51 @@ def main():
             "RE-" + value.strip() for value in dependencies.split(",")
         ]
         assert actual == expected, (key, actual, expected)
-    print("Validated: original source hashes, all 136 GR IDs, 5 sequential epics, "
-          "27 feature issues, Markdown index, baseline audit and acyclic dependency graph.")
+    print("Validated: historical source hashes, live workbook statuses/acceptance/review identity, "
+          "136 GR IDs, 5 epics, 27 delivered features, Markdown index and dependency DAG.")
+
+
+def workbook_rows(path, sheet_name=None):
+    """Read the first register sheet without an Excel dependency (both encodings)."""
+    ns = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    with zipfile.ZipFile(path) as archive:
+        strings = []
+        if "xl/sharedStrings.xml" in archive.namelist():
+            strings = ["".join(item.itertext()) for item in ET.fromstring(
+                archive.read("xl/sharedStrings.xml")).findall("m:si", ns)]
+        sheet_path = "xl/worksheets/sheet1.xml"
+        if sheet_name is not None:
+            book = ET.fromstring(archive.read("xl/workbook.xml"))
+            rel_id = next(item for item in book.findall("m:sheets/m:sheet", ns)
+                          if item.get("name") == sheet_name).get(
+                              "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")
+            relationships = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+            target = next(item.get("Target") for item in relationships if item.get("Id") == rel_id)
+            sheet_path = (target.lstrip("/") if target.startswith("/")
+                          else posixpath.normpath(posixpath.join("xl", target)))
+        sheet = ET.fromstring(archive.read(sheet_path))
+        rows = []
+        for row in sheet.findall("m:sheetData/m:row", ns):
+            values = [None] * 14
+            for cell in row.findall("m:c", ns):
+                letters = re.match(r"[A-Z]+", cell.get("r")).group()
+                index = 0
+                for letter in letters:
+                    index = index * 26 + ord(letter) - ord("A") + 1
+                if index > len(values):
+                    values.extend([None] * (index - len(values)))
+                value = cell.find("m:v", ns)
+                if cell.get("t") == "inlineStr":
+                    decoded = "".join(cell.find("m:is", ns).itertext())
+                elif value is None:
+                    decoded = None
+                elif cell.get("t") == "s":
+                    decoded = strings[int(value.text)]
+                else:
+                    decoded = value.text
+                values[index - 1] = decoded
+            rows.append(values)
+        return rows
 
 
 if __name__ == "__main__":

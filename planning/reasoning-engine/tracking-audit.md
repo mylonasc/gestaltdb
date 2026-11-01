@@ -1,5 +1,11 @@
 # GitHub/roadmap sanitation — 2026-10-25
 
+> Historical audit only. Current status, delivery dates and remaining work are
+> consolidated in [EPIC_REASONING_ENGINE.md](../../EPIC_REASONING_ENGINE.md).
+> Its 2026-11-01 review supersedes the unmerged #369 and open-parent claims
+> below. The live workbook is now generated from that epic; original workbook
+> bytes remain in git and original rows remain in its historical sheets.
+
 Reviewed integration: `2ed6ade764d6af4d27a3fab52bc3fc3d5f5c41e5` (PR #368).
 This is a tracking/evidence audit, not new feature delivery or release approval.
 Original workbook, source assessment, baseline hashes, feature IDs and dependency
