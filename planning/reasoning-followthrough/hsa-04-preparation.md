@@ -49,3 +49,24 @@ before admitting batching; expand selective/nonselective and larger-scale
 allocation/latency measurements. Do not remove world completeness or canonical
 checks based on candidate hits. HSA-05 remains optional and measurement-gated;
 HSA-06's final-source cross-consumer acceptance is still mandatory.
+
+## Next-slice capability probe (not admission)
+
+The installed `pyrex-rocksdb==0.7.1` plain handle exposes these actual entry
+points (runtime docstrings, not inferred method names):
+
+- `scan_arrow_ranges(ranges=None, prefixes=None, batch_size=65536,
+  max_batch_bytes=8388608, read_options=None, snapshot=None,
+  allow_overflow=False, collect_metrics=False)`
+- `multi_get(keys, read_options=None, snapshot=None)` returns values/None in
+  input order with a documented maximum of 65536 keys.
+- `multi_get_arrow(keys, batch_size=65536, max_batch_bytes=8388608,
+  read_options=None, snapshot=None, allow_overflow=False, collect_metrics=False)`
+
+This is only API discovery. It establishes neither minimum-version support nor
+the range container format, overlapping-range deduplication, omission handling,
+key ordering/encoding, byte-overflow behavior, physical work accounting or
+snapshot/handle guarantees. Test those contracts against the same authenticated
+catalog under bounded chunks before adding an explicit batching path. In
+particular, do not mix native-only snapshot point fetches with unauthenticated
+live canonical history.
