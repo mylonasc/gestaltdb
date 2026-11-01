@@ -235,6 +235,11 @@ different runs are not a controlled scaling curve.
      - 1,000
      - 1.30
      - complete, 3 repeats
+   * - ``1k-sparse``
+     - 1,000 / 100
+     - 1,000
+     - 0.35
+     - complete
    * - ``10k-dense``
      - 10,000 / 10,000
      - 1,000
@@ -256,10 +261,11 @@ different runs are not a controlled scaling curve.
      - not reached
      - fixture timeout at 900 s, last stage ``fixture-commit``
 
-Later reports in the table were written while earlier result files were
-untracked, so their recorded ``dirty`` flag is true even though the recorded
-harness hashes match revision ``94d53d3``. Preserve that qualification rather
-than relabelling them clean-source evidence. The companion
+The first ``1k-dense-b1000`` report is clean. Later reports record ``dirty`` true
+because earlier result files were still untracked when they were measured. Every
+recorded harness hash matches revision ``94d53d3``, so the measured harness code
+is identical; preserve the qualification rather than relabelling them
+clean-source evidence. The companion
 ``benchmarks/results/reasoning-457-hsa-01-baseline-index.json`` is a compact,
 checksummed index of every HSA-01 report, its command, fixture stages and a
 representative attribution group.
@@ -279,7 +285,8 @@ of retractions. Construction performed 48.67 million metadata reads, of which
 targets across 6,858 fallback passes. The 10K sparse fixture with the same
 assertion count but amendments only in the first 1,000 rows constructed several
 orders of magnitude more cheaply, and its extraction did not repeat the dense
-target fallback work.
+target fallback work. A matched 1K fixture loaded in 0.35 seconds with sparse
+history (100 amended rows) versus 1.37 seconds with full dense history.
 
 Extraction attribution separates transfer from authentication. At 10K dense,
 valid time 50, ``all`` selection produced approximately:
