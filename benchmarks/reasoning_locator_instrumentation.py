@@ -332,22 +332,42 @@ class LocatorInstrumentation:
 
         self._patch(reader, "get_version", get_version)
 
+        original_batch = reader.get_versions_through_batch
+
+        @functools.wraps(original_batch)
+        def get_versions_through_batch(reader_self: Any, version_ids: Any, through_commit: int) -> Any:
+            # One batch resolution counts once; distinct IDs accumulate across batches.
+            counters.target_lookup_calls += 1
+            try:
+                horizon = max(0, int(through_commit))
+            except (TypeError, ValueError):
+                horizon = 0
+            counters.target_lookup_horizon_sum += horizon
+            counters._target_lookup_depth += 1
+            begin = time.perf_counter()
+            try:
+                result = original_batch(reader_self, version_ids, through_commit)
+            finally:
+                counters.target_lookup_s += time.perf_counter() - begin
+                counters._target_lookup_depth -= 1
+            try:
+                for resolved_id in result:
+                    if resolved_id not in counters._target_version_ids:
+                        counters._target_version_ids.add(resolved_id)
+                        counters.distinct_target_version_ids += 1
+            except TypeError:
+                pass
+            return result
+
+        self._patch(reader, "get_versions_through_batch", get_versions_through_batch)
+
         original_through = reader.get_version_through
 
         @functools.wraps(original_through)
         def get_version_through(reader_self: Any, version_id: str, through_commit: int) -> Any:
-            counters.target_lookup_calls += 1
-            counters.target_lookup_horizon_sum += max(0, int(through_commit))
-            if version_id not in counters._target_version_ids:
-                counters._target_version_ids.add(version_id)
-                counters.distinct_target_version_ids += 1
-            counters._target_lookup_depth += 1
-            begin = time.perf_counter()
-            try:
-                return original_through(reader_self, version_id, through_commit)
-            finally:
-                counters.target_lookup_s += time.perf_counter() - begin
-                counters._target_lookup_depth -= 1
+            # Single-target lookups delegate to the batched resolver; counting
+            # lives in the batch wrapper to preserve once-per-batch semantics.
+            return original_through(reader_self, version_id, through_commit)
 
         self._patch(reader, "get_version_through", get_version_through)
 

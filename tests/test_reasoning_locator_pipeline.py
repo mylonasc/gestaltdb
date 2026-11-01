@@ -131,7 +131,9 @@ def test_instrumented_fixture_records_construction_phases(tmp_path):
     assert counts["index_write_s"] > 0
     assert counts["index_entries_written"] > 0
     assert counts["distinct_target_version_ids"] > 0
-    assert counts["target_lookup_calls"] >= counts["distinct_target_version_ids"]
+    assert counts["target_lookup_calls"] > 0
+    # Batched resolution: one call resolves many distinct targets.
+    assert counts["distinct_target_version_ids"] >= counts["target_lookup_calls"]
     assert counts["checksum_calls"] > 0
     assert counts["checksum_marker_visits"] > 0
     assert counts["commit_cache_entries_peak"] > 0
