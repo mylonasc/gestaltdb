@@ -102,6 +102,8 @@ def test_unpaired_summary_is_rejected():
     row = dict(fake_receipt(), label="before", repeat=0, method="ordinary", selection="all", valid_time=50, cache="first")
     with pytest.raises(ValueError, match="unpaired"):
         acceptance.summarize([row])
+    with pytest.raises(ValueError, match="duplicate"):
+        acceptance.summarize([row, row])
 
 
 def test_real_workers_attest_checkout_and_share_exact_versions(tmp_path):

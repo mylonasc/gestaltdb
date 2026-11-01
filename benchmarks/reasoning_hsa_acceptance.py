@@ -104,7 +104,10 @@ def summarize(samples):
     groups = {}
     for row in samples:
         key = f'{row["method"]}/{row["selection"]}/{row["valid_time"]}/{row["cache"]}'
-        groups.setdefault(key, {}).setdefault(row["label"], {})[row["repeat"]] = row
+        bucket = groups.setdefault(key, {}).setdefault(row["label"], {})
+        if row["repeat"] in bucket:
+            raise ValueError("duplicate acceptance observation")
+        bucket[row["repeat"]] = row
     summary = {}
     for key, labels in groups.items():
         if set(labels) != {"before", "after"}:
@@ -163,6 +166,8 @@ def main():
             or (args.history_rows is not None and not 1 <= args.history_rows <= args.rows)
             or (args.after_history_batch_size is not None and not 1 <= args.after_history_batch_size <= 65536)):
         parser.error("invalid bounded workload, repeat count, timeout or batch size")
+    if any(len(values) != len(set(values)) for values in (args.methods, args.selections, args.times, args.caches)):
+        parser.error("comparison dimensions must not contain duplicates")
     roots = {"before": args.before.resolve(), "after": args.after.resolve()}
     report = {
         "schema_version": 1, "complete": False, "all_parity_verified": False, "samples": [],
