@@ -1,9 +1,18 @@
 # Native extraction original acceptance and capability audit — #194
 
-Target: `feature/onto-dev-epic-2`, not `main`. Reference integration `96a9103`.
-#194 remains open: distinguish delivered measurements and raw/decoded contracts
-from any remaining general source-admitted locator/pushdown requirement. Do not
-close it merely because the original remaining scale checkbox is now measured.
+Historical audit baseline: integration `96a9103`, originally targeting
+`feature/onto-dev-epic-2`. That target is fulfilled history, not current work
+instructions. Current authority is `EPIC_REASONING_ENGINE.md` sections 1–4.
+
+Reconciled against main `7f28808` (sanitation #452) on 2026-11-01: the production
+locator source is already on main. Open PR #450 contains actual-adapter evidence
+and a **defer automatic adoption** decision, not yet merged into reviewed main.
+It preserves 18/18 100K sparse-history and 36/36 diagnostic dense-history 10K
+exact fact/version-ID parity observations plus the separate dense 100K
+construction timeout. No rule-closure, repeated-distribution or OS-cold claim is
+made by those extraction results. #194 awaits integration/review; #451 separately
+owns dense-history supersession/authentication and locator read-amplification
+remediation. Do not turn a measured defer decision into a speedup/default change.
 
 ## Original issue requirements, not merged-child counts
 
@@ -60,12 +69,12 @@ prefix pushdown must not be described as eliminating full catalog decoding or
 canonical reads. Dedicated catalog-record and cumulative native-index-row
 limits/profiles expose the different work units.
 
-This addresses the historical locator/source correctness gap in implementation,
-but acceptance is still pending green integration and an actual-adapter
-measurement/decision review. Existing benchmark-only locator and full-record
-native reports are not relabelled measurements of this source. Original scale
-evidence remains valid for the modes it measured; do not infer a universal
-locator acceleration or automatically close #194 from this additive API.
+This addressed the historical locator/source correctness gap and reached main
+through #369. Actual-adapter measurements/decision are delivered separately in
+unmerged PR #450; final integration/review remains. Existing benchmark-only
+locator and full-record native reports are not relabelled measurements of this
+source. Original scale evidence remains valid for the modes it measured; do not
+infer a universal acceleration or automatically close #194 from this additive API.
 
 ## Actual-adapter benchmark continuation (2026-11-01)
 
@@ -81,10 +90,15 @@ authentication/materialization costs; native work profiles; runtime/source hashe
 and timing/whole-worker RSS. See `docs/reasoning-native-locator-claims.rst` for commands.
 This is extraction-only, not a relabelling of inference/support/publication results.
 
-Closure still requires staged successful scale/repeat measurements of this actual
-adapter and an explicit adopt/defer/reject review. No production default changes,
-performance adoption or issue closure follows from implementing the harness or a
-small smoke. Preserve all earlier raw/full-record/assertion-only results separately.
+The actual-adapter scale comparison and explicit defer decision are now recorded
+in `docs/reasoning-native-locator-claims.rst`, with committed reports under
+`benchmarks/results/reasoning-194-locator-*`. Closure awaits PR #450 integration/
+review, not completion of #451 optimization debt. Repeated isolated measurements
+remain necessary for a future adoption claim; single observations suffice to keep
+the existing default and explicitly defer adoption. Preserve earlier raw/full-record/
+assertion-only results separately and distinguish dense construction failure from
+sparse-history extraction success. The 10K report's later-worker harness imports
+have a documented provenance qualification, not immutable-source certification.
 
 ## Re-audit commands
 
