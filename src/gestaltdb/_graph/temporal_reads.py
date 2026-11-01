@@ -422,6 +422,15 @@ class TemporalReader:
         same-batch or future records: ``through_commit`` must be captured
         before the batch's own commit is published.
         """
+        try:
+            return self._get_versions_through_batch(version_ids, through_commit)
+        except BaseException:
+            self.commit_cache.clear()
+            raise
+
+    def _get_versions_through_batch(
+        self, version_ids: object, through_commit: int
+    ) -> dict[str, TemporalVersion | None]:
         if isinstance(through_commit, bool) or not isinstance(through_commit, int):
             raise ValueError("through_commit must be a non-negative integer")
         if through_commit < 0:
@@ -440,6 +449,10 @@ class TemporalReader:
         generation = self._usable_version_index_generation(through_commit)
         if generation is not None:
             missing: set[str] = set()
+            # One complete commit authentication covers all of its requested
+            # target versions for this batch. This map never escapes the call;
+            # a later invocation must recheck mutable envelopes and markers.
+            authenticated_commits: dict[int, TemporalCommit | None] = {}
             for value in distinct:
                 locators = list(
                     self.store.iter_index_prefix(
@@ -462,7 +475,10 @@ class TemporalReader:
                 if commit_id < 1 or commit_id > through_commit:
                     missing.add(value)
                     continue
-                commit = self.get_commit_cached(commit_id, _validate_supersession=False)
+                if commit_id not in authenticated_commits:
+                    authenticated_commits[commit_id] = self.get_commit_cached(
+                        commit_id, _validate_supersession=False)
+                commit = authenticated_commits[commit_id]
                 if commit is None:
                     missing.add(value)
                     continue

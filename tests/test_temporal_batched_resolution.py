@@ -71,8 +71,9 @@ def test_batch_resolves_distinct_once_without_per_link_scan(tmp_path, backend, m
         assert all(v is not None for v in resolved.values())
         # Once per distinct target, not once per link.
         assert calls["index"] == 3
-        # Target commits are cached: at most distinct + horizon work, not M*N.
-        assert calls["commit"] <= 6
+        # All requested versions belong to one authenticated commit. Recheck
+        # that whole commit once per batch, not once per distinct version.
+        assert calls["commit"] == 1
         # Detached: mutating the returned copy must not poison the cache.
         if isinstance(resolved[ids["a"]], NodeVersion):
             resolved[ids["a"]].node.properties["x"] = 1  # type: ignore[union-attr]
