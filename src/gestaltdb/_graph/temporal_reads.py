@@ -61,10 +61,10 @@ from .temporal_types import CommitCache, PointInput, TemporalReadSource, Version
 
 
 def _commit_cache_bytes(cache: CommitCache) -> int:
-    """Return stored descriptor plus envelope bytes (decoded commits share that floor)."""
+    """Return stored descriptor plus retained record sizes (decoded commits share that floor)."""
     total = 0
-    for _, descriptor_payload, envelopes, _ in cache.values():
-        total += len(descriptor_payload) + sum(len(envelope) for envelope in envelopes)
+    for _, descriptor_payload, sizes, _ in cache.values():
+        total += len(descriptor_payload) + sum(sizes)
     return total
 
 
@@ -189,7 +189,7 @@ class TemporalReader:
 
         Decode reuse is bounded and scoped to the exact store object. Pinned
         verifiable read snapshots can reuse validated records directly;
-        live/unverifiable stores recheck descriptor, marker and envelopes.
+        live/unverifiable stores recheck descriptor, marker and record digests.
         """
         commit = self.get_commit_cached(commit_id, _validate_supersession=_validate_supersession)
         if commit is None:
@@ -220,14 +220,45 @@ class TemporalReader:
         if descriptor_payload is None or marker != hashlib.sha256(descriptor_payload).digest():
             raise TemporalCorruptionError("temporal commit marker does not match its descriptor")
         if cached is not None and cached[0] is self.store and cached[1] == descriptor_payload:
-            cached_envelopes = tuple(self.store.get_metadata(temporal_record_key(commit_id, ordinal))
-                              for ordinal in range(len(cached[2])))
-            if cached_envelopes != cached[2]:
+            # Descriptor unchanged; verify live envelopes against its digests
+            # without retaining them. Cached versions stay valid; only
+            # supersession targets can change on mutable stores.
+            try:
+                hit_catalog = json.loads(descriptor_payload.decode("utf-8"))
+                hit_digests = hit_catalog.get("record_digests")
+                if not isinstance(hit_digests, list) or not hit_digests:
+                    raise ValueError
+            except (UnicodeDecodeError, json.JSONDecodeError, ValueError, AttributeError) as exc:
+                raise TemporalCorruptionError("invalid temporal commit descriptor") from exc
+            if len(hit_digests) != len(cached[2]):
                 raise TemporalCorruptionError("temporal commit record is missing or corrupt")
-            # Supersession targets can change on mutable stores too. Only
-            # reuse the non-supersession validation result in this path.
-            if not _validate_supersession or not any(v.supersedes_version_id for v in cached[3].versions):
-                return cached[3]
+            for ordinal, expected_digest in enumerate(hit_digests):
+                envelope = self.store.get_metadata(temporal_record_key(commit_id, ordinal))
+                if envelope is None or hashlib.sha256(envelope).hexdigest() != expected_digest:
+                    raise TemporalCorruptionError("temporal commit record is missing or corrupt")
+            cached_commit = cached[3]
+            if not _validate_supersession or not any(
+                v.supersedes_version_id for v in cached_commit.versions
+            ):
+                return cached_commit
+            distinct_targets = list(
+                dict.fromkeys(
+                    version.supersedes_version_id
+                    for version in cached_commit.versions
+                    if version.supersedes_version_id is not None
+                )
+            )
+            if distinct_targets:
+                targets = self.get_versions_through_batch(distinct_targets, commit_id - 1)
+                for version in cached_commit.versions:
+                    if version.supersedes_version_id is None:
+                        continue
+                    target = targets[normalize_version_id(version.supersedes_version_id)]
+                    if target is None:
+                        raise TemporalCorruptionError("temporal version supersedes a missing version")
+                    if type(target) is not type(version) or target.logical_id != version.logical_id:
+                        raise TemporalCorruptionError("temporal supersession kind or logical ID mismatch")
+            return cached_commit
         try:
             descriptor = json.loads(descriptor_payload.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -271,12 +302,12 @@ class TemporalReader:
         except (KeyError, TypeError, ValueError) as exc:
             raise TemporalCorruptionError("invalid temporal commit metadata") from exc
         versions: list[TemporalVersion] = []
-        envelopes: list[bytes] = []
+        sizes: list[int] = []
         for ordinal, (version_id, expected_digest) in enumerate(zip(version_ids, record_digests)):
             envelope = self.store.get_metadata(temporal_record_key(commit_id, ordinal))
             if envelope is None or hashlib.sha256(envelope).hexdigest() != expected_digest:
                 raise TemporalCorruptionError("temporal commit record is missing or corrupt")
-            envelopes.append(envelope)
+            sizes.append(len(envelope))
             version = self.decode_version(envelope)
             if version.version_id != version_id or version.commit_id != commit_id or version.commit_ordinal != ordinal:
                 raise TemporalCorruptionError("temporal commit record does not match its descriptor")
@@ -304,13 +335,14 @@ class TemporalReader:
         commit = TemporalCommit(commit_id, system_time, metadata, tuple(versions))
         # Bounded reuse: entries and bytes. Commits are immutable so eviction
         # only costs a future re-decode, never correctness. Bytes cover the
-        # stored descriptor plus envelopes; decoded commits share that floor.
+        # stored descriptor plus retained record sizes; decoded commits share
+        # that floor without retaining full envelopes.
         if len(self.commit_cache) >= 256 or _commit_cache_bytes(self.commit_cache) >= 64 * 1024 * 1024:
             # Drop the oldest half; commits are immutable so eviction only
             # costs a future re-decode, never correctness.
             for old_key in list(self.commit_cache)[:128]:
                 del self.commit_cache[old_key]
-        self.commit_cache[cache_key] = (self.store, descriptor_payload, tuple(envelopes), commit)
+        self.commit_cache[cache_key] = (self.store, descriptor_payload, tuple(sizes), commit)
         return commit
 
     def iter_commits(self, *, through_commit: int | None = None) -> Iterator[TemporalCommit]:

@@ -74,7 +74,7 @@ def test_byte_and_entry_bounds_evict_oldest_half(tmp_path, backend, module):
         assert real_commit is not None
         for i in range(300):
             cache[(id(graph.store), 10000 + i, False)] = (
-                graph.store, b"d", (b"e",), real_commit,
+                graph.store, b"d", (1,), real_commit,
             )
         assert len(cache) > 256
         graph.temporal.put_node_version(Node("evict"), valid=(0, None))
