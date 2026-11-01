@@ -224,6 +224,13 @@ DeepWalk extensions: `gestaltdb.sampling.iter_context_pairs` yields bounded rest
 - Well-motivated architecture work that enables large portions of ambitious roadmaps always takes priority.
 - Use GitHub issues and their dependency relationships to represent roadmap dependencies and track work.
 
+## HSA Integration Branch (temporary — remove this section when obsolete)
+
+- Parent roadmap: #451 (HSA-01 through HSA-06).
+- Integration branch: `hsa-dev`. It stacks PR #450 plus HSA-01 (#457/PR #459), HSA-02 (#456/PR #461), and onward.
+- Base new HSA slices on `hsa-dev`, open stacked PRs toward `hsa-dev`, and freely merge completed HSA slices into `hsa-dev` as implementation progresses.
+- Remove this section once HSA work has landed on `main` and the instruction is obsolete.
+
 ## Development Commands
 
 - Lint library correctness: `uv run --extra lint ruff check .`
