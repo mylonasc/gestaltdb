@@ -224,6 +224,25 @@ at 900 seconds, before extraction ran. Its clean source was ``4c3d125``. Preserv
 failed construction gate, not a native/ordinary extraction timing or RSS result.
 The sparse-history success does not resolve that dense-history performance debt.
 
+The separate dense-history **10K** matrix also completed: **36/36 exact evidence
+parity samples**, covering the three sources/selections, times 30/50 and first/
+primed reads, one observation per case. Its 13,429-version fixture loaded in
+66.96 seconds. At time 30, subject pipeline times were 24.196 seconds ordinary,
+122.918 full-record native and 81.591 authenticated locator; primed times were
+23.772, 122.156 and 77.211 seconds respectively. Correct output does not remove
+the dense-history authentication cost, even for a single subject.
+
+This diagnostic report is preserved separately as
+``benchmarks/results/reasoning-194-locator-10k-dense-history-gate.json``. Its parent
+captured clean ``4c3d125`` and the harness hash at launch; additive sparse-fixture
+and optional-metadata changes were committed while it was running. Those changes
+left its default fixture behavior and measured worker bodies unchanged, but later
+workers could import the updated module. Preserve that qualification: the report
+is not wholly immutable-source release evidence, and its recorded clean-at-launch
+flag must not be interpreted as a guarantee across the run. Dense 10K and sparse
+100K are different workloads, not a same-shape scaling comparison. First/primed
+are cache states, not independent repeated samples of one state.
+
 **Decision: defer automatic native locator adoption.** Ordinary extraction remains
 the default; retain the authenticated locator as an explicit correctness-preserving
 alternative. Reject a speedup/default-switch claim for this evidence, not the API's
