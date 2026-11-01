@@ -14,7 +14,7 @@ Authentication reuse and cold verification (HSA-03)
 Commit decode reuse is scoped to the exact store and entity decoder. New
 transaction/snapshot scopes start with empty caches; close, store replacement,
 scope exit and failed/interrupted commit reads discard scoped admission. At
-most 256 entries and 64 MiB of descriptor plus serialized-record-size accounting
+most 256 entries and 64 MiB of descriptor, digest and serialized-record-size accounting
 are admitted, including the incoming entry. Oversized commits remain readable
 but are not cached. This accounting is **not** a decoded Python heap or RSS
 bound. Full record envelopes are not retained alongside decoded versions.

@@ -65,8 +65,8 @@ _COMMIT_CACHE_MAX_BYTES = 64 * 1024 * 1024
 def _commit_cache_bytes(cache: CommitCache) -> int:
     """Serialized-size accounting, not a bound on decoded Python heap or RSS."""
     total = 0
-    for _, descriptor_payload, sizes, _, _ in cache.values():
-        total += len(descriptor_payload) + sum(sizes)
+    for _, descriptor_payload, sizes, _, _, digests in cache.values():
+        total += len(descriptor_payload) + sum(sizes) + sum(map(len, digests))
     return total
 
 
@@ -238,18 +238,12 @@ class TemporalReader:
             # Descriptor unchanged; verify live envelopes against its digests
             # without retaining them. Cached versions stay valid; only
             # supersession targets can change on mutable stores.
-            try:
-                hit_catalog = json.loads(descriptor_payload.decode("utf-8"))
-                hit_digests = hit_catalog.get("record_digests")
-                if not isinstance(hit_digests, list) or not hit_digests:
-                    raise ValueError
-            except (UnicodeDecodeError, json.JSONDecodeError, ValueError, AttributeError) as exc:
-                raise TemporalCorruptionError("invalid temporal commit descriptor") from exc
-            if len(hit_digests) != len(cached[2]):
-                raise TemporalCorruptionError("temporal commit record is missing or corrupt")
-            for ordinal, expected_digest in enumerate(hit_digests):
+            # Digests were validated with this exact descriptor on admission.
+            # Retaining their compact binary form avoids reparsing the full
+            # JSON catalog on every target lookup; live records still hash.
+            for ordinal, expected_digest in enumerate(cached[5]):
                 envelope = self.store.get_metadata(temporal_record_key(commit_id, ordinal))
-                if envelope is None or hashlib.sha256(envelope).hexdigest() != expected_digest:
+                if envelope is None or hashlib.sha256(envelope).digest() != expected_digest:
                     raise TemporalCorruptionError("temporal commit record is missing or corrupt")
             cached_commit = cached[3]
             if not _validate_supersession or not any(
@@ -351,7 +345,7 @@ class TemporalReader:
         # Include incoming occupancy and replacement before admission. A
         # single oversized commit is returned normally but never retained.
         self.commit_cache.pop(cache_key, None)
-        incoming_bytes = len(descriptor_payload) + sum(sizes)
+        incoming_bytes = len(descriptor_payload) + sum(sizes) + 32 * len(record_digests)
         if incoming_bytes <= _COMMIT_CACHE_MAX_BYTES:
             occupied = _commit_cache_bytes(self.commit_cache)
             while self.commit_cache and (
@@ -359,9 +353,10 @@ class TemporalReader:
                 or occupied + incoming_bytes > _COMMIT_CACHE_MAX_BYTES
             ):
                 oldest = self.commit_cache.pop(next(iter(self.commit_cache)))
-                occupied -= len(oldest[1]) + sum(oldest[2])
+                occupied -= len(oldest[1]) + sum(oldest[2]) + sum(map(len, oldest[5]))
             self.commit_cache[cache_key] = (
-                self.store, descriptor_payload, tuple(sizes), commit, self.entity_serializer)
+                self.store, descriptor_payload, tuple(sizes), commit, self.entity_serializer,
+                tuple(bytes.fromhex(digest) for digest in record_digests))
         return commit
 
     def iter_commits(self, *, through_commit: int | None = None) -> Iterator[TemporalCommit]:

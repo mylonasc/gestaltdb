@@ -70,7 +70,7 @@ def test_byte_and_entry_bounds_include_incoming_commit(tmp_path, backend, module
         assert len(cache) <= 256
         assert _reads._commit_cache_bytes(cache) > 0
         one_entry = next(iter(cache.values()))
-        one_size = len(one_entry[1]) + sum(one_entry[2])
+        one_size = len(one_entry[1]) + sum(one_entry[2]) + sum(map(len, one_entry[5]))
         cache.clear()
         monkeypatch.setattr(_reads, "_COMMIT_CACHE_MAX_ENTRIES", 2)
         monkeypatch.setattr(_reads, "_COMMIT_CACHE_MAX_BYTES", one_size * 2)

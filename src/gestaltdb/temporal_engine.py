@@ -133,7 +133,7 @@ class TemporalEngine:
 
     def invalidate_commit_cache_for_store(self, store: KVStore) -> None:
         """Drop cached commits for one store object; preserves other scopes."""
-        for key, (cached_store, _, _, _, _) in list(self._commit_cache.items()):
+        for key, (cached_store, _, _, _, _, _) in list(self._commit_cache.items()):
             if cached_store is store or key[0] == id(store):
                 self._commit_cache.pop(key, None)
 
