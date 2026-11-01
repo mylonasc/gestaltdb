@@ -17,6 +17,7 @@ from ..versioning import (
 )
 
 if TYPE_CHECKING:
+    from .entities import GraphEntityDictSerializer
     from ..kvstores import KVStore
     from ..temporal_engine import TemporalEngine
 
@@ -28,7 +29,7 @@ VersionWrite: TypeAlias = NodeVersionWrite | EdgeVersionWrite | ClaimVersionWrit
 Hydrator: TypeAlias = Callable[[bytes], TemporalVersion | None]
 LiveStore: TypeAlias = Callable[[], "KVStore"]
 Clock: TypeAlias = Callable[[], datetime | TemporalInstant]
-CommitCache: TypeAlias = "dict[tuple[int, int, bool], tuple[KVStore, bytes, tuple[int, ...], TemporalCommit]]"
+CommitCache: TypeAlias = "dict[tuple[int, int, bool], tuple[KVStore, bytes, tuple[int, ...], TemporalCommit, GraphEntityDictSerializer]]"
 RetractionIdentity: TypeAlias = tuple[EntityKind, str]
 ExactEntry: TypeAlias = tuple[str, list[bytes], bytes]
 RangeEntry: TypeAlias = tuple[str, list[bytes], bytes, bytes]

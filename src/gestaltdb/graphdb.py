@@ -148,7 +148,7 @@ from ._graph.entities import (
     key_to_string as _key_to_string,
     node_key_to_bytes as _node_key_to_bytes,
 )
-from ._graph.scopes import configure_snapshot_child, configure_transaction_child
+from ._graph.scopes import close_graph_store, rebind_graph_store, snapshot_graph_scope, transaction_graph_scope
 from .concurrency import DEFAULT_LOCK_MANAGER, ReentrantFileLock as _TemporalWriterLock
 from .temporal_engine import TemporalEngine
 from .epistemic_engine import EpistemicEngine
@@ -359,17 +359,7 @@ class GraphDB:
 
     @store.setter
     def store(self, value) -> None:
-        self._store = value
-        temporal = getattr(self, "temporal", None)
-        if temporal is None:
-            return
-        path = getattr(value, "path", None)
-        self.temporal = temporal.rebound(
-            value, store_path=None if path is None else Path(path))
-        self.epistemic = self.epistemic.rebound(self.temporal)
-        self.rules = self.rules.rebound(self.temporal)
-        self._node_repository: NodeRepository | None = None
-        self._edge_repository: EdgeRepository | None = None
+        rebind_graph_store(self, value)
 
     @property
     def database_id(self) -> str:
@@ -1098,10 +1088,8 @@ class GraphDB:
                 raise NotImplementedError(
                     "the configured backend can pin reads but cannot expose a verifiable snapshot identity; for PyRex use PyRexStore(transactional=True) with pyrex-rocksdb>=0.7.0"
                 )
-            snapshot_graph = copy.copy(self)
-            snapshot_graph.store = snapshot_store
-            configure_snapshot_child(self, snapshot_graph)
-            yield CurrentGraphReadView(snapshot_graph, provenance)
+            with snapshot_graph_scope(self, snapshot_store) as snapshot_graph:
+                yield CurrentGraphReadView(snapshot_graph, provenance)
 
     @property
     def traversal(self) -> TraversalService:
@@ -1887,18 +1875,8 @@ class GraphDB:
         The transaction commits on clean context exit and rolls back if an
         exception leaves the context.
         """
-        with self.temporal.write_guard():
-            tx_store = self.store.transaction(**options)
-            try:
-                tx_graph = GraphDB(tx_store, self.serializer)
-                configure_transaction_child(self, tx_graph)
-                yield tx_graph
-            except Exception:
-                tx_store.rollback()
-                raise
-            else:
-                tx_store.commit()
-                self._typed_adjacency_count_cache.clear()
+        with transaction_graph_scope(self, **options) as tx_graph:
+            yield tx_graph
 
     def close(self):
         """Close the underlying key-value store.
@@ -1906,4 +1884,4 @@ class GraphDB:
         Examples:
             >>> graph_db.close()  # doctest: +SKIP
         """
-        self.store.close()
+        close_graph_store(self)

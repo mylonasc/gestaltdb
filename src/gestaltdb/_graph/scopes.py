@@ -25,10 +25,72 @@ store, exactly as the previous inline code did.
 
 from __future__ import annotations
 
+import copy
+from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from ..graphdb import GraphDB
+    from ..kvstores import KVStore
+
+
+def rebind_graph_store(graph: GraphDB, store: KVStore) -> None:
+    """Replace a graph's store and discard admission for the previous binding."""
+    temporal = getattr(graph, "temporal", None)
+    graph._store = store
+    if temporal is None:
+        return
+    temporal.invalidate_commit_cache()
+    path = getattr(store, "path", None)
+    graph.temporal = temporal.rebound(store, store_path=None if path is None else Path(path))
+    graph.epistemic = graph.epistemic.rebound(graph.temporal)
+    graph.rules = graph.rules.rebound(graph.temporal)
+    graph._node_repository = None
+    graph._edge_repository = None
+
+
+def close_graph_store(graph: GraphDB) -> None:
+    """Release decoded admission even when backend close raises."""
+    graph.temporal.invalidate_commit_cache()
+    graph.store.close()
+
+
+@contextmanager
+def snapshot_graph_scope(parent: GraphDB, store: KVStore) -> Iterator[GraphDB]:
+    """Borrow a snapshot with isolated admission, cleared on every exit."""
+    child = copy.copy(parent)
+    # Bypass the public replacement lifecycle: a fork does not retire parent.
+    child._store = store
+    configure_snapshot_child(parent, child)
+    try:
+        yield child
+    finally:
+        child.temporal.invalidate_commit_cache()
+
+
+@contextmanager
+def transaction_graph_scope(parent: GraphDB, **options: object) -> Iterator[GraphDB]:
+    """Coordinate transaction lifetime and always retire child admission."""
+    from ..graphdb import GraphDB
+
+    with parent.temporal.write_guard():
+        store = parent.store.transaction(**options)
+        child = None
+        try:
+            child = GraphDB(store, parent.serializer)
+            configure_transaction_child(parent, child)
+            yield child
+        except BaseException:
+            store.rollback()
+            raise
+        else:
+            store.commit()
+            parent._typed_adjacency_count_cache.clear()
+        finally:
+            if child is not None:
+                child.temporal.invalidate_commit_cache()
 
 
 def configure_transaction_child(parent: GraphDB, child: GraphDB) -> None:
