@@ -1,0 +1,2524 @@
+{
+  "schema_version": 1,
+  "configuration": {
+    "rows": 10000,
+    "methods": [
+      "ordinary",
+      "native-full-record",
+      "native-authenticated-locator"
+    ],
+    "selections": [
+      "all",
+      "predicate",
+      "subject"
+    ],
+    "times": [
+      30,
+      50
+    ],
+    "caches": [
+      "first",
+      "warm"
+    ],
+    "repeats": 1,
+    "timeout": 600.0
+  },
+  "samples": [
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.8729941679998774,
+        "source_open_extract_close_verify_s": 16.967782027999874,
+        "post_verify_s": 3.3039663630001996,
+        "authenticated_pipeline_s": 24.144796721000148,
+        "reopen_s": 0.049113455999759026,
+        "total_pipeline_s": 24.193910176999907
+      },
+      "evidence_digest": "fec9ddfcb96d931c13e8f2bf0470cec50e9f6dbd1391d581a1e0bcc3877ee6a7",
+      "evidence_rows": 10000,
+      "profile": {
+        "batches": 10,
+        "rows": 10000,
+        "scanned": 10000,
+        "verifications": 5,
+        "pushdown": "none"
+      },
+      "native_profile": null,
+      "source_contract": "ordinary",
+      "valid_time": 30,
+      "selection": "all",
+      "rss_peak_bytes": 134336512,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 24.61429033000013,
+      "repeat": 0,
+      "method": "ordinary",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.7301478670001416,
+        "source_open_extract_close_verify_s": 112.75716362899993,
+        "post_verify_s": 3.2643530079999437,
+        "authenticated_pipeline_s": 119.75172940900029,
+        "reopen_s": 0.014163073999952758,
+        "total_pipeline_s": 119.76589248300024
+      },
+      "evidence_digest": "fec9ddfcb96d931c13e8f2bf0470cec50e9f6dbd1391d581a1e0bcc3877ee6a7",
+      "evidence_rows": 10000,
+      "profile": {
+        "batches": 10,
+        "rows": 10000,
+        "scanned": 10000,
+        "verifications": 8,
+        "pushdown": "none; native-full-records; post-selection-filters"
+      },
+      "native_profile": {
+        "raw_rows": 13429,
+        "visible_records": 13429,
+        "logical_claims": 10000,
+        "resolved_claims": 10000,
+        "scan_mode": "full-records; grouped-canonical-point-resolution; post-selection-filters"
+      },
+      "source_contract": "native-full-record",
+      "valid_time": 30,
+      "selection": "all",
+      "rss_peak_bytes": 217366528,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 120.19302456300011,
+      "repeat": 0,
+      "method": "native-full-record",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.8620103529997323,
+        "source_open_extract_close_verify_s": 74.13597586200012,
+        "post_verify_s": 3.4006916339999407,
+        "authenticated_pipeline_s": 81.39874762499994,
+        "reopen_s": 0.02706661799993526,
+        "total_pipeline_s": 81.42581424299988
+      },
+      "evidence_digest": "fec9ddfcb96d931c13e8f2bf0470cec50e9f6dbd1391d581a1e0bcc3877ee6a7",
+      "evidence_rows": 10000,
+      "profile": {
+        "batches": 10,
+        "rows": 10000,
+        "scanned": 10000,
+        "verifications": 8,
+        "pushdown": "native-world/predicate/subject-prefixes; object/policy-post-selection"
+      },
+      "native_profile": {
+        "authenticated_records": 13429,
+        "raw_index_rows": 24000,
+        "candidate_claims": 10000,
+        "materialized_records": 12000,
+        "resolved_claims": 10000,
+        "scans": 10001,
+        "scan_mode": "native-dimension-intersection+logical-history; full-catalog-authentication"
+      },
+      "source_contract": "native-authenticated-locator",
+      "valid_time": 30,
+      "selection": "all",
+      "rss_peak_bytes": 207900672,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 81.79982504600002,
+      "repeat": 0,
+      "method": "native-authenticated-locator",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.302632071000062,
+        "source_open_extract_close_verify_s": 16.682731804000014,
+        "post_verify_s": 3.2796722690000024,
+        "authenticated_pipeline_s": 23.265102422999917,
+        "reopen_s": 0.016626480000013544,
+        "total_pipeline_s": 23.28172890299993
+      },
+      "evidence_digest": "fec9ddfcb96d931c13e8f2bf0470cec50e9f6dbd1391d581a1e0bcc3877ee6a7",
+      "evidence_rows": 10000,
+      "profile": {
+        "batches": 10,
+        "rows": 10000,
+        "scanned": 10000,
+        "verifications": 5,
+        "pushdown": "none"
+      },
+      "native_profile": null,
+      "source_contract": "ordinary",
+      "valid_time": 30,
+      "selection": "all",
+      "rss_peak_bytes": 135020544,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 48.21473288799962,
+      "repeat": 0,
+      "method": "ordinary",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.321607259999837,
+        "source_open_extract_close_verify_s": 113.2733891150001,
+        "post_verify_s": 3.3169348189999255,
+        "authenticated_pipeline_s": 119.91199892099985,
+        "reopen_s": 0.01371200499988845,
+        "total_pipeline_s": 119.92571092599974
+      },
+      "evidence_digest": "fec9ddfcb96d931c13e8f2bf0470cec50e9f6dbd1391d581a1e0bcc3877ee6a7",
+      "evidence_rows": 10000,
+      "profile": {
+        "batches": 10,
+        "rows": 10000,
+        "scanned": 10000,
+        "verifications": 8,
+        "pushdown": "none; native-full-records; post-selection-filters"
+      },
+      "native_profile": {
+        "raw_rows": 13429,
+        "visible_records": 13429,
+        "logical_claims": 10000,
+        "resolved_claims": 10000,
+        "scan_mode": "full-records; grouped-canonical-point-resolution; post-selection-filters"
+      },
+      "source_contract": "native-full-record",
+      "valid_time": 30,
+      "selection": "all",
+      "rss_peak_bytes": 206389248,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 241.63330700300003,
+      "repeat": 0,
+      "method": "native-full-record",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.4391446939998787,
+        "source_open_extract_close_verify_s": 70.75178632000006,
+        "post_verify_s": 3.4569271299997126,
+        "authenticated_pipeline_s": 77.6479271610001,
+        "reopen_s": 0.028218126999945525,
+        "total_pipeline_s": 77.67614528800004
+      },
+      "evidence_digest": "fec9ddfcb96d931c13e8f2bf0470cec50e9f6dbd1391d581a1e0bcc3877ee6a7",
+      "evidence_rows": 10000,
+      "profile": {
+        "batches": 10,
+        "rows": 10000,
+        "scanned": 10000,
+        "verifications": 8,
+        "pushdown": "native-world/predicate/subject-prefixes; object/policy-post-selection"
+      },
+      "native_profile": {
+        "authenticated_records": 13429,
+        "raw_index_rows": 24000,
+        "candidate_claims": 10000,
+        "materialized_records": 12000,
+        "resolved_claims": 10000,
+        "scans": 10001,
+        "scan_mode": "native-dimension-intersection+logical-history; full-catalog-authentication"
+      },
+      "source_contract": "native-authenticated-locator",
+      "valid_time": 30,
+      "selection": "all",
+      "rss_peak_bytes": 208662528,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 155.8674693209996,
+      "repeat": 0,
+      "method": "native-authenticated-locator",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.8497496279996994,
+        "source_open_extract_close_verify_s": 16.690244427999914,
+        "post_verify_s": 3.313206708999587,
+        "authenticated_pipeline_s": 23.8532693559996,
+        "reopen_s": 0.01538309100033075,
+        "total_pipeline_s": 23.86865244699993
+      },
+      "evidence_digest": "0db3a68c3347e49e58eeceba51b7b436f2e1882595b19674e4c5785178942b01",
+      "evidence_rows": 2500,
+      "profile": {
+        "batches": 3,
+        "rows": 2500,
+        "scanned": 2500,
+        "verifications": 5,
+        "pushdown": "predicate"
+      },
+      "native_profile": null,
+      "source_contract": "ordinary",
+      "valid_time": 30,
+      "selection": "predicate",
+      "rss_peak_bytes": 130240512,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 24.230906523000158,
+      "repeat": 0,
+      "method": "ordinary",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.8763344630001484,
+        "source_open_extract_close_verify_s": 113.00835854900015,
+        "post_verify_s": 3.3227110660000108,
+        "authenticated_pipeline_s": 120.20746951000001,
+        "reopen_s": 0.015316700999846944,
+        "total_pipeline_s": 120.22278621099986
+      },
+      "evidence_digest": "0db3a68c3347e49e58eeceba51b7b436f2e1882595b19674e4c5785178942b01",
+      "evidence_rows": 2500,
+      "profile": {
+        "batches": 3,
+        "rows": 2500,
+        "scanned": 2500,
+        "verifications": 8,
+        "pushdown": "none; native-full-records; post-selection-filters"
+      },
+      "native_profile": {
+        "raw_rows": 13429,
+        "visible_records": 13429,
+        "logical_claims": 10000,
+        "resolved_claims": 10000,
+        "scan_mode": "full-records; grouped-canonical-point-resolution; post-selection-filters"
+      },
+      "source_contract": "native-full-record",
+      "valid_time": 30,
+      "selection": "predicate",
+      "rss_peak_bytes": 201003008,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 120.6434152339998,
+      "repeat": 0,
+      "method": "native-full-record",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.780466850999801,
+        "source_open_extract_close_verify_s": 70.80345120399988,
+        "post_verify_s": 3.44759967400023,
+        "authenticated_pipeline_s": 78.03158173700012,
+        "reopen_s": 0.015789712000241707,
+        "total_pipeline_s": 78.04737144900037
+      },
+      "evidence_digest": "0db3a68c3347e49e58eeceba51b7b436f2e1882595b19674e4c5785178942b01",
+      "evidence_rows": 2500,
+      "profile": {
+        "batches": 3,
+        "rows": 2500,
+        "scanned": 2500,
+        "verifications": 8,
+        "pushdown": "native-world/predicate/subject-prefixes; object/policy-post-selection"
+      },
+      "native_profile": {
+        "authenticated_records": 13429,
+        "raw_index_rows": 18000,
+        "candidate_claims": 2500,
+        "materialized_records": 3000,
+        "resolved_claims": 2500,
+        "scans": 2502,
+        "scan_mode": "native-dimension-intersection+logical-history; full-catalog-authentication"
+      },
+      "source_contract": "native-authenticated-locator",
+      "valid_time": 30,
+      "selection": "predicate",
+      "rss_peak_bytes": 206430208,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 78.45304081999984,
+      "repeat": 0,
+      "method": "native-authenticated-locator",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.3561831960000745,
+        "source_open_extract_close_verify_s": 16.640966993999882,
+        "post_verify_s": 3.3922558469998876,
+        "authenticated_pipeline_s": 23.389472230000138,
+        "reopen_s": 0.016594276999967406,
+        "total_pipeline_s": 23.406066507000105
+      },
+      "evidence_digest": "0db3a68c3347e49e58eeceba51b7b436f2e1882595b19674e4c5785178942b01",
+      "evidence_rows": 2500,
+      "profile": {
+        "batches": 3,
+        "rows": 2500,
+        "scanned": 2500,
+        "verifications": 5,
+        "pushdown": "predicate"
+      },
+      "native_profile": null,
+      "source_contract": "ordinary",
+      "valid_time": 30,
+      "selection": "predicate",
+      "rss_peak_bytes": 130822144,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 47.79696848200001,
+      "repeat": 0,
+      "method": "ordinary",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.4341208030000416,
+        "source_open_extract_close_verify_s": 115.501972217,
+        "post_verify_s": 3.381976004999615,
+        "authenticated_pipeline_s": 122.31813769100017,
+        "reopen_s": 0.01564216299993859,
+        "total_pipeline_s": 122.33377985400011
+      },
+      "evidence_digest": "0db3a68c3347e49e58eeceba51b7b436f2e1882595b19674e4c5785178942b01",
+      "evidence_rows": 2500,
+      "profile": {
+        "batches": 3,
+        "rows": 2500,
+        "scanned": 2500,
+        "verifications": 8,
+        "pushdown": "none; native-full-records; post-selection-filters"
+      },
+      "native_profile": {
+        "raw_rows": 13429,
+        "visible_records": 13429,
+        "logical_claims": 10000,
+        "resolved_claims": 10000,
+        "scan_mode": "full-records; grouped-canonical-point-resolution; post-selection-filters"
+      },
+      "source_contract": "native-full-record",
+      "valid_time": 30,
+      "selection": "predicate",
+      "rss_peak_bytes": 205410304,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 245.0292873479998,
+      "repeat": 0,
+      "method": "native-full-record",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.5210229620001883,
+        "source_open_extract_close_verify_s": 74.83873406599969,
+        "post_verify_s": 3.4718758970002455,
+        "authenticated_pipeline_s": 81.83169383200038,
+        "reopen_s": 0.016367285000342235,
+        "total_pipeline_s": 81.84806111700073
+      },
+      "evidence_digest": "0db3a68c3347e49e58eeceba51b7b436f2e1882595b19674e4c5785178942b01",
+      "evidence_rows": 2500,
+      "profile": {
+        "batches": 3,
+        "rows": 2500,
+        "scanned": 2500,
+        "verifications": 8,
+        "pushdown": "native-world/predicate/subject-prefixes; object/policy-post-selection"
+      },
+      "native_profile": {
+        "authenticated_records": 13429,
+        "raw_index_rows": 18000,
+        "candidate_claims": 2500,
+        "materialized_records": 3000,
+        "resolved_claims": 2500,
+        "scans": 2502,
+        "scan_mode": "native-dimension-intersection+logical-history; full-catalog-authentication"
+      },
+      "source_contract": "native-authenticated-locator",
+      "valid_time": 30,
+      "selection": "predicate",
+      "rss_peak_bytes": 208039936,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 163.8983086809999,
+      "repeat": 0,
+      "method": "native-authenticated-locator",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.7260008620000917,
+        "source_open_extract_close_verify_s": 17.033773198999825,
+        "post_verify_s": 3.4364883339999324,
+        "authenticated_pipeline_s": 24.196320312999887,
+        "reopen_s": 0.015312263000396342,
+        "total_pipeline_s": 24.211632576000284
+      },
+      "evidence_digest": "32a4e1d7b9f551600cee5df59e0f9829b41cbcfca2167be81cc4f5e3ddea1453",
+      "evidence_rows": 1,
+      "profile": {
+        "batches": 1,
+        "rows": 1,
+        "scanned": 1,
+        "verifications": 5,
+        "pushdown": "predicate+subject"
+      },
+      "native_profile": null,
+      "source_contract": "ordinary",
+      "valid_time": 30,
+      "selection": "subject",
+      "rss_peak_bytes": 126754816,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 24.622949846999745,
+      "repeat": 0,
+      "method": "ordinary",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.8433299510002144,
+        "source_open_extract_close_verify_s": 115.69430532699971,
+        "post_verify_s": 3.380765613999756,
+        "authenticated_pipeline_s": 122.91846644199995,
+        "reopen_s": 0.014519396000196139,
+        "total_pipeline_s": 122.93298583800015
+      },
+      "evidence_digest": "32a4e1d7b9f551600cee5df59e0f9829b41cbcfca2167be81cc4f5e3ddea1453",
+      "evidence_rows": 1,
+      "profile": {
+        "batches": 1,
+        "rows": 1,
+        "scanned": 1,
+        "verifications": 8,
+        "pushdown": "none; native-full-records; post-selection-filters"
+      },
+      "native_profile": {
+        "raw_rows": 13429,
+        "visible_records": 13429,
+        "logical_claims": 10000,
+        "resolved_claims": 10000,
+        "scan_mode": "full-records; grouped-canonical-point-resolution; post-selection-filters"
+      },
+      "source_contract": "native-full-record",
+      "valid_time": 30,
+      "selection": "subject",
+      "rss_peak_bytes": 200761344,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 123.37501650000013,
+      "repeat": 0,
+      "method": "native-full-record",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 4.061374998000247,
+        "source_open_extract_close_verify_s": 74.09262189699984,
+        "post_verify_s": 3.4369113320003635,
+        "authenticated_pipeline_s": 81.5909754850004,
+        "reopen_s": 0.013935892999597854,
+        "total_pipeline_s": 81.604911378
+      },
+      "evidence_digest": "32a4e1d7b9f551600cee5df59e0f9829b41cbcfca2167be81cc4f5e3ddea1453",
+      "evidence_rows": 1,
+      "profile": {
+        "batches": 1,
+        "rows": 1,
+        "scanned": 1,
+        "verifications": 8,
+        "pushdown": "native-world/predicate/subject-prefixes; object/policy-post-selection"
+      },
+      "native_profile": {
+        "authenticated_records": 13429,
+        "raw_index_rows": 15004,
+        "candidate_claims": 1,
+        "materialized_records": 2,
+        "resolved_claims": 1,
+        "scans": 4,
+        "scan_mode": "native-dimension-intersection+logical-history; full-catalog-authentication"
+      },
+      "source_contract": "native-authenticated-locator",
+      "valid_time": 30,
+      "selection": "subject",
+      "rss_peak_bytes": 205111296,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 82.04781663999984,
+      "repeat": 0,
+      "method": "native-authenticated-locator",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.4149291339999763,
+        "source_open_extract_close_verify_s": 17.05262834799987,
+        "post_verify_s": 3.3046682220001458,
+        "authenticated_pipeline_s": 23.77229426399981,
+        "reopen_s": 0.014212606999990385,
+        "total_pipeline_s": 23.7865068709998
+      },
+      "evidence_digest": "32a4e1d7b9f551600cee5df59e0f9829b41cbcfca2167be81cc4f5e3ddea1453",
+      "evidence_rows": 1,
+      "profile": {
+        "batches": 1,
+        "rows": 1,
+        "scanned": 1,
+        "verifications": 5,
+        "pushdown": "predicate+subject"
+      },
+      "native_profile": null,
+      "source_contract": "ordinary",
+      "valid_time": 30,
+      "selection": "subject",
+      "rss_peak_bytes": 126799872,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 48.05745140199997,
+      "repeat": 0,
+      "method": "ordinary",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.4574477050000496,
+        "source_open_extract_close_verify_s": 115.23350532699988,
+        "post_verify_s": 3.4652707579998605,
+        "authenticated_pipeline_s": 122.15629764200003,
+        "reopen_s": 0.01666537099981724,
+        "total_pipeline_s": 122.17296301299984
+      },
+      "evidence_digest": "32a4e1d7b9f551600cee5df59e0f9829b41cbcfca2167be81cc4f5e3ddea1453",
+      "evidence_rows": 1,
+      "profile": {
+        "batches": 1,
+        "rows": 1,
+        "scanned": 1,
+        "verifications": 8,
+        "pushdown": "none; native-full-records; post-selection-filters"
+      },
+      "native_profile": {
+        "raw_rows": 13429,
+        "visible_records": 13429,
+        "logical_claims": 10000,
+        "resolved_claims": 10000,
+        "scan_mode": "full-records; grouped-canonical-point-resolution; post-selection-filters"
+      },
+      "source_contract": "native-full-record",
+      "valid_time": 30,
+      "selection": "subject",
+      "rss_peak_bytes": 206282752,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 243.87057386200058,
+      "repeat": 0,
+      "method": "native-full-record",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.2862514429998555,
+        "source_open_extract_close_verify_s": 70.50562590299978,
+        "post_verify_s": 3.41897564699957,
+        "authenticated_pipeline_s": 77.21091641200019,
+        "reopen_s": 0.01694913000028464,
+        "total_pipeline_s": 77.22786554200047
+      },
+      "evidence_digest": "32a4e1d7b9f551600cee5df59e0f9829b41cbcfca2167be81cc4f5e3ddea1453",
+      "evidence_rows": 1,
+      "profile": {
+        "batches": 1,
+        "rows": 1,
+        "scanned": 1,
+        "verifications": 8,
+        "pushdown": "native-world/predicate/subject-prefixes; object/policy-post-selection"
+      },
+      "native_profile": {
+        "authenticated_records": 13429,
+        "raw_index_rows": 15004,
+        "candidate_claims": 1,
+        "materialized_records": 2,
+        "resolved_claims": 1,
+        "scans": 4,
+        "scan_mode": "native-dimension-intersection+logical-history; full-catalog-authentication"
+      },
+      "source_contract": "native-authenticated-locator",
+      "valid_time": 30,
+      "selection": "subject",
+      "rss_peak_bytes": 208084992,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 155.38779484800034,
+      "repeat": 0,
+      "method": "native-authenticated-locator",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.759775778000403,
+        "source_open_extract_close_verify_s": 17.02014872199925,
+        "post_verify_s": 3.280497114999889,
+        "authenticated_pipeline_s": 24.060486845000014,
+        "reopen_s": 0.016882931000509416,
+        "total_pipeline_s": 24.077369776000523
+      },
+      "evidence_digest": "64f406e9927684bb6907f1b265179787ddbf197e5b520e3a2770709cc8188806",
+      "evidence_rows": 8571,
+      "profile": {
+        "batches": 9,
+        "rows": 8571,
+        "scanned": 8571,
+        "verifications": 5,
+        "pushdown": "none"
+      },
+      "native_profile": null,
+      "source_contract": "ordinary",
+      "valid_time": 50,
+      "selection": "all",
+      "rss_peak_bytes": 134987776,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 24.462001951000275,
+      "repeat": 0,
+      "method": "ordinary",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.8057131440000376,
+        "source_open_extract_close_verify_s": 114.21925740899951,
+        "post_verify_s": 3.5558516710007098,
+        "authenticated_pipeline_s": 121.58088613699965,
+        "reopen_s": 0.030751001999306027,
+        "total_pipeline_s": 121.61163713899896
+      },
+      "evidence_digest": "64f406e9927684bb6907f1b265179787ddbf197e5b520e3a2770709cc8188806",
+      "evidence_rows": 8571,
+      "profile": {
+        "batches": 9,
+        "rows": 8571,
+        "scanned": 8571,
+        "verifications": 8,
+        "pushdown": "none; native-full-records; post-selection-filters"
+      },
+      "native_profile": {
+        "raw_rows": 13429,
+        "visible_records": 13429,
+        "logical_claims": 10000,
+        "resolved_claims": 8571,
+        "scan_mode": "full-records; grouped-canonical-point-resolution; post-selection-filters"
+      },
+      "source_contract": "native-full-record",
+      "valid_time": 50,
+      "selection": "all",
+      "rss_peak_bytes": 202059776,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 122.05117007599983,
+      "repeat": 0,
+      "method": "native-full-record",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.838481451000007,
+        "source_open_extract_close_verify_s": 71.34861166500013,
+        "post_verify_s": 3.282739508999839,
+        "authenticated_pipeline_s": 78.46989742599999,
+        "reopen_s": 0.01465075899977819,
+        "total_pipeline_s": 78.48454818499977
+      },
+      "evidence_digest": "64f406e9927684bb6907f1b265179787ddbf197e5b520e3a2770709cc8188806",
+      "evidence_rows": 8571,
+      "profile": {
+        "batches": 9,
+        "rows": 8571,
+        "scanned": 8571,
+        "verifications": 8,
+        "pushdown": "native-world/predicate/subject-prefixes; object/policy-post-selection"
+      },
+      "native_profile": {
+        "authenticated_records": 13429,
+        "raw_index_rows": 25429,
+        "candidate_claims": 10000,
+        "materialized_records": 13429,
+        "resolved_claims": 8571,
+        "scans": 10001,
+        "scan_mode": "native-dimension-intersection+logical-history; full-catalog-authentication"
+      },
+      "source_contract": "native-authenticated-locator",
+      "valid_time": 50,
+      "selection": "all",
+      "rss_peak_bytes": 207212544,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 78.91469779599993,
+      "repeat": 0,
+      "method": "native-authenticated-locator",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.285500488999787,
+        "source_open_extract_close_verify_s": 17.2187694510003,
+        "post_verify_s": 3.38109119299952,
+        "authenticated_pipeline_s": 23.88542817799953,
+        "reopen_s": 0.015435143999638967,
+        "total_pipeline_s": 23.900863321999168
+      },
+      "evidence_digest": "64f406e9927684bb6907f1b265179787ddbf197e5b520e3a2770709cc8188806",
+      "evidence_rows": 8571,
+      "profile": {
+        "batches": 9,
+        "rows": 8571,
+        "scanned": 8571,
+        "verifications": 5,
+        "pushdown": "none"
+      },
+      "native_profile": null,
+      "source_contract": "ordinary",
+      "valid_time": 50,
+      "selection": "all",
+      "rss_peak_bytes": 133242880,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 48.41393558500022,
+      "repeat": 0,
+      "method": "ordinary",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.3474299129993597,
+        "source_open_extract_close_verify_s": 113.64808450000055,
+        "post_verify_s": 3.4681551009998657,
+        "authenticated_pipeline_s": 120.4637390050002,
+        "reopen_s": 0.017226564999873517,
+        "total_pipeline_s": 120.48096557000008
+      },
+      "evidence_digest": "64f406e9927684bb6907f1b265179787ddbf197e5b520e3a2770709cc8188806",
+      "evidence_rows": 8571,
+      "profile": {
+        "batches": 9,
+        "rows": 8571,
+        "scanned": 8571,
+        "verifications": 8,
+        "pushdown": "none; native-full-records; post-selection-filters"
+      },
+      "native_profile": {
+        "raw_rows": 13429,
+        "visible_records": 13429,
+        "logical_claims": 10000,
+        "resolved_claims": 8571,
+        "scan_mode": "full-records; grouped-canonical-point-resolution; post-selection-filters"
+      },
+      "source_contract": "native-full-record",
+      "valid_time": 50,
+      "selection": "all",
+      "rss_peak_bytes": 206520320,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 241.84230713200031,
+      "repeat": 0,
+      "method": "native-full-record",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.3722067950002383,
+        "source_open_extract_close_verify_s": 73.6590726960003,
+        "post_verify_s": 3.480499291000342,
+        "authenticated_pipeline_s": 80.51184933900004,
+        "reopen_s": 0.01676827699975547,
+        "total_pipeline_s": 80.52861761599979
+      },
+      "evidence_digest": "64f406e9927684bb6907f1b265179787ddbf197e5b520e3a2770709cc8188806",
+      "evidence_rows": 8571,
+      "profile": {
+        "batches": 9,
+        "rows": 8571,
+        "scanned": 8571,
+        "verifications": 8,
+        "pushdown": "native-world/predicate/subject-prefixes; object/policy-post-selection"
+      },
+      "native_profile": {
+        "authenticated_records": 13429,
+        "raw_index_rows": 25429,
+        "candidate_claims": 10000,
+        "materialized_records": 13429,
+        "resolved_claims": 8571,
+        "scans": 10001,
+        "scan_mode": "native-dimension-intersection+logical-history; full-catalog-authentication"
+      },
+      "source_contract": "native-authenticated-locator",
+      "valid_time": 50,
+      "selection": "all",
+      "rss_peak_bytes": 209772544,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 160.1339811379994,
+      "repeat": 0,
+      "method": "native-authenticated-locator",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.7838539060003313,
+        "source_open_extract_close_verify_s": 17.02895758500017,
+        "post_verify_s": 3.4230835650005247,
+        "authenticated_pipeline_s": 24.235961223999766,
+        "reopen_s": 0.015862389999711013,
+        "total_pipeline_s": 24.251823613999477
+      },
+      "evidence_digest": "49caad30a7dcbc9007ab19f854090ffe9e6f6ddf6d868e8f8421c2cae7bb0aab",
+      "evidence_rows": 2142,
+      "profile": {
+        "batches": 3,
+        "rows": 2142,
+        "scanned": 2142,
+        "verifications": 5,
+        "pushdown": "predicate"
+      },
+      "native_profile": null,
+      "source_contract": "ordinary",
+      "valid_time": 50,
+      "selection": "predicate",
+      "rss_peak_bytes": 130547712,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 24.61769605200061,
+      "repeat": 0,
+      "method": "ordinary",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 4.081372600000577,
+        "source_open_extract_close_verify_s": 119.53645475099984,
+        "post_verify_s": 3.486886863000109,
+        "authenticated_pipeline_s": 127.10478111300017,
+        "reopen_s": 0.01695331099926989,
+        "total_pipeline_s": 127.12173442399944
+      },
+      "evidence_digest": "49caad30a7dcbc9007ab19f854090ffe9e6f6ddf6d868e8f8421c2cae7bb0aab",
+      "evidence_rows": 2142,
+      "profile": {
+        "batches": 3,
+        "rows": 2142,
+        "scanned": 2142,
+        "verifications": 8,
+        "pushdown": "none; native-full-records; post-selection-filters"
+      },
+      "native_profile": {
+        "raw_rows": 13429,
+        "visible_records": 13429,
+        "logical_claims": 10000,
+        "resolved_claims": 8571,
+        "scan_mode": "full-records; grouped-canonical-point-resolution; post-selection-filters"
+      },
+      "source_contract": "native-full-record",
+      "valid_time": 50,
+      "selection": "predicate",
+      "rss_peak_bytes": 200630272,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 127.50324960199941,
+      "repeat": 0,
+      "method": "native-full-record",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.842392681000092,
+        "source_open_extract_close_verify_s": 70.41779580100047,
+        "post_verify_s": 3.3282540270001846,
+        "authenticated_pipeline_s": 77.58851283500007,
+        "reopen_s": 0.016666825999891444,
+        "total_pipeline_s": 77.60517966099997
+      },
+      "evidence_digest": "49caad30a7dcbc9007ab19f854090ffe9e6f6ddf6d868e8f8421c2cae7bb0aab",
+      "evidence_rows": 2142,
+      "profile": {
+        "batches": 3,
+        "rows": 2142,
+        "scanned": 2142,
+        "verifications": 8,
+        "pushdown": "native-world/predicate/subject-prefixes; object/policy-post-selection"
+      },
+      "native_profile": {
+        "authenticated_records": 13429,
+        "raw_index_rows": 18358,
+        "candidate_claims": 2500,
+        "materialized_records": 3358,
+        "resolved_claims": 2142,
+        "scans": 2502,
+        "scan_mode": "native-dimension-intersection+logical-history; full-catalog-authentication"
+      },
+      "source_contract": "native-authenticated-locator",
+      "valid_time": 50,
+      "selection": "predicate",
+      "rss_peak_bytes": 206807040,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 77.97694799300007,
+      "repeat": 0,
+      "method": "native-authenticated-locator",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.334209673999794,
+        "source_open_extract_close_verify_s": 17.006240638000236,
+        "post_verify_s": 3.3967407390000517,
+        "authenticated_pipeline_s": 23.737261976999434,
+        "reopen_s": 0.015600774000631645,
+        "total_pipeline_s": 23.752862751000066
+      },
+      "evidence_digest": "49caad30a7dcbc9007ab19f854090ffe9e6f6ddf6d868e8f8421c2cae7bb0aab",
+      "evidence_rows": 2142,
+      "profile": {
+        "batches": 3,
+        "rows": 2142,
+        "scanned": 2142,
+        "verifications": 5,
+        "pushdown": "predicate"
+      },
+      "native_profile": null,
+      "source_contract": "ordinary",
+      "valid_time": 50,
+      "selection": "predicate",
+      "rss_peak_bytes": 130887680,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 48.16996283200024,
+      "repeat": 0,
+      "method": "ordinary",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.5793292630005453,
+        "source_open_extract_close_verify_s": 117.90419534099965,
+        "post_verify_s": 3.611212157999944,
+        "authenticated_pipeline_s": 125.09480785400046,
+        "reopen_s": 0.027614663000349537,
+        "total_pipeline_s": 125.12242251700081
+      },
+      "evidence_digest": "49caad30a7dcbc9007ab19f854090ffe9e6f6ddf6d868e8f8421c2cae7bb0aab",
+      "evidence_rows": 2142,
+      "profile": {
+        "batches": 3,
+        "rows": 2142,
+        "scanned": 2142,
+        "verifications": 8,
+        "pushdown": "none; native-full-records; post-selection-filters"
+      },
+      "native_profile": {
+        "raw_rows": 13429,
+        "visible_records": 13429,
+        "logical_claims": 10000,
+        "resolved_claims": 8571,
+        "scan_mode": "full-records; grouped-canonical-point-resolution; post-selection-filters"
+      },
+      "source_contract": "native-full-record",
+      "valid_time": 50,
+      "selection": "predicate",
+      "rss_peak_bytes": 206290944,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 251.7236079459999,
+      "repeat": 0,
+      "method": "native-full-record",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.3168095170003653,
+        "source_open_extract_close_verify_s": 70.83196560000033,
+        "post_verify_s": 3.306094855000083,
+        "authenticated_pipeline_s": 77.45493502600038,
+        "reopen_s": 0.018459908999830077,
+        "total_pipeline_s": 77.47339493500021
+      },
+      "evidence_digest": "49caad30a7dcbc9007ab19f854090ffe9e6f6ddf6d868e8f8421c2cae7bb0aab",
+      "evidence_rows": 2142,
+      "profile": {
+        "batches": 3,
+        "rows": 2142,
+        "scanned": 2142,
+        "verifications": 8,
+        "pushdown": "native-world/predicate/subject-prefixes; object/policy-post-selection"
+      },
+      "native_profile": {
+        "authenticated_records": 13429,
+        "raw_index_rows": 18358,
+        "candidate_claims": 2500,
+        "materialized_records": 3358,
+        "resolved_claims": 2142,
+        "scans": 2502,
+        "scan_mode": "native-dimension-intersection+logical-history; full-catalog-authentication"
+      },
+      "source_contract": "native-authenticated-locator",
+      "valid_time": 50,
+      "selection": "predicate",
+      "rss_peak_bytes": 207761408,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 155.15872325500004,
+      "repeat": 0,
+      "method": "native-authenticated-locator",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.749194111000179,
+        "source_open_extract_close_verify_s": 16.665517008999814,
+        "post_verify_s": 3.361685609000233,
+        "authenticated_pipeline_s": 23.77646153800015,
+        "reopen_s": 0.016578820000177075,
+        "total_pipeline_s": 23.793040358000326
+      },
+      "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "evidence_rows": 0,
+      "profile": {
+        "batches": 0,
+        "rows": 0,
+        "scanned": 0,
+        "verifications": 5,
+        "pushdown": "predicate+subject"
+      },
+      "native_profile": null,
+      "source_contract": "ordinary",
+      "valid_time": 50,
+      "selection": "subject",
+      "rss_peak_bytes": 126754816,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 24.15325254399977,
+      "repeat": 0,
+      "method": "ordinary",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.827814691999265,
+        "source_open_extract_close_verify_s": 116.78217258600034,
+        "post_verify_s": 3.511901552999916,
+        "authenticated_pipeline_s": 124.12195510499987,
+        "reopen_s": 0.027628681000351207,
+        "total_pipeline_s": 124.14958378600022
+      },
+      "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "evidence_rows": 0,
+      "profile": {
+        "batches": 0,
+        "rows": 0,
+        "scanned": 0,
+        "verifications": 8,
+        "pushdown": "none; native-full-records; post-selection-filters"
+      },
+      "native_profile": {
+        "raw_rows": 13429,
+        "visible_records": 13429,
+        "logical_claims": 10000,
+        "resolved_claims": 8571,
+        "scan_mode": "full-records; grouped-canonical-point-resolution; post-selection-filters"
+      },
+      "source_contract": "native-full-record",
+      "valid_time": 50,
+      "selection": "subject",
+      "rss_peak_bytes": 200863744,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 124.53639129200019,
+      "repeat": 0,
+      "method": "native-full-record",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.649455411999952,
+        "source_open_extract_close_verify_s": 69.88322026599963,
+        "post_verify_s": 3.4216237040000124,
+        "authenticated_pipeline_s": 76.95437036200019,
+        "reopen_s": 0.016795159000139392,
+        "total_pipeline_s": 76.97116552100033
+      },
+      "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "evidence_rows": 0,
+      "profile": {
+        "batches": 0,
+        "rows": 0,
+        "scanned": 0,
+        "verifications": 8,
+        "pushdown": "native-world/predicate/subject-prefixes; object/policy-post-selection"
+      },
+      "native_profile": {
+        "authenticated_records": 13429,
+        "raw_index_rows": 15005,
+        "candidate_claims": 1,
+        "materialized_records": 3,
+        "resolved_claims": 0,
+        "scans": 4,
+        "scan_mode": "native-dimension-intersection+logical-history; full-catalog-authentication"
+      },
+      "source_contract": "native-authenticated-locator",
+      "valid_time": 50,
+      "selection": "subject",
+      "rss_peak_bytes": 206458880,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 77.33921500399993,
+      "repeat": 0,
+      "method": "native-authenticated-locator",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.4169443410000895,
+        "source_open_extract_close_verify_s": 17.41466515100001,
+        "post_verify_s": 3.6490963910000573,
+        "authenticated_pipeline_s": 24.48077015400031,
+        "reopen_s": 0.014561971000148333,
+        "total_pipeline_s": 24.49533212500046
+      },
+      "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "evidence_rows": 0,
+      "profile": {
+        "batches": 0,
+        "rows": 0,
+        "scanned": 0,
+        "verifications": 5,
+        "pushdown": "predicate+subject"
+      },
+      "native_profile": null,
+      "source_contract": "ordinary",
+      "valid_time": 50,
+      "selection": "subject",
+      "rss_peak_bytes": 126578688,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 49.893622583999786,
+      "repeat": 0,
+      "method": "ordinary",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.368399997999404,
+        "source_open_extract_close_verify_s": 115.59512054199968,
+        "post_verify_s": 3.5461166770001,
+        "authenticated_pipeline_s": 122.50971056599974,
+        "reopen_s": 0.015645598999981303,
+        "total_pipeline_s": 122.52535616499972
+      },
+      "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "evidence_rows": 0,
+      "profile": {
+        "batches": 0,
+        "rows": 0,
+        "scanned": 0,
+        "verifications": 8,
+        "pushdown": "none; native-full-records; post-selection-filters"
+      },
+      "native_profile": {
+        "raw_rows": 13429,
+        "visible_records": 13429,
+        "logical_claims": 10000,
+        "resolved_claims": 8571,
+        "scan_mode": "full-records; grouped-canonical-point-resolution; post-selection-filters"
+      },
+      "source_contract": "native-full-record",
+      "valid_time": 50,
+      "selection": "subject",
+      "rss_peak_bytes": 206401536,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 246.40626512700055,
+      "repeat": 0,
+      "method": "native-full-record",
+      "cache": "warm"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 3.277189116000045,
+        "source_open_extract_close_verify_s": 68.80782799100052,
+        "post_verify_s": 3.2228864870003235,
+        "authenticated_pipeline_s": 75.30797316000007,
+        "reopen_s": 0.016278893000162498,
+        "total_pipeline_s": 75.32425205300024
+      },
+      "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "evidence_rows": 0,
+      "profile": {
+        "batches": 0,
+        "rows": 0,
+        "scanned": 0,
+        "verifications": 8,
+        "pushdown": "native-world/predicate/subject-prefixes; object/policy-post-selection"
+      },
+      "native_profile": {
+        "authenticated_records": 13429,
+        "raw_index_rows": 15005,
+        "candidate_claims": 1,
+        "materialized_records": 3,
+        "resolved_claims": 0,
+        "scans": 4,
+        "scan_mode": "native-dimension-intersection+logical-history; full-catalog-authentication"
+      },
+      "source_contract": "native-authenticated-locator",
+      "valid_time": 50,
+      "selection": "subject",
+      "rss_peak_bytes": 208048128,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 151.6163468470004,
+      "repeat": 0,
+      "method": "native-authenticated-locator",
+      "cache": "warm"
+    }
+  ],
+  "complete": true,
+  "revision": "4c3d1259f71b452eb21d386a78bb5206d7b6cdd6",
+  "dirty": false,
+  "harness_sha256": "0bc9d9a359f50e96a93e67332929027fa59ba24427c0f3a10a1c774bd2f6ccf0",
+  "shared_harness_sha256": "f4389e70643784a0db5f4bd63c244ee3c9a4edfb80c4d4e4dafe33bc8602cc4b",
+  "python": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "dependencies": {
+    "gestaltdb": "0.16.0",
+    "pyrex-rocksdb": "0.7.1",
+    "pyarrow": "24.0.0"
+  },
+  "decision": "pending measurement review; no automatic native adoption",
+  "os_cache": "uncontrolled; process restart is not OS-cold",
+  "fixture": {
+    "status": "ok",
+    "rows": 10000,
+    "versions": 13429,
+    "load_s": 66.96224782400031,
+    "expected": {
+      "10": {
+        "all": {
+          "digest": "25730778a0a6265372c5ef6477ca4ac448aa3f04d7c5a145abfe337712687341",
+          "rows": 10000
+        },
+        "predicate": {
+          "digest": "9002e9dd613f18c82763d4709ddb8d8cd79b5723a58b15ffa11480d15641c5a6",
+          "rows": 2500
+        },
+        "subject": {
+          "digest": "f58d67f1ed0da255aff082f852e653a75ca8f7599d5645721538b1f8e8d173a7",
+          "rows": 1
+        }
+      },
+      "30": {
+        "all": {
+          "digest": "fec9ddfcb96d931c13e8f2bf0470cec50e9f6dbd1391d581a1e0bcc3877ee6a7",
+          "rows": 10000
+        },
+        "predicate": {
+          "digest": "0db3a68c3347e49e58eeceba51b7b436f2e1882595b19674e4c5785178942b01",
+          "rows": 2500
+        },
+        "subject": {
+          "digest": "32a4e1d7b9f551600cee5df59e0f9829b41cbcfca2167be81cc4f5e3ddea1453",
+          "rows": 1
+        }
+      },
+      "50": {
+        "all": {
+          "digest": "64f406e9927684bb6907f1b265179787ddbf197e5b520e3a2770709cc8188806",
+          "rows": 8571
+        },
+        "predicate": {
+          "digest": "49caad30a7dcbc9007ab19f854090ffe9e6f6ddf6d868e8f8421c2cae7bb0aab",
+          "rows": 2142
+        },
+        "subject": {
+          "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "rows": 0
+        }
+      },
+      "70": {
+        "all": {
+          "digest": "fec9ddfcb96d931c13e8f2bf0470cec50e9f6dbd1391d581a1e0bcc3877ee6a7",
+          "rows": 10000
+        },
+        "predicate": {
+          "digest": "0db3a68c3347e49e58eeceba51b7b436f2e1882595b19674e4c5785178942b01",
+          "rows": 2500
+        },
+        "subject": {
+          "digest": "32a4e1d7b9f551600cee5df59e0f9829b41cbcfca2167be81cc4f5e3ddea1453",
+          "rows": 1
+        }
+      },
+      "90": {
+        "all": {
+          "digest": "25730778a0a6265372c5ef6477ca4ac448aa3f04d7c5a145abfe337712687341",
+          "rows": 10000
+        },
+        "predicate": {
+          "digest": "9002e9dd613f18c82763d4709ddb8d8cd79b5723a58b15ffa11480d15641c5a6",
+          "rows": 2500
+        },
+        "subject": {
+          "digest": "f58d67f1ed0da255aff082f852e653a75ca8f7599d5645721538b1f8e8d173a7",
+          "rows": 1
+        }
+      }
+    },
+    "worker_wall_s": 67.30645998299997
+  },
+  "all_parity_verified": true,
+  "summary": {
+    "ordinary/all/30/first": {
+      "view_open_s": {
+        "p50": 3.8729941679998774,
+        "p95": 3.8729941679998774
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 16.967782027999874,
+        "p95": 16.967782027999874
+      },
+      "post_verify_s": {
+        "p50": 3.3039663630001996,
+        "p95": 3.3039663630001996
+      },
+      "authenticated_pipeline_s": {
+        "p50": 24.144796721000148,
+        "p95": 24.144796721000148
+      },
+      "reopen_s": {
+        "p50": 0.049113455999759026,
+        "p95": 0.049113455999759026
+      },
+      "total_pipeline_s": {
+        "p50": 24.193910176999907,
+        "p95": 24.193910176999907
+      },
+      "rss_peak_bytes": {
+        "p50": 134336512,
+        "p95": 134336512
+      }
+    },
+    "native-full-record/all/30/first": {
+      "view_open_s": {
+        "p50": 3.7301478670001416,
+        "p95": 3.7301478670001416
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 112.75716362899993,
+        "p95": 112.75716362899993
+      },
+      "post_verify_s": {
+        "p50": 3.2643530079999437,
+        "p95": 3.2643530079999437
+      },
+      "authenticated_pipeline_s": {
+        "p50": 119.75172940900029,
+        "p95": 119.75172940900029
+      },
+      "reopen_s": {
+        "p50": 0.014163073999952758,
+        "p95": 0.014163073999952758
+      },
+      "total_pipeline_s": {
+        "p50": 119.76589248300024,
+        "p95": 119.76589248300024
+      },
+      "rss_peak_bytes": {
+        "p50": 217366528,
+        "p95": 217366528
+      }
+    },
+    "native-authenticated-locator/all/30/first": {
+      "view_open_s": {
+        "p50": 3.8620103529997323,
+        "p95": 3.8620103529997323
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 74.13597586200012,
+        "p95": 74.13597586200012
+      },
+      "post_verify_s": {
+        "p50": 3.4006916339999407,
+        "p95": 3.4006916339999407
+      },
+      "authenticated_pipeline_s": {
+        "p50": 81.39874762499994,
+        "p95": 81.39874762499994
+      },
+      "reopen_s": {
+        "p50": 0.02706661799993526,
+        "p95": 0.02706661799993526
+      },
+      "total_pipeline_s": {
+        "p50": 81.42581424299988,
+        "p95": 81.42581424299988
+      },
+      "rss_peak_bytes": {
+        "p50": 207900672,
+        "p95": 207900672
+      }
+    },
+    "ordinary/all/30/warm": {
+      "view_open_s": {
+        "p50": 3.302632071000062,
+        "p95": 3.302632071000062
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 16.682731804000014,
+        "p95": 16.682731804000014
+      },
+      "post_verify_s": {
+        "p50": 3.2796722690000024,
+        "p95": 3.2796722690000024
+      },
+      "authenticated_pipeline_s": {
+        "p50": 23.265102422999917,
+        "p95": 23.265102422999917
+      },
+      "reopen_s": {
+        "p50": 0.016626480000013544,
+        "p95": 0.016626480000013544
+      },
+      "total_pipeline_s": {
+        "p50": 23.28172890299993,
+        "p95": 23.28172890299993
+      },
+      "rss_peak_bytes": {
+        "p50": 135020544,
+        "p95": 135020544
+      }
+    },
+    "native-full-record/all/30/warm": {
+      "view_open_s": {
+        "p50": 3.321607259999837,
+        "p95": 3.321607259999837
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 113.2733891150001,
+        "p95": 113.2733891150001
+      },
+      "post_verify_s": {
+        "p50": 3.3169348189999255,
+        "p95": 3.3169348189999255
+      },
+      "authenticated_pipeline_s": {
+        "p50": 119.91199892099985,
+        "p95": 119.91199892099985
+      },
+      "reopen_s": {
+        "p50": 0.01371200499988845,
+        "p95": 0.01371200499988845
+      },
+      "total_pipeline_s": {
+        "p50": 119.92571092599974,
+        "p95": 119.92571092599974
+      },
+      "rss_peak_bytes": {
+        "p50": 206389248,
+        "p95": 206389248
+      }
+    },
+    "native-authenticated-locator/all/30/warm": {
+      "view_open_s": {
+        "p50": 3.4391446939998787,
+        "p95": 3.4391446939998787
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 70.75178632000006,
+        "p95": 70.75178632000006
+      },
+      "post_verify_s": {
+        "p50": 3.4569271299997126,
+        "p95": 3.4569271299997126
+      },
+      "authenticated_pipeline_s": {
+        "p50": 77.6479271610001,
+        "p95": 77.6479271610001
+      },
+      "reopen_s": {
+        "p50": 0.028218126999945525,
+        "p95": 0.028218126999945525
+      },
+      "total_pipeline_s": {
+        "p50": 77.67614528800004,
+        "p95": 77.67614528800004
+      },
+      "rss_peak_bytes": {
+        "p50": 208662528,
+        "p95": 208662528
+      }
+    },
+    "ordinary/predicate/30/first": {
+      "view_open_s": {
+        "p50": 3.8497496279996994,
+        "p95": 3.8497496279996994
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 16.690244427999914,
+        "p95": 16.690244427999914
+      },
+      "post_verify_s": {
+        "p50": 3.313206708999587,
+        "p95": 3.313206708999587
+      },
+      "authenticated_pipeline_s": {
+        "p50": 23.8532693559996,
+        "p95": 23.8532693559996
+      },
+      "reopen_s": {
+        "p50": 0.01538309100033075,
+        "p95": 0.01538309100033075
+      },
+      "total_pipeline_s": {
+        "p50": 23.86865244699993,
+        "p95": 23.86865244699993
+      },
+      "rss_peak_bytes": {
+        "p50": 130240512,
+        "p95": 130240512
+      }
+    },
+    "native-full-record/predicate/30/first": {
+      "view_open_s": {
+        "p50": 3.8763344630001484,
+        "p95": 3.8763344630001484
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 113.00835854900015,
+        "p95": 113.00835854900015
+      },
+      "post_verify_s": {
+        "p50": 3.3227110660000108,
+        "p95": 3.3227110660000108
+      },
+      "authenticated_pipeline_s": {
+        "p50": 120.20746951000001,
+        "p95": 120.20746951000001
+      },
+      "reopen_s": {
+        "p50": 0.015316700999846944,
+        "p95": 0.015316700999846944
+      },
+      "total_pipeline_s": {
+        "p50": 120.22278621099986,
+        "p95": 120.22278621099986
+      },
+      "rss_peak_bytes": {
+        "p50": 201003008,
+        "p95": 201003008
+      }
+    },
+    "native-authenticated-locator/predicate/30/first": {
+      "view_open_s": {
+        "p50": 3.780466850999801,
+        "p95": 3.780466850999801
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 70.80345120399988,
+        "p95": 70.80345120399988
+      },
+      "post_verify_s": {
+        "p50": 3.44759967400023,
+        "p95": 3.44759967400023
+      },
+      "authenticated_pipeline_s": {
+        "p50": 78.03158173700012,
+        "p95": 78.03158173700012
+      },
+      "reopen_s": {
+        "p50": 0.015789712000241707,
+        "p95": 0.015789712000241707
+      },
+      "total_pipeline_s": {
+        "p50": 78.04737144900037,
+        "p95": 78.04737144900037
+      },
+      "rss_peak_bytes": {
+        "p50": 206430208,
+        "p95": 206430208
+      }
+    },
+    "ordinary/predicate/30/warm": {
+      "view_open_s": {
+        "p50": 3.3561831960000745,
+        "p95": 3.3561831960000745
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 16.640966993999882,
+        "p95": 16.640966993999882
+      },
+      "post_verify_s": {
+        "p50": 3.3922558469998876,
+        "p95": 3.3922558469998876
+      },
+      "authenticated_pipeline_s": {
+        "p50": 23.389472230000138,
+        "p95": 23.389472230000138
+      },
+      "reopen_s": {
+        "p50": 0.016594276999967406,
+        "p95": 0.016594276999967406
+      },
+      "total_pipeline_s": {
+        "p50": 23.406066507000105,
+        "p95": 23.406066507000105
+      },
+      "rss_peak_bytes": {
+        "p50": 130822144,
+        "p95": 130822144
+      }
+    },
+    "native-full-record/predicate/30/warm": {
+      "view_open_s": {
+        "p50": 3.4341208030000416,
+        "p95": 3.4341208030000416
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 115.501972217,
+        "p95": 115.501972217
+      },
+      "post_verify_s": {
+        "p50": 3.381976004999615,
+        "p95": 3.381976004999615
+      },
+      "authenticated_pipeline_s": {
+        "p50": 122.31813769100017,
+        "p95": 122.31813769100017
+      },
+      "reopen_s": {
+        "p50": 0.01564216299993859,
+        "p95": 0.01564216299993859
+      },
+      "total_pipeline_s": {
+        "p50": 122.33377985400011,
+        "p95": 122.33377985400011
+      },
+      "rss_peak_bytes": {
+        "p50": 205410304,
+        "p95": 205410304
+      }
+    },
+    "native-authenticated-locator/predicate/30/warm": {
+      "view_open_s": {
+        "p50": 3.5210229620001883,
+        "p95": 3.5210229620001883
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 74.83873406599969,
+        "p95": 74.83873406599969
+      },
+      "post_verify_s": {
+        "p50": 3.4718758970002455,
+        "p95": 3.4718758970002455
+      },
+      "authenticated_pipeline_s": {
+        "p50": 81.83169383200038,
+        "p95": 81.83169383200038
+      },
+      "reopen_s": {
+        "p50": 0.016367285000342235,
+        "p95": 0.016367285000342235
+      },
+      "total_pipeline_s": {
+        "p50": 81.84806111700073,
+        "p95": 81.84806111700073
+      },
+      "rss_peak_bytes": {
+        "p50": 208039936,
+        "p95": 208039936
+      }
+    },
+    "ordinary/subject/30/first": {
+      "view_open_s": {
+        "p50": 3.7260008620000917,
+        "p95": 3.7260008620000917
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 17.033773198999825,
+        "p95": 17.033773198999825
+      },
+      "post_verify_s": {
+        "p50": 3.4364883339999324,
+        "p95": 3.4364883339999324
+      },
+      "authenticated_pipeline_s": {
+        "p50": 24.196320312999887,
+        "p95": 24.196320312999887
+      },
+      "reopen_s": {
+        "p50": 0.015312263000396342,
+        "p95": 0.015312263000396342
+      },
+      "total_pipeline_s": {
+        "p50": 24.211632576000284,
+        "p95": 24.211632576000284
+      },
+      "rss_peak_bytes": {
+        "p50": 126754816,
+        "p95": 126754816
+      }
+    },
+    "native-full-record/subject/30/first": {
+      "view_open_s": {
+        "p50": 3.8433299510002144,
+        "p95": 3.8433299510002144
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 115.69430532699971,
+        "p95": 115.69430532699971
+      },
+      "post_verify_s": {
+        "p50": 3.380765613999756,
+        "p95": 3.380765613999756
+      },
+      "authenticated_pipeline_s": {
+        "p50": 122.91846644199995,
+        "p95": 122.91846644199995
+      },
+      "reopen_s": {
+        "p50": 0.014519396000196139,
+        "p95": 0.014519396000196139
+      },
+      "total_pipeline_s": {
+        "p50": 122.93298583800015,
+        "p95": 122.93298583800015
+      },
+      "rss_peak_bytes": {
+        "p50": 200761344,
+        "p95": 200761344
+      }
+    },
+    "native-authenticated-locator/subject/30/first": {
+      "view_open_s": {
+        "p50": 4.061374998000247,
+        "p95": 4.061374998000247
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 74.09262189699984,
+        "p95": 74.09262189699984
+      },
+      "post_verify_s": {
+        "p50": 3.4369113320003635,
+        "p95": 3.4369113320003635
+      },
+      "authenticated_pipeline_s": {
+        "p50": 81.5909754850004,
+        "p95": 81.5909754850004
+      },
+      "reopen_s": {
+        "p50": 0.013935892999597854,
+        "p95": 0.013935892999597854
+      },
+      "total_pipeline_s": {
+        "p50": 81.604911378,
+        "p95": 81.604911378
+      },
+      "rss_peak_bytes": {
+        "p50": 205111296,
+        "p95": 205111296
+      }
+    },
+    "ordinary/subject/30/warm": {
+      "view_open_s": {
+        "p50": 3.4149291339999763,
+        "p95": 3.4149291339999763
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 17.05262834799987,
+        "p95": 17.05262834799987
+      },
+      "post_verify_s": {
+        "p50": 3.3046682220001458,
+        "p95": 3.3046682220001458
+      },
+      "authenticated_pipeline_s": {
+        "p50": 23.77229426399981,
+        "p95": 23.77229426399981
+      },
+      "reopen_s": {
+        "p50": 0.014212606999990385,
+        "p95": 0.014212606999990385
+      },
+      "total_pipeline_s": {
+        "p50": 23.7865068709998,
+        "p95": 23.7865068709998
+      },
+      "rss_peak_bytes": {
+        "p50": 126799872,
+        "p95": 126799872
+      }
+    },
+    "native-full-record/subject/30/warm": {
+      "view_open_s": {
+        "p50": 3.4574477050000496,
+        "p95": 3.4574477050000496
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 115.23350532699988,
+        "p95": 115.23350532699988
+      },
+      "post_verify_s": {
+        "p50": 3.4652707579998605,
+        "p95": 3.4652707579998605
+      },
+      "authenticated_pipeline_s": {
+        "p50": 122.15629764200003,
+        "p95": 122.15629764200003
+      },
+      "reopen_s": {
+        "p50": 0.01666537099981724,
+        "p95": 0.01666537099981724
+      },
+      "total_pipeline_s": {
+        "p50": 122.17296301299984,
+        "p95": 122.17296301299984
+      },
+      "rss_peak_bytes": {
+        "p50": 206282752,
+        "p95": 206282752
+      }
+    },
+    "native-authenticated-locator/subject/30/warm": {
+      "view_open_s": {
+        "p50": 3.2862514429998555,
+        "p95": 3.2862514429998555
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 70.50562590299978,
+        "p95": 70.50562590299978
+      },
+      "post_verify_s": {
+        "p50": 3.41897564699957,
+        "p95": 3.41897564699957
+      },
+      "authenticated_pipeline_s": {
+        "p50": 77.21091641200019,
+        "p95": 77.21091641200019
+      },
+      "reopen_s": {
+        "p50": 0.01694913000028464,
+        "p95": 0.01694913000028464
+      },
+      "total_pipeline_s": {
+        "p50": 77.22786554200047,
+        "p95": 77.22786554200047
+      },
+      "rss_peak_bytes": {
+        "p50": 208084992,
+        "p95": 208084992
+      }
+    },
+    "ordinary/all/50/first": {
+      "view_open_s": {
+        "p50": 3.759775778000403,
+        "p95": 3.759775778000403
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 17.02014872199925,
+        "p95": 17.02014872199925
+      },
+      "post_verify_s": {
+        "p50": 3.280497114999889,
+        "p95": 3.280497114999889
+      },
+      "authenticated_pipeline_s": {
+        "p50": 24.060486845000014,
+        "p95": 24.060486845000014
+      },
+      "reopen_s": {
+        "p50": 0.016882931000509416,
+        "p95": 0.016882931000509416
+      },
+      "total_pipeline_s": {
+        "p50": 24.077369776000523,
+        "p95": 24.077369776000523
+      },
+      "rss_peak_bytes": {
+        "p50": 134987776,
+        "p95": 134987776
+      }
+    },
+    "native-full-record/all/50/first": {
+      "view_open_s": {
+        "p50": 3.8057131440000376,
+        "p95": 3.8057131440000376
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 114.21925740899951,
+        "p95": 114.21925740899951
+      },
+      "post_verify_s": {
+        "p50": 3.5558516710007098,
+        "p95": 3.5558516710007098
+      },
+      "authenticated_pipeline_s": {
+        "p50": 121.58088613699965,
+        "p95": 121.58088613699965
+      },
+      "reopen_s": {
+        "p50": 0.030751001999306027,
+        "p95": 0.030751001999306027
+      },
+      "total_pipeline_s": {
+        "p50": 121.61163713899896,
+        "p95": 121.61163713899896
+      },
+      "rss_peak_bytes": {
+        "p50": 202059776,
+        "p95": 202059776
+      }
+    },
+    "native-authenticated-locator/all/50/first": {
+      "view_open_s": {
+        "p50": 3.838481451000007,
+        "p95": 3.838481451000007
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 71.34861166500013,
+        "p95": 71.34861166500013
+      },
+      "post_verify_s": {
+        "p50": 3.282739508999839,
+        "p95": 3.282739508999839
+      },
+      "authenticated_pipeline_s": {
+        "p50": 78.46989742599999,
+        "p95": 78.46989742599999
+      },
+      "reopen_s": {
+        "p50": 0.01465075899977819,
+        "p95": 0.01465075899977819
+      },
+      "total_pipeline_s": {
+        "p50": 78.48454818499977,
+        "p95": 78.48454818499977
+      },
+      "rss_peak_bytes": {
+        "p50": 207212544,
+        "p95": 207212544
+      }
+    },
+    "ordinary/all/50/warm": {
+      "view_open_s": {
+        "p50": 3.285500488999787,
+        "p95": 3.285500488999787
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 17.2187694510003,
+        "p95": 17.2187694510003
+      },
+      "post_verify_s": {
+        "p50": 3.38109119299952,
+        "p95": 3.38109119299952
+      },
+      "authenticated_pipeline_s": {
+        "p50": 23.88542817799953,
+        "p95": 23.88542817799953
+      },
+      "reopen_s": {
+        "p50": 0.015435143999638967,
+        "p95": 0.015435143999638967
+      },
+      "total_pipeline_s": {
+        "p50": 23.900863321999168,
+        "p95": 23.900863321999168
+      },
+      "rss_peak_bytes": {
+        "p50": 133242880,
+        "p95": 133242880
+      }
+    },
+    "native-full-record/all/50/warm": {
+      "view_open_s": {
+        "p50": 3.3474299129993597,
+        "p95": 3.3474299129993597
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 113.64808450000055,
+        "p95": 113.64808450000055
+      },
+      "post_verify_s": {
+        "p50": 3.4681551009998657,
+        "p95": 3.4681551009998657
+      },
+      "authenticated_pipeline_s": {
+        "p50": 120.4637390050002,
+        "p95": 120.4637390050002
+      },
+      "reopen_s": {
+        "p50": 0.017226564999873517,
+        "p95": 0.017226564999873517
+      },
+      "total_pipeline_s": {
+        "p50": 120.48096557000008,
+        "p95": 120.48096557000008
+      },
+      "rss_peak_bytes": {
+        "p50": 206520320,
+        "p95": 206520320
+      }
+    },
+    "native-authenticated-locator/all/50/warm": {
+      "view_open_s": {
+        "p50": 3.3722067950002383,
+        "p95": 3.3722067950002383
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 73.6590726960003,
+        "p95": 73.6590726960003
+      },
+      "post_verify_s": {
+        "p50": 3.480499291000342,
+        "p95": 3.480499291000342
+      },
+      "authenticated_pipeline_s": {
+        "p50": 80.51184933900004,
+        "p95": 80.51184933900004
+      },
+      "reopen_s": {
+        "p50": 0.01676827699975547,
+        "p95": 0.01676827699975547
+      },
+      "total_pipeline_s": {
+        "p50": 80.52861761599979,
+        "p95": 80.52861761599979
+      },
+      "rss_peak_bytes": {
+        "p50": 209772544,
+        "p95": 209772544
+      }
+    },
+    "ordinary/predicate/50/first": {
+      "view_open_s": {
+        "p50": 3.7838539060003313,
+        "p95": 3.7838539060003313
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 17.02895758500017,
+        "p95": 17.02895758500017
+      },
+      "post_verify_s": {
+        "p50": 3.4230835650005247,
+        "p95": 3.4230835650005247
+      },
+      "authenticated_pipeline_s": {
+        "p50": 24.235961223999766,
+        "p95": 24.235961223999766
+      },
+      "reopen_s": {
+        "p50": 0.015862389999711013,
+        "p95": 0.015862389999711013
+      },
+      "total_pipeline_s": {
+        "p50": 24.251823613999477,
+        "p95": 24.251823613999477
+      },
+      "rss_peak_bytes": {
+        "p50": 130547712,
+        "p95": 130547712
+      }
+    },
+    "native-full-record/predicate/50/first": {
+      "view_open_s": {
+        "p50": 4.081372600000577,
+        "p95": 4.081372600000577
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 119.53645475099984,
+        "p95": 119.53645475099984
+      },
+      "post_verify_s": {
+        "p50": 3.486886863000109,
+        "p95": 3.486886863000109
+      },
+      "authenticated_pipeline_s": {
+        "p50": 127.10478111300017,
+        "p95": 127.10478111300017
+      },
+      "reopen_s": {
+        "p50": 0.01695331099926989,
+        "p95": 0.01695331099926989
+      },
+      "total_pipeline_s": {
+        "p50": 127.12173442399944,
+        "p95": 127.12173442399944
+      },
+      "rss_peak_bytes": {
+        "p50": 200630272,
+        "p95": 200630272
+      }
+    },
+    "native-authenticated-locator/predicate/50/first": {
+      "view_open_s": {
+        "p50": 3.842392681000092,
+        "p95": 3.842392681000092
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 70.41779580100047,
+        "p95": 70.41779580100047
+      },
+      "post_verify_s": {
+        "p50": 3.3282540270001846,
+        "p95": 3.3282540270001846
+      },
+      "authenticated_pipeline_s": {
+        "p50": 77.58851283500007,
+        "p95": 77.58851283500007
+      },
+      "reopen_s": {
+        "p50": 0.016666825999891444,
+        "p95": 0.016666825999891444
+      },
+      "total_pipeline_s": {
+        "p50": 77.60517966099997,
+        "p95": 77.60517966099997
+      },
+      "rss_peak_bytes": {
+        "p50": 206807040,
+        "p95": 206807040
+      }
+    },
+    "ordinary/predicate/50/warm": {
+      "view_open_s": {
+        "p50": 3.334209673999794,
+        "p95": 3.334209673999794
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 17.006240638000236,
+        "p95": 17.006240638000236
+      },
+      "post_verify_s": {
+        "p50": 3.3967407390000517,
+        "p95": 3.3967407390000517
+      },
+      "authenticated_pipeline_s": {
+        "p50": 23.737261976999434,
+        "p95": 23.737261976999434
+      },
+      "reopen_s": {
+        "p50": 0.015600774000631645,
+        "p95": 0.015600774000631645
+      },
+      "total_pipeline_s": {
+        "p50": 23.752862751000066,
+        "p95": 23.752862751000066
+      },
+      "rss_peak_bytes": {
+        "p50": 130887680,
+        "p95": 130887680
+      }
+    },
+    "native-full-record/predicate/50/warm": {
+      "view_open_s": {
+        "p50": 3.5793292630005453,
+        "p95": 3.5793292630005453
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 117.90419534099965,
+        "p95": 117.90419534099965
+      },
+      "post_verify_s": {
+        "p50": 3.611212157999944,
+        "p95": 3.611212157999944
+      },
+      "authenticated_pipeline_s": {
+        "p50": 125.09480785400046,
+        "p95": 125.09480785400046
+      },
+      "reopen_s": {
+        "p50": 0.027614663000349537,
+        "p95": 0.027614663000349537
+      },
+      "total_pipeline_s": {
+        "p50": 125.12242251700081,
+        "p95": 125.12242251700081
+      },
+      "rss_peak_bytes": {
+        "p50": 206290944,
+        "p95": 206290944
+      }
+    },
+    "native-authenticated-locator/predicate/50/warm": {
+      "view_open_s": {
+        "p50": 3.3168095170003653,
+        "p95": 3.3168095170003653
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 70.83196560000033,
+        "p95": 70.83196560000033
+      },
+      "post_verify_s": {
+        "p50": 3.306094855000083,
+        "p95": 3.306094855000083
+      },
+      "authenticated_pipeline_s": {
+        "p50": 77.45493502600038,
+        "p95": 77.45493502600038
+      },
+      "reopen_s": {
+        "p50": 0.018459908999830077,
+        "p95": 0.018459908999830077
+      },
+      "total_pipeline_s": {
+        "p50": 77.47339493500021,
+        "p95": 77.47339493500021
+      },
+      "rss_peak_bytes": {
+        "p50": 207761408,
+        "p95": 207761408
+      }
+    },
+    "ordinary/subject/50/first": {
+      "view_open_s": {
+        "p50": 3.749194111000179,
+        "p95": 3.749194111000179
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 16.665517008999814,
+        "p95": 16.665517008999814
+      },
+      "post_verify_s": {
+        "p50": 3.361685609000233,
+        "p95": 3.361685609000233
+      },
+      "authenticated_pipeline_s": {
+        "p50": 23.77646153800015,
+        "p95": 23.77646153800015
+      },
+      "reopen_s": {
+        "p50": 0.016578820000177075,
+        "p95": 0.016578820000177075
+      },
+      "total_pipeline_s": {
+        "p50": 23.793040358000326,
+        "p95": 23.793040358000326
+      },
+      "rss_peak_bytes": {
+        "p50": 126754816,
+        "p95": 126754816
+      }
+    },
+    "native-full-record/subject/50/first": {
+      "view_open_s": {
+        "p50": 3.827814691999265,
+        "p95": 3.827814691999265
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 116.78217258600034,
+        "p95": 116.78217258600034
+      },
+      "post_verify_s": {
+        "p50": 3.511901552999916,
+        "p95": 3.511901552999916
+      },
+      "authenticated_pipeline_s": {
+        "p50": 124.12195510499987,
+        "p95": 124.12195510499987
+      },
+      "reopen_s": {
+        "p50": 0.027628681000351207,
+        "p95": 0.027628681000351207
+      },
+      "total_pipeline_s": {
+        "p50": 124.14958378600022,
+        "p95": 124.14958378600022
+      },
+      "rss_peak_bytes": {
+        "p50": 200863744,
+        "p95": 200863744
+      }
+    },
+    "native-authenticated-locator/subject/50/first": {
+      "view_open_s": {
+        "p50": 3.649455411999952,
+        "p95": 3.649455411999952
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 69.88322026599963,
+        "p95": 69.88322026599963
+      },
+      "post_verify_s": {
+        "p50": 3.4216237040000124,
+        "p95": 3.4216237040000124
+      },
+      "authenticated_pipeline_s": {
+        "p50": 76.95437036200019,
+        "p95": 76.95437036200019
+      },
+      "reopen_s": {
+        "p50": 0.016795159000139392,
+        "p95": 0.016795159000139392
+      },
+      "total_pipeline_s": {
+        "p50": 76.97116552100033,
+        "p95": 76.97116552100033
+      },
+      "rss_peak_bytes": {
+        "p50": 206458880,
+        "p95": 206458880
+      }
+    },
+    "ordinary/subject/50/warm": {
+      "view_open_s": {
+        "p50": 3.4169443410000895,
+        "p95": 3.4169443410000895
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 17.41466515100001,
+        "p95": 17.41466515100001
+      },
+      "post_verify_s": {
+        "p50": 3.6490963910000573,
+        "p95": 3.6490963910000573
+      },
+      "authenticated_pipeline_s": {
+        "p50": 24.48077015400031,
+        "p95": 24.48077015400031
+      },
+      "reopen_s": {
+        "p50": 0.014561971000148333,
+        "p95": 0.014561971000148333
+      },
+      "total_pipeline_s": {
+        "p50": 24.49533212500046,
+        "p95": 24.49533212500046
+      },
+      "rss_peak_bytes": {
+        "p50": 126578688,
+        "p95": 126578688
+      }
+    },
+    "native-full-record/subject/50/warm": {
+      "view_open_s": {
+        "p50": 3.368399997999404,
+        "p95": 3.368399997999404
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 115.59512054199968,
+        "p95": 115.59512054199968
+      },
+      "post_verify_s": {
+        "p50": 3.5461166770001,
+        "p95": 3.5461166770001
+      },
+      "authenticated_pipeline_s": {
+        "p50": 122.50971056599974,
+        "p95": 122.50971056599974
+      },
+      "reopen_s": {
+        "p50": 0.015645598999981303,
+        "p95": 0.015645598999981303
+      },
+      "total_pipeline_s": {
+        "p50": 122.52535616499972,
+        "p95": 122.52535616499972
+      },
+      "rss_peak_bytes": {
+        "p50": 206401536,
+        "p95": 206401536
+      }
+    },
+    "native-authenticated-locator/subject/50/warm": {
+      "view_open_s": {
+        "p50": 3.277189116000045,
+        "p95": 3.277189116000045
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 68.80782799100052,
+        "p95": 68.80782799100052
+      },
+      "post_verify_s": {
+        "p50": 3.2228864870003235,
+        "p95": 3.2228864870003235
+      },
+      "authenticated_pipeline_s": {
+        "p50": 75.30797316000007,
+        "p95": 75.30797316000007
+      },
+      "reopen_s": {
+        "p50": 0.016278893000162498,
+        "p95": 0.016278893000162498
+      },
+      "total_pipeline_s": {
+        "p50": 75.32425205300024,
+        "p95": 75.32425205300024
+      },
+      "rss_peak_bytes": {
+        "p50": 208048128,
+        "p95": 208048128
+      }
+    }
+  }
+}

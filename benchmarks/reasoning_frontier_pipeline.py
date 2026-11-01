@@ -29,9 +29,10 @@ METHODS = ("frontier", "indexed-python", "indexed-scc", "polars-prototype", "nat
 BENCHMARK_NATIVE_METHODS = ("native-decoded", "native-locator")
 
 
-def checkpoint(stage):
+def checkpoint(stage, **details):
     """Small flushed worker diagnostics, never substitute partial timings."""
-    print("PIPELINE_PROGRESS " + json.dumps({"stage": stage}), file=sys.stderr, flush=True)
+    print("PIPELINE_PROGRESS " + json.dumps({"stage": stage, **details}),
+          file=sys.stderr, flush=True)
 
 
 def last_checkpoint(stderr):

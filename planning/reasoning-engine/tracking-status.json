@@ -1,10 +1,10 @@
 {
   "status_authority": "EPIC_REASONING_ENGINE.md",
-  "reviewed_integration": "3403530adf186cf79d6426829d3be8bf8898f6f3",
+  "reviewed_integration": "7f288085fc01ecd2fac66def9d3c29981054af26",
   "review_date": "2026-11-01",
-  "reviewed_at": "2026-11-01T11:27:42Z",
+  "reviewed_at": "2026-11-01T13:00:35Z",
   "roadmap": {"issue": 156, "state": "closed"},
-  "note": "Current snapshot: #156 and all five phases closed; #391 and #392-#396 closed. #194 remains open for actual authenticated locator measurements/decision, not missing implementation. See epic for adjacent programs and release boundaries.",
+  "note": "Reconciled after sanitation #452 at main 7f28808: #156/all phases and #391-#396 remain closed. #194 has measurements/defer decision in unmerged PR #450, not reviewed main; #451 owns unremediated dense-history authentication/locator performance debt. No changed GR dispositions or adoption claim.",
   "phases": {
     "RE-E1": {
       "issue": 157,
@@ -34,8 +34,12 @@
   },
   "followups": {
     "194": {
-      "state": "open"
+      "state": "open",
+      "measurement_pr": 450,
+      "disposition": "locator source on main; actual-adapter evidence/defer decision in unmerged PR #450; integration/review pending",
+      "performance_debt_issue": 451
     },
+    "451": {"state": "open", "disposition": "dense-history construction/authentication and locator read amplification; native adoption deferred"},
     "200": {
       "state": "closed",
       "disposition_issue": 371
