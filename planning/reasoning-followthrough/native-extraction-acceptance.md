@@ -4,7 +4,16 @@ Historical audit baseline: integration `96a9103`, originally targeting
 `feature/onto-dev-epic-2`. That target is fulfilled history, not current work
 instructions. Current authority is `EPIC_REASONING_ENGINE.md` sections 1–4.
 
-Reconciled against main `7f28808` (sanitation #452) on 2026-11-01: the production
+Current reconciliation (2026-11-01T23:07:18Z): #450 and HSA-02 #461 are merged
+to main `dcc90e2`; the earlier integration blocker below is resolved. #194 stays
+open for closure reconciliation, not because its source or measurements are
+missing. HSA-03/HSA-04 are separately on `hsa-dev` (`af08f60`), with HSA-06 pilot
+evidence in `planning/reasoning-followthrough/hsa-06-pilot.md`. Dense construction
+clears the preserved 900s gate, but selective native latency/RSS still misses the
+ordinary-relative goal. Native adoption and optional new-index HSA-05 remain
+deferred. Original #450 reports retain their original hashes and limitations.
+
+Superseded review against main `7f28808` (sanitation #452) on 2026-11-01: the production
 locator source is already on main. Open PR #450 contains actual-adapter evidence
 and a **defer automatic adoption** decision, not yet merged into reviewed main.
 It preserves 18/18 100K sparse-history and 36/36 diagnostic dense-history 10K
@@ -71,7 +80,7 @@ limits/profiles expose the different work units.
 
 This addressed the historical locator/source correctness gap and reached main
 through #369. Actual-adapter measurements/decision are delivered separately in
-unmerged PR #450; final integration/review remains. Existing benchmark-only
+PR #450, now merged; issue closure reconciliation remains. Existing benchmark-only
 locator and full-record native reports are not relabelled measurements of this
 source. Original scale evidence remains valid for the modes it measured; do not
 infer a universal acceleration or automatically close #194 from this additive API.
@@ -92,8 +101,8 @@ This is extraction-only, not a relabelling of inference/support/publication resu
 
 The actual-adapter scale comparison and explicit defer decision are now recorded
 in `docs/reasoning-native-locator-claims.rst`, with committed reports under
-`benchmarks/results/reasoning-194-locator-*`. Closure awaits PR #450 integration/
-review, not completion of #451 optimization debt. Repeated isolated measurements
+`benchmarks/results/reasoning-194-locator-*`. PR #450 integration/review is now
+complete; closure reconciliation is not blocked on #451 optimization debt. Repeated isolated measurements
 remain necessary for a future adoption claim; single observations suffice to keep
 the existing default and explicitly defer adoption. Preserve earlier raw/full-record/
 assertion-only results separately and distinguish dense construction failure from

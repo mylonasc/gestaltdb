@@ -1,10 +1,10 @@
 {
   "status_authority": "EPIC_REASONING_ENGINE.md",
-  "reviewed_integration": "7f288085fc01ecd2fac66def9d3c29981054af26",
+  "reviewed_integration": "dcc90e2b3c21875045f3760bcedd3a234cb79e42",
   "review_date": "2026-11-01",
-  "reviewed_at": "2026-11-01T13:00:35Z",
+  "reviewed_at": "2026-11-01T23:07:18Z",
   "roadmap": {"issue": 156, "state": "closed"},
-  "note": "Reconciled after sanitation #452 at main 7f28808: #156/all phases and #391-#396 remain closed. #194 has measurements/defer decision in unmerged PR #450, not reviewed main; #451 owns unremediated dense-history authentication/locator performance debt. No changed GR dispositions or adoption claim.",
+  "note": "Main dcc90e2 includes #450 measurements/defer decision and HSA-02 #461; #194 remains open for closure reconciliation. HSA-03/HSA-04 are on hsa-dev af08f60, not main. HSA-06 pilot clears 100K dense construction and observed own-baseline 1K gates but fails selective native-vs-ordinary goals; #451 remains open, native adoption/HSA-05 deferred. #156/phases/#391-#396 remain closed; no changed GR dispositions.",
   "phases": {
     "RE-E1": {
       "issue": 157,
