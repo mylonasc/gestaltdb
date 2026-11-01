@@ -32,12 +32,15 @@ def selected(index, selection):
     return selection == "all" or (index % 4 == 0 and (selection != "subject" or index == 0))
 
 
-def fixture(path, rows):
+def fixture(path, rows, history_rows=None):
     """Build history and independent expected winner IDs from write receipts."""
     from gestaltdb.epistemic import Claim
     from gestaltdb.graphdb import GraphDB
     from gestaltdb.versioning import ClaimVersionWrite
 
+    history_rows = rows if history_rows is None else history_rows
+    if not 1 <= history_rows <= rows:
+        raise ValueError("history_rows must be between 1 and rows")
     begin = time.perf_counter()
     graph = GraphDB.create(path, backend="pyrex", serializer="json")
     expected = {str(t): {s: [] for s in SELECTIONS} for t in TIMES}
@@ -52,25 +55,26 @@ def fixture(path, rows):
             corrections = {}
             pending = [ClaimVersionWrite.correction(replace(c, confidence=.8),
                        supersedes_version_id=v.version_id, valid=(20, 80))
-                       for i, (c, v) in enumerate(zip(claims, assertions), start) if i % 5 == 0]
+                       for i, (c, v) in enumerate(zip(claims, assertions), start)
+                       if i < history_rows and i % 5 == 0]
             if pending:
                 corrections = {v.logical_id: v for v in graph.temporal.commit_versions(pending).versions}
             pending = [ClaimVersionWrite.retraction(v.logical_id, valid=(40, 60),
                        supersedes_version_id=corrections.get(v.logical_id, v).version_id)
-                       for i, v in enumerate(assertions, start) if i % 7 == 0]
+                       for i, v in enumerate(assertions, start) if i < history_rows and i % 7 == 0]
             if pending:
                 graph.temporal.commit_versions(pending)
             versions += len(assertions) + len(corrections) + len(pending)
             for i, v in enumerate(assertions, start):
                 for t in TIMES:
-                    if i % 7 == 0 and 40 <= t < 60:
+                    if i < history_rows and i % 7 == 0 and 40 <= t < 60:
                         continue
                     winner = corrections.get(v.logical_id, v) if 20 <= t < 80 else v
                     record = (v.claim.subject, v.claim.predicate, v.claim.object, winner.version_id)
                     for selection in SELECTIONS:
                         if selected(i, selection):
                             expected[str(t)][selection].append(record)
-        return {"status": "ok", "rows": rows, "versions": versions,
+        return {"status": "ok", "rows": rows, "history_rows": history_rows, "versions": versions,
                 "load_s": time.perf_counter() - begin,
                 "expected": {t: {s: {"digest": digest(items), "rows": len(items)}
                                     for s, items in groups.items()} for t, groups in expected.items()}}
@@ -159,6 +163,8 @@ def worker(path, rows, method, selection, valid_time, cache):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rows", type=int, default=1000)
+    parser.add_argument("--history-rows", type=int,
+                        help="apply corrections/retractions only to this many initial assertions; default all")
     parser.add_argument("--methods", nargs="+", choices=METHODS, default=list(METHODS))
     parser.add_argument("--selections", nargs="+", choices=SELECTIONS, default=list(SELECTIONS))
     parser.add_argument("--times", nargs="+", type=int, choices=TIMES, default=[50])
@@ -171,10 +177,12 @@ def main():
     args = parser.parse_args()
     if not 1 <= args.rows <= 1_000_000 or args.repeats < 1 or not 0 < args.timeout < math.inf:
         parser.error("positive finite timeout/repeats and rows <=1000000 required")
+    if args.history_rows is not None and not 1 <= args.history_rows <= args.rows:
+        parser.error("history-rows must be between 1 and rows")
     if args.worker:
         if args.fixture is None:
             parser.error("worker requires --fixture")
-        result = fixture(args.fixture, args.rows) if args.worker == "load" else worker(
+        result = fixture(args.fixture, args.rows, args.history_rows) if args.worker == "load" else worker(
             args.fixture, args.rows, args.worker, args.selections[0], args.times[0], args.caches[0])
         print(json.dumps(result))
         return
@@ -190,7 +198,10 @@ def main():
               "decision": "pending measurement review; no automatic native adoption",
               "os_cache": "uncontrolled; process restart is not OS-cold"}
     for package in ("gestaltdb", "pyrex-rocksdb", "pyarrow"):
-        report["dependencies"][package] = importlib.metadata.version(package)
+        try:
+            report["dependencies"][package] = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            report["dependencies"][package] = None
 
     def save():
         if args.output:
@@ -202,6 +213,8 @@ def main():
         path = Path(directory) / "db"
         common = [sys.executable, "-m", "benchmarks.reasoning_locator_pipeline",
                   "--rows", str(args.rows), "--fixture", str(path)]
+        if args.history_rows is not None:
+            common += ["--history-rows", str(args.history_rows)]
         loaded = call_worker([*common, "--worker", "load"], args.timeout)
         report["fixture"] = loaded
         save()

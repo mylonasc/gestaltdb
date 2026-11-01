@@ -64,3 +64,32 @@ def test_cli_timeout_retains_incomplete_report_without_quantiles(tmp_path):
     assert report["complete"] is False
     assert report["fixture"]["status"] == "timeout"
     assert "summary" not in report
+
+
+def test_sparse_history_keeps_real_versions_and_distinct_density(tmp_path):
+    pytest.importorskip("pyrex")
+    pytest.importorskip("pyarrow")
+    path = tmp_path / "db"
+    manifest = fixture(path, 36, history_rows=8)
+    (tmp_path / "fixture.json").write_text(json.dumps(manifest))
+    assert manifest["history_rows"] == 8
+    assert manifest["versions"] == 40  # two corrections and two retractions
+    assert manifest["expected"]["50"]["all"]["rows"] == 34
+    for t in (30, 50):
+        samples = [worker(path, 36, method, "all", t, "first") for method in METHODS]
+        assert len({s["evidence_digest"] for s in samples}) == 1
+
+
+def test_missing_optional_metadata_still_writes_timeout_report(tmp_path, monkeypatch):
+    import benchmarks.reasoning_locator_pipeline as benchmark
+    def missing(package):
+        raise benchmark.importlib.metadata.PackageNotFoundError(package)
+    monkeypatch.setattr(benchmark.importlib.metadata, "version", missing)
+    monkeypatch.setattr(benchmark, "call_worker", lambda *args: {"status": "timeout", "timeout_s": .001})
+    path = tmp_path / "report.json"
+    monkeypatch.setattr(sys, "argv", ["benchmark", "--rows", "1", "--output", str(path)])
+    with pytest.raises(SystemExit, match="fixture failed"):
+        benchmark.main()
+    report = json.loads(path.read_text())
+    assert all(v is None for v in report["dependencies"].values())
+    assert report["fixture"]["status"] == "timeout" and report["complete"] is False

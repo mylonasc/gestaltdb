@@ -179,3 +179,27 @@ not deleting or declaring the authenticated locator semantically incorrect.
 
 Issue #194 remains **open** and PR #450 remains **draft**. No merge, release,
 automatic source adoption or issue closure has been performed.
+
+## Follow-up: 100K dense-history fixture gate failed
+
+The ordinary-source 100K pilot has now returned: its **fixture worker timed out
+at 900 seconds**, `last_stage=null`, `samples=[]`, `complete=false`. No extraction
+worker ran. This is a fixture-construction failure, not an ordinary or native
+read-path timing, a parity failure, or an RSS measurement. The original report
+remains at `/tmp/opencode/reasoning-194-locator-100k-ordinary-subject-gate.json`.
+
+The harness continuation adds explicit `--history-rows` (default remains all
+assertions) so a separately labelled 100K sparse-history study can limit
+correction/retraction writes to the first 1,000 assertions. Complete 100K catalog
+authentication and canonical conformance remain charged; the production adapters
+are unchanged. This does not complete the original dense-history scale gate.
+It also fixes optional-distribution metadata handling rather than skipping the
+minimal-install timeout test. Fresh clean-source runs must use the new committed
+harness revision and retain the failed baseline separately.
+
+The earlier 10K matrix was already running while this continuation was edited.
+Its parent captured the original harness hash at launch. Default fixture behavior
+and measured worker function bodies are unchanged, but later worker processes may
+import the updated module; retain this provenance qualification rather than
+presenting that matrix as a wholly immutable-source experiment. No workbook or
+implementation-roadmap file was edited by this continuation.

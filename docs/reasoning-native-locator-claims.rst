@@ -142,6 +142,15 @@ Actual-adapter measurement harness
    uv run --extra rocksdb --extra arrow python -m benchmarks.reasoning_locator_pipeline --rows 1000 --times 10 30 50 70 90 --repeats 1 --output /tmp/opencode/locator-smoke.json
    uv run --extra rocksdb --extra arrow python -m benchmarks.reasoning_locator_pipeline --rows 100000 --times 30 50 --repeats 3 --timeout 600 --output /tmp/opencode/locator-100k.json
 
+For a separately labelled sparse-history scale study, add
+``--history-rows 1000`` to apply corrections/retractions only to the first 1,000
+assertions while retaining all 100,000 assertions in authentication and canonical
+conformance. The default still applies history to the whole fixture. Reports
+record the requested density and the fixture's actual historical version count;
+sparse-history results must not be relabelled dense-history measurements. Fixture
+construction can itself time out before extraction; such a failure supplies no
+extraction timing, parity result or worker RSS.
+
 The fixture has variable bounded entity IDs and compressible provenance padding,
 one correction per five assertions over ``[20, 80)``, and one retraction per seven
 over ``[40, 60)``. Named ``all``, ``predicate`` (one quarter of assertions) and
