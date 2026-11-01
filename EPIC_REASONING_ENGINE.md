@@ -1,827 +1,374 @@
-# Reasoning engine roadmap — reviewed against `onto-dev`
+# Reasoning engine: delivered scope and remaining roadmap
 
-## Current disposition (2026-11-01)
+**Reviewed at:** 2026-11-01T11:27:42Z (UTC).
 
-The RE-01–RE-27 slices and all five phase epics (#157–#161) are closed and
-included in the released v0.16.0 line. The original branch, candidate and
-release instructions below are **historical**; do not use them to schedule work
-or infer permission to publish another release. #156 is a completed roadmap,
-not a promise of full OWL, probabilistic rules or a native executor. Optional
-native extraction #194 remains an independent follow-up.
+**Reviewed source:** [`3403530adf186cf79d6426829d3be8bf8898f6f3`](https://github.com/mylonasc/gestaltdb/commit/3403530adf186cf79d6426829d3be8bf8898f6f3), `origin/main`.
 
-The later composability program #391 (typed explanations, structural validation,
-selected temporal negation/aggregates, inferred queries and graph-to-fact
-mappings) has shipped within its documented fragments; see
-`EPIC_ONTOLOGY_EXTENSIONS_251026.md` for the outcome and non-goals. Other work
-is tracked on its own issues, including #388 (remaining service coupling), #410
-(typing), #106 (sampling options) and #409 (CDM application work). Historical
-audit snapshots in `planning/reasoning-engine/` are evidence for their dated
-revisions, not live status tables; recheck GitHub before acting on them.
+**Published baseline:** [v0.16.0](https://github.com/mylonasc/gestaltdb/releases/tag/v0.16.0), source `0ae4d4bb1624605efc0351f9a029f396baf291dc`, published 2026-10-29T00:03:19Z.
 
-## Historical planning record
+**Authority:** this file is the reasoning roadmap/status source of truth. GitHub records work and dependencies; code/tests establish behavior. The Excel workbook is a generated, review-dated view of section 7, not a second editable delivery ledger.
 
-Review date: 2026-10-20. Baseline: `onto-dev` / `origin/onto-dev` at
-`c71f0433fc40251b7dcec08b60370e80b40d36d8` (completed #131).
-Planning/integration branch: **`feature/onto-dev-epic-2`**, inherited from that
-baseline, not `main`. This is a plan, not an implementation or release claim.
-Parent roadmap: [#156](https://github.com/mylonasc/gestaltdb/issues/156).
+## 1. Current disposition
 
-## Current status — tracking audit 2026-10-25
+- **Delivered:** parent [#156](https://github.com/mylonasc/gestaltdb/issues/156), RE-01–RE-27 and all five phase epics are closed. Delivery includes explicitly bounded implementations, experiments and approved defer decisions; it does **not** mean every aspirational native/OWL acceptance criterion is implemented.
+- **Delivered composability:** [#391](https://github.com/mylonasc/gestaltdb/issues/391) and #392–#396 are closed: typed first-witness explanations, selected temporal negation/aggregates, structural validation, explicit inferred Cypher and typed graph mappings. See sections 2–3 for fragment and release boundaries.
+- **Pending native follow-up:** [#194](https://github.com/mylonasc/gestaltdb/issues/194) needs measurement of the actual authenticated historical locator adapter and an adopt/defer/reject decision. The source implementation is on main; it is not blocked on an absent native scan API.
+- **Proposed, not delivered:** weighted/probabilistic semantics #124 and feedback composition #128. Architecture #388 and typing #410 are partially delivered independent programs. Tutorial #273 and CDM #409 are separate documentation/application work.
+- **Activity:** at review, no open reasoning implementation PR was present; open PRs #441/#443/#444/#445 were dependency updates. An open issue or an old started-work comment is not evidence that implementation is currently active.
 
-The original RE-01–RE-27 feature issues are integrated and closed; that does
-not automatically close their phase epics. Current phase disposition:
+No merge, tag, release, issue closure or new feature commitment is authorized by this document. Current changes start from accepted `main` unless explicitly directed otherwise. `onto-dev` and `feature/onto-dev-epic-2` below are **historical integration targets**, not current PR instructions.
 
-| Phase | Status | Remaining gate |
-|---|---|---|
-| RE-E1 [#157](https://github.com/mylonasc/gestaltdb/issues/157) | Complete; stale-open issue corrected | Explicit executor/measurement/limits/install-isolation gate verified; optional #194 does not block E1. |
-| RE-E2 [#158](https://github.com/mylonasc/gestaltdb/issues/158) | Complete | Verified selected-profile contract; broader review accounting closed with #371. |
-| RE-E3 [#159](https://github.com/mylonasc/gestaltdb/issues/159) | Complete (closed 2026-10-25) | Durable crash/concurrency evidence reconciled in #370 (closed). |
-| RE-E4 [#160](https://github.com/mylonasc/gestaltdb/issues/160) | Complete (closed 2026-10-25) | Bounded interval-publication evidence gate reconciled in #370 (closed). |
-| RE-E5 [#161](https://github.com/mylonasc/gestaltdb/issues/161) | Complete (closed 2026-10-25) | Sequential prerequisite #160 closed; not missing full OWL DL or a new native engine. |
+### Completed phases
 
-Review #200 is closed; D2–D6 dispositions were reconciled in #371 (closed);
-#248–#256 are all closed against their scoped acceptance. #194 is the separate
-open native-extraction follow-up; PR #369 is not integrated in this audit.
-See [tracking-audit.md](planning/reasoning-engine/tracking-audit.md) for evidence,
-remaining checklists and corrected native issue relationships. Run
-`python planning/reasoning-engine/check_tracking.py --github` to detect live
-status/relationship drift without changing GitHub.
+| Phase | Issues / scope | Completion disposition |
+| --- | --- | --- |
+| RE-E1 #157 | RE-01–06: contracts, compact batches, Polars, plans, extraction, executor choice | Closed 2026-10-25 after evidence reconciliation; implementation exit was declared 2026-10-21 at `79e4369`. Indexed Python retained; no bespoke kernel required. |
+| RE-E2 #158 | RE-07–13: typed rules, ontology subset, validation, negation, equality, demand and integration | Closed 2026-10-23. Scoped semantics delivered; signed-denial premises and evaluated TBox reuse were explicitly deferred, not silently implemented. |
+| RE-E3 #159 | RE-14–18: generations, supports, insertion/deletion, catalogs and gates | Closed 2026-10-25 after #370 crash/concurrency evidence and explicit #381 disposition. |
+| RE-E4 #160 | RE-19–22: interval algebra, range closure, updates/publication and conformance | Closed 2026-10-25 after evidence reconciliation; gap-preserving bounded range workflows delivered. |
+| RE-E5 #161 | RE-23–27: profile gates, experimental EL, context/scale decisions and explanations/checkpoints | Closed 2026-10-25. Experimental/design-gated/deferred outcomes are the deliverables, not full OWL, soft logic or spill. |
 
-**Release history:** `0.13.0rc1` was published on 2026-10-23 via #307 and trusted
-Publish `39936450890`. `0.14.0rc1` was published on 2026-10-25 via #389
-(GraphDB service decomposition plus post-rc1 reasoning work). The sanitation
-authorization below is superseded for that release; later integration commits
-are still not automatically released. No new main merge, tag or release is
-authorized by this sanitation.
+Review #200 and dispositions #371/#373/#374 are closed. Parent #156 closed 2026-10-31; its native child graph also includes release-readiness #385. #194 remains independent of completed phase exits.
 
-## Follow-on ontology extensions (2026-10-26)
+## 2. Supported surfaces and composition boundaries
 
-Composability follow-ups — typed derivation explanations, temporal negation
-and aggregates, structural validation, reasoning-aware graph queries, richer
-graph-to-fact mappings — are tracked in
-[#391](https://github.com/mylonasc/gestaltdb/issues/391) and recorded in
-`EPIC_ONTOLOGY_EXTENSIONS_251026.md` (children
-[#392](https://github.com/mylonasc/gestaltdb/issues/392),
-[#393](https://github.com/mylonasc/gestaltdb/issues/393),
-[#394](https://github.com/mylonasc/gestaltdb/issues/394),
-[#395](https://github.com/mylonasc/gestaltdb/issues/395),
-[#396](https://github.com/mylonasc/gestaltdb/issues/396)).
-They sit outside the closed RE-01…RE-27 index; that table is unchanged.
+The core/compiler remain storage-independent. Database extraction, source authentication, mutable snapshots and publication are explicit adapters; no second unsynchronized backend handle or silent capability fallback is assumed.
 
-## Historical priority: release readiness and early user testing (2026-10-23)
+| Surface | Delivered behavior | Boundary that callers must retain |
+| --- | --- | --- |
+| Binary Datalog | `DatalogEngine`: indexed predicate/subject/object candidates, repeated-variable unification, exact set membership, designated delta pivots and predicate-triggered dispatch | Python execution; finite positive binary entity facts. Not a native vectorized executor. |
+| Prepared binary plans | Positive SCCs, reusable compilation identities, dynamic smallest-bound-bucket ordering, `explain_plan` and optional telemetry | Heuristic, not general cost-based optimization; component-round limits differ from the binary default's global rounds. |
+| Typed Datalog | `GenericEngine`: n-ary facts, strict literal kinds/comparisons, multi-head normalization, explicit predicate-domain expansion, stratified absence and nonrecursive aggregates | Positive and stratified entry points are explicit; no recursive/lattice aggregates, arbitrary structured terms, implicit predicate-variable execution or signed-denial premises. |
+| Compact/Arrow/Polars | Snapshot-local dictionaries, immutable compact relation buffers, optional Arrow exchange and explicit binary closure-only Polars prototype | Dictionary/context must match exactly. Imports may copy; no universal zero-copy/RSS guarantee. Polars has no proof/maintenance/publication parity and is not selected automatically. |
+| Ontology compiler/RDF | Named subclass/subproperty/equivalence, domain/range, inverse/symmetry/transitivity, two-link chains, directional class conjunction/union and scoped reflexivity; selected offline RDF normalization | Named subsets, not complete RDFS/OWL RL/DL. `CompiledSchemaCache` memoizes compilation with LRU eviction, not evaluated schema/TBox closure. |
+| Equality and validation | Snapshot-local representatives/aliases, explicit inequality conflicts, selected functional equality links; ground-denial/disjointness/functional conflict reports | Never physically merge entities or explode under contradiction. Denial validation is not a negative premise. Equality changes require explicit scoped rebuild. |
+| Structural validation | Required fields, min/max fact cardinality, literal-kind checks and exclusive/exactly-one groups on explicitly complete classes | Read-only logical-fact evidence, not full SHACL, datatype facets or exact claim-version provenance. Input is buffered; report caps are not memory caps. |
+| Typed proofs | Opt-in generation-bound first witnesses with ordered premises, grounded comparisons, scoped successful absence and aggregate evidence; truncation is explicit | Direct `GenericEngine` proof collection is available. Typed application executor/session dispatch remains closure-only. First witnesses are not all-support maintenance or independent certification. Reevaluate after support/program changes. |
+| Stored claim rules | `graph.rules.create_rule/run/maintain/explain`, `not_when`/`closed_world`, versioned justifications and historical explanations | Entity-claim, point-selected rule service with recomputation-based reconciliation; not automatically the standalone typed DRed API. Partial negative-interval overlap conservatively blocks a derivation. |
+| Support maintenance | Exact bounded dependency indexes, changed-predicate insertion propagation and DRed-style reverse overdeletion/rederivation | `maintenance.py` excludes negation, aggregates and closed scopes. Deletion evaluates survivors and rediscovers supports; not exclusively local work. Changed rules/equality demand explicit rebuild, not stale-index reuse. |
+| Sessions/admission | Exact assertion-version multiplicities, corrections/retractions, bounded commit-delta advance, durable atomic JSON replacement, locking/CAS and separately authenticated resume | File checksums alone do not authenticate source facts or prove closure. Positive typed/session and binary/current-source profiles are distinct. |
+| Temporal closure | Disjoint half-open interval sets, event-scheduled change segments, per-segment evaluation/evidence, selected negation/nonrecursive aggregates, equality scopes, memoized updates and independent point-conformance gate | No native interval join or arbitrary temporal calculus. Changed/truncated generations rebuild explicitly; segment reuse is not signed differential execution. Proof truncation must not truncate answers. |
+| Publication | Explicit staged point generations and bound range extraction/computation, guarded freshness checks, target-history CAS and visibility-marked interval commits | Raw caller-supplied staging is not authenticated admission. Persistence guarantees are backend/capability-qualified; no transparent global materialization store is implied. |
+| Demand/query/sampler | Magic-set/demand specialization; temporal/current authenticated frontiers; typed graph projection; explicit inferred artifacts; generation-pinned asserted-only/asserted-plus-inferred Cypher | Inferred Cypher is current binary entity, read-only single-node/fixed-one-hop projection. No ordinary-query rewrite, physical edge multiplicity/properties or unrestricted inferred paths. Selected adapters do not universally compose all typed/range features. |
+| Native extraction | Explicit plain-PyRex full-record and historical index-locator sources; native world/predicate/subject prefixes, exact evidence and canonical correction/retraction conformance | Full catalog authentication/canonical reads remain. Object/agent/source filters are post-selection. Raw transactional scans and verifiable mutable snapshots do not automatically admit transactional native claims. No speed/adoption claim. |
 
-The policy below explains the already-published prerelease's bounded scope;
-future-tense candidate wording is historical, not a current release checklist.
-The dated status above and release register supersede its delivery-status claims.
+Runtime defaults remain indexed Python (`reasoning/executors.py`). Confidence stays metadata; `CalculusRegistry` has no approved calculus by default. `SpillBudget`/`WorkerPolicy` are admission policies, not a spill engine or parallel fixpoint implementation. `checkpoint_closure` binds program/fact/support/index consistency, not arbitrary caller-data authentication or resumable native mid-join execution.
 
-Priority update: **2026-10-23**. Focus subsequent work on #156-related
-release blockers and phase acceptance evidence, not on expanding the feature
-backlog. **Releasing a useful testing milestone soon is a priority; completing
-every remaining roadmap enhancement is not a prerequisite.** No further
-sampling-feature-roadmap work is scheduled by this update.
+## 3. What was implemented when
 
-### Why release soon
+Dates below are **GitHub merge timestamps in UTC**, not claims about when coding began. Commits were verified as ancestors of reviewed main. The original work integrated into `feature/onto-dev-epic-2`; first main integration was PR #307 on **2026-10-23T10:01:10Z**, commit `1d9caad`, followed by v0.13.0rc1. Later follow-through, service changes and composability reached main in subsequent integrations. All RE-01–RE-27 deliveries are included in v0.16.0; the post-tag rows below are not.
 
-The integration branch contains the original RE-01–RE-27 deliveries. RE-E1 and
-RE-E2 are complete; RE-E3/E4 evidence and RE-E5's sequential gate are explicit
-above. Closed child issues alone do not certify phase exits. Original review
-findings retain a disposition ledger under #200/#371, distinct from the now-
-closed #248–#256 follow-through implementations.
+### RE delivery ledger (replaces “implementation started” diaries)
 
-The branch now contains hundreds of commits beyond `main`. At this review,
-`origin/main` was an ancestor of the integration branch, with no main-only
-commits. That makes integration mechanically simpler, **not low-risk**: the
-large accumulated API surface still needs release validation. Continuing to
-add optional features delays user feedback, enlarges the review surface and
-makes future fixes or independent changes on `main` harder to integrate.
-External testing of installation, API usability, compatibility and composed
-reasoning workflows is now more valuable than another open-ended feature batch.
-
-### Work order and release-blocker rule
-
-Track candidate-specific triage and outstanding evidence in the
-[release-readiness register](planning/reasoning-engine/release-readiness.md).
-
-1. **Freeze a candidate scope and triage correctness first.** Review #200 and
-   its linked follow-ups against the candidate SHA. Incorrect results,
-   cross-world/horizon or identity leakage, unsafe publication/recovery,
-   data-loss risks and compatibility regressions in advertised workflows block
-   release. Fix them, or explicitly exclude the affected feature with enforced
-   fail-closed admission and a documented boundary; a warning alone is not a
-   substitute for correctness. Record the decision and evidence per issue.
-2. **Reconcile phase exit gates.** Verify the delivered contracts, runnable
-   user scenarios and acceptance evidence for #157/#159/#160/#161. Keep
-   unsupported profiles and deferred combinations explicit. Do not close an
-   epic merely because its children are closed, or turn every broader follow-up
-   into a prerequisite for this release.
-3. **Validate the exact release candidate.** Run the full suite on supported
-   Python 3.10–3.13, applicable backend/optional-extra isolation checks, docs and
-   runnable reasoning scenarios. Build wheel and sdist, check metadata, and
-   test installed artifacts outside the checkout, including reopening existing
-   databases. Exercise correction/retraction, provenance and fresh-recomputation
-   parity for the workflows advertised in the release.
-4. **Prepare the release contract.** Curate the changelog, choose a deliberate
-   minor prerelease version (proposed: `0.13.0rc1`, not the existing patch
-   version), and separate supported APIs from experimental executors/profiles.
-   Document compatibility/migration requirements and known limitations; do not
-   imply full OWL coverage, general zero-copy operation or unmeasured scale.
-5. **Merge and publish only after the gates below pass.** Aim for a bounded
-   hardening pass, not another feature-development cycle. Publish an opt-in
-   prerelease for user testing, then use feedback and fixes to decide when to
-   promote a stable release.
-
-Optimization-only work, broader tutorials, unrelated tooling and experimental
-extensions do not block this milestone unless needed for a promised workflow.
-For example, #194's native decoded extraction need not block a release that
-does not promise that path. Open #248–#256 follow-ups must be classified by
-their actual correctness impact and delivered scope, not treated as either
-automatically complete or automatically release-blocking. Deferred work keeps
-its issue and dependency links; the roadmap is not being declared complete.
-
-### Main integration and CI gates
-
-- Continue individual hardening PRs into `feature/onto-dev-epic-2`. Prepare one
-  reviewed release-integration PR **from that branch to `main`** once scope and
-  blocker triage are recorded. This is the planned exception to the normal
-  feature-PR target below, not authorization to push directly to `main`.
-- Run all applicable main-target PR workflows on the candidate, including the
-  general test matrix, optional-dependency checks, documentation and relevant
-  regression/security gates. Integration-branch ontology/fuzz checks alone
-  are **not** proof that every repository pipeline passed.
-- After merging, require applicable **main push workflows to pass on the exact
-  merged SHA** before tagging/publishing it. Fix failures and revalidate the new
-  SHA; do not publish based solely on green feature-branch checks.
-- Publishing a GitHub release triggers the current PyPI Publish workflow,
-  including for a prerelease. Verify its success and smoke-test the published
-  distribution. Keep merge, tag and publishing actions subject to explicit
-  maintainer authorization; this priority update does not perform those actions.
-- While hardening, regularly fetch `main` and integrate any new main fixes into
-  the candidate, rerunning affected gates. After this milestone, base subsequent
-  slices on the released baseline and use smaller release batches. Carry urgent
-  main fixes promptly into any retained integration branch to prevent renewed
-  long-lived divergence.
-
-## Sources and tracking authority
-
-- Original assessment, preserved unchanged: [source-assessment.md](planning/reasoning-engine/source-assessment.md).
-- Original 136-row workbook, preserved unchanged: [gestaltdb_reasoning_feature_tracker.xlsx](gestaltdb_reasoning_feature_tracker.xlsx).
-- Reviewed work packages, acceptance criteria, dependencies and GR-ID coverage:
-  [roadmap.json](planning/reasoning-engine/roadmap.json).
-- GitHub issue index: [issues.json](planning/reasoning-engine/issues.json).
-- Validate source hashes, complete GR coverage and dependency DAG:
-  `uv run python planning/reasoning-engine/check_roadmap.py`.
-- Previous v1 delivery (#131, ONTO-01–ONTO-11, PRs #143–#155) and its boundaries:
-  see epic [#131](https://github.com/mylonasc/gestaltdb/issues/131), its child
-  issues and git history. The standalone v1 epic note was removed after the
-  `0.13.0rc1` main merge; it is preserved in history, not in the working tree.
-
-This document and the new parent tracker carry the **whole** reviewed roadmap.
-The workbook is historical input, not the current delivery dashboard: its audit
-statuses describe public `main`, not this baseline. Preserve original GR-001–136
-identities; do not treat its 81 “Required” entries as 81 missing features here.
-Update the parent, relevant phase/child issue, JSON register and this document
-when scope, dependencies, decisions or acceptance evidence change.
-
-## Review verdict
-
-**Adopt the relational execution direction, not the proposed rewrite order.**
-Compact terms, reusable plans, selected indexes, columnar operations, explicit
-delta lifecycles and support-aware maintenance are well-motivated architecture
-for the larger roadmap. But neither a new C++/Rust engine nor RocksDB-only
-execution is a prerequisite for useful reasoning features.
-
-### Corrections to the input assessment
-
-| Assessment assumption | Actual `onto-dev` baseline and consequence |
-| --- | --- |
-| Only predicate-list scans with post-match delta filtering | True of legacy `GraphDB.run_rules` / `maintain_truth`, not `reasoning/engine.py`. The standalone kernel already has predicate/subject/object indexes, exact membership, per-body-position delta pivots, smallest-bound-bucket ordering and predicate-triggered dispatch. Improve and measure these, do not reimplement them as missing functionality. |
-| Ontology compiler and elementary axioms are future M3 | `ontology/model.py` and `compiler.py` already implement immutable revisions, exact axiom origins, named subclass/subproperty/equivalence, domain/range, inverse, symmetric and transitive properties. Extend the compiler under a new profile; preserve `gestalt-core-v1`. |
-| Reference/conformance/determinism tests and reasoning benchmarks are missing | `tests/test_ontology_conformance.py`, reasoning tests, `benchmarks/ontology.py` and four committed matrices exist. Extend their independent oracles and workload sizes, rather than discard the baseline. |
-| RDF import is absent | The optional, bounded offline RDF adapter exists. Expand only alongside supported semantics; never silently accept an incomplete profile. |
-| All provenance has multiple supports | Legacy rule provenance stores multiple justifications. Standalone proofs deliberately retain a bounded single witness. Point publication recomputes base closure and is not an all-support TMS. These contracts are not interchangeable. |
-| Atomic temporal publication implies general derived generations | Existing `reconcile_point` uses the writer guard and a visibility-marked commit for exactly `[t,t+1us)` in a separate world. It is not a general generation store, broad interval publisher or transparent nontransactional recovery protocol. |
-| RocksDB should own the engine | LMDB, LevelDB and PyRex are supported storage choices. Keep the standalone core/compiler storage-independent; specialize extraction behind explicit capabilities. No second unsynchronized RocksDB handle. |
-| Compact IDs solve long persistent keys | Snapshot-local integer interning helps joins but does not remove existing 511-byte canonical index-key constraints. Persistent dictionary/key-layout changes need independent format, migration and collision-safety design. |
-| “Composite indexes” implies arbitrary tuple indexes | Existing graph indexes combine label/type with a single property. General relation multi-column indexes are separate work. |
-
-Evidence: `reasoning/{model,engine,protocols,proofs}.py`,
-`ontology/{model,compiler}.py`, `reasoning/adapters/{claims,graph,publication}.py`,
-`graphdb.py:run_rules/maintain_truth`, ontology tests and `docs/ontology*.rst`.
-The existing dense N=128 benchmark reports pipeline medians of 537.02ms native,
-622.88ms native-proofs and 54.79ms Clingo; these are small synthetic **baseline**
-measurements, not evidence for million-fact performance or equivalent provenance.
-Extraction dominates the duplicate-source claims workload. Clingo remains a
-benchmark comparator, not an approved production dependency.
-
-## Architecture and user-facing principles
-
-1. Keep the current simple `Fact` / `Atom` / `Program` and ontology workflow working.
-   Introduce a versioned relational IR underneath or through explicit new types;
-   no surprising string-to-variable conversion or silent semantic upgrades.
-2. Public Python semantics/compiler -> inward-only plans/operators -> interchangeable
-   execution implementations. Storage, temporal normalization, clocks, I/O and
-   publication remain in explicit adapters. Core interval values, if introduced,
-   are storage-neutral; do not import database temporal records into the compiler.
-3. Keep the standard-library evaluator as an available reference/fallback. Arrow,
-   Polars, RDF and any bespoke native runtime stay optional; unsupported backend
-   features fail clearly before work/publication, never quietly change semantics.
-4. Separate logical fact IDs, exact immutable evidence/version IDs, dictionary
-   generations, materialization IDs, context identity and execution-plan identity.
-   Compact IDs are only meaningful with their dictionary; external IDs stay stable.
-5. A run pins the fact horizon **and** ruleset/ontology, mapping, semantics profile,
-   source policy and dictionary/schema versions. Cached plans/results authenticate
-   all relevant identities; contexts/worlds never join implicitly.
-6. Explicit denial, absence under a closed-world declaration, validation violations
-   and OWL inconsistency are distinct. Default remains open-world and non-explosive.
-   Classical checking is an explicit profile with declared unsupported behavior,
-   not a “NOT” switch or an implied complete OWL reasoner.
-7. Bounded single-witness proofs are not maintenance indexes. Maintenance needs a
-   bounded support representation and recursive deletion algorithm, or falls back
-   visibly to complete rematerialization. Never enumerate all recursive paths.
-8. Prefer reusable architecture over local optimizations when it unlocks substantial
-   roadmap coverage. Throw-away implementations may establish executable semantics;
-   correctness and roadmap progress need not wait for first-pass maximum performance.
-
-## Ordered parent epics
-
-Five phase epics sit beneath one roadmap tracker. Arrows below mean phase exit
-prerequisite, not that every child in the later phase depends on every earlier
-optimization. Child dependencies in the register are the actual implementation
-DAG; design/fixtures may proceed early after the required interfaces freeze.
-
-| Phase | Priority / user value | Scope / original milestones | Exit gate |
+| Feature | Merged UTC | PR / integration commit | Delivered outcome |
 | --- | --- | --- | --- |
-| [RE-E1 #157](https://github.com/mylonasc/gestaltdb/issues/157) | P0: reusable, inspectable and faster execution | RE-01–06: baseline/IR, compact relations, Polars prototype, SCC/plans, batched extraction and measured backend choice; revises M0–M2 | Reference parity, compatibility, measured end-to-end time/RSS/footprint and limits; no native rewrite assumed |
-| [RE-E2 #158](https://github.com/mylonasc/gestaltdb/issues/158) | P1: practical rules, ontology checks and selective answers | RE-07–13: literals/n-ary rules, chains/intersections, explicit negatives/violations, scoped stratified negation, equality, demand queries and explicit graph/sampling integration; M3 plus useful M6 moved forward | Runnable compliance/type-resolution examples, declared profile coverage, intuitive APIs, no semantic leakage |
-| [RE-E3 #159](https://github.com/mylonasc/gestaltdb/issues/159) | P1: maintain live derived knowledge safely | RE-14–18: recoverable generations, support/dependency indexes, insertion/deletion, rule-catalog pinning and opt-in legacy migration; M4 | Old-or-new visibility, crash/concurrency tests, randomized update parity, recursive cycle deletion and documented rebuild crossover |
-| [RE-E4 #160](https://github.com/mylonasc/gestaltdb/issues/160) | P1: correct derived history, not sampled points | RE-19–22: interval algebra, complete range closure, temporal updates/publication and audit examples; M5 | No gap filling; exact time-local supports, point/range agreement, reproducible system-time history and bounded interval growth |
-| [RE-E5 #161](https://github.com/mylonasc/gestaltdb/issues/161) | P2/P3 gated extensions, not a full-OWL promise | RE-23–27: profile expansion, bounded existential/EL experiments, context/soft logic design, advanced operators and provenance/checkpoint extensions; remaining M6/M7 and inventory | Each extension gets a separately approved profile/termination/performance contract; deferred outcomes remain explicitly tracked |
+| RE-01 | 2026-10-20T22:10:00Z | #189 / `1c69373` | Relational contracts, baseline audit, budgets and structural inspection; not executable general n-ary IR. |
+| RE-02 | 2026-10-20T22:22:11Z | #190 / `865f3b1` | Context-bound compact dictionaries/batches and Arrow copy/lifetime contract. |
+| RE-03 | 2026-10-20T22:42:43Z | #191 / `b320c33` | Optional Polars binary delta-fixpoint prototype and measured tradeoffs. |
+| RE-04 | 2026-10-20T23:15:47Z | #192 / `07588ae` | Reusable positive SCC plans, indexed delta sites and opt-in telemetry. |
+| RE-05 | 2026-10-21T00:40:47Z | #193 / `0b9f32d` | Pinned batched claim extraction and capability-gated raw native scans. |
+| RE-06 | 2026-10-21T00:52:37Z | #195 / `79e4369` | Explicit executor decision, cooperative cancellation and no-bespoke-kernel defer. |
+| RE-07 | 2026-10-21T01:23:20Z | #196 / `15c2d78` | Strict literals, n-ary rules, comparisons, normalization and restricted aggregates. |
+| RE-08 | 2026-10-21T05:46:32Z | #197 / `3919287` | Two-link property chains, directional class forms and compilation cache/offline normalization. |
+| RE-09 | 2026-10-21T05:55:33Z | #198 / `684d7a8` | Ground-denial/conflict validation and static class-conflict checks; not signed premises. |
+| RE-10 | 2026-10-21T06:10:37Z | #199 / `f035847` | Explicit closed predicates and stratified typed absence. |
+| RE-11 | 2026-10-21T06:30:49Z | #201 / `bf43570` | Snapshot-local equality/inequality, explicit functional links and safe rebuild boundaries. |
+| RE-12 | 2026-10-21T06:47:24Z | #202 / `48a9d12` | Goal-directed demand specialization and identity-bound cache; no longer “in review”. |
+| RE-13 | 2026-10-21T07:01:15Z | #203 / `8034231` | Explicit relation expansion/fanout and inferred seed handoff. |
+| RE-14 | 2026-10-21T07:09:36Z | #204 / `ea38931` | Staged point generations, compare-and-publish and explicit orphan recovery. |
+| RE-15 | 2026-10-21T07:18:15Z | #205 / `31f72d5` | Bounded supports/dependency indexes and insertion propagation. |
+| RE-16 | 2026-10-22T00:23:45Z | #206 / `8b2dcce` | DRed-style support-safe deletion, rebuild fallback and randomized parity. |
+| RE-17 | 2026-10-22T00:32:07Z | #218 / `cec7e0a` | Pinned indexed catalog, migration and explicit compatibility/rebind gates. |
+| RE-18 | 2026-10-22T00:42:08Z | #219 / `f8cc14e` | Incremental/recovery workload gates and measured maintenance scenarios. |
+| RE-19 | 2026-10-22T00:52:21Z | #220 / `ebd652d` | Storage-neutral interval-set and support-segment algebra. |
+| RE-20 | 2026-10-22T01:01:23Z | #231 / `93ce554` | Change-segment full-range closure and scoped equality, initially positive. |
+| RE-21 | 2026-10-22T01:20:45Z | #235 / `cfd35a7` | Segment-memoized updates, range fallback and managed interval publication. |
+| RE-22 | 2026-10-22T01:30:07Z | #236 / `1eb4f6e` | Independent temporal conformance, cost evidence and historical workflows. |
+| RE-23 | 2026-10-22T01:39:17Z | #237 / `0e0ec9a` | Named construct/profile admission matrix; no full-OWL claim. |
+| RE-24 | 2026-10-22T01:52:01Z | #238 / `1c64d3a` | Bounded experimental EL completion, proof replay and finite-model oracle. |
+| RE-25 | 2026-10-22T02:00:38Z | #239 / `3341b83` | Context/modal/confidence policy gates; no new combination/inheritance evaluator. |
+| RE-26 | 2026-10-22T02:09:37Z | #240 / `59cc1a4` | Join/deletion measurements and explicit advanced-runtime/spill defer decisions. |
+| RE-27 | 2026-10-22T02:20:21Z | #241 / `3b14d61` | Bounded one-step minimal/top-k witnesses, export and closure checkpoint validation. |
 
-```mermaid
-flowchart LR
-  B[onto-dev c71f043 / completed ONTO v1] --> E1[RE-E1 Execution foundation]
-  E1 --> E2[RE-E2 Useful reasoning and queries]
-  E2 --> E3[RE-E3 Durable incremental maintenance]
-  E3 --> E4[RE-E4 Complete temporal closure]
-  E4 --> E5[RE-E5 Gated advanced extensions]
-```
+### Later implementation and release boundaries
 
-This ordering does **not** hold point-only useful APIs hostage to complete temporal
-closure. Equality starts snapshot-local with split/rebuild on evidence removal;
-its temporal scope must be revisited in RE-E4. Negation gets explicit closed-world
-scope before anti-joins become user-facing. Read-only demand evaluation can ship
-before incremental persistence. Existing #154 recovery work is addressed explicitly
-in RE-14/21, not silently declared fixed by planning.
+| When | Evidence | Outcome / release disposition |
+| --- | --- | --- |
+| 2026-10-22–25 | #242, #313/#315, #349, #366/#367/#368 | Native evidence plumbing, ordinary grouped-read fixes, repeated 100K measurements, explicit admitted full-record source and raw capability re-audit. Earlier timeouts remain evidence, not successful timings. Full-record native measurements did not justify adoption. |
+| 2026-10-22–25 | #248–#256; #363–#365 | Generation/admission identities, demand/frontier integration, exact evidence ledger, durable/authenticated sessions and inferred consumers; scoped follow-through issues closed. |
+| 2026-10-25 | #371/#373/#374/#370/#381 | Original review findings fixed or explicitly disposed/deferred; crash/concurrency phase evidence reconciled. Closed dispositions are not promises that deferred capabilities exist. |
+| 2026-10-25T23:34:33Z | #399 / `fc0ec33` (#394) | Initial closed-class structural validation, later included in v0.16.0. |
+| 2026-10-25T23:34:50Z | #400 / `738a0c6` (#396) | Initial typed n-ary graph mapping; later collision/reference hardening #408, included in v0.16.0. |
+| 2026-10-25T23:45:01Z | #402 / `cda8dae` (#392) | Initial typed first-witness tracking, included in v0.16.0. |
+| 2026-10-25T23:51:52Z | #403 / `07affaa` (#393) | Selected temporal negation/nonrecursive aggregates, later answer-versus-proof truncation fixes, included in v0.16.0. |
+| 2026-10-26T06:55:18Z | #369 / `49d4638` (#194) | Historical native claim-index locator admission merged; included in v0.16.0. Actual-adapter benchmark/decision remains pending. |
+| 2026-10-27T23:33:49Z | #426 / `47f0fde` (#395) | Generation-pinned read-only inferred Cypher node/one-hop projection, included in v0.16.0. |
+| 2026-10-29T00:03:19Z | v0.16.0 / `0ae4d4b` | Published stable baseline; API migration uses `graph.temporal`, `graph.epistemic`, `graph.rules` and current services. |
+| 2026-10-31T14:48:05Z | #447 / `ac838da` | **Post-v0.16.0:** PyRex >=0.7.1 dependency floor and point-read regression recovery evidence. |
+| 2026-10-31T21:56:49Z | #448 / `2fdc160` | **Post-v0.16.0:** structural constraint identity/evidence, deterministic ordering, cancellation and acceptance hardening. |
+| 2026-10-31T22:06:13Z | #440 / `7551425` | **Post-v0.16.0:** verifiable transactional PyRex mutable snapshots with runtime >=0.7.0. |
+| 2026-10-31T22:06:34Z | #449 / `6e9793f` | **Post-v0.16.0:** typed proof comparison/absence/aggregate consistency and result-binding hardening. |
 
-### Feature issue index
+The package metadata still says 0.16.0 on reviewed main. That does not make post-tag code part of the published wheel. Validation of this checkout is not retrospective certification of that wheel's stronger guarantees.
 
-Prerequisites below are RE feature IDs, not GitHub issue numbers. All items are
-planned/open; original GR coverage and detailed acceptance live in the register
-and corresponding child issues.
+## 4. Pending work and deliberate deferrals
 
-| Feature | Issue | Deliverable | Prerequisites |
+| Issue | State at review | Remaining acceptance / dependency |
+| --- | --- | --- |
+| [#194](https://github.com/mylonasc/gestaltdb/issues/194) | Open; implemented source, pending measurement | Benchmark actual `PinnedNativeLocatorClaimSource` with named historical/selective and nonselective inputs, complete authentication/point materialization, exact evidence/closure parity, versions, time/RSS and explicit adoption decision. Do not substitute benchmark-only locator, raw KV or full-record native results. Optional, not a #156 blocker. |
+| [#124](https://github.com/mylonasc/gestaltdb/issues/124) | Open proposal; design-gated | Choose probabilistic, fuzzy **or** importance semantics; prove combination, retraction, convergence and provenance with independent tests and a named user scenario. No silent confidence multiplication. |
+| [#128](https://github.com/mylonasc/gestaltdb/issues/128) | Open composition proposal | Model/task/version provenance, source/world/assertion policy, bounded iterations and leakage controls. Weighted feedback depends on #124; a small deterministic loop need not. Audit export #126 is delivered. |
+| [#388](https://github.com/mylonasc/gestaltdb/issues/388) | Open, partially delivered | Finish concrete facade/consumer coupling: legacy adjacency/BFS, update composition, key/serializer helpers and query/viz/transaction/snapshot/lifecycle integration. Services already exist; require standalone boundary/compatibility tests, not a facade line-count goal. |
+| [#410](https://github.com/mylonasc/gestaltdb/issues/410) | Open, partially delivered | Remaining diagnostics, read-view/facade and optional adapter contracts, normalized construction inputs and installed consumer checks. `py.typed` and scoped strict ratchets already ship. Old diagnostic totals are not current runtime bug counts. |
+| [#273](https://github.com/mylonasc/gestaltdb/issues/273) | Open documentation track | Complete/reconcile tutorial coverage and publish from its separate branch; old gap lists need current fragments. Not a missing core engine. |
+| [#409](https://github.com/mylonasc/gestaltdb/issues/409) | Open application proposal | CDM schema impact, collateral/lifecycle/temporal-ML scenarios with explicit expected results and data/version policies. No automatic CDM/Rune translation or financial-calculation semantics implied. |
+
+Sampling #106/#118–#121 and security #88 remain separate. Importance sampling is not probabilistic entailment; memmap/tensor exports are not a reasoning spill engine.
+
+### Deferred or experimental, not scheduled by closed RE issues
+
+- Bespoke C++/Rust reasoning kernel, automatic Polars/native adoption, general cost-based/parallel joins, B/F/differential maintenance and out-of-core spill. RE-06/RE-26 delivered benchmark-gated decisions instead.
+- Full OWL RL/DL, production EL classification, unrestricted existential witnesses, disjunctive heads, keys/value/self/universal/complement semantics, datatype facets and recursive/lattice aggregation/negation. Consult `reasoning/profiles.py`; experimental EL is separately admitted.
+- Signed-denial rule premises, reusable evaluated TBox closure, general executable cross-context inheritance/temporal-modal closure and probabilistic propagation. Policy objects/approval registries are not implementations of these calculi.
+- Globally minimal recursive proofs, arbitrary independent closure certification, hard RSS bounds and pausing/resuming arbitrary native joins.
+
+Select a deferred capability only through a new bounded issue with semantic, termination, composition and validation gates. Some deferrals have closed disposition records rather than open implementation issues; they are not implicitly “in implementation”.
+
+## 5. Completed feature issue index and original dependencies
+
+**All 27 issues below are closed.** Dependencies describe original delivery order, not current blockers. Section 3 records actual dates/outcomes; section 7 records whether each broader GR acceptance criterion is complete, partial, experimental or deferred.
+
+| Feature | Issue | Delivered scope / disposition | Prerequisites |
 | --- | --- | --- | --- |
 | RE-01 | [#162](https://github.com/mylonasc/gestaltdb/issues/162) | Contracts, baseline reconciliation and budgets | None |
 | RE-02 | [#163](https://github.com/mylonasc/gestaltdb/issues/163) | Compact dictionaries, batches and Arrow boundaries | 01 |
-| RE-03 | [#164](https://github.com/mylonasc/gestaltdb/issues/164) | Polars join/delta prototype | 02 |
-| RE-04 | [#165](https://github.com/mylonasc/gestaltdb/issues/165) | SCC plans, selected indexes and telemetry | 01, 02 |
-| RE-05 | [#166](https://github.com/mylonasc/gestaltdb/issues/166) | Pinned batched extraction | 02 |
-| RE-06 | [#167](https://github.com/mylonasc/gestaltdb/issues/167) | Executor decision and production hardening | 03, 04, 05 |
-| RE-07 | [#168](https://github.com/mylonasc/gestaltdb/issues/168) | Literals, n-ary rules, comparisons and aggregates | 01, 04 |
-| RE-08 | [#169](https://github.com/mylonasc/gestaltdb/issues/169) | Chains, class expressions and schema closure | 04 |
-| RE-09 | [#170](https://github.com/mylonasc/gestaltdb/issues/170) | Explicit negatives and validation reports | 07, 08 |
-| RE-10 | [#171](https://github.com/mylonasc/gestaltdb/issues/171) | Scoped stratified negation | 07, 09 |
-| RE-11 | [#172](https://github.com/mylonasc/gestaltdb/issues/172) | Equality, inequality and functionality | 07, 09 |
-| RE-12 | [#173](https://github.com/mylonasc/gestaltdb/issues/173) | Demand queries and safe caching | 04, 08 |
-| RE-13 | [#174](https://github.com/mylonasc/gestaltdb/issues/174) | Explicit graph/query/sampler integration | 08, 12 |
-| RE-14 | [#175](https://github.com/mylonasc/gestaltdb/issues/175) | Recoverable generations and compare-and-publish | 01, 05, 06 |
-| RE-15 | [#176](https://github.com/mylonasc/gestaltdb/issues/176) | Maintenance supports, dependencies and inserts | 04, 14 |
-| RE-16 | [#177](https://github.com/mylonasc/gestaltdb/issues/177) | Recursive deletion and rule invalidation | 15, 10, 11 |
-| RE-17 | [#178](https://github.com/mylonasc/gestaltdb/issues/178) | Pinned catalog and opt-in legacy migration | 14, 15, 16 |
-| RE-18 | [#179](https://github.com/mylonasc/gestaltdb/issues/179) | Incremental safety/performance gates | 16, 17 |
+| RE-03 | [#164](https://github.com/mylonasc/gestaltdb/issues/164) | Experimental Polars join/delta prototype | 02 |
+| RE-04 | [#165](https://github.com/mylonasc/gestaltdb/issues/165) | Binary SCC plans, selected indexes and telemetry | 01, 02 |
+| RE-05 | [#166](https://github.com/mylonasc/gestaltdb/issues/166) | Pinned batched extraction and capability gates | 02 |
+| RE-06 | [#167](https://github.com/mylonasc/gestaltdb/issues/167) | Executor decision; bespoke kernel explicitly deferred | 03, 04, 05 |
+| RE-07 | [#168](https://github.com/mylonasc/gestaltdb/issues/168) | Literals, n-ary rules, comparisons and restricted aggregates | 01, 04 |
+| RE-08 | [#169](https://github.com/mylonasc/gestaltdb/issues/169) | Chains, directional class forms and compilation memoization | 04 |
+| RE-09 | [#170](https://github.com/mylonasc/gestaltdb/issues/170) | Ground-denial/conflict validation; signed premises deferred | 07, 08 |
+| RE-10 | [#171](https://github.com/mylonasc/gestaltdb/issues/171) | Scoped stratified absence | 07, 09 |
+| RE-11 | [#172](https://github.com/mylonasc/gestaltdb/issues/172) | Snapshot-local equality, inequality and functionality subset | 07, 09 |
+| RE-12 | [#173](https://github.com/mylonasc/gestaltdb/issues/173) | Demand queries and identity-bound caching | 04, 08 |
+| RE-13 | [#174](https://github.com/mylonasc/gestaltdb/issues/174) | Explicit graph/query/sampler handoff | 08, 12 |
+| RE-14 | [#175](https://github.com/mylonasc/gestaltdb/issues/175) | Recoverable point generations and compare-and-publish | 01, 05, 06 |
+| RE-15 | [#176](https://github.com/mylonasc/gestaltdb/issues/176) | Bounded supports/dependencies and insertions | 04, 14 |
+| RE-16 | [#177](https://github.com/mylonasc/gestaltdb/issues/177) | DRed-style deletion and explicit rule-change rebuild | 15, 10, 11 |
+| RE-17 | [#178](https://github.com/mylonasc/gestaltdb/issues/178) | Pinned catalog and compatibility gates | 14, 15, 16 |
+| RE-18 | [#179](https://github.com/mylonasc/gestaltdb/issues/179) | Incremental correctness/recovery workload gates | 16, 17 |
 | RE-19 | [#180](https://github.com/mylonasc/gestaltdb/issues/180) | Interval-set and support-segment algebra | 01, 15 |
-| RE-20 | [#181](https://github.com/mylonasc/gestaltdb/issues/181) | Complete range closure and proofs | 19, 08, 11 |
-| RE-21 | [#182](https://github.com/mylonasc/gestaltdb/issues/182) | Temporal deltas and interval publication | 16, 20, 14 |
-| RE-22 | [#183](https://github.com/mylonasc/gestaltdb/issues/183) | Temporal conformance and audit workflows | 20, 21 |
-| RE-23 | [#184](https://github.com/mylonasc/gestaltdb/issues/184) | Gated profile/validation expansion | 09, 11, 22 |
-| RE-24 | [#185](https://github.com/mylonasc/gestaltdb/issues/185) | Bounded existential / EL feasibility | 23 |
-| RE-25 | [#186](https://github.com/mylonasc/gestaltdb/issues/186) | Context, modal and confidence semantics | 22 |
-| RE-26 | [#187](https://github.com/mylonasc/gestaltdb/issues/187) | Advanced joins, differential updates and spill | 06, 18, 22 |
-| RE-27 | [#188](https://github.com/mylonasc/gestaltdb/issues/188) | Minimal/ranked proofs and checkpoints | 18, 22 |
-
-## Polars / Arrow decision and fundamental operations
-
-RE-02/03 establish compact integer columns and a small relation-operator contract.
-Prototype selection, projection, equijoins, semi/anti-join, union, distinct and
-stable-minus-new operations in Polars; use designated delta inputs each round.
-Keep plans reusable where supported and measure per-round collection/planning.
-Represent evidence/support references in side tables, not one Python object per
-hot-path row. Preserve repeated-variable checks, exact set semantics and body
-occurrence order for provenance when joins are reordered.
-
-Arrow is the exchange format, not an assumption that every algorithm must be an
-Arrow table. Document schema, fixed-width IDs, dictionary reuse, null rejection,
-literal encodings, ownership, chunk boundaries and release/cancellation lifetimes.
-Avoid `.to_dicts()` / Python row callbacks in the optimized path. No universal
-zero-copy claim: decoding KV values, recoding dictionaries, sorting/rechunking and
-some exports necessarily allocate. Do not claim Polars streaming provides a hard
-RSS bound for arbitrary recursive joins.
-
-Compare the current indexed Python kernel, compact Python/NumPy where useful,
-Polars and the existing Clingo benchmark on identical supported fragments. A
-bespoke C++/Rust kernel is a **conditional RE-06 outcome**, justified by measured
-conversion/planning, memory, proof or recursion limits that existing components
-cannot meet. A useful reference-backed feature can ship before that optimization.
-PyRex native scans require checking the actual external binding/API first; this
-repository cannot promise an unimplemented upstream native entry point.
-
-## Acceptance and performance policy
-
-- Every slice has focused semantic tests, limits/failure tests, docs and at least
-  one runnable user scenario. Every phase can produce an independently useful cut.
-- Differential tests use the independent small grounding oracle, baseline kernel
-  and legacy evaluator only on mutually compatible contracts. W3C/OWL-RL comparisons
-  project the declared fragment; no full standards badge from selected examples.
-- Exercise duplicate evidence, repeated atoms/variables, constants, disconnected
-  and skewed joins, diamonds, recursion, long IRIs, equality splits, source/world
-  isolation, support loss/resurrection, cancellation and incompatible snapshots.
-- Record cold startup, compile, extraction/authentication, conversion, join/fixpoint,
-  proofs/supports, publication, decode, total pipeline, P50/P95 updates, peak RSS,
-  bytes copied/spilled, thread count, dependency/wheel footprint and actual work.
-  Compare closure-only, witness and maintenance modes separately.
-- RE-01 freezes reproducible workload-specific time/RSS budgets before selecting
-  the executor; do not invent speedups now. Small interactive workloads must not
-  inherit avoidable heavy startup. Benchmark sparse and dense outputs separately;
-  quadratic closure is not a constant-memory workload.
-- Enforce budgets before materializing unbounded join intermediates. Counters,
-  allocator estimates, cooperative deadlines and process-level RSS limits are
-  different guarantees. If an executor cannot interrupt a batch safely, document
-  that limitation or use worker isolation; no successful partial closure/publication.
-- Full suite, Python 3.10–3.13, optional-extra/install isolation and capability-specific
-  backend CI remain phase gates. No requirement that unavailable native features
-  be emulated with weaker snapshot or atomicity guarantees.
-
-## Worktree, branch and issue agreement
-
-- Keep this branch as the designated second-slice integration branch. Each RE-NN
-  feature uses its own persistent worktree and `feature/re-NN-<slug>` branch based
-  on its accepted prerequisites here. PRs target `feature/onto-dev-epic-2`, not
-   `main`; the reviewed release-integration PR described above is the explicit
-   exception. Ordinary feature PRs retain the integration target.
-- Create feature worktrees when implementation starts, not dozens of stale empty
-  worktrees during planning. Stacking is only for true dependencies. Preserve all
-  unrelated example/feature worktrees; no forced reset or shared force-push.
-- Commit and push coherent tested milestones often. Link worktree/branch/PR and
-  validation evidence in each child. Keep native GitHub parent/sub-issue and
-  blocked-by relationships synchronized with textual dependency lists.
-- Phase completion requires evidence for all acceptance items, or an explicit
-  parent-approved scope/defer decision with a linked issue. No roadmap item
-  disappears merely because a prototype or profile is inconvenient.
-- Related existing issues remain authoritative for their broader scopes: #125
-  (negation), #126 (unified explanations), #127 (hierarchical query/sampling),
-  #124 (weighted semantics), #128 (neuro-symbolic composition), #154 (recovery and
-  intervals). Link the new work rather than close or overwrite these as done.
-- No implementation, merge into `onto-dev`/`main`, tag or release is authorized by
-  this planning deliverable alone.
-
-## Review validation
-
-### Implementation started: RE-01 (#162)
-
-Dedicated worktree: `re-01-contracts`; branch: `feature/re-01-contracts`, based on
-integration commit `3e6dc71`; [PR #189](https://github.com/mylonasc/gestaltdb/pull/189)
-targets the second integration branch. Additive entity-only relational IR, exact compilation
-compatibility keys and structural-only `explain_plan` are implemented without
-changing legacy `Fact`/`Program` or their digest namespace. N-ary execution and
-runtime operator telemetry remain RE-07/RE-04, respectively.
-
-Baseline evidence for each GR ID is in `planning/reasoning-engine/baseline-review.json`;
-the roadmap validator checks unique coverage and evidence paths. Frozen budgets
-and a fresh-worker runner (`python -m benchmarks.reasoning_contracts`) cover
-interactive, sparse batch, dense-output and full-rematerialization insert/delete
-reference workloads in closure-only and witness modes. See
-`docs/reasoning-execution.rst` for supported semantics, identity rules and limits.
-This is not a claim of incremental, native, Arrow or Polars execution delivery.
-
-RE-01 local validation: **1557 passed, 227 skipped** with LMDB/LevelDB/RDF/Arrow/
-Polars; docs drift, Sphinx with warnings-as-errors, runnable examples (7 passed,
-1 optional skip) and installed-wheel contract smoke passed. Forty fresh-worker
-benchmark rows passed all frozen budgets on clean source revision `99be3cb`;
-the full report is `benchmarks/results/reasoning-re01-baseline.json`.
-Python 3.10–3.13 and fuzz CI passed; PR #189 merged into the second integration
-branch at `1c69373`. RE-01 is integrated, not released to `main`.
-
-### Implementation started: RE-02 (#163)
-
-Dedicated worktree `re-02-batches`, branch `feature/re-02-batches`, now based on
-accepted integration commit `1c69373`; [PR #190](https://github.com/mylonasc/gestaltdb/pull/190)
-targets the second integration branch. Implemented canonical context-bound uint64
-symbol dictionaries, immutable compact columns, reference set/delta generations,
-separate exact evidence references and optional strict Arrow C Stream exchange.
-The public boundary and copy/lifetime/limits behavior are documented in
-`docs/reasoning-batches.rst`. Arrow exports share immutable little-endian payloads;
-imports copy/validate/canonicalize. These containers do not implement native joins,
-all-support maintenance, literal semantics or the proposed PyRex raw-KV scan API.
-
-RE-02 local validation: **1581 passed, 227 skipped** with the available optional
-backends and Arrow/Polars. Documentation drift, Sphinx warnings-as-errors, modular
-examples and an isolated no-site-packages batch smoke passed. The measurement
-runner is `python -m benchmarks.reasoning_batches`; executor comparisons and
-optimized joins remain RE-03/RE-06.
-
-Installed base-wheel batch/extra-isolation smoke passed. Six clean-source
-measurement rows (three core, three Arrow/Polars) at `32a22cc` are committed as
-`benchmarks/results/reasoning-re02-{core,batch}.json`. Ten thousand binary rows
-occupy 160,000 final payload bytes, excluding dictionary and staging memory;
-the Arrow path confirms immutable payload sharing and validated round trips.
-PR #190 passed Python 3.10–3.13 and fuzz CI and merged into the second integration
-branch at `865f3b1`; #163 is closed. No main merge or release occurred.
-
-### Implementation started: RE-03 (#164)
-
-Dedicated worktree `re-03-polars`, branch `feature/re-03-polars`, based on accepted
-RE-02 integration `865f3b1`; [PR #191](https://github.com/mylonasc/gestaltdb/pull/191)
-targets the second integration branch. Explicit `PolarsDatalogPrototype` evaluates the existing
-binary positive entity profile via compact IDs, eager native per-occurrence delta
-plans and preflighted equijoins. `PolarsRun` separates closure/identity/telemetry;
-proofs, maintenance and publication are not offered, and row-work accounting is
-not equivalent to indexed Python attempted-unification counters.
-
-Clean-source `14ade5a` produced **126 validated comparison rows** against indexed
-Python and benchmark-only Clingo, plus one explicit intermediate-limit diagnostic.
-Evidence: `benchmarks/results/reasoning-re03-*.json`; supported boundaries and
-measured tradeoffs: `docs/reasoning-polars.rst`. Dense N=128 median pipeline was
-46.44ms Polars versus 534.73ms indexed Python, with identical independent evidence
-wrappers. Small workloads were slower, memory use increased, and four threads
-did not materially improve tested sparse workloads.
-The default evaluator is unchanged; RE-06 remains the production backend decision.
-
-PyRex #31 was rechecked on 2026-10-21: still open, no public scan implementation
-found, PyPI still 0.4.1. The recheck and release/capability prerequisites are
-recorded in #166; raw KV Arrow reads remain optional RE-05 extraction work, not
-an assumed dependency or decoded-fact API in this prototype.
-The user subsequently confirmed that the Arrow-read release is under way. RE-05's
-optional native read path will wait for the published release and validate its
-actual API/version, shared horizon and lifetime guarantees. This does not block
-RE-03 or require pausing its storage-independent implementation.
-
-### Implementation started: RE-05 (#166)
-
-Dedicated worktree `re-05-extraction`, branch `feature/re-05-extraction`, based on
-accepted RE-03 integration `b320c33` (RE-05 depends only on integrated RE-02, so it
-is not stacked on unmerged RE-04); [PR #193](https://github.com/mylonasc/gestaltdb/pull/193)
-targets the second integration branch. Storage-neutral `ExtractionRequest`/`FactBatch`
-contracts, storage-free capability probing and a pinned batched claim source with
-exact version-ID evidence, index pushdown modes and per-batch verification. LevelDB
-snapshot requests fail closed; `native_arrow_scan` was False on every backend until
-the `pyrex-rocksdb 0.5.0` release (PyPI, 2026-10-20) and is now bound through the
-audited `scan_arrow`/`Snapshot` contract on plain handles
-(`reasoning/adapters/native.py`, capability-detected and version-gated; decoded
-fact extraction over native scans stays a separate techdebt item). Audited
-0.5.0 behaviors — shared-snapshot horizons, prefix/range semantics, batch and
-overflow limits, single-consumer enforcement, idempotent release and foreign
-snapshot rejection — are covered by `tests/test_reasoning_native_scan.py`. See
-`docs/reasoning-extraction.rst`;
-evidence: `benchmarks/results/reasoning-re05-extraction.json`.
-
-RE-05 local validation: **1804 passed, 49 skipped** with LMDB/LevelDB, Arrow,
-Polars, Clingo, OWL-RL and PyRex 0.5.0 available. Sphinx warnings-as-errors,
-documentation drift, modular examples and the full roadmap/evidence validator
-passed. The prepared path note above belongs to RE-04; this slice changes no
-evaluator semantics. Python 3.10–3.13/fuzz CI is tracked in #193.
-RE-05 subsequently passed all checks and merged into the second integration
-branch at `0b9f32d`; #166 is closed. No main merge/release occurred.
-
-### Implementation started: RE-06 (#167)
-
-Dedicated worktree `re-06-executors`, branch `feature/re-06-executors`, based on
-accepted RE-05 integration `0b9f32d` (all of RE-03/RE-04/RE-05 integrated, so the
-executor decision rests on final phase evidence). Deterministic
-`select_executor` keeps `indexed-python-v1` as the reference default, honors
-explicit `indexed-scc-v1`/`polars-prototype-v1` requests, routes proofs to
-indexed engines and fails closed on unknown profiles/preferences. Cooperative
-`cancel` raises `ReasoningCancelledError` without partial results across the
-indexed, planned, Polars and adapter evaluation paths; running native kernels
-are never interrupted, and hard deadlines stay a worker-isolation concern. No
-bespoke C++/Rust kernel and no spill: recorded defer with revisit triggers,
-not missing delivery. See `docs/reasoning-executors.rst`.
-RE-06 subsequently passed all checks and merged into the second integration
-branch at `79e4369`; #167 is closed, completing phase RE-E1. No main merge or
-release occurred.
-
-### Implementation started: RE-07 (#168)
-
-Dedicated worktree `re-07-literals`, branch `feature/re-07-literals`, based on
-accepted RE-E1 completion `79e4369` (prerequisites RE-01/RE-04 integrated).
-Milestones: M1 strict typed literal vocabulary with lexical/value canonicalization
-(`reasoning/terms.py`); M2 n-ary typed facts, kind-strict comparisons and a generic
-indexed fixpoint engine with independent-oracle parity (`reasoning/typed.py`);
-M3 multi-head normalization; M4 nonrecursive/stratified aggregates; M5 controlled
-predicate variables (defer to techdebt if it threatens slice safety).
-Recursive/lattice aggregation stays explicitly deferred. Old binary entity APIs
-remain compatible; `Literal` never implicitly converts to an entity string.
-
-RE-03 local validation: **1632 passed, 199 skipped** with LMDB/LevelDB, Arrow,
-Polars, Clingo and OWL-RL available. Sphinx warnings-as-errors, documentation drift
-and the full roadmap/evidence validator passed. The new prototype is explicitly
-closure-only; the source/default evaluator has not been replaced.
-Installed base-wheel missing-extra isolation and optional-wheel fixpoint smokes
-passed outside the checkout; modular examples reported 7 passes and one optional
-PyRex skip. Python 3.10–3.13/fuzz CI is tracked in #191.
-PR #191 subsequently passed all checks and merged into the second integration
-branch at `b320c33`; #164 is closed. No main merge/release occurred.
-
-### Implementation started: RE-04 (#165)
-
-Dedicated worktree `re-04-plans`, branch `feature/re-04-plans`, based on accepted
-integration `b320c33`; [PR #192](https://github.com/mylonasc/gestaltdb/pull/192)
-targets the second integration branch. Implemented immutable positive-predicate SCC plans,
-compiled dispatch/delta sites, exact compatibility checks before source iteration,
-shared indexed matching and ordered bounded witnesses. Detailed body/index bucket,
-actual-attempt and relation-skew telemetry is opt-in. Plan/run `explain_plan()`
-reports exact current-bucket estimates and labels the join strategy heuristic,
-not cost-based optimization. Component-round limits differ explicitly from the
-default evaluator's global rounds; no default-mode or persistent-index change.
-
-Clean-source `cb4351e` produced **144 validated first/reuse evaluation rows** in
-closure/witness modes, with profiling enabled/disabled. Evidence:
-`benchmarks/results/reasoning-re04-plans.json`; contract and observations:
-`docs/reasoning-plans.rst`. Preparation offers reusable architecture and inspection,
-not a demonstrated throughput gain on these small programs. Profiling overhead
-is measured and remains disabled by default. Sort-merge/hash-join/parallel
-strategies are not enabled without later parity and performance evidence.
-
-RE-04 local validation: **1673 passed, 199 skipped** with LMDB/LevelDB, Arrow,
-Polars, Clingo and OWL-RL available. Sphinx warnings-as-errors, documentation drift,
-modular examples (7 passed, 1 optional PyRex skip) and the full roadmap/evidence
-validator passed. The prepared path is explicitly opt-in with telemetry off by
-default; the source/default evaluator is not replaced. Python 3.10–3.13/fuzz CI
-is tracked in #192.
-
-Focused existing ontology/reasoning suite on this checkout: **181 passed, 72
-skipped** without optional extras. Repeated with LMDB, LevelDB and RDFLib, plus
-graph interface/Cypher/sampling regression suites: **492 passed, 128 skipped**.
-Documentation drift check passed; modular examples with LevelDB/Arrow/Polars:
-**7 passed, 1 skipped** (PyRex unavailable). The roadmap validator confirms all
-136 IDs, original source hashes and the acyclic issue graph. Native GitHub
-parent/sub-issue and blocked-by relationships were read back and verified.
-
-These checks confirm existing baseline behavior and planning consistency, not
-new performance or all-backend guarantees. Previous baseline integration evidence
-is recorded in epic #131, its child issues/PRs and git history. No new executor was implemented or benchmarked
-during this review.
-
-### Implementation started: RE-08 (#169)
-
-Dedicated worktree `re-08-chains`, branch `feature/re-08-chains`, based on
-accepted integration `79e4369` (RE-E1 complete; only RE-04 prerequisite needed).
-Horn-safe schema extensions compiling to the existing binary engine: binary
-`PropertyChain`, left-side `IntersectionSubClassOf`/`UnionSubClassOf` (the
-latter normalized to per-member rules with exact origins) and scoped
-`Reflexive`, with disjunctive heads and unscoped reflexivity rejected.
-M2 adds a revision-keyed schema-compilation cache; M3 extends strict offline
-RDF normalization (2-element chains, named left-side collections with
-intersection-superclass expansion, explicit rejections). No claim of complete
-RDFS or OWL RL.
-
-### Implementation started: RE-09 (#170)
-
-Dedicated worktree `re-09-validation`, branch `feature/re-09-validation`,
-based on accepted integration `3919287` (RE-07/RE-08 integrated).
-M1 delivers `reasoning/validation.py`: explicit denials, disjointness,
-irreflexivity and functional-conflict detection over typed closures with
-bounded deterministic reports and cooperative cancellation; equality
-generation stays deferred to RE-11 and the closure stands unchanged
-(paraconsistent evidence, never classical explosion). M2 adds a static
-unsatisfiable-class check plus measured cost evidence. Domain/range
-entailment remains compiler business; SHACL-style full shapes stay out.
-
-### Implementation started: RE-10 (#171)
-
-Dedicated worktree `re-10-negation`, branch `feature/re-10-negation`, based on
-accepted integration `684d7a8` (RE-07/RE-09 integrated). Scoped closed-world
-negation on the generic engine: `negated` atoms with program-level `closed`
-declarations, constructor-checked stratification, per-component fixpoints with
-exact anti-joins and scope/horizon-carrying absence witnesses. Incremental
-invalidation stays in RE-16; recomputation is the explicit fallback. Coordinates
-#125. Merged into the second integration branch at `f035847`; #171 is closed.
-
-### Implementation started: RE-11 (#172)
-
-Dedicated worktree `re-11-equality`, branch `feature/re-11-equality`, based on
-accepted integration `684d7a8` with only RE-07/RE-09 prerequisites (both
-integrated). Snapshot-local `SameAs`/`DifferentFrom`, canonical smallest-member
-representatives with alias preservation and link evidence, functional-property
-conflict detection without silent merging, inequality conflicts, explicit
-`rewrite`, scope-bound mappings and safe rebuild-on-removal. Literals never
-merge; no unique-name assumption. Temporal representatives revisit in RE-20.
-
-### Implementation started: RE-12 (#173)
-
-Dedicated worktree `re-12-demand`, branch `feature/re-12-demand`, based on
-accepted integration `bf43570` (RE-04 + RE-08 integrated). Goal-directed
-demand evaluation via magic-set specialization over the positive typed
-fragment: bound-goal adornment, identity-bound specialization cache,
-full-closure parity by construction, fail-closed unsupported combinations.
-
-RE-05, RE-08, RE-09 and RE-11 subsequently passed all checks and merged into
-the second integration branch (at `0b9f32d`, `3919287`, `684d7a8` and
-`bf43570` respectively); #166, #169, #170 and #172 are closed. RE-E1 and the
-RE-07/RE-09/RE-10/RE-11 links of RE-E2 are integrated; only RE-12/RE-13 remain
-open in RE-E2.
-
-### Implementation started: RE-13 (#174)
-
-Dedicated worktree `re-13-integration`, branch `feature/re-13-integration`,
-based on accepted integration `48a9d12` (RE-E1 complete, RE-07–RE-12 integrated;
-RE-13 is the final RE-E2 slice). Explicit relation expansion with per-relation
-fanout accounting, sampler seed-list glue without hidden rewrites, and opt-in
-integration examples against #127. No automatic Cypher rewrites, no array
-mutation, no weight/path multiplicity changes.
-
-M1 delivers explicit relation expansion (`expand_edge_types`), per-relation
-fanout sampling (`sample_expanded_neighbors` with `ExpandedNeighborhood`
-accounting) and plain seed handoff (`inferred_seeds`) against the existing
-`GraphMapping`/`GraphReasoningResult` adapters. Unknown predicates fail
-closed; no Cypher rewrites, array mutation or multiplicity changes.
-
-### Implementation started: RE-14 (#175)
-
-Dedicated worktree `re-14-generations`, branch `feature/re-14-generations`,
-based on accepted integration `8034231` (RE-E2 fully integrated). Staged
-point generations with identity-bound base fingerprints, compare-and-publish
-under a short writer guard, explicit retry on `GenerationStaleError`, and
-consent-gated orphan audit/reclaim. No silent repair; durability follows the
-existing temporal commit path.
-
-### Implementation started: RE-15 (#176)
-
-Dedicated worktree `re-15-provenance`, branch `feature/re-15-provenance`,
-based on accepted integration `ea38931` (RE-14 integrated; prerequisites
-RE-04/RE-14 satisfied). Finite independent supports with forward/reverse
-dependency index bound to program digest + fact horizon; changed-predicate
-insertion propagation with duplicate handling and support/output/work
-budgets; stale generations fail closed demanding rematerialization. Deletion
-and rule-change invalidation stay in RE-16.
-
-### Implementation started: RE-16 (#177)
-
-Dedicated worktree `re-16-deletion`, branch `feature/re-16-deletion`,
-based on accepted integration `31f72d5` (RE-15 integrated; prerequisites
-RE-10/RE-11/RE-15 satisfied). DRed-style overdeletion with support-aware
-filtering plus rederivation (exact on recursive SCCs), `rematerialize` as
-the explicit fallback with complete support discovery, changed-rule /
-negation / equality-split fail-closed contracts, randomized oracle parity
-and affected-work crossover measurement. B/F stays a documented
-conditional alternative.
-
-### Implementation started: RE-17 (#178)
-
-Dedicated worktree `re-17-catalog`, branch `feature/re-17-catalog`, based
-on accepted integration `8b2dcce` (RE-16 integrated; prerequisites
-RE-14/15/16 satisfied). Pinned indexed rule catalog with digest + horizon
-binding, versioned v1→v2 dict migration preserving historical versions,
-explicit rebind semantics, and documented legacy parity gates with the
-compatibility path kept (no legacy semantic changes, no witness-only
-substitution).
-
-### Implementation started: RE-18 (#179)
-
-Dedicated worktree `re-18-gates`, branch `feature/re-18-gates`, based on
-accepted integration `cec7e0a` (RE-17 integrated; prerequisites RE-16/RE-17
-satisfied; final RE-E3 slice). Crash-at-every-boundary cancellation gates,
-stale plan/generation rejection, backend-gated orphan recovery, redundant
-cycle no-ops, rule-revision parity, maintenance benchmark with P50/P95, RSS,
-supports and write amplification
-(`benchmarks/results/reasoning-re18-maintenance.json`), and the
-repeatable update/audit workflow. RE-E3 exits here.
-
-### Implementation started: RE-19 (#180)
-
-Dedicated worktree `re-19-intervals`, branch `feature/re-19-intervals`,
-based on accepted integration `f8cc14e` (RE-E3 fully integrated;
-prerequisites RE-01/RE-15 satisfied; first RE-E4 slice). Storage-neutral
-half-open interval unions with linear-sweep intersection/difference,
-support-qualified coalescing with truth/segment distinction and no
-envelopes, seeded 300-case oracle parity, measured 5k-interval evidence.
-Scalar prototype only; Polars/native operators stay deferred.
-
-### Implementation started: RE-20 (#181)
-
-Dedicated worktree `re-20-temporal`, branch `feature/re-20-temporal`,
-based on accepted integration `ebd652d` (RE-19 integrated; prerequisites
-RE-08/RE-11/RE-19 satisfied). Change-segment range evaluation with
-per-interval evidence and budgets, change-point point-parity, temporal
-negation/equality fail-closed contracts, and per-segment equality rebuilds
-with no global merges. Measured 29-segment/935-derivation evidence.
-
-### Implementation started: RE-21 (#182)
-
-Dedicated worktree `re-21-delta`, branch `feature/re-21-delta`, based on
-accepted integration `499614f` (RE-20 integrated plus fixes #207–#217 and
-#221; prerequisites RE-14/RE-16/RE-20 satisfied). Segment-memoized validity
-propagation with full-range fallback and reuse diagnostics, managed
-interval generations with exact identities and no gap filling (point
-behavior preserved), correction/retraction/resurrection parity, plus #154
-interval/locking coordination.
-
-### Implementation started: RE-22 (#183)
-
-Dedicated worktree `re-22-conformance`, branch `feature/re-22-conformance`,
-based on accepted integration `cfd35a7` (RE-21 integrated; prerequisites
-RE-20/RE-21 satisfied; final RE-E4 slice). Independent `verify_closure`
-conformance gate, supported temporal/profile matrix, temporal benchmark
-with P50/P95, RSS and reuse ratios
-(`benchmarks/results/reasoning-re22-temporal.json`), when/why workflows and
-runnable historical compliance scenarios (core + backend-gated). RE-E4
-exits here.
-
-### Implementation started: RE-23 (#184)
-
-Dedicated worktree `re-23-profiles`, branch `feature/re-23-profiles`,
-based on accepted integration `1eb4f6e` (RE-22 integrated; prerequisites
-RE-09/RE-11/RE-22 satisfied; first RE-E5 slice). Construct-by-construct
-semantics/conformance matrix with digest pinning, Horn/validation/
-satisfiability separation gates, and named-subset publication with
-per-extension approval. No full-OWL-RL claim.
-
-### Implementation started: RE-24 (#185)
-
-Dedicated worktree `re-24-el`, branch `feature/re-24-el`, based on
-accepted integration `0e0ec9a` (RE-23 integrated; prerequisite RE-23
-satisfied). Bounded EL completion with witness identity, chase
-termination and strict budgets; independent proof replay plus
-finite-model oracle with 40-case parity; experimental-profile gate,
-anonymous-construction rejection and full-OWL-DL deferral record.
-
-### Implementation started: RE-25 (#186)
-
-Dedicated worktree `re-25-scopes`, branch `feature/re-25-scopes`, based
-on accepted integration `1c64d3a` (RE-24 integrated; prerequisite RE-22
-satisfied). Default-deny inheritance allowlists, temporal-modal bounds
-with the modal API unchanged, separately-selected confidence calculi
-with four-policy approval, and design-gate retention with #124/#128
-coordination.
-
-### Implementation started: RE-26 (#187)
-
-Dedicated worktree `re-26-scale`, branch `feature/re-26-scale`, based on
-accepted integration `3341b83` (RE-25 integrated; prerequisites RE-06/18/22
-satisfied). Join-shape/transitive profiler with frozen evidence,
-DRed-vs-rebuild crossover comparison with no-adoption default, spill/worker
-ownership-cancellation-budget gates and a pinned common operator API. No
-second runtime, no constant-memory promises.
-
-### Implementation started: RE-27 (#188)
-
-Dedicated worktree `re-27-proofs`, branch `feature/re-27-proofs`, based
-on accepted integration `59cc1a4` (RE-26 integrated; prerequisites
-RE-18/RE-22 satisfied; final roadmap slice). Bounded minimal/top-k proof
-contracts with witness-vs-supports export interchange (#126), authenticated
-generation checkpoints with incompatible-resume rejection and explicit
-incomplete discard, ranked-vs-deterministic separation with published
-complexity/resource limits.
-
-### Techdebt implementation: #194 decoded native Evidence path (#techedt slice)
-
-Dedicated worktree `re-194-decoded`, branch `feature/re-194-decoded`,
-based on accepted integration `3b14d61` (full RE-01–RE-27 integrated).
-Decoded Evidence handoff over native scans with predicate/binding
-pushdown, authenticated visibility, exact version IDs and no raw-row
-leaks; locator-key iteration for per-backend tradeoff measurement;
-capability-matrix re-audit (TransactionDB still unscanned in
-pyrex-rocksdb==0.5.0); GenerationStore question settled by the RE-26
-no-bespoke-kernel decision. The 100K-row measurement box stays explicitly
-open: no performance claim is made.
-
-### Measurement continuation: #194 / PR #313
-
-Preserves the unfinished #262 harness in a dedicated continuation branch/worktree
-(`feature/onto-194-benchmark-matrix`, `gestaltdb-onto-194-matrix`) refreshed from
-integration `54eb114`. Clean-source `4bd5a6d` produced 102 successful exact-parity
-samples and two retained 100K authenticated-extraction timeouts. Evidence and
-precise boundaries: [pipeline-benchmarks.md](planning/reasoning-followthrough/pipeline-benchmarks.md)
-and `benchmarks/results/reasoning-194-*.json`. The native 100K experiment is
-synthetic KV only and demonstrates no acceleration; it is not a real native
-claims adapter. The larger claims matrix remains open, with repeated full-commit
-integrity-read costs tracked separately in [#314](https://github.com/mylonasc/gestaltdb/issues/314).
-No validation bypass, production cache change, #194 closure, main merge or release
-is part of this measurement slice.
-
-### Integrity-preserving grouped claim reads: #314 / PR #315
-
-Dedicated branch/worktree `feature/onto-314-bounded-validation` /
-`gestaltdb-onto-314`, based on integration `f6342d5`. Candidate/history locators
-are grouped by commit with full existing validation and final touched-commit
-revalidation on exhaustion; no live-cache trust bypass or new backend snapshot.
-Deterministic work/corruption/history tests and **120 exact-parity measurement
-samples** cover the previously blocked 1K/10K/100K first/primed reads and 100K
-variable provenance payloads. Evidence and boundaries:
-[bounded-claim-validation.md](planning/reasoning-followthrough/bounded-claim-validation.md).
-#194 remains open for native-claims/recursive/support/publication integration.
-
-Completion review also reconciled #252/#253: merged #266/#267 already deliver
-head-bound support discovery and immutable dependency lookup reuse, with budget,
-alternative-support/literal and randomized deletion regression coverage. Their
-scoped issues are closed; this is not a claim that dependent session/executor or
-phase crash/durability acceptance is complete.
+| RE-20 | [#181](https://github.com/mylonasc/gestaltdb/issues/181) | Change-segment range closure and scoped evidence | 19, 08, 11 |
+| RE-21 | [#182](https://github.com/mylonasc/gestaltdb/issues/182) | Segment-memoized updates and interval publication | 16, 20, 14 |
+| RE-22 | [#183](https://github.com/mylonasc/gestaltdb/issues/183) | Temporal conformance and audit scenarios | 20, 21 |
+| RE-23 | [#184](https://github.com/mylonasc/gestaltdb/issues/184) | Gated named-profile matrix, not complete OWL RL | 09, 11, 22 |
+| RE-24 | [#185](https://github.com/mylonasc/gestaltdb/issues/185) | Experimental bounded EL feasibility | 23 |
+| RE-25 | [#186](https://github.com/mylonasc/gestaltdb/issues/186) | Context/modal/confidence design gates only | 22 |
+| RE-26 | [#187](https://github.com/mylonasc/gestaltdb/issues/187) | Measured advanced-runtime/spill deferrals | 06, 18, 22 |
+| RE-27 | [#188](https://github.com/mylonasc/gestaltdb/issues/188) | Bounded ranked witnesses and closure checkpoint contracts | 18, 22 |
+
+## 6. Evidence catalogue for the live register
+
+Paths are repository-relative. Keys below expand into code/test evidence in Excel. A passing test establishes its declared fragment, not universal performance/standards certification.
+
+| Key | Implementation / decision | Tests / measurements |
+| --- | --- | --- |
+| F | `src/gestaltdb/epistemic_engine.py`, `src/gestaltdb/epistemic.py` | `tests/test_epistemic.py`, `tests/test_temporal_epistemic_workflow.py` |
+| R | `src/gestaltdb/reasoning/engine.py`, `src/gestaltdb/reasoning/typed.py` | `tests/test_reasoning_engine.py`, `tests/test_reasoning_typed.py`, `tests/test_reasoning_negation.py` |
+| B | `src/gestaltdb/reasoning/batches.py`, `src/gestaltdb/reasoning/adapters/arrow.py` | `tests/test_reasoning_batches.py`, `tests/test_reasoning_arrow.py` |
+| P | `src/gestaltdb/reasoning/plans.py`, `src/gestaltdb/reasoning/relational.py` | `tests/test_reasoning_plans.py`, `tests/test_reasoning_relational.py` |
+| O | `src/gestaltdb/ontology/compiler.py`, `src/gestaltdb/ontology/adapters/rdf.py` | `tests/test_ontology_compiler.py`, `tests/test_ontology_chains.py`, `tests/test_ontology_rdf.py`, `tests/test_ontology_conformance.py` |
+| E | `src/gestaltdb/reasoning/equality.py` | `tests/test_reasoning_equality.py` |
+| V | `src/gestaltdb/reasoning/validation.py`, `src/gestaltdb/reasoning/structural.py` | `tests/test_reasoning_validation.py`, `tests/test_reasoning_structural.py` |
+| M | `src/gestaltdb/reasoning/maintenance.py`, `src/gestaltdb/_graph/truth_maintenance.py` | `tests/test_reasoning_maintenance.py`, `tests/test_reasoning_deletion.py`, `tests/test_truth_maintenance.py`, `tests/test_reasoning_dependency_lookups.py` |
+| S | `src/gestaltdb/reasoning/adapters/session_store.py`, `src/gestaltdb/reasoning/adapters/authenticated_sessions.py` | `tests/test_reasoning_sessions_durable.py`, `tests/test_reasoning_authenticated_sessions.py`, `tests/test_reasoning_crash_evidence.py` |
+| G | `src/gestaltdb/reasoning/adapters/publication.py`, `src/gestaltdb/reasoning/adapters/range_publication.py`, `src/gestaltdb/reasoning/generation.py` | `tests/test_reasoning_generations.py`, `tests/test_reasoning_publication_freshness.py`, `tests/test_reasoning_bound_range_publication.py` |
+| I | `src/gestaltdb/reasoning/intervals.py`, `src/gestaltdb/reasoning/temporal_closure.py`, `src/gestaltdb/reasoning/temporal_sweep.py` | `tests/test_reasoning_intervals.py`, `tests/test_reasoning_temporal.py`, `tests/test_reasoning_temporal_negation_aggregates.py`, `tests/test_reasoning_conformance.py` |
+| X | `src/gestaltdb/reasoning/explanations.py`, `src/gestaltdb/reasoning/typed_proofs.py` | `tests/test_reasoning_explanations.py`, `tests/test_reasoning_typed_proofs.py` |
+| N | `src/gestaltdb/reasoning/adapters/native.py`, `src/gestaltdb/reasoning/adapters/native_locator_claims.py`, `src/gestaltdb/reasoning/adapters/native_claims.py` | `tests/test_reasoning_native_scan.py`, `tests/test_reasoning_native_locator_claims.py`, `tests/test_reasoning_native_claims.py` |
+| Q | `src/gestaltdb/reasoning/demand.py`, `src/gestaltdb/reasoning/adapters/frontier.py`, `src/gestaltdb/reasoning/adapters/queries.py` | `tests/test_reasoning_demand.py`, `tests/test_reasoning_frontier.py`, `tests/test_reasoning_queries.py` |
+| T | `src/gestaltdb/reasoning/terms.py`, `src/gestaltdb/reasoning/typed.py` | `tests/test_reasoning_terms.py`, `tests/test_reasoning_typed.py`, `tests/test_reasoning_aggregate_rows.py`, `tests/test_reasoning_expansion.py` |
+| A | `src/gestaltdb/reasoning/adapters/polars.py` | `tests/test_reasoning_polars.py`, `benchmarks/results/reasoning-re03-comparison.json` |
+| C | `src/gestaltdb/reasoning/profiles.py`, `src/gestaltdb/reasoning/scopes.py`, `src/gestaltdb/reasoning/scale.py` | `tests/test_reasoning_profiles.py`, `tests/test_reasoning_scopes.py`, `tests/test_reasoning_scale.py`, `planning/reasoning-engine/design-dispositions.md` |
+| L | `src/gestaltdb/reasoning/el.py` | `tests/test_reasoning_el.py` |
+| H | `src/gestaltdb/temporal_engine.py`, `src/gestaltdb/kvstores.py`, `src/gestaltdb/modal.py` | `tests/test_readview.py`, `tests/test_graphdb_versions.py`, `tests/test_modal.py`, `tests/test_pyrex_verifiable_snapshots.py` |
+| K | `src/gestaltdb/ingestion_service.py`, `src/gestaltdb/_graph/ingest_edges.py` | `tests/test_ingestion_service.py`, `tests/test_ingestion.py` |
+| Z | `benchmarks/reasoning_pipeline.py`, `benchmarks/reasoning_maintenance.py`, `benchmarks/reasoning_temporal.py`, `benchmarks/reasoning_frontier_pipeline.py` | `tests/test_reasoning_pipeline_benchmark.py`, `tests/test_reasoning_matrix.py`, `tests/test_reasoning_frontier_pipeline.py` |
+
+## 7. Live 136-feature register (Excel source)
+
+Stable GR IDs, original construct names and original acceptance criteria remain in the workbook. **Available** means implemented for the scope stated here; **Partial** means a broader criterion remains unmet; **Experimental** means prototype-only; **Deferred** means not implemented/selected for delivery, not necessarily actively pending. Suggested native layers in the original audit are proposals, not requirements to reimplement correct Python behavior. Explicitly native/scale criteria remain partial/deferred where unproven. No row status is inferred merely from a closed RE issue.
+
+| ID | Construct | Status | Evidence | Delivered scope / remaining boundary |
+| --- | --- | --- | --- | --- |
+| GR-001 | Stable entity & relationship IDs | Available | F,H | Stable external IDs and immutable version identities survive reopen. |
+| GR-002 | Typed binary relationships | Available | R,H | Stored directed typed adjacency and binary fact relations. |
+| GR-003 | Subject-predicate-object claims | Available | F | Sourced claims remain separate from mutable graph edges. |
+| GR-004 | Positive/negative evidence | Available | F | Independent polarity with supported/refuted/both/unknown status; not negative rule premises. |
+| GR-005 | Sourced claim metadata | Available | F | Agent/source/world/confidence persisted; confidence is metadata. |
+| GR-006 | Bitemporal immutable versions | Available | F,H | Append-only versions and valid/system horizons. |
+| GR-007 | Arbitrary-arity internal relations | Available | T | Executable typed n-ary facts/rules; structural relational IR remains a separate surface. |
+| GR-008 | Typed literals in rules | Available | T | Strict finite literal vocabulary and comparisons, no implicit entity/literal coercion. |
+| GR-009 | Integer symbol/entity dictionary | Available | B | Deterministic snapshot-local uint64 IDs; not a persistent/native symbol service. |
+| GR-010 | Base vs inferred fact stores | Available | G,M | Explicit managed derived worlds/generations preserve authoritative base claims. |
+| GR-011 | Canonical fact identity | Available | F,B | Proposition/fact identity is distinct from independent evidence IDs. |
+| GR-012 | Deduplicated set relations | Available | B,R | Exact bounded set membership and iteration deduplication; no unlimited-scale guarantee. |
+| GR-013 | Equality/equivalence facts | Available | E | Explicit snapshot-local equality links and rewrite. |
+| GR-014 | Equivalence-class representatives | Available | E | Canonical smallest-member aliases, explicit deletion rebuild. |
+| GR-015 | Context-scoped fact partitions | Available | B,G | Explicit context/dictionary/source identities; contexts never join implicitly. |
+| GR-016 | Compressed columnar fact segments | Partial | B,C | Compact contiguous buffers exist; compressed spill/reload executor deferred. |
+| GR-017 | Predicate-indexed relation scan | Available | N,R | Pinned predicate extraction and explicit native prefixes; complete native catalog authentication retained. |
+| GR-018 | Variable binding & unification | Available | R | Constants/repeated variables checked in binary/typed engines. |
+| GR-019 | Selection & projection | Available | T,A | Typed filters and optional batched Polars projection/selection. |
+| GR-020 | Multi-relation equijoins | Available | R,T | Indexed multi-atom joins in supported binary/n-ary fragments. |
+| GR-021 | Hash join | Partial | A,P | Native Polars equijoin and Python hashed indexes; no explicit partitioned hash-join runtime contract. |
+| GR-022 | Index nested-loop join | Available | R,P | Bound endpoint/position buckets and exact probes avoid unbound relation scans. |
+| GR-023 | Sort-merge join | Deferred | C | No dedicated selectable sorted-batch reasoning operator; benchmark-gated. |
+| GR-024 | Semi-join | Experimental | A | Internal bounded Polars semi-join; not a general public native algebra. |
+| GR-025 | Anti-join | Available | R,A | Exact scoped stratified absence; Polars internal anti-join is set difference, not user NAF. |
+| GR-026 | Union and distinct | Available | B,R | Exact set union/dedup across alternatives and rounds. |
+| GR-027 | Difference | Available | B,A | Stable/new delta difference and optional native column operations. |
+| GR-028 | Group/reduce | Available | T | Nonrecursive aggregate stratum with explicit grouping/type semantics. |
+| GR-029 | Typed arithmetic/comparisons | Partial | T | Kind-strict comparisons/reductions exist; general arithmetic-expression rule algebra absent. |
+| GR-030 | Predicate-position variables | Available | T | Controlled explicit finite-domain expansion, not implicit unrestricted predicates. |
+| GR-031 | Cost-based join ordering | Deferred | P,C | Current smallest-bound-bucket heuristic is not a general cost model/operator optimizer. |
+| GR-032 | Cardinality/selectivity statistics | Partial | P | Optional relation/bucket/skew observations; no persistent multicolumn optimizer statistics. |
+| GR-033 | Vectorized batch executor | Experimental | A | Explicit binary closure-only Polars native operators; Python fixpoint orchestration remains. |
+| GR-034 | Worst-case-optimal multiway joins | Deferred | C | No dedicated multiway join engine; retain measured revisit gate. |
+| GR-035 | Safe positive Horn rules | Available | R | Unsafe heads rejected before execution. |
+| GR-036 | Recursive rules and fixpoint | Available | R | Bounded least fixpoint over supported finite positive programs. |
+| GR-037 | Semi-naive delta filtering | Available | R | Delta-sensitive evaluation with exact dedup. |
+| GR-038 | Per-atom delta-join variants | Available | R,P | Explicit body-position pivots and prepared delta occurrences. |
+| GR-039 | Stable/delta/new relation lifecycle | Available | B,R | Immutable/reference relation generations and exact per-round new sets; not persistent native delta stores. |
+| GR-040 | Rule dependency graph | Available | P,T | Positive/negative predicate dependencies and explicit safety checks. |
+| GR-041 | SCC and stratum scheduling | Available | P,T | Prepared positive SCCs and typed stratification; negative cycles rejected. |
+| GR-042 | Rule IR compilation | Partial | P | Reusable binary compiled schedules/inspection; no common executable relational IR for every typed feature. |
+| GR-043 | Typed term normalization | Partial | T | Constants/variables/strict literals normalized; arbitrary structured terms absent. |
+| GR-044 | Stratified negation | Available | R,T | Explicit closed predicates and completed lower-stratum checks. |
+| GR-045 | Safe recursive aggregates | Partial | T,C | Safe nonrecursive aggregate stratum delivered; recursive/lattice aggregates deferred. |
+| GR-046 | Existential witnesses (bounded) | Experimental | L | Experimental bounded EL completion/witness identity and termination oracle; not production existential Datalog. |
+| GR-047 | Goal-directed evaluation | Available | Q | Demand-specialized answers and authenticated positive binary frontiers. |
+| GR-048 | Magic set/demand rewriting | Available | Q | Explicit supported-fragment specialization with full-answer parity. |
+| GR-049 | Parallel rule execution | Deferred | A,C | Polars native threading is not a parallel rule scheduler or demonstrated scaling contract. |
+| GR-050 | Work-queue-driven inference | Available | R,M | Predicate-triggered round dispatch and changed-predicate insertion scheduling; no asynchronous native queue. |
+| GR-051 | Multi-head normalization | Available | T | Explicit normalization to single-head rules. |
+| GR-052 | Class assertions | Available | O | Explicit class membership vocabulary and graph mapping. |
+| GR-053 | Subclass closure | Available | O | Named subclass inheritance compiled to recursive Horn rules. |
+| GR-054 | Subproperty closure | Available | O | Named subproperty propagation under selected profile. |
+| GR-055 | Domain & range | Available | O | Entail membership from subjects/objects; not shape validation. |
+| GR-056 | Inverse & symmetric | Available | O | Directional generated Horn rules with exact axiom origins. |
+| GR-057 | Transitive relationships | Partial | O,A | Correct indexed closure and optional Polars prototype; no general native performance certification. |
+| GR-058 | Reflexive/irreflexive | Available | O,V | Scoped reflexivity plus explicit irreflexive-conflict reports; no unscoped reflexivity. |
+| GR-059 | Equivalent classes/properties | Available | O | Named bidirectional implications, not general anonymous OWL equivalence. |
+| GR-060 | Property chains | Partial | O | Two-link chains compile; arbitrary-length imported chains not supported. |
+| GR-061 | Disjoint classes/properties | Partial | V | Class disjointness reports delivered; general property-disjointness axioms absent. |
+| GR-062 | sameAs / differentFrom | Available | E | Scoped links, canonicalization and inequality evidence; no physical merge. |
+| GR-063 | Functional/inverse functional | Partial | E,V | Functional conflict reports/explicit equality links; no general inverse-functional compiler support. |
+| GR-064 | Intersection/union class expressions | Partial | O | Horn-safe directional named forms; disjunctive heads/complements not inferred. |
+| GR-065 | Complement class expressions | Deferred | C | No general complement semantics; scoped absence is not OWL complement. |
+| GR-066 | Existential class restrictions | Experimental | L | Bounded selected EL feasibility only; general ontology compiler restrictions deferred. |
+| GR-067 | Universal class restrictions | Deferred | C | No general allValuesFrom support. |
+| GR-068 | Value/self restrictions | Deferred | C | No general hasValue/hasSelf compiler support. |
+| GR-069 | Cardinality constraints | Partial | V,C | Closed-class fact-count validation exists; equality-normalized OWL filler cardinality reasoning absent. |
+| GR-070 | HasKey identity | Deferred | C | No property-key identity inference. |
+| GR-071 | Ontology satisfiability | Partial | V,L | Static subclass/disjoint class conflicts and experimental EL oracle; not complete satisfiability. |
+| GR-072 | Complete OWL2 DL reasoning | Deferred | C,L | Explicit research non-goal, no production DL/JVM reasoner. |
+| GR-073 | Immutable rule justifications | Available | F,M | Stored rule/premise versions and exact historical explanation evidence. |
+| GR-074 | Multiple independent supports | Available | M,S | Bounded all-support maintenance and exact assertion-version multiplicity. |
+| GR-075 | Historical explanation graphs | Available | F,X | Historical claim/rule versions and bounded typed witnesses are distinct supported contracts. |
+| GR-076 | Premise→conclusion dependencies | Available | M | Persisted reconciliation metadata and reusable standalone reverse dependency index. |
+| GR-077 | Rule→conclusion dependencies | Available | M | Rule dependency lookups and explicit revision invalidation; local stratum optimization not implied. |
+| GR-078 | Support counts | Available | M,S | Counts derive from deduplicated support/version identities; counts alone never decide recursive deletion. |
+| GR-079 | Deletion-and-rederivation | Available | M | DRed-style overdeletion/rederivation with recursive-cycle oracle parity. |
+| GR-080 | Backward/forward incremental deletion | Deferred | C | Compared/revisit decision recorded; no second B/F executor delivered. |
+| GR-081 | Signed differential updates | Deferred | C | Logical evidence deltas exist; no signed-multiplicity differential runtime. |
+| GR-082 | Materialization generations | Available | G | Staged point and bound interval publication with source/target guards. |
+| GR-083 | Incremental rule changes | Partial | M,G | Revision-bound invalidation/rebuild correctness; localized affected-stratum rule maintenance absent. |
+| GR-084 | Minimal explanations | Partial | X | Deterministic bounded one-step minimum-premise selection; global recursive minimality deferred. |
+| GR-085 | Ranked provenance | Partial | X,C | Deterministic top-k one-step supports; no probabilistic semiring propagation. |
+| GR-086 | Four-valued claim status | Available | F | Unknown/support/refutation/both remain distinct. |
+| GR-087 | Explicit negative rule premises | Deferred | V,C | Ground denials validate positives; no signed-denial rule premise mechanism. |
+| GR-088 | Negation as failure | Available | R,T | Absence only under explicit stratified closed predicates. |
+| GR-089 | Class disjointness conflicts | Available | V | Bounded non-explosive conflict evidence. |
+| GR-090 | Inequality conflicts | Available | E | DifferentFrom versus equality-path evidence reported in scope. |
+| GR-091 | Functional property checks | Available | E,V | Explicit conflict/equality policy for supported functional properties. |
+| GR-092 | Datatype canonicalization | Available | T | Strict finite lexical/value vocabulary including instant microseconds; not full RDF datatype facets. |
+| GR-093 | Constraint provenance | Partial | V | Logical supporting facts and canonical constraint IDs; not arbitrary source axiom/claim-version provenance. |
+| GR-094 | Classical/paraconsistent profiles | Partial | C,V | Explicit named non-explosive profiles/gates; no general selectable classical OWL calculus. |
+| GR-095 | Predicate-level closed-world scope | Available | T,R | Explicit closed declarations and negative-cycle rejection. |
+| GR-096 | SHACL-style validation kernels | Partial | V | Required/cardinality/literal-kind/choice kernels on closed classes; not SHACL shape language. |
+| GR-097 | Probabilistic/fuzzy reasoning | Deferred | C | No approved calculus; #124/#128 remain separate proposals. |
+| GR-098 | Half-open valid intervals | Available | I,H | Exact half-open overlap/intersection, touching bounds and unbounded ends. |
+| GR-099 | System time horizons | Available | F,H | Pinned commit prefixes and historical correction/retraction replay. |
+| GR-100 | Consistent read-view provenance | Available | H,G | Explicit authenticated source identity and compatible generation admission; capabilities differ by backend. |
+| GR-101 | Temporal premise intersection | Available | I | Per-segment valid-time evidence and gap-preserving support intersections. |
+| GR-102 | Bounded modal accessibility | Available | F,H | Separate finite belief/knowledge/modal frames with bounds. |
+| GR-103 | Temporal delta relations | Partial | I | Active-set event sweep and unchanged-segment reuse; not general native temporal delta relations. |
+| GR-104 | Interval sets preserving gaps | Available | I | Disjoint interval unions retain unsupported gaps. |
+| GR-105 | Temporal coalescing | Available | I | Truth unions and equal-support segment coalescing are explicitly distinct. |
+| GR-106 | Native interval join | Deferred | I,C | Scalar interval algebra/change segments exist; no native batched interval join executor. |
+| GR-107 | Full-range temporal closure | Available | I | Every supported change segment evaluated, including selected absence/aggregates; not single-point sampling. |
+| GR-108 | World-qualifier on native joins | Partial | N,B | Native world-prefix extraction/context binding; reasoning joins still scoped Python or explicit Polars, not general native world joins. |
+| GR-109 | Cross-world inference policies | Partial | C | Default-deny explicit grant values/gates exist; general inheritance evaluation deferred. |
+| GR-110 | Confidence combination policy | Partial | C | Approval gate prevents accidental probability semantics; no approved combination/retraction calculus. |
+| GR-111 | Temporal modal closure | Deferred | C,H | Bounded point modal evaluation exists; no general temporal-modal closure executor. |
+| GR-112 | Native columnar ingest | Available | K | Optional PyRex native payload writer preserved; ingestion is not native inference. |
+| GR-113 | Batched indexed scan | Available | N | Explicit native prefix/range index scans with bounds, snapshot lifetime and full source admission. |
+| GR-114 | MultiGet batch | Deferred | N,H | No admitted native multi-key reasoning read API; prefix batches/point materialization are different operations. |
+| GR-115 | Arrow C Data/C Stream bridge | Available | B | Explicit capsule exchange and ownership checks; imports validate/copy as documented. |
+| GR-116 | Native symbol dictionary | Partial | B | Snapshot-local Python dictionary/compact IDs exist; no bespoke native encoding service. |
+| GR-117 | Native compact working relations | Experimental | B,A | Compact buffers and optional Polars native columns; not production general native relation storage. |
+| GR-118 | Native joins & delta loops | Partial | A | Native Polars joins with Python round orchestration; million-row native-loop criterion unproven. |
+| GR-119 | Multithreaded hash/merge joins | Partial | A,C | Optional native threading measurements exist; no admitted scaling/strategy guarantee. |
+| GR-120 | Atomic derived generation swap | Available | G | Guarded visibility-marked old-or-new point/range publication, not arbitrary persistent native stores. |
+| GR-121 | Spilling & memory budgets | Deferred | C | Explicit budget policy only; no spill engine or hard RSS bound. |
+| GR-122 | GIL-free batch execution | Partial | A,N | Optional native batch calls; Python fixpoint/decoding remains, no whole-run GIL-free guarantee. |
+| GR-123 | Native instrumentation | Partial | P,A,N | Wrapper/operator work/time counters; not complete native allocator/copy/backend-I/O instrumentation. |
+| GR-124 | Cancellation and time limits | Partial | R,G | Cooperative cancellation/bounded work fails without partial publication; native calls/sorts/blocking iterators not forcibly interrupted. |
+| GR-125 | Zero-copy ownership/lifetime tests | Available | B,N | Arrow buffer/snapshot release, ownership, foreign-source and cancellation tests; not universal zero-copy operation. |
+| GR-126 | Bounded resource controls | Available | R,G | Input/facts/rules/rounds/candidate/proof/publication limits; resource units remain explicit. |
+| GR-127 | Reasoning plan inspection | Available | P | Binary prepared/runtime inspection with heuristic estimates/actual work; telemetry opt-in. |
+| GR-128 | Soundness differential tests | Available | R,O,M,I | Independent grounding/ontology/update/point-range comparisons under declared fragments. |
+| GR-129 | Completeness profile tests | Available | O,C | Selected named-profile oracle/conformance corpus; no complete RDFS/OWL standards badge. |
+| GR-130 | Deterministic repeated-run tests | Available | R,V | Deterministic logical closure/report ordering and retry tests; freshly allocated version IDs need not match. |
+| GR-131 | Native/Python property tests | Experimental | A | Randomized Polars/reference closure parity for prototype fragment; no bespoke native engine exists. |
+| GR-132 | RDF/OWL import normalization | Partial | O | Strict bounded offline supported forms; general RDF/OWL import semantics rejected. |
+| GR-133 | Inference-specific benchmark suite | Available | Z | Separate extraction/evaluation/update/range/publication evidence; measured workloads only. |
+| GR-134 | Operator-level timing/memory | Partial | P,Z | Timings/work/whole-worker RSS exist; not complete per-operator CPU/allocation/spill/backend-I/O accounting. |
+| GR-135 | Snapshot/plan compatibility checks | Available | P,G,S | Exact program/catalog/source/policy/dictionary identities and stale-generation rejection. |
+| GR-136 | Recovery/checkpoint | Partial | S,X,G | Durable session/closure recovery, checks and explicit discard; no arbitrary long-running native computation resume. |
+
+## 8. Synchronization, validation and historical evidence
+
+### Update workflow
+
+1. Update this file's review timestamp/source SHA, relevant current/delivery/pending rows and GR dispositions after checking code/tests and GitHub.
+2. Update `planning/reasoning-engine/roadmap.json` delivery metadata and `tracking-status.json` only when their checked fields change. They are supporting machine indexes, not competing narrative roadmaps.
+3. Run `uv run --with openpyxl python planning/reasoning-engine/sync_tracker.py` to regenerate the workbook from section 7, retaining original acceptance criteria, priorities and unassigned owners. `--check` detects divergence without writing. Do not edit an open workbook: save/close LibreOffice first.
+4. Run `uv run python planning/reasoning-engine/check_roadmap.py`, `uv run python planning/reasoning-engine/check_tracking.py --github`, and the documentation/example/tests gates below. Live GitHub checks are read-only.
+
+The workbook's original audit is preserved in its **Original audit** sheet. Historical binary/source hashes and original architecture proposals remain reproducible from git; they must not prevent updating the live workbook. Original 136 GR identities and acceptance criteria are not silently rewritten to turn partial delivery into completion. Closed issue counts and status totals are not performance measurements.
+
+### Validation at reviewed source
+
+- Python 3.13.11 full suite: **4,095 passed, 15 skipped in 84.97s**. Command: `uv run --python 3.13 --extra backends --extra serializers --extra rdf --extra polars --extra bloom --extra docs --with-requirements benchmarks/ontology-requirements.txt pytest -q --tb=short`.
+- All **8 modular documentation examples passed** with those extras (without extra oracle requirements). Documentation/API drift and original roadmap/DAG checks passed.
+- Runtime versions: pytest 9.1.1, pyrex-rocksdb 0.7.1, LMDB 3.0.0, plyvel 1.5.1, PyArrow 24.0.0, Polars 1.41.2, RDFLib 7.6.0, Clingo 5.8.2 and OWL-RL 7.6.2.
+- The initial live tracking check exposed hardcoded open #156 and missing child #385; this sanitation refreshes the supporting snapshot/checker. It does not alter GitHub issues.
+- No new performance benchmark, Python 3.10–3.12 matrix, browser/ML-framework or installed-release artifact certification was performed in the source review. Committed benchmark reports are dated evidence only. Fresh-worker/first-reopened is not OS-cold; copied bytes are not assumed zero; RSS often includes the whole worker.
+
+### Sanitation validation (2026-11-01T11:44:00Z)
+
+- Final working-branch full suite: **4,115 passed, 14 skipped in 92.34s**, using the same Python/extras command above plus `--with openpyxl`. The new synchronization/tracking regression module separately passes **19 tests**, including drift rejection, historical-criteria preservation, save/reopen round trips and refusing to overwrite an open workbook.
+- All **8 documentation examples**, documentation/API drift, live GitHub tracking, roadmap/DAG/original-audit checks, Excel `--check`, targeted correctness lint and `git diff --check` pass. The stdlib roadmap check also passes with `python -S`, without openpyxl/site packages or old git objects; shallow CI need not fetch the historical workbook commit.
+- Excel totals: **80 Available, 33 Partial, 6 Experimental, 17 Deferred**. These are scoped feature dispositions, not test counts or promises that deferred features are scheduled.
+
+### Historical records, not current operating instructions
+
+- The original architecture assessment is `planning/reasoning-engine/source-assessment.md`; the original workbook bytes are in git at `3403530:gestaltdb_reasoning_feature_tracker.xlsx`. Both describe their original baselines, not today's missing-feature list.
+- `roadmap.json` preserves the original baseline `c71f043`, phase dependencies, GR coverage and accepted work packages. Historical branch/worktree names are provenance only. The delivery ledger above supersedes its former RE-12 “in-review” status and all started-work diaries.
+- `planning/reasoning-engine/release-readiness.md`, `tracking-audit.md`, design/overlap dispositions and `planning/reasoning-followthrough/` retain detailed dated investigations/measurement contracts. Their old candidate/branch instructions and pending claims do not override sections 1–4 here.
+- `EPIC_ONTOLOGY_EXTENSIONS_251026.md` is retained as a pointer to this consolidated status and the five implementation issues, not a second live proposal ledger. Long obsolete diaries and release orders remain available through git history rather than being copied into more floating planning documents.
+
+Future release decisions require explicit authorization and fresh exact-SHA CI/artifact validation; the old proposal to publish 0.13.0rc1 and target the integration branch is fulfilled history, not an instruction to repeat it.

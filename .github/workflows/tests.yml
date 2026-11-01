@@ -7,7 +7,9 @@ on:
     paths:
       - 'src/**/*.py'
       - 'src/gestaltdb/viz/static/**'
-      - 'tests/**'
+      - 'tests/**/*.py'
+      - 'tests/fixtures/**'
+      - '!tests/fixtures/**/*.md'
       - 'benchmarks/**/*.py'
       - 'benchmarks/*requirements*.txt'
       - 'scripts/**/*.py'
@@ -22,7 +24,9 @@ on:
     paths:
       - 'src/**/*.py'
       - 'src/gestaltdb/viz/static/**'
-      - 'tests/**'
+      - 'tests/**/*.py'
+      - 'tests/fixtures/**'
+      - '!tests/fixtures/**/*.md'
       - 'benchmarks/**/*.py'
       - 'benchmarks/*requirements*.txt'
       - 'scripts/**/*.py'

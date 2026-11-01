@@ -1,6 +1,10 @@
 {
+  "status_authority": "EPIC_REASONING_ENGINE.md",
+  "reviewed_source": "3403530adf186cf79d6426829d3be8bf8898f6f3",
+  "reviewed_at": "2026-11-01T11:27:42Z",
   "baseline": "c71f0433fc40251b7dcec08b60370e80b40d36d8",
   "integration_branch": "feature/onto-dev-epic-2",
+  "integration_branch_disposition": "Historical completed integration; current work starts from accepted main unless explicitly directed otherwise.",
   "delivery": {
     "RE-01": {
       "status": "integrated",
@@ -116,12 +120,14 @@
       "integration_commit": "bf43570"
     },
     "RE-12": {
-      "status": "in-review",
+      "status": "integrated",
+      "integration_commit": "48a9d12",
+      "merged_at": "2026-10-21T06:47:24Z",
       "branch": "feature/re-12-demand",
       "worktree": "re-12-demand",
       "contract": "docs/reasoning-demand.rst",
       "pr": 202,
-      "validation": "Focused suites incl. 40-case oracle parity pass; docs drift, Sphinx -W, roadmap validator passed. Selective 30 vs 99,000 facts (~33ms vs ~912ms). PR CI running."
+      "validation": "Historical focused suites incl. 40-case oracle parity, docs drift, Sphinx -W and roadmap validator passed. PR #202 merged 2026-10-21; current source validation is recorded in EPIC_REASONING_ENGINE.md, not an outstanding review."
     },
     "RE-13": {
       "status": "integrated",
@@ -263,8 +269,14 @@
     }
   },
   "source_sha256": {
-    "source-assessment.md": "e1e50b72fb5b2ecfd629a8847f2be3500c1c51f8f761a26ea00063c328f903eb",
-    "gestaltdb_reasoning_feature_tracker.xlsx": "399486f87b04415fafb0e4066f452908c493c4ee6dc1675339a2ced5386e10cb"
+    "source-assessment.md": "e1e50b72fb5b2ecfd629a8847f2be3500c1c51f8f761a26ea00063c328f903eb"
+  },
+  "historical_workbook": {
+    "path": "gestaltdb_reasoning_feature_tracker.xlsx",
+    "revision": "3403530adf186cf79d6426829d3be8bf8898f6f3",
+    "sha256": "399486f87b04415fafb0e4066f452908c493c4ee6dc1675339a2ced5386e10cb",
+    "original_audit_rows_sha256": "73a4c8fda0af9729486a118e4d5817ddd2817b9e1cf78850106507d83c8db124",
+    "note": "Original binary is preserved in git; the live workbook is generated from the epic. Original audit and original milestone sheets retain source rows."
   },
   "baseline_preserve_gr": [
     1,
