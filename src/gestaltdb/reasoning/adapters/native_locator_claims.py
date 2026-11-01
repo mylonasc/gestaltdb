@@ -79,7 +79,7 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
                 if isinstance(version, ClaimVersion):
                     locator = temporal.locator(commit_id, version.commit_ordinal)
                     catalog[locator] = version
-                    histories.setdefault(version.logical_id, []).append((locator, version))
+                    histories.setdefault(version.logical_id, []).append(version)
                     if version.valid.contains(self._time):
                         all_winners[version.logical_id] = version
                         if len(all_winners) > limits.max_logical_claims:
@@ -89,7 +89,7 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
         point = temporal_instant_index_value(self._time)
         snapshot = self._native_handle.create_snapshot()
         try:
-            def scan_index(base_name, parts, expected):
+            def scan_index(base_name, parts, remaining, consume):
                 nonlocal raw_rows, scans
                 check_cancelled(cancel)
                 self._check_binding()
@@ -98,8 +98,9 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
                 # Fixed-width sortable start, followed by 0x1f and locator.
                 # Include every start equal to the point, but no later start.
                 stop = prefix + point + b"\x20"
-                remaining = dict(expected)
-                found = []
+                # The caller transfers ownership of this one-use membership
+                # map. Consume verified versions directly instead of copying
+                # the map and building an intermediate full result list.
                 previous = None
                 scans += 1
                 with NativeKeyScan(self._native_store, prefix=prefix, stop=stop, snapshot=snapshot,
@@ -130,10 +131,9 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
                                 raise ProvenanceMismatchError("native locator is not an authenticated claim member")
                             if remaining.pop(key, None) != value:
                                 raise ProvenanceMismatchError("native locator differs from authenticated index membership")
-                            found.append(version)
+                            consume(version)
                 if remaining:
                     raise ProvenanceMismatchError("native locator scan omitted authenticated index membership")
-                return found
 
             def expected_dimension(dimension, value):
                 name = temporal.index_name(_TEMPORAL_CLAIM_DIMENSION_INDEX, generation)
@@ -150,8 +150,12 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
 
             def dimension_ids(dimension, value):
                 parts, expected = expected_dimension(dimension, value)
-                return {v.logical_id for v in scan_index(_TEMPORAL_CLAIM_DIMENSION_INDEX, parts, expected)
-                        if v.valid.contains(self._time)}
+                found = set()
+                def consume(version):
+                    if version.valid.contains(self._time):
+                        found.add(version.logical_id)
+                scan_index(_TEMPORAL_CLAIM_DIMENSION_INDEX, parts, expected, consume)
+                return found
 
             ids = dimension_ids("world", self._request.world) if horizon else set()
             if self._request.predicates is not None:
@@ -168,12 +172,15 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
                 parts = [b"c", logical_id.encode("utf-8")]
                 expected = {
                     _range_index_key(logical_name, parts,
-                        temporal_instant_index_value(v.valid.start), locator): locator
-                    for locator, v in histories[logical_id]
+                        temporal_instant_index_value(v.valid.start),
+                        temporal.locator(v.commit_id, v.commit_ordinal)):
+                        temporal.locator(v.commit_id, v.commit_ordinal)
+                    for v in histories[logical_id]
                     if v.valid.start <= self._time
                 }
                 winner = None
-                for version in scan_index(_TEMPORAL_LOGICAL_VALID_INDEX, parts, expected):
+                def materialize(version):
+                    nonlocal winner, materialized
                     check_cancelled(cancel)
                     self._check_binding()
                     key = temporal.record_key(version.commit_id, version.commit_ordinal)
@@ -184,6 +191,7 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
                     if version.valid.contains(self._time) and (winner is None or
                             (version.commit_id, version.commit_ordinal) > (winner.commit_id, winner.commit_ordinal)):
                         winner = version
+                scan_index(_TEMPORAL_LOGICAL_VALID_INDEX, parts, expected, materialize)
                 if winner != all_winners.get(logical_id):
                     raise ProvenanceMismatchError("native logical history differs from authenticated winner")
                 if winner is not None and winner.operation is not VersionOperation.RETRACT:
