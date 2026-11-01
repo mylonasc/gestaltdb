@@ -27,7 +27,12 @@ def _frequencies(values, name: str) -> np.ndarray:
 
 @dataclass(slots=True)
 class ContextPairBatch:
-    """Aligned compact center/context IDs, positive distances and pair weights."""
+    """Aligned compact center/context IDs, positive distances and pair weights.
+
+    IDs are compact and belong to the walks' snapshot; convert at application
+    boundaries. Batches are bounded by ``batch_size``; see ``iter_context_pairs``
+    and ``docs/random-walks.rst`` RWS-02 for windowing and subsampling.
+    """
 
     center_nodes: np.ndarray
     context_nodes: np.ndarray

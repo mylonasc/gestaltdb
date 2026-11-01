@@ -59,10 +59,8 @@ class SamplerSnapshot:
         out: Source-to-edge CSR adjacency.
         in_: Target-to-edge CSR adjacency.
         incident: Undirected incident edge CSR adjacency.
-        relation_out: Source/relation adjacency keyed by
-            ``node_id * num_relations + relation_id``; use ``edge_range``.
-        relation_in: Target/relation adjacency, with sparse populated-row
-            directories on new snapshots and dense directories on legacy ones.
+        relation_out: Source/relation CSR keyed by ``node*relations+relation``.
+        relation_in: Target/relation CSR (sparse dirs on new snapshots).
         positive_triples: Array of ``(src, rel, dst)`` positives.
         positive_membership_triples: Sorted unique static membership keys;
             temporal snapshots reuse ``positive_history_triples`` instead.
@@ -102,8 +100,7 @@ class SamplerSnapshot:
             ...     assert loaded.external_node_id(loaded.node_int("drug-1")) == "drug-1"
             ...     assert loaded.num_edges == 1
 
-        Use a fresh output directory for each immutable snapshot. The
-        ``SamplerEngine`` class example continues from construction to sampling.
+        Use a fresh output directory; ``SamplerEngine`` continues to sampling.
     """
 
     path: Path
@@ -149,14 +146,17 @@ class SamplerSnapshot:
 
     @property
     def num_nodes(self) -> int:
+        """Number of compact node rows in this snapshot."""
         return int(self.external_node_ids.size)
 
     @property
     def num_edges(self) -> int:
+        """Number of compact edge rows in this snapshot."""
         return int(self.src_int.size)
 
     @property
     def num_relations(self) -> int:
+        """Number of compact relation IDs in this snapshot."""
         return int(self.external_relation_ids.size)
 
     @property
@@ -376,7 +376,7 @@ class SamplerSnapshot:
         source_db: dict | None = None,
         **metadata_options,
     ) -> "SamplerSnapshot":
-        """Build a deterministic temporal-history snapshot from one read view."""
+        """Build a temporal-history snapshot from one authenticated read view."""
         reserved_metadata = {"source_provenance", "temporal_encoding"}.intersection(metadata_options)
         if reserved_metadata:
             names = ", ".join(sorted(reserved_metadata))
@@ -1355,12 +1355,15 @@ class SamplerSnapshot:
             raise
 
     def external_node_id(self, node_int) -> str:
+        """Resolve one compact node row to its external string ID."""
         return str(self.external_node_ids[int(node_int)])
 
     def external_edge_id(self, edge_int) -> str:
+        """Resolve one compact edge row to its external string ID."""
         return str(self.external_edge_ids[int(edge_int)])
 
     def external_relation_id(self, rel_int) -> str:
+        """Resolve one compact relation ID to its external string ID."""
         return str(self.external_relation_ids[int(rel_int)])
 
     def node_int(self, external_node_id) -> int:
@@ -1373,7 +1376,7 @@ class SamplerSnapshot:
         return self._resolve_external_ids(external_node_ids, self.external_node_ids, lookup_ids, lookup_order, "node")
 
     def edge_int(self, external_edge_id) -> int:
-        """Resolve one external edge ID to its compact integer ID."""
+        """Resolve one external edge ID; ambiguous under temporal dup rows."""
         return int(self.edge_ints([external_edge_id])[0])
 
     def edge_ints(self, external_edge_ids: Sequence[object]) -> IntArray:
@@ -1391,13 +1394,10 @@ class SamplerSnapshot:
         return self._resolve_external_ids(external_relation_ids, self.external_relation_ids, lookup_ids, lookup_order, "relation")
 
     def expand_relations(self, relations: Sequence[str], hierarchy: RelationHierarchy) -> IntArray:
-        """Expand parent relation names through a sub-property hierarchy.
+        """Expand parents to transitive sub-properties, then to compact IDs.
 
-        Each name resolves to itself plus all transitive sub-properties,
-        then to compact IDs usable by every engine method. Unknown snapshot
-        relations fail closed; hierarchy-undefined names expand to
-        themselves. Fanout caps in downstream sampling apply to the union,
-        not per expanded relation.
+        Unknown snapshot relations fail closed; hierarchy-undefined names
+        expand to themselves. Fanout applies to the union, not per relation.
         """
         if not isinstance(hierarchy, RelationHierarchy):
             raise ValueError("hierarchy must be a RelationHierarchy")

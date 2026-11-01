@@ -21,12 +21,44 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class WalkPolicy:
-    """Hard avoidance policy (RWS-04), with explicit exhaustion behavior.
+    """Explicit walk behavior; compose avoidance, schema, and chronology.
 
-    ``avoid_recent`` includes the current node: 1 forbids self-loops, 2 also
-    forbids returning to the previous node. ``non_backtracking`` forbids that
-    return independently. ``relax`` drops only avoidance, not other filters.
-    Restart jumps clear history. Parallel edges to a forbidden node all fail.
+    All node/relation/type IDs are compact snapshot IDs.
+
+    Attributes:
+        non_backtracking: Forbid returning to the previous node.
+        avoid_recent: Forbid the last ``k`` nodes (includes the current node,
+            so 1 excludes self-loops). Restarts clear history.
+        avoidance_exhaustion: ``"terminate"``, ``"restart"``, or ``"relax"``
+            (drop avoidance only; other filters never relax).
+        strategy: ``"uniform"`` or ``"weighted"`` (static ``edge_weights``).
+        schema: Optional :class:`WalkSchema` for typed/metapath/state-machine
+            constraints; global relation filters always intersect it.
+        chronology: Optional :class:`TemporalWalkPolicy` (temporal snapshots
+            only). Ordinary point/window filters alone do not imply chronology.
+        transition_unit: ``"edge"`` (parallel edges are distinct choices) or
+            ``"neighbor"`` (distinct neighbors; aggregate weights via
+            ``neighbor_weight_aggregation``).
+        neighbor_weight_aggregation: ``"sum"``, ``"mean"``, or ``"max"`` for
+            ``transition_unit="neighbor"``.
+        node2vec: Enable return/in-out bias (first step stays uniform unless
+            ``weighted_first_step=True``).
+        return_factor: node2vec return parameter (positive finite).
+        inout_factor: node2vec in-out parameter (positive finite).
+        bias_adjacency: ``"snapshot"`` (legacy unfiltered distances) or
+            ``"eligible"`` (static filters/current chronology; fails closed for
+            state-machine/metapath schemas).
+        weighted_first_step: Opt into static weights on the first step
+            (requires ``node2vec=True``).
+
+    Hard avoidance core (RWS-04): ``avoid_recent`` includes the current node
+    (1 forbids self-loops, 2 also forbids returning to the previous node);
+    ``non_backtracking`` forbids that return independently; ``relax`` drops only
+    avoidance, not other filters; parallel edges to a forbidden node all fail.
+
+    See Also:
+        ``docs/random-walks.rst`` RWS-04 through RWS-07 for examples of
+        avoidance, schemas, chronology, and transition units.
     """
 
     non_backtracking: bool = False
@@ -83,7 +115,17 @@ def sample_policy_walks(
     temporal=None, window_policy: str = "overlap", dead_end: str = "terminate",
     restart_probability: float = 0.0,
 ) -> RandomWalkBatch:
-    """Reference constrained kernel; memory is bounded per walk and candidate set."""
+    """Sample walks under a :class:`WalkPolicy` (all IDs are compact).
+
+    ``relations``/``temporal``/``window_policy`` prefilter candidates before
+    avoidance/schema/chronology apply. Returns :class:`RandomWalkBatch`, or
+    :class:`TemporalWalkBatch` when ``policy.chronology`` is set. Memory is
+    bounded per walk and candidate set.
+
+    See Also:
+        ``engine.sample_policy_walks`` for the engine entry point and
+        ``docs/random-walks.rst`` RWS-04 for runnable avoidance examples.
+    """
     policy = WalkPolicy() if policy is None else policy
     if not isinstance(policy, WalkPolicy):
         raise TypeError("policy must be a WalkPolicy")

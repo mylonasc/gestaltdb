@@ -4,6 +4,20 @@ GestaltDB has two sampling layers: live typed traversal for application queries,
 and reusable array-native CSR snapshots for high-throughput training batches.
 For property-graph cohort selection, read the `indexing` topic too.
 
+## ID Spaces (Read This First)
+
+- `external`: application string IDs (`"drug"`, `"binds"`). Live traversal and
+  `*_external` engine entry points accept these.
+- `compact` (also called `global` in batch fields like `node_ids_global`):
+  snapshot-wide integer rows. Engine results are compact by default, even from
+  `*_external` calls; call `to_external(snapshot)` to convert back.
+- `local`: batch-row positions in `SampledSubgraphBatch.senders/receivers/
+  positives/negatives`; map through `node_ids_global` before resolving.
+
+Temporal history may hold several rows per logical edge ID, so external edge
+lookup can raise an ambiguity error; prefer compact edge rows there. See
+`Compact, Local, and External IDs` in `docs/typed-sampling.rst`.
+
 ## GraphDB Traversal Sampling
 
 Use this for application code and external node IDs:
@@ -27,10 +41,10 @@ Use `SamplerSnapshot` and `SamplerEngine` for ML training pipelines. These APIs 
 
 ### Sampling Policy Map
 
-- `sample_nodes` / `sample_edges`: seed draws, node-type/relation filtering, supported degree/weight strategies.
-- `sample_neighbors`: batched uniform/weighted neighbors, direction/relation filters, per-seed offsets.
-- `sample_layers`: independent fanout, direction, relation, replacement, and strategy per layer.
-- `sample_random_walks`: uniform/weighted first-order walks, repeating metapaths, restarts and dead-end policies.
+- `sample_nodes` / `sample_edges`: seed draws, node-type/relation filtering, supported degree/weight strategies. `sample_nodes` supports `uniform`/`weighted`/`degree`; `sample_edges` supports `uniform`/`weighted` only, and defaults to snapshot `edge_weights` when `weights` is omitted (unlike `sample_nodes`, which requires explicit weights for weighted draws).
+- `sample_neighbors`: batched uniform/weighted neighbors, direction/relation filters, per-seed offsets. `causal_policy` is accepted for API consistency but ignored here; causal ordering applies to `sample_multihop`/`sample_subgraph`.
+- `sample_layers`: one `NeighborSamplingSpec(fanout, direction, relations, replace, strategy, balanced)` per hop; the frontier is `unique(neighbor_nodes)` per layer. `temporal`/`window_policy` apply to every hop; results are neighbor blocks (use `to_blocks` for message-passing blocks).
+- `sample_random_walks`: uniform/weighted first-order walks, repeating metapaths, restarts and dead-end policies. `metapath` cycles on edge steps only and is mutually exclusive with `relations`; padding is `-1` with `lengths` counting populated transitions. `*_external` variants take external relation names and still return compact batches.
 - `iter_random_walks`: lazy batches over all nodes (`start_nodes=None`) or explicit compact seeds, with `walks_per_node`, `batch_size`, optional round shuffling, and `walk_type="random"|"node2vec"`. Extra options go to the selected kernel. Explicit seeds are copied; global shuffling needs O(seed count) storage. Consume/discard batches and retain the snapshot lifetime. The same initial RNG state/options give batch-size-independent concatenated walks only without interleaved RNG users. Reuse `worker_engine` for independent streams; no automatic workers or partitioning.
 - `sample_multihop` / `sample_subgraph`: multi-hop topology and edge-seeded batches with positives and negatives.
 - `sample_hard_negatives`: endpoint-type/relation constraints, positive rejection, temporal policies.
@@ -105,8 +119,8 @@ Pass `temporal=TemporalContext.as_of(...)` or `TemporalContext.during(...)` to e
 
 Temporal snapshots index positive-triple and node-availability intervals for leakage-safe hard negatives. Configure `HardNegativeConfig(temporal_positive_policy="at_positive_time", temporal_candidate_window_days=90)` for example-time rejection and a trailing candidate window. Policies are `"any_time"`, `"at_positive_time"`, and `"window"`; window membership supports overlap or containment. Future candidates require explicit `allow_future_candidates=True`, so direct temporal calls must otherwise provide `positive_times_us` or a `temporal` context. Temporal batches include aligned `positive_time_us`, `negative_time_us`, and deterministic rejection diagnostics. Exhaustion either raises or repeats an accepted negative according to `exhaustion_policy`.
 - Resolve application IDs with `snapshot.node_int(...)`, `snapshot.edge_int(...)`, and `snapshot.relation_int(...)`. Their plural variants preserve input order.
-- Methods ending in `_external` accept external node, edge, and relation IDs while retaining compact array-native results.
-- Use `to_external(snapshot)` on neighbor, layered, and random-walk batches. Walk padding and restart edge/relation IDs become `None`.
+- Methods ending in `_external` accept external IDs but still return compact array-native batches; call `to_external(snapshot)` to convert back.
+- Use `to_external(snapshot)` on neighbor, layered, and random-walk batches. Walk padding and restart edge/relation IDs become `None` (`SampledNeighbors.to_external` likewise maps `-1` to `None`).
 - Temporal history may contain multiple rows for one logical edge ID; external edge lookup then raises an ambiguity error. Use compact edge rows instead.
 - Layer and walk calls accept `temporal` and `window_policy`, but do not impose causal ordering across steps. Seed-node/edge draws cover the full snapshot, not a selected time. Use multihop/subgraph APIs for causal policies.
 

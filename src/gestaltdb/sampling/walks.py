@@ -19,9 +19,15 @@ class RandomWalkBatch:
     """Fixed-width random walks over compact snapshot IDs.
 
     ``node_ids`` has shape ``(walks, walk_length + 1)``. ``edge_indices`` and
-    ``relation_ids`` have shape ``(walks, walk_length)``. Unused positions and
+    ``relation_ids`` have shape ``(walks, walk_length)``. ``edge_indices`` are
+    compact edge ROWS (not external edge IDs, which are ambiguous when temporal
+    history holds several rows per logical edge). Unused positions and
     restart transitions use ``-1`` edge and relation IDs. ``lengths`` counts
     populated transitions, including restart transitions.
+
+    See Also:
+        ``docs/random-walks.rst`` RWS-01 for a runnable streaming example and
+        the all-compact-IDs-same-snapshot contract.
     """
 
     node_ids: IntArray
@@ -71,7 +77,13 @@ def iter_walk_batches(
     walk_type: str,
     **walk_options,
 ) -> Iterator[RandomWalkBatch]:
-    """Validate eagerly, then iterate rounds without materializing the corpus."""
+    """Validate eagerly, then iterate rounds without materializing the corpus.
+
+    ``start_nodes`` are compact IDs (``None`` visits every node);
+    ``walk_type`` is ``"random"``, ``"node2vec"``, or ``"policy"`` with extra
+    options passed to the selected kernel. Prefer ``engine.iter_random_walks``
+    unless you already hold compact seeds; see ``docs/random-walks.rst`` RWS-01.
+    """
     for name, value in (("walks_per_node", walks_per_node), ("batch_size", batch_size)):
         if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
             raise ValueError(f"{name} must be an integer")

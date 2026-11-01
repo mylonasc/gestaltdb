@@ -9,7 +9,49 @@ from numbers import Real
 
 @dataclass(frozen=True, slots=True)
 class HardNegativeConfig:
-    """Configuration for KG hard-negative generation."""
+    """Configuration for KG hard-negative generation.
+
+    IDs are compact snapshot IDs; use ``*_external`` engine entry points to
+    pass application string IDs, then resolve results with ``to_external``.
+
+    Attributes:
+        negatives_per_positive: Negatives drawn per positive triple.
+        source: Candidate source (``"random"`` default). ``"in-batch"`` is
+            enabled separately via ``in_batch=True`` below.
+        reject_known_positives: Skip candidates that match a known positive.
+        same_endpoint_type: Restrict corrupted endpoints to the positive's type.
+        relation_endpoint_types: Restrict candidates by relation endpoint types.
+        candidate_fanout: Candidate pool size per draw; ``None`` uses the
+            engine default.
+        head_probability: Probability of corrupting the head (vs tail).
+        max_retries: Attempts per negative before exhaustion handling.
+        temporal_positive_policy: ``"any_time"`` (default), ``"at_positive_time"``,
+            or ``"window"``. Time-aware policies need ``positive_times_us`` or a
+            ``temporal`` context unless ``allow_future_candidates=True``.
+        temporal_positive_window_policy: ``"overlap"`` or ``"contained"`` for
+            ``"window"`` membership.
+        temporal_candidate_window_days: Trailing candidate window size; ``None``
+            disables windowing.
+        allow_future_candidates: Opt in to candidates after the positive time.
+        exhaustion_policy: ``"raise"`` (default) or ``"repeat"`` an accepted
+            negative when the pool is exhausted.
+        in_batch: Also try other in-batch positives as negatives first.
+        candidate_distribution: ``"uniform"`` or ``"degree"`` (weights the
+            random fallback by ``incident_degree ** degree_exponent``).
+        degree_exponent: Exponent for ``"degree"`` weighting (default 0.75).
+
+    Examples:
+        Leakage-safe time-aware negatives::
+
+            config = HardNegativeConfig(
+                temporal_positive_policy="at_positive_time",
+                temporal_candidate_window_days=90,
+            )
+
+    See Also:
+        ``docs/typed-sampling.rst`` "Time-Aware Hard Negatives" for policies,
+        diagnostics, and exhaustion semantics.
+    """
 
     negatives_per_positive: int = 1
     source: str = "random"

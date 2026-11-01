@@ -5,6 +5,6 @@
   "src/gestaltdb/query_engine/cypher/runtime.py": 1872,
   "src/gestaltdb/query_engine/cypher/semantics.py": 1081,
   "src/gestaltdb/reasoning/typed.py": 1105,
-  "src/gestaltdb/sampling/engine.py": 2314,
+  "src/gestaltdb/sampling/engine.py": 2313,
   "src/gestaltdb/sampling/snapshot.py": 2154
 }
