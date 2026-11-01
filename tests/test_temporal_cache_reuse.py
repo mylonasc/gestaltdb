@@ -1,8 +1,11 @@
 """Bounded commit-cache reuse with explicit identity and invalidation (HSA-03)."""
 
+import copy
+
 import pytest
 
 from gestaltdb._graph import temporal_reads as _reads
+from gestaltdb._graph.scopes import configure_snapshot_child
 from gestaltdb.graphdb import GraphDB
 from gestaltdb._graph.entities import Node
 from gestaltdb.versioning import NodeVersionWrite, VersionOperation
@@ -18,8 +21,6 @@ def _make(tmp_path, backend):
 @pytest.mark.parametrize("backend,module", BACKENDS)
 def test_snapshot_child_gets_fresh_cache_and_parent_stays_warm(tmp_path, backend, module):
     pytest.importorskip(module)
-    import copy
-    from gestaltdb._graph.scopes import configure_snapshot_child
     graph = _make(tmp_path, backend)
     try:
         graph.temporal.put_node_version(Node("n1"), valid=(0, None))
@@ -107,5 +108,70 @@ def test_warm_cache_tamper_is_detected(tmp_path, backend, module):
             graph.store.put_metadata(temporal_record_key(1, 0), original)
         # After repair, the cached entry validates again.
         assert reader.get_commit_cached(1, _validate_supersession=False) is not None
+    finally:
+        graph.close()
+
+
+@pytest.mark.parametrize("backend,module", BACKENDS)
+def test_old_view_survives_late_append(tmp_path, backend, module):
+    pytest.importorskip(module)
+    graph = _make(tmp_path, backend)
+    try:
+        first = graph.temporal.put_node_version(Node("n1"), valid=(0, None))
+        warmed = graph.temporal.get_commit_cached(1)
+        assert warmed is not None
+        # Late append: correction superseding the warmed assertion.
+        second = graph.temporal.commit_versions([
+            NodeVersionWrite(VersionOperation.CORRECT, "n1", (0, None),
+                             node=Node("n1"),
+                             supersedes_version_id=first.version_id)])
+        assert second.versions[0].supersedes_version_id == first.version_id
+        # Old commit still validates and is identical (immutable history).
+        again = graph.temporal.get_commit_cached(1)
+        assert again is not None
+        assert again.versions[0].version_id == first.version_id
+        # New commit validates with its supersession link intact.
+        assert graph.temporal.get_commit_cached(2) is not None
+    finally:
+        graph.close()
+
+
+@pytest.mark.parametrize("backend,module", BACKENDS)
+def test_rebinding_drops_old_store_entries_explicitly(tmp_path, backend, module):
+    pytest.importorskip(module)
+    graph = _make(tmp_path, backend)
+    try:
+        graph.temporal.put_node_version(Node("n1"), valid=(0, None))
+        assert graph.temporal.get_commit_cached(1) is not None
+        old_store = graph.store
+        assert len(graph.temporal._commit_cache) > 0
+        # Explicit lifetime binding: drop the old store without touching others.
+        graph.temporal.invalidate_commit_cache_for_store(old_store)
+        assert len(graph.temporal._commit_cache) == 0
+        # Re-read repopulates and validates.
+        assert graph.temporal.get_commit_cached(1) is not None
+        # Rebinding to a second store shares the dict object; old entries for
+        # a different store key must not be confused (keys include store id).
+        from gestaltdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
+
+        store_cls = {"lmdb": LMDBStore, "leveldb": LevelDBStore, "pyrex": PyRexStore}[backend]
+        second_path = tmp_path / f"{backend}-second"
+        try:
+            second_store = store_cls(path=str(second_path))
+        except TypeError:
+            # PyRexStore takes no path in some configs; skip rebinding part.
+            return
+        try:
+            rebound = graph.temporal.rebound(second_store)
+            # Shared dict still holds first store's entries (explicit cleanup
+            # is the caller's job until automatic wiring lands via extraction).
+            assert any(key[0] == id(old_store) for key in graph.temporal._commit_cache)
+            rebound.invalidate_commit_cache_for_store(old_store)
+            assert not any(key[0] == id(old_store) for key in rebound._commit_cache)
+        finally:
+            try:
+                second_store.close()
+            except Exception:
+                pass
     finally:
         graph.close()
