@@ -498,7 +498,10 @@ def test_range_query_nodes_uses_store_range_iter(graph_db):
     original_store = graph_db.store
     graph_db.store = RangeStore()
     try:
-        graph_db.store.get_node = lambda node_id: original_store.get_node(node_id.encode("utf-8"))
-        assert [node.get_id for node in graph_db.range_query_nodes("name", "A", "Z")] == ["n1"]
+        graph_db.store.get_node = lambda node_id: original_store.get_node(
+            node_id.encode("utf-8") if isinstance(node_id, str) else node_id)
+        with __import__("warnings").catch_warnings():
+            __import__("warnings").simplefilter("ignore", DeprecationWarning)
+            assert [node.get_id for node in graph_db.range_query_nodes("name", "A", "Z")] == ["n1"]
     finally:
         graph_db.store = original_store

@@ -118,15 +118,23 @@ class NodeReader:
     def __init__(self, session: StorageSession) -> None:
         self._session = session
 
-    def get(self, node_id: bytes) -> Node | None:
-        """Read a decoded current node, or None, using its stored byte key."""
-        return node_records.get_node(
-            self._session.store, self._session.entity_serializer, node_id)
+    def get(self, node_id: NodeKeyInput) -> Node | None:
+        """Read a decoded current node, or None, using its stored key.
 
-    def get_many(self, node_ids: Iterable[bytes]) -> list[Node | None]:
+        Accepts ``str`` or ``bytes``; ``str`` IDs are UTF-8 encoded.
+        """
+        from ._graph.entities import node_key_to_bytes as _to_bytes
+
+        return node_records.get_node(
+            self._session.store, self._session.entity_serializer, _to_bytes(node_id))
+
+    def get_many(self, node_ids: Iterable[NodeKeyInput]) -> list[Node | None]:
         """Read current nodes in request order, retaining None for missing IDs."""
+        from ._graph.entities import node_key_to_bytes as _to_bytes
+
         return node_records.get_nodes(
-            self._session.store, self._session.serializer, node_ids)
+            self._session.store, self._session.serializer,
+            [_to_bytes(node_id) for node_id in node_ids])
 
     def keys(self, num_nodes: int | None = None, key_offset: bytes | None = None) -> Any:
         """Iterate current node keys in backend order."""
@@ -189,10 +197,15 @@ class EdgeReader:
     def __init__(self, session: StorageSession) -> None:
         self._session = session
 
-    def get(self, edge_id: bytes) -> Edge | None:
-        """Read a decoded current edge, or None, using its stored byte key."""
+    def get(self, edge_id: NodeKeyInput) -> Edge | None:
+        """Read a decoded current edge, or None, using its stored key.
+
+        Accepts ``str`` or ``bytes``; ``str`` IDs are UTF-8 encoded.
+        """
+        from ._graph.entities import node_key_to_bytes as _to_bytes
+
         return edge_records.get_edge(
-            self._session.store, self._session.entity_serializer, edge_id)
+            self._session.store, self._session.entity_serializer, _to_bytes(edge_id))
 
     def keys(self, num_edges: int | None = None, key_offset: bytes | None = None) -> Any:
         """Iterate current edge keys in backend order."""

@@ -7,8 +7,11 @@ Read this when creating small scripts, notebooks, tests, or applications that us
 - Import core classes from `gestaltdb.graphdb`.
 - Use `GraphDB.create` for manifest-backed directories when possible.
 - Use `TemporaryDirectory` in examples and tests.
-- Always close graph handles in `finally`.
+- Always close graph handles in `finally` (`GraphDB` also supports `with GraphDB.create(...) as graph:`).
 - Relationship types live in `Edge.properties["type"]`.
+- ID-taking reads accept `str` or `bytes`; returned keys and traversal neighbor IDs are bytes, so decode with `graph.key_to_string(...)` before comparing with string IDs.
+- Node identity is the `get_id` property (also `to_dict()["id"]`); there is no `node.id` attribute and `get_id` is not callable.
+- Create property indexes before index-backed lookups; unindexed property lookups return `[]`/`0`. Use `MATCH (n) RETURN id(n), labels(n), properties(n)` for inspectable Cypher rows instead of bare `RETURN n`.
 
 ## Example
 

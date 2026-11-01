@@ -4,7 +4,9 @@ Use `graph.query(cypher, parameters=None)` for Cypher reads and writes. It retur
 
 ## Supported
 
+- Every ordinary query starts with `MATCH`, `OPTIONAL MATCH`, `UNWIND`, `CALL`, `CREATE`, `MERGE`, `FOREACH`, `SET`, `DELETE`, or `SHOW`. Bare `RETURN 1 AS n` is not supported; use a `MATCH`-rooted query.
 - Node labels and multi-entry inline property maps: `MATCH (p:Person {name: $name, active: true})`.
+- Inspect the graph with `MATCH (n) RETURN count(n) AS nodes`, `MATCH ()-[r]->() RETURN count(r) AS edges`, `MATCH (n) UNWIND labels(n) AS label RETURN DISTINCT label`, `MATCH (n) UNWIND keys(n) AS key RETURN DISTINCT key`, `MATCH ()-[r]->() RETURN DISTINCT type(r) AS type`, and `MATCH (n) RETURN id(n) AS id, labels(n) AS labels, properties(n) AS properties LIMIT 2`. There is no `SHOW LABELS` / `CALL db.labels()`; bare `RETURN n` yields opaque `Node` objects, so prefer scalar projections.
 - Typed and untyped fixed traversal: `MATCH (a)-[:KNOWS]->(b)` and `MATCH (a)-->(b)`.
 - Anonymous pattern elements, endpoint labels/properties, unanchored multi-hop paths, and comma-separated pattern parts.
 - `WHERE` arithmetic and comparisons, `NOT`/`AND`/`XOR`/`OR`, `IN`, null predicates, string predicates, and `=~`.

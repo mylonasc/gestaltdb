@@ -129,8 +129,46 @@ def _example_coverage() -> dict[str, list[dict[str, object]]]:
     return coverage
 
 
+def _collect_engine_methods(
+    path: Path, class_name: str, prefix: str, topic: str, coverage: dict[str, list[dict[str, object]]]
+) -> list[dict]:
+    """Collect public methods from a service engine class with a dotted prefix."""
+    try:
+        source = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return []
+    tree = ast.parse(source)
+    entries = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef) or node.name != class_name:
+            continue
+        for item in node.body:
+            if not isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if item.name.startswith("_"):
+                continue
+            doc = ast.get_docstring(item) or ""
+            summary, returns = _split_docstring(doc)
+            bare_signature = _format_signature(item)
+            # Prefix the bare method name so search resolves `graph.temporal.*`
+            # and `graph.rules.*` call sites.
+            dotted_signature = bare_signature.replace(item.name, f"{prefix}.{item.name}", 1)
+            entries.append(
+                {
+                    "name": f"{prefix}.{item.name}",
+                    "signature": dotted_signature,
+                    "summary": summary,
+                    "returns": returns,
+                    "topic": topic,
+                    "line": item.lineno,
+                    "examples": coverage.get(item.name, []),
+                }
+            )
+    return entries
+
+
 def build_index() -> dict:
-    """Build the API index from the GraphDB source file."""
+    """Build the API index from GraphDB plus temporal/epistemic/rules engines."""
     source = GRAPHDB_PATH.read_text(encoding="utf-8")
     tree = ast.parse(source)
     coverage = _example_coverage()
@@ -156,6 +194,13 @@ def build_index() -> dict:
                     "examples": coverage.get(item.name, []),
                 }
             )
+    engine_sources = [
+        (REPO_ROOT / "src" / "gestaltdb" / "temporal_engine.py", "TemporalEngine", "temporal", "temporal"),
+        (REPO_ROOT / "src" / "gestaltdb" / "epistemic_engine.py", "EpistemicEngine", "epistemic", "epistemic"),
+        (REPO_ROOT / "src" / "gestaltdb" / "rules_engine.py", "RulesEngine", "rules", "epistemic"),
+    ]
+    for engine_path, class_name, prefix, topic in engine_sources:
+        methods.extend(_collect_engine_methods(engine_path, class_name, prefix, topic, coverage))
     methods.sort(key=lambda entry: entry["name"])
     return {
         "generated_from": {

@@ -519,17 +519,19 @@ class GraphDB:
         """
         return self.nodes.put(node)
 
-    def get_node(self, node_id) -> Node | None:
-        """Return a node by byte key.
+    def get_node(self, node_id: NodeKeyInput) -> Node | None:
+        """Return a node by key.
 
         Args:
-            node_id: Node ID bytes as stored in the backend.
+            node_id: Node ID as ``str`` or bytes as stored in the backend.
+                ``str`` IDs are UTF-8 encoded automatically.
 
         Returns:
             The decoded node, or ``None`` when absent.
 
         Examples:
             >>> graph_db.get_node(b"drug-1")  # doctest: +SKIP
+            >>> graph_db.get_node("drug-1")  # doctest: +SKIP
         """
         return self.nodes.get(node_id)
 
@@ -1302,23 +1304,42 @@ class GraphDB:
         """
         return self.traversal.rebuild_typed_adjacency()
 
-    def get_edge(self, edge_id) -> Edge | None:
-        """Return an edge by byte key.
+    def get_edge(self, edge_id: NodeKeyInput) -> Edge | None:
+        """Return an edge by key.
 
         Args:
-            edge_id: Edge ID bytes as stored in the backend.
+            edge_id: Edge ID as ``str`` or bytes as stored in the backend.
+                ``str`` IDs are UTF-8 encoded automatically.
 
         Returns:
             The decoded edge, or ``None`` when absent.
 
         Examples:
             >>> graph_db.get_edge(b"d1-p1")  # doctest: +SKIP
+            >>> graph_db.get_edge("d1-p1")  # doctest: +SKIP
         """
         return self.edges.get(edge_id)
 
     # --- Legacy example range query (keeps its exact raw key format) ---
     def range_query_nodes(self, property_name: str, start_val, end_val):
-        """Example stub: You might rely on the underlying store to handle indexing for nodes."""
+        """Legacy raw range iteration; prefer ``nodes_by_property_range``.
+
+        This keeps its historical exact raw key format and does not use the
+        current encoded secondary/range indexes, so it can return ``[]``
+        where :meth:`nodes_by_property_range` returns rows. New code should
+        call ``nodes_by_property_range`` after
+        :meth:`create_node_property_index`.
+
+        .. deprecated::
+            Use ``nodes_by_property_range`` instead.
+        """
+        import warnings
+
+        warnings.warn(
+            "range_query_nodes is deprecated; use nodes_by_property_range instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.lookup.range_query_nodes(property_name, start_val, end_val)
 
     # --------------------------------
@@ -1592,8 +1613,11 @@ class GraphDB:
         """Serialize an edge for use with columnar edge ingestion."""
         return self.entity_serializer.serialize(edge, "Edge")
 
-    def get_nodes(self, node_ids: Iterable[bytes]) -> list[Node | None]:
-        """Return decoded nodes in request order (``None`` for missing IDs)."""
+    def get_nodes(self, node_ids: Iterable[NodeKeyInput]) -> list[Node | None]:
+        """Return decoded nodes in request order (``None`` for missing IDs).
+
+        Accepts ``str`` or byte IDs; ``str`` IDs are UTF-8 encoded automatically.
+        """
         return self.nodes.get_many(node_ids)
     def get_node_keys_generator(self, num_nodes = None, key_offset = None):
         """Yield node keys from the backing store.
@@ -1907,3 +1931,11 @@ class GraphDB:
             >>> graph_db.close()  # doctest: +SKIP
         """
         self.store.close()
+
+    def __enter__(self) -> "GraphDB":
+        """Enter a context manager that closes the handle on exit."""
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        """Close the handle; exceptions are never suppressed."""
+        self.close()

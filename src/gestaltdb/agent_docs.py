@@ -209,7 +209,9 @@ def cmd_search(args: argparse.Namespace) -> int:
     api_cards = _api_cards(pattern)
     for card in api_cards[:5]:
         print()
-        print(f"API: GraphDB.{card['signature']}")
+        signature = card['signature']
+        label = signature if "." in signature.split("(")[0] else f"GraphDB.{signature}"
+        print(f"API: {label}")
         if card["summary"]:
             print(f"  {card['summary']}")
         if card["returns"]:
@@ -264,12 +266,49 @@ def cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
+_API_ALIASES: dict[str, str] = {
+    "read_view": "temporal.open_read_view",
+    "open_read_view": "temporal.open_read_view",
+    "run_rules": "rules.run",
+    "maintain_truth": "rules.maintain",
+    "explain_claim": "rules.explain",
+    "create_rule": "rules.create_rule",
+    "assert_claim": "epistemic.assert_claim",
+    "claim_status": "epistemic.claim_status",
+}
+
+
 def _api_cards(pattern: "re.Pattern[str]") -> list[dict]:
     index = read_api_index()
     methods = index.get("methods") if isinstance(index, dict) else None
     if not methods:
         return []
-    return [entry for entry in methods if pattern.search(entry.get("name", ""))]
+    query = pattern.pattern.strip()
+    aliased: re.Pattern[str] | None = None
+    for alias, target in _API_ALIASES.items():
+        try:
+            if re.search(alias, query, re.IGNORECASE):
+                aliased = re.compile(re.escape(target), re.IGNORECASE)
+                break
+        except re.error:
+            continue
+    scored: list[tuple[int, dict]] = []
+    for entry in methods:
+        haystack = " ".join([
+            entry.get("name", ""),
+            entry.get("signature", ""),
+            entry.get("summary", ""),
+            entry.get("returns", ""),
+            entry.get("topic", ""),
+        ])
+        if pattern.search(entry.get("name", "")):
+            scored.append((0, entry))
+        elif pattern.search(haystack):
+            scored.append((1, entry))
+        elif aliased is not None and aliased.search(haystack):
+            scored.append((2, entry))
+    scored.sort(key=lambda item: (item[0], item[1].get("name", "")))
+    return [entry for _, entry in scored]
 
 
 def cmd_install_opencode_skill(args: argparse.Namespace) -> int:
