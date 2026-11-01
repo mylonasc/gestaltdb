@@ -58,7 +58,7 @@ def test_invalidate_for_store_and_clear(tmp_path, backend, module):
 
 
 @pytest.mark.parametrize("backend,module", BACKENDS)
-def test_byte_and_entry_bounds_evict_oldest_half(tmp_path, backend, module):
+def test_byte_and_entry_bounds_include_incoming_commit(tmp_path, backend, module, monkeypatch):
     pytest.importorskip(module)
     graph = _make(tmp_path, backend)
     try:
@@ -69,20 +69,21 @@ def test_byte_and_entry_bounds_evict_oldest_half(tmp_path, backend, module):
         cache = graph.temporal._commit_cache
         assert len(cache) <= 256
         assert _reads._commit_cache_bytes(cache) > 0
-        # Fill the live dict with fake entries, then force a real miss that
-        # must evict the oldest half before inserting.
-        real_commit = graph.temporal.get_commit_cached(1, _validate_supersession=False)
-        assert real_commit is not None
-        for i in range(300):
-            cache[(id(graph.store), 10000 + i, False)] = (
-                graph.store, b"d", (1,), real_commit,
-            )
-        assert len(cache) > 256
-        graph.temporal.put_node_version(Node("evict"), valid=(0, None))
-        # The write uses a transaction-scoped cache on some backends; force
-        # the eviction on the live dict with a real miss.
-        assert graph.temporal.get_commit_cached(6) is not None
-        assert len(graph.temporal._commit_cache) <= 256
+        one_entry = next(iter(cache.values()))
+        one_size = len(one_entry[1]) + sum(one_entry[2]) + sum(map(len, one_entry[5]))
+        cache.clear()
+        monkeypatch.setattr(_reads, "_COMMIT_CACHE_MAX_ENTRIES", 2)
+        monkeypatch.setattr(_reads, "_COMMIT_CACHE_MAX_BYTES", one_size * 2)
+        for commit_id in range(1, 6):
+            assert graph.temporal.get_commit_cached(commit_id) is not None
+            assert len(cache) <= 2
+            assert _reads._commit_cache_bytes(cache) <= one_size * 2
+        # Admission of one oversized commit must not break the bound or
+        # discard other useful entries. Reading still succeeds uncached.
+        monkeypatch.setattr(_reads, "_COMMIT_CACHE_MAX_BYTES", 1)
+        cache.clear()
+        assert graph.temporal.get_commit_cached(1) is not None
+        assert cache == {}
     finally:
         graph.close()
 
@@ -94,7 +95,7 @@ def test_warm_cache_tamper_is_detected(tmp_path, backend, module):
     try:
         from gestaltdb.versioning import TemporalCorruptionError
         graph.temporal.put_node_version(Node("n1"), valid=(0, None))
-        assert graph.temporal.get_commit_cached(1) is not None
+        assert graph.temporal.get_commit_cached(1, _validate_supersession=False) is not None
         reader = graph.temporal.reader()
         from gestaltdb._graph.temporal_keys import temporal_record_key
         # Tamper the live record after warming the cache.
@@ -104,6 +105,7 @@ def test_warm_cache_tamper_is_detected(tmp_path, backend, module):
         try:
             with pytest.raises(TemporalCorruptionError):
                 reader.get_commit_cached(1, _validate_supersession=False)
+            assert not graph.temporal._commit_cache
         finally:
             graph.store.put_metadata(temporal_record_key(1, 0), original)
         # After repair, the cached entry validates again.
@@ -113,7 +115,7 @@ def test_warm_cache_tamper_is_detected(tmp_path, backend, module):
 
 
 @pytest.mark.parametrize("backend,module", BACKENDS)
-def test_old_view_survives_late_append(tmp_path, backend, module):
+def test_historical_commit_survives_late_append(tmp_path, backend, module):
     pytest.importorskip(module)
     graph = _make(tmp_path, backend)
     try:
@@ -137,7 +139,7 @@ def test_old_view_survives_late_append(tmp_path, backend, module):
 
 
 @pytest.mark.parametrize("backend,module", BACKENDS)
-def test_rebinding_drops_old_store_entries_explicitly(tmp_path, backend, module):
+def test_store_setter_and_close_retire_admission(tmp_path, backend, module):
     pytest.importorskip(module)
     graph = _make(tmp_path, backend)
     try:
@@ -145,33 +147,164 @@ def test_rebinding_drops_old_store_entries_explicitly(tmp_path, backend, module)
         assert graph.temporal.get_commit_cached(1) is not None
         old_store = graph.store
         assert len(graph.temporal._commit_cache) > 0
-        # Explicit lifetime binding: drop the old store without touching others.
-        graph.temporal.invalidate_commit_cache_for_store(old_store)
-        assert len(graph.temporal._commit_cache) == 0
-        # Re-read repopulates and validates.
-        assert graph.temporal.get_commit_cached(1) is not None
-        # Rebinding to a second store shares the dict object; old entries for
-        # a different store key must not be confused (keys include store id).
-        from gestaltdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
-
-        store_cls = {"lmdb": LMDBStore, "leveldb": LevelDBStore, "pyrex": PyRexStore}[backend]
-        second_path = tmp_path / f"{backend}-second"
+        old_cache = graph.temporal._commit_cache
+        second = GraphDB.create(tmp_path / "second", backend=backend, serializer="json")
         try:
-            second_store = store_cls(path=str(second_path))
-        except TypeError:
-            # PyRexStore takes no path in some configs; skip rebinding part.
-            return
-        try:
-            rebound = graph.temporal.rebound(second_store)
-            # Shared dict still holds first store's entries (explicit cleanup
-            # is the caller's job until automatic wiring lands via extraction).
-            assert any(key[0] == id(old_store) for key in graph.temporal._commit_cache)
-            rebound.invalidate_commit_cache_for_store(old_store)
-            assert not any(key[0] == id(old_store) for key in rebound._commit_cache)
+            version = second.temporal.put_node_version(Node("other"), valid=(0, None))
+            graph.store = second.store
+            assert not old_cache
+            assert graph.temporal._commit_cache is not old_cache
+            commit = graph.temporal.get_commit_cached(1)
+            assert commit.versions[0].version_id == version.version_id
+            new_cache = graph.temporal._commit_cache
+            graph.store = old_store
+            assert not new_cache
         finally:
-            try:
-                second_store.close()
-            except Exception:
-                pass
+            second.close()
+        graph.temporal.get_commit_cached(1)
+        assert graph.temporal._commit_cache
+    finally:
+        graph.close()
+    assert not graph.temporal._commit_cache
+
+
+def test_real_snapshot_pins_old_versions_and_retires_cache(tmp_path):
+    pytest.importorskip("lmdb")
+    graph = _make(tmp_path, "lmdb")
+    try:
+        first = graph.temporal.put_node_version(Node("n1"), valid=(0, None))
+        graph.temporal.get_commit_cached(1)
+        parent_cache = graph.temporal._commit_cache
+        with graph.current_read_view(require_verifiable=True) as view:
+            scoped = view._graph.temporal
+            cache = scoped._commit_cache
+            assert cache is not parent_cache and not cache
+            assert scoped.get_commit_cached(1).versions[0].version_id == first.version_id
+            graph.temporal.commit_versions([
+                NodeVersionWrite(VersionOperation.CORRECT, "n1", (0, None),
+                                 node=Node("n1"), supersedes_version_id=first.version_id)])
+            assert scoped.get_commit_cached(2) is None
+            assert scoped.get_commit_cached(1).versions[0].version_id == first.version_id
+            assert parent_cache
+        assert not cache
+        assert graph.temporal.get_commit_cached(2) is not None
+    finally:
+        graph.close()
+
+
+@pytest.mark.parametrize("failure", [RuntimeError, KeyboardInterrupt])
+def test_interrupted_reader_clears_admission(tmp_path, monkeypatch, failure):
+    pytest.importorskip("lmdb")
+    graph = _make(tmp_path, "lmdb")
+    try:
+        graph.temporal.put_node_version(Node("n"), valid=(0, None))
+        graph.temporal.get_commit_cached(1)
+        assert graph.temporal._commit_cache
+        def fail(*args):
+            raise failure("interrupted")
+        monkeypatch.setattr(graph.store, "get_metadata", fail)
+        with pytest.raises(failure):
+            graph.temporal.get_commit_cached(1)
+        assert not graph.temporal._commit_cache
+    finally:
+        graph.close()
+
+
+@pytest.mark.parametrize("failure", [None, RuntimeError, KeyboardInterrupt])
+def test_transaction_exit_retires_admission(tmp_path, failure):
+    pytest.importorskip("lmdb")
+    graph = _make(tmp_path, "lmdb")
+    try:
+        graph.temporal.put_node_version(Node("n"), valid=(0, None))
+        def run():
+            with graph.transaction() as tx:
+                tx.temporal.get_commit_cached(1)
+                retained.append(tx.temporal._commit_cache)
+                assert retained[0]
+                if failure is not None:
+                    raise failure("interrupted")
+        retained = []
+        if failure is None:
+            run()
+        else:
+            with pytest.raises(failure):
+                run()
+        assert retained == [{}]
+    finally:
+        graph.close()
+
+
+def test_decoder_rebinding_cannot_reuse_old_decode(tmp_path, monkeypatch):
+    pytest.importorskip("lmdb")
+    from gestaltdb._graph.entities import GraphEntityDictSerializer
+    from gestaltdb.serializers import JSONSerializer
+
+    graph = _make(tmp_path, "lmdb")
+    try:
+        graph.temporal.put_node_version(Node("n"), valid=(0, None))
+        reader = graph.temporal.reader()
+        first = reader.get_commit_cached(1)
+        reader.entity_serializer = GraphEntityDictSerializer(JSONSerializer())
+        decoded = []
+        original = reader.decode_version
+        def decode(payload):
+            decoded.append(payload)
+            return original(payload)
+        monkeypatch.setattr(reader, "decode_version", decode)
+        assert reader.get_commit_cached(1).versions[0].version_id == first.versions[0].version_id
+        assert len(decoded) == 1
+    finally:
+        graph.close()
+
+
+@pytest.mark.parametrize("backend,module", BACKENDS)
+def test_warm_supersession_reuses_decodes_but_detects_target_tamper(
+    tmp_path, backend, module, monkeypatch,
+):
+    pytest.importorskip(module)
+    from gestaltdb._graph.temporal_keys import temporal_record_key
+    from gestaltdb.versioning import TemporalCorruptionError
+
+    graph = _make(tmp_path, backend)
+    try:
+        first = graph.temporal.put_node_version(Node("n"), valid=(0, None))
+        graph.temporal.commit_versions([
+            NodeVersionWrite(VersionOperation.CORRECT, "n", (0, None),
+                             node=Node("n"), supersedes_version_id=first.version_id)])
+        graph.temporal.get_commit_cached(2)
+        calls = []
+        original = _reads.TemporalReader.decode_version
+        def decode(reader, payload):
+            calls.append(payload)
+            return original(reader, payload)
+        monkeypatch.setattr(_reads.TemporalReader, "decode_version", decode)
+        graph.temporal.get_commit_cached(2)
+        assert calls == []
+        key = temporal_record_key(1, 0)
+        envelope = graph.store.get_metadata(key)
+        graph.store.put_metadata(key, b"tampered target")
+        try:
+            with pytest.raises(TemporalCorruptionError):
+                graph.temporal.get_commit_cached(2)
+            assert not graph.temporal._commit_cache
+        finally:
+            graph.store.put_metadata(key, envelope)
+    finally:
+        graph.close()
+
+
+def test_close_failure_still_clears_cache(tmp_path, monkeypatch):
+    pytest.importorskip("lmdb")
+    graph = _make(tmp_path, "lmdb")
+    try:
+        graph.temporal.put_node_version(Node("n"), valid=(0, None))
+        graph.temporal.get_commit_cached(1)
+        with monkeypatch.context() as patch:
+            def fail():
+                raise RuntimeError("close failed")
+            patch.setattr(graph.store, "close", fail)
+            with pytest.raises(RuntimeError, match="close failed"):
+                graph.close()
+            assert not graph.temporal._commit_cache
     finally:
         graph.close()

@@ -1,5 +1,5 @@
 {
-  "src/gestaltdb/graphdb.py": 1909,
+  "src/gestaltdb/graphdb.py": 1887,
   "src/gestaltdb/kvstores.py": 2202,
   "src/gestaltdb/query_engine/cypher/parser.py": 1626,
   "src/gestaltdb/query_engine/cypher/runtime.py": 1872,

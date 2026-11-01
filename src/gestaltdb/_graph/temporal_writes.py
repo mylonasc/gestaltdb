@@ -32,6 +32,7 @@ from ..versioning import (
     TemporalCommit,
     TemporalCorruptionError,
     TemporalVersionError,
+    TemporalVersion,
     VersionOperation,
     commit_descriptor_bytes,
     encode_version_envelope,
@@ -165,7 +166,7 @@ class TemporalCommitter:
             if normalized_supersedes not in seen_supersedes:
                 seen_supersedes.add(normalized_supersedes)
                 distinct_supersedes.append(normalized_supersedes)
-        supersession_targets: dict[str, object] = {}
+        supersession_targets: dict[str, TemporalVersion | None] = {}
         if distinct_supersedes and pre_horizon > 0:
             supersession_targets = self.reader.get_versions_through_batch(
                 distinct_supersedes, pre_horizon

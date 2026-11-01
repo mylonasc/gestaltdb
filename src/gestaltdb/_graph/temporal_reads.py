@@ -5,11 +5,9 @@ backend store, the entity serializer, the handle-owned commit cache, and
 the sequence/state/stale key configuration. It performs no writes and never
 touches mutable graph records, indexes, or the writer guard.
 
-The commit cache dict is owned by the calling ``GraphDB`` handle and shared
-by design across transaction/snapshot scopes: entries are keyed by store
-identity, so a snapshot-bound reader never confuses another scope's
-records. ``GraphDB`` keeps thin wrappers (including the private names
-reasoning adapters rely on) and constructs a reader bound to its own scope.
+The commit cache belongs to one engine scope. Transaction/snapshot children
+start fresh; entries also authenticate the exact store and entity decoder.
+Mutable hits always recheck descriptors, markers, envelopes and targets.
 """
 
 from __future__ import annotations
@@ -60,11 +58,15 @@ from .entities import Edge, GraphEntityDictSerializer, Node
 from .temporal_types import CommitCache, PointInput, TemporalReadSource, VersionFields, VersionT
 
 
+_COMMIT_CACHE_MAX_ENTRIES = 256
+_COMMIT_CACHE_MAX_BYTES = 64 * 1024 * 1024
+
+
 def _commit_cache_bytes(cache: CommitCache) -> int:
-    """Return stored descriptor plus retained record sizes (decoded commits share that floor)."""
+    """Serialized-size accounting, not a bound on decoded Python heap or RSS."""
     total = 0
-    for _, descriptor_payload, sizes, _ in cache.values():
-        total += len(descriptor_payload) + sum(sizes)
+    for _, descriptor_payload, sizes, _, _, digests in cache.values():
+        total += len(descriptor_payload) + sum(sizes) + sum(map(len, digests))
     return total
 
 
@@ -199,10 +201,23 @@ class TemporalReader:
     def get_commit_cached(self, commit_id: int, *,
                           _validate_supersession: bool = True) -> TemporalCommit | None:
         """Return a cached validated commit, rechecking store markers."""
+        try:
+            return self._get_commit_cached(commit_id, _validate_supersession=_validate_supersession)
+        except BaseException:
+            # Failed authentication, backend errors and interrupted reads must
+            # not leave reusable admission behind in this scope.
+            self.commit_cache.clear()
+            raise
+
+    def _get_commit_cached(self, commit_id: int, *,
+                           _validate_supersession: bool) -> TemporalCommit | None:
         if isinstance(commit_id, bool) or not isinstance(commit_id, int) or commit_id < 1:
             raise ValueError("commit_id must be a positive integer")
         cache_key = (id(self.store), commit_id, bool(_validate_supersession))
         cached = self.commit_cache.get(cache_key)
+        if cached is not None and cached[4] is not self.entity_serializer:
+            self.commit_cache.pop(cache_key, None)
+            cached = None
         identity = getattr(self.store, "snapshot_identity", None)
         if (
             cached is not None
@@ -223,18 +238,12 @@ class TemporalReader:
             # Descriptor unchanged; verify live envelopes against its digests
             # without retaining them. Cached versions stay valid; only
             # supersession targets can change on mutable stores.
-            try:
-                hit_catalog = json.loads(descriptor_payload.decode("utf-8"))
-                hit_digests = hit_catalog.get("record_digests")
-                if not isinstance(hit_digests, list) or not hit_digests:
-                    raise ValueError
-            except (UnicodeDecodeError, json.JSONDecodeError, ValueError, AttributeError) as exc:
-                raise TemporalCorruptionError("invalid temporal commit descriptor") from exc
-            if len(hit_digests) != len(cached[2]):
-                raise TemporalCorruptionError("temporal commit record is missing or corrupt")
-            for ordinal, expected_digest in enumerate(hit_digests):
+            # Digests were validated with this exact descriptor on admission.
+            # Retaining their compact binary form avoids reparsing the full
+            # JSON catalog on every target lookup; live records still hash.
+            for ordinal, expected_digest in enumerate(cached[5]):
                 envelope = self.store.get_metadata(temporal_record_key(commit_id, ordinal))
-                if envelope is None or hashlib.sha256(envelope).hexdigest() != expected_digest:
+                if envelope is None or hashlib.sha256(envelope).digest() != expected_digest:
                     raise TemporalCorruptionError("temporal commit record is missing or corrupt")
             cached_commit = cached[3]
             if not _validate_supersession or not any(
@@ -333,16 +342,21 @@ class TemporalReader:
                     if type(target) is not type(version) or target.logical_id != version.logical_id:
                         raise TemporalCorruptionError("temporal supersession kind or logical ID mismatch")
         commit = TemporalCommit(commit_id, system_time, metadata, tuple(versions))
-        # Bounded reuse: entries and bytes. Commits are immutable so eviction
-        # only costs a future re-decode, never correctness. Bytes cover the
-        # stored descriptor plus retained record sizes; decoded commits share
-        # that floor without retaining full envelopes.
-        if len(self.commit_cache) >= 256 or _commit_cache_bytes(self.commit_cache) >= 64 * 1024 * 1024:
-            # Drop the oldest half; commits are immutable so eviction only
-            # costs a future re-decode, never correctness.
-            for old_key in list(self.commit_cache)[:128]:
-                del self.commit_cache[old_key]
-        self.commit_cache[cache_key] = (self.store, descriptor_payload, tuple(sizes), commit)
+        # Include incoming occupancy and replacement before admission. A
+        # single oversized commit is returned normally but never retained.
+        self.commit_cache.pop(cache_key, None)
+        incoming_bytes = len(descriptor_payload) + sum(sizes) + 32 * len(record_digests)
+        if incoming_bytes <= _COMMIT_CACHE_MAX_BYTES:
+            occupied = _commit_cache_bytes(self.commit_cache)
+            while self.commit_cache and (
+                len(self.commit_cache) >= _COMMIT_CACHE_MAX_ENTRIES
+                or occupied + incoming_bytes > _COMMIT_CACHE_MAX_BYTES
+            ):
+                oldest = self.commit_cache.pop(next(iter(self.commit_cache)))
+                occupied -= len(oldest[1]) + sum(oldest[2]) + sum(map(len, oldest[5]))
+            self.commit_cache[cache_key] = (
+                self.store, descriptor_payload, tuple(sizes), commit, self.entity_serializer,
+                tuple(bytes.fromhex(digest) for digest in record_digests))
         return commit
 
     def iter_commits(self, *, through_commit: int | None = None) -> Iterator[TemporalCommit]:
@@ -408,6 +422,15 @@ class TemporalReader:
         same-batch or future records: ``through_commit`` must be captured
         before the batch's own commit is published.
         """
+        try:
+            return self._get_versions_through_batch(version_ids, through_commit)
+        except BaseException:
+            self.commit_cache.clear()
+            raise
+
+    def _get_versions_through_batch(
+        self, version_ids: object, through_commit: int
+    ) -> dict[str, TemporalVersion | None]:
         if isinstance(through_commit, bool) or not isinstance(through_commit, int):
             raise ValueError("through_commit must be a non-negative integer")
         if through_commit < 0:
@@ -426,6 +449,10 @@ class TemporalReader:
         generation = self._usable_version_index_generation(through_commit)
         if generation is not None:
             missing: set[str] = set()
+            # One complete commit authentication covers all of its requested
+            # target versions for this batch. This map never escapes the call;
+            # a later invocation must recheck mutable envelopes and markers.
+            authenticated_commits: dict[int, TemporalCommit | None] = {}
             for value in distinct:
                 locators = list(
                     self.store.iter_index_prefix(
@@ -448,7 +475,10 @@ class TemporalReader:
                 if commit_id < 1 or commit_id > through_commit:
                     missing.add(value)
                     continue
-                commit = self.get_commit_cached(commit_id, _validate_supersession=False)
+                if commit_id not in authenticated_commits:
+                    authenticated_commits[commit_id] = self.get_commit_cached(
+                        commit_id, _validate_supersession=False)
+                commit = authenticated_commits[commit_id]
                 if commit is None:
                     missing.add(value)
                     continue

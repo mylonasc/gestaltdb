@@ -93,7 +93,7 @@ class TemporalEngine:
     # -- scope binding ----------------------------------------------------
 
     def rebound(self, store: KVStore, *, store_path: str | Path | None = None) -> TemporalEngine:
-        """Bind a sibling engine to a new store, sharing cache and coordination."""
+        """Bind a sibling engine, sharing coordination but not store admission."""
         return TemporalEngine(
             store,
             self._entity_serializer,
@@ -102,7 +102,7 @@ class TemporalEngine:
             lock_manager=self._lock_manager,
             write_lock=self._write_lock,
             transaction_bound=self._transaction_bound,
-            commit_cache=self._commit_cache,
+            commit_cache={},
             state_key=self._state_key,
             stale_key=self._stale_key,
             sequence_key=self._sequence_key,
@@ -133,7 +133,7 @@ class TemporalEngine:
 
     def invalidate_commit_cache_for_store(self, store: KVStore) -> None:
         """Drop cached commits for one store object; preserves other scopes."""
-        for key, (_, cached_store, _, _) in list(self._commit_cache.items()):
+        for key, (cached_store, _, _, _, _, _) in list(self._commit_cache.items()):
             if cached_store is store or key[0] == id(store):
                 self._commit_cache.pop(key, None)
 

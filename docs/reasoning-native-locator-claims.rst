@@ -8,6 +8,26 @@ including complete correction/retraction histories, under the same point-view
 policy, evidence and logical context contract. Ordinary extraction and the
 full-record native source remain unchanged; there is no automatic selection.
 
+Authentication reuse and cold verification (HSA-03)
+--------------------------------------------------
+
+Commit decode reuse is scoped to the exact store and entity decoder. New
+transaction/snapshot scopes start with empty caches; close, store replacement,
+scope exit and failed/interrupted commit reads discard scoped admission. At
+most 256 entries and 64 MiB of descriptor, digest and serialized-record-size accounting
+are admitted, including the incoming entry. Oversized commits remain readable
+but are not cached. This accounting is **not** a decoded Python heap or RSS
+bound. Full record envelopes are not retained alongside decoded versions.
+
+On mutable stores, warm hits still reread the descriptor, visibility marker
+and every record envelope, verify existing SHA-256 digests, and authenticate
+supersession targets. Reusing decoded values does not authorize skipping those
+checks. Work remains linear in the authenticated envelopes (including target
+commits); cold reads additionally decode them. Only verifiable pinned backend
+snapshots retain the existing no-I/O warm path. A temporal horizon or writer
+lock alone does not supply that guarantee. No new digest, persistent checkpoint,
+on-disk format or publication authority is introduced.
+
 .. code-block:: python
 
    from pathlib import Path
