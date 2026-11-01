@@ -4,6 +4,7 @@ Prefix pushdown reduces native row transfer, not complete catalog authentication
 The default full-record and ordinary sources remain unchanged.
 """
 
+from bisect import bisect_right
 from dataclasses import dataclass
 
 from ..._graph.temporal_indexes import (
@@ -16,6 +17,7 @@ from ...readview import ProvenanceMismatchError
 from ...versioning import ClaimVersion, VersionOperation, canonical_json_bytes
 from ..model import ReasoningError, ReasoningLimitError, check_cancelled
 from .native import NativeKeyScan
+from .native_batching import MAX_NATIVE_BATCH_ITEMS, NativePointScan, NativeRangeScan, require_native_batching
 from .native_claims import NativeClaimLimits, PinnedNativeClaimSource
 
 
@@ -24,6 +26,8 @@ class NativeLocatorLimits(NativeClaimLimits):
     """Cumulative native index rows plus an independent full-catalog record cap."""
 
     max_authenticated_records: int = 1_000_000
+    max_point_rows: int = 1_000_000
+    max_point_bytes: int = 64 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -35,6 +39,9 @@ class NativeLocatorProfile:
     resolved_claims: int
     scans: int
     scan_mode: str = "native-dimension-intersection+logical-history; full-catalog-authentication"
+    point_rows: int = 0
+    point_bytes: int = 0
+    point_fetches: int = 0
 
 
 class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
@@ -49,10 +56,16 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
 
     _physical_pushdown = "native-world/predicate/subject-prefixes; object/policy-post-selection"
 
-    def __init__(self, view, *, native_limits=NativeLocatorLimits(), **kwargs):
+    def __init__(self, view, *, native_limits=NativeLocatorLimits(), history_batch_size=None, **kwargs):
         if not isinstance(native_limits, NativeLocatorLimits):
             raise ReasoningError("native_limits must be NativeLocatorLimits")
         super().__init__(view, native_limits=native_limits, **kwargs)
+        if history_batch_size is not None:
+            if (isinstance(history_batch_size, bool) or not isinstance(history_batch_size, int)
+                    or not 1 <= history_batch_size <= MAX_NATIVE_BATCH_ITEMS):
+                raise ReasoningError("history_batch_size must be 1..65536 or None")
+            require_native_batching(self._native_store)
+        self._history_batch_size = history_batch_size
 
     def _read_winners(self, cancel):
         temporal, limits = self._graph.temporal, self._native_limits
@@ -85,27 +98,35 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
                         if len(all_winners) > limits.max_logical_claims:
                             raise ReasoningLimitError("native locator extraction exceeded max_logical_claims")
 
-        raw_rows = scans = materialized = 0
+        raw_rows = scans = materialized = point_rows = point_bytes = point_fetches = 0
         point = temporal_instant_index_value(self._time)
         snapshot = self._native_handle.create_snapshot()
         try:
-            def scan_index(base_name, parts, remaining, consume):
+            def scan_index(base_name, parts, remaining, consume, *, ranges=None):
                 nonlocal raw_rows, scans
                 check_cancelled(cancel)
                 self._check_binding()
-                name = temporal.index_name(base_name, generation)
-                prefix = _range_index_prefix(name, parts)
-                # Fixed-width sortable start, followed by 0x1f and locator.
-                # Include every start equal to the point, but no later start.
-                stop = prefix + point + b"\x20"
+                if ranges is None:
+                    name = temporal.index_name(base_name, generation)
+                    prefix = _range_index_prefix(name, parts)
+                    # Include every start equal to the point, but no later start.
+                    stop = prefix + point + b"\x20"
+                    bounds = ((prefix, stop),)
+                    scan = NativeKeyScan(self._native_store, prefix=prefix, stop=stop, snapshot=snapshot,
+                        batch_rows=limits.batch_rows, max_batch_bytes=limits.max_batch_bytes,
+                        max_rows=limits.max_raw_rows)
+                else:
+                    bounds = tuple(sorted(ranges))
+                    scan = NativeRangeScan(self._native_store, ranges=bounds, snapshot=snapshot,
+                        batch_rows=limits.batch_rows, max_batch_bytes=limits.max_batch_bytes,
+                        max_rows=limits.max_raw_rows)
+                starts = [start for start, _ in bounds]
                 # The caller transfers ownership of this one-use membership
                 # map. Consume verified versions directly instead of copying
                 # the map and building an intermediate full result list.
                 previous = None
                 scans += 1
-                with NativeKeyScan(self._native_store, prefix=prefix, stop=stop, snapshot=snapshot,
-                        batch_rows=limits.batch_rows, max_batch_bytes=limits.max_batch_bytes,
-                        max_rows=limits.max_raw_rows) as scan:
+                with scan:
                     for batch in scan:
                         for key, value in batch.rows:
                             check_cancelled(cancel)
@@ -113,7 +134,9 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
                             raw_rows += 1
                             if raw_rows > limits.max_raw_rows:
                                 raise ReasoningLimitError("native locator extraction exceeded max_raw_rows")
-                            if not prefix <= key < stop or not key.startswith(prefix) or (previous is not None and key <= previous):
+                            interval = bisect_right(starts, key) - 1
+                            if (interval < 0 or not bounds[interval][0] <= key < bounds[interval][1]
+                                    or (previous is not None and key <= previous)):
                                 raise ProvenanceMismatchError("native locator keys escaped bounds or are unordered/duplicated")
                             previous = key
                             try:
@@ -167,7 +190,82 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
                 ids.intersection_update(dimension_ids("subject", self._request.subject))
             selected = {}
             logical_name = temporal.index_name(_TEMPORAL_LOGICAL_VALID_INDEX, generation)
-            for logical_id in sorted(ids):
+            ordered_ids = sorted(ids)
+            if self._history_batch_size is not None:
+                batch_size = self._history_batch_size
+                for start in range(0, len(ordered_ids), batch_size):
+                    check_cancelled(cancel)
+                    logical_ids = ordered_ids[start:start + batch_size]
+                    expected, ranges, winners, pending = {}, [], {}, []
+                    for logical_id in logical_ids:
+                        check_cancelled(cancel)
+                        self._check_binding()
+                        parts = [b"c", logical_id.encode("utf-8")]
+                        prefix = _range_index_prefix(logical_name, parts)
+                        ranges.append((prefix, prefix + point + b"\x20"))
+                        for version in histories[logical_id]:
+                            check_cancelled(cancel)
+                            if version.valid.start <= self._time:
+                                loc = temporal.locator(version.commit_id, version.commit_ordinal)
+                                expected[_range_index_key(logical_name, parts,
+                                    temporal_instant_index_value(version.valid.start), loc)] = loc
+
+                    def fetch_points():
+                        nonlocal point_rows, point_bytes, point_fetches, materialized
+                        if not pending:
+                            return
+                        check_cancelled(cancel)
+                        self._check_binding()
+                        keys = []
+                        for version in pending:
+                            check_cancelled(cancel)
+                            keys.append(self._native_store._key(b"M", temporal.record_key(
+                                version.commit_id, version.commit_ordinal)))
+                        point_fetches += 1
+                        ordinal = 0
+                        with NativePointScan(self._native_store, keys=keys, snapshot=snapshot,
+                                batch_rows=limits.batch_rows, max_batch_bytes=limits.max_batch_bytes,
+                                max_rows=limits.max_point_rows) as points:
+                            for batch in points:
+                                for key, payload in batch.rows:
+                                    check_cancelled(cancel)
+                                    self._check_binding()
+                                    point_rows += 1
+                                    point_bytes += len(key) + len(payload)
+                                    if point_rows > limits.max_point_rows:
+                                        raise ReasoningLimitError("native locator extraction exceeded max_point_rows")
+                                    if point_bytes > limits.max_point_bytes:
+                                        raise ReasoningLimitError("native locator extraction exceeded max_point_bytes")
+                                    if ordinal >= len(keys) or key != keys[ordinal]:
+                                        raise ProvenanceMismatchError("native point fetch keys differ from requested order")
+                                    version = pending[ordinal]
+                                    if temporal.decode_version(payload) != version:
+                                        raise ProvenanceMismatchError("batched point fetch differs from authenticated version")
+                                    ordinal += 1
+                                    materialized += 1
+                                    winner = winners.get(version.logical_id)
+                                    if version.valid.contains(self._time) and (winner is None or
+                                            (version.commit_id, version.commit_ordinal) > (winner.commit_id, winner.commit_ordinal)):
+                                        winners[version.logical_id] = version
+                        if ordinal != len(keys):
+                            raise ProvenanceMismatchError("native point fetch omitted requested records")
+                        pending.clear()
+
+                    def queue_point(version):
+                        pending.append(version)
+                        if len(pending) >= min(limits.batch_rows, MAX_NATIVE_BATCH_ITEMS):
+                            fetch_points()
+
+                    scan_index(_TEMPORAL_LOGICAL_VALID_INDEX, None, expected, queue_point, ranges=ranges)
+                    fetch_points()
+                    for logical_id in logical_ids:
+                        winner = winners.get(logical_id)
+                        if winner != all_winners.get(logical_id):
+                            raise ProvenanceMismatchError("batched logical history differs from authenticated winner")
+                        if winner is not None and winner.operation is not VersionOperation.RETRACT:
+                            selected[logical_id] = winner
+                ordered_ids = []
+            for logical_id in ordered_ids:
                 check_cancelled(cancel)
                 parts = [b"c", logical_id.encode("utf-8")]
                 expected = {
@@ -226,4 +324,7 @@ class PinnedNativeLocatorClaimSource(PinnedNativeClaimSource):
         self.verify_source()
         check_cancelled(cancel)
         return tuple(selected[key] for key in sorted(selected)), NativeLocatorProfile(
-            authenticated_records, raw_rows, len(ids), materialized, len(selected), scans)
+            authenticated_records, raw_rows, len(ids), materialized, len(selected), scans,
+            scan_mode=("native-dimensions+batched-logical-ranges+points; full-catalog-authentication"
+                       if self._history_batch_size is not None else NativeLocatorProfile.scan_mode),
+            point_rows=point_rows, point_bytes=point_bytes, point_fetches=point_fetches)
