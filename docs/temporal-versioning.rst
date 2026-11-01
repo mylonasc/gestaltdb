@@ -487,7 +487,7 @@ are published in one temporal commit before the rebuildable dependency index;
 retrying after interruption is therefore idempotent. A bound failure publishes
 no maintenance commit.
 
-``explain_claim`` resolves the claim at both valid and system time and returns a
+``graph.rules.explain`` resolves the claim at both valid and system time and returns a
 ``ClaimExplanation`` graph. Claim nodes contain exact immutable
 ``ClaimVersion`` values, rule nodes contain exact ``RuleVersion`` values,
 absence nodes contain ``RuleAbsence`` evidence, and

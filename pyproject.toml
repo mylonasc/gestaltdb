@@ -55,6 +55,20 @@ python_version = "3.10"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+module = [
+    "gestaltdb.agent_docs",
+    "gestaltdb.current",
+    "gestaltdb.sampling.contexts",
+    "gestaltdb.sampling.negatives",
+    "gestaltdb.sampling.walk_policy",
+    "gestaltdb.sampling.walk_schema",
+]
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
 module = ["gestaltdb.sampling._arrays", "gestaltdb.sampling.adjacency", "gestaltdb.sampling.feeder", "gestaltdb.sampling.positive_membership"]
 check_untyped_defs = true
 disallow_untyped_defs = true

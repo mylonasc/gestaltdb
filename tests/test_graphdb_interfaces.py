@@ -30,6 +30,30 @@ def test_node_serialization_preserves_labels_and_older_payloads_default_empty_la
     assert Node.from_dict({"id": "old", "properties": {}}).labels == ()
 
 
+def test_entity_identity_aliases_and_repr_are_repl_friendly():
+    node = Node("n1", labels=["Person"], properties={"name": "Alice"})
+    edge = Edge("e1", "n1", "n2", properties={"type": "KNOWS"})
+
+    assert node.id == node.get_id == "n1"
+    assert edge.id == edge.get_id == "e1"
+    assert repr(node) == "Node(id='n1', labels=['Person'], properties=['name'])"
+    assert repr(edge) == "Edge(id='e1', source='n1', target='n2', type='KNOWS')"
+
+
+def test_graphdb_context_manager_closes_without_suppressing(graph_db, monkeypatch):
+    calls = []
+    monkeypatch.setattr(graph_db, "close", lambda: calls.append("closed"))
+
+    with graph_db as entered:
+        assert entered is graph_db
+    assert calls == ["closed"]
+
+    with pytest.raises(ValueError, match="boom"):
+        with graph_db:
+            raise ValueError("boom")
+    assert calls == ["closed", "closed"]
+
+
 def test_graphdb_key_normalizers_handle_bytes_and_strings(graph_db):
     assert graph_db.node_key_to_bytes(b"n1") == b"n1"
     assert graph_db.node_key_to_bytes("n1") == b"n1"
@@ -500,8 +524,7 @@ def test_range_query_nodes_uses_store_range_iter(graph_db):
     try:
         graph_db.store.get_node = lambda node_id: original_store.get_node(
             node_id.encode("utf-8") if isinstance(node_id, str) else node_id)
-        with __import__("warnings").catch_warnings():
-            __import__("warnings").simplefilter("ignore", DeprecationWarning)
+        with pytest.warns(DeprecationWarning, match="nodes_by_property_range"):
             assert [node.get_id for node in graph_db.range_query_nodes("name", "A", "Z")] == ["n1"]
     finally:
         graph_db.store = original_store

@@ -1297,7 +1297,7 @@ class GraphDB:
         return self.edges.get(edge_id)
 
     # --- Legacy example range query (keeps its exact raw key format) ---
-    def range_query_nodes(self, property_name: str, start_val, end_val):
+    def range_query_nodes(self, property_name: str, start_val, end_val) -> Iterator[Node | None]:
         """Deprecated; use ``nodes_by_property_range`` instead."""
         import warnings
         warnings.warn("range_query_nodes is deprecated; use nodes_by_property_range instead", DeprecationWarning, stacklevel=2)
@@ -1882,7 +1882,7 @@ class GraphDB:
                 tx_store.commit()
                 self._typed_adjacency_count_cache.clear()
 
-    def close(self):
+    def close(self) -> None:
         """Close the underlying key-value store.
 
         Examples:
@@ -1893,5 +1893,5 @@ class GraphDB:
     def __enter__(self) -> "GraphDB":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: Any) -> None:
         self.close()

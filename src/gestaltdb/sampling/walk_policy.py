@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
+from ._arrays import Array
+from ..temporal import TemporalContext
 from .validation import _validate_count
 from .walks import RandomWalkBatch
 from .walk_schema import WalkSchema
@@ -63,19 +66,19 @@ class WalkPolicy:
 
     non_backtracking: bool = False
     avoid_recent: int = 0
-    avoidance_exhaustion: str = "terminate"
-    strategy: str = "uniform"
+    avoidance_exhaustion: Literal["terminate", "restart", "relax"] = "terminate"
+    strategy: Literal["uniform", "weighted"] = "uniform"
     schema: WalkSchema | None = None
     chronology: TemporalWalkPolicy | None = None
-    transition_unit: str = "edge"
-    neighbor_weight_aggregation: str = "sum"
+    transition_unit: Literal["edge", "neighbor"] = "edge"
+    neighbor_weight_aggregation: Literal["sum", "mean", "max"] = "sum"
     node2vec: bool = False
     return_factor: float = 1.0
     inout_factor: float = 1.0
-    bias_adjacency: str = "snapshot"
+    bias_adjacency: Literal["snapshot", "eligible"] = "snapshot"
     weighted_first_step: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not isinstance(self.non_backtracking, bool):
             raise ValueError("non_backtracking must be a boolean")
         _validate_count(self.avoid_recent, "avoid_recent")
@@ -110,9 +113,11 @@ class WalkPolicy:
 
 
 def sample_policy_walks(
-    engine: SamplerEngine, start_nodes, walk_length: int, *,
-    policy: WalkPolicy | None = None, direction: str = "out", relations=None,
-    temporal=None, window_policy: str = "overlap", dead_end: str = "terminate",
+    engine: SamplerEngine, start_nodes: Sequence[int] | Array, walk_length: int, *,
+    policy: WalkPolicy | None = None, direction: str = "out",
+    relations: Sequence[int] | Array | None = None,
+    temporal: TemporalContext | None = None, window_policy: str = "overlap",
+    dead_end: Literal["terminate", "restart"] = "terminate",
     restart_probability: float = 0.0,
 ) -> RandomWalkBatch:
     """Sample walks under a :class:`WalkPolicy` (all IDs are compact).
@@ -163,11 +168,11 @@ def sample_policy_walks(
                     feasible, candidate_times, time_weights = chronology.candidates(
                         engine.snapshot, candidates, clock, temporal,
                     )
-                    candidates, endpoints, next_states, schema_weights, candidate_times = (
-                        values[feasible] for values in (
-                            candidates, endpoints, next_states, schema_weights + time_weights, candidate_times
-                        )
-                    )
+                    candidates = candidates[feasible]
+                    endpoints = endpoints[feasible]
+                    next_states = next_states[feasible]
+                    schema_weights = (schema_weights + time_weights)[feasible]
+                    candidate_times = candidate_times[feasible]
                 action = dead_end
                 if candidates.size:
                     forbidden = set(list(history)[-policy.avoid_recent:]) if policy.avoid_recent else set()
@@ -177,9 +182,9 @@ def sample_policy_walks(
                         allowed = ~np.isin(endpoints, list(forbidden))
                         if np.any(allowed):
                             candidates = candidates[allowed]
-                            endpoints, next_states, schema_weights = (
-                                values[allowed] for values in (endpoints, next_states, schema_weights)
-                            )
+                            endpoints = endpoints[allowed]
+                            next_states = next_states[allowed]
+                            schema_weights = schema_weights[allowed]
                             if candidate_times is not None:
                                 candidate_times = candidate_times[allowed]
                         elif policy.avoidance_exhaustion != "relax":
@@ -214,6 +219,7 @@ def sample_policy_walks(
                     previous, current = current, int(endpoints[chosen])
                     state, position = int(next_states[chosen]), position + 1
                     if chronology is not None:
+                        assert candidate_times is not None and times is not None
                         clock = int(candidate_times[chosen])
                         times[row, step] = clock
                     history.append(current)
@@ -232,6 +238,7 @@ def sample_policy_walks(
             nodes[row, step + 1] = current
             lengths[row] = step + 1
     if chronology is not None:
+        assert times is not None and engine.snapshot.edge_version_ids is not None
         versions = np.full(edges.shape, None, dtype=object)
         mask = edges >= 0
         versions[mask] = engine.snapshot.edge_version_ids[edges[mask]]

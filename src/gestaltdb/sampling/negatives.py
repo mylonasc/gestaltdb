@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from numbers import Real
+from typing import Literal
 
 
 
@@ -54,23 +55,23 @@ class HardNegativeConfig:
     """
 
     negatives_per_positive: int = 1
-    source: str = "random"
+    source: Literal["random", "non_visited_relation_neighbors", "context_relation_neighbors"] = "random"
     reject_known_positives: bool = True
     same_endpoint_type: bool = False
     relation_endpoint_types: bool = False
     candidate_fanout: int | None = None
     head_probability: float = 0.5
     max_retries: int = 100
-    temporal_positive_policy: str = "any_time"
-    temporal_positive_window_policy: str = "overlap"
+    temporal_positive_policy: Literal["any_time", "at_positive_time", "window"] = "any_time"
+    temporal_positive_window_policy: Literal["overlap", "contained"] = "overlap"
     temporal_candidate_window_days: float | None = None
     allow_future_candidates: bool = False
-    exhaustion_policy: str = "raise"
+    exhaustion_policy: Literal["raise", "repeat"] = "raise"
     in_batch: bool = False
-    candidate_distribution: str = "uniform"
+    candidate_distribution: Literal["uniform", "degree"] = "uniform"
     degree_exponent: float = 0.75
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.negatives_per_positive < 0:
             raise ValueError("negatives_per_positive must be non-negative")
         if not isinstance(self.in_batch, bool):

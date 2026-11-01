@@ -94,8 +94,9 @@ GraphDB rule catalogs
 ---------------------
 
 The temporal claim rule API supports the same closed-world contract through
-``create_rule(..., not_when=[...], closed_world=[...])``. ``run_rules`` and
-``maintain_truth`` stratify the active catalog, anti-join absence only against
+``graph.rules.create_rule(..., not_when=[...], closed_world=[...])``.
+``graph.rules.run`` and ``graph.rules.maintain`` stratify the active catalog,
+anti-join absence only against
 completed lower strata, and persist grouped absence evidence without creating
 negative claims. This is separate from the generic typed engine above: it
 operates on binary entity-object claims, validity intervals and world-scoped

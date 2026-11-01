@@ -1,6 +1,6 @@
 """Bounded audit export for persisted logical and model-output claims.
 
-This explicit adapter consumes ``GraphDB.explain_claim``; it is not an
+This explicit adapter consumes ``graph.rules.explain``; it is not an
 independent proof checker, a probability calculus, or a model explainer.
 """
 

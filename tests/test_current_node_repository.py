@@ -34,8 +34,8 @@ def test_standalone_repository_reads_and_writes_without_facade(graph, monkeypatc
     monkeypatch.setattr(GraphDB, "get_node", forbidden)
     repository.put(Node("a", labels=["Old"], properties={"name": "before"}))
     repository.put_many([Node("a", labels=["New"], properties={"name": "after"}), Node("b")])
-    assert repository.get(b"a").properties == {"name": "after"}
-    assert repository.get_many([b"a", b"missing"])[1] is None
+    assert repository.get("a").properties == {"name": "after"}
+    assert repository.get_many(["a", b"missing"])[1] is None
     assert set(repository.keys()) == {b"a", b"b"}
     assert list(graph.iter_node_ids_by_label("Old")) == []
     assert list(graph.iter_node_ids_by_label("New")) == [b"a"]
@@ -52,7 +52,7 @@ def test_facade_node_calls_do_not_construct_transaction_graphs(graph, monkeypatc
     monkeypatch.setattr(GraphDB, "transaction", forbidden)
     graph.put_node(Node("a"))
     graph.put_nodes([Node("b")])
-    assert graph.get_node(b"a").get_id == "a"
+    assert graph.get_node("a").get_id == "a"
     graph.delete_node("a")
     assert graph.get_node(b"a") is None
 
