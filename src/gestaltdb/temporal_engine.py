@@ -127,6 +127,16 @@ class TemporalEngine:
         """Whether this scope runs inside a caller-owned backend transaction."""
         return self._transaction_bound
 
+    def invalidate_commit_cache(self) -> None:
+        """Drop all cached commits; used on close/rebinding/error/cancellation."""
+        self._commit_cache.clear()
+
+    def invalidate_commit_cache_for_store(self, store: KVStore) -> None:
+        """Drop cached commits for one store object; preserves other scopes."""
+        for key, (_, cached_store, _, _) in list(self._commit_cache.items()):
+            if cached_store is store or key[0] == id(store):
+                self._commit_cache.pop(key, None)
+
     def reader(self) -> _temporal_reads.TemporalReader:
         """Return the store-bound historical read capability for this scope."""
         return _temporal_reads.TemporalReader(

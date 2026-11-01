@@ -60,6 +60,14 @@ from .entities import Edge, GraphEntityDictSerializer, Node
 from .temporal_types import CommitCache, PointInput, TemporalReadSource, VersionFields, VersionT
 
 
+def _commit_cache_bytes(cache: CommitCache) -> int:
+    """Return stored descriptor plus envelope bytes (decoded commits share that floor)."""
+    total = 0
+    for _, descriptor_payload, envelopes, _ in cache.values():
+        total += len(descriptor_payload) + sum(len(envelope) for envelope in envelopes)
+    return total
+
+
 @dataclass
 class TemporalReader:
     """Store-bound historical read capability for one graph scope."""
@@ -196,7 +204,13 @@ class TemporalReader:
         cache_key = (id(self.store), commit_id, bool(_validate_supersession))
         cached = self.commit_cache.get(cache_key)
         identity = getattr(self.store, "snapshot_identity", None)
-        if cached is not None and identity is not None and identity.verifiable and identity.sequence is not None:
+        if (
+            cached is not None
+            and cached[0] is self.store
+            and identity is not None
+            and identity.verifiable
+            and identity.sequence is not None
+        ):
             return cached[3]
         descriptor_payload = self.store.get_metadata(temporal_commit_key(commit_id))
         marker = self.store.get_metadata(temporal_visible_key(commit_id))
@@ -205,7 +219,7 @@ class TemporalReader:
             return None
         if descriptor_payload is None or marker != hashlib.sha256(descriptor_payload).digest():
             raise TemporalCorruptionError("temporal commit marker does not match its descriptor")
-        if cached is not None and cached[1] == descriptor_payload:
+        if cached is not None and cached[0] is self.store and cached[1] == descriptor_payload:
             cached_envelopes = tuple(self.store.get_metadata(temporal_record_key(commit_id, ordinal))
                               for ordinal in range(len(cached[2])))
             if cached_envelopes != cached[2]:
@@ -288,7 +302,10 @@ class TemporalReader:
                     if type(target) is not type(version) or target.logical_id != version.logical_id:
                         raise TemporalCorruptionError("temporal supersession kind or logical ID mismatch")
         commit = TemporalCommit(commit_id, system_time, metadata, tuple(versions))
-        if len(self.commit_cache) >= 256:
+        # Bounded reuse: entries and bytes. Commits are immutable so eviction
+        # only costs a future re-decode, never correctness. Bytes cover the
+        # stored descriptor plus envelopes; decoded commits share that floor.
+        if len(self.commit_cache) >= 256 or _commit_cache_bytes(self.commit_cache) >= 64 * 1024 * 1024:
             # Drop the oldest half; commits are immutable so eviction only
             # costs a future re-decode, never correctness.
             for old_key in list(self.commit_cache)[:128]:

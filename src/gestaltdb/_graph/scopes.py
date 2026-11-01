@@ -80,5 +80,8 @@ def configure_snapshot_child(parent: GraphDB, child: GraphDB) -> None:
     child._edge_repository = None
     child.temporal = child.temporal.rebound(
         child.store, store_path=child._store_path)
+    # Snapshot scopes get a fresh commit cache (like transactions); the live
+    # parent's entries stay warm and snapshot lookups never poison them.
+    child.temporal._commit_cache = {}
     child.epistemic = child.epistemic.rebound(child.temporal)
     child.rules = child.rules.rebound(child.temporal)
