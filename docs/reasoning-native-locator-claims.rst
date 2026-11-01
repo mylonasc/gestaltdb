@@ -130,6 +130,36 @@ actual output evidence. These counters are neither mutually interchangeable
 nor an instrumented total of source/engine work. Bytes copied and RSS are not
 inferred from them.
 
+Actual-adapter measurement harness
+----------------------------------
+
+``benchmarks.reasoning_locator_pipeline`` measures this production adapter as
+``native-authenticated-locator``, separately from ``native-full-record`` and
+``ordinary``. It never invokes the assertion-only benchmark decoder. For example:
+
+.. code-block:: sh
+
+   uv run --extra rocksdb --extra arrow python -m benchmarks.reasoning_locator_pipeline --rows 1000 --times 10 30 50 70 90 --repeats 1 --output /tmp/opencode/locator-smoke.json
+   uv run --extra rocksdb --extra arrow python -m benchmarks.reasoning_locator_pipeline --rows 100000 --times 30 50 --repeats 3 --timeout 600 --output /tmp/opencode/locator-100k.json
+
+The fixture has variable bounded entity IDs and compressible provenance padding,
+one correction per five assertions over ``[20, 80)``, and one retraction per seven
+over ``[40, 60)``. Named ``all``, ``predicate`` (one quarter of assertions) and
+``subject`` (one logical history, possibly retracted) selections run at explicit
+valid-time points. Exact fact/version-ID evidence is checked against an independent
+winner oracle assembled from write receipts, not from the extraction being timed.
+No inference, support discovery or publication cost is measured.
+
+Fixture loading is a separate process. Extraction workers include complete view
+and source authentication, native transfer, history point materialization, canonical
+conformance, source closure and final verification in the timed pipeline. Reports
+retain distinct native profiles, source revision/dirty state, harness hashes, runtime
+versions, repeated timing summaries and whole-worker peak RSS. Warmup uses the same
+method; neither fresh workers nor reopened handles imply OS-cold caches. Failed or
+timed-out workers retain stage diagnostics in incomplete reports without quantiles
+or an adoption decision. These commands are a measurement protocol, not evidence
+that a successful 100K locator comparison or speedup has already been obtained.
+
 Lifetime, cancellation and remaining boundaries
 ------------------------------------------------
 

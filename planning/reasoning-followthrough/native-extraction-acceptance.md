@@ -67,6 +67,25 @@ native reports are not relabelled measurements of this source. Original scale
 evidence remains valid for the modes it measured; do not infer a universal
 locator acceleration or automatically close #194 from this additive API.
 
+## Actual-adapter benchmark continuation (2026-11-01)
+
+The current issue body targets `main`; the integration-only target at the top of
+this document is historical. New work starts from `3403530` on dedicated branch
+`feature/194-native-locator-benchmarks`.
+
+`benchmarks.reasoning_locator_pipeline` now compares the production historical
+locator adapter, authenticated full-record adapter and ordinary source in separate
+fresh workers. It covers nonselective, predicate and subject requests; correction
+and retraction windows; exact write-receipt-derived fact/version parity; full
+authentication/materialization costs; native work profiles; runtime/source hashes;
+and timing/whole-worker RSS. See `docs/reasoning-native-locator-claims.rst` for commands.
+This is extraction-only, not a relabelling of inference/support/publication results.
+
+Closure still requires staged successful scale/repeat measurements of this actual
+adapter and an explicit adopt/defer/reject review. No production default changes,
+performance adoption or issue closure follows from implementing the harness or a
+small smoke. Preserve all earlier raw/full-record/assertion-only results separately.
+
 ## Re-audit commands
 
 ```sh
