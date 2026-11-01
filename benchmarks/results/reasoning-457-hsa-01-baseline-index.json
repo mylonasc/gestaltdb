@@ -1,0 +1,1192 @@
+{
+  "issue": 457,
+  "parent": 451,
+  "schema_version": 1,
+  "source_revision": "94d53d31092992fdb45ebd2d215197c3e0cd6533",
+  "source_note": "All reports record revision 94d53d3. Later reports record dirty=true because earlier result files were still untracked; every recorded harness hash matches the committed revision, so no measured harness code changed.",
+  "measurement_boundary": "Single observations unless repeats are recorded. Fixture construction and each extraction run in separate processes; OS caches are uncontrolled and runs are not a controlled scaling curve. Counters are inclusive benchmark-only attribution, not RSS, allocation or elapsed-time guarantees. The 100K dense attempt preserves the existing 900-second timeout and records a fixture-construction timeout, not an extraction result.",
+  "reports": [
+    {
+      "file": "reasoning-457-hsa-01-1k-dense-b1000.json",
+      "sha256": "c656a856b6fb5b36660b6d536de4196520dd3e9a969ae1e8d452222e8859f6b9",
+      "command": [
+        "/home/charilaos/.cache/uv/builds-v0/.tmpI7KCSn/bin/python",
+        "-m",
+        "benchmarks.reasoning_locator_pipeline",
+        "--rows",
+        "1000",
+        "--commit-batch",
+        "1000",
+        "--instrument",
+        "--repeats",
+        "1",
+        "--methods",
+        "ordinary",
+        "native-full-record",
+        "native-authenticated-locator",
+        "--selections",
+        "all",
+        "predicate",
+        "subject",
+        "--times",
+        "30",
+        "50",
+        "--caches",
+        "first",
+        "warm",
+        "--output",
+        "benchmarks/results/reasoning-457-hsa-01-1k-dense-b1000.json"
+      ],
+      "revision": "94d53d31092992fdb45ebd2d215197c3e0cd6533",
+      "dirty": false,
+      "complete": true,
+      "samples": 36,
+      "groups": [
+        "native-authenticated-locator/all/30/first",
+        "native-authenticated-locator/all/30/warm",
+        "native-authenticated-locator/all/50/first",
+        "native-authenticated-locator/all/50/warm",
+        "native-authenticated-locator/predicate/30/first",
+        "native-authenticated-locator/predicate/30/warm",
+        "native-authenticated-locator/predicate/50/first",
+        "native-authenticated-locator/predicate/50/warm",
+        "native-authenticated-locator/subject/30/first",
+        "native-authenticated-locator/subject/30/warm",
+        "native-authenticated-locator/subject/50/first",
+        "native-authenticated-locator/subject/50/warm",
+        "native-full-record/all/30/first",
+        "native-full-record/all/30/warm",
+        "native-full-record/all/50/first",
+        "native-full-record/all/50/warm",
+        "native-full-record/predicate/30/first",
+        "native-full-record/predicate/30/warm",
+        "native-full-record/predicate/50/first",
+        "native-full-record/predicate/50/warm",
+        "native-full-record/subject/30/first",
+        "native-full-record/subject/30/warm",
+        "native-full-record/subject/50/first",
+        "native-full-record/subject/50/warm",
+        "ordinary/all/30/first",
+        "ordinary/all/30/warm",
+        "ordinary/all/50/first",
+        "ordinary/all/50/warm",
+        "ordinary/predicate/30/first",
+        "ordinary/predicate/30/warm",
+        "ordinary/predicate/50/first",
+        "ordinary/predicate/50/warm",
+        "ordinary/subject/30/first",
+        "ordinary/subject/30/warm",
+        "ordinary/subject/50/first",
+        "ordinary/subject/50/warm"
+      ],
+      "repeats": 1,
+      "rows": 1000,
+      "history_rows": null,
+      "commit_batch": 1000,
+      "fixture_status": "ok",
+      "fixture_last_stage": null,
+      "fixture_construction": {
+        "create_s": 0.020375070000227424,
+        "assertions_s": 0.17695436800022435,
+        "corrections_s": 0.6809290070013958,
+        "retractions_s": 0.46791464899979474,
+        "oracle_s": 0.0016479299993079621,
+        "close_s": 0.0003827380005532177,
+        "load_s": 1.3660962089998065,
+        "batches": 1,
+        "timing_boundary": "fixture process only; extraction workers are separate"
+      },
+      "fixture_counters": {
+        "metadata_reads": 704834,
+        "index_scan_openings": 343,
+        "index_rows": 0,
+        "native_scan_openings": 0,
+        "native_batches": 0,
+        "native_rows": 0,
+        "commit_auth_calls": 747,
+        "target_lookup_calls": 686,
+        "target_lookup_commit_visits": 744,
+        "distinct_target_version_ids": 343,
+        "checksum_calls": 3,
+        "checksum_marker_visits": 6,
+        "commit_cache_entries_peak": 5,
+        "native_selected_records_peak": 0
+      },
+      "source_hashes_match_revision": true,
+      "instrumentation_compaction": "per-sample stage counters aggregated into stage_attribution; per-sample metrics, profiles and top-level attribution retained",
+      "representative_attribution": {
+        "group": "native-authenticated-locator/all/50/first",
+        "pipeline_s": {
+          "p50": 3.424912915999812,
+          "p95": 3.424912915999812
+        },
+        "rss_peak_bytes": {
+          "p50": 107253760,
+          "p95": 107253760
+        },
+        "counters": {
+          "metadata_reads": {
+            "p50": 1865320,
+            "p95": 1865320
+          },
+          "index_scan_openings": {
+            "p50": 2002,
+            "p95": 2002
+          },
+          "index_rows": {
+            "p50": 5086,
+            "p95": 5086
+          },
+          "native_scan_openings": {
+            "p50": 1001,
+            "p95": 1001
+          },
+          "native_batches": {
+            "p50": 1002,
+            "p95": 1002
+          },
+          "native_rows": {
+            "p50": 2543,
+            "p95": 2543
+          },
+          "commit_auth_calls": {
+            "p50": 2145,
+            "p95": 2145
+          },
+          "target_lookup_calls": {
+            "p50": 1773,
+            "p95": 1773
+          },
+          "target_lookup_commit_visits": {
+            "p50": 2092,
+            "p95": 2092
+          },
+          "distinct_target_version_ids": {
+            "p50": 343,
+            "p95": 343
+          },
+          "checksum_calls": {
+            "p50": 2,
+            "p95": 2
+          },
+          "checksum_marker_visits": {
+            "p50": 6,
+            "p95": 6
+          },
+          "commit_cache_entries_peak": {
+            "p50": 6,
+            "p95": 6
+          },
+          "native_selected_records_peak": {
+            "p50": 857,
+            "p95": 857
+          }
+        },
+        "timings": {
+          "native_scan_s": {
+            "p50": 0.018030209013886633,
+            "p95": 0.018030209013886633
+          },
+          "native_prepare_s": {
+            "p50": 1.0297885410000163,
+            "p95": 1.0297885410000163
+          },
+          "commit_auth_s": {
+            "p50": 6.369054923996373,
+            "p95": 6.369054923996373
+          },
+          "target_lookup_s": {
+            "p50": 3.1230850699630537,
+            "p95": 3.1230850699630537
+          },
+          "checksum_s": {
+            "p50": 2.0262999896658584e-05,
+            "p95": 2.0262999896658584e-05
+          },
+          "canonical_conformance_s": {
+            "p50": 0.03157105401078297,
+            "p95": 0.03157105401078297
+          }
+        }
+      }
+    },
+    {
+      "file": "reasoning-457-hsa-01-1k-dense-b250.json",
+      "sha256": "40e84470d5396888db5ebe3db8ca59981b8a3f1617718f702072147831fa0069",
+      "command": [
+        "/home/charilaos/.cache/uv/builds-v0/.tmpYUyjmz/bin/python",
+        "-m",
+        "benchmarks.reasoning_locator_pipeline",
+        "--rows",
+        "1000",
+        "--commit-batch",
+        "250",
+        "--instrument",
+        "--repeats",
+        "1",
+        "--methods",
+        "ordinary",
+        "native-full-record",
+        "native-authenticated-locator",
+        "--selections",
+        "all",
+        "predicate",
+        "subject",
+        "--times",
+        "30",
+        "50",
+        "--caches",
+        "first",
+        "warm",
+        "--output",
+        "benchmarks/results/reasoning-457-hsa-01-1k-dense-b250.json"
+      ],
+      "revision": "94d53d31092992fdb45ebd2d215197c3e0cd6533",
+      "dirty": true,
+      "complete": true,
+      "samples": 36,
+      "groups": [
+        "native-authenticated-locator/all/30/first",
+        "native-authenticated-locator/all/30/warm",
+        "native-authenticated-locator/all/50/first",
+        "native-authenticated-locator/all/50/warm",
+        "native-authenticated-locator/predicate/30/first",
+        "native-authenticated-locator/predicate/30/warm",
+        "native-authenticated-locator/predicate/50/first",
+        "native-authenticated-locator/predicate/50/warm",
+        "native-authenticated-locator/subject/30/first",
+        "native-authenticated-locator/subject/30/warm",
+        "native-authenticated-locator/subject/50/first",
+        "native-authenticated-locator/subject/50/warm",
+        "native-full-record/all/30/first",
+        "native-full-record/all/30/warm",
+        "native-full-record/all/50/first",
+        "native-full-record/all/50/warm",
+        "native-full-record/predicate/30/first",
+        "native-full-record/predicate/30/warm",
+        "native-full-record/predicate/50/first",
+        "native-full-record/predicate/50/warm",
+        "native-full-record/subject/30/first",
+        "native-full-record/subject/30/warm",
+        "native-full-record/subject/50/first",
+        "native-full-record/subject/50/warm",
+        "ordinary/all/30/first",
+        "ordinary/all/30/warm",
+        "ordinary/all/50/first",
+        "ordinary/all/50/warm",
+        "ordinary/predicate/30/first",
+        "ordinary/predicate/30/warm",
+        "ordinary/predicate/50/first",
+        "ordinary/predicate/50/warm",
+        "ordinary/subject/30/first",
+        "ordinary/subject/30/warm",
+        "ordinary/subject/50/first",
+        "ordinary/subject/50/warm"
+      ],
+      "repeats": 1,
+      "rows": 1000,
+      "history_rows": null,
+      "commit_batch": 250,
+      "fixture_status": "ok",
+      "fixture_last_stage": null,
+      "fixture_construction": {
+        "create_s": 0.01816537599916046,
+        "assertions_s": 0.18437137399996573,
+        "corrections_s": 0.5557509249993018,
+        "retractions_s": 0.35781177899843897,
+        "oracle_s": 0.0015784799979883246,
+        "close_s": 0.0005460699994728202,
+        "load_s": 1.1360051880001265,
+        "batches": 4,
+        "timing_boundary": "fixture process only; extraction workers are separate"
+      },
+      "fixture_counters": {
+        "metadata_reads": 532661,
+        "index_scan_openings": 1093,
+        "index_rows": 0,
+        "native_scan_openings": 0,
+        "native_batches": 0,
+        "native_rows": 0,
+        "commit_auth_calls": 3834,
+        "target_lookup_calls": 686,
+        "target_lookup_commit_visits": 3822,
+        "distinct_target_version_ids": 343,
+        "checksum_calls": 12,
+        "checksum_marker_visits": 78,
+        "commit_cache_entries_peak": 23,
+        "native_selected_records_peak": 0
+      },
+      "source_hashes_match_revision": true,
+      "instrumentation_compaction": "per-sample stage counters aggregated into stage_attribution; per-sample metrics, profiles and top-level attribution retained",
+      "representative_attribution": {
+        "group": "native-authenticated-locator/all/50/first",
+        "pipeline_s": {
+          "p50": 1.5099835649998568,
+          "p95": 1.5099835649998568
+        },
+        "rss_peak_bytes": {
+          "p50": 105684992,
+          "p95": 105684992
+        },
+        "counters": {
+          "metadata_reads": {
+            "p50": 736692,
+            "p95": 736692
+          },
+          "index_scan_openings": {
+            "p50": 2002,
+            "p95": 2002
+          },
+          "index_rows": {
+            "p50": 5086,
+            "p95": 5086
+          },
+          "native_scan_openings": {
+            "p50": 1001,
+            "p95": 1001
+          },
+          "native_batches": {
+            "p50": 1002,
+            "p95": 1002
+          },
+          "native_rows": {
+            "p50": 2543,
+            "p95": 2543
+          },
+          "commit_auth_calls": {
+            "p50": 5657,
+            "p95": 5657
+          },
+          "target_lookup_calls": {
+            "p50": 693,
+            "p95": 693
+          },
+          "target_lookup_commit_visits": {
+            "p50": 5481,
+            "p95": 5481
+          },
+          "distinct_target_version_ids": {
+            "p50": 343,
+            "p95": 343
+          },
+          "checksum_calls": {
+            "p50": 2,
+            "p95": 2
+          },
+          "checksum_marker_visits": {
+            "p50": 24,
+            "p95": 24
+          },
+          "commit_cache_entries_peak": {
+            "p50": 24,
+            "p95": 24
+          },
+          "native_selected_records_peak": {
+            "p50": 857,
+            "p95": 857
+          }
+        },
+        "timings": {
+          "native_scan_s": {
+            "p50": 0.017970628996408777,
+            "p95": 0.017970628996408777
+          },
+          "native_prepare_s": {
+            "p50": 0.7157571610005107,
+            "p95": 0.7157571610005107
+          },
+          "commit_auth_s": {
+            "p50": 2.571795632962676,
+            "p95": 2.571795632962676
+          },
+          "target_lookup_s": {
+            "p50": 1.2289009530213661,
+            "p95": 1.2289009530213661
+          },
+          "checksum_s": {
+            "p50": 4.9057998694479465e-05,
+            "p95": 4.9057998694479465e-05
+          },
+          "canonical_conformance_s": {
+            "p50": 0.031157160996372113,
+            "p95": 0.031157160996372113
+          }
+        }
+      }
+    },
+    {
+      "file": "reasoning-457-hsa-01-1k-dense-r3.json",
+      "sha256": "33ff0f3c5c92a45fa3a106f6171c2053890c75d869927180f8d43ca5ff250cb1",
+      "command": [
+        "/home/charilaos/.cache/uv/builds-v0/.tmp2Ad8lt/bin/python",
+        "-m",
+        "benchmarks.reasoning_locator_pipeline",
+        "--rows",
+        "1000",
+        "--commit-batch",
+        "1000",
+        "--instrument",
+        "--repeats",
+        "3",
+        "--methods",
+        "ordinary",
+        "native-full-record",
+        "native-authenticated-locator",
+        "--selections",
+        "all",
+        "--times",
+        "30",
+        "50",
+        "--caches",
+        "first",
+        "--output",
+        "benchmarks/results/reasoning-457-hsa-01-1k-dense-r3.json"
+      ],
+      "revision": "94d53d31092992fdb45ebd2d215197c3e0cd6533",
+      "dirty": true,
+      "complete": true,
+      "samples": 18,
+      "groups": [
+        "native-authenticated-locator/all/30/first",
+        "native-authenticated-locator/all/50/first",
+        "native-full-record/all/30/first",
+        "native-full-record/all/50/first",
+        "ordinary/all/30/first",
+        "ordinary/all/50/first"
+      ],
+      "repeats": 3,
+      "rows": 1000,
+      "history_rows": null,
+      "commit_batch": 1000,
+      "fixture_status": "ok",
+      "fixture_last_stage": null,
+      "fixture_construction": {
+        "create_s": 0.018611046998557867,
+        "assertions_s": 0.17732799199984584,
+        "corrections_s": 0.6361219640002673,
+        "retractions_s": 0.4505241080005362,
+        "oracle_s": 0.001628751000680495,
+        "close_s": 0.00043148899931111373,
+        "load_s": 1.302597791000153,
+        "batches": 1,
+        "timing_boundary": "fixture process only; extraction workers are separate"
+      },
+      "fixture_counters": {
+        "metadata_reads": 704834,
+        "index_scan_openings": 343,
+        "index_rows": 0,
+        "native_scan_openings": 0,
+        "native_batches": 0,
+        "native_rows": 0,
+        "commit_auth_calls": 747,
+        "target_lookup_calls": 686,
+        "target_lookup_commit_visits": 744,
+        "distinct_target_version_ids": 343,
+        "checksum_calls": 3,
+        "checksum_marker_visits": 6,
+        "commit_cache_entries_peak": 5,
+        "native_selected_records_peak": 0
+      },
+      "source_hashes_match_revision": true,
+      "instrumentation_compaction": "per-sample stage counters aggregated into stage_attribution; per-sample metrics, profiles and top-level attribution retained",
+      "representative_attribution": {
+        "group": "native-authenticated-locator/all/50/first",
+        "pipeline_s": {
+          "p50": 3.404168402999858,
+          "p95": 3.6723958540005697
+        },
+        "rss_peak_bytes": {
+          "p50": 107196416,
+          "p95": 107409408
+        },
+        "counters": {
+          "metadata_reads": {
+            "p50": 1865320,
+            "p95": 1865320
+          },
+          "index_scan_openings": {
+            "p50": 2002,
+            "p95": 2002
+          },
+          "index_rows": {
+            "p50": 5086,
+            "p95": 5086
+          },
+          "native_scan_openings": {
+            "p50": 1001,
+            "p95": 1001
+          },
+          "native_batches": {
+            "p50": 1002,
+            "p95": 1002
+          },
+          "native_rows": {
+            "p50": 2543,
+            "p95": 2543
+          },
+          "commit_auth_calls": {
+            "p50": 2145,
+            "p95": 2145
+          },
+          "target_lookup_calls": {
+            "p50": 1773,
+            "p95": 1773
+          },
+          "target_lookup_commit_visits": {
+            "p50": 2092,
+            "p95": 2092
+          },
+          "distinct_target_version_ids": {
+            "p50": 343,
+            "p95": 343
+          },
+          "checksum_calls": {
+            "p50": 2,
+            "p95": 2
+          },
+          "checksum_marker_visits": {
+            "p50": 6,
+            "p95": 6
+          },
+          "commit_cache_entries_peak": {
+            "p50": 6,
+            "p95": 6
+          },
+          "native_selected_records_peak": {
+            "p50": 857,
+            "p95": 857
+          }
+        },
+        "timings": {
+          "native_scan_s": {
+            "p50": 0.017989031053730287,
+            "p95": 0.018381648991635302
+          },
+          "native_prepare_s": {
+            "p50": 1.0245123780005088,
+            "p95": 1.098407635001422
+          },
+          "commit_auth_s": {
+            "p50": 6.328276170983372,
+            "p95": 6.855103352956576
+          },
+          "target_lookup_s": {
+            "p50": 3.1034887760379206,
+            "p95": 3.364381351000702
+          },
+          "checksum_s": {
+            "p50": 2.0654000763897784e-05,
+            "p95": 2.1133000700501725e-05
+          },
+          "canonical_conformance_s": {
+            "p50": 0.031915199009745265,
+            "p95": 0.03382111101382179
+          }
+        }
+      }
+    },
+    {
+      "file": "reasoning-457-hsa-01-10k-dense.json",
+      "sha256": "2ce89a936fc5a3702f280b2096ab756614cff9b10e000401c177891ed42f5f56",
+      "command": [
+        "/home/charilaos/.cache/uv/builds-v0/.tmp9wazSo/bin/python",
+        "-m",
+        "benchmarks.reasoning_locator_pipeline",
+        "--rows",
+        "10000",
+        "--commit-batch",
+        "1000",
+        "--instrument",
+        "--repeats",
+        "1",
+        "--methods",
+        "ordinary",
+        "native-full-record",
+        "native-authenticated-locator",
+        "--selections",
+        "all",
+        "predicate",
+        "subject",
+        "--times",
+        "30",
+        "50",
+        "--caches",
+        "first",
+        "--output",
+        "benchmarks/results/reasoning-457-hsa-01-10k-dense.json"
+      ],
+      "revision": "94d53d31092992fdb45ebd2d215197c3e0cd6533",
+      "dirty": true,
+      "complete": true,
+      "samples": 18,
+      "groups": [
+        "native-authenticated-locator/all/30/first",
+        "native-authenticated-locator/all/50/first",
+        "native-authenticated-locator/predicate/30/first",
+        "native-authenticated-locator/predicate/50/first",
+        "native-authenticated-locator/subject/30/first",
+        "native-authenticated-locator/subject/50/first",
+        "native-full-record/all/30/first",
+        "native-full-record/all/50/first",
+        "native-full-record/predicate/30/first",
+        "native-full-record/predicate/50/first",
+        "native-full-record/subject/30/first",
+        "native-full-record/subject/50/first",
+        "ordinary/all/30/first",
+        "ordinary/all/50/first",
+        "ordinary/predicate/30/first",
+        "ordinary/predicate/50/first",
+        "ordinary/subject/30/first",
+        "ordinary/subject/50/first"
+      ],
+      "repeats": 1,
+      "rows": 10000,
+      "history_rows": null,
+      "commit_batch": 1000,
+      "fixture_status": "ok",
+      "fixture_last_stage": null,
+      "fixture_construction": {
+        "create_s": 0.018770972001220798,
+        "assertions_s": 1.9061723989980237,
+        "corrections_s": 48.47246377100237,
+        "retractions_s": 36.21648964399901,
+        "oracle_s": 0.01714320199971553,
+        "close_s": 0.000326733999827411,
+        "load_s": 86.80517352700008,
+        "batches": 10,
+        "timing_boundary": "fixture process only; extraction workers are separate"
+      },
+      "fixture_counters": {
+        "metadata_reads": 48670468,
+        "index_scan_openings": 12429,
+        "index_rows": 0,
+        "native_scan_openings": 0,
+        "native_batches": 0,
+        "native_rows": 0,
+        "commit_auth_calls": 100034,
+        "target_lookup_calls": 6858,
+        "target_lookup_commit_visits": 100004,
+        "distinct_target_version_ids": 3429,
+        "checksum_calls": 30,
+        "checksum_marker_visits": 465,
+        "commit_cache_entries_peak": 59,
+        "native_selected_records_peak": 0
+      },
+      "source_hashes_match_revision": true,
+      "instrumentation_compaction": "per-sample stage counters aggregated into stage_attribution; per-sample metrics, profiles and top-level attribution retained",
+      "representative_attribution": {
+        "group": "native-authenticated-locator/all/50/first",
+        "pipeline_s": {
+          "p50": 99.4004434189992,
+          "p95": 99.4004434189992
+        },
+        "rss_peak_bytes": {
+          "p50": 208588800,
+          "p95": 208588800
+        },
+        "counters": {
+          "metadata_reads": {
+            "p50": 43370488,
+            "p95": 43370488
+          },
+          "index_scan_openings": {
+            "p50": 20002,
+            "p95": 20002
+          },
+          "index_rows": {
+            "p50": 50858,
+            "p95": 50858
+          },
+          "native_scan_openings": {
+            "p50": 10001,
+            "p95": 10001
+          },
+          "native_batches": {
+            "p50": 10012,
+            "p95": 10012
+          },
+          "native_rows": {
+            "p50": 25429,
+            "p95": 25429
+          },
+          "commit_auth_calls": {
+            "p50": 90744,
+            "p95": 90744
+          },
+          "target_lookup_calls": {
+            "p50": 4859,
+            "p95": 4859
+          },
+          "target_lookup_commit_visits": {
+            "p50": 90322,
+            "p95": 90322
+          },
+          "distinct_target_version_ids": {
+            "p50": 3429,
+            "p95": 3429
+          },
+          "checksum_calls": {
+            "p50": 2,
+            "p95": 2
+          },
+          "checksum_marker_visits": {
+            "p50": 60,
+            "p95": 60
+          },
+          "commit_cache_entries_peak": {
+            "p50": 60,
+            "p95": 60
+          },
+          "native_selected_records_peak": {
+            "p50": 8571,
+            "p95": 8571
+          }
+        },
+        "timings": {
+          "native_scan_s": {
+            "p50": 0.18184827585719177,
+            "p95": 0.18184827585719177
+          },
+          "native_prepare_s": {
+            "p50": 60.27993036299995,
+            "p95": 60.27993036299995
+          },
+          "commit_auth_s": {
+            "p50": 193.1636028271114,
+            "p95": 193.1636028271114
+          },
+          "target_lookup_s": {
+            "p50": 96.6212772850613,
+            "p95": 96.6212772850613
+          },
+          "checksum_s": {
+            "p50": 0.00014147399997455068,
+            "p95": 0.00014147399997455068
+          },
+          "canonical_conformance_s": {
+            "p50": 0.3515353340153524,
+            "p95": 0.3515353340153524
+          }
+        }
+      }
+    },
+    {
+      "file": "reasoning-457-hsa-01-10k-sparse.json",
+      "sha256": "4966323a32cc1ebff438333d924cbd4c8dfe6fda9bfe0c82a94db8be9184f530",
+      "command": [
+        "/home/charilaos/.cache/uv/builds-v0/.tmp4bps6X/bin/python",
+        "-m",
+        "benchmarks.reasoning_locator_pipeline",
+        "--rows",
+        "10000",
+        "--history-rows",
+        "1000",
+        "--commit-batch",
+        "1000",
+        "--instrument",
+        "--repeats",
+        "1",
+        "--methods",
+        "ordinary",
+        "native-full-record",
+        "native-authenticated-locator",
+        "--selections",
+        "all",
+        "predicate",
+        "subject",
+        "--times",
+        "30",
+        "50",
+        "--caches",
+        "first",
+        "--output",
+        "benchmarks/results/reasoning-457-hsa-01-10k-sparse.json"
+      ],
+      "revision": "94d53d31092992fdb45ebd2d215197c3e0cd6533",
+      "dirty": true,
+      "complete": true,
+      "samples": 18,
+      "groups": [
+        "native-authenticated-locator/all/30/first",
+        "native-authenticated-locator/all/50/first",
+        "native-authenticated-locator/predicate/30/first",
+        "native-authenticated-locator/predicate/50/first",
+        "native-authenticated-locator/subject/30/first",
+        "native-authenticated-locator/subject/50/first",
+        "native-full-record/all/30/first",
+        "native-full-record/all/50/first",
+        "native-full-record/predicate/30/first",
+        "native-full-record/predicate/50/first",
+        "native-full-record/subject/30/first",
+        "native-full-record/subject/50/first",
+        "ordinary/all/30/first",
+        "ordinary/all/50/first",
+        "ordinary/predicate/30/first",
+        "ordinary/predicate/50/first",
+        "ordinary/subject/30/first",
+        "ordinary/subject/50/first"
+      ],
+      "repeats": 1,
+      "rows": 10000,
+      "history_rows": 1000,
+      "commit_batch": 1000,
+      "fixture_status": "ok",
+      "fixture_last_stage": null,
+      "fixture_construction": {
+        "create_s": 0.018204972000603448,
+        "assertions_s": 1.8460804430014832,
+        "corrections_s": 0.6541744730002392,
+        "retractions_s": 0.4565849669997988,
+        "oracle_s": 0.015386141001727083,
+        "close_s": 0.0004179640000074869,
+        "load_s": 3.1234978449992923,
+        "batches": 10,
+        "timing_boundary": "fixture process only; extraction workers are separate"
+      },
+      "fixture_counters": {
+        "metadata_reads": 740969,
+        "index_scan_openings": 9343,
+        "index_rows": 0,
+        "native_scan_openings": 0,
+        "native_batches": 0,
+        "native_rows": 0,
+        "commit_auth_calls": 756,
+        "target_lookup_calls": 686,
+        "target_lookup_commit_visits": 744,
+        "distinct_target_version_ids": 343,
+        "checksum_calls": 12,
+        "checksum_marker_visits": 78,
+        "commit_cache_entries_peak": 14,
+        "native_selected_records_peak": 0
+      },
+      "source_hashes_match_revision": true,
+      "instrumentation_compaction": "per-sample stage counters aggregated into stage_attribution; per-sample metrics, profiles and top-level attribution retained",
+      "representative_attribution": {
+        "group": "native-authenticated-locator/all/50/first",
+        "pipeline_s": {
+          "p50": 2.8177571059986803,
+          "p95": 2.8177571059986803
+        },
+        "rss_peak_bytes": {
+          "p50": 186458112,
+          "p95": 186458112
+        },
+        "counters": {
+          "metadata_reads": {
+            "p50": 527148,
+            "p95": 527148
+          },
+          "index_scan_openings": {
+            "p50": 20002,
+            "p95": 20002
+          },
+          "index_rows": {
+            "p50": 41086,
+            "p95": 41086
+          },
+          "native_scan_openings": {
+            "p50": 10001,
+            "p95": 10001
+          },
+          "native_batches": {
+            "p50": 10010,
+            "p95": 10010
+          },
+          "native_rows": {
+            "p50": 20543,
+            "p95": 20543
+          },
+          "commit_auth_calls": {
+            "p50": 551,
+            "p95": 551
+          },
+          "target_lookup_calls": {
+            "p50": 343,
+            "p95": 343
+          },
+          "target_lookup_commit_visits": {
+            "p50": 372,
+            "p95": 372
+          },
+          "distinct_target_version_ids": {
+            "p50": 343,
+            "p95": 343
+          },
+          "checksum_calls": {
+            "p50": 2,
+            "p95": 2
+          },
+          "checksum_marker_visits": {
+            "p50": 24,
+            "p95": 24
+          },
+          "commit_cache_entries_peak": {
+            "p50": 24,
+            "p95": 24
+          },
+          "native_selected_records_peak": {
+            "p50": 9857,
+            "p95": 9857
+          }
+        },
+        "timings": {
+          "native_scan_s": {
+            "p50": 0.16560240693615924,
+            "p95": 0.16560240693615924
+          },
+          "native_prepare_s": {
+            "p50": 2.1640728849997686,
+            "p95": 2.1640728849997686
+          },
+          "commit_auth_s": {
+            "p50": 2.1726179080087604,
+            "p95": 2.1726179080087604
+          },
+          "target_lookup_s": {
+            "p50": 0.5894873220040608,
+            "p95": 0.5894873220040608
+          },
+          "checksum_s": {
+            "p50": 5.7379997087991796e-05,
+            "p95": 5.7379997087991796e-05
+          },
+          "canonical_conformance_s": {
+            "p50": 0.2908575850251509,
+            "p95": 0.2908575850251509
+          }
+        }
+      }
+    },
+    {
+      "file": "reasoning-457-hsa-01-100k-sparse.json",
+      "sha256": "284ce4330a5d465d67c49deac534cb92dc2f2100e749b607810083bbd6541813",
+      "command": [
+        "/home/charilaos/.cache/uv/builds-v0/.tmpOj6vIM/bin/python",
+        "-m",
+        "benchmarks.reasoning_locator_pipeline",
+        "--rows",
+        "100000",
+        "--history-rows",
+        "1000",
+        "--commit-batch",
+        "1000",
+        "--instrument",
+        "--repeats",
+        "1",
+        "--methods",
+        "ordinary",
+        "native-full-record",
+        "native-authenticated-locator",
+        "--selections",
+        "all",
+        "predicate",
+        "subject",
+        "--times",
+        "30",
+        "50",
+        "--caches",
+        "first",
+        "--output",
+        "benchmarks/results/reasoning-457-hsa-01-100k-sparse.json"
+      ],
+      "revision": "94d53d31092992fdb45ebd2d215197c3e0cd6533",
+      "dirty": true,
+      "complete": true,
+      "samples": 18,
+      "groups": [
+        "native-authenticated-locator/all/30/first",
+        "native-authenticated-locator/all/50/first",
+        "native-authenticated-locator/predicate/30/first",
+        "native-authenticated-locator/predicate/50/first",
+        "native-authenticated-locator/subject/30/first",
+        "native-authenticated-locator/subject/50/first",
+        "native-full-record/all/30/first",
+        "native-full-record/all/50/first",
+        "native-full-record/predicate/30/first",
+        "native-full-record/predicate/50/first",
+        "native-full-record/subject/30/first",
+        "native-full-record/subject/50/first",
+        "ordinary/all/30/first",
+        "ordinary/all/50/first",
+        "ordinary/predicate/30/first",
+        "ordinary/predicate/50/first",
+        "ordinary/subject/30/first",
+        "ordinary/subject/50/first"
+      ],
+      "repeats": 1,
+      "rows": 100000,
+      "history_rows": 1000,
+      "commit_batch": 1000,
+      "fixture_status": "ok",
+      "fixture_last_stage": null,
+      "fixture_construction": {
+        "create_s": 0.018892630001573707,
+        "assertions_s": 19.956779272009953,
+        "corrections_s": 0.636048803000449,
+        "retractions_s": 0.44325800399928994,
+        "oracle_s": 0.14875662699523673,
+        "close_s": 0.0003628329995990498,
+        "load_s": 22.659209237999676,
+        "batches": 100,
+        "timing_boundary": "fixture process only; extraction workers are separate"
+      },
+      "fixture_counters": {
+        "metadata_reads": 1106774,
+        "index_scan_openings": 99343,
+        "index_rows": 0,
+        "native_scan_openings": 0,
+        "native_batches": 0,
+        "native_rows": 0,
+        "commit_auth_calls": 846,
+        "target_lookup_calls": 686,
+        "target_lookup_commit_visits": 744,
+        "distinct_target_version_ids": 343,
+        "checksum_calls": 102,
+        "checksum_marker_visits": 5253,
+        "commit_cache_entries_peak": 104,
+        "native_selected_records_peak": 0
+      },
+      "source_hashes_match_revision": true,
+      "instrumentation_compaction": "per-sample stage counters aggregated into stage_attribution; per-sample metrics, profiles and top-level attribution retained",
+      "representative_attribution": {
+        "group": "native-authenticated-locator/all/50/first",
+        "pipeline_s": {
+          "p50": 25.210686944999907,
+          "p95": 25.210686944999907
+        },
+        "rss_peak_bytes": {
+          "p50": 880930816,
+          "p95": 880930816
+        },
+        "counters": {
+          "metadata_reads": {
+            "p50": 1971288,
+            "p95": 1971288
+          },
+          "index_scan_openings": {
+            "p50": 200002,
+            "p95": 200002
+          },
+          "index_rows": {
+            "p50": 401086,
+            "p95": 401086
+          },
+          "native_scan_openings": {
+            "p50": 100001,
+            "p95": 100001
+          },
+          "native_batches": {
+            "p50": 100098,
+            "p95": 100098
+          },
+          "native_rows": {
+            "p50": 200543,
+            "p95": 200543
+          },
+          "commit_auth_calls": {
+            "p50": 1811,
+            "p95": 1811
+          },
+          "target_lookup_calls": {
+            "p50": 343,
+            "p95": 343
+          },
+          "target_lookup_commit_visits": {
+            "p50": 372,
+            "p95": 372
+          },
+          "distinct_target_version_ids": {
+            "p50": 343,
+            "p95": 343
+          },
+          "checksum_calls": {
+            "p50": 2,
+            "p95": 2
+          },
+          "checksum_marker_visits": {
+            "p50": 204,
+            "p95": 204
+          },
+          "commit_cache_entries_peak": {
+            "p50": 204,
+            "p95": 204
+          },
+          "native_selected_records_peak": {
+            "p50": 99857,
+            "p95": 99857
+          }
+        },
+        "timings": {
+          "native_scan_s": {
+            "p50": 1.7402756092251366,
+            "p95": 1.7402756092251366
+          },
+          "native_prepare_s": {
+            "p50": 18.24132362599994,
+            "p95": 18.24132362599994
+          },
+          "commit_auth_s": {
+            "p50": 12.827557462060213,
+            "p95": 12.827557462060213
+          },
+          "target_lookup_s": {
+            "p50": 0.7731247739957325,
+            "p95": 0.7731247739957325
+          },
+          "checksum_s": {
+            "p50": 0.00047860400081845,
+            "p95": 0.00047860400081845
+          },
+          "canonical_conformance_s": {
+            "p50": 3.417416114923981,
+            "p95": 3.417416114923981
+          }
+        }
+      }
+    },
+    {
+      "file": "reasoning-457-hsa-01-100k-dense-timeout.json",
+      "sha256": "eaf0d71fe6e35136744d4d07017260b018872905e05c6570977d2b7f5e88626c",
+      "command": [
+        "/home/charilaos/.cache/uv/builds-v0/.tmp37Zxuf/bin/python",
+        "-m",
+        "benchmarks.reasoning_locator_pipeline",
+        "--rows",
+        "100000",
+        "--commit-batch",
+        "1000",
+        "--instrument",
+        "--repeats",
+        "1",
+        "--methods",
+        "ordinary",
+        "--selections",
+        "subject",
+        "--times",
+        "30",
+        "--caches",
+        "first",
+        "--timeout",
+        "900",
+        "--output",
+        "benchmarks/results/reasoning-457-hsa-01-100k-dense-timeout.json"
+      ],
+      "revision": "94d53d31092992fdb45ebd2d215197c3e0cd6533",
+      "dirty": true,
+      "complete": false,
+      "samples": 0,
+      "groups": [],
+      "repeats": 1,
+      "rows": 100000,
+      "history_rows": null,
+      "commit_batch": 1000,
+      "fixture_status": "timeout",
+      "fixture_last_stage": "fixture-commit",
+      "fixture_construction": null,
+      "fixture_counters": {},
+      "source_hashes_match_revision": true,
+      "instrumentation_compaction": null,
+      "representative_attribution": null
+    }
+  ]
+}
