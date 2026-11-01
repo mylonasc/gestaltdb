@@ -239,3 +239,30 @@ Keep ordinary extraction as the default and native sources explicit. Retain the
 correctness implementation. Optimization belongs to #451; completing and
 preserving #194's measurement/documentation/integration review remains PR #450's
 scope. No completed repeated/nonselective matrix or final PR acceptance is implied.
+
+## Completed sparse-history 100K gate and documented decision
+
+The sparse-history gate has now completed: **18/18 exact fact/version-ID parity
+samples**, including subject, predicate and **nonselective** reads at valid times
+30 and 50. `complete=true`, `all_parity_verified=true`. It is one observation per
+case on clean source `48b7d53` at launch, not a repeated performance distribution.
+
+At time 30 nonselective reads took 8.820 s ordinary, 15.872 s full-record native
+and 23.604 s authenticated locator; whole-worker RSS was 489.9, 823.1 and 840.0
+MiB respectively. Across all six selection/time pairs the locator took roughly
+2.5–2.8 times ordinary pipeline time and more peak RSS in these observations.
+Exact parity also holds for the retracted subject (zero output) at time 50.
+
+Durable reports are now committed under `benchmarks/results/`:
+
+- `reasoning-194-locator-100k-sparse-history-gate.json`: complete actual-adapter
+  comparison, with source/runtime/hash metadata, timings, RSS and native profiles.
+- `reasoning-194-locator-100k-dense-fixture-timeout.json`: original 900-second
+  **construction** timeout; no extraction result, parity or RSS was obtained.
+
+`docs/reasoning-native-locator-claims.rst` records the workload, evidence boundaries
+and explicit decision: **defer automatic adoption**, retain ordinary extraction as
+default and native APIs as explicit alternatives, and route performance remediation
+to technical-debt issue #451. Neither sparse-history success nor one-sample JSON
+quantiles establishes a successful dense-history gate or a stable speed ranking.
+The roadmap/workbook remains untouched pending the separate sanitation merge.

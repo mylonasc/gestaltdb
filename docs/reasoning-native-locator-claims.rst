@@ -169,6 +169,76 @@ timed-out workers retain stage diagnostics in incomplete reports without quantil
 or an adoption decision. These commands are a measurement protocol, not evidence
 that a successful 100K locator comparison or speedup has already been obtained.
 
+Measured decision: defer automatic adoption
+-------------------------------------------
+
+The actual-adapter 100K **sparse-history** gate completed with **18/18 exact
+fact/version-ID parity samples**: three sources, three selections, valid times
+30 and 50, first extraction on reopened handles, one observation per case.
+Source was clean ``48b7d5306c9a369e521c768e8d848331f6621139`` at launch;
+Python 3.13.11, pyrex-rocksdb 0.7.1 and PyArrow 24.0.0. The committed report is
+``benchmarks/results/reasoning-194-locator-100k-sparse-history-gate.json``.
+
+This fixture uses ``--history-rows 1000``: 100,000 assertions and 343 additional
+correction/retraction versions. Fixture loading took 21.86 seconds in its separate
+worker. All 100,343 versions remain subject to catalog authentication. Observed
+authenticated pipeline times and whole-worker peak RSS at valid time 30:
+
+.. list-table:: Single observations, not repeated latency estimates
+   :header-rows: 1
+
+   * - Selection
+     - Ordinary s / MiB
+     - Full-record native s / MiB
+     - Authenticated locator s / MiB
+   * - Subject (one evidence row)
+     - 5.328 / 425.1
+     - 15.167 / 800.7
+     - 14.521 / 832.9
+   * - Predicate (25,000 evidence rows)
+     - 6.588 / 438.9
+     - 15.226 / 800.2
+     - 16.747 / 834.0
+   * - All (100,000 evidence rows)
+     - 8.820 / 489.9
+     - 15.872 / 823.1
+     - 23.604 / 840.0
+
+At valid time 50, the subject is retracted and yields zero evidence rows; the
+locator still takes 14.687 seconds versus 5.274 ordinary. Predicate/all requests
+return 24,964/99,857 evidence rows with exact historical version parity. Across
+the six selection/time pairs the locator takes approximately 2.5--2.8 times the
+ordinary pipeline time in these observations, with higher whole-worker RSS.
+
+For the single-subject request at time 30, the locator authenticates 100,343
+records and transfers 125,254 index rows to identify one candidate and materialize
+two records in four scans. Predicate selection opens 25,002 scans for 25,000
+candidates. Selective materialization does not eliminate full authentication,
+broad world-prefix transfer or canonical conformance; many-candidate workloads
+also pay per-history scan overhead. These counters describe observed work, not
+an exact allocation attribution or proof of every bottleneck.
+
+The separate **dense-history** 100K fixture attempt timed out during construction
+at 900 seconds, before extraction ran. Its clean source was ``4c3d125``. Preserve
+``benchmarks/results/reasoning-194-locator-100k-dense-fixture-timeout.json`` as a
+failed construction gate, not a native/ordinary extraction timing or RSS result.
+The sparse-history success does not resolve that dense-history performance debt.
+
+**Decision: defer automatic native locator adoption.** Ordinary extraction remains
+the default; retain the authenticated locator as an explicit correctness-preserving
+alternative. Reject a speedup/default-switch claim for this evidence, not the API's
+historical semantics. Targeted remediation and measurable goals are tracked in
+`technical-debt issue #451 <https://github.com/mylonasc/gestaltdb/issues/451>`_.
+
+Limitations: these are single observations, not three-repeat median/P95 estimates;
+one-element summary quantiles in the JSON do not establish a distribution. OS
+caches and host contention were uncontrolled, including overlap with another gate.
+RSS is whole-worker high-water, not query-only memory. Padding is compressible;
+copied bytes are not instrumented. These are extraction/authentication results,
+not inference, support, publication, transactional source or OS-cold-cache evidence.
+Repeated isolated measurements are required before any future adoption claim;
+none is needed to retain the current default and defer optimization to #451.
+
 Lifetime, cancellation and remaining boundaries
 ------------------------------------------------
 
