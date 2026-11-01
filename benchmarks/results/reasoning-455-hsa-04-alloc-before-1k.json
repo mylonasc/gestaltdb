@@ -1,0 +1,142 @@
+{
+  "revision": "8c5413d50d4f835cd5feb891ba66f638ffd30228",
+  "script_sha256": "11a41d67efe74cca4cdddf8544ec660425dc0851fd78d614f67dacb0b9f5eeb5",
+  "adapter_sha256": "8d583400aa4ac68278b212be8c8c3b027f2e38931448fbe8f37d642f4502164a",
+  "measurements": [
+    {
+      "retained_python_bytes": 2899813,
+      "peak_python_bytes": 3679137
+    },
+    {
+      "retained_python_bytes": 2756162,
+      "peak_python_bytes": 3557630
+    },
+    {
+      "retained_python_bytes": 2754810,
+      "peak_python_bytes": 3557514
+    }
+  ],
+  "samples": [
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 0.049659520998829976,
+        "source_open_extract_close_verify_s": 0.8158525640028529,
+        "post_verify_s": 0.006363103006151505,
+        "authenticated_pipeline_s": 0.8719136059953598,
+        "reopen_s": 0.036816578001889866,
+        "total_pipeline_s": 0.9087301839972497
+      },
+      "evidence_digest": "25e73925361b278256b51f03224698f481f6db403aaab51a095e3ac792d698df",
+      "evidence_rows": 857,
+      "profile": {
+        "batches": 1,
+        "rows": 857,
+        "scanned": 857,
+        "verifications": 8,
+        "pushdown": "native-world/predicate/subject-prefixes; object/policy-post-selection"
+      },
+      "native_profile": {
+        "authenticated_records": 1343,
+        "raw_index_rows": 2543,
+        "candidate_claims": 1000,
+        "materialized_records": 1343,
+        "resolved_claims": 857,
+        "scans": 1001,
+        "scan_mode": "native-dimension-intersection+logical-history; full-catalog-authentication"
+      },
+      "instrumentation": null,
+      "evaluator_s": null,
+      "evaluator_boundary": "not measured: this harness does not evaluate rules",
+      "source_contract": "native-authenticated-locator",
+      "valid_time": 50,
+      "selection": "all",
+      "rss_peak_bytes": 120373248,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "counter_boundary": "opt-in benchmark-only counters; inclusive attribution; not RSS or elapsed-time guarantees",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 0.049186197997187264,
+        "source_open_extract_close_verify_s": 0.7607152450000285,
+        "post_verify_s": 0.006362951004120987,
+        "authenticated_pipeline_s": 0.8163008409974282,
+        "reopen_s": 0.005961349997960497,
+        "total_pipeline_s": 0.8222621909953887
+      },
+      "evidence_digest": "25e73925361b278256b51f03224698f481f6db403aaab51a095e3ac792d698df",
+      "evidence_rows": 857,
+      "profile": {
+        "batches": 1,
+        "rows": 857,
+        "scanned": 857,
+        "verifications": 8,
+        "pushdown": "native-world/predicate/subject-prefixes; object/policy-post-selection"
+      },
+      "native_profile": {
+        "authenticated_records": 1343,
+        "raw_index_rows": 2543,
+        "candidate_claims": 1000,
+        "materialized_records": 1343,
+        "resolved_claims": 857,
+        "scans": 1001,
+        "scan_mode": "native-dimension-intersection+logical-history; full-catalog-authentication"
+      },
+      "instrumentation": null,
+      "evaluator_s": null,
+      "evaluator_boundary": "not measured: this harness does not evaluate rules",
+      "source_contract": "native-authenticated-locator",
+      "valid_time": 50,
+      "selection": "all",
+      "rss_peak_bytes": 120373248,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "counter_boundary": "opt-in benchmark-only counters; inclusive attribution; not RSS or elapsed-time guarantees",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 0.0494734329986386,
+        "source_open_extract_close_verify_s": 0.7471392250008648,
+        "post_verify_s": 0.00627407700085314,
+        "authenticated_pipeline_s": 0.8029229019957711,
+        "reopen_s": 0.0059586749994196,
+        "total_pipeline_s": 0.8088815769951907
+      },
+      "evidence_digest": "25e73925361b278256b51f03224698f481f6db403aaab51a095e3ac792d698df",
+      "evidence_rows": 857,
+      "profile": {
+        "batches": 1,
+        "rows": 857,
+        "scanned": 857,
+        "verifications": 8,
+        "pushdown": "native-world/predicate/subject-prefixes; object/policy-post-selection"
+      },
+      "native_profile": {
+        "authenticated_records": 1343,
+        "raw_index_rows": 2543,
+        "candidate_claims": 1000,
+        "materialized_records": 1343,
+        "resolved_claims": 857,
+        "scans": 1001,
+        "scan_mode": "native-dimension-intersection+logical-history; full-catalog-authentication"
+      },
+      "instrumentation": null,
+      "evaluator_s": null,
+      "evaluator_boundary": "not measured: this harness does not evaluate rules",
+      "source_contract": "native-authenticated-locator",
+      "valid_time": 50,
+      "selection": "all",
+      "rss_peak_bytes": 120373248,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "counter_boundary": "opt-in benchmark-only counters; inclusive attribution; not RSS or elapsed-time guarantees",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement"
+    }
+  ],
+  "boundary": "tracemalloc around _read_winners only; same-process repeated fresh handles, uncontrolled OS caches, native buffers excluded, not RSS or a memory guarantee"
+}
