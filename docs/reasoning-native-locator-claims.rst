@@ -9,7 +9,7 @@ policy, evidence and logical context contract. Ordinary extraction and the
 full-record native source remain unchanged; there is no automatic selection.
 
 Authentication reuse and cold verification (HSA-03)
---------------------------------------------------
+--------------------------------------------------------------------
 
 Commit decode reuse is scoped to the exact store and entity decoder. New
 transaction/snapshot scopes start with empty caches; close, store replacement,
