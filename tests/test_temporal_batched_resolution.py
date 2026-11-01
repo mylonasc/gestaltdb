@@ -189,25 +189,42 @@ def test_deferred_indexes_use_canonical_pass_without_repair(tmp_path, backend, m
 
 
 @pytest.mark.parametrize("backend,module", BACKENDS)
-def test_read_validation_rejects_missing_and_mismatch(tmp_path, backend, module):
+@pytest.mark.parametrize("fault", ["missing", "logical", "kind"])
+def test_read_validation_rejects_missing_and_mismatch(tmp_path, backend, module, fault):
+    import hashlib
+    import json
+    from gestaltdb._graph.temporal_keys import temporal_commit_key, temporal_record_key, temporal_visible_key
+    from gestaltdb.versioning import canonical_json_bytes, decode_version_envelope, encode_version_envelope
+
     pytest.importorskip(module)
     graph = _make_graph(tmp_path, backend)
     try:
         node = graph.temporal.put_node_version(Node("n1"), valid=(0, None))
         reader = graph.temporal.reader()
-        # Missing target via batch returns None; commit validation raises corruption.
-        assert reader.get_versions_through_batch(
-            ["00000000-0000-4000-8000-000000000000"], 1) == \
-            {"00000000-0000-4000-8000-000000000000": None}
-        # Tamper a commit payload to create a kind mismatch at validation time.
-        # Build a correction in-memory and validate through get_commit_cached by
-        # writing a raw commit with mismatched logical ID is rejected at write,
-        # so exercise the read validator directly with a forged in-memory commit
-        # is out of scope; instead verify the mismatch detector via batch + type check.
-        resolved = reader.get_versions_through_batch([node.version_id], 1)
-        target = resolved[node.version_id]
-        assert target is not None and target.logical_id == "n1"
-        assert not isinstance(target, EdgeVersion)
+        other = graph.temporal.put_node_version(Node("n2"), valid=(0, None))
+        edge = graph.temporal.put_edge_version(Edge("e", "n1", "n2"), valid=(0, None))
+        correction = graph.temporal.commit_versions([_node_write("n1", node.version_id)])
+        cid = correction.commit_id
+        reader.get_commit_cached(cid)
+        record_key, commit_key = temporal_record_key(cid, 0), temporal_commit_key(cid)
+        header, payload = decode_version_envelope(graph.store.get_metadata(record_key))
+        header["supersedes_version_id"] = {
+            "missing": "00000000-0000-4000-8000-000000000000",
+            "logical": other.version_id, "kind": edge.version_id,
+        }[fault]
+        forged = encode_version_envelope(header, payload)
+        descriptor = json.loads(graph.store.get_metadata(commit_key))
+        descriptor["record_digests"][0] = hashlib.sha256(forged).hexdigest()
+        descriptor_payload = canonical_json_bytes(descriptor)
+        graph.store.put_metadata(record_key, forged)
+        graph.store.put_metadata(commit_key, descriptor_payload)
+        graph.store.put_metadata(temporal_visible_key(cid), hashlib.sha256(descriptor_payload).digest())
+        # Hash-consistent forged history must still fail semantic admission,
+        # including when an older valid decode has warmed the same cache key.
+        match = "missing version" if fault == "missing" else "kind or logical ID mismatch"
+        with pytest.raises(TemporalCorruptionError, match=match):
+            reader.get_commit_cached(cid)
+        assert not reader.commit_cache
     finally:
         graph.close()
 
