@@ -4,7 +4,7 @@
   "review_date": "2026-11-01",
   "reviewed_at": "2026-11-01T23:07:18Z",
   "roadmap": {"issue": 156, "state": "closed"},
-  "note": "Main dcc90e2 includes #450 measurements/defer decision and HSA-02 #461; #194 remains open for closure reconciliation. HSA-03/HSA-04 are on hsa-dev af08f60, not main. HSA-06 pilot clears 100K dense construction and observed own-baseline 1K gates but fails selective native-vs-ordinary goals; #451 remains open, native adoption/HSA-05 deferred. #156/phases/#391-#396 remain closed; no changed GR dispositions.",
+  "note": "Main dcc90e2 includes #450 measurements/defer decision and HSA-02 #461; #194 remains open for closure reconciliation. HSA-03/HSA-04 are on hsa-dev af08f60, not main. HSA-06 pilot clears 100K dense construction and observed own-baseline 1K gates but fails selective native-vs-ordinary goals; #451 is now closed with all exit criteria evidenced (HSA-01-04, HSA-06 delivered; HSA-05 deferred and not required). #156/phases/#391-#396 remain closed; no changed GR dispositions.",
   "phases": {
     "RE-E1": {
       "issue": 157,
