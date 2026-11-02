@@ -1,0 +1,325 @@
+# Documentation restructuring: capability coverage and user journeys
+
+**Reviewed at:** 2026-11-02 (UTC).
+
+**Reviewed source:** [`8199b1d1025ae64967f8fa300f9542a324a15bd3`](https://github.com/mylonasc/gestaltdb/commit/8199b1d1025ae64967f8fa300f9542a324a15bd3), the v0.17.0 release source.
+
+**Tracking parent:** [#480](https://github.com/mylonasc/gestaltdb/issues/480).
+
+**Authority:** this document records the documentation assessment, target structure,
+delivery slices and acceptance criteria. Source code and tests remain authoritative
+for behavior. Documentation must not promote an experiment, benchmark result or
+deferred feature into a supported guarantee.
+
+## 1. Objective
+
+Restructure GestaltDB's documentation so that a user can:
+
+1. discover the relevant capability from an application goal;
+2. understand when to use it and what it is not;
+3. run a concise, complete example;
+4. find exact semantics, limitations and operational requirements; and
+5. progress to advanced integration material without starting there.
+
+This is not a request to reduce the technical depth of the documentation. The
+repository contains valuable correctness contracts, benchmark evidence and design
+boundaries. The goal is to put concise user journeys in front of that material,
+classify the detailed pages by role and make their navigation intentional.
+
+## 2. Review baseline
+
+The review sampled the landing pages, quickstart, architecture and API workflows;
+the major sampling, temporal, epistemic, ontology and reasoning guides; the
+packaged agent skill; the repository agent map; and the complete Sphinx page
+inventory.
+
+Observed baseline:
+
+- The Sphinx tree contains **71 RST pages**. The current `docs/index.rst` names
+  36 pages in its toctrees; most of the remaining pages are advanced reasoning
+  references marked `:orphan:`.
+- `sphinx-build -W --keep-going` succeeds for all 71 pages.
+- The documentation/API drift checker succeeds. It checks 18 Markdown documents,
+  selected public signatures, imports, registries and referenced Sphinx files;
+  it does not establish that every RST example is complete or that the narrative
+  is discoverable and progressive.
+- Sampling has the clearest first-class task path. `typed-sampling.rst` is also
+  about 888 lines, so the introductory path competes with format, compatibility
+  and advanced-policy detail.
+- `performance.rst` is about 970 lines, `cypher.rst` about 644 lines,
+  `temporal-versioning.rst` about 533 lines and `typed-sampling.rst` about 888
+  lines. These are useful references, but size and mixed roles reduce digestibility.
+- The quickstart covers graph creation, direct reads, indexes, Cypher, traversal,
+  bulk writes and reusable sampling. Its next steps do not currently route users
+  to temporal history, epistemic claims, ontology, standalone Datalog or temporal
+  reasoning.
+- The landing page foregrounds filtering and sampling, then places a mixture of
+  introductory and advanced reasoning integrations in one broad “User Guide”.
+  There is no equivalent Datalog/reasoning learning-path hub.
+- The ontology guide has useful examples and strict profile boundaries, but begins
+  with optional RDF import before its shortest standalone classification example.
+- Several reasoning pages provide precise contracts but assume users already know
+  how the pieces compose. For example, the short temporal-closure snippet refers
+  to an undefined `program` and omitted typed-engine imports; it is illustrative,
+  not a standalone example, but is not labelled as such.
+- The packaged retrieval CLI exposes an ontology topic, while the packaged skill's
+  prose topic list omits it. Packaged topics cover temporal and epistemic storage
+  but do not provide a general standalone Datalog/reasoning topic.
+
+The baseline therefore passes structural and API checks but does not yet prove
+complete capability coverage, concise introductions or successful audience
+journeys.
+
+## 3. Assessment against the review questions
+
+### 3.1 Does the documentation reflect the library's capabilities?
+
+**Mostly at the detailed-reference level, but not yet as one coherent public
+capability map.** The repository documents almost every major subsystem somewhere.
+The strongest risk is not total absence; it is that capabilities are distributed
+between landing pages, very large guides, orphaned reasoning pages, docstrings,
+agent references and roadmap-style contract documents.
+
+The restructuring must cover all of these supported surfaces:
+
+| Capability family | Supported surfaces that require a documentation disposition | Delivery |
+| --- | --- | --- |
+| Core property graph | Nodes, native labels, directed edges, typed relationships, stable IDs, object/batched CRUD, current readers/repositories | [DOC-11 #491](https://github.com/mylonasc/gestaltdb/issues/491) |
+| Swappable persistence | `GraphDB.create/open`, manifests, direct store construction, LMDB, LevelDB, plain/transactional PyRex, locking, transactions, current snapshots and close/reopen lifecycle | DOC-11 #491 |
+| Serializers and values | Pickle, JSON, MessagePack, Protobuf, independent backend/serializer extras, recursively persisted temporal values | DOC-11 #491 |
+| Indexes and filtering | Automatic label/type indexes, explicit property indexes, exact/range/composite lookups, ID-only cohorts, freshness, deferred rebuilds and key limits | [DOC-12 #492](https://github.com/mylonasc/gestaltdb/issues/492) |
+| Ingestion | Object/bulk writes, Arrow/Polars, entity columns versus serialized payloads, maintain/defer/defer-rebuild and native writer boundaries | DOC-12 #492 |
+| Cypher | Reads, label expressions, typed/fixed/variable/shortest paths, expressions, aggregation, composition, temporal qualifiers, writes, constraints, schema inspection and registered procedures | DOC-12 #492 |
+| Sampling | Live typed traversal, seed reservoirs, snapshots, compact/local/external IDs, RAM/memmap, filtering, weighted/balanced layers, blocks, subgraphs and hierarchy expansion | [DOC-03 #483](https://github.com/mylonasc/gestaltdb/issues/483) |
+| Walks and ML preparation | Random/Node2Vec/policy walks, schemas, temporal walk policy, context pairs, negatives, temporal positives and framework-facing blocks | DOC-03 #483 |
+| Temporal/bitemporal data | Immutable versions, valid/system time, corrections/retractions, indexes, authenticated read views, point/window reads, bitemporal Cypher, migration and recovery | [DOC-04 #484](https://github.com/mylonasc/gestaltdb/issues/484) |
+| Epistemic knowledge | Sourced claims, polarity, agents/worlds, confidence metadata, four-valued status, corrections/retractions and provenance | [DOC-05 #485](https://github.com/mylonasc/gestaltdb/issues/485) |
+| Stored rules and modality | Versioned Horn rules, scoped absence, maintenance, explanations, accessibility, belief/knowledge/possibility/necessity and audit export | DOC-05 #485 |
+| Ontology | Immutable axioms, selected profile, compilation/origins, offline RDF, hierarchy adapters, graph/claim projection and explicit publication | [DOC-06 #486](https://github.com/mylonasc/gestaltdb/issues/486) |
+| Standalone Datalog | Binary and typed engines, recursion, literals, comparisons, multi-heads, predicate variables, stratified negation, aggregates, proofs, demand, equality and validation | DOC-06 #486 |
+| Temporal reasoning | Interval sets/facts, change segments, exact range closure, time-scoped equality, selected negation/aggregates, maintenance, conformance and interval evidence | [DOC-07 #487](https://github.com/mylonasc/gestaltdb/issues/487) |
+| Advanced reasoning integration | Current/temporal extraction, frontier/full closure, plans/executors, batches, sessions, generations, admission, native sources, inferred consumers and publication | [DOC-08 #488](https://github.com/mylonasc/gestaltdb/issues/488) |
+| Visualization | Offline HTML/Jupyter, static SVG, query/sample/reasoning builders, layouts, styling, browser export and saved view state | [DOC-13 #493](https://github.com/mylonasc/gestaltdb/issues/493) |
+| Interoperability | NetworkX import/export, static GEXF, mapping/directionality/security limits and notebooks | DOC-13 #493 |
+| Operations and performance | Installation/extras, compatibility, index state, migration/recovery, vulnerability workflow, workload-specific ingestion/query/sampling/reasoning measurements | DOC-11 #491 and DOC-13 #493 |
+| API and agent surfaces | README, Sphinx, `EXAMPLES.md`, package docstring, public docstrings, `AGENTS.md`, packaged skill and `agent_docs` retrieval | [DOC-10 #490](https://github.com/mylonasc/gestaltdb/issues/490) |
+
+The capability inventory in [DOC-01 #481](https://github.com/mylonasc/gestaltdb/issues/481)
+must verify this provisional map against source and tests and record any additional
+public surface rather than silently dropping it.
+
+### 3.2 Are capabilities introduced concisely with digestible examples?
+
+**Unevenly.** The core quickstart, filtering guide and several sampling workflows
+are practical. Ontology and many reasoning pages contain examples, but they often
+sit within contract-heavy pages or assume concepts and setup from elsewhere.
+Some code blocks are fragments rather than complete workflows. Long pages mix
+introductory guidance, exhaustive reference, benchmark evidence and compatibility
+history.
+
+Every major capability needs a layered path:
+
+1. problem and appropriate use;
+2. concise runnable example with expected output;
+3. conceptual model and choice table;
+4. common task guides;
+5. limitations and lifecycle requirements;
+6. API map; and
+7. advanced contracts and evidence.
+
+The initial example should not attempt to demonstrate every option. Detailed
+semantics remain in reference pages and should be linked at the point where a user
+needs them.
+
+### 3.3 Are special capabilities given adequate focused sections?
+
+**Sampling: yes in depth, but it needs progressive splitting. Ontology: substantial
+coverage, but its first-run journey should precede RDF and advanced adapters.
+Reasoning/Datalog: deep coverage without an adequate introductory hub. Temporal
+storage: deep coverage but overloaded. Temporal Datalog: precise but largely an
+advanced orphaned reference. Epistemic/modal reasoning: focused semantics but
+needs a complete claims-to-rules-to-maintenance journey.**
+
+The targeted slices below give each of these a first-class entry point while also
+covering the less distinctive but equally important database, backend, ingestion,
+Cypher, visualization and operations capabilities.
+
+## 4. Target audiences
+
+Review and acceptance use six representative audiences:
+
+1. **Property-graph application developer:** CRUD, persistence, indexes, Cypher,
+   ingestion, current snapshots and visualization.
+2. **Graph-ML developer:** cohort filtering, snapshot construction, ID domains,
+   neighborhoods/layers/walks, negatives and temporal sampling.
+3. **Knowledge-graph developer:** temporal claims, provenance, contradictions,
+   stored rules, modal evaluation and explanations.
+4. **Ontology/Datalog user:** ontology compilation, facts/rules, typed literals,
+   recursion, negation, aggregates, proofs and demand evaluation.
+5. **Advanced reasoning integrator:** graph/claim adapters, authenticated sessions,
+   admission, maintenance, interval evaluation/publication and executor choice.
+6. **Operator:** installation, backend/serializer choice, concurrency guarantees,
+   index freshness, recovery, migration, security and performance boundaries.
+
+## 5. Target information architecture
+
+The documentation landing page should offer a goal-oriented table and intentional
+toctree groups rather than one flat user-guide sequence:
+
+1. **Getting started** — installation, quickstart, architecture and goal map.
+2. **Property graph and persistence** — graph model, backends, serializers,
+   lifecycle and current read views.
+3. **Querying and loading data** — filtering/indexes, ingestion and Cypher.
+4. **Sampling and graph ML** — live versus snapshot choice, layers, walks,
+   temporal policies and negatives.
+5. **Temporal and epistemic knowledge** — version history, claims, rules, modal
+   evaluation and audit.
+6. **Ontology and Datalog** — standalone foundations, typed features, proofs,
+   demand and validation.
+7. **Temporal reasoning** — range closure, maintenance, admission and publication.
+8. **Advanced reasoning integration** — source/executor/session/publication
+   decision map and authenticated adapters.
+9. **Visualization and integrations** — offline visualization, NetworkX/GEXF and
+   notebooks.
+10. **Operations, performance and reference** — compatibility, recovery,
+    benchmarks, API reference and engineering evidence.
+
+Advanced pages need not all appear directly in the top-level toctree. Every page
+must, however, have an intentional role and an inbound path from a hub or reference
+index. `:orphan:` should represent a deliberate Sphinx choice, not undiscoverability.
+
+## 6. Example contract
+
+Every code block must be classified as one of:
+
+- **standalone runnable**;
+- **runnable continuation** of setup on the same page;
+- **illustrative fragment**; or
+- **pseudocode**.
+
+Introductory examples should:
+
+- include all imports and define every variable;
+- state required optional extras;
+- use disposable paths and close graph handles safely;
+- show expected results or assertions;
+- demonstrate one primary concept;
+- explain the important correctness/lifecycle boundary immediately after the code;
+- use a small consistent application domain where that reduces cognitive load; and
+- execute in CI where practical.
+
+The existing Markdown/API checker is retained. [DOC-09 #489](https://github.com/mylonasc/gestaltdb/issues/489)
+extends coverage to high-value RST workflows, Cypher snippets and installed-package
+examples without making every illustrative fragment an expensive integration test.
+
+## 7. Delivery slices
+
+Each slice should be a small, independently reviewable series of PRs. Capability
+guides may be written in parallel once they follow the provisional taxonomy; they
+must reconcile with DOC-01 before closure.
+
+| ID | Issue | Independently deliverable outcome |
+| --- | --- | --- |
+| DOC-01 | [#481](https://github.com/mylonasc/gestaltdb/issues/481) | Source/test-backed capability matrix, page roles and shared terminology. |
+| DOC-02 | [#482](https://github.com/mylonasc/gestaltdb/issues/482) | README, landing-page and quickstart audience journeys. |
+| DOC-03 | [#483](https://github.com/mylonasc/gestaltdb/issues/483) | Progressive sampling and graph-ML path. |
+| DOC-04 | [#484](https://github.com/mylonasc/gestaltdb/issues/484) | Temporal/bitemporal data path. |
+| DOC-05 | [#485](https://github.com/mylonasc/gestaltdb/issues/485) | Epistemic claims, stored rules and modal path. |
+| DOC-06 | [#486](https://github.com/mylonasc/gestaltdb/issues/486) | Ontology and standalone Datalog foundations. |
+| DOC-07 | [#487](https://github.com/mylonasc/gestaltdb/issues/487) | Temporal Datalog/range-reasoning guide. |
+| DOC-08 | [#488](https://github.com/mylonasc/gestaltdb/issues/488) | Advanced reasoning integration hub and page classification. |
+| DOC-09 | [#489](https://github.com/mylonasc/gestaltdb/issues/489) | Runnable-example inventory and stronger documentation CI. |
+| DOC-10 | [#490](https://github.com/mylonasc/gestaltdb/issues/490) | Packaged-surface alignment and final audience acceptance. |
+| DOC-11 | [#491](https://github.com/mylonasc/gestaltdb/issues/491) | Core graph, swappable backends, serializers and lifecycle. |
+| DOC-12 | [#492](https://github.com/mylonasc/gestaltdb/issues/492) | Indexing, Arrow/Polars ingestion and Cypher. |
+| DOC-13 | [#493](https://github.com/mylonasc/gestaltdb/issues/493) | Visualization, NetworkX/GEXF, installation, notebooks and performance. |
+
+Suggested dependency flow:
+
+```text
+DOC-01 taxonomy ───────────────┐
+                              ├─> DOC-10 final reconciliation
+DOC-02 navigation ─────────────┤
+DOC-03..08 capability guides ──┤
+DOC-11..13 platform guides ────┤
+DOC-09 example/CI gates ───────┘
+```
+
+DOC-03 through DOC-08 and DOC-11 through DOC-13 are intentionally parallelizable.
+DOC-02 can land stable navigation groups before every linked guide is rewritten.
+DOC-09 can add infrastructure incrementally. DOC-10 is the final reconciliation.
+
+## 8. Review rubric
+
+Score every capability from 0 (absent/incorrect) to 3 (complete and verified):
+
+| Dimension | Completion standard |
+| --- | --- |
+| Accuracy | Claims and examples agree with source/tests and backend qualifications. |
+| Discoverability | A user reaches the correct starting point from an application goal. |
+| Introduction | The page explains the problem, appropriate use and non-goals. |
+| Example quality | A minimal dependency-aware example runs and shows its result. |
+| Conceptual clarity | Adjacent capabilities and lifecycle stages are distinguished. |
+| Completeness | Supported public behavior has a guide/reference disposition. |
+| Boundaries | Limits, authentication, budgets, atomicity and failure behavior are explicit. |
+| Progression | Introduction leads to tasks, reference, then advanced contracts/evidence. |
+| Cross-linking | Next steps and related surfaces are intentional and non-circular. |
+| Concision | Entry points are skimmable; detail is layered rather than deleted. |
+
+Priorities:
+
+- **P0:** incorrect/unsafe claims, stale signatures or broken introductory examples.
+- **P1:** supported major capabilities without discoverable introductory paths.
+- **P2:** mixed page roles, duplication, excessive density and weak cross-linking.
+- **P3:** wording, visual polish and optional additional examples.
+
+## 9. Guardrails
+
+- Preserve exact historical winners/evidence, source authentication, budgets,
+  cancellation, cleanup and fail-closed behavior in all documentation claims.
+- State backend-specific atomicity, snapshot and concurrency guarantees; do not
+  imply that every backend supports the strongest mode.
+- Keep ordinary extraction/default executor behavior visible. Optional native,
+  Polars and experimental paths remain explicit opt-ins with measured boundaries.
+- Confidence is metadata, not a logical probability. Model output is an assertion,
+  not independent proof. Source authentication is not a truth guarantee or user
+  authentication.
+- Do not describe selected ontology fragments as full RDFS/OWL/SHACL support.
+- Do not conflate current records, temporal history, interval reasoning, source
+  admission and publication authority.
+- Memmap, native scans and columnar paths are not universal zero-copy, out-of-core
+  or speedup guarantees.
+- Preserve engineering evidence. Move or classify it when necessary; do not erase
+  it to make introductory pages shorter.
+
+## 10. Epic exit criteria
+
+- [ ] DOC-01 records every supported public capability and every documentation
+  page/resource with an explicit role and disposition.
+- [ ] Each target audience has a tested path from landing page to a successful
+  representative workflow.
+- [ ] Core graph, swappable backends/serializers, indexes, ingestion, Cypher,
+  sampling, temporal/bitemporal data, epistemic/modal knowledge, ontology,
+  standalone/typed Datalog, temporal reasoning, advanced adapters, visualization,
+  integrations and operations all have discoverable entry points.
+- [ ] Sampling, ontology, Datalog, temporal data, temporal reasoning and epistemic
+  reasoning each have a concise overview, runnable introduction, conceptual model,
+  limitations and API/advanced-guide map.
+- [ ] Temporal storage versus temporal reasoning, standalone versus GraphDB-stored
+  rules, live versus snapshot sampling, and evaluation versus publication are
+  explicit distinctions.
+- [ ] Introductory examples are complete or visibly labelled as fragments.
+- [ ] README, Sphinx, `EXAMPLES.md`, package/public docstrings and packaged agent
+  resources agree on imports, lifecycle, terminology and capability boundaries.
+- [ ] Strict Sphinx, docs/API drift, example, link, packaged-resource and focused
+  regression gates pass on final source.
+- [ ] Remaining intentional gaps are documented as follow-ups rather than silently
+  treated as complete.
+
+## 11. Out of scope
+
+This epic does not authorize new library capabilities, API redesigns, changed
+reasoning semantics, automatic native adoption, new backend guarantees or deletion
+of canonical benchmark/design evidence. Defects discovered while making examples
+runnable should receive focused implementation issues when they cannot be resolved
+as documentation corrections.
