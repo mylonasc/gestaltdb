@@ -13,11 +13,13 @@ Ontology and reasoning components add semantic classification, temporal evidence
 
 Documentation: https://mylonasc.github.io/gestaltdb/
 
-**Development version:** `0.16.0` adds explicit generation-pinned, read-only
-[reasoning-aware Cypher](docs/reasoning-queries.rst) (#395), building on the
-native Python typing in `0.15.0`. Ordinary Cypher behavior is unchanged.
-Typing remains incremental, not whole-library strict coverage. See the
-[testing guide](docs/reasoning-testing.rst) for compatibility boundaries.
+**Development version:** `0.17.0` adds bounded historical-authentication reuse,
+opt-in native logical-history batching, and expanded graph-handle ergonomics.
+Ordinary extraction remains the default after exact paired acceptance showed
+that automatic native locator adoption is not yet justified. It also includes
+the generation-pinned [reasoning-aware Cypher](docs/reasoning-queries.rst) API
+from `0.16.0`. Typing remains incremental, not whole-library strict coverage.
+See the [testing guide](docs/reasoning-testing.rst) for compatibility boundaries.
 
 ## Components and Applications
 

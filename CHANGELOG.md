@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.17.0 — bounded historical authentication and native batching
+
+- Added bounded, scope-local temporal commit reuse with exact store/decoder
+  identity, mutable-envelope and supersession-target revalidation, explicit
+  lifecycle invalidation, and serialized-size/entry limits. Historical winner,
+  evidence, corruption and concurrency semantics remain unchanged.
+- Added opt-in authenticated native logical-history range/point batching with
+  independent cumulative row/byte budgets, cancellation cleanup and complete
+  catalog/canonical conformance. Ordinary extraction remains the default.
+- Completed the HSA acceptance matrix with exact parity across 1,512
+  observations / 756 pairs. Native locator latency and RSS remained above the
+  ordinary-relative target, so automatic native adoption and the optional new
+  index experiment remain deferred.
+- Added context-manager support and string-ID ergonomics for graph handles,
+  refreshed agent-facing API documentation, and extended strict typing coverage.
+
 - Hardened typed explanations (#392): require complete grounded filter/absence
   evidence, exact program rule definitions and closed scopes, consistent
   aggregate metadata, and reject absence contradicted by retained or full

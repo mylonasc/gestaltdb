@@ -109,7 +109,9 @@ Dates below are **GitHub merge timestamps in UTC**, not claims about when coding
 | 2026-10-31T22:06:13Z | #440 / `7551425` | **Post-v0.16.0:** verifiable transactional PyRex mutable snapshots with runtime >=0.7.0. |
 | 2026-10-31T22:06:34Z | #449 / `6e9793f` | **Post-v0.16.0:** typed proof comparison/absence/aggregate consistency and result-binding hardening. |
 
-The package metadata still says 0.16.0 on reviewed main. That does not make post-tag code part of the published wheel. Validation of this checkout is not retrospective certification of that wheel's stronger guarantees.
+The package metadata is now staged for 0.17.0. Until the tag is published and
+verified, post-v0.16.0 code is not part of a published wheel. Validation of this
+checkout is not retrospective certification of the v0.16.0 wheel's stronger guarantees.
 
 ## 4. Pending work and deliberate deferrals
 
