@@ -1,369 +1,292 @@
 Storage Backends
 ================
 
-GestaltDB separates graph logic from storage. ``GraphDB`` receives a key-value
-store instance and a serializer instance.
-
-Backends are optional and independent of serializers. For example, install
-``gestaltdb[leveldb,msgpack]`` to use ``LevelDBStore`` with
-``MessagePackSerializer``, or ``gestaltdb[lmdb,protobuf]`` for LMDB with
-Protobuf. Install ``gestaltdb[backends]`` to make every built-in backend
-available. Missing dependencies are checked before ``GraphDB.create`` modifies
-the target directory and are reported with the required extra name.
+Choose two independent components: a **backend** persists keys and bytes; a
+**serializer** encodes property payloads. Changing either choice for a new
+database does not convert an existing directory. Use :doc:`property-graph` for
+the entity model and :doc:`serializers` for value types and codec trade-offs.
 
 Backend Selection Summary
 -------------------------
 
-The current backend trade-offs are:
+.. Graphics debt VIS-01 (#495): independent backend/codec selection diagram;
+   retain the capability matrix and text as its accessible static fallback.
 
-.. list-table::
+.. list-table:: Install only what the application needs
    :header-rows: 1
+   :widths: 17 18 35 30
 
-   * - Backend
-     - Best fit
-     - Main trade-offs
-   * - ``LMDBStore``
-     - Mature embedded storage
-     - Requires choosing a sufficient ``map_size``
-   * - ``LevelDBStore``
-     - Simple local graphs
-     - No native Arrow/Polars columnar fast path
-   * - ``PyRexStore``
-     - Large writes and ingestion
-     - Optional dependency, RocksDB tuning knobs, opt-in transactions
+   * - Backend / registry name
+     - Install extra
+     - When to consider it
+     - Main qualification
+   * - ``LMDBStore`` / ``lmdb``
+     - ``gestaltdb[lmdb]``
+     - Embedded transactions and coherent current-graph snapshots
+     - Provision sufficient ``map_size``.
+   * - ``LevelDBStore`` / ``leveldb``
+     - ``gestaltdb[leveldb]``
+     - Modest local graphs and straightforward embedded use
+     - GestaltDB's multi-database layout has no graph-wide transaction/snapshot.
+   * - ``PyRexStore`` / ``pyrex``
+     - ``gestaltdb[rocksdb]``
+     - RocksDB bulk ingestion and append-heavy workloads
+     - Default mode is nontransactional; native columnar writes need the
+       appropriate input/runtime path.
+   * - ``PyRexStore(transactional=True)`` / ``pyrex`` plus backend option
+     - ``gestaltdb[rocksdb]``
+     - Explicit transactions and current snapshots on a capable PyRex runtime
+     - No native columnar writer on the current TransactionDB path.
 
-Recommendations for the library as-is:
+Install all built-in backends with ``gestaltdb[backends]``. Add codec extras
+independently, for example ``gestaltdb[lmdb,msgpack]`` or
+``gestaltdb[leveldb,protobuf]``. Pickle and JSON need no serializer extra. A base
+install contains **no embedded backend**.
 
-- Start with ``LevelDBStore`` for small applications, examples, and local testing
-  when you do not need RocksDB's native columnar ingestion path.
-- Use ``PyRexStore`` for bulk loads and append-heavy workloads, especially with
-  ``GraphDB.ingest_arrow`` or ``GraphDB.ingest_polars``.
-- Use ``LMDBStore`` when LMDB's storage model is desirable and the database size
-  is predictable enough to configure ``map_size`` safely.
-- Keep ``disable_wal=False`` for durable RocksDB writes. Consider
-  ``disable_wal=True`` only for disposable benchmark runs or reloadable bulk-load
-  experiments.
-- Benchmark with your actual serializer, index definitions, and graph shape.
-  Backend differences can be hidden by Python object creation, JSON
-  serialization, or index maintenance.
+Parameterless ``GraphDB.create(path)`` retains the ``pyrex`` backend default and
+requires the ``rocksdb`` extra. It never silently falls back to another backend.
+Selected dependencies are checked before creating/replacing storage. Python must
+be within the package's supported range (3.10–3.13); backend wheels and local build
+tooling are additional installation constraints (:doc:`installation`).
+
+Create and reopen a self-describing database
+--------------------------------------------
+
+**Standalone runnable example.** Requires ``gestaltdb[lmdb]``. Prefer this
+manifest-backed path when GestaltDB owns the database directory.
+
+.. code-block:: python
+
+   from tempfile import TemporaryDirectory
+   from gestaltdb.graphdb import GraphDB, Node
+
+   with TemporaryDirectory() as root:
+       path = f"{root}/graph"
+       with GraphDB.create(
+           path, backend="lmdb", serializer="json",
+           backend_options={"map_size": 2**30},
+           indexed_node_properties=["name"],
+       ) as graph:
+           graph.put_node(Node("drug-1", labels=["Drug"], properties={"name": "Aspirin"}))
+
+       with GraphDB.open(path) as reopened:
+           assert reopened.manifest["backend"]["name"] == "lmdb"
+           assert reopened.manifest["serializer"]["name"] == "json"
+           assert [n.get_id for n in reopened.nodes_by_property("name", "Aspirin")] == ["drug-1"]
+
+``create`` writes ``gestaltdb_manifest.json`` with backend/serializer choices and
+configuration. ``open`` restores those choices and the configured property-index
+metadata; it is not a way to pick a different decoder for the same stored bytes.
+It requires a manifest. A nonempty target directory is rejected by ``create``
+unless ``overwrite=True`` is explicitly supplied; **overwrite replaces storage**,
+so never add it just to make a repeated notebook cell succeed.
+
+For persistent applications, replace the temporary example path with an
+application-owned directory. Close the old handle before reopening it. A context
+manager closes the handle; it is **not** an implicit transaction around everything
+inside the block.
+
+.. _backend-selection-pattern:
+
+Direct store construction
+--------------------------
+
+Use direct construction when an application explicitly manages its store and
+codec. It does not automatically create a filesystem manifest. Reopen with the
+same compatible configuration, or explicitly write a manifest with
+``graph.save_manifest(path)`` before switching to ``GraphDB.open``.
+
+**Standalone runnable example.** Requires ``gestaltdb[leveldb,msgpack]``.
+
+.. code-block:: python
+
+   from tempfile import TemporaryDirectory
+   from gestaltdb.graphdb import GraphDB, Node
+   from gestaltdb.kvstores import LevelDBStore
+   from gestaltdb.serializers import MessagePackSerializer
+
+   with TemporaryDirectory() as root:
+       graph = GraphDB(LevelDBStore(path=f"{root}/graph"), MessagePackSerializer())
+       try:
+           graph.put_node(Node("sample-1", properties={"raw": b"abc"}))
+           assert graph.get_node("sample-1").properties["raw"] == b"abc"
+       finally:
+           graph.close()
+
+Backend options and ingestion
+------------------------------
 
 LMDB Backend
-------------
+~~~~~~~~~~~~~
 
-Use ``LMDBStore`` for a mature embedded backend with named sub-databases.
-
-Install it with ``python -m pip install "gestaltdb[lmdb]"``.
-
-.. code-block:: python
-
-   from gestaltdb.graphdb import GraphDB
-   from gestaltdb.kvstores import LMDBStore
-   from gestaltdb.serializers import PickleSerializer
-
-   store = LMDBStore(path="graph_lmdb", map_size=2**30)
-   graph_db = GraphDB(store, PickleSerializer())
-
-LMDB keeps separate databases for nodes, edges, adjacency, typed adjacency, and
-sorted indexes. Increase ``map_size`` when loading large graphs.
-
-LMDB is a good fit when you want a mature embedded backend and can provision the
-maximum database size ahead of time. It is not currently the optimized backend
-for native Arrow/Polars columnar ingestion; those paths are designed around
-``PyRexStore`` when PyRex exposes ``write_columnar_batch``.
+Choose ``map_size`` for the intended database size. The same environment contains
+named node/edge/adjacency/index/metadata databases. Native PyRex columnar writing
+is not an LMDB capability.
 
 LevelDB Backend
----------------
+~~~~~~~~~~~~~~~~
 
-Use ``LevelDBStore`` when you want LevelDB through ``plyvel``.
-
-Install it with ``python -m pip install "gestaltdb[leveldb]"``.
-
-.. code-block:: python
-
-   from gestaltdb.graphdb import GraphDB
-   from gestaltdb.kvstores import LevelDBStore
-   from gestaltdb.serializers import PickleSerializer
-
-   store = LevelDBStore(path="graph_leveldb")
-   graph_db = GraphDB(store, PickleSerializer())
-
-``plyvel`` requires compatible CPython wheels or local LevelDB build tooling. If
-installation fails on Python 3.14 or a free-threaded interpreter, create a Python
-3.12 environment and install ``gestaltdb[leveldb]`` there.
-
-LevelDB is the pragmatic default for modest local workloads. It supports the same
-``GraphDB`` API and index semantics, but columnar ingestion falls back to Python
-bulk writes rather than RocksDB's native columnar batch writer. In local
-benchmarks, LevelDB can be close to RocksDB when serialization dominates, but it
-does not get the same write-phase advantage on larger native columnar loads.
+The ``plyvel`` dependency may need a compatible wheel or local LevelDB build
+tooling. Columnar ingestion uses portable writes rather than PyRex's native writer.
 
 RocksDB Backend
----------------
+~~~~~~~~~~~~~~~~
 
-Use ``PyRexStore`` for RocksDB through the optional ``pyrex-rocksdb`` package.
-This backend uses one physical RocksDB database with prefixed keys and exposes
-several RocksDB tuning knobs.
+``parallelism``, ``max_background_jobs``, ``write_buffer_size`` and
+``bloom_bits_per_key`` are backend tuning options. Keep ``disable_wal=False`` for
+durable writes; disabling WAL is only appropriate for explicitly
+disposable/reloadable experiments, not a safe default.
 
-Install it with ``python -m pip install "gestaltdb[rocksdb]"``.
+Select transactional PyRex at creation with
+``backend="pyrex", backend_options={"transactional": True}``. The manifest
+retains that mode for ``open``. Runtime capabilities remain explicit.
 
-.. code-block:: python
-
-   from gestaltdb.graphdb import GraphDB
-   from gestaltdb.kvstores import PyRexStore
-   from gestaltdb.serializers import PickleSerializer
-
-   store = PyRexStore(
-       path="graph_rocksdb",
-       parallelism=4,
-       max_background_jobs=4,
-       write_buffer_size=64 * 1024 * 1024,
-       bloom_bits_per_key=10,
-   )
-   graph_db = GraphDB(store, PickleSerializer())
-
-``disable_wal=True`` can be useful for bulk-loading experiments, but it weakens
-durability and should not be used as a safe default.
-
-When installed with ``pyrex-rocksdb>=0.4.1``, ``PyRexStore`` can use PyRex's
-native ``write_columnar_batch`` API through ``GraphDB.ingest_nodes_arrow`` and
-``GraphDB.ingest_edges_arrow``. Serialized ``node_value`` and ``edge_value``
-columns backed by Arrow binary arrays are passed directly to PyRex's native
-batch writer where possible. The native path still constructs RocksDB keys in
-GestaltDB, but avoids Python value materialization for Arrow-backed value
-columns.
-
-For JSON-compatible payloads, ``GraphDB.ingest_nodes_polars_entities`` and
-``GraphDB.ingest_edges_polars_entities`` can build serialized payload columns
-from structured Polars columns before using the same columnar write path:
-
-.. code-block:: python
-
-   import polars as pl
-
-   from gestaltdb.graphdb import GraphDB
-   from gestaltdb.kvstores import PyRexStore
-   from gestaltdb.serializers import JSONSerializer
-
-   graph_db = GraphDB(PyRexStore(path="graph_rocksdb"), JSONSerializer())
-   graph_db.ingest_nodes_polars_entities(
-       pl.DataFrame({
-           "node_id": ["n1"],
-           "labels": [["Entity"]],
-           "kind": ["drug"],
-       }),
-       property_columns=["kind"],
-   )
-
-Other serializers use the same entity methods as a convenience API, but fall
-back to Python row-wise serialization. Columnar edge ingestion remains
-append-only.
-
-RocksDB is the backend to choose when ingestion throughput matters. A targeted
-100,000-node and 500,000-edge local benchmark using JSON payloads showed RocksDB
-with native columnar ingestion at 3.400 seconds total versus 3.948 seconds for
-LevelDB on the same Python JSON serialization path, a 1.16x total speedup and a
-1.23x write-phase speedup. The same run showed larger gains from avoiding Python
-JSON serialization with Polars, so pair RocksDB with Polars/Arrow entity-column
-ingestion when your input data is already tabular.
+For structured JSON-compatible Arrow/Polars columns, entity-column ingestion can
+avoid Python row-wise payload construction on eligible native paths. Serialized
+payload ingestion accepts already encoded values. Neither API implies that every
+codec/backend gets the same fast path. Columnar edge ingestion is append-only.
+See :doc:`api-workflows` and :doc:`performance` for setup and measurements.
 
 Indexes
 -------
 
-All backends implement sorted index primitives used by labels, relationship type
-catalogs, property lookups, and range scans. The high-level indexes maintained by
-``GraphDB`` are:
+Labels and relationship types are indexed automatically. Node/edge property
+indexes are explicit; their creation also provides composite and range lookup
+support. Current index definitions persist in backend metadata.
 
-- label indexes for ``Node.labels`` and ``GraphDB.nodes_by_label``
-- relationship type indexes for ``edge.properties["type"]`` and ``GraphDB.edges_by_type``
-- explicit node and edge property indexes
-- composite label/property and type/property indexes
-- scalar range indexes for indexed string and numeric properties
+``MAINTAIN`` keeps configured indexes current during ingestion. ``DEFER`` leaves
+affected secondary indexes stale and requires ``rebuild_deferred_indexes()``;
+high-level ``DEFER_REBUILD`` performs that rebuild before returning. Moving index
+work out of the write window is not a guarantee of lower total ingest time.
+See :doc:`property-filtering` for exact/range/ID/count APIs and freshness rules.
 
-Property indexes are intentionally explicit. Register them only for predicates
-you expect to use frequently:
+All backends enforce a 511-byte **final encoded index key** limit before backend
+I/O. URL-safe-base64 components expand input, so an ID/value below 511 raw bytes
+can still exceed the final limit. Oversized keys are rejected, not truncated.
+.. _backend-index-interface:
 
-.. code-block:: python
-
-   graph_db.create_node_property_index("name")
-   graph_db.create_edge_property_index("score")
-
-   graph_db.nodes_by_property("name", "Aspirin")
-   graph_db.edges_by_property_range("score", 0.8, None)
-
-Cypher uses these indexes when possible for label/property scans and typed
-relationship predicates. Index definitions are persisted in backend metadata, so
-reopened databases continue maintaining the configured property indexes.
-
-Columnar ingestion keeps label, relationship type, property, composite, and range
-indexes current for configured indexed properties.
-
-Columnar ingestion also accepts ``index_mode`` to control when secondary indexes
-are updated:
-
-``IndexMaintenanceMode.MAINTAIN``
-   Updates label, type, property, composite, and range indexes during ingestion.
-   Use this for incremental writes or when index-backed queries must be valid as
-   soon as ingestion returns.
-
-``IndexMaintenanceMode.DEFER``
-   Writes canonical node and edge records plus traversal-critical typed adjacency
-   records, marks affected secondary indexes stale, and requires an explicit
-   ``GraphDB.rebuild_deferred_indexes()`` before indexed queries. Use this when
-   the write window is more important than immediate index readiness.
-
-``IndexMaintenanceMode.DEFER_REBUILD``
-   Defers secondary-index writes during ingestion and immediately rebuilds stale
-   indexes before returning. This is the high-level default for
-   ``GraphDB.ingest_arrow`` and ``GraphDB.ingest_polars``.
-
-On a targeted 100,000-node and 500,000-edge local benchmark with node property
-indexes on ``kind`` and ``group`` plus an edge property index on ``weight``,
-deferred mode reduced the write phase from 12.269 seconds to 1.407 seconds
-(``8.72x`` faster). The immediate rebuild took 12.973 seconds, so total
-ingest-plus-rebuild time was 14.380 seconds, which was 17.2% slower than inline
-maintenance for that subset. Use deferred indexing to move index work out of the
-critical write path; do not assume it always reduces total wall-clock time when a
-full rebuild runs immediately.
-
-Backend Index Interface
-~~~~~~~~~~~~~~~~~~~~~~~
-
-Backend implementations expose lower-level sorted index methods such as
-``put_index_entry``, ``delete_index_entry``, ``iter_index_prefix``, and range
-index equivalents. Most users should prefer the ``GraphDB`` helpers above.
+Low-level sorted-index primitives are backend interfaces; prefer graph-level
+lookups and index services in application code.
 
 Transactions
 ------------
 
-GestaltDB exposes optional graph-level transactions for backends that can commit
-all graph records and indexes atomically:
+.. list-table:: Graph-wide mutable-state capabilities
+   :header-rows: 1
+
+   * - Mode
+     - ``graph.transaction()``
+     - ``graph.current_read_view()``
+   * - LMDB
+     - Supported across named databases
+     - Pinned, verifiable MVCC state
+   * - LevelDB layout
+     - Unsupported
+     - Unsupported
+   * - Plain PyRex
+     - Unsupported
+     - Unsupported
+   * - Transactional PyRex
+     - Supported when the runtime exposes transactions
+     - Pinned when transaction snapshots are available; verifiable provenance
+       requires PyRex >=0.7.0
+
+Current RocksDB extras require ``pyrex-rocksdb>=0.7.1``. The older 0.7.0 boundary
+above explains snapshot capability, not permission to install an older dependency.
+Explicit unsupported transaction/snapshot requests raise rather than downgrade to
+a best-effort guarantee.
+
+**Standalone runnable example.** Requires ``gestaltdb[lmdb]``. Use the yielded
+``tx`` handle for every operation in the transaction. Clean exit commits;
+an exception leaving the transaction rolls back.
 
 .. code-block:: python
 
-   with graph_db.transaction() as tx:
-       tx.put_node(Node(node_id="n1"))
-       tx.put_edge(Edge(edge_id="e1", source="n1", target="n2", properties={"type": "rel"}))
+   from tempfile import TemporaryDirectory
+   from gestaltdb.graphdb import GraphDB, Node
 
-The context commits on clean exit and rolls back if an exception leaves the
-block. ``LMDBStore`` supports transactions directly because LMDB transactions
-span all named sub-databases in the environment.
+   with TemporaryDirectory() as root:
+       with GraphDB.create(f"{root}/graph", backend="lmdb", serializer="json") as graph:
+           with graph.transaction() as tx:
+               tx.put_nodes([Node("drug-1", labels=["Drug"]), Node("protein-1")])
+           try:
+               with graph.transaction() as tx:
+                   tx.put_node(Node("discarded", labels=["Drug"]))
+                   raise RuntimeError("abort this transaction")
+           except RuntimeError:
+               pass
+           assert graph.get_node("drug-1") is not None
+           assert graph.get_node("discarded") is None
+           assert [n.get_id for n in graph.nodes_by_label("Drug")] == ["drug-1"]
 
-``PyRexStore`` supports transactions when opened in transaction-capable mode with
-``pyrex-rocksdb>=0.4.1``:
-
-.. code-block:: python
-
-   store = PyRexStore(path="graph_rocksdb", transactional=True)
-   graph_db = GraphDB(store, PickleSerializer())
-
-The default ``PyRexStore`` mode remains the fastest non-transactional path and
-keeps native columnar ingestion available. Transactional PyRex writes still use
-RocksDB ``PyWriteBatch`` internally for bulk methods, but the current PyRex
-``TransactionDB`` API does not expose the native columnar writer.
-
-A focused local benchmark on this branch used 100,000 nodes, 500,000 edges,
-Pickle payloads, chunk size 10,000, four RocksDB background threads, a 64 MiB
-write buffer, and Bloom filters. The transaction-capable RocksDB backend was
-opened with ``PyRexStore(transactional=True)`` and used the same public ingestion
-API, not one giant user transaction.
-
-=========================================== ========== ========== =================
-RocksDB backend                             Node write Edge write Native columnar
-=========================================== ========== ========== =================
-default, Arrow payloads                     0.457 s    1.886 s    yes
-transaction-capable, Arrow payloads         0.540 s    3.623 s    no
-default, Polars payloads                    0.429 s    1.828 s    yes
-transaction-capable, Polars payloads        0.545 s    3.670 s    no
-=========================================== ========== ========== =================
-
-Use transaction-capable RocksDB when graph-level atomicity is required. Keep the
-default RocksDB backend for append-only bulk loads where native columnar
-ingestion is the priority.
-
-The current ``LevelDBStore`` layout uses multiple physical LevelDB databases, so
-graph-level transactions are intentionally unsupported there.
+The context manager on ``GraphDB`` itself only owns handle lifetime. Do not infer
+atomic read/modify/write behavior from separate calls, or cross-family atomicity
+from a bulk-ingestion call. Use an explicit supported transaction for the required
+scope. Individual APIs retain their own documented transaction boundaries.
 
 Mutable Read Snapshots
 ----------------------
 
-``GraphDB.current_read_view()`` binds node and edge records, adjacency, indexes,
-and metadata to one read-only backend horizon. LMDB uses one MVCC transaction
-across all named databases and records its transaction ID plus a digest of every
-visible namespace in ``CurrentReadProvenance``. The digest distinguishes
-divergent copies that share a database UUID and transaction number; capturing
-provenance therefore performs a full store scan. Unqualified read-only Cypher
-automatically uses a provenance-free pinned view on capable backends and does
-not pay that hashing cost; pass ``read_snapshot=True`` to require the view or
-``False`` to opt out.
+A current read view binds records, adjacency, indexes and metadata to one backend
+snapshot. It differs from a live read-only repository and from a historical
+temporal read view. **Standalone runnable example**, requiring ``gestaltdb[lmdb]``:
 
 .. code-block:: python
 
-   with graph_db.current_read_view(require_verifiable=True) as view:
-       nodes = view.nodes_by_label("Drug")
-       provenance = view.provenance
+   from tempfile import TemporaryDirectory
+   from gestaltdb.graphdb import GraphDB, Node
 
-Transactional ``PyRexStore`` pins point reads and iterators to one RocksDB
-transaction snapshot. With ``PyRexStore(transactional=True)`` and
-``pyrex-rocksdb>=0.7.0``, a verifiable provenance record is available from the
-snapshot's sequence number plus a full-state digest. Older PyRex runtimes pin
-reads but cannot expose that sequence; default non-transactional PyRex has no
-snapshot handle. ``LevelDBStore`` deliberately
-raises ``NotImplementedError`` for explicit snapshot requests because its node,
-edge, adjacency, index, and metadata databases cannot be captured at one atomic
-sequence.
+   with TemporaryDirectory() as root:
+       with GraphDB.create(f"{root}/graph", backend="lmdb", serializer="json") as graph:
+           graph.put_node(Node("drug-1", properties={"revision": 1}))
+           with graph.current_read_view(require_verifiable=True) as view:
+               graph.put_node(Node("drug-1", properties={"revision": 2}))
+               assert view.nodes.get("drug-1").properties["revision"] == 1
+               assert view.provenance is not None
+           assert graph.get_node("drug-1").properties["revision"] == 2
 
-High-level non-temporal sampler builds automatically use a verifiable backend
-snapshot where available and persist its source provenance. Use
-``read_snapshot=True`` to require that behavior; unsupported or non-verifiable
-backends fail before output is built. Legacy ordinary reads and builds remain
-available on other backends unless the guarantee is explicitly requested.
+Verifiable provenance includes a snapshot sequence and full-state digest;
+capturing it therefore scans the store. ``capture_provenance=False`` avoids that
+digest when a caller needs only a pinned read, not a verifiable provenance record.
+Do not retain view readers after the view closes.
 
-Immutable temporal-version commits use backend metadata rather than current
-node and edge records. LMDB and transaction-capable PyRex publish all records
-and the commit marker in the surrounding backend transaction. LevelDB and
-default PyRex publish a marker last; interrupted, unmarked records remain
-invisible and visible commit IDs remain ordered. Filesystem-backed temporal
-writers are serialized across handles and processes. See :doc:`temporal-versioning`.
+Unqualified read-only Cypher automatically pins reads on capable backends without
+capturing the full-state digest. ``read_snapshot=True`` explicitly requires a
+snapshot; ``False`` opts out. High-level non-temporal sampler builds automatically
+use **verifiable** snapshots where available; ``read_snapshot=True`` requires that
+stronger build guarantee. Unsupported requests fail before building. Memmap
+loading of a built sampler artifact is separate from these database snapshots.
 
-All secondary and temporal index encodings enforce a portable 511-byte final-key
-limit, matching the smallest supported backend constraint. Components are
-URL-safe-base64 encoded, so application IDs and indexed property values consume
-roughly four encoded bytes per three input bytes plus namespace separators.
-Oversized keys raise ``ValueError`` consistently before backend I/O; GestaltDB
-does not truncate or hash them, avoiding silent collisions.
+Temporal publication and coordination
+--------------------------------------
 
-Backend Selection Pattern
--------------------------
+Temporal history is not the same as mutable graph transactions. LMDB and
+transactional PyRex can publish version records and visibility markers in one
+transaction. LevelDB/plain PyRex publish the marker last; interrupted unmarked
+artifacts stay invisible, and recovery is explicit. Cooperating filesystem-backed
+temporal writers are serialized across handles/processes with file locks.
 
-.. code-block:: python
+Those locks do not turn all ordinary mutable operations into globally serialized
+transactions or protect against arbitrary external storage modification. See
+:doc:`temporal-versioning` and :doc:`operations` for writer coordination,
+orphan recovery, index rebuilding and deprecated ``TimeIndexedEdge`` migration.
+Do not delete canonical history to repair a derived index.
 
-   from pathlib import Path
+Measurements and next steps
+---------------------------
 
-   from gestaltdb.graphdb import GraphDB
-   from gestaltdb.kvstores import LMDBStore, LevelDBStore, PyRexStore
-   from gestaltdb.serializers import PickleSerializer
+Backend choice is workload-dependent. Account for codec work, index maintenance,
+ingestion, snapshot construction and steady-state reads separately. Historical
+numbers formerly embedded in this page remain in
+:doc:`storage-backend-evidence`; they are not fresh v0.17.0 measurements or a
+universal backend ranking. Use :doc:`performance` to reproduce relevant workloads.
 
-   def open_graph(path: str, backend: str = "lmdb") -> GraphDB:
-       Path(path).parent.mkdir(parents=True, exist_ok=True)
-       if backend == "lmdb":
-           store = LMDBStore(path=path, map_size=2**30)
-       elif backend == "leveldb":
-           store = LevelDBStore(path=path)
-       elif backend == "rocksdb":
-           store = PyRexStore(path=path)
-       else:
-           raise ValueError(f"unknown backend: {backend}")
-       return GraphDB(store, PickleSerializer())
+.. _cleanup:
 
 Cleanup
--------
+--------
 
-Always close stores when a script or notebook cell is finished with them.
-
-.. code-block:: python
-
-   graph_db = GraphDB(LMDBStore(path="example_lmdb"), PickleSerializer())
-   try:
-       graph_db.put_node(Node(node_id="n1"))
-   finally:
-       graph_db.close()
+Close graph handles with a context manager or ``try/finally`` as shown above.
+Close transaction/read-view scopes before the parent handle and do not reuse
+borrowed readers afterward. Back up and quiesce the database before migration
+or recovery; closing a handle is not a migration or backup procedure.
