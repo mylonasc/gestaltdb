@@ -31,7 +31,7 @@ Quick Start
            graph.put_edge(Edge(edge_id="e1", source="alice", target="bob", properties={"type": "knows"}))
 
            figure = graph.visualize('MATCH (a:Person)-[r:knows]->(b) RETURN a, r, b')
-           figure.save("/tmp/knows.html")  # open in any browser, offline
+           figure.save(f"{tmpdir}/knows.html")  # disposable offline demonstration
        finally:
            graph.close()
 

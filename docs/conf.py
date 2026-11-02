@@ -9,6 +9,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "docs/_ext"))
 
 project = "GestaltDB"
 author = "Mylonas Charilaos"
@@ -24,6 +25,9 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "myst_parser",
+    "sphinx_tabs.tabs",
+    "database_examples",
+    "terminology",
 ]
 
 templates_path = ["_templates"]
@@ -35,6 +39,7 @@ html_static_path = ["_static"]
 html_css_files = ["documentation.css"]
 html_js_files = ["documentation.js"]
 html_codeblock_linenos_style = "inline"
+sphinx_tabs_disable_tab_closing = True
 
 
 def number_code_blocks(app, doctree, docname):

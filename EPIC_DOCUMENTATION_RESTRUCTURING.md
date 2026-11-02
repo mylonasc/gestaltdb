@@ -326,6 +326,26 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
+### Reconciled delivery status (2026-11-03)
+
+- **Merged/delivered:** DOC-01 #481 (PR #496), DOC-02 #482 (PR #498),
+  DOC-11 #491 (PR #499), consolidated by #494 at `69fe552`. Their child
+  issues are closed and #480's corresponding delivery entries are checked.
+- **Implemented, not merged:** DOC-12 #492 in #501; terminology, code controls
+  and generated figures in #502; glossary tooltips and backend/serializer tabs
+  are stacked follow-through. These do not complete the remaining epic slices.
+- **Partial/pending:** DOC-03–DOC-10 and DOC-13, including final audience
+  acceptance and packaged-document alignment. Graphics debt remains in #495.
+
+The existing Concepts and Terminology glossary remains canonical, expanded for
+encountered jargon and linked with accessible definition tooltips. Explicit
+example declarations cover 42 database/codec setups: 389 rendered alternatives,
+including 365 executable alternatives and 24 compiled setup-fragment variants.
+One fixed benchmark setup is classified without tabs. Backend-free snippets and
+existing-graph continuations keep their context. Capability-qualified tabs do not
+change the ordinary extraction default, deferred automatic native adoption or
+optional HSA-05 #458.
+
 DOC-01's initial implementation lives under `planning/documentation-review/`:
 
 - `capabilities.json` maps 44 capability families to representative source/tests,

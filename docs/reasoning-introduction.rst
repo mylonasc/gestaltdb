@@ -21,7 +21,7 @@ a synthetic reasoning example, not a claim of medical efficacy.
   are variables; matching concrete facts binds them to values.
 - A rule's **body** contains its premises. Its **head** is the conclusion.
   Shared variables require matching values in every premise.
-- A **witness** is one recorded explanation of a conclusion: which rule and
+- A :term:`witness` is one recorded explanation of a conclusion: which rule and
   concrete premises produced it. It is not all possible explanations.
 
 Read the rule below as “if x binds y and y is in pathway z, derive that x is a

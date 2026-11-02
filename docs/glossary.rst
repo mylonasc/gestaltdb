@@ -207,6 +207,79 @@ a small example that connects facts, rules, conclusions and explanations; use
       identities and supported execution contract. It is not automatic authority
       to publish results (:doc:`reasoning-generation-identity`).
 
+   materialization
+      Computing a result and retaining it for subsequent use, rather than deriving
+      it again for each request. Publication of materialized conclusions is an
+      explicit operation, not an automatic side effect of evaluation.
+
+   stratum
+      One evaluation layer in a stratified program. Dependencies must respect the
+      layer order, especially when testing that another relation is absent.
+
+   semi-naive evaluation
+      Computing each rule round using at least one newly added input rather than
+      repeatedly joining all old facts. It changes execution work, not the
+      intended positive-program closure.
+
+   SCC
+      Strongly connected component: a group in a directed dependency graph where
+      every member can reach every other. Prepared plans use these components to
+      organize recursive positive rules (:doc:`reasoning-plans`).
+
+   DRed
+      Delete and rederive: a maintenance strategy that removes potentially affected
+      conclusions after a deletion, then restores those still derivable from
+      surviving support. It is not simply deleting every dependent fact forever.
+
+   CAS
+      Compare and swap: update only if the observed state still matches an expected
+      state. Session/publication APIs qualify this check with exact identities and
+      coordination; a checksum alone does not make an arbitrary file update atomic.
+
+   MVCC
+      Multiversion concurrency control: readers observe a selected consistent
+      storage version while writes may create newer versions. GestaltDB's backend
+      snapshot guarantees remain backend/runtime-specific (:doc:`storage-backends`).
+
+   horizon
+      The recorded-history boundary selected for a read or computation, such as
+      the visible commit prefix. It limits which updates are visible, separately
+      from the valid-time instant being queried.
+
+   generation
+      An identified version of prepared, evaluated or persisted reasoning state.
+      Always specify the relevant API's source/program/state pins; the word does
+      not imply every generation is independently source-authenticated.
+
+   manifest
+      Configuration metadata describing a database directory's backend, codec and
+      format identity. It enables compatible reopen, not arbitrary format conversion.
+
+   codec
+      An encoder/decoder, called a serializer in these guides. A backend stores
+      bytes; a codec determines how supported payloads become and recover from bytes.
+
+   index freshness
+      Whether derived index entries agree with the canonical records they describe.
+      Deferred writes can mark index families stale; rebuilding restores the
+      documented lookup contract (:doc:`ingestion`).
+
+   native path
+      A capability that uses the storage/runtime's compiled scan or writer APIs.
+      It does not automatically provide stronger source authentication, lower
+      total memory use, or a speedup for every workload.
+
+   cardinality
+      A count of distinct members or facts under the stated semantics. Validation
+      cardinality constraints do not necessarily count physical duplicate records
+      or edges (:doc:`reasoning-validation`).
+
+   magic sets
+      A demand-evaluation technique that specializes rule work around a requested
+      goal and its bound arguments, rather than requesting every conclusion.
+      Unsupported combinations require the documented complete strategy
+      (:doc:`reasoning-demand`).
+
 External links above are optional background reading, not specifications of
 GestaltDB support. The local guides and supported-profile references define the
 library's actual capabilities.

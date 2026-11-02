@@ -49,7 +49,7 @@ the stratified positive fixpoint over the completed closure.
 Strata, cycles and witnesses
 ----------------------------------------
 
-Positive SCCs evaluate in dependency order; components with no rules still
+Positive :term:`SCCs <SCC>` evaluate in dependency order; components with no rules still
 occupy schedule positions with zero rounds. A negative edge inside one
 component, or rankings that cannot order negative edges strictly downward,
 fail closed as unstratifiable — there is no fallback to non-monotonic

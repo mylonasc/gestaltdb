@@ -71,7 +71,7 @@ before persistence. No stale new output is relabelled as current.
 
 ``advance_authenticated_session`` holds the database temporal writer guard,
 then a cooperating session-file lock, across load/admission, existing incremental
-advance or explicit rebuild, new-generation admission and exact-state file CAS.
+advance or explicit rebuild, new-generation admission and exact-state file :term:`CAS`.
 Normal temporal writers cannot change the source through that boundary. Source
 store/decoder rebinding and reentrant source movement before replacement fail
 closed. It writes no database claims and grants no publication permit.

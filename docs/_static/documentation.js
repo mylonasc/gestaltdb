@@ -3,6 +3,40 @@
  * Without JavaScript the wrapped, bounded table remains available.
  */
 document.addEventListener("DOMContentLoaded", () => {
+  const tooltip = document.createElement("div");
+  tooltip.id = "term-definition-tooltip";
+  tooltip.className = "term-definition-tooltip";
+  tooltip.setAttribute("role", "tooltip");
+  tooltip.hidden = true;
+  document.body.appendChild(tooltip);
+  let currentTerm = null;
+  const hideTerm = () => {
+    if (currentTerm) currentTerm.removeAttribute("aria-describedby");
+    currentTerm = null;
+    tooltip.hidden = true;
+  };
+  const showTerm = (link) => {
+    hideTerm();
+    currentTerm = link;
+    tooltip.textContent = link.dataset.termDefinition;
+    tooltip.hidden = false;
+    link.setAttribute("aria-describedby", tooltip.id);
+    const anchor = link.getBoundingClientRect();
+    const box = tooltip.getBoundingClientRect();
+    tooltip.style.left = `${Math.max(12, Math.min(anchor.left, innerWidth - box.width - 12))}px`;
+    const below = anchor.bottom + 8;
+    tooltip.style.top = `${below + box.height < innerHeight ? below : Math.max(12, anchor.top - box.height - 8)}px`;
+  };
+  document.querySelectorAll("a.term-definition-link[title]").forEach((link) => {
+    link.dataset.termDefinition = link.title;
+    link.removeAttribute("title"); // avoid a second native tooltip when enhanced
+    link.addEventListener("mouseenter", () => showTerm(link));
+    link.addEventListener("focus", () => showTerm(link));
+    link.addEventListener("mouseleave", () => { if (document.activeElement !== link) hideTerm(); });
+    link.addEventListener("blur", () => { if (!link.matches(":hover")) hideTerm(); });
+    link.addEventListener("keydown", (event) => { if (event.key === "Escape") hideTerm(); });
+  });
+
   document.querySelectorAll(".rst-content div.highlight").forEach((block, index) => {
     const pre = block.querySelector("pre");
     if (!pre) return;

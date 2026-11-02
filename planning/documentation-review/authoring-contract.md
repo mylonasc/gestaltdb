@@ -50,6 +50,25 @@ role and must not displace user tutorials.
 
 ## Runnable examples
 
+Keep `docs/glossary.rst` as the canonical user terminology section; add unfamiliar
+jargon there and use Sphinx `:term:` links at useful introductions. The terminology
+extension derives short tooltip definitions from that file, retaining ordinary
+glossary navigation and a native title fallback without JavaScript. Enhanced
+tooltips support hover, keyboard focus and Escape dismissal.
+
+Declare applicable backend/serializer alternatives in
+`docs/_ext/example_options.json` (page name plus zero-based Python-block index).
+Keep one canonical source block; `database_examples.py` renders real nested
+`sphinx-tabs` with installation commands and AST-rewritten configuration only.
+Every declaration explains its capability boundary. Transaction/current-snapshot
+examples exclude incapable backends; native admission stays plain-PyRex-only;
+raw bytes exclude JSON; Pickle is trusted-data-only. Never imply equal performance.
+Backend-free snippets and existing-graph continuations need no selectors. Fixed
+benchmark setups have an explicit non-rendered disposition; notebook/shared-state
+setup fragments are compiled, not advertised as independently executable programs.
+Run `tests/test_documentation_variants.py` with all backend, serializer, Arrow,
+Polars and NetworkX extras to execute alternatives and detect undeclared examples.
+
 Label each block as standalone, continuation, illustrative fragment or pseudocode.
 Standalone examples include imports, data construction, optional extras and expected
 results. Continuations explicitly name their setup on the same page; fragments must

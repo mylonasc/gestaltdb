@@ -179,7 +179,7 @@ Transactions
      - ``graph.current_read_view()``
    * - LMDB
      - Supported across named databases
-     - Pinned, verifiable MVCC state
+     - Pinned, verifiable :term:`MVCC` state
    * - LevelDB layout
      - Unsupported
      - Unsupported

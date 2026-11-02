@@ -101,12 +101,13 @@ token and stale caches cannot match.
    from gestaltdb.reasoning.typed import TypedFact
    from tempfile import TemporaryDirectory
 
-   mapping = TypedGraphMapping(node_attributes=[("age", "age")],
+   mapping = TypedGraphMapping(edge_types=[("PAYS", "pays")],
+                               node_attributes=[("age", "age")],
                                edge_attributes=[("amount", "amount")])
    with TemporaryDirectory() as directory:
        graph = GraphDB.create(directory, backend="lmdb", serializer="json")
        try:
-           graph.put_nodes([Node("a", properties={"age": 30})])
+           graph.put_nodes([Node("a", properties={"age": 30}), Node("b")])
            graph.put_edge(Edge("ab", "a", "b", {"type": "PAYS", "amount": 5}))
            with graph.current_read_view(require_verifiable=True) as view:
                with PinnedTypedGraphSource(view, mapping=mapping) as source:
