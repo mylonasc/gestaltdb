@@ -98,9 +98,40 @@ uv run --with pyrex-rocksdb --with pyarrow python -m benchmarks.reasoning_hsa_ac
   --after-history-batch-size 64 --timeout 900 --output /tmp/opencode/hsa-06-paired-1k.json
 ```
 
-OS caches remain uncontrolled, hardware/noise are local, and sparse histories
-and larger paired scale points are still missing. Profiling reports
+OS caches remain uncontrolled, hardware/noise are local, and larger paired
+scale points are still missing. Profiling reports
 from HSA-04 stay separate; their latency is not substituted for these timings.
+
+## Sparse-history extension (1K, history_rows=100)
+
+Report: `benchmarks/results/reasoning-454-hsa-06-paired-1k-sparse.json`
+
+SHA-256: `0de1e2566ba7cfd3c34924c8f242a930fd69261d2bb18f40b36d05b07afd7e82`
+
+Same 1K shape with amendments on only the first 100 assertions (1035 versions
+vs 1343 dense), 6 alternating pairs per method/selection/time, first-handle
+reads: **216 observations / 108 pairs**, all with exact fact/version parity.
+Before `001e276`, after `25ebca4` (warm-slice branch; library sources identical
+to `hsa-dev`).
+
+All 36 own-mode observed latency/RSS gates are within limits. Sparse medians
+are proportionally faster on both sides (e.g. time-50 ordinary all 0.208s →
+0.096s; batched locator all 0.444s → 0.213s), so a lighter fixture cannot
+manufacture a native pass.
+
+Selective actual-locator-vs-ordinary gates still **breach** 1.25x at time 50
+(paired latency ~2.14–2.28x; RSS also breaches). Sparse evidence therefore
+extends the deferral rather than overturning it.
+
+```bash
+uv run --with pyrex-rocksdb --with pyarrow python -m benchmarks.reasoning_hsa_acceptance \
+  --before /absolute/path/to/hsa-01-baseline-attribution \
+  --after /absolute/path/to/hsa-06-warm-sparse \
+  --rows 1000 --history-rows 100 --commit-batch 1000 --repeats 6 \
+  --methods ordinary native-full-record native-authenticated-locator \
+  --selections all predicate subject --times 30 50 --caches first \
+  --after-history-batch-size 64 --timeout 900 --output /tmp/opencode/hsa-06-paired-1k-sparse.json
+```
 
 ## Warm-pair extension (1K dense, first+warm)
 
