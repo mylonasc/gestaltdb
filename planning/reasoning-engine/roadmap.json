@@ -1,7 +1,7 @@
 {
   "status_authority": "EPIC_REASONING_ENGINE.md",
-  "reviewed_source": "dcc90e2b3c21875045f3760bcedd3a234cb79e42",
-  "reviewed_at": "2026-11-01T23:07:18Z",
+  "reviewed_source": "089583bea546a10ef27ff20254af87680cfd7575",
+  "reviewed_at": "2026-11-02T20:03:14Z",
   "baseline": "c71f0433fc40251b7dcec08b60370e80b40d36d8",
   "integration_branch": "feature/onto-dev-epic-2",
   "integration_branch_disposition": "Historical completed integration; current work starts from accepted main unless explicitly directed otherwise.",
