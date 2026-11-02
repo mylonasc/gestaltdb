@@ -98,9 +98,42 @@ uv run --with pyrex-rocksdb --with pyarrow python -m benchmarks.reasoning_hsa_ac
   --after-history-batch-size 64 --timeout 900 --output /tmp/opencode/hsa-06-paired-1k.json
 ```
 
-OS caches remain uncontrolled, hardware/noise are local, and larger paired
-scale points are still missing. Profiling reports
+OS caches remain uncontrolled, hardware/noise are local, and 10K warm/sparse
+paired variants are still missing. Profiling reports
 from HSA-04 stay separate; their latency is not substituted for these timings.
+
+## Larger-scale extension (10K dense, first-handle)
+
+Report: `benchmarks/results/reasoning-454-hsa-06-paired-10k.json`
+
+SHA-256: `390695011b2d3824ef5bf308481cdbe3c9613878f235f40cc963224144d5e4ec`
+
+Same dense shape at 10000 rows (13429 versions), 6 alternating pairs per
+method/selection/time, first-handle reads: **216 observations / 108 pairs**,
+all with exact fact/version parity. Before `001e276`, after `9d97d60`
+(after-side library sources identical to `hsa-dev`).
+
+All 36 own-mode observed latency/RSS gates are within limits. The before side
+predates the whole HSA stack, so absolute before→after gaps are large (e.g.
+time-50 ordinary all 23.415s → 1.028s; batched locator all 76.225s → 2.329s);
+those gaps measure the cumulative stack against HSA-01, not a single slice,
+and ordinary's own improvement cannot manufacture a native pass.
+
+Selective actual-locator-vs-ordinary gates still **breach** 1.25x at both times
+and selections (paired latency ~2.18–2.63x; RSS also breaches). The deferral
+now holds at 1K dense-first, 1K dense-first+warm, 1K sparse and 10K
+dense-first: keep ordinary default, no automatic native adoption, HSA-05
+stays deferred.
+
+```bash
+uv run --with pyrex-rocksdb --with pyarrow python -m benchmarks.reasoning_hsa_acceptance \
+  --before /absolute/path/to/hsa-01-baseline-attribution \
+  --after /absolute/path/to/hsa-06-warm-sparse \
+  --rows 10000 --commit-batch 1000 --repeats 6 \
+  --methods ordinary native-full-record native-authenticated-locator \
+  --selections all predicate subject --times 30 50 --caches first \
+  --after-history-batch-size 64 --timeout 900 --output /tmp/opencode/hsa-06-paired-10k.json
+```
 
 ## Sparse-history extension (1K, history_rows=100)
 
