@@ -323,3 +323,49 @@ reasoning semantics, automatic native adoption, new backend guarantees or deleti
 of canonical benchmark/design evidence. Defects discovered while making examples
 runnable should receive focused implementation issues when they cannot be resolved
 as documentation corrections.
+
+## 12. Implementation ledger
+
+DOC-01's initial implementation lives under `planning/documentation-review/`:
+
+- `capabilities.json` maps 44 capability families to representative source/tests,
+  existing coverage, delivery owners and specific remediation gaps.
+- `documents.json` classifies all 71 current Sphinx pages, 11 packaged Markdown
+  resources and four cross-surface entry points (86 files total).
+- `check_inventory.py` checks classifications, citations and the 10-topic packaged
+  registry without importing optional library dependencies. Regression tests cover
+  new pages/resources, missing citations, invalid status, duplicate classifications
+  and topic drift. File validation is not semantic completeness certification.
+- `authoring-contract.md` establishes terminology, example execution classes and
+  mathematical/pseudocode conventions: directed multigraphs, eligibility before
+  sampling, Datalog fixpoints, interval intersection/union and four-valued evidence.
+- `graphics.md` records 13 concrete teaching opportunities under
+  [Documentation Debt: Graphics #495](https://github.com/mylonasc/gestaltdb/issues/495).
+  Static accessible diagrams come first; optional animation must have a readable
+  fallback, reduced-motion support and explicit controls.
+
+These inventories are the foundation for the guide-writing slices, not a claim
+that the listed documentation gaps have already been repaired. DOC-10 must
+reconcile them against the final user journeys. Optional graphics may remain
+explicit follow-ups rather than blocking useful prose and runnable examples.
+
+DOC-02's initial reader-facing pass adds goal-oriented routes to README and the
+Sphinx landing page, separates navigation into ten groups, and replaces the
+quickstart's implicit shared-state snippets with one tested disposable-database
+workflow. The example covers explicit backend/codec choice, indexes, parameterized
+Cypher, snapshot sampling after the database closes, and manifest-backed reopen.
+It introduces directed-multigraph notation with a plain-language reading. The
+new route checks guard major capability links and the quickstart executes in a
+fresh directory. Deeper introductions and advanced-page grouping remain owned by
+their capability slices; linking an existing page does not repair its content.
+
+DOC-11's initial core/persistence pass introduces `docs/property-graph.rst`,
+rewrites backend/serializer guides around independent choices and complete
+workflows, and preserves old storage measurements in
+`docs/storage-backend-evidence.rst`. It distinguishes handle lifetime from
+transactions, live readers from pinned views, current graph from temporal
+history, and supported runtime capabilities from universal backend parity.
+Examples explicitly exercise replacement/deletion, manifests, direct construction,
+rollback, snapshot isolation, binary values and recursive temporal scalars.
+The page inventory grows to 88 files (73 Sphinx pages); the original review counts
+above remain the historical baseline.
