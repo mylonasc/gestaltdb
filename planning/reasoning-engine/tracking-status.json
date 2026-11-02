@@ -39,7 +39,7 @@
       "disposition": "locator source on main; actual-adapter evidence/defer decision in unmerged PR #450; integration/review pending",
       "performance_debt_issue": 451
     },
-    "451": {"state": "open", "disposition": "dense-history construction/authentication and locator read amplification; native adoption deferred"},
+    "451": {"state": "closed", "disposition": "HSA-01/02/03/04/06 delivered and closed with evidence; HSA-05 deferred (not required); native adoption deferred, ordinary default retained"},
     "200": {
       "state": "closed",
       "disposition_issue": 371
