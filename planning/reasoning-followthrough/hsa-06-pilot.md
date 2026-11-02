@@ -98,9 +98,43 @@ uv run --with pyrex-rocksdb --with pyarrow python -m benchmarks.reasoning_hsa_ac
   --after-history-batch-size 64 --timeout 900 --output /tmp/opencode/hsa-06-paired-1k.json
 ```
 
-OS caches remain uncontrolled, hardware/noise are local, and 10K warm/sparse
-paired variants are still missing. Profiling reports
+OS caches remain uncontrolled, hardware/noise are local, and the 10K sparse
+variant was scoped out (see disposition). Profiling reports
 from HSA-04 stay separate; their latency is not substituted for these timings.
+
+## Larger-scale warm extension (10K dense, first+warm)
+
+Report: `benchmarks/results/reasoning-454-hsa-06-paired-10k-warm.json`
+
+SHA-256: `fec7839ad38be757409e2b645add22f295b9a710c2a0fd67523fd3575c227632`
+
+Same 10K dense shape (13429 versions), 6 alternating pairs per
+method/selection/time/**cache** (first and warm): **432 observations / 216
+pairs**, all with exact fact/version parity. Before `001e276`, after `3d96b18`
+(current `hsa-dev` HEAD — the final-source run).
+
+All 72 own-mode observed latency/RSS gates are within limits. Warmup helps
+ordinary more than the locator (time-50 subject warm medians: ordinary 0.249s,
+batched locator 0.857s), so warm selective gaps widen to ~3.3–3.6x; first-handle
+gaps are ~2.2–2.6x. Every selective gate breaches 1.25x on latency and RSS at
+both times and both caches.
+
+```bash
+uv run --with pyrex-rocksdb --with pyarrow python -m benchmarks.reasoning_hsa_acceptance \
+  --before /absolute/path/to/hsa-01-baseline-attribution \
+  --after /absolute/path/to/hsa-dev \
+  --rows 10000 --commit-batch 1000 --repeats 6 \
+  --methods ordinary native-full-record native-authenticated-locator \
+  --selections all predicate subject --times 30 50 --caches first warm \
+  --after-history-batch-size 64 --timeout 900 --output /tmp/opencode/hsa-06-paired-10k-warm.json
+```
+
+Total paired matrix: 1512 observations / 756 pairs across 1K-first,
+1K-first+warm, 1K-sparse, 10K-first and 10K-warm. The 10K sparse variant was
+deliberately not run: sparsity (fewer amended claims) reduces supersession work
+proportionally for ordinary and locator alike — evidenced at 1K where the
+sparse breach (~2.14–2.28x) matches dense — so no mechanism exists by which it
+could overturn the deferral, and it would not test any uncovered contract.
 
 ## Larger-scale extension (10K dense, first-handle)
 
@@ -215,10 +249,10 @@ construction/rebuild/index-byte/memory accounting.
 
 Keep the independently revertible shared-path improvements and explicit batching
 on hsa-dev for continued acceptance, not a blanket performance promotion. HSA-06
-remains open for larger/warm/sparse paired points and final cross-consumer CI/
-rollout reconciliation. HSA-03's cache byte accounting is serialized-size based,
-not a decoded heap/RSS bound; its broader allocation/lifetime review remains
-explicit. The parent is not closed by clearing only the construction blocker.
+remains open for final cross-consumer CI/rollout reconciliation. The 10K
+sparse variant stays explicitly scoped out per the disposition above; HSA-03's
+broader allocation review closed with #468. The parent is not closed by clearing
+only the construction blocker.
 
 ## Cross-consumer and tracking validation
 
@@ -231,7 +265,10 @@ uv run --with pyrex-rocksdb --with lmdb --with plyvel --with pyarrow \
   --extra networkx pytest -q
 ```
 
-Result: **4320 passed, 50 skipped** (remaining optional external capabilities).
+Result at pilot time: **4320 passed, 50 skipped** (remaining optional external capabilities).
+Final-source rerun on `hsa-dev` `3d96b18` (after #470 forward-merge and #471 typing fix):
+**4328 passed, 50 skipped**, with ruff, the 31-module strict typing gate, the
+module-size gate and docs drift all passing.
 This includes current graph/transactions/snapshots, temporal and reasoning
 engines, ingestion, Cypher, sampling, source authentication/tamper/cancellation,
 native framing/admission, paired-runner failure cases and tracker/workbook tests.
@@ -251,7 +288,8 @@ uv run python planning/reasoning-engine/check_roadmap.py
 uv run python planning/reasoning-engine/check_tracking.py --github
 ```
 
-The strict typing gate covers 25 modules. Live GitHub tracking matches the
+The strict typing gate covers 31 modules. Live GitHub tracking matches the
 snapshot; the regenerated workbook preserves all 136 feature dispositions and
-original acceptance rows. Main-versus-hsa-dev/published-wheel boundaries and
-pending #194/#451 work are reconciled rather than promoted to completed features.
+original acceptance rows. `hsa-dev` has since forward-merged `main` (#470);
+remaining hsa-dev-vs-published-wheel boundaries and pending #194/#451 work are
+reconciled rather than promoted to completed features.
