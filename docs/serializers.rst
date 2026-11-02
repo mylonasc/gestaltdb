@@ -1,90 +1,143 @@
 Serializers
 ===========
 
-Serializers convert ``Node``, ``Edge``, and adjacency dictionaries to bytes for
-storage. Choose the serializer based on portability and payload requirements.
-Serializer extras are independent of backend extras. Multiple extras can be
-installed together, such as ``gestaltdb[leveldb,msgpack]`` or
-``gestaltdb[lmdb,protobuf]``; no combination-specific extra is required.
+A serializer encodes graph payloads as bytes; the selected KV backend persists
+them. Choose them independently. For example, LMDB can store JSON or MessagePack,
+and LevelDB can store JSON or Protobuf. This flexibility applies to **new compatible
+stores**, not to reading one encoding with another decoder.
 
-Pickle Serializer
------------------
-
-``PickleSerializer`` is convenient for Python-only workflows.
-
-.. code-block:: python
-
-   from gestaltdb.serializers import PickleSerializer
-
-   serializer = PickleSerializer()
-   payload = {"id": "node-1", "properties": {"score": 1}}
-   assert serializer.deserialize(serializer.serialize(payload)) == payload
-
-JSON Serializer
+Choose a codec
 ---------------
 
-``JSONSerializer`` is readable and portable for JSON-compatible values.
+.. list-table:: Built-in serializer choices
+   :header-rows: 1
+
+   * - Class / ``create`` registry name
+     - Extra
+     - Fit and limitations
+   * - ``JSONSerializer`` / ``json``
+     - None
+     - Readable UTF-8, JSON-compatible properties plus GestaltDB temporal values.
+       Raw ``bytes`` and arbitrary Python objects are not JSON values.
+   * - ``PickleSerializer`` / ``pickle``
+     - None
+     - Python-only payloads. **Never unpickle untrusted data**; decoding can
+       execute code. Python object portability is not a cross-language contract.
+   * - ``MessagePackSerializer`` / ``messagepack``
+     - ``gestaltdb[msgpack]``
+     - Compact dictionaries/lists and binary values; not arbitrary Python objects.
+   * - ``ProtobufSerializer`` / ``protobuf``
+     - ``gestaltdb[protobuf]``
+     - Uses ``google.protobuf.Struct`` with integer/bytes tagging; not an
+       application-specific generated Protobuf schema.
+
+The install extra ``msgpack`` and registry name ``messagepack`` are deliberately
+different. Install backend and codec extras additively, for example
+``python -m pip install "gestaltdb[lmdb,msgpack]"``. The bundle
+``gestaltdb[serializers]`` installs both optional codecs, but no backend.
+
+JSON and temporal properties
+-----------------------------
+
+**Standalone runnable example.** No optional dependency is needed. Temporal
+scalars round-trip recursively through all four serializers; use the library's
+temporal values rather than assuming every Python ``datetime`` object has the
+same portable encoding.
 
 .. code-block:: python
 
    from gestaltdb.serializers import JSONSerializer
+   from gestaltdb.temporal import TemporalInstant
 
-   serializer = JSONSerializer()
-   data = serializer.serialize({"name": "Alice", "active": True})
-   print(data.decode("utf-8"))
+   codec = JSONSerializer()
+   payload = {
+       "name": "Aspirin",
+       "observations": [{"recorded_at": TemporalInstant(0), "score": 0.9}],
+   }
+   encoded = codec.serialize(payload)
+   assert isinstance(encoded, bytes)
+   assert codec.deserialize(encoded) == payload
 
-MessagePack Serializer
-----------------------
+The encoded temporal representation uses library tags; it is not just an
+untyped date string. Cypher temporal constructors and exact/range property indexes
+have their own semantics (:doc:`cypher`, :doc:`property-filtering`). Scalar
+property values do not automatically create temporal history.
 
-``MessagePackSerializer`` is compact and supports bytes values.
+Binary values with MessagePack
+------------------------------
+
+**Standalone runnable example.** Requires ``gestaltdb[msgpack]``.
 
 .. code-block:: python
 
    from gestaltdb.serializers import MessagePackSerializer
 
-   serializer = MessagePackSerializer()
+   codec = MessagePackSerializer()
    payload = {"edge_ids": [b"e1", b"e2"]}
-   assert serializer.deserialize(serializer.serialize(payload)) == payload
+   assert codec.deserialize(codec.serialize(payload)) == payload
 
-Install the optional dependency first:
+Protobuf integer and bytes preservation
+----------------------------------------
 
-.. code-block:: sh
-
-   python -m pip install "gestaltdb[msgpack]"
-
-Protobuf Serializer
--------------------
-
-``ProtobufSerializer`` uses ``google.protobuf.Struct``. It tags bytes and ints so
-they round-trip cleanly through Struct's JSON-like model.
+**Standalone runnable example.** Requires ``gestaltdb[protobuf]``. Integer/bytes
+tags preserve values that ordinary ``Struct`` numeric/string fields would not
+represent in the same way.
 
 .. code-block:: python
 
    from gestaltdb.serializers import ProtobufSerializer
 
-   serializer = ProtobufSerializer()
-   payload = {"count": 3, "raw": b"abc"}
-   assert serializer.deserialize(serializer.serialize(payload)) == payload
+   codec = ProtobufSerializer()
+   payload = {"count": 2**60 + 1, "raw": b"abc"}
+   assert codec.deserialize(codec.serialize(payload)) == payload
 
-Install the optional dependency first:
+Pickle for trusted Python-only data
+------------------------------------
 
-.. code-block:: sh
-
-   python -m pip install "gestaltdb[protobuf]"
-
-Using a Serializer With GraphDB
--------------------------------
-
-Install both independently selected components first:
-
-.. code-block:: sh
-
-   python -m pip install "gestaltdb[lmdb,msgpack]"
+**Standalone runnable example.** No optional dependency is needed. This payload
+is created and decoded locally; it is not obtained from an untrusted supplier.
 
 .. code-block:: python
 
-   from gestaltdb.graphdb import GraphDB
-   from gestaltdb.kvstores import LMDBStore
-   from gestaltdb.serializers import MessagePackSerializer
+   from gestaltdb.serializers import PickleSerializer
 
-   graph_db = GraphDB(LMDBStore(path="msgpack_lmdb"), MessagePackSerializer())
+   codec = PickleSerializer()
+   payload = {"ids": {"drug-1", "protein-1"}}
+   assert codec.deserialize(codec.serialize(payload)) == payload
+
+Using a serializer with GraphDB
+-------------------------------
+
+**Standalone runnable example.** Requires ``gestaltdb[lmdb,msgpack]``.
+
+.. code-block:: python
+
+   from tempfile import TemporaryDirectory
+   from gestaltdb.graphdb import GraphDB, Node
+
+   with TemporaryDirectory() as root:
+       path = f"{root}/graph"
+       with GraphDB.create(path, backend="lmdb", serializer="messagepack") as graph:
+           graph.put_node(Node("sample-1", properties={"raw": b"abc"}))
+       with GraphDB.open(path) as reopened:
+           assert reopened.get_node("sample-1").properties["raw"] == b"abc"
+
+For direct construction import codec classes from ``gestaltdb.serializers`` and
+pass an instance to ``GraphDB(store, codec)``. Import backend classes separately
+from ``gestaltdb.kvstores``. The complete lifecycle example and the distinction
+between direct construction and manifest-backed stores are in
+:doc:`storage-backends`.
+
+Compatibility and trust boundaries
+-----------------------------------
+
+- Reopen a store with its original compatible codec. Editing the manifest's
+  serializer name or rebinding a decoder is not a data migration.
+- Temporal values are supported across codecs, but arbitrary Python payload types
+  are not universally interchangeable. Validate the values your application uses.
+- Readable or tagged encoding is not source authentication, encryption, a
+  resource sandbox, or a guarantee that supplier assertions are true.
+- Codecs alone do not provide storage transactions, index maintenance or safe
+  publication. These are graph/backend responsibilities.
+- See :doc:`operations` for compatibility and recovery, and :doc:`performance`
+  for why serialization costs should be measured separately from backend I/O.
