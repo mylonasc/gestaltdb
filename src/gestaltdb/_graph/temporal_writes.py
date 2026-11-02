@@ -145,6 +145,31 @@ class TemporalCommitter:
         """Validate, sequence, and publish one commit on this scope's store."""
         store = self.store
         entity_serializer = self.entity_serializer
+        # Batch supersession resolution: distinct targets once against the
+        # captured pre-write horizon. Same-batch and future records cannot be
+        # selected because the horizon predates sequence reservation.
+        pre_horizon, _ = read_temporal_sequence(
+            store, self.reader.sequence_key, self.reader.store_path,
+            self.reader.sequence_filename)
+        distinct_supersedes: list[str] = []
+        seen_supersedes: set[str] = set()
+        for candidate in writes:
+            supersedes = getattr(candidate, "supersedes_version_id", None)
+            if supersedes is None:
+                continue
+            try:
+                normalized_supersedes = normalize_version_id(supersedes)
+            except (TypeError, ValueError):
+                # Deferred to per-write validation to preserve exact errors.
+                continue
+            if normalized_supersedes not in seen_supersedes:
+                seen_supersedes.add(normalized_supersedes)
+                distinct_supersedes.append(normalized_supersedes)
+        supersession_targets: dict[str, object] = {}
+        if distinct_supersedes and pre_horizon > 0:
+            supersession_targets = self.reader.get_versions_through_batch(
+                distinct_supersedes, pre_horizon
+            )
         prepared_inputs: list[PreparedWrite] = []
         batch_version_ids = set()
         known_identities: set[RetractionIdentity] = set()
@@ -173,7 +198,13 @@ class TemporalCommitter:
             supersedes_version_id = None
             if write.supersedes_version_id is not None:
                 supersedes_version_id = normalize_version_id(write.supersedes_version_id)
-                target = self.reader.get_version(supersedes_version_id)
+                if supersedes_version_id in supersession_targets:
+                    target = supersession_targets[supersedes_version_id]
+                else:
+                    # Invalid IDs skipped during pre-resolution surface here
+                    # with identical errors; unindexed horizons fall back to a
+                    # single bounded lookup without index side effects.
+                    target = self.reader.get_version(supersedes_version_id)
                 if target is None:
                     raise TemporalVersionError("superseded temporal version does not exist")
                 expected_version_type = {

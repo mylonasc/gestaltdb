@@ -46,6 +46,7 @@ from ..versioning import (
     normalize_version_id,
 )
 from . import temporal_indexes as _temporal_indexes
+from . import index_maintenance as _index_maintenance
 from .temporal_keys import (
     decode_temporal_locator,
     temporal_commit_key,
@@ -269,16 +270,23 @@ class TemporalReader:
                 raise TemporalCorruptionError("temporal version system time does not match its commit")
             versions.append(version)
         if _validate_supersession:
-            for version in versions:
-                if version.supersedes_version_id is None:
-                    continue
-                target = self.get_version_through(
-                    version.supersedes_version_id, commit_id - 1
+            distinct_targets = list(
+                dict.fromkeys(
+                    version.supersedes_version_id
+                    for version in versions
+                    if version.supersedes_version_id is not None
                 )
-                if target is None:
-                    raise TemporalCorruptionError("temporal version supersedes a missing version")
-                if type(target) is not type(version) or target.logical_id != version.logical_id:
-                    raise TemporalCorruptionError("temporal supersession kind or logical ID mismatch")
+            )
+            if distinct_targets:
+                targets = self.get_versions_through_batch(distinct_targets, commit_id - 1)
+                for version in versions:
+                    if version.supersedes_version_id is None:
+                        continue
+                    target = targets[normalize_version_id(version.supersedes_version_id)]
+                    if target is None:
+                        raise TemporalCorruptionError("temporal version supersedes a missing version")
+                    if type(target) is not type(version) or target.logical_id != version.logical_id:
+                        raise TemporalCorruptionError("temporal supersession kind or logical ID mismatch")
         commit = TemporalCommit(commit_id, system_time, metadata, tuple(versions))
         if len(self.commit_cache) >= 256:
             # Drop the oldest half; commits are immutable so eviction only
@@ -316,17 +324,144 @@ class TemporalReader:
             raise TemporalCorruptionError("temporal index locator ordinal is out of range")
         return self.copy_payload(commit.versions[ordinal])
 
-    def get_version_through(self, version_id: str, through_commit: int) -> TemporalVersion | None:
-        """Return the latest version with an ID up to a commit horizon."""
-        version_id = normalize_version_id(version_id)
+    def _usable_version_index_generation(self, through_commit: int) -> int | None:
+        """Return a usable version-index generation for a horizon, or None.
+
+        This is an O(1) freshness gate: stale families and uncovered horizons
+        fall back to one bounded canonical pass. It never repairs or publishes
+        indexes. Checksum divergence is surfaced by explicit ``ensure`` scopes
+        and per-locator commit authentication, not by a per-target checksum.
+        """
+        if through_commit < 1:
+            return None
+        if "temporal" in _index_maintenance.load_stale_indexes(self.store, self.stale_key):
+            return None
+        state = _temporal_indexes.load_index_state(self.store, self.state_key)
+        if state is None:
+            return None
+        if state["indexed_through_commit"] < through_commit:
+            return None
+        return state["active_generation"]
+
+    def get_versions_through_batch(
+        self, version_ids: object, through_commit: int
+    ) -> dict[str, TemporalVersion | None]:
+        """Resolve distinct version IDs once against one captured horizon.
+
+        When the published version index covers ``through_commit`` and is not
+        stale, each distinct target is located via the index and then
+        authenticated through its commit descriptor/digest, exact version ID,
+        commit/ordinal agreement and visibility. A miss cannot prove
+        nonexistence without coverage: index misses trigger one bounded
+        canonical pass, and an omission despite claimed coverage raises
+        corruption. Deferred or absent indexes use one bounded canonical pass
+        per batch. This never repairs or publishes indexes and never reuses
+        same-batch or future records: ``through_commit`` must be captured
+        before the batch's own commit is published.
+        """
+        if isinstance(through_commit, bool) or not isinstance(through_commit, int):
+            raise ValueError("through_commit must be a non-negative integer")
+        if through_commit < 0:
+            raise ValueError("through_commit must be a non-negative integer")
+        if not isinstance(version_ids, (list, tuple, set, frozenset)):
+            # Accept any iterable but materialize once for distinct handling.
+            try:
+                version_ids = tuple(version_ids)  # type: ignore[arg-type]
+            except TypeError as exc:
+                raise TypeError("version_ids must be an iterable of version IDs") from exc
+        normalized: list[str] = [normalize_version_id(value) for value in version_ids]
+        distinct: list[str] = list(dict.fromkeys(normalized))
+        resolved: dict[str, TemporalVersion | None] = {value: None for value in distinct}
+        if not distinct or through_commit < 1:
+            return resolved
+        generation = self._usable_version_index_generation(through_commit)
+        if generation is not None:
+            missing: set[str] = set()
+            for value in distinct:
+                locators = list(
+                    self.store.iter_index_prefix(
+                        _temporal_indexes.index_name(
+                            _temporal_indexes.VERSION_INDEX, generation
+                        ),
+                        [value.encode("ascii")],
+                    )
+                )
+                unique = set(locators)
+                if not unique:
+                    missing.add(value)
+                    continue
+                if len(unique) > 1:
+                    raise TemporalCorruptionError(
+                        "temporal version index contains duplicate locators"
+                    )
+                locator = next(iter(unique))
+                commit_id, ordinal = decode_temporal_locator(locator)
+                if commit_id < 1 or commit_id > through_commit:
+                    missing.add(value)
+                    continue
+                commit = self.get_commit_cached(commit_id, _validate_supersession=False)
+                if commit is None:
+                    missing.add(value)
+                    continue
+                if ordinal >= len(commit.versions):
+                    raise TemporalCorruptionError(
+                        "temporal index locator ordinal is out of range"
+                    )
+                version = commit.versions[ordinal]
+                if (
+                    version.version_id != value
+                    or version.commit_id != commit_id
+                    or version.commit_ordinal != ordinal
+                ):
+                    raise TemporalCorruptionError(
+                        "temporal index locator does not match its authenticated version"
+                    )
+                resolved[value] = self.copy_payload(version)
+            if missing:
+                # One bounded canonical pass proves absence or exposes an
+                # omission despite claimed index coverage. A full scan is
+                # required to prove nonexistence; hits are rare because a
+                # usable index should have located every visible target.
+                for commit_id in range(1, through_commit + 1):
+                    commit = self.get_commit_cached(commit_id, _validate_supersession=False)
+                    if commit is None:
+                        continue
+                    for version in commit.versions:
+                        if version.version_id in missing:
+                            # Index claimed coverage but omitted this record.
+                            raise TemporalCorruptionError(
+                                "temporal version index omitted authenticated membership"
+                            )
+                for value in missing:
+                    resolved[value] = None
+            return resolved
+        # Deferred or absent indexes: one bounded canonical pass, no side effects.
+        needed = set(distinct)
         for commit_id in range(1, through_commit + 1):
+            if not needed:
+                break
             commit = self.get_commit_cached(commit_id, _validate_supersession=False)
             if commit is None:
                 continue
             for version in commit.versions:
-                if version.version_id == version_id:
-                    return self.copy_payload(version)
-        return None
+                if version.version_id in needed and resolved[version.version_id] is None:
+                    resolved[version.version_id] = self.copy_payload(version)
+                    # Version IDs are unique; keep earliest and ignore later
+                    # duplicates here to preserve historical lookup behavior.
+                    # Index builds reject duplicates before they can persist.
+                    needed.discard(version.version_id)
+            if not needed:
+                break
+        return resolved
+
+    def get_version_through(self, version_id: str, through_commit: int) -> TemporalVersion | None:
+        """Return the latest version with an ID up to a commit horizon."""
+        normalized = normalize_version_id(version_id)
+        if isinstance(through_commit, bool) or not isinstance(through_commit, int):
+            raise ValueError("through_commit must be a non-negative integer")
+        if through_commit < 0:
+            raise ValueError("through_commit must be a non-negative integer")
+        return self.get_versions_through_batch([normalized], through_commit)[normalized]
 
     def system_horizon(self, *, system_time: PointInput | None = None, through_commit: int | None = None) -> int:
         """Resolve a system-time/through-commit selection to a commit horizon."""

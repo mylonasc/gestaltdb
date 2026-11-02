@@ -1,0 +1,74 @@
+{
+  "schema_version": 2,
+  "configuration": {
+    "rows": 100000,
+    "history_rows": null,
+    "commit_batch": 1000,
+    "instrument": true,
+    "methods": [
+      "ordinary"
+    ],
+    "selections": [
+      "subject"
+    ],
+    "times": [
+      30
+    ],
+    "caches": [
+      "first"
+    ],
+    "repeats": 1,
+    "timeout": 900.0
+  },
+  "samples": [],
+  "complete": false,
+  "command": [
+    "/home/charilaos/.cache/uv/builds-v0/.tmp37Zxuf/bin/python",
+    "-m",
+    "benchmarks.reasoning_locator_pipeline",
+    "--rows",
+    "100000",
+    "--commit-batch",
+    "1000",
+    "--instrument",
+    "--repeats",
+    "1",
+    "--methods",
+    "ordinary",
+    "--selections",
+    "subject",
+    "--times",
+    "30",
+    "--caches",
+    "first",
+    "--timeout",
+    "900",
+    "--output",
+    "benchmarks/results/reasoning-457-hsa-01-100k-dense-timeout.json"
+  ],
+  "timeout_policy": "existing timeout preserved; timeouts retain the incomplete report and last checkpoint without quantiles",
+  "revision": "94d53d31092992fdb45ebd2d215197c3e0cd6533",
+  "dirty": true,
+  "harness_sha256": "252d7e5fa04e513cffe7ec44831e9fb37aa031aae71d116e6def047f6ef95726",
+  "shared_harness_sha256": "2b3392e21d56ddf9793c87b8ebf057a297cb4f92a0068b91b071154768b19dfb",
+  "instrumentation_sha256": "54427178bd71c768d0b9d7daae1b87659dfbb93badabae51d96902d995261a67",
+  "python": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "dependencies": {
+    "gestaltdb": "0.16.0",
+    "pyrex-rocksdb": "0.7.1",
+    "pyarrow": "24.0.0"
+  },
+  "attribution_boundary": "fixture stages and extraction counters are separate worker processes; inclusive attribution buckets do not sum to end-to-end time",
+  "evaluator": {
+    "measured": false,
+    "boundary": "locator harness does not execute rules or publication"
+  },
+  "decision": "pending measurement review; no automatic native adoption",
+  "os_cache": "uncontrolled; process restart is not OS-cold",
+  "fixture": {
+    "status": "timeout",
+    "timeout_s": 900.0,
+    "last_stage": "fixture-commit"
+  }
+}

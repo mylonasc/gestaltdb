@@ -25,7 +25,8 @@ def test_register_has_all_original_ids_and_verified_evidence(tracker):
     review = tracker.load_review()
     assert [row[0] for row in review.features] == [f"GR-{n:03}" for n in range(1, 137)]
     assert set(row[2] for row in review.features) == set(tracker.STATUSES)
-    assert len(review.roadmap) == 34
+    assert len(review.roadmap) == 35
+    assert any(row[0] == "#451" and "technical debt" in row[1] for row in review.roadmap)
     assert review.roadmap[11][3] == "2026-10-21T06:47:24Z"
     assert review.roadmap[-1][0] == "#409"
 

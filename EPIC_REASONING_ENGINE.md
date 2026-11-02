@@ -1,8 +1,8 @@
 # Reasoning engine: delivered scope and remaining roadmap
 
-**Reviewed at:** 2026-11-01T11:27:42Z (UTC).
+**Reviewed at:** 2026-11-01T13:00:35Z (UTC).
 
-**Reviewed source:** [`3403530adf186cf79d6426829d3be8bf8898f6f3`](https://github.com/mylonasc/gestaltdb/commit/3403530adf186cf79d6426829d3be8bf8898f6f3), `origin/main`.
+**Reviewed source:** [`7f288085fc01ecd2fac66def9d3c29981054af26`](https://github.com/mylonasc/gestaltdb/commit/7f288085fc01ecd2fac66def9d3c29981054af26), `origin/main` after roadmap/workbook sanitation #452. The #194 evidence below is explicitly pending PR #450, not part of that main revision or the published baseline.
 
 **Published baseline:** [v0.16.0](https://github.com/mylonasc/gestaltdb/releases/tag/v0.16.0), source `0ae4d4bb1624605efc0351f9a029f396baf291dc`, published 2026-10-29T00:03:19Z.
 
@@ -12,9 +12,9 @@
 
 - **Delivered:** parent [#156](https://github.com/mylonasc/gestaltdb/issues/156), RE-01–RE-27 and all five phase epics are closed. Delivery includes explicitly bounded implementations, experiments and approved defer decisions; it does **not** mean every aspirational native/OWL acceptance criterion is implemented.
 - **Delivered composability:** [#391](https://github.com/mylonasc/gestaltdb/issues/391) and #392–#396 are closed: typed first-witness explanations, selected temporal negation/aggregates, structural validation, explicit inferred Cypher and typed graph mappings. See sections 2–3 for fragment and release boundaries.
-- **Pending native follow-up:** [#194](https://github.com/mylonasc/gestaltdb/issues/194) needs measurement of the actual authenticated historical locator adapter and an adopt/defer/reject decision. The source implementation is on main; it is not blocked on an absent native scan API.
+- **Pending native follow-up:** [#194](https://github.com/mylonasc/gestaltdb/issues/194) has actual-adapter measurements and an explicit **defer automatic adoption** decision in open PR #450, not yet on reviewed main. The locator implementation is already on main; #451 separately tracks dense-history construction/authentication and locator read-amplification debt. Integration/review, not an absent native scan API, remains for #194.
 - **Proposed, not delivered:** weighted/probabilistic semantics #124 and feedback composition #128. Architecture #388 and typing #410 are partially delivered independent programs. Tutorial #273 and CDM #409 are separate documentation/application work.
-- **Activity:** at review, no open reasoning implementation PR was present; open PRs #441/#443/#444/#445 were dependency updates. An open issue or an old started-work comment is not evidence that implementation is currently active.
+- **Activity:** PR #450 is the open native-locator benchmark/documentation follow-up; sanitation #452 is merged. PRs #441/#443/#444/#445 are dependency updates. An open issue or an old started-work comment is not evidence that implementation is currently active.
 
 No merge, tag, release, issue closure or new feature commitment is authorized by this document. Current changes start from accepted `main` unless explicitly directed otherwise. `onto-dev` and `feature/onto-dev-epic-2` below are **historical integration targets**, not current PR instructions.
 
@@ -101,7 +101,7 @@ Dates below are **GitHub merge timestamps in UTC**, not claims about when coding
 | 2026-10-25T23:34:50Z | #400 / `738a0c6` (#396) | Initial typed n-ary graph mapping; later collision/reference hardening #408, included in v0.16.0. |
 | 2026-10-25T23:45:01Z | #402 / `cda8dae` (#392) | Initial typed first-witness tracking, included in v0.16.0. |
 | 2026-10-25T23:51:52Z | #403 / `07affaa` (#393) | Selected temporal negation/nonrecursive aggregates, later answer-versus-proof truncation fixes, included in v0.16.0. |
-| 2026-10-26T06:55:18Z | #369 / `49d4638` (#194) | Historical native claim-index locator admission merged; included in v0.16.0. Actual-adapter benchmark/decision remains pending. |
+| 2026-10-26T06:55:18Z | #369 / `49d4638` (#194) | Historical native claim-index locator admission merged; included in v0.16.0. Actual-adapter benchmark/decision is delivered separately in unmerged PR #450, not in reviewed main. |
 | 2026-10-27T23:33:49Z | #426 / `47f0fde` (#395) | Generation-pinned read-only inferred Cypher node/one-hop projection, included in v0.16.0. |
 | 2026-10-29T00:03:19Z | v0.16.0 / `0ae4d4b` | Published stable baseline; API migration uses `graph.temporal`, `graph.epistemic`, `graph.rules` and current services. |
 | 2026-10-31T14:48:05Z | #447 / `ac838da` | **Post-v0.16.0:** PyRex >=0.7.1 dependency floor and point-read regression recovery evidence. |
@@ -115,7 +115,8 @@ The package metadata still says 0.16.0 on reviewed main. That does not make post
 
 | Issue | State at review | Remaining acceptance / dependency |
 | --- | --- | --- |
-| [#194](https://github.com/mylonasc/gestaltdb/issues/194) | Open; implemented source, pending measurement | Benchmark actual `PinnedNativeLocatorClaimSource` with named historical/selective and nonselective inputs, complete authentication/point materialization, exact evidence/closure parity, versions, time/RSS and explicit adoption decision. Do not substitute benchmark-only locator, raw KV or full-record native results. Optional, not a #156 blocker. |
+| [#194](https://github.com/mylonasc/gestaltdb/issues/194) | Open; implemented source on main; measurement/decision in unmerged #450 | PR #450 preserves 18/18 exact fact/version-ID parity observations at 100K sparse history, including selective/nonselective reads and full authentication/materialization costs, versions and time/RSS. Decision: defer automatic native adoption. Complete integration/review; no rule-closure, repeated-performance or OS-cold claim. Do not substitute raw/assertion-only/full-record modes. Optional, not a #156 blocker. |
+| [#451](https://github.com/mylonasc/gestaltdb/issues/451) | Open technical debt; not remediated | Resolve dense-history supersession/commit validation and native locator read amplification without weakening authentication. Dense 100K construction timed out at 900 s before extraction; sparse-history success is different evidence. Instrument/batch verified target resolution, bound redundant catalog/history work and remeasure isolated repeated time/RSS. Native adoption remains deferred. |
 | [#124](https://github.com/mylonasc/gestaltdb/issues/124) | Open proposal; design-gated | Choose probabilistic, fuzzy **or** importance semantics; prove combination, retraction, convergence and provenance with independent tests and a named user scenario. No silent confidence multiplication. |
 | [#128](https://github.com/mylonasc/gestaltdb/issues/128) | Open composition proposal | Model/task/version provenance, source/world/assertion policy, bounded iterations and leakage controls. Weighted feedback depends on #124; a small deterministic loop need not. Audit export #126 is delivered. |
 | [#388](https://github.com/mylonasc/gestaltdb/issues/388) | Open, partially delivered | Finish concrete facade/consumer coupling: legacy adjacency/BFS, update composition, key/serializer helpers and query/viz/transaction/snapshot/lifecycle integration. Services already exist; require standalone boundary/compatibility tests, not a facade line-count goal. |
@@ -124,6 +125,45 @@ The package metadata still says 0.16.0 on reviewed main. That does not make post
 | [#409](https://github.com/mylonasc/gestaltdb/issues/409) | Open application proposal | CDM schema impact, collateral/lifecycle/temporal-ML scenarios with explicit expected results and data/version policies. No automatic CDM/Rune translation or financial-calculation semantics implied. |
 
 Sampling #106/#118–#121 and security #88 remain separate. Importance sampling is not probabilistic entailment; memmap/tensor exports are not a reasoning spill engine.
+
+### Native follow-up evidence and newcomer orientation (#194 / #451)
+
+**Reviewed main versus pending evidence:** `7f28808` includes sanitation #452 and
+the production locator API, but not PR #450's harness, reports or measured-decision
+documentation. PR #450's measured source is `48b7d53`; its final evidence is
+preserved at `f3782fb` (100K) and `9a47873` (10K). Those observations must not be
+presented as benchmarks of `7f28808` or the published v0.16.0 wheel.
+
+A reasoning engine needs the right base facts before applying rules. Corrections
+and retractions can change which historical claim version is eligible, even for
+one requested subject. Resolving and authenticating that input is separate from
+rule joins/fixpoint evaluation. **Dense history** here means amendments throughout
+the claim population, not densely connected graph edges or thousands of versions
+per claim: 100,000 assertions would have 134,286 total versions in the dense
+fixture; the sparse fixture has 100,343 because only its first 1,000 assertions
+receive amendments. Optimizing this work helps knowledge ingestion and preparation
+of time-specific reasoning inputs, not the expressiveness of the rule engine.
+Confidence remains metadata and exact evidence/version semantics must not change.
+
+In PR #450, sparse-history 100K completed 18/18 exact evidence parity observations
+across three sources, three selections and valid times 30/50. Locator pipeline
+time was approximately 2.5–2.8x ordinary in these single observations, with higher
+whole-worker RSS. Dense 10K completed 36/36 first/primed parity observations, with
+a documented launch-versus-later-worker harness provenance caveat. Dense 100K
+**fixture construction** timed out at 900 seconds: no extraction, rule evaluation,
+parity result or RSS measurement was obtained from that attempt. Successful
+sparse-history reads do not remediate dense-history construction/read costs.
+
+The measured decision is **defer automatic native adoption**, retain the ordinary
+source default and native sources as explicit alternatives. #451 owns remediation:
+repeated supersession-target searches, commit-envelope revalidation and broad
+catalog/index/history work are the slices to instrument and reduce. Preserve
+complete source/index authentication, correction/retraction winners, exact evidence,
+pinned horizons and fail-closed corruption/concurrency gates. The issue includes
+a fuller newcomer guide, proposed performance goals and remediation exit criteria;
+those goals are not current guarantees. Source-scoped reuse is not permission for
+an unauthenticated persistent cache. Measurements remain single observations with
+uncontrolled OS cache/host contention, not repeated medians or OS-cold evidence.
 
 ### Deferred or experimental, not scheduled by closed RE issues
 
@@ -363,6 +403,24 @@ The workbook's original audit is preserved in its **Original audit** sheet. Hist
 - Final working-branch full suite: **4,115 passed, 14 skipped in 92.34s**, using the same Python/extras command above plus `--with openpyxl`. The new synchronization/tracking regression module separately passes **19 tests**, including drift rejection, historical-criteria preservation, save/reopen round trips and refusing to overwrite an open workbook.
 - All **8 documentation examples**, documentation/API drift, live GitHub tracking, roadmap/DAG/original-audit checks, Excel `--check`, targeted correctness lint and `git diff --check` pass. The stdlib roadmap check also passes with `python -S`, without openpyxl/site packages or old git objects; shallow CI need not fetch the historical workbook commit.
 - Excel totals: **80 Available, 33 Partial, 6 Experimental, 17 Deferred**. These are scoped feature dispositions, not test counts or promises that deferred features are scheduled.
+
+### Native-follow-up reconciliation (2026-11-01T13:00:35Z)
+
+Reviewed sanitation merge `7f28808` against PR #450: main changed documentation,
+tracker tooling/workbook and CI policy, not the runtime source measured by the
+earlier pilots. No new performance measurement is claimed for this merge. The
+pending-work rows now distinguish #194's unmerged measurement/decision delivery
+from #451's unimplemented performance remediation. GR feature dispositions remain
+unchanged; regenerating Excel updates its review/roadmap view, not the original
+acceptance criteria or a performance certification. Earlier full-suite counts
+above retain their original review scope and are not relabelled tests of this SHA.
+
+Reconciled PR #450 working-branch validation after integrating `7f28808`: **4,199
+passed, 41 skipped** (Python 3.13 with backend/serializer/Arrow/Polars/RDF/NetworkX/
+bloom/docs extras and openpyxl); all **8** modular documentation examples passed.
+Roadmap/original-audit, live GitHub tracking (including open #451), generated Excel
+`--check`, documentation/API drift, Sphinx `-W` and diff checks passed. This validates
+the merged working branch, not a new performance run or an installed-release claim.
 
 ### Historical records, not current operating instructions
 

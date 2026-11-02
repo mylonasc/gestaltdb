@@ -253,6 +253,12 @@ class TemporalEngine:
         """Return the latest version with an ID up to a commit horizon."""
         return self.reader().get_version_through(version_id, through_commit)
 
+    def get_versions_through_batch(
+        self, version_ids: object, through_commit: int
+    ) -> dict[str, TemporalVersion | None]:
+        """Resolve distinct version IDs once against one captured horizon."""
+        return self.reader().get_versions_through_batch(version_ids, through_commit)
+
     def system_horizon(self, *, system_time: PointInput | None = None, through_commit: int | None = None) -> int:
         """Resolve a system-time/through-commit selection to a commit horizon."""
         return self.reader().system_horizon(system_time=system_time, through_commit=through_commit)

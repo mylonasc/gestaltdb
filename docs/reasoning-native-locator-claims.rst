@@ -130,6 +130,289 @@ actual output evidence. These counters are neither mutually interchangeable
 nor an instrumented total of source/engine work. Bytes copied and RSS are not
 inferred from them.
 
+Actual-adapter measurement harness
+----------------------------------
+
+``benchmarks.reasoning_locator_pipeline`` measures this production adapter as
+``native-authenticated-locator``, separately from ``native-full-record`` and
+``ordinary``. It never invokes the assertion-only benchmark decoder. For example:
+
+.. code-block:: sh
+
+   uv run --extra rocksdb --extra arrow python -m benchmarks.reasoning_locator_pipeline --rows 1000 --times 10 30 50 70 90 --repeats 1 --output /tmp/opencode/locator-smoke.json
+   uv run --extra rocksdb --extra arrow python -m benchmarks.reasoning_locator_pipeline --rows 1000 --commit-batch 250 --instrument --times 30 50 --repeats 3 --output /tmp/opencode/locator-attributed.json
+   uv run --extra rocksdb --extra arrow python -m benchmarks.reasoning_locator_pipeline --rows 100000 --times 30 50 --repeats 3 --timeout 600 --output /tmp/opencode/locator-100k.json
+
+For a separately labelled sparse-history scale study, add
+``--history-rows 1000`` to apply corrections/retractions only to the first 1,000
+assertions while retaining all 100,000 assertions in authentication and canonical
+conformance. The default still applies history to the whole fixture. Reports
+record the requested density and the fixture's actual historical version count;
+sparse-history results must not be relabelled dense-history measurements. Fixture
+construction can itself time out before extraction; such a failure supplies no
+extraction timing, parity result or worker RSS.
+
+The fixture has variable bounded entity IDs and compressible provenance padding,
+one correction per five assertions over ``[20, 80)``, and one retraction per seven
+over ``[40, 60)``. Named ``all``, ``predicate`` (one quarter of assertions) and
+``subject`` (one logical history, possibly retracted) selections run at explicit
+valid-time points. Exact fact/version-ID evidence is checked against an independent
+winner oracle assembled from write receipts, not from the extraction being timed.
+No inference, support discovery or publication cost is measured.
+
+Fixture loading is a separate process. Extraction workers include complete view
+and source authentication, native transfer, history point materialization, canonical
+conformance, source closure and final verification in the timed pipeline. Reports
+retain distinct native profiles, source revision/dirty state, harness hashes, runtime
+versions, repeated timing summaries and whole-worker peak RSS. Warmup uses the same
+method; neither fresh workers nor reopened handles imply OS-cold caches. Failed or
+timed-out workers retain stage diagnostics in incomplete reports without quantiles
+or an adoption decision. These commands are a measurement protocol, not evidence
+that a successful 100K locator comparison or speedup has already been obtained.
+
+HSA-01 opt-in attribution and committed baselines
+-------------------------------------------------
+
+HSA-01 adds **benchmark-only attribution** behind ``--instrument``. It does not
+change production code, default budgets, verification, historical winners or
+evidence. Wrappers are installed only for the selected benchmark process and
+cover every concrete store class in ``gestaltdb.kvstores``, including
+transaction-bound children, so counters are not limited to the parent facade.
+Ordinary extraction remains the default and no optimization or adoption claim is
+made here; HSA-02 and later work own remediation.
+
+The opt-in counters distinguish:
+
+* physical commit-descriptor, visibility-marker, record-envelope, sequence and
+  index-state metadata reads/writes, by concrete store scope and category;
+* exact/range index scan openings and rows, native scan openings/batches/rows and
+  native preparation/transfer time;
+* commit authentication, version decoding, supersession-target fallback passes,
+  commit visits per fallback, distinct target version IDs and retained commit-cache
+  entries;
+* visibility-checksum calls and marker visits;
+* construction commit, validation-target, retraction-validation, sequence
+  reservation, index writing/publication and stale-mark phases.
+
+``--commit-batch`` controls assertion records per fixture commit independently of
+row count; a batch larger than the row count is a single commit. Fixture
+construction emits flushed ``PIPELINE_PROGRESS`` checkpoints for assertion,
+correction, retraction, oracle, commit/validation start, sequence-reservation,
+index-write, publication and completion phases. A timed-out construction worker
+therefore retains its last durable stage. ``fixture.construction`` contains stage
+timings, while reports add ``fixture_attribution`` and an extraction
+``attribution`` summary. Attribution
+timings are inclusive and non-exclusive: nested work contributes to more than one
+bucket and does not sum to end-to-end time. Counter presence is not an RSS,
+backend-read or elapsed-time guarantee.
+
+Committed HSA-01 baseline reports live under
+``benchmarks/results/reasoning-457-hsa-01-*`` and retain their exact command,
+source revision, harness hashes and measured configuration. They are single
+observations except where repeats are stated; OS caches were uncontrolled and
+different runs are not a controlled scaling curve.
+
+.. list-table:: Committed HSA-01 baselines (source 94d53d3)
+   :header-rows: 1
+
+   * - Report
+     - Rows / history
+     - Commit batch
+     - Fixture load s
+     - Status
+   * - ``1k-dense-b1000``
+     - 1,000 / 1,000
+     - 1,000
+     - 1.37
+     - complete
+   * - ``1k-dense-b250``
+     - 1,000 / 1,000
+     - 250
+     - 1.14
+     - complete
+   * - ``1k-dense-r3``
+     - 1,000 / 1,000
+     - 1,000
+     - 1.30
+     - complete, 3 repeats
+   * - ``1k-sparse``
+     - 1,000 / 100
+     - 1,000
+     - 0.35
+     - complete
+   * - ``10k-dense``
+     - 10,000 / 10,000
+     - 1,000
+     - 86.81
+     - complete
+   * - ``10k-sparse``
+     - 10,000 / 1,000
+     - 1,000
+     - 3.12
+     - complete
+   * - ``100k-sparse``
+     - 100,000 / 1,000
+     - 1,000
+     - 22.66
+     - complete
+   * - ``100k-dense-timeout``
+     - 100,000 / 100,000
+     - 1,000
+     - not reached
+     - fixture timeout at 900 s, last stage ``fixture-commit``
+
+The first ``1k-dense-b1000`` report is clean. Later reports record ``dirty`` true
+because earlier result files were still untracked when they were measured. Every
+recorded harness hash matches revision ``94d53d3``, so the measured harness code
+is identical; preserve the qualification rather than relabelling them
+clean-source evidence. The companion
+``benchmarks/results/reasoning-457-hsa-01-baseline-index.json`` is a compact,
+checksummed index of every HSA-01 report, its command, fixture stages and a
+representative attribution group.
+
+The ``1k-dense-r3`` report repeats the three sources three times for the
+``all`` selection at valid times 30 and 50. At time 50 the authenticated pipeline
+p50/p95 was 1.89/2.03 seconds ordinary, 4.02/4.09 seconds full-record native and
+3.40/3.67 seconds authenticated locator. The physical counters were identical
+across repeats because work is deterministic; that is not a claim that latency
+is deterministic. These small repeated samples are a local noise check, not a
+general latency distribution.
+
+Dense history dominates construction. For the 10K dense fixture, 1.91 seconds of
+assertion commits were followed by 48.47 seconds of corrections and 36.22 seconds
+of retractions. Construction performed 48.67 million metadata reads, of which
+48.44 million were record envelopes, and resolved 3,429 distinct supersession
+targets across 6,858 fallback passes. The 10K sparse fixture with the same
+assertion count but amendments only in the first 1,000 rows constructed several
+orders of magnitude more cheaply, and its extraction did not repeat the dense
+target fallback work. A matched 1K fixture loaded in 0.35 seconds with sparse
+history (100 amended rows) versus 1.37 seconds with full dense history.
+
+Extraction attribution separates transfer from authentication. At 10K dense,
+valid time 50, ``all`` selection produced approximately:
+
+.. list-table:: Single observations at 10K dense, valid time 50
+   :header-rows: 1
+
+   * - Source
+     - Pipeline s
+     - Metadata reads
+     - Commit auth calls
+     - Target fallbacks
+     - Native rows
+   * - Ordinary
+     - 31.14
+     - 13,340,758
+     - 28,523
+     - 1,001
+     - 0
+   * - Native full-record
+     - 151.89
+     - 67,693,694
+     - 140,776
+     - 8,288
+     - 13,429
+   * - Authenticated locator
+     - 99.40
+     - 43,370,488
+     - 90,744
+     - 4,859
+     - 25,429
+
+These counts identify where amplification sits; they are not an allocation
+profile or a claim that a particular fix is sufficient. The dense-history 100K
+construction attempt retains the existing 900-second timeout and is recorded as
+a failed construction gate, not as extraction, RSS or quantile evidence.
+
+Measured decision: defer automatic adoption
+-------------------------------------------
+
+The actual-adapter 100K **sparse-history** gate completed with **18/18 exact
+fact/version-ID parity samples**: three sources, three selections, valid times
+30 and 50, first extraction on reopened handles, one observation per case.
+Source was clean ``48b7d5306c9a369e521c768e8d848331f6621139`` at launch;
+Python 3.13.11, pyrex-rocksdb 0.7.1 and PyArrow 24.0.0. The committed report is
+``benchmarks/results/reasoning-194-locator-100k-sparse-history-gate.json``.
+
+This fixture uses ``--history-rows 1000``: 100,000 assertions and 343 additional
+correction/retraction versions. Fixture loading took 21.86 seconds in its separate
+worker. All 100,343 versions remain subject to catalog authentication. Observed
+authenticated pipeline times and whole-worker peak RSS at valid time 30:
+
+.. list-table:: Single observations, not repeated latency estimates
+   :header-rows: 1
+
+   * - Selection
+     - Ordinary s / MiB
+     - Full-record native s / MiB
+     - Authenticated locator s / MiB
+   * - Subject (one evidence row)
+     - 5.328 / 425.1
+     - 15.167 / 800.7
+     - 14.521 / 832.9
+   * - Predicate (25,000 evidence rows)
+     - 6.588 / 438.9
+     - 15.226 / 800.2
+     - 16.747 / 834.0
+   * - All (100,000 evidence rows)
+     - 8.820 / 489.9
+     - 15.872 / 823.1
+     - 23.604 / 840.0
+
+At valid time 50, the subject is retracted and yields zero evidence rows; the
+locator still takes 14.687 seconds versus 5.274 ordinary. Predicate/all requests
+return 24,964/99,857 evidence rows with exact historical version parity. Across
+the six selection/time pairs the locator takes approximately 2.5--2.8 times the
+ordinary pipeline time in these observations, with higher whole-worker RSS.
+
+For the single-subject request at time 30, the locator authenticates 100,343
+records and transfers 125,254 index rows to identify one candidate and materialize
+two records in four scans. Predicate selection opens 25,002 scans for 25,000
+candidates. Selective materialization does not eliminate full authentication,
+broad world-prefix transfer or canonical conformance; many-candidate workloads
+also pay per-history scan overhead. These counters describe observed work, not
+an exact allocation attribution or proof of every bottleneck.
+
+The separate **dense-history** 100K fixture attempt timed out during construction
+at 900 seconds, before extraction ran. Its clean source was ``4c3d125``. Preserve
+``benchmarks/results/reasoning-194-locator-100k-dense-fixture-timeout.json`` as a
+failed construction gate, not a native/ordinary extraction timing or RSS result.
+The sparse-history success does not resolve that dense-history performance debt.
+
+The separate dense-history **10K** matrix also completed: **36/36 exact evidence
+parity samples**, covering the three sources/selections, times 30/50 and first/
+primed reads, one observation per case. Its 13,429-version fixture loaded in
+66.96 seconds. At time 30, subject pipeline times were 24.196 seconds ordinary,
+122.918 full-record native and 81.591 authenticated locator; primed times were
+23.772, 122.156 and 77.211 seconds respectively. Correct output does not remove
+the dense-history authentication cost, even for a single subject.
+
+This diagnostic report is preserved separately as
+``benchmarks/results/reasoning-194-locator-10k-dense-history-gate.json``. Its parent
+captured clean ``4c3d125`` and the harness hash at launch; additive sparse-fixture
+and optional-metadata changes were committed while it was running. Those changes
+left its default fixture behavior and measured worker bodies unchanged, but later
+workers could import the updated module. Preserve that qualification: the report
+is not wholly immutable-source release evidence, and its recorded clean-at-launch
+flag must not be interpreted as a guarantee across the run. Dense 10K and sparse
+100K are different workloads, not a same-shape scaling comparison. First/primed
+are cache states, not independent repeated samples of one state.
+
+**Decision: defer automatic native locator adoption.** Ordinary extraction remains
+the default; retain the authenticated locator as an explicit correctness-preserving
+alternative. Reject a speedup/default-switch claim for this evidence, not the API's
+historical semantics. Targeted remediation and measurable goals are tracked in
+`technical-debt issue #451 <https://github.com/mylonasc/gestaltdb/issues/451>`_.
+
+Limitations: these are single observations, not three-repeat median/P95 estimates;
+one-element summary quantiles in the JSON do not establish a distribution. OS
+caches and host contention were uncontrolled, including overlap with another gate.
+RSS is whole-worker high-water, not query-only memory. Padding is compressible;
+copied bytes are not instrumented. These are extraction/authentication results,
+not inference, support, publication, transactional source or OS-cold-cache evidence.
+Repeated isolated measurements are required before any future adoption claim;
+none is needed to retain the current default and defer optimization to #451.
+
 Lifetime, cancellation and remaining boundaries
 ------------------------------------------------
 
