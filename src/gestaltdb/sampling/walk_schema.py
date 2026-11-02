@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Literal, Mapping, cast
 
 import numpy as np
 
-from ._arrays import FloatArray, IntArray
+from ._arrays import Array, FloatArray, IntArray
 from ..temporal import TemporalContext
 from .validation import _integer_array, _validate_count
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from .engine import SamplerEngine
 
 
-def _ids(values: Sequence[int] | np.ndarray | None, name: str) -> tuple[int, ...] | None:
+def _ids(values: Sequence[int] | Array | None, name: str) -> tuple[int, ...] | None:
     if values is None:
         return None
     values = _integer_array(values, name)

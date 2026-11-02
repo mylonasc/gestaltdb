@@ -7,6 +7,7 @@ from typing import Iterable, Iterator
 
 import numpy as np
 
+from ._arrays import Array, FloatArray, IntArray
 from .walks import RandomWalkBatch
 
 
@@ -18,7 +19,7 @@ def _count(value: object, name: str, *, minimum: int = 0) -> int:
     return int(value)
 
 
-def _frequencies(values: Iterable[float] | np.ndarray, name: str) -> np.ndarray:
+def _frequencies(values: Iterable[float] | Array, name: str) -> FloatArray:
     frequencies = np.array(values, dtype=np.float64, copy=True)
     if frequencies.ndim != 1 or not np.all(np.isfinite(frequencies)) or np.any(frequencies < 0):
         raise ValueError(f"{name} must be one-dimensional, finite and non-negative")
@@ -34,19 +35,19 @@ class ContextPairBatch:
     and ``docs/random-walks.rst`` RWS-02 for windowing and subsampling.
     """
 
-    center_nodes: np.ndarray
-    context_nodes: np.ndarray
-    distances: np.ndarray
-    weights: np.ndarray
+    center_nodes: IntArray
+    context_nodes: IntArray
+    distances: IntArray
+    weights: FloatArray
 
-    def to_numpy(self) -> dict[str, np.ndarray]:
+    def to_numpy(self) -> dict[str, Array]:
         """Return arrays without copying; IDs belong to the walks' snapshot."""
         return {name: getattr(self, name) for name in (
             "center_nodes", "context_nodes", "distances", "weights"
         )}
 
 
-def _segments(batch: RandomWalkBatch, cross_restarts: bool) -> Iterator[np.ndarray]:
+def _segments(batch: RandomWalkBatch, cross_restarts: bool) -> Iterator[IntArray]:
     nodes, edges, relations, lengths = (
         batch.node_ids, batch.edge_indices, batch.relation_ids, batch.lengths
     )
@@ -82,7 +83,7 @@ def iter_context_pairs(
     dynamic_window: bool = False,
     distance_weighting: str = "uniform",
     cross_restarts: bool = False,
-    frequencies: Iterable[float] | np.ndarray | None = None,
+    frequencies: Iterable[float] | Array | None = None,
     subsample_threshold: float = 0.0,
     batch_size: int = 4096,
     seed: int | None = None,
