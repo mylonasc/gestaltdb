@@ -323,3 +323,28 @@ reasoning semantics, automatic native adoption, new backend guarantees or deleti
 of canonical benchmark/design evidence. Defects discovered while making examples
 runnable should receive focused implementation issues when they cannot be resolved
 as documentation corrections.
+
+## 12. Implementation ledger
+
+DOC-01's initial implementation lives under `planning/documentation-review/`:
+
+- `capabilities.json` maps 44 capability families to representative source/tests,
+  existing coverage, delivery owners and specific remediation gaps.
+- `documents.json` classifies all 71 current Sphinx pages, 11 packaged Markdown
+  resources and four cross-surface entry points (86 files total).
+- `check_inventory.py` checks classifications, citations and the 10-topic packaged
+  registry without importing optional library dependencies. Regression tests cover
+  new pages/resources, missing citations, invalid status, duplicate classifications
+  and topic drift. File validation is not semantic completeness certification.
+- `authoring-contract.md` establishes terminology, example execution classes and
+  mathematical/pseudocode conventions: directed multigraphs, eligibility before
+  sampling, Datalog fixpoints, interval intersection/union and four-valued evidence.
+- `graphics.md` records 13 concrete teaching opportunities under
+  [Documentation Debt: Graphics #495](https://github.com/mylonasc/gestaltdb/issues/495).
+  Static accessible diagrams come first; optional animation must have a readable
+  fallback, reduced-motion support and explicit controls.
+
+These inventories are the foundation for the guide-writing slices, not a claim
+that the listed documentation gaps have already been repaired. DOC-10 must
+reconcile them against the final user journeys. Optional graphics may remain
+explicit follow-ups rather than blocking useful prose and runnable examples.
