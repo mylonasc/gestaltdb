@@ -58,6 +58,36 @@ def test_invalidate_for_store_and_clear(tmp_path, backend, module):
 
 
 @pytest.mark.parametrize("backend,module", BACKENDS)
+def test_cache_retains_sizes_and_digests_not_envelopes(tmp_path, backend, module):
+    pytest.importorskip(module)
+    from gestaltdb._graph.temporal_keys import temporal_record_key
+    graph = _make(tmp_path, backend)
+    try:
+        for i in range(3):
+            graph.temporal.put_node_version(Node(f"n{i}", properties={"payload": "x" * (64 + i)}), valid=(0, None))
+        for commit_id in range(1, 4):
+            assert graph.temporal.get_commit_cached(commit_id) is not None
+        for key, (store, descriptor, sizes, commit, decoder, digests) in graph.temporal._commit_cache.items():
+            assert store is graph.store
+            assert isinstance(descriptor, bytes) and descriptor
+            assert isinstance(sizes, tuple) and all(isinstance(s, int) and s > 0 for s in sizes)
+            assert len(sizes) == len(commit.versions) == len(digests)
+            assert all(type(d) is bytes and len(d) == 32 for d in digests)
+            # No retained envelope bytes: every bytes object in the entry is either
+            # the descriptor or a 32-byte digest. Envelope payloads are re-read
+            # from the store on warm hits, not kept alive by the cache.
+            for ordinal in range(len(sizes)):
+                envelope = graph.store.get_metadata(temporal_record_key(key[1], ordinal))
+                assert envelope is not None and len(envelope) == sizes[ordinal]
+            assert _reads._commit_cache_bytes(graph.temporal._commit_cache) == sum(
+                len(entry[1]) + sum(entry[2]) + sum(len(d) for d in entry[5])
+                for entry in graph.temporal._commit_cache.values()
+            )
+    finally:
+        graph.close()
+
+
+@pytest.mark.parametrize("backend,module", BACKENDS)
 def test_byte_and_entry_bounds_include_incoming_commit(tmp_path, backend, module, monkeypatch):
     pytest.importorskip(module)
     graph = _make(tmp_path, backend)

@@ -28,6 +28,13 @@ snapshots retain the existing no-I/O warm path. A temporal horizon or writer
 lock alone does not supply that guarantee. No new digest, persistent checkpoint,
 on-disk format or publication authority is introduced.
 
+A bounded Python allocation diagnostic (`benchmarks/reasoning_commit_cache_allocations.py`,
+report `benchmarks/results/reasoning-453-hsa-03-cache-alloc.json`) re-reads 200
+single-version commits: cold decode peaks at ~399KB traced Python bytes, while
+warm reuse peaks at ~1.5KB with zero decode calls. Cached entries retain only
+descriptor bytes, record sizes and 32-byte digests — never full envelopes.
+Native buffers and RSS are excluded; this is not a heap or RSS bound.
+
 .. code-block:: python
 
    from pathlib import Path

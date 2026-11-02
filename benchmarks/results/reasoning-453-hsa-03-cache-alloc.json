@@ -1,0 +1,12 @@
+{
+  "revision": "2423f240b691aaa05365e2ec70200b3251521f8a",
+  "script_sha256": "9d0bda6cb9862048fd603da3e96a69c34cda3119bba946e4948142863b3960eb",
+  "reader_sha256": "5ec93c36bc3a14e3f298cd5cd5217746c77b9db74155c31ad741a29c0496aecd",
+  "commits": 200,
+  "cold_peak_python_bytes": 399039,
+  "warm_peak_python_bytes": 1553,
+  "warm_decode_calls": 0,
+  "cache_entries": 200,
+  "cache_bytes": 167164,
+  "boundary": "tracemalloc around get_commit_cached only; same process, uncontrolled OS caches, native buffers excluded, not RSS or heap guarantee"
+}
