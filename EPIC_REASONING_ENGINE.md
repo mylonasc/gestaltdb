@@ -12,9 +12,9 @@
 
 - **Delivered:** parent [#156](https://github.com/mylonasc/gestaltdb/issues/156), RE-01–RE-27 and all five phase epics are closed. Delivery includes explicitly bounded implementations, experiments and approved defer decisions; it does **not** mean every aspirational native/OWL acceptance criterion is implemented.
 - **Delivered composability:** [#391](https://github.com/mylonasc/gestaltdb/issues/391) and #392–#396 are closed: typed first-witness explanations, selected temporal negation/aggregates, structural validation, explicit inferred Cypher and typed graph mappings. See sections 2–3 for fragment and release boundaries.
-- **Native follow-up:** [#194](https://github.com/mylonasc/gestaltdb/issues/194) remains open for closure reconciliation; actual-adapter measurements and the **defer automatic adoption** decision are now on main through #450. #451 has partial HSA implementation on `hsa-dev`, not an absent native API. HSA-06's pilot clears dense construction but selective native latency/RSS still misses the ordinary-relative goal.
+- **Native follow-up:** [#194](https://github.com/mylonasc/gestaltdb/issues/194) remains open for closure reconciliation; actual-adapter measurements and the **defer automatic adoption** decision are now on main through #450. #451 has HSA-01/HSA-02 closed and on main; HSA-03 allocation evidence, HSA-04 prep/batching and HSA-06 warm/sparse/10K paired acceptance are on `hsa-dev` (PRs #463–#469 merged), not an absent native API. Selective native latency/RSS still misses the ordinary-relative goal at every measured point.
 - **Proposed, not delivered:** weighted/probabilistic semantics #124 and feedback composition #128. Architecture #388 and typing #410 are partially delivered independent programs. Tutorial #273 and CDM #409 are separate documentation/application work.
-- **Activity:** #450/#461 are merged to main; #463–#466 contain HSA-03/HSA-04 progress on `hsa-dev`. #454 owns final acceptance and remaining scale/rollout gates; optional HSA-05 #458 is deferred by the current evidence. PRs #441/#443/#444/#445 are dependency updates. No native default or GR disposition is promoted.
+- **Activity:** #450/#461/#462 are merged to main; #463–#471 (HSA-03 allocation, HSA-04 prep/batching, HSA-06 paired acceptance, main forward-merge #470, typing-gate fix #471) are merged to `hsa-dev`. #454 owns final acceptance and remaining rollout gates; optional HSA-05 #458 is deferred by the current evidence. No native default or GR disposition is promoted.
 
 No merge, tag, release, issue closure or new feature commitment is authorized by this document. Current changes start from accepted `main` unless explicitly directed otherwise. `onto-dev` and `feature/onto-dev-epic-2` below are **historical integration targets**, not current PR instructions.
 
@@ -116,7 +116,7 @@ The package metadata still says 0.16.0 on reviewed main. That does not make post
 | Issue | State at review | Remaining acceptance / dependency |
 | --- | --- | --- |
 | [#194](https://github.com/mylonasc/gestaltdb/issues/194) | Open; measurements/defer decision merged in #450 | Main now contains the actual-adapter harness and original 18/18 sparse-history 100K plus 36/36 diagnostic dense 10K parity observations. Preserve their original source/host/cache limitations; no raw/assertion-only/full-record substitution or native adoption. Closure reconciliation remains separate from optimization debt #451. Optional, not a #156 blocker. |
-| [#451](https://github.com/mylonasc/gestaltdb/issues/451) | Open technical debt; partial HSA work on hsa-dev | HSA-02 is on main; HSA-03/HSA-04 remain on hsa-dev. HSA-06 pilot: dense 100K/134286-version construction passes the preserved 900s gate in 35.17s, with checked-point parity; 216 unprofiled alternating 1K reads pass own-baseline observed gates, but selective native latency/RSS fails the 1.25x ordinary goal. Larger/warm/sparse paired gates and rollout remain; native adoption and optional new-index HSA-05 stay deferred. See planning/reasoning-followthrough/hsa-06-pilot.md; no blanket performance or feature promotion. |
+| [#451](https://github.com/mylonasc/gestaltdb/issues/451) | Open technical debt; HSA-01/HSA-02 closed, remainder on hsa-dev | HSA-01/HSA-02 closed and on main. HSA-03 allocation evidence, HSA-04 prep/batching and HSA-06 paired acceptance (1K-first, 1K-first+warm, 1K-sparse, 10K-first; 864 observations, exact parity, all own-mode observed gates pass) are on hsa-dev. Selective native latency/RSS fails the 1.25x ordinary goal at every point. 10K warm/sparse variants and rollout remain; native adoption and optional new-index HSA-05 stay deferred. See planning/reasoning-followthrough/hsa-06-pilot.md; no blanket performance or feature promotion. |
 | [#124](https://github.com/mylonasc/gestaltdb/issues/124) | Open proposal; design-gated | Choose probabilistic, fuzzy **or** importance semantics; prove combination, retraction, convergence and provenance with independent tests and a named user scenario. No silent confidence multiplication. |
 | [#128](https://github.com/mylonasc/gestaltdb/issues/128) | Open composition proposal | Model/task/version provenance, source/world/assertion policy, bounded iterations and leakage controls. Weighted feedback depends on #124; a small deterministic loop need not. Audit export #126 is delivered. |
 | [#388](https://github.com/mylonasc/gestaltdb/issues/388) | Open, partially delivered | Finish concrete facade/consumer coupling: legacy adjacency/BFS, update composition, key/serializer helpers and query/viz/transaction/snapshot/lifecycle integration. Services already exist; require standalone boundary/compatibility tests, not a facade line-count goal. |
@@ -176,8 +176,11 @@ attests imported checkouts over one shared fixture: all 216 observations preserv
 exact evidence, and all tested mode-relative observed gates pass against each
 mode's own HSA-01 baseline. Selective native latency is still about 2.1x ordinary
 and RSS also breaches 1.25x. Keep ordinary default; defer automatic native adoption
-and the optional new-index/vectorization experiment. Larger/warm/sparse paired
-points and final rollout reconciliation remain; no GR feature status changes.
+and the optional new-index/vectorization experiment. The matrix has since grown
+to 864 paired observations (1K-first, 1K-first+warm, 1K-sparse, 10K-first) with
+the same verdict at every point; HSA-01/HSA-02 are closed and #462 ergonomics
+plus a typing-gate fix are reconciled on `hsa-dev`. 10K warm/sparse variants
+and final rollout reconciliation remain; no GR feature status changes.
 
 ### Deferred or experimental, not scheduled by closed RE issues
 
