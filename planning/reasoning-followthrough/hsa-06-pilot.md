@@ -111,7 +111,7 @@ SHA-256: `fec7839ad38be757409e2b645add22f295b9a710c2a0fd67523fd3575c227632`
 Same 10K dense shape (13429 versions), 6 alternating pairs per
 method/selection/time/**cache** (first and warm): **432 observations / 216
 pairs**, all with exact fact/version parity. Before `001e276`, after `3d96b18`
-(current `hsa-dev` HEAD — the final-source run).
+(the `hsa-dev` HEAD at run time — sources unchanged since).
 
 All 72 own-mode observed latency/RSS gates are within limits. Warmup helps
 ordinary more than the locator (time-50 subject warm medians: ordinary 0.249s,
