@@ -73,6 +73,61 @@ def test_native_prefixes_reduce_transfer_but_report_full_authentication(graph):
         assert profile.scans == 4
 
 
+@pytest.mark.parametrize("batch_rows", [1, 2, 64])
+def test_small_native_chunks_preserve_complete_membership_and_profile(graph, batch_rows):
+    first = claim(graph, "a")
+    claim(graph, "b")
+    correction = graph.epistemic.correct_claim(
+        first.logical_id, confidence=.7, valid=(20, 80), supersedes_version_id=first.version_id)
+    graph.epistemic.retract_claim(
+        first.logical_id, valid=(40, 60), supersedes_version_id=correction.version_id)
+    with read_view(graph, valid_time=50) as view, locator(
+        view, native_limits=NativeLocatorLimits(batch_rows=batch_rows),
+    ) as native:
+        with source(view, PinnedBatchedClaimSource) as ordinary:
+            assert evidence(native) == evidence(ordinary)
+        profile = native.native_profile
+        assert profile.authenticated_records == 4
+        assert profile.candidate_claims == 2
+        assert profile.resolved_claims == 1
+        assert profile.materialized_records == 4
+        assert profile.raw_index_rows == 7  # three assertion/correction world rows + four history rows
+        assert profile.scans == 3
+
+
+@pytest.mark.parametrize("fault", ["omit-tail", "duplicate-tail"])
+def test_membership_consumption_still_rejects_late_stream_faults(graph, monkeypatch, fault):
+    import gestaltdb.reasoning.adapters.native_locator_claims as adapter
+
+    for subject in ("a", "b", "c"):
+        claim(graph, subject)
+    real = adapter.NativeKeyScan
+    class FaultyScan:
+        def __init__(self, *args, **kwargs):
+            self.scan = real(*args, **kwargs)
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            self.scan.close()
+        def __iter__(self):
+            batches = list(self.scan)
+            if fault == "omit-tail":
+                yield from batches[:-1]
+            else:
+                yield from batches
+                yield batches[-1]
+    monkeypatch.setattr(adapter, "NativeKeyScan", FaultyScan)
+    with read_view(graph, valid_time=50) as view, locator(
+        view, native_limits=NativeLocatorLimits(batch_rows=1),
+    ) as native:
+        with pytest.raises(ProvenanceMismatchError):
+            next(native.iter_batches())
+        assert not native._active
+        assert "_native_versions" not in native.__dict__
+        with pytest.raises(ReasoningError, match="no completed"):
+            _ = native.native_profile
+
+
 @pytest.mark.parametrize("filters", [{}, {"agents": []}, {"sources": [None]}, {"object": "absent"}])
 def test_policy_and_literal_negative_world_filter_parity(graph, filters):
     claim(graph)

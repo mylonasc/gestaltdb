@@ -1,0 +1,2577 @@
+{
+  "schema_version": 2,
+  "configuration": {
+    "rows": 100000,
+    "history_rows": null,
+    "commit_batch": 1000,
+    "instrument": true,
+    "locator_history_batch_size": null,
+    "methods": [
+      "ordinary"
+    ],
+    "selections": [
+      "all",
+      "subject"
+    ],
+    "times": [
+      30,
+      50
+    ],
+    "caches": [
+      "first"
+    ],
+    "repeats": 1,
+    "timeout": 900.0
+  },
+  "samples": [
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 5.063576185995771,
+        "source_open_extract_close_verify_s": 43.99012527200102,
+        "post_verify_s": 5.3746959540003445,
+        "authenticated_pipeline_s": 54.42854297500162,
+        "reopen_s": 0.05210392600565683,
+        "total_pipeline_s": 54.480646901007276
+      },
+      "evidence_digest": "f0dd6ec3d3f37ec2b330a3c918dc50f9345c5eac2a79c3313cd66549122aacde",
+      "evidence_rows": 100000,
+      "profile": {
+        "batches": 98,
+        "rows": 100000,
+        "scanned": 100000,
+        "verifications": 5,
+        "pushdown": "none"
+      },
+      "native_profile": null,
+      "instrumentation": {
+        "view_open": {
+          "metadata_reads": 136539,
+          "metadata_writes": 0,
+          "metadata_deletes": 0,
+          "metadata_reads_by_category": {
+            "sequence": 1,
+            "visibility_marker": 604,
+            "index_state": 1,
+            "commit_descriptor": 303,
+            "other_metadata": 1,
+            "record_envelope": 135629
+          },
+          "metadata_writes_by_category": {},
+          "metadata_reads_by_scope": {
+            "PyRexStore": 136539
+          },
+          "metadata_writes_by_scope": {},
+          "metadata_read_s_by_category": {
+            "sequence": 1.385999348713085e-05,
+            "visibility_marker": 0.004201165022095665,
+            "index_state": 2.443004632368684e-06,
+            "commit_descriptor": 0.00973951794730965,
+            "other_metadata": 2.7989000955130905e-05,
+            "record_envelope": 0.39817684057197766
+          },
+          "index_scan_openings": 143,
+          "index_rows": 143,
+          "index_scan_s": 0.0013285390523378737,
+          "index_scan_openings_by_scope": {
+            "PyRexStore": 143
+          },
+          "native_scan_openings": 0,
+          "native_batches": 0,
+          "native_rows": 0,
+          "native_scan_s": 0.0,
+          "native_prepare_calls": 0,
+          "native_prepare_s": 0.0,
+          "native_selected_records_peak": 0,
+          "commit_auth_calls": 303,
+          "commit_auth_s": 5.050494590017479,
+          "decode_calls": 134429,
+          "decode_s": 3.860732722641842,
+          "target_lookup_calls": 1,
+          "target_lookup_horizon_sum": 299,
+          "target_lookup_commit_visits": 2,
+          "target_lookup_s": 0.004885675996774808,
+          "distinct_target_version_ids": 143,
+          "validation_target_calls": 0,
+          "validation_target_s": 0.0,
+          "retraction_validation_calls": 0,
+          "retraction_validation_s": 0.0,
+          "version_id_exists_calls": 0,
+          "version_id_exists_s": 0.0,
+          "checksum_calls": 0,
+          "checksum_marker_visits": 0,
+          "checksum_s": 0.0,
+          "canonical_conformance_calls": 0,
+          "canonical_conformance_s": 0.0,
+          "commit_calls": 0,
+          "commit_s": 0.0,
+          "sequence_reservations": 0,
+          "sequence_reserve_s": 0.0,
+          "index_write_calls": 0,
+          "index_write_s": 0.0,
+          "index_entries_written": 0,
+          "publication_calls": 0,
+          "publication_s": 0.0,
+          "stale_mark_calls": 0,
+          "stale_mark_s": 0.0,
+          "commit_cache_entries_peak": 137,
+          "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+          "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+        },
+        "extraction": {
+          "metadata_reads": 1145839,
+          "metadata_writes": 0,
+          "metadata_deletes": 0,
+          "metadata_reads_by_category": {
+            "visibility_marker": 5127,
+            "index_state": 100008,
+            "commit_descriptor": 2118,
+            "other_metadata": 11,
+            "record_envelope": 1038574,
+            "sequence": 1
+          },
+          "metadata_writes_by_category": {},
+          "metadata_reads_by_scope": {
+            "PyRexStore": 1145839
+          },
+          "metadata_writes_by_scope": {},
+          "metadata_read_s_by_category": {
+            "visibility_marker": 0.02838721525768051,
+            "index_state": 0.15976055339706363,
+            "commit_descriptor": 0.05691963907156605,
+            "other_metadata": 0.0002274040089105256,
+            "record_envelope": 2.7343165367565234,
+            "sequence": 3.4430049709044397e-06
+          },
+          "index_scan_openings": 200717,
+          "index_rows": 495001,
+          "index_scan_s": 1.459506738188793,
+          "index_scan_openings_by_scope": {
+            "PyRexStore": 200717
+          },
+          "native_scan_openings": 0,
+          "native_batches": 0,
+          "native_rows": 0,
+          "native_scan_s": 0.0,
+          "native_prepare_calls": 0,
+          "native_prepare_s": 0.0,
+          "native_selected_records_peak": 0,
+          "commit_auth_calls": 2118,
+          "commit_auth_s": 40.62391621793358,
+          "decode_calls": 1032145,
+          "decode_s": 31.3196320359566,
+          "target_lookup_calls": 5,
+          "target_lookup_horizon_sum": 1495,
+          "target_lookup_commit_visits": 10,
+          "target_lookup_s": 0.023562771995784715,
+          "distinct_target_version_ids": 0,
+          "validation_target_calls": 0,
+          "validation_target_s": 0.0,
+          "retraction_validation_calls": 0,
+          "retraction_validation_s": 0.0,
+          "version_id_exists_calls": 0,
+          "version_id_exists_s": 0.0,
+          "checksum_calls": 1,
+          "checksum_marker_visits": 300,
+          "checksum_s": 0.0005548120025196113,
+          "canonical_conformance_calls": 1,
+          "canonical_conformance_s": 17.608072762042866,
+          "commit_calls": 0,
+          "commit_s": 0.0,
+          "sequence_reservations": 0,
+          "sequence_reserve_s": 0.0,
+          "index_write_calls": 0,
+          "index_write_s": 0.0,
+          "index_entries_written": 0,
+          "publication_calls": 0,
+          "publication_s": 0.0,
+          "stale_mark_calls": 0,
+          "stale_mark_s": 0.0,
+          "commit_cache_entries_peak": 137,
+          "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+          "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+        },
+        "post_verify": {
+          "metadata_reads": 136538,
+          "metadata_writes": 0,
+          "metadata_deletes": 0,
+          "metadata_reads_by_category": {
+            "visibility_marker": 604,
+            "index_state": 1,
+            "commit_descriptor": 303,
+            "other_metadata": 1,
+            "record_envelope": 135629,
+            "sequence": 0
+          },
+          "metadata_writes_by_category": {},
+          "metadata_reads_by_scope": {
+            "PyRexStore": 136538
+          },
+          "metadata_writes_by_scope": {},
+          "metadata_read_s_by_category": {
+            "visibility_marker": 0.00402752300578868,
+            "index_state": 1.935004547704011e-06,
+            "commit_descriptor": 0.007717330037849024,
+            "other_metadata": 2.867099829018116e-05,
+            "record_envelope": 0.3482334460277343,
+            "sequence": 0.0
+          },
+          "index_scan_openings": 143,
+          "index_rows": 143,
+          "index_scan_s": 0.0013012190684094094,
+          "index_scan_openings_by_scope": {
+            "PyRexStore": 143
+          },
+          "native_scan_openings": 0,
+          "native_batches": 0,
+          "native_rows": 0,
+          "native_scan_s": 0.0,
+          "native_prepare_calls": 0,
+          "native_prepare_s": 0.0,
+          "native_selected_records_peak": 0,
+          "commit_auth_calls": 303,
+          "commit_auth_s": 5.360791687009623,
+          "decode_calls": 134429,
+          "decode_s": 4.085053577728104,
+          "target_lookup_calls": 1,
+          "target_lookup_horizon_sum": 299,
+          "target_lookup_commit_visits": 2,
+          "target_lookup_s": 0.004800155998964328,
+          "distinct_target_version_ids": 0,
+          "validation_target_calls": 0,
+          "validation_target_s": 0.0,
+          "retraction_validation_calls": 0,
+          "retraction_validation_s": 0.0,
+          "version_id_exists_calls": 0,
+          "version_id_exists_s": 0.0,
+          "checksum_calls": 0,
+          "checksum_marker_visits": 0,
+          "checksum_s": 0.0,
+          "canonical_conformance_calls": 0,
+          "canonical_conformance_s": 0.0,
+          "commit_calls": 0,
+          "commit_s": 0.0,
+          "sequence_reservations": 0,
+          "sequence_reserve_s": 0.0,
+          "index_write_calls": 0,
+          "index_write_s": 0.0,
+          "index_entries_written": 0,
+          "publication_calls": 0,
+          "publication_s": 0.0,
+          "stale_mark_calls": 0,
+          "stale_mark_s": 0.0,
+          "commit_cache_entries_peak": 137,
+          "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+          "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+        },
+        "total": {
+          "metadata_reads": 1418916,
+          "metadata_writes": 0,
+          "metadata_deletes": 0,
+          "metadata_reads_by_category": {
+            "sequence": 2,
+            "visibility_marker": 6335,
+            "index_state": 100010,
+            "commit_descriptor": 2724,
+            "other_metadata": 13,
+            "record_envelope": 1309832
+          },
+          "metadata_writes_by_category": {},
+          "metadata_reads_by_scope": {
+            "PyRexStore": 1418916
+          },
+          "metadata_writes_by_scope": {},
+          "metadata_read_s_by_category": {
+            "sequence": 1.730299845803529e-05,
+            "visibility_marker": 0.036615903285564855,
+            "index_state": 0.1597649314062437,
+            "commit_descriptor": 0.07437648705672473,
+            "other_metadata": 0.00028406400815583766,
+            "record_envelope": 3.4807268233562354
+          },
+          "index_scan_openings": 201003,
+          "index_rows": 495287,
+          "index_scan_s": 1.4621364963095402,
+          "index_scan_openings_by_scope": {
+            "PyRexStore": 201003
+          },
+          "native_scan_openings": 0,
+          "native_batches": 0,
+          "native_rows": 0,
+          "native_scan_s": 0.0,
+          "native_prepare_calls": 0,
+          "native_prepare_s": 0.0,
+          "native_selected_records_peak": 0,
+          "commit_auth_calls": 2724,
+          "commit_auth_s": 51.035202494960686,
+          "decode_calls": 1301003,
+          "decode_s": 39.26541833632655,
+          "target_lookup_calls": 7,
+          "target_lookup_horizon_sum": 2093,
+          "target_lookup_commit_visits": 14,
+          "target_lookup_s": 0.03324860399152385,
+          "distinct_target_version_ids": 143,
+          "validation_target_calls": 0,
+          "validation_target_s": 0.0,
+          "retraction_validation_calls": 0,
+          "retraction_validation_s": 0.0,
+          "version_id_exists_calls": 0,
+          "version_id_exists_s": 0.0,
+          "checksum_calls": 1,
+          "checksum_marker_visits": 300,
+          "checksum_s": 0.0005548120025196113,
+          "canonical_conformance_calls": 1,
+          "canonical_conformance_s": 17.608072762042866,
+          "commit_calls": 0,
+          "commit_s": 0.0,
+          "sequence_reservations": 0,
+          "sequence_reserve_s": 0.0,
+          "index_write_calls": 0,
+          "index_write_s": 0.0,
+          "index_entries_written": 0,
+          "publication_calls": 0,
+          "publication_s": 0.0,
+          "stale_mark_calls": 0,
+          "stale_mark_s": 0.0,
+          "commit_cache_entries_peak": 137,
+          "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+          "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+        }
+      },
+      "evaluator_s": null,
+      "evaluator_boundary": "not measured: this harness does not evaluate rules",
+      "source_contract": "ordinary",
+      "valid_time": 30,
+      "selection": "all",
+      "locator_history_batch_size": null,
+      "rss_peak_bytes": 524619776,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "counter_boundary": "opt-in benchmark-only counters; inclusive attribution; not RSS or elapsed-time guarantees",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 55.12316374100192,
+      "repeat": 0,
+      "method": "ordinary",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 5.028495790997113,
+        "source_open_extract_close_verify_s": 25.739136126998346,
+        "post_verify_s": 5.177546033999533,
+        "authenticated_pipeline_s": 35.9453173199945,
+        "reopen_s": 0.01921806199970888,
+        "total_pipeline_s": 35.96453538199421
+      },
+      "evidence_digest": "fffb7c043394ff8614d3bb830f36cb84c7016160d86bfb465c6b0d69f30ea5df",
+      "evidence_rows": 1,
+      "profile": {
+        "batches": 1,
+        "rows": 1,
+        "scanned": 1,
+        "verifications": 5,
+        "pushdown": "predicate+subject"
+      },
+      "native_profile": null,
+      "instrumentation": {
+        "view_open": {
+          "metadata_reads": 136539,
+          "metadata_writes": 0,
+          "metadata_deletes": 0,
+          "metadata_reads_by_category": {
+            "commit_descriptor": 303,
+            "visibility_marker": 604,
+            "record_envelope": 135629,
+            "index_state": 1,
+            "sequence": 1,
+            "other_metadata": 1
+          },
+          "metadata_writes_by_category": {},
+          "metadata_reads_by_scope": {
+            "PyRexStore": 136539
+          },
+          "metadata_writes_by_scope": {},
+          "metadata_read_s_by_category": {
+            "commit_descriptor": 0.010012661914515775,
+            "visibility_marker": 0.0036428709208848886,
+            "record_envelope": 0.40227088289975654,
+            "index_state": 2.7089990908280015e-06,
+            "sequence": 1.65310048032552e-05,
+            "other_metadata": 2.9164999432396144e-05
+          },
+          "index_scan_openings": 143,
+          "index_rows": 143,
+          "index_scan_s": 0.0013802291068714112,
+          "index_scan_openings_by_scope": {
+            "PyRexStore": 143
+          },
+          "native_scan_openings": 0,
+          "native_batches": 0,
+          "native_rows": 0,
+          "native_scan_s": 0.0,
+          "native_prepare_calls": 0,
+          "native_prepare_s": 0.0,
+          "native_selected_records_peak": 0,
+          "commit_auth_calls": 303,
+          "commit_auth_s": 5.01693754200096,
+          "decode_calls": 134429,
+          "decode_s": 3.8434507395068067,
+          "target_lookup_calls": 1,
+          "target_lookup_horizon_sum": 299,
+          "target_lookup_commit_visits": 2,
+          "target_lookup_s": 0.005103821000375319,
+          "distinct_target_version_ids": 143,
+          "validation_target_calls": 0,
+          "validation_target_s": 0.0,
+          "retraction_validation_calls": 0,
+          "retraction_validation_s": 0.0,
+          "version_id_exists_calls": 0,
+          "version_id_exists_s": 0.0,
+          "checksum_calls": 0,
+          "checksum_marker_visits": 0,
+          "checksum_s": 0.0,
+          "canonical_conformance_calls": 0,
+          "canonical_conformance_s": 0.0,
+          "commit_calls": 0,
+          "commit_s": 0.0,
+          "sequence_reservations": 0,
+          "sequence_reserve_s": 0.0,
+          "index_write_calls": 0,
+          "index_write_s": 0.0,
+          "index_entries_written": 0,
+          "publication_calls": 0,
+          "publication_s": 0.0,
+          "stale_mark_calls": 0,
+          "stale_mark_s": 0.0,
+          "commit_cache_entries_peak": 137,
+          "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+          "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+        },
+        "extraction": {
+          "metadata_reads": 687064,
+          "metadata_writes": 0,
+          "metadata_deletes": 0,
+          "metadata_reads_by_category": {
+            "commit_descriptor": 1524,
+            "sequence": 1,
+            "other_metadata": 11,
+            "visibility_marker": 3345,
+            "record_envelope": 682174,
+            "index_state": 9
+          },
+          "metadata_writes_by_category": {},
+          "metadata_reads_by_scope": {
+            "PyRexStore": 687064
+          },
+          "metadata_writes_by_scope": {},
+          "metadata_read_s_by_category": {
+            "commit_descriptor": 0.037051530147437006,
+            "sequence": 4.2339961510151625e-06,
+            "other_metadata": 0.0001583019911777228,
+            "visibility_marker": 0.021206566962064244,
+            "record_envelope": 2.02185471021221,
+            "index_state": 2.2624997654929757e-05
+          },
+          "index_scan_openings": 719,
+          "index_rows": 724,
+          "index_scan_s": 0.006549663026817143,
+          "index_scan_openings_by_scope": {
+            "PyRexStore": 719
+          },
+          "native_scan_openings": 0,
+          "native_batches": 0,
+          "native_rows": 0,
+          "native_scan_s": 0.0,
+          "native_prepare_calls": 0,
+          "native_prepare_s": 0.0,
+          "native_selected_records_peak": 0,
+          "commit_auth_calls": 1524,
+          "commit_auth_s": 25.672308031018474,
+          "decode_calls": 672002,
+          "decode_s": 19.33550969755015,
+          "target_lookup_calls": 5,
+          "target_lookup_horizon_sum": 1495,
+          "target_lookup_commit_visits": 10,
+          "target_lookup_s": 0.024704734998522326,
+          "distinct_target_version_ids": 0,
+          "validation_target_calls": 0,
+          "validation_target_s": 0.0,
+          "retraction_validation_calls": 0,
+          "retraction_validation_s": 0.0,
+          "version_id_exists_calls": 0,
+          "version_id_exists_s": 0.0,
+          "checksum_calls": 1,
+          "checksum_marker_visits": 300,
+          "checksum_s": 0.0006023739988449961,
+          "canonical_conformance_calls": 1,
+          "canonical_conformance_s": 0.055742418007866945,
+          "commit_calls": 0,
+          "commit_s": 0.0,
+          "sequence_reservations": 0,
+          "sequence_reserve_s": 0.0,
+          "index_write_calls": 0,
+          "index_write_s": 0.0,
+          "index_entries_written": 0,
+          "publication_calls": 0,
+          "publication_s": 0.0,
+          "stale_mark_calls": 0,
+          "stale_mark_s": 0.0,
+          "commit_cache_entries_peak": 137,
+          "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+          "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+        },
+        "post_verify": {
+          "metadata_reads": 136538,
+          "metadata_writes": 0,
+          "metadata_deletes": 0,
+          "metadata_reads_by_category": {
+            "commit_descriptor": 303,
+            "sequence": 0,
+            "other_metadata": 1,
+            "visibility_marker": 604,
+            "record_envelope": 135629,
+            "index_state": 1
+          },
+          "metadata_writes_by_category": {},
+          "metadata_reads_by_scope": {
+            "PyRexStore": 136538
+          },
+          "metadata_writes_by_scope": {},
+          "metadata_read_s_by_category": {
+            "commit_descriptor": 0.007620671945915092,
+            "sequence": 0.0,
+            "other_metadata": 2.9920003726147115e-05,
+            "visibility_marker": 0.0044008451150148176,
+            "record_envelope": 0.4054237584787188,
+            "index_state": 2.2989988792687654e-06
+          },
+          "index_scan_openings": 143,
+          "index_rows": 143,
+          "index_scan_s": 0.0013449520047288388,
+          "index_scan_openings_by_scope": {
+            "PyRexStore": 143
+          },
+          "native_scan_openings": 0,
+          "native_batches": 0,
+          "native_rows": 0,
+          "native_scan_s": 0.0,
+          "native_prepare_calls": 0,
+          "native_prepare_s": 0.0,
+          "native_selected_records_peak": 0,
+          "commit_auth_calls": 303,
+          "commit_auth_s": 5.163885227957508,
+          "decode_calls": 134429,
+          "decode_s": 3.8689964244913426,
+          "target_lookup_calls": 1,
+          "target_lookup_horizon_sum": 299,
+          "target_lookup_commit_visits": 2,
+          "target_lookup_s": 0.005049352002970409,
+          "distinct_target_version_ids": 0,
+          "validation_target_calls": 0,
+          "validation_target_s": 0.0,
+          "retraction_validation_calls": 0,
+          "retraction_validation_s": 0.0,
+          "version_id_exists_calls": 0,
+          "version_id_exists_s": 0.0,
+          "checksum_calls": 0,
+          "checksum_marker_visits": 0,
+          "checksum_s": 0.0,
+          "canonical_conformance_calls": 0,
+          "canonical_conformance_s": 0.0,
+          "commit_calls": 0,
+          "commit_s": 0.0,
+          "sequence_reservations": 0,
+          "sequence_reserve_s": 0.0,
+          "index_write_calls": 0,
+          "index_write_s": 0.0,
+          "index_entries_written": 0,
+          "publication_calls": 0,
+          "publication_s": 0.0,
+          "stale_mark_calls": 0,
+          "stale_mark_s": 0.0,
+          "commit_cache_entries_peak": 137,
+          "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+          "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+        },
+        "total": {
+          "metadata_reads": 960141,
+          "metadata_writes": 0,
+          "metadata_deletes": 0,
+          "metadata_reads_by_category": {
+            "commit_descriptor": 2130,
+            "visibility_marker": 4553,
+            "record_envelope": 953432,
+            "index_state": 11,
+            "sequence": 2,
+            "other_metadata": 13
+          },
+          "metadata_writes_by_category": {},
+          "metadata_reads_by_scope": {
+            "PyRexStore": 960141
+          },
+          "metadata_writes_by_scope": {},
+          "metadata_read_s_by_category": {
+            "commit_descriptor": 0.05468486400786787,
+            "visibility_marker": 0.02925028299796395,
+            "record_envelope": 2.8295493515906855,
+            "index_state": 2.7632995625026524e-05,
+            "sequence": 2.0765000954270363e-05,
+            "other_metadata": 0.00021738699433626607
+          },
+          "index_scan_openings": 1005,
+          "index_rows": 1010,
+          "index_scan_s": 0.009274844138417393,
+          "index_scan_openings_by_scope": {
+            "PyRexStore": 1005
+          },
+          "native_scan_openings": 0,
+          "native_batches": 0,
+          "native_rows": 0,
+          "native_scan_s": 0.0,
+          "native_prepare_calls": 0,
+          "native_prepare_s": 0.0,
+          "native_selected_records_peak": 0,
+          "commit_auth_calls": 2130,
+          "commit_auth_s": 35.85313080097694,
+          "decode_calls": 940860,
+          "decode_s": 27.0479568615483,
+          "target_lookup_calls": 7,
+          "target_lookup_horizon_sum": 2093,
+          "target_lookup_commit_visits": 14,
+          "target_lookup_s": 0.034857908001868054,
+          "distinct_target_version_ids": 143,
+          "validation_target_calls": 0,
+          "validation_target_s": 0.0,
+          "retraction_validation_calls": 0,
+          "retraction_validation_s": 0.0,
+          "version_id_exists_calls": 0,
+          "version_id_exists_s": 0.0,
+          "checksum_calls": 1,
+          "checksum_marker_visits": 300,
+          "checksum_s": 0.0006023739988449961,
+          "canonical_conformance_calls": 1,
+          "canonical_conformance_s": 0.055742418007866945,
+          "commit_calls": 0,
+          "commit_s": 0.0,
+          "sequence_reservations": 0,
+          "sequence_reserve_s": 0.0,
+          "index_write_calls": 0,
+          "index_write_s": 0.0,
+          "index_entries_written": 0,
+          "publication_calls": 0,
+          "publication_s": 0.0,
+          "stale_mark_calls": 0,
+          "stale_mark_s": 0.0,
+          "commit_cache_entries_peak": 137,
+          "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+          "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+        }
+      },
+      "evaluator_s": null,
+      "evaluator_boundary": "not measured: this harness does not evaluate rules",
+      "source_contract": "ordinary",
+      "valid_time": 30,
+      "selection": "subject",
+      "locator_history_batch_size": null,
+      "rss_peak_bytes": 248610816,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "counter_boundary": "opt-in benchmark-only counters; inclusive attribution; not RSS or elapsed-time guarantees",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 36.35074478200113,
+      "repeat": 0,
+      "method": "ordinary",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 4.985154141999374,
+        "source_open_extract_close_verify_s": 44.79898038399551,
+        "post_verify_s": 5.570124682999449,
+        "authenticated_pipeline_s": 55.35440186600317,
+        "reopen_s": 0.020656868000514805,
+        "total_pipeline_s": 55.37505873400369
+      },
+      "evidence_digest": "0da5472769fe9aa7063a7d51d7c97f42a2f169c61a21e5a462ed046c867e2900",
+      "evidence_rows": 85714,
+      "profile": {
+        "batches": 84,
+        "rows": 85714,
+        "scanned": 85714,
+        "verifications": 5,
+        "pushdown": "none"
+      },
+      "native_profile": null,
+      "instrumentation": {
+        "view_open": {
+          "metadata_reads": 136539,
+          "metadata_writes": 0,
+          "metadata_deletes": 0,
+          "metadata_reads_by_category": {
+            "record_envelope": 135629,
+            "commit_descriptor": 303,
+            "other_metadata": 1,
+            "index_state": 1,
+            "visibility_marker": 604,
+            "sequence": 1
+          },
+          "metadata_writes_by_category": {},
+          "metadata_reads_by_scope": {
+            "PyRexStore": 136539
+          },
+          "metadata_writes_by_scope": {},
+          "metadata_read_s_by_category": {
+            "record_envelope": 0.36057583027286455,
+            "commit_descriptor": 0.009815435914788395,
+            "other_metadata": 2.7536996640264988e-05,
+            "index_state": 2.6609995984472334e-06,
+            "visibility_marker": 0.003511662027449347,
+            "sequence": 1.5687000995967537e-05
+          },
+          "index_scan_openings": 143,
+          "index_rows": 143,
+          "index_scan_s": 0.001338598995062057,
+          "index_scan_openings_by_scope": {
+            "PyRexStore": 143
+          },
+          "native_scan_openings": 0,
+          "native_batches": 0,
+          "native_rows": 0,
+          "native_scan_s": 0.0,
+          "native_prepare_calls": 0,
+          "native_prepare_s": 0.0,
+          "native_selected_records_peak": 0,
+          "commit_auth_calls": 303,
+          "commit_auth_s": 4.973197367013199,
+          "decode_calls": 134429,
+          "decode_s": 3.8292580136912875,
+          "target_lookup_calls": 1,
+          "target_lookup_horizon_sum": 299,
+          "target_lookup_commit_visits": 2,
+          "target_lookup_s": 0.004896354002994485,
+          "distinct_target_version_ids": 143,
+          "validation_target_calls": 0,
+          "validation_target_s": 0.0,
+          "retraction_validation_calls": 0,
+          "retraction_validation_s": 0.0,
+          "version_id_exists_calls": 0,
+          "version_id_exists_s": 0.0,
+          "checksum_calls": 0,
+          "checksum_marker_visits": 0,
+          "checksum_s": 0.0,
+          "canonical_conformance_calls": 0,
+          "canonical_conformance_s": 0.0,
+          "commit_calls": 0,
+          "commit_s": 0.0,
+          "sequence_reservations": 0,
+          "sequence_reserve_s": 0.0,
+          "index_write_calls": 0,
+          "index_write_s": 0.0,
+          "index_entries_written": 0,
+          "publication_calls": 0,
+          "publication_s": 0.0,
+          "stale_mark_calls": 0,
+          "stale_mark_s": 0.0,
+          "commit_cache_entries_peak": 137,
+          "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+          "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+        },
+        "extraction": {
+          "metadata_reads": 1175064,
+          "metadata_writes": 0,
+          "metadata_deletes": 0,
+          "metadata_reads_by_category": {
+            "record_envelope": 1067003,
+            "commit_descriptor": 2317,
+            "visibility_marker": 5724,
+            "sequence": 1,
+            "index_state": 100008,
+            "other_metadata": 11
+          },
+          "metadata_writes_by_category": {},
+          "metadata_reads_by_scope": {
+            "PyRexStore": 1175064
+          },
+          "metadata_writes_by_scope": {},
+          "metadata_read_s_by_category": {
+            "record_envelope": 2.805104692801251,
+            "commit_descriptor": 0.05959401704603806,
+            "visibility_marker": 0.030967738610343076,
+            "sequence": 3.4510012483224273e-06,
+            "index_state": 0.1590453016178799,
+            "other_metadata": 0.00021889700292376801
+          },
+          "index_scan_openings": 200717,
+          "index_rows": 509287,
+          "index_scan_s": 1.4759153082122793,
+          "index_scan_openings_by_scope": {
+            "PyRexStore": 200717
+          },
+          "native_scan_openings": 0,
+          "native_batches": 0,
+          "native_rows": 0,
+          "native_scan_s": 0.0,
+          "native_prepare_calls": 0,
+          "native_prepare_s": 0.0,
+          "native_selected_records_peak": 0,
+          "commit_auth_calls": 2317,
+          "commit_auth_s": 41.63034358715959,
+          "decode_calls": 1054145,
+          "decode_s": 31.954254821204813,
+          "target_lookup_calls": 5,
+          "target_lookup_horizon_sum": 1495,
+          "target_lookup_commit_visits": 10,
+          "target_lookup_s": 0.023862246016506106,
+          "distinct_target_version_ids": 0,
+          "validation_target_calls": 0,
+          "validation_target_s": 0.0,
+          "retraction_validation_calls": 0,
+          "retraction_validation_s": 0.0,
+          "version_id_exists_calls": 0,
+          "version_id_exists_s": 0.0,
+          "checksum_calls": 1,
+          "checksum_marker_visits": 300,
+          "checksum_s": 0.0005522869978449307,
+          "canonical_conformance_calls": 1,
+          "canonical_conformance_s": 18.46538799249538,
+          "commit_calls": 0,
+          "commit_s": 0.0,
+          "sequence_reservations": 0,
+          "sequence_reserve_s": 0.0,
+          "index_write_calls": 0,
+          "index_write_s": 0.0,
+          "index_entries_written": 0,
+          "publication_calls": 0,
+          "publication_s": 0.0,
+          "stale_mark_calls": 0,
+          "stale_mark_s": 0.0,
+          "commit_cache_entries_peak": 183,
+          "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+          "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+        },
+        "post_verify": {
+          "metadata_reads": 136538,
+          "metadata_writes": 0,
+          "metadata_deletes": 0,
+          "metadata_reads_by_category": {
+            "record_envelope": 135629,
+            "commit_descriptor": 303,
+            "visibility_marker": 604,
+            "sequence": 0,
+            "index_state": 1,
+            "other_metadata": 1
+          },
+          "metadata_writes_by_category": {},
+          "metadata_reads_by_scope": {
+            "PyRexStore": 136538
+          },
+          "metadata_writes_by_scope": {},
+          "metadata_read_s_by_category": {
+            "record_envelope": 0.35966550945158815,
+            "commit_descriptor": 0.007790244992065709,
+            "visibility_marker": 0.003978524073318113,
+            "sequence": 0.0,
+            "index_state": 1.9930012058466673e-06,
+            "other_metadata": 3.2620999263599515e-05
+          },
+          "index_scan_openings": 143,
+          "index_rows": 143,
+          "index_scan_s": 0.0013308139823493548,
+          "index_scan_openings_by_scope": {
+            "PyRexStore": 143
+          },
+          "native_scan_openings": 0,
+          "native_batches": 0,
+          "native_rows": 0,
+          "native_scan_s": 0.0,
+          "native_prepare_calls": 0,
+          "native_prepare_s": 0.0,
+          "native_selected_records_peak": 0,
+          "commit_auth_calls": 303,
+          "commit_auth_s": 5.556411958066747,
+          "decode_calls": 134429,
+          "decode_s": 4.259878658456728,
+          "target_lookup_calls": 1,
+          "target_lookup_horizon_sum": 299,
+          "target_lookup_commit_visits": 2,
+          "target_lookup_s": 0.004910321003990248,
+          "distinct_target_version_ids": 0,
+          "validation_target_calls": 0,
+          "validation_target_s": 0.0,
+          "retraction_validation_calls": 0,
+          "retraction_validation_s": 0.0,
+          "version_id_exists_calls": 0,
+          "version_id_exists_s": 0.0,
+          "checksum_calls": 0,
+          "checksum_marker_visits": 0,
+          "checksum_s": 0.0,
+          "canonical_conformance_calls": 0,
+          "canonical_conformance_s": 0.0,
+          "commit_calls": 0,
+          "commit_s": 0.0,
+          "sequence_reservations": 0,
+          "sequence_reserve_s": 0.0,
+          "index_write_calls": 0,
+          "index_write_s": 0.0,
+          "index_entries_written": 0,
+          "publication_calls": 0,
+          "publication_s": 0.0,
+          "stale_mark_calls": 0,
+          "stale_mark_s": 0.0,
+          "commit_cache_entries_peak": 183,
+          "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+          "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+        },
+        "total": {
+          "metadata_reads": 1448141,
+          "metadata_writes": 0,
+          "metadata_deletes": 0,
+          "metadata_reads_by_category": {
+            "record_envelope": 1338261,
+            "commit_descriptor": 2923,
+            "other_metadata": 13,
+            "index_state": 100010,
+            "visibility_marker": 6932,
+            "sequence": 2
+          },
+          "metadata_writes_by_category": {},
+          "metadata_reads_by_scope": {
+            "PyRexStore": 1448141
+          },
+          "metadata_writes_by_scope": {},
+          "metadata_read_s_by_category": {
+            "record_envelope": 3.5253460325257038,
+            "commit_descriptor": 0.07719969795289217,
+            "other_metadata": 0.0002790549988276325,
+            "index_state": 0.15904995561868418,
+            "visibility_marker": 0.038457924711110536,
+            "sequence": 1.9138002244289964e-05
+          },
+          "index_scan_openings": 201003,
+          "index_rows": 509573,
+          "index_scan_s": 1.4785847211896908,
+          "index_scan_openings_by_scope": {
+            "PyRexStore": 201003
+          },
+          "native_scan_openings": 0,
+          "native_batches": 0,
+          "native_rows": 0,
+          "native_scan_s": 0.0,
+          "native_prepare_calls": 0,
+          "native_prepare_s": 0.0,
+          "native_selected_records_peak": 0,
+          "commit_auth_calls": 2923,
+          "commit_auth_s": 52.15995291223953,
+          "decode_calls": 1323003,
+          "decode_s": 40.04339149335283,
+          "target_lookup_calls": 7,
+          "target_lookup_horizon_sum": 2093,
+          "target_lookup_commit_visits": 14,
+          "target_lookup_s": 0.03366892102349084,
+          "distinct_target_version_ids": 143,
+          "validation_target_calls": 0,
+          "validation_target_s": 0.0,
+          "retraction_validation_calls": 0,
+          "retraction_validation_s": 0.0,
+          "version_id_exists_calls": 0,
+          "version_id_exists_s": 0.0,
+          "checksum_calls": 1,
+          "checksum_marker_visits": 300,
+          "checksum_s": 0.0005522869978449307,
+          "canonical_conformance_calls": 1,
+          "canonical_conformance_s": 18.46538799249538,
+          "commit_calls": 0,
+          "commit_s": 0.0,
+          "sequence_reservations": 0,
+          "sequence_reserve_s": 0.0,
+          "index_write_calls": 0,
+          "index_write_s": 0.0,
+          "index_entries_written": 0,
+          "publication_calls": 0,
+          "publication_s": 0.0,
+          "stale_mark_calls": 0,
+          "stale_mark_s": 0.0,
+          "commit_cache_entries_peak": 183,
+          "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+          "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+        }
+      },
+      "evaluator_s": null,
+      "evaluator_boundary": "not measured: this harness does not evaluate rules",
+      "source_contract": "ordinary",
+      "valid_time": 50,
+      "selection": "all",
+      "locator_history_batch_size": null,
+      "rss_peak_bytes": 508493824,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "counter_boundary": "opt-in benchmark-only counters; inclusive attribution; not RSS or elapsed-time guarantees",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 56.003233395997086,
+      "repeat": 0,
+      "method": "ordinary",
+      "cache": "first"
+    },
+    {
+      "status": "ok",
+      "metrics": {
+        "view_open_s": 4.926698802002647,
+        "source_open_extract_close_verify_s": 25.423850448998564,
+        "post_verify_s": 5.072686489002081,
+        "authenticated_pipeline_s": 35.42337007600145,
+        "reopen_s": 0.03137020400026813,
+        "total_pipeline_s": 35.454740280001715
+      },
+      "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "evidence_rows": 0,
+      "profile": {
+        "batches": 0,
+        "rows": 0,
+        "scanned": 0,
+        "verifications": 5,
+        "pushdown": "predicate+subject"
+      },
+      "native_profile": null,
+      "instrumentation": {
+        "view_open": {
+          "metadata_reads": 136539,
+          "metadata_writes": 0,
+          "metadata_deletes": 0,
+          "metadata_reads_by_category": {
+            "other_metadata": 1,
+            "index_state": 1,
+            "commit_descriptor": 303,
+            "sequence": 1,
+            "record_envelope": 135629,
+            "visibility_marker": 604
+          },
+          "metadata_writes_by_category": {},
+          "metadata_reads_by_scope": {
+            "PyRexStore": 136539
+          },
+          "metadata_writes_by_scope": {},
+          "metadata_read_s_by_category": {
+            "other_metadata": 3.004199970746413e-05,
+            "index_state": 2.5479967007413507e-06,
+            "commit_descriptor": 0.009918041876517236,
+            "sequence": 1.6492995200678706e-05,
+            "record_envelope": 0.34979870995448437,
+            "visibility_marker": 0.0031510440167039633
+          },
+          "index_scan_openings": 143,
+          "index_rows": 143,
+          "index_scan_s": 0.0013381960452534258,
+          "index_scan_openings_by_scope": {
+            "PyRexStore": 143
+          },
+          "native_scan_openings": 0,
+          "native_batches": 0,
+          "native_rows": 0,
+          "native_scan_s": 0.0,
+          "native_prepare_calls": 0,
+          "native_prepare_s": 0.0,
+          "native_selected_records_peak": 0,
+          "commit_auth_calls": 303,
+          "commit_auth_s": 4.9150181220175,
+          "decode_calls": 134429,
+          "decode_s": 3.7981522394547937,
+          "target_lookup_calls": 1,
+          "target_lookup_horizon_sum": 299,
+          "target_lookup_commit_visits": 2,
+          "target_lookup_s": 0.004869132004387211,
+          "distinct_target_version_ids": 143,
+          "validation_target_calls": 0,
+          "validation_target_s": 0.0,
+          "retraction_validation_calls": 0,
+          "retraction_validation_s": 0.0,
+          "version_id_exists_calls": 0,
+          "version_id_exists_s": 0.0,
+          "checksum_calls": 0,
+          "checksum_marker_visits": 0,
+          "checksum_s": 0.0,
+          "canonical_conformance_calls": 0,
+          "canonical_conformance_s": 0.0,
+          "commit_calls": 0,
+          "commit_s": 0.0,
+          "sequence_reservations": 0,
+          "sequence_reserve_s": 0.0,
+          "index_write_calls": 0,
+          "index_write_s": 0.0,
+          "index_entries_written": 0,
+          "publication_calls": 0,
+          "publication_s": 0.0,
+          "stale_mark_calls": 0,
+          "stale_mark_s": 0.0,
+          "commit_cache_entries_peak": 137,
+          "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+          "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+        },
+        "extraction": {
+          "metadata_reads": 687358,
+          "metadata_writes": 0,
+          "metadata_deletes": 0,
+          "metadata_reads_by_category": {
+            "other_metadata": 11,
+            "sequence": 1,
+            "record_envelope": 682460,
+            "visibility_marker": 3351,
+            "index_state": 9,
+            "commit_descriptor": 1526
+          },
+          "metadata_writes_by_category": {},
+          "metadata_reads_by_scope": {
+            "PyRexStore": 687358
+          },
+          "metadata_writes_by_scope": {},
+          "metadata_read_s_by_category": {
+            "other_metadata": 0.00014849301078356802,
+            "sequence": 3.445995389483869e-06,
+            "record_envelope": 1.7663193702101125,
+            "visibility_marker": 0.018915795750217512,
+            "index_state": 2.0533996575977653e-05,
+            "commit_descriptor": 0.037059243019029964
+          },
+          "index_scan_openings": 719,
+          "index_rows": 725,
+          "index_scan_s": 0.006205782912729774,
+          "index_scan_openings_by_scope": {
+            "PyRexStore": 719
+          },
+          "native_scan_openings": 0,
+          "native_batches": 0,
+          "native_rows": 0,
+          "native_scan_s": 0.0,
+          "native_prepare_calls": 0,
+          "native_prepare_s": 0.0,
+          "native_selected_records_peak": 0,
+          "commit_auth_calls": 1526,
+          "commit_auth_s": 25.355798190015776,
+          "decode_calls": 672002,
+          "decode_s": 19.240615415590582,
+          "target_lookup_calls": 5,
+          "target_lookup_horizon_sum": 1495,
+          "target_lookup_commit_visits": 10,
+          "target_lookup_s": 0.023449523003364448,
+          "distinct_target_version_ids": 0,
+          "validation_target_calls": 0,
+          "validation_target_s": 0.0,
+          "retraction_validation_calls": 0,
+          "retraction_validation_s": 0.0,
+          "version_id_exists_calls": 0,
+          "version_id_exists_s": 0.0,
+          "checksum_calls": 1,
+          "checksum_marker_visits": 300,
+          "checksum_s": 0.0005531529968720861,
+          "canonical_conformance_calls": 1,
+          "canonical_conformance_s": 0.05842791000031866,
+          "commit_calls": 0,
+          "commit_s": 0.0,
+          "sequence_reservations": 0,
+          "sequence_reserve_s": 0.0,
+          "index_write_calls": 0,
+          "index_write_s": 0.0,
+          "index_entries_written": 0,
+          "publication_calls": 0,
+          "publication_s": 0.0,
+          "stale_mark_calls": 0,
+          "stale_mark_s": 0.0,
+          "commit_cache_entries_peak": 137,
+          "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+          "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+        },
+        "post_verify": {
+          "metadata_reads": 136538,
+          "metadata_writes": 0,
+          "metadata_deletes": 0,
+          "metadata_reads_by_category": {
+            "other_metadata": 1,
+            "sequence": 0,
+            "record_envelope": 135629,
+            "visibility_marker": 604,
+            "index_state": 1,
+            "commit_descriptor": 303
+          },
+          "metadata_writes_by_category": {},
+          "metadata_reads_by_scope": {
+            "PyRexStore": 136538
+          },
+          "metadata_writes_by_scope": {},
+          "metadata_read_s_by_category": {
+            "other_metadata": 2.80880049103871e-05,
+            "sequence": 0.0,
+            "record_envelope": 0.3481996372502181,
+            "visibility_marker": 0.0036012330019730143,
+            "index_state": 1.9220024114474654e-06,
+            "commit_descriptor": 0.007234728989715222
+          },
+          "index_scan_openings": 143,
+          "index_rows": 143,
+          "index_scan_s": 0.001284645935811568,
+          "index_scan_openings_by_scope": {
+            "PyRexStore": 143
+          },
+          "native_scan_openings": 0,
+          "native_batches": 0,
+          "native_rows": 0,
+          "native_scan_s": 0.0,
+          "native_prepare_calls": 0,
+          "native_prepare_s": 0.0,
+          "native_selected_records_peak": 0,
+          "commit_auth_calls": 303,
+          "commit_auth_s": 5.059620701955282,
+          "decode_calls": 134429,
+          "decode_s": 3.838805715109629,
+          "target_lookup_calls": 1,
+          "target_lookup_horizon_sum": 299,
+          "target_lookup_commit_visits": 2,
+          "target_lookup_s": 0.004771586005517747,
+          "distinct_target_version_ids": 0,
+          "validation_target_calls": 0,
+          "validation_target_s": 0.0,
+          "retraction_validation_calls": 0,
+          "retraction_validation_s": 0.0,
+          "version_id_exists_calls": 0,
+          "version_id_exists_s": 0.0,
+          "checksum_calls": 0,
+          "checksum_marker_visits": 0,
+          "checksum_s": 0.0,
+          "canonical_conformance_calls": 0,
+          "canonical_conformance_s": 0.0,
+          "commit_calls": 0,
+          "commit_s": 0.0,
+          "sequence_reservations": 0,
+          "sequence_reserve_s": 0.0,
+          "index_write_calls": 0,
+          "index_write_s": 0.0,
+          "index_entries_written": 0,
+          "publication_calls": 0,
+          "publication_s": 0.0,
+          "stale_mark_calls": 0,
+          "stale_mark_s": 0.0,
+          "commit_cache_entries_peak": 137,
+          "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+          "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+        },
+        "total": {
+          "metadata_reads": 960435,
+          "metadata_writes": 0,
+          "metadata_deletes": 0,
+          "metadata_reads_by_category": {
+            "other_metadata": 13,
+            "index_state": 11,
+            "commit_descriptor": 2132,
+            "sequence": 2,
+            "record_envelope": 953718,
+            "visibility_marker": 4559
+          },
+          "metadata_writes_by_category": {},
+          "metadata_reads_by_scope": {
+            "PyRexStore": 960435
+          },
+          "metadata_writes_by_scope": {},
+          "metadata_read_s_by_category": {
+            "other_metadata": 0.00020662301540141925,
+            "index_state": 2.500399568816647e-05,
+            "commit_descriptor": 0.05421201388526242,
+            "sequence": 1.9938990590162575e-05,
+            "record_envelope": 2.464317717414815,
+            "visibility_marker": 0.02566807276889449
+          },
+          "index_scan_openings": 1005,
+          "index_rows": 1011,
+          "index_scan_s": 0.008828624893794768,
+          "index_scan_openings_by_scope": {
+            "PyRexStore": 1005
+          },
+          "native_scan_openings": 0,
+          "native_batches": 0,
+          "native_rows": 0,
+          "native_scan_s": 0.0,
+          "native_prepare_calls": 0,
+          "native_prepare_s": 0.0,
+          "native_selected_records_peak": 0,
+          "commit_auth_calls": 2132,
+          "commit_auth_s": 35.33043701398856,
+          "decode_calls": 940860,
+          "decode_s": 26.877573370155005,
+          "target_lookup_calls": 7,
+          "target_lookup_horizon_sum": 2093,
+          "target_lookup_commit_visits": 14,
+          "target_lookup_s": 0.033090241013269406,
+          "distinct_target_version_ids": 143,
+          "validation_target_calls": 0,
+          "validation_target_s": 0.0,
+          "retraction_validation_calls": 0,
+          "retraction_validation_s": 0.0,
+          "version_id_exists_calls": 0,
+          "version_id_exists_s": 0.0,
+          "checksum_calls": 1,
+          "checksum_marker_visits": 300,
+          "checksum_s": 0.0005531529968720861,
+          "canonical_conformance_calls": 1,
+          "canonical_conformance_s": 0.05842791000031866,
+          "commit_calls": 0,
+          "commit_s": 0.0,
+          "sequence_reservations": 0,
+          "sequence_reserve_s": 0.0,
+          "index_write_calls": 0,
+          "index_write_s": 0.0,
+          "index_entries_written": 0,
+          "publication_calls": 0,
+          "publication_s": 0.0,
+          "stale_mark_calls": 0,
+          "stale_mark_s": 0.0,
+          "commit_cache_entries_peak": 137,
+          "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+          "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+        }
+      },
+      "evaluator_s": null,
+      "evaluator_boundary": "not measured: this harness does not evaluate rules",
+      "source_contract": "ordinary",
+      "valid_time": 50,
+      "selection": "subject",
+      "locator_history_batch_size": null,
+      "rss_peak_bytes": 248639488,
+      "rss_boundary": "whole extraction worker including warmup/parity; fixture load in separate worker",
+      "counter_boundary": "opt-in benchmark-only counters; inclusive attribution; not RSS or elapsed-time guarantees",
+      "cache_boundary": "reopened handle; OS cache uncontrolled, not OS-cold; warm primes same method",
+      "scope": "extraction and authentication; no inference/support/publication measurement",
+      "worker_wall_s": 35.8880794009965,
+      "repeat": 0,
+      "method": "ordinary",
+      "cache": "first"
+    }
+  ],
+  "complete": true,
+  "command": [
+    "/home/charilaos/.cache/uv/builds-v0/.tmpZdhf7H/bin/python",
+    "-m",
+    "benchmarks.reasoning_locator_pipeline",
+    "--rows",
+    "100000",
+    "--commit-batch",
+    "1000",
+    "--instrument",
+    "--repeats",
+    "1",
+    "--methods",
+    "ordinary",
+    "--selections",
+    "all",
+    "subject",
+    "--times",
+    "30",
+    "50",
+    "--caches",
+    "first",
+    "--timeout",
+    "900",
+    "--output",
+    "/tmp/opencode/hsa-06-100k-dense-construction.json"
+  ],
+  "timeout_policy": "existing timeout preserved; timeouts retain the incomplete report and last checkpoint without quantiles",
+  "revision": "2e5540c4db89988dfd473adb9311f4965e53cee9",
+  "dirty": false,
+  "harness_sha256": "d90e60fdaa3b6f757b661243aecf1fc4d2e78862f07cb54c83f3fe0ded0def92",
+  "shared_harness_sha256": "2b3392e21d56ddf9793c87b8ebf057a297cb4f92a0068b91b071154768b19dfb",
+  "instrumentation_sha256": "b8daf29dd71ed6a3625b15774054b65bd4abe1b867165f058a407c078b5adf87",
+  "python": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "dependencies": {
+    "gestaltdb": "0.16.0",
+    "pyrex-rocksdb": "0.7.1",
+    "pyarrow": "24.0.0"
+  },
+  "attribution_boundary": "fixture stages and extraction counters are separate worker processes; inclusive attribution buckets do not sum to end-to-end time",
+  "evaluator": {
+    "measured": false,
+    "boundary": "locator harness does not execute rules or publication"
+  },
+  "decision": "pending measurement review; no automatic native adoption",
+  "os_cache": "uncontrolled; process restart is not OS-cold",
+  "fixture": {
+    "status": "ok",
+    "rows": 100000,
+    "history_rows": 100000,
+    "commit_batch": 1000,
+    "versions": 134286,
+    "commits": 300,
+    "expected": {
+      "10": {
+        "all": {
+          "digest": "4cb16ad4953e9be65be02c6053b71bd36f57c5088f55a7ecd9126f45ef13b325",
+          "rows": 100000
+        },
+        "predicate": {
+          "digest": "6e357873ab44a814cf95f964e2899a054acef1f475d17454bda349e62bb22421",
+          "rows": 25000
+        },
+        "subject": {
+          "digest": "fe90aea9388b4dc6f92abe9e940dac4e9d24b086d96e3bcf8d277a837b107490",
+          "rows": 1
+        }
+      },
+      "30": {
+        "all": {
+          "digest": "f0dd6ec3d3f37ec2b330a3c918dc50f9345c5eac2a79c3313cd66549122aacde",
+          "rows": 100000
+        },
+        "predicate": {
+          "digest": "9473d475cd8709c7333aa756a6f92a93726f3678c7eaca1a1084cc8c5b4b44c1",
+          "rows": 25000
+        },
+        "subject": {
+          "digest": "fffb7c043394ff8614d3bb830f36cb84c7016160d86bfb465c6b0d69f30ea5df",
+          "rows": 1
+        }
+      },
+      "50": {
+        "all": {
+          "digest": "0da5472769fe9aa7063a7d51d7c97f42a2f169c61a21e5a462ed046c867e2900",
+          "rows": 85714
+        },
+        "predicate": {
+          "digest": "6fcc3ac2a97d3e371f59abd568d4c2c7a9633944a3b20b0c9fa277f9cc1f3a35",
+          "rows": 21428
+        },
+        "subject": {
+          "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "rows": 0
+        }
+      },
+      "70": {
+        "all": {
+          "digest": "f0dd6ec3d3f37ec2b330a3c918dc50f9345c5eac2a79c3313cd66549122aacde",
+          "rows": 100000
+        },
+        "predicate": {
+          "digest": "9473d475cd8709c7333aa756a6f92a93726f3678c7eaca1a1084cc8c5b4b44c1",
+          "rows": 25000
+        },
+        "subject": {
+          "digest": "fffb7c043394ff8614d3bb830f36cb84c7016160d86bfb465c6b0d69f30ea5df",
+          "rows": 1
+        }
+      },
+      "90": {
+        "all": {
+          "digest": "4cb16ad4953e9be65be02c6053b71bd36f57c5088f55a7ecd9126f45ef13b325",
+          "rows": 100000
+        },
+        "predicate": {
+          "digest": "6e357873ab44a814cf95f964e2899a054acef1f475d17454bda349e62bb22421",
+          "rows": 25000
+        },
+        "subject": {
+          "digest": "fe90aea9388b4dc6f92abe9e940dac4e9d24b086d96e3bcf8d277a837b107490",
+          "rows": 1
+        }
+      }
+    },
+    "instrumentation": {
+      "metadata_reads": 1026698,
+      "metadata_writes": 135488,
+      "metadata_deletes": 0,
+      "metadata_reads_by_category": {
+        "visibility_marker": 46050,
+        "sequence": 1600,
+        "other_metadata": 405,
+        "commit_descriptor": 1200,
+        "record_envelope": 708572,
+        "index_state": 268871
+      },
+      "metadata_writes_by_category": {
+        "visibility_marker": 300,
+        "sequence": 300,
+        "other_metadata": 2,
+        "commit_descriptor": 300,
+        "record_envelope": 134286,
+        "index_state": 300
+      },
+      "metadata_reads_by_scope": {
+        "PyRexStore": 1026698
+      },
+      "metadata_writes_by_scope": {
+        "PyRexStore": 135488
+      },
+      "metadata_read_s_by_category": {
+        "visibility_marker": 0.10759093245724216,
+        "sequence": 0.006049682073353324,
+        "other_metadata": 0.006121073995018378,
+        "commit_descriptor": 0.018519753881264478,
+        "record_envelope": 1.0518140606654924,
+        "index_state": 0.36820700493990444
+      },
+      "index_scan_openings": 201858,
+      "index_rows": 68572,
+      "index_scan_s": 1.7475303713436006,
+      "index_scan_openings_by_scope": {
+        "PyRexStore": 201858
+      },
+      "native_scan_openings": 0,
+      "native_batches": 0,
+      "native_rows": 0,
+      "native_scan_s": 0.0,
+      "native_prepare_calls": 0,
+      "native_prepare_s": 0.0,
+      "native_selected_records_peak": 0,
+      "commit_auth_calls": 900,
+      "commit_auth_s": 11.36265081702004,
+      "decode_calls": 388572,
+      "decode_s": 11.587304125750961,
+      "target_lookup_calls": 400,
+      "target_lookup_horizon_sum": 60000,
+      "target_lookup_commit_visits": 600,
+      "target_lookup_s": 6.346699649024231,
+      "distinct_target_version_ids": 34286,
+      "validation_target_calls": 0,
+      "validation_target_s": 0.0,
+      "retraction_validation_calls": 300,
+      "retraction_validation_s": 0.0003239238358219154,
+      "version_id_exists_calls": 134286,
+      "version_id_exists_s": 2.785635769738292,
+      "checksum_calls": 300,
+      "checksum_marker_visits": 45150,
+      "checksum_s": 0.12403154594358057,
+      "canonical_conformance_calls": 0,
+      "canonical_conformance_s": 0.0,
+      "commit_calls": 300,
+      "commit_s": 32.173329776967876,
+      "sequence_reservations": 300,
+      "sequence_reserve_s": 0.6454886229912518,
+      "index_write_calls": 300,
+      "index_write_s": 8.492317472002469,
+      "index_entries_written": 2697444,
+      "publication_calls": 300,
+      "publication_s": 0.1300104049660149,
+      "stale_mark_calls": 0,
+      "stale_mark_s": 0.0,
+      "commit_cache_entries_peak": 118,
+      "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+      "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+    },
+    "construction": {
+      "create_s": 0.031102086999453604,
+      "assertions_s": 20.10535675299616,
+      "corrections_s": 9.353464580039144,
+      "retractions_s": 3.316460593014199,
+      "oracle_s": 0.3561061280051945,
+      "close_s": 0.01947493799525546,
+      "load_s": 35.17443290499796,
+      "batches": 100,
+      "timing_boundary": "fixture process only; extraction workers are separate"
+    },
+    "worker_wall_s": 35.581690092003555
+  },
+  "all_parity_verified": true,
+  "summary": {
+    "ordinary/all/30/first": {
+      "view_open_s": {
+        "p50": 5.063576185995771,
+        "p95": 5.063576185995771
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 43.99012527200102,
+        "p95": 43.99012527200102
+      },
+      "post_verify_s": {
+        "p50": 5.3746959540003445,
+        "p95": 5.3746959540003445
+      },
+      "authenticated_pipeline_s": {
+        "p50": 54.42854297500162,
+        "p95": 54.42854297500162
+      },
+      "reopen_s": {
+        "p50": 0.05210392600565683,
+        "p95": 0.05210392600565683
+      },
+      "total_pipeline_s": {
+        "p50": 54.480646901007276,
+        "p95": 54.480646901007276
+      },
+      "rss_peak_bytes": {
+        "p50": 524619776,
+        "p95": 524619776
+      }
+    },
+    "ordinary/subject/30/first": {
+      "view_open_s": {
+        "p50": 5.028495790997113,
+        "p95": 5.028495790997113
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 25.739136126998346,
+        "p95": 25.739136126998346
+      },
+      "post_verify_s": {
+        "p50": 5.177546033999533,
+        "p95": 5.177546033999533
+      },
+      "authenticated_pipeline_s": {
+        "p50": 35.9453173199945,
+        "p95": 35.9453173199945
+      },
+      "reopen_s": {
+        "p50": 0.01921806199970888,
+        "p95": 0.01921806199970888
+      },
+      "total_pipeline_s": {
+        "p50": 35.96453538199421,
+        "p95": 35.96453538199421
+      },
+      "rss_peak_bytes": {
+        "p50": 248610816,
+        "p95": 248610816
+      }
+    },
+    "ordinary/all/50/first": {
+      "view_open_s": {
+        "p50": 4.985154141999374,
+        "p95": 4.985154141999374
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 44.79898038399551,
+        "p95": 44.79898038399551
+      },
+      "post_verify_s": {
+        "p50": 5.570124682999449,
+        "p95": 5.570124682999449
+      },
+      "authenticated_pipeline_s": {
+        "p50": 55.35440186600317,
+        "p95": 55.35440186600317
+      },
+      "reopen_s": {
+        "p50": 0.020656868000514805,
+        "p95": 0.020656868000514805
+      },
+      "total_pipeline_s": {
+        "p50": 55.37505873400369,
+        "p95": 55.37505873400369
+      },
+      "rss_peak_bytes": {
+        "p50": 508493824,
+        "p95": 508493824
+      }
+    },
+    "ordinary/subject/50/first": {
+      "view_open_s": {
+        "p50": 4.926698802002647,
+        "p95": 4.926698802002647
+      },
+      "source_open_extract_close_verify_s": {
+        "p50": 25.423850448998564,
+        "p95": 25.423850448998564
+      },
+      "post_verify_s": {
+        "p50": 5.072686489002081,
+        "p95": 5.072686489002081
+      },
+      "authenticated_pipeline_s": {
+        "p50": 35.42337007600145,
+        "p95": 35.42337007600145
+      },
+      "reopen_s": {
+        "p50": 0.03137020400026813,
+        "p95": 0.03137020400026813
+      },
+      "total_pipeline_s": {
+        "p50": 35.454740280001715,
+        "p95": 35.454740280001715
+      },
+      "rss_peak_bytes": {
+        "p50": 248639488,
+        "p95": 248639488
+      }
+    }
+  },
+  "attribution": {
+    "ordinary/all/30/first": {
+      "metadata_reads": {
+        "p50": 1418916,
+        "p95": 1418916
+      },
+      "metadata_writes": {
+        "p50": 0,
+        "p95": 0
+      },
+      "index_scan_openings": {
+        "p50": 201003,
+        "p95": 201003
+      },
+      "index_rows": {
+        "p50": 495287,
+        "p95": 495287
+      },
+      "native_scan_openings": {
+        "p50": 0,
+        "p95": 0
+      },
+      "native_batches": {
+        "p50": 0,
+        "p95": 0
+      },
+      "native_rows": {
+        "p50": 0,
+        "p95": 0
+      },
+      "native_prepare_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "commit_auth_calls": {
+        "p50": 2724,
+        "p95": 2724
+      },
+      "decode_calls": {
+        "p50": 1301003,
+        "p95": 1301003
+      },
+      "target_lookup_calls": {
+        "p50": 7,
+        "p95": 7
+      },
+      "target_lookup_commit_visits": {
+        "p50": 14,
+        "p95": 14
+      },
+      "target_lookup_horizon_sum": {
+        "p50": 2093,
+        "p95": 2093
+      },
+      "distinct_target_version_ids": {
+        "p50": 143,
+        "p95": 143
+      },
+      "validation_target_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "version_id_exists_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "checksum_calls": {
+        "p50": 1,
+        "p95": 1
+      },
+      "checksum_marker_visits": {
+        "p50": 300,
+        "p95": 300
+      },
+      "canonical_conformance_calls": {
+        "p50": 1,
+        "p95": 1
+      },
+      "commit_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "sequence_reservations": {
+        "p50": 0,
+        "p95": 0
+      },
+      "index_write_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "index_entries_written": {
+        "p50": 0,
+        "p95": 0
+      },
+      "publication_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "stale_mark_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "commit_cache_entries_peak": {
+        "p50": 137,
+        "p95": 137
+      },
+      "native_selected_records_peak": {
+        "p50": 0,
+        "p95": 0
+      },
+      "native_scan_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "native_prepare_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "commit_auth_s": {
+        "p50": 51.035202494960686,
+        "p95": 51.035202494960686
+      },
+      "decode_s": {
+        "p50": 39.26541833632655,
+        "p95": 39.26541833632655
+      },
+      "target_lookup_s": {
+        "p50": 0.03324860399152385,
+        "p95": 0.03324860399152385
+      },
+      "validation_target_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "version_id_exists_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "checksum_s": {
+        "p50": 0.0005548120025196113,
+        "p95": 0.0005548120025196113
+      },
+      "canonical_conformance_s": {
+        "p50": 17.608072762042866,
+        "p95": 17.608072762042866
+      },
+      "commit_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "sequence_reserve_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "index_write_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "publication_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "stale_mark_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "index_scan_s": {
+        "p50": 1.4621364963095402,
+        "p95": 1.4621364963095402
+      },
+      "read_categories": {
+        "other_metadata": {
+          "p50": 13,
+          "p95": 13
+        },
+        "index_state": {
+          "p50": 100010,
+          "p95": 100010
+        },
+        "record_envelope": {
+          "p50": 1309832,
+          "p95": 1309832
+        },
+        "sequence": {
+          "p50": 2,
+          "p95": 2
+        },
+        "commit_descriptor": {
+          "p50": 2724,
+          "p95": 2724
+        },
+        "visibility_marker": {
+          "p50": 6335,
+          "p95": 6335
+        }
+      },
+      "boundary": "counts are per extraction stage (exclusive of fixture construction); timings are inclusive buckets and do not sum to end-to-end time"
+    },
+    "ordinary/subject/30/first": {
+      "metadata_reads": {
+        "p50": 960141,
+        "p95": 960141
+      },
+      "metadata_writes": {
+        "p50": 0,
+        "p95": 0
+      },
+      "index_scan_openings": {
+        "p50": 1005,
+        "p95": 1005
+      },
+      "index_rows": {
+        "p50": 1010,
+        "p95": 1010
+      },
+      "native_scan_openings": {
+        "p50": 0,
+        "p95": 0
+      },
+      "native_batches": {
+        "p50": 0,
+        "p95": 0
+      },
+      "native_rows": {
+        "p50": 0,
+        "p95": 0
+      },
+      "native_prepare_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "commit_auth_calls": {
+        "p50": 2130,
+        "p95": 2130
+      },
+      "decode_calls": {
+        "p50": 940860,
+        "p95": 940860
+      },
+      "target_lookup_calls": {
+        "p50": 7,
+        "p95": 7
+      },
+      "target_lookup_commit_visits": {
+        "p50": 14,
+        "p95": 14
+      },
+      "target_lookup_horizon_sum": {
+        "p50": 2093,
+        "p95": 2093
+      },
+      "distinct_target_version_ids": {
+        "p50": 143,
+        "p95": 143
+      },
+      "validation_target_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "version_id_exists_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "checksum_calls": {
+        "p50": 1,
+        "p95": 1
+      },
+      "checksum_marker_visits": {
+        "p50": 300,
+        "p95": 300
+      },
+      "canonical_conformance_calls": {
+        "p50": 1,
+        "p95": 1
+      },
+      "commit_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "sequence_reservations": {
+        "p50": 0,
+        "p95": 0
+      },
+      "index_write_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "index_entries_written": {
+        "p50": 0,
+        "p95": 0
+      },
+      "publication_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "stale_mark_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "commit_cache_entries_peak": {
+        "p50": 137,
+        "p95": 137
+      },
+      "native_selected_records_peak": {
+        "p50": 0,
+        "p95": 0
+      },
+      "native_scan_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "native_prepare_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "commit_auth_s": {
+        "p50": 35.85313080097694,
+        "p95": 35.85313080097694
+      },
+      "decode_s": {
+        "p50": 27.0479568615483,
+        "p95": 27.0479568615483
+      },
+      "target_lookup_s": {
+        "p50": 0.034857908001868054,
+        "p95": 0.034857908001868054
+      },
+      "validation_target_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "version_id_exists_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "checksum_s": {
+        "p50": 0.0006023739988449961,
+        "p95": 0.0006023739988449961
+      },
+      "canonical_conformance_s": {
+        "p50": 0.055742418007866945,
+        "p95": 0.055742418007866945
+      },
+      "commit_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "sequence_reserve_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "index_write_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "publication_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "stale_mark_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "index_scan_s": {
+        "p50": 0.009274844138417393,
+        "p95": 0.009274844138417393
+      },
+      "read_categories": {
+        "other_metadata": {
+          "p50": 13,
+          "p95": 13
+        },
+        "record_envelope": {
+          "p50": 953432,
+          "p95": 953432
+        },
+        "index_state": {
+          "p50": 11,
+          "p95": 11
+        },
+        "sequence": {
+          "p50": 2,
+          "p95": 2
+        },
+        "commit_descriptor": {
+          "p50": 2130,
+          "p95": 2130
+        },
+        "visibility_marker": {
+          "p50": 4553,
+          "p95": 4553
+        }
+      },
+      "boundary": "counts are per extraction stage (exclusive of fixture construction); timings are inclusive buckets and do not sum to end-to-end time"
+    },
+    "ordinary/all/50/first": {
+      "metadata_reads": {
+        "p50": 1448141,
+        "p95": 1448141
+      },
+      "metadata_writes": {
+        "p50": 0,
+        "p95": 0
+      },
+      "index_scan_openings": {
+        "p50": 201003,
+        "p95": 201003
+      },
+      "index_rows": {
+        "p50": 509573,
+        "p95": 509573
+      },
+      "native_scan_openings": {
+        "p50": 0,
+        "p95": 0
+      },
+      "native_batches": {
+        "p50": 0,
+        "p95": 0
+      },
+      "native_rows": {
+        "p50": 0,
+        "p95": 0
+      },
+      "native_prepare_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "commit_auth_calls": {
+        "p50": 2923,
+        "p95": 2923
+      },
+      "decode_calls": {
+        "p50": 1323003,
+        "p95": 1323003
+      },
+      "target_lookup_calls": {
+        "p50": 7,
+        "p95": 7
+      },
+      "target_lookup_commit_visits": {
+        "p50": 14,
+        "p95": 14
+      },
+      "target_lookup_horizon_sum": {
+        "p50": 2093,
+        "p95": 2093
+      },
+      "distinct_target_version_ids": {
+        "p50": 143,
+        "p95": 143
+      },
+      "validation_target_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "version_id_exists_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "checksum_calls": {
+        "p50": 1,
+        "p95": 1
+      },
+      "checksum_marker_visits": {
+        "p50": 300,
+        "p95": 300
+      },
+      "canonical_conformance_calls": {
+        "p50": 1,
+        "p95": 1
+      },
+      "commit_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "sequence_reservations": {
+        "p50": 0,
+        "p95": 0
+      },
+      "index_write_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "index_entries_written": {
+        "p50": 0,
+        "p95": 0
+      },
+      "publication_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "stale_mark_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "commit_cache_entries_peak": {
+        "p50": 183,
+        "p95": 183
+      },
+      "native_selected_records_peak": {
+        "p50": 0,
+        "p95": 0
+      },
+      "native_scan_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "native_prepare_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "commit_auth_s": {
+        "p50": 52.15995291223953,
+        "p95": 52.15995291223953
+      },
+      "decode_s": {
+        "p50": 40.04339149335283,
+        "p95": 40.04339149335283
+      },
+      "target_lookup_s": {
+        "p50": 0.03366892102349084,
+        "p95": 0.03366892102349084
+      },
+      "validation_target_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "version_id_exists_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "checksum_s": {
+        "p50": 0.0005522869978449307,
+        "p95": 0.0005522869978449307
+      },
+      "canonical_conformance_s": {
+        "p50": 18.46538799249538,
+        "p95": 18.46538799249538
+      },
+      "commit_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "sequence_reserve_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "index_write_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "publication_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "stale_mark_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "index_scan_s": {
+        "p50": 1.4785847211896908,
+        "p95": 1.4785847211896908
+      },
+      "read_categories": {
+        "other_metadata": {
+          "p50": 13,
+          "p95": 13
+        },
+        "record_envelope": {
+          "p50": 1338261,
+          "p95": 1338261
+        },
+        "index_state": {
+          "p50": 100010,
+          "p95": 100010
+        },
+        "sequence": {
+          "p50": 2,
+          "p95": 2
+        },
+        "commit_descriptor": {
+          "p50": 2923,
+          "p95": 2923
+        },
+        "visibility_marker": {
+          "p50": 6932,
+          "p95": 6932
+        }
+      },
+      "boundary": "counts are per extraction stage (exclusive of fixture construction); timings are inclusive buckets and do not sum to end-to-end time"
+    },
+    "ordinary/subject/50/first": {
+      "metadata_reads": {
+        "p50": 960435,
+        "p95": 960435
+      },
+      "metadata_writes": {
+        "p50": 0,
+        "p95": 0
+      },
+      "index_scan_openings": {
+        "p50": 1005,
+        "p95": 1005
+      },
+      "index_rows": {
+        "p50": 1011,
+        "p95": 1011
+      },
+      "native_scan_openings": {
+        "p50": 0,
+        "p95": 0
+      },
+      "native_batches": {
+        "p50": 0,
+        "p95": 0
+      },
+      "native_rows": {
+        "p50": 0,
+        "p95": 0
+      },
+      "native_prepare_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "commit_auth_calls": {
+        "p50": 2132,
+        "p95": 2132
+      },
+      "decode_calls": {
+        "p50": 940860,
+        "p95": 940860
+      },
+      "target_lookup_calls": {
+        "p50": 7,
+        "p95": 7
+      },
+      "target_lookup_commit_visits": {
+        "p50": 14,
+        "p95": 14
+      },
+      "target_lookup_horizon_sum": {
+        "p50": 2093,
+        "p95": 2093
+      },
+      "distinct_target_version_ids": {
+        "p50": 143,
+        "p95": 143
+      },
+      "validation_target_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "version_id_exists_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "checksum_calls": {
+        "p50": 1,
+        "p95": 1
+      },
+      "checksum_marker_visits": {
+        "p50": 300,
+        "p95": 300
+      },
+      "canonical_conformance_calls": {
+        "p50": 1,
+        "p95": 1
+      },
+      "commit_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "sequence_reservations": {
+        "p50": 0,
+        "p95": 0
+      },
+      "index_write_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "index_entries_written": {
+        "p50": 0,
+        "p95": 0
+      },
+      "publication_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "stale_mark_calls": {
+        "p50": 0,
+        "p95": 0
+      },
+      "commit_cache_entries_peak": {
+        "p50": 137,
+        "p95": 137
+      },
+      "native_selected_records_peak": {
+        "p50": 0,
+        "p95": 0
+      },
+      "native_scan_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "native_prepare_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "commit_auth_s": {
+        "p50": 35.33043701398856,
+        "p95": 35.33043701398856
+      },
+      "decode_s": {
+        "p50": 26.877573370155005,
+        "p95": 26.877573370155005
+      },
+      "target_lookup_s": {
+        "p50": 0.033090241013269406,
+        "p95": 0.033090241013269406
+      },
+      "validation_target_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "version_id_exists_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "checksum_s": {
+        "p50": 0.0005531529968720861,
+        "p95": 0.0005531529968720861
+      },
+      "canonical_conformance_s": {
+        "p50": 0.05842791000031866,
+        "p95": 0.05842791000031866
+      },
+      "commit_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "sequence_reserve_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "index_write_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "publication_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "stale_mark_s": {
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "index_scan_s": {
+        "p50": 0.008828624893794768,
+        "p95": 0.008828624893794768
+      },
+      "read_categories": {
+        "other_metadata": {
+          "p50": 13,
+          "p95": 13
+        },
+        "record_envelope": {
+          "p50": 953718,
+          "p95": 953718
+        },
+        "index_state": {
+          "p50": 11,
+          "p95": 11
+        },
+        "sequence": {
+          "p50": 2,
+          "p95": 2
+        },
+        "commit_descriptor": {
+          "p50": 2132,
+          "p95": 2132
+        },
+        "visibility_marker": {
+          "p50": 4559,
+          "p95": 4559
+        }
+      },
+      "boundary": "counts are per extraction stage (exclusive of fixture construction); timings are inclusive buckets and do not sum to end-to-end time"
+    }
+  },
+  "fixture_attribution": {
+    "construction": {
+      "create_s": 0.031102086999453604,
+      "assertions_s": 20.10535675299616,
+      "corrections_s": 9.353464580039144,
+      "retractions_s": 3.316460593014199,
+      "oracle_s": 0.3561061280051945,
+      "close_s": 0.01947493799525546,
+      "load_s": 35.17443290499796,
+      "batches": 100,
+      "timing_boundary": "fixture process only; extraction workers are separate"
+    },
+    "counters": {
+      "metadata_reads": 1026698,
+      "metadata_writes": 135488,
+      "metadata_deletes": 0,
+      "metadata_reads_by_category": {
+        "visibility_marker": 46050,
+        "sequence": 1600,
+        "other_metadata": 405,
+        "commit_descriptor": 1200,
+        "record_envelope": 708572,
+        "index_state": 268871
+      },
+      "metadata_writes_by_category": {
+        "visibility_marker": 300,
+        "sequence": 300,
+        "other_metadata": 2,
+        "commit_descriptor": 300,
+        "record_envelope": 134286,
+        "index_state": 300
+      },
+      "metadata_reads_by_scope": {
+        "PyRexStore": 1026698
+      },
+      "metadata_writes_by_scope": {
+        "PyRexStore": 135488
+      },
+      "metadata_read_s_by_category": {
+        "visibility_marker": 0.10759093245724216,
+        "sequence": 0.006049682073353324,
+        "other_metadata": 0.006121073995018378,
+        "commit_descriptor": 0.018519753881264478,
+        "record_envelope": 1.0518140606654924,
+        "index_state": 0.36820700493990444
+      },
+      "index_scan_openings": 201858,
+      "index_rows": 68572,
+      "index_scan_s": 1.7475303713436006,
+      "index_scan_openings_by_scope": {
+        "PyRexStore": 201858
+      },
+      "native_scan_openings": 0,
+      "native_batches": 0,
+      "native_rows": 0,
+      "native_scan_s": 0.0,
+      "native_prepare_calls": 0,
+      "native_prepare_s": 0.0,
+      "native_selected_records_peak": 0,
+      "commit_auth_calls": 900,
+      "commit_auth_s": 11.36265081702004,
+      "decode_calls": 388572,
+      "decode_s": 11.587304125750961,
+      "target_lookup_calls": 400,
+      "target_lookup_horizon_sum": 60000,
+      "target_lookup_commit_visits": 600,
+      "target_lookup_s": 6.346699649024231,
+      "distinct_target_version_ids": 34286,
+      "validation_target_calls": 0,
+      "validation_target_s": 0.0,
+      "retraction_validation_calls": 300,
+      "retraction_validation_s": 0.0003239238358219154,
+      "version_id_exists_calls": 134286,
+      "version_id_exists_s": 2.785635769738292,
+      "checksum_calls": 300,
+      "checksum_marker_visits": 45150,
+      "checksum_s": 0.12403154594358057,
+      "canonical_conformance_calls": 0,
+      "canonical_conformance_s": 0.0,
+      "commit_calls": 300,
+      "commit_s": 32.173329776967876,
+      "sequence_reservations": 300,
+      "sequence_reserve_s": 0.6454886229912518,
+      "index_write_calls": 300,
+      "index_write_s": 8.492317472002469,
+      "index_entries_written": 2697444,
+      "publication_calls": 300,
+      "publication_s": 0.1300104049660149,
+      "stale_mark_calls": 0,
+      "stale_mark_s": 0.0,
+      "commit_cache_entries_peak": 118,
+      "timing_boundary": "inclusive non-exclusive attribution buckets; nested work contributes to multiple buckets and does not sum to end-to-end time",
+      "validation_boundary": "validation_target_* covers supersession get_version calls and version_id_exists; other commit validation/encoding is only in commit_s"
+    }
+  }
+}

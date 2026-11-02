@@ -7,6 +7,8 @@ This full-scan correctness path does not imply native index pushdown or speedup.
 The separate historical locator source has its own executable example in
 [`docs/reasoning-native-locator-claims.rst`](docs/reasoning-native-locator-claims.rst);
 native prefix transfer remains distinct from full source authentication cost.
+The locator guide also covers explicit `history_batch_size=` range-union/point-fetch
+batching with independent cumulative point limits; the default path is unchanged.
 
 For authenticated complete current-graph projection with generation pins and
 explicit executor admission, see the runnable example in

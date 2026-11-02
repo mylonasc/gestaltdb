@@ -1,8 +1,8 @@
 # Reasoning engine: delivered scope and remaining roadmap
 
-**Reviewed at:** 2026-11-01T13:00:35Z (UTC).
+**Reviewed at:** 2026-11-02T20:03:14Z (UTC).
 
-**Reviewed source:** [`7f288085fc01ecd2fac66def9d3c29981054af26`](https://github.com/mylonasc/gestaltdb/commit/7f288085fc01ecd2fac66def9d3c29981054af26), `origin/main` after roadmap/workbook sanitation #452. The #194 evidence below is explicitly pending PR #450, not part of that main revision or the published baseline.
+**Reviewed source:** [`089583bea546a10ef27ff20254af87680cfd7575`](https://github.com/mylonasc/gestaltdb/commit/089583bea546a10ef27ff20254af87680cfd7575), the integrated HSA source after #450–#476. #477 corrected the acceptance count and review identity without changing library sources. HSA-01–HSA-04 and HSA-06 are included in this landing; the measurements remain local acceptance evidence, not published-wheel guarantees.
 
 **Published baseline:** [v0.16.0](https://github.com/mylonasc/gestaltdb/releases/tag/v0.16.0), source `0ae4d4bb1624605efc0351f9a029f396baf291dc`, published 2026-10-29T00:03:19Z.
 
@@ -12,9 +12,9 @@
 
 - **Delivered:** parent [#156](https://github.com/mylonasc/gestaltdb/issues/156), RE-01–RE-27 and all five phase epics are closed. Delivery includes explicitly bounded implementations, experiments and approved defer decisions; it does **not** mean every aspirational native/OWL acceptance criterion is implemented.
 - **Delivered composability:** [#391](https://github.com/mylonasc/gestaltdb/issues/391) and #392–#396 are closed: typed first-witness explanations, selected temporal negation/aggregates, structural validation, explicit inferred Cypher and typed graph mappings. See sections 2–3 for fragment and release boundaries.
-- **Pending native follow-up:** [#194](https://github.com/mylonasc/gestaltdb/issues/194) has actual-adapter measurements and an explicit **defer automatic adoption** decision in open PR #450, not yet on reviewed main. The locator implementation is already on main; #451 separately tracks dense-history construction/authentication and locator read-amplification debt. Integration/review, not an absent native scan API, remains for #194.
+- **Native follow-up:** [#194](https://github.com/mylonasc/gestaltdb/issues/194) remains open for closure reconciliation; actual-adapter measurements and the **defer automatic adoption** decision landed through #450. #451 is closed: HSA-01–HSA-04 and HSA-06, including **1,512 observations / 756 pairs**, are included in this landing. Selective native latency/RSS misses the ordinary-relative goal at every measured point; ordinary stays default.
 - **Proposed, not delivered:** weighted/probabilistic semantics #124 and feedback composition #128. Architecture #388 and typing #410 are partially delivered independent programs. Tutorial #273 and CDM #409 are separate documentation/application work.
-- **Activity:** PR #450 is the open native-locator benchmark/documentation follow-up; sanitation #452 is merged. PRs #441/#443/#444/#445 are dependency updates. An open issue or an old started-work comment is not evidence that implementation is currently active.
+- **Activity:** HSA slices and integration/reconciliation PRs through #477 are present in the landing history, including paired acceptance, the #470 main forward-merge, typing-gate fix, tracker reconciliation and final review corrections. #454 and #451 are closed; optional HSA-05 #458 stays open as deferred (not required for closure). No native default or GR disposition is promoted.
 
 No merge, tag, release, issue closure or new feature commitment is authorized by this document. Current changes start from accepted `main` unless explicitly directed otherwise. `onto-dev` and `feature/onto-dev-epic-2` below are **historical integration targets**, not current PR instructions.
 
@@ -101,7 +101,7 @@ Dates below are **GitHub merge timestamps in UTC**, not claims about when coding
 | 2026-10-25T23:34:50Z | #400 / `738a0c6` (#396) | Initial typed n-ary graph mapping; later collision/reference hardening #408, included in v0.16.0. |
 | 2026-10-25T23:45:01Z | #402 / `cda8dae` (#392) | Initial typed first-witness tracking, included in v0.16.0. |
 | 2026-10-25T23:51:52Z | #403 / `07affaa` (#393) | Selected temporal negation/nonrecursive aggregates, later answer-versus-proof truncation fixes, included in v0.16.0. |
-| 2026-10-26T06:55:18Z | #369 / `49d4638` (#194) | Historical native claim-index locator admission merged; included in v0.16.0. Actual-adapter benchmark/decision is delivered separately in unmerged PR #450, not in reviewed main. |
+| 2026-10-26T06:55:18Z | #369 / `49d4638` (#194) | Historical native claim-index locator admission merged; included in v0.16.0. Actual-adapter benchmark/decision was delivered later in #450, now on reviewed main but not in that wheel. |
 | 2026-10-27T23:33:49Z | #426 / `47f0fde` (#395) | Generation-pinned read-only inferred Cypher node/one-hop projection, included in v0.16.0. |
 | 2026-10-29T00:03:19Z | v0.16.0 / `0ae4d4b` | Published stable baseline; API migration uses `graph.temporal`, `graph.epistemic`, `graph.rules` and current services. |
 | 2026-10-31T14:48:05Z | #447 / `ac838da` | **Post-v0.16.0:** PyRex >=0.7.1 dependency floor and point-read regression recovery evidence. |
@@ -115,8 +115,8 @@ The package metadata still says 0.16.0 on reviewed main. That does not make post
 
 | Issue | State at review | Remaining acceptance / dependency |
 | --- | --- | --- |
-| [#194](https://github.com/mylonasc/gestaltdb/issues/194) | Open; implemented source on main; measurement/decision in unmerged #450 | PR #450 preserves 18/18 exact fact/version-ID parity observations at 100K sparse history, including selective/nonselective reads and full authentication/materialization costs, versions and time/RSS. Decision: defer automatic native adoption. Complete integration/review; no rule-closure, repeated-performance or OS-cold claim. Do not substitute raw/assertion-only/full-record modes. Optional, not a #156 blocker. |
-| [#451](https://github.com/mylonasc/gestaltdb/issues/451) | Open technical debt; not remediated | Resolve dense-history supersession/commit validation and native locator read amplification without weakening authentication. Dense 100K construction timed out at 900 s before extraction; sparse-history success is different evidence. Instrument/batch verified target resolution, bound redundant catalog/history work and remeasure isolated repeated time/RSS. Native adoption remains deferred. |
+| [#194](https://github.com/mylonasc/gestaltdb/issues/194) | Open; measurements/defer decision merged in #450 | Main now contains the actual-adapter harness and original 18/18 sparse-history 100K plus 36/36 diagnostic dense 10K parity observations. Preserve their original source/host/cache limitations; no raw/assertion-only/full-record substitution or native adoption. Closure reconciliation remains separate from optimization debt #451. Optional, not a #156 blocker. |
+| [#451](https://github.com/mylonasc/gestaltdb/issues/451) | Closed; HSA-01-04 and HSA-06 delivered, HSA-05 deferred | HSA-01–HSA-04 and HSA-06 are included in the landing. Paired acceptance covers 1K-first, 1K-first+warm, 1K-sparse, 10K-first and 10K-first+warm: **1,512 observations / 756 pairs**, exact parity, all own-mode observed gates pass. Selective native latency/RSS fails the 1.25x ordinary goal at every point. 10K sparse was explicitly scoped out with rationale; rollout recorded; native adoption and optional new-index HSA-05 stay deferred. See planning/reasoning-followthrough/hsa-06-pilot.md; no blanket performance or feature promotion. |
 | [#124](https://github.com/mylonasc/gestaltdb/issues/124) | Open proposal; design-gated | Choose probabilistic, fuzzy **or** importance semantics; prove combination, retraction, convergence and provenance with independent tests and a named user scenario. No silent confidence multiplication. |
 | [#128](https://github.com/mylonasc/gestaltdb/issues/128) | Open composition proposal | Model/task/version provenance, source/world/assertion policy, bounded iterations and leakage controls. Weighted feedback depends on #124; a small deterministic loop need not. Audit export #126 is delivered. |
 | [#388](https://github.com/mylonasc/gestaltdb/issues/388) | Open, partially delivered | Finish concrete facade/consumer coupling: legacy adjacency/BFS, update composition, key/serializer helpers and query/viz/transaction/snapshot/lifecycle integration. Services already exist; require standalone boundary/compatibility tests, not a facade line-count goal. |
@@ -128,11 +128,11 @@ Sampling #106/#118–#121 and security #88 remain separate. Importance sampling 
 
 ### Native follow-up evidence and newcomer orientation (#194 / #451)
 
-**Reviewed main versus pending evidence:** `7f28808` includes sanitation #452 and
-the production locator API, but not PR #450's harness, reports or measured-decision
-documentation. PR #450's measured source is `48b7d53`; its final evidence is
+**Historical main-versus-branch evidence boundary:** `dcc90e2` included #450's harness,
+reports and measured-decision documentation plus HSA-02 #461. HSA-03/HSA-04 were
+then developed on `hsa-dev`; they are included in the current landing. PR #450's measured source is `48b7d53`; its original evidence is
 preserved at `f3782fb` (100K) and `9a47873` (10K). Those observations must not be
-presented as benchmarks of `7f28808` or the published v0.16.0 wheel.
+presented as benchmarks of `dcc90e2` or the published v0.16.0 wheel.
 
 A reasoning engine needs the right base facts before applying rules. Corrections
 and retractions can change which historical claim version is eligible, even for
@@ -162,8 +162,27 @@ complete source/index authentication, correction/retraction winners, exact evide
 pinned horizons and fail-closed corruption/concurrency gates. The issue includes
 a fuller newcomer guide, proposed performance goals and remediation exit criteria;
 those goals are not current guarantees. Source-scoped reuse is not permission for
-an unauthenticated persistent cache. Measurements remain single observations with
-uncontrolled OS cache/host contention, not repeated medians or OS-cold evidence.
+an unauthenticated persistent cache. Those original #450 measurements remain
+single observations with uncontrolled OS cache/host contention, not repeated
+medians or OS-cold evidence.
+
+**HSA-06 acceptance evidence:**
+`planning/reasoning-followthrough/hsa-06-pilot.md` records the exact commands,
+checksummed raw reports and source boundaries. Dense 100K construction now takes
+35.17s for 134,286 versions under the preserved 900s budget; all/subject reads at
+times 30/50 pass exact receipts, but instrumented extraction still takes 35–55s.
+The unprofiled 1K pilot alternates before/after workers, rotates methods and
+attests imported checkouts over one shared fixture: all 216 observations preserve
+exact evidence, and all tested mode-relative observed gates pass against each
+mode's own HSA-01 baseline. Selective native latency is still about 2.1x ordinary
+and RSS also breaches 1.25x. Keep ordinary default; defer automatic native adoption
+and the optional new-index/vectorization experiment. The matrix has since grown
+to **1,512 observations / 756 pairs** with the same verdict at every point;
+HSA-01/HSA-02 are closed and #462 ergonomics
+plus a typing-gate fix are reconciled in the landing. 10K sparse explicitly scoped out
+with rationale; HSA-06 closed with final cross-consumer CI green (4328 passed).
+The temporary `hsa-dev` integration instruction is removed by the landing;
+no GR feature status changes.
 
 ### Deferred or experimental, not scheduled by closed RE issues
 

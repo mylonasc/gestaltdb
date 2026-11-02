@@ -1,10 +1,10 @@
 {
   "status_authority": "EPIC_REASONING_ENGINE.md",
-  "reviewed_integration": "7f288085fc01ecd2fac66def9d3c29981054af26",
-  "review_date": "2026-11-01",
-  "reviewed_at": "2026-11-01T13:00:35Z",
+  "reviewed_integration": "089583bea546a10ef27ff20254af87680cfd7575",
+  "review_date": "2026-11-02",
+  "reviewed_at": "2026-11-02T20:03:14Z",
   "roadmap": {"issue": 156, "state": "closed"},
-  "note": "Reconciled after sanitation #452 at main 7f28808: #156/all phases and #391-#396 remain closed. #194 has measurements/defer decision in unmerged PR #450, not reviewed main; #451 owns unremediated dense-history authentication/locator performance debt. No changed GR dispositions or adoption claim.",
+  "note": "Reviewed integrated HSA source 089583b after #450-#476; #477 corrected review records without changing library sources. The landing includes HSA-01/HSA-02/HSA-03/HSA-04/HSA-06 and the final 1,512-observation / 756-pair acceptance matrix. #194 remains open for closure reconciliation; #451 is closed with all exit criteria evidenced (HSA-05 deferred and not required). Native adoption remains deferred and ordinary extraction remains default. #156/phases/#391-#396 remain closed; no changed GR dispositions.",
   "phases": {
     "RE-E1": {
       "issue": 157,
@@ -39,7 +39,7 @@
       "disposition": "locator source on main; actual-adapter evidence/defer decision in unmerged PR #450; integration/review pending",
       "performance_debt_issue": 451
     },
-    "451": {"state": "open", "disposition": "dense-history construction/authentication and locator read amplification; native adoption deferred"},
+    "451": {"state": "closed", "disposition": "HSA-01/02/03/04/06 delivered and closed with evidence; HSA-05 deferred (not required); native adoption deferred, ordinary default retained"},
     "200": {
       "state": "closed",
       "disposition_issue": 371

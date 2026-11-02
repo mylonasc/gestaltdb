@@ -1,0 +1,295 @@
+# HSA-06 pilot: construction, paired evidence and explicit defer decision
+
+Parent #451; mandatory acceptance #454. Partial acceptance evidence, not roadmap
+closure, release authorization or automatic native adoption.
+
+## Production/source boundaries
+
+- #450 (actual-adapter benchmarks/HSA-01) and #461 (HSA-02) are merged to main
+  `dcc90e2`. #459 was merged into its stacked base.
+- HSA-03 slices #463/#464 and HSA-04 #465/#466 are on `hsa-dev` (`af08f60`),
+  **not main or the published v0.16.0 wheel**.
+- Paired controller `ab8445a` adds only benchmark/tests. Its library sources
+  match HSA-04 `2e5540c`, the source of the 100K construction report. Both are
+  identified independently; no old report is relabelled as a new revision.
+- A later duplicate-dimension/observation guard changes only acceptance framing;
+  recomputing the recorded pilot summaries with that guard gives identical results.
+
+## Preserved 100K dense construction gate
+
+The original HSA-01 report remains unchanged: instrumented construction timed
+out at 900 seconds, before any extraction or parity result. New report:
+
+`benchmarks/results/reasoning-454-hsa-06-100k-dense-construction.json`
+
+SHA-256: `97cdf1008892201d2d2c24b9ea30f0ba7eaaad7981a3d284d42daa33b7b487a8`
+
+It constructs **134,286 versions in 35.174s**, preserving the 900s timeout,
+100K assertion population, dense amendments, commit batch 1000 and opt-in
+instrumentation. Construction passes that gate. Four ordinary observations
+also pass exact write-receipt-derived fact/version-ID parity:
+
+| Selection / valid time | Evidence rows | Instrumented pipeline s |
+| --- | ---: | ---: |
+| all / 30 | 100000 | 54.429 |
+| subject / 30 | 1 | 35.945 |
+| all / 50 | 85714 | 55.354 |
+| subject / 50 | 0 | 35.423 |
+
+Command (report records the exact interpreter/runtime/source/harness hashes):
+
+```bash
+uv run --with pyrex-rocksdb --with pyarrow python -m benchmarks.reasoning_locator_pipeline \
+  --rows 100000 --commit-batch 1000 --instrument --repeats 1 --methods ordinary \
+  --selections all subject --times 30 50 --caches first --timeout 900 \
+  --output /tmp/opencode/hsa-06-100k-dense-construction.json
+```
+
+This is **not** repeated/unprofiled 100K acceptance or all-time history coverage.
+The remaining 35–55s extraction cost matters: the all/50 observation counts
+1,448,141 metadata reads and 1,323,003 decode calls over 134,286 stored versions.
+Bounded cache pressure and repeated authentication can cause re-decoding. Neither
+an immutable history nor a writer guard makes mutable envelope reads optional.
+
+## Unprofiled alternating-pair controller
+
+`benchmarks.reasoning_hsa_acceptance` builds one after-written fixture, then
+reopens it in isolated workers importing the requested before/after source trees.
+Every worker attests its actual library/harness path. Whole library and harness
+hashes/revisions are checked before and after the run; source drift invalidates
+the result. A shared fixture means before/after verify **the same version IDs**,
+not just independently generated fact cardinalities.
+
+Before/after order alternates each repeat, method order rotates, instrumentation
+is disabled, and all individual timing/RSS peaks plus medians/maxima/p95 and
+paired ratios are retained. Incomplete/timeout/parity/profile/source-drift results
+are atomically preserved **without successful summaries**. At least six pairs
+are required for an observed gate; every ratio must be within the limit. Mixed
+results are inconclusive, never passes. This conservative rule is not a
+statistical-confidence or universal performance guarantee.
+
+Report: `benchmarks/results/reasoning-454-hsa-06-paired-1k.json`
+
+SHA-256: `038adc90d308487540506d6d5ec74a9f80d9d85e1b13dbe9fc126a7d0f04e1f5`
+
+Before `001e276` (HSA-01); after `ab8445a`; 6 alternating pairs per method/
+selection/time, first-handle reads, times 30/50. All **216 observations / 108 pairs**
+pass exact fact/version parity. All 36 mode-relative latency/RSS observed gates
+are within their <=1.05x / <=1.10x bounds against each mode's **own** baseline.
+Ordinary improves substantially; its slowdown cannot manufacture a native pass.
+
+Selected time-50 medians and individual maximum RSS:
+
+| Mode / selection | Before s | After s | Before max RSS bytes | After max RSS bytes |
+| --- | ---: | ---: | ---: | ---: |
+| ordinary / all | 1.439 | 0.126 | 75821056 | 73338880 |
+| full-record / all | 2.996 | 0.220 | 107855872 | 104366080 |
+| batched locator / all | 2.738 | 0.277 | 107192320 | 104296448 |
+| ordinary / subject | 1.431 | 0.101 | 74731520 | 72720384 |
+| batched locator / subject | 2.510 | 0.210 | 107397120 | 103989248 |
+
+```bash
+uv run --with pyrex-rocksdb --with pyarrow python -m benchmarks.reasoning_hsa_acceptance \
+  --before /absolute/path/to/hsa-01-baseline-attribution \
+  --after /absolute/path/to/hsa-06-paired-acceptance \
+  --rows 1000 --commit-batch 1000 --repeats 6 \
+  --methods ordinary native-full-record native-authenticated-locator \
+  --selections all predicate subject --times 30 50 --caches first \
+  --after-history-batch-size 64 --timeout 900 --output /tmp/opencode/hsa-06-paired-1k.json
+```
+
+OS caches remain uncontrolled, hardware/noise are local, and the 10K sparse
+variant was scoped out (see disposition). Profiling reports
+from HSA-04 stay separate; their latency is not substituted for these timings.
+
+## Larger-scale warm extension (10K dense, first+warm)
+
+Report: `benchmarks/results/reasoning-454-hsa-06-paired-10k-warm.json`
+
+SHA-256: `fec7839ad38be757409e2b645add22f295b9a710c2a0fd67523fd3575c227632`
+
+Same 10K dense shape (13429 versions), 6 alternating pairs per
+method/selection/time/**cache** (first and warm): **432 observations / 216
+pairs**, all with exact fact/version parity. Before `001e276`, after `3d96b18`
+(the `hsa-dev` HEAD at run time — sources unchanged since).
+
+All 72 own-mode observed latency/RSS gates are within limits. Warmup helps
+ordinary more than the locator (time-50 subject warm medians: ordinary 0.249s,
+batched locator 0.857s), so warm selective gaps widen to ~3.3–3.6x; first-handle
+gaps are ~2.2–2.6x. Every selective gate breaches 1.25x on latency and RSS at
+both times and both caches.
+
+```bash
+uv run --with pyrex-rocksdb --with pyarrow python -m benchmarks.reasoning_hsa_acceptance \
+  --before /absolute/path/to/hsa-01-baseline-attribution \
+  --after /absolute/path/to/hsa-dev \
+  --rows 10000 --commit-batch 1000 --repeats 6 \
+  --methods ordinary native-full-record native-authenticated-locator \
+  --selections all predicate subject --times 30 50 --caches first warm \
+  --after-history-batch-size 64 --timeout 900 --output /tmp/opencode/hsa-06-paired-10k-warm.json
+```
+
+Total paired matrix: 1512 observations / 756 pairs across 1K-first,
+1K-first+warm, 1K-sparse, 10K-first and 10K-warm. The 10K sparse variant was
+deliberately not run: sparsity (fewer amended claims) reduces supersession work
+proportionally for ordinary and locator alike — evidenced at 1K where the
+sparse breach (~2.14–2.28x) matches dense — so no mechanism exists by which it
+could overturn the deferral, and it would not test any uncovered contract.
+
+## Larger-scale extension (10K dense, first-handle)
+
+Report: `benchmarks/results/reasoning-454-hsa-06-paired-10k.json`
+
+SHA-256: `390695011b2d3824ef5bf308481cdbe3c9613878f235f40cc963224144d5e4ec`
+
+Same dense shape at 10000 rows (13429 versions), 6 alternating pairs per
+method/selection/time, first-handle reads: **216 observations / 108 pairs**,
+all with exact fact/version parity. Before `001e276`, after `9d97d60`
+(after-side library sources identical to `hsa-dev`).
+
+All 36 own-mode observed latency/RSS gates are within limits. The before side
+predates the whole HSA stack, so absolute before→after gaps are large (e.g.
+time-50 ordinary all 23.415s → 1.028s; batched locator all 76.225s → 2.329s);
+those gaps measure the cumulative stack against HSA-01, not a single slice,
+and ordinary's own improvement cannot manufacture a native pass.
+
+Selective actual-locator-vs-ordinary gates still **breach** 1.25x at both times
+and selections (paired latency ~2.18–2.63x; RSS also breaches). The deferral
+now holds at 1K dense-first, 1K dense-first+warm, 1K sparse and 10K
+dense-first: keep ordinary default, no automatic native adoption, HSA-05
+stays deferred.
+
+```bash
+uv run --with pyrex-rocksdb --with pyarrow python -m benchmarks.reasoning_hsa_acceptance \
+  --before /absolute/path/to/hsa-01-baseline-attribution \
+  --after /absolute/path/to/hsa-06-warm-sparse \
+  --rows 10000 --commit-batch 1000 --repeats 6 \
+  --methods ordinary native-full-record native-authenticated-locator \
+  --selections all predicate subject --times 30 50 --caches first \
+  --after-history-batch-size 64 --timeout 900 --output /tmp/opencode/hsa-06-paired-10k.json
+```
+
+## Sparse-history extension (1K, history_rows=100)
+
+Report: `benchmarks/results/reasoning-454-hsa-06-paired-1k-sparse.json`
+
+SHA-256: `0de1e2566ba7cfd3c34924c8f242a930fd69261d2bb18f40b36d05b07afd7e82`
+
+Same 1K shape with amendments on only the first 100 assertions (1035 versions
+vs 1343 dense), 6 alternating pairs per method/selection/time, first-handle
+reads: **216 observations / 108 pairs**, all with exact fact/version parity.
+Before `001e276`, after `25ebca4` (warm-slice branch; library sources identical
+to `hsa-dev`).
+
+All 36 own-mode observed latency/RSS gates are within limits. Sparse medians
+are proportionally faster on both sides (e.g. time-50 ordinary all 0.208s →
+0.096s; batched locator all 0.444s → 0.213s), so a lighter fixture cannot
+manufacture a native pass.
+
+Selective actual-locator-vs-ordinary gates still **breach** 1.25x at time 50
+(paired latency ~2.14–2.28x; RSS also breaches). Sparse evidence therefore
+extends the deferral rather than overturning it.
+
+```bash
+uv run --with pyrex-rocksdb --with pyarrow python -m benchmarks.reasoning_hsa_acceptance \
+  --before /absolute/path/to/hsa-01-baseline-attribution \
+  --after /absolute/path/to/hsa-06-warm-sparse \
+  --rows 1000 --history-rows 100 --commit-batch 1000 --repeats 6 \
+  --methods ordinary native-full-record native-authenticated-locator \
+  --selections all predicate subject --times 30 50 --caches first \
+  --after-history-batch-size 64 --timeout 900 --output /tmp/opencode/hsa-06-paired-1k-sparse.json
+```
+
+## Warm-pair extension (1K dense, first+warm)
+
+Report: `benchmarks/results/reasoning-454-hsa-06-paired-1k-warm.json`
+
+SHA-256: `1649d8cb12e3418cff8f4b8a1e283e55e43614bcbe543c5f74202c76a1d6b3a0`
+
+Same fixture shape as the pilot (1000 rows, dense amendments, commit batch
+1000) with 6 alternating pairs per method/selection/time/**cache** (first and
+warm): **432 observations / 216 pairs**, all with exact fact/version parity.
+Before `001e276`, after `857c2a5` (library sources identical to `hsa-dev`;
+only tests/benchmarks/docs differ from the pilot after-side).
+
+All 72 own-mode observed latency/RSS gates are within their <=1.05x / <=1.10x
+bounds. Warm medians improve substantially on both sides (e.g. time-50 warm
+ordinary 1.408s → 0.077s; batched locator all 2.601s → 0.172s), so ordinary
+warmup cannot manufacture a native pass.
+
+Selective actual-locator-vs-ordinary gates still **breach** 1.25x at time 50 on
+both first and warm handles (paired latency ~2.04–2.18x; RSS also breaches).
+Warm evidence therefore confirms the pilot deferral rather than overturning it:
+keep ordinary default, no automatic native adoption, HSA-05 stays deferred.
+
+```bash
+uv run --with pyrex-rocksdb --with pyarrow python -m benchmarks.reasoning_hsa_acceptance \
+  --before /absolute/path/to/hsa-01-baseline-attribution \
+  --after /absolute/path/to/hsa-06-warm-sparse \
+  --rows 1000 --commit-batch 1000 --repeats 6 \
+  --methods ordinary native-full-record native-authenticated-locator \
+  --selections all predicate subject --times 30 50 --caches first warm \
+  --after-history-batch-size 64 --timeout 900 --output /tmp/opencode/hsa-06-paired-1k-warm.json
+```
+
+## Disposition and remaining work
+
+**Defer automatic native adoption.** Every selective locator-vs-ordinary latency
+and RSS observed gate breaches the 1.25x target at both times. Paired latency is
+about 2.03–2.17x ordinary, despite large improvements against the locator's own
+baseline. Full authentication and Arrow/worker memory floors remain material.
+Do not weaken checks or raise budgets to manufacture a pass.
+
+**HSA-05: defer the optional new-index/vectorization experiment.** Existing
+prefix/range/point batching is measured, but these results do not show that an
+additional selective index would remove the dominant authentication and native
+memory floors. No new derived format or write/rebuild amplification is justified
+by this evidence. Reopen only with a measured residual bottleneck and full
+construction/rebuild/index-byte/memory accounting.
+
+Keep the independently revertible shared-path improvements and explicit batching
+on hsa-dev for continued acceptance, not a blanket performance promotion. HSA-06
+remains open for final cross-consumer CI/rollout reconciliation. The 10K
+sparse variant stays explicitly scoped out per the disposition above; HSA-03's
+broader allocation review closed with #468. The parent is not closed by clearing
+only the construction blocker.
+
+## Cross-consumer and tracking validation
+
+Final library/controller/tracker source, with all three backends, both binary
+serializers, Arrow/Polars, NetworkX, bloom support and Excel checks enabled:
+
+```bash
+uv run --with pyrex-rocksdb --with lmdb --with plyvel --with pyarrow \
+  --with msgpack --with protobuf --with polars --with openpyxl --with pybloom-live \
+  --extra networkx pytest -q
+```
+
+Result at pilot time: **4320 passed, 50 skipped** (remaining optional external capabilities).
+Final-source rerun on `hsa-dev` `3d96b18` (after #470 forward-merge and #471 typing fix):
+**4328 passed, 50 skipped**, with ruff, the 31-module strict typing gate, the
+module-size gate and docs drift all passing.
+This includes current graph/transactions/snapshots, temporal and reasoning
+engines, ingestion, Cypher, sampling, source authentication/tamper/cancellation,
+native framing/admission, paired-runner failure cases and tracker/workbook tests.
+The 15 new controller tests independently cover pair/method order, shared fixture,
+loaded-checkout attestations, conservative/noisy gates and incomplete failure
+reports. Earlier HSA-04 focused native matrix: 178 passed.
+
+Additional commands pass:
+
+```bash
+uv run --extra lint ruff check .
+uv run --extra lint python scripts/check_typing.py
+uv run python scripts/check_code_quality.py
+uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/check_docs.py
+uv run --with openpyxl python planning/reasoning-engine/sync_tracker.py --check
+uv run python planning/reasoning-engine/check_roadmap.py
+uv run python planning/reasoning-engine/check_tracking.py --github
+```
+
+The strict typing gate covers 31 modules. Live GitHub tracking matches the
+snapshot; the regenerated workbook preserves all 136 feature dispositions and
+original acceptance rows. `hsa-dev` has since forward-merged `main` (#470);
+remaining hsa-dev-vs-published-wheel boundaries and pending #194/#451 work are
+reconciled rather than promoted to completed features.

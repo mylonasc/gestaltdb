@@ -287,9 +287,9 @@ class NativeKeyScan:
         self._owned = snapshot is None
         try:
             self._snapshot = snapshot if snapshot is not None else handle.create_snapshot()
-            self._scan = handle.scan_arrow(prefix=prefix, start=start, stop=stop,
-                                           batch_size=batch_rows, max_batch_bytes=max_batch_bytes,
-                                           snapshot=self._snapshot, allow_overflow=allow_overflow)
+            self._scan = self._open_scan(handle, prefix=prefix, start=start, stop=stop,
+                                        batch_size=batch_rows, max_batch_bytes=max_batch_bytes,
+                                        snapshot=self._snapshot, allow_overflow=allow_overflow)
         except Exception as exc:
             if snapshot is None and getattr(self, "_snapshot", None) is not None:
                 try:
@@ -300,6 +300,10 @@ class NativeKeyScan:
         self._max_rows = max_rows
         self._consumed = False
         self._closed = False
+
+    def _open_scan(self, handle, **options):
+        """Single-prefix native entry point; bounded batch variants override it."""
+        return handle.scan_arrow(**options)
 
     def _check_snapshot(self, when: str) -> None:
         try:

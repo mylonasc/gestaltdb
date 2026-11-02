@@ -114,8 +114,8 @@ def iter_context_pairs(
     keep = None
     if frequencies is not None:
         counts = _frequencies(frequencies, "frequencies")
-        if counts.size and counts.max() > 0 and subsample_threshold > 0:
-            normalized = counts / counts.max()
+        if counts.size and np.max(counts) > 0 and subsample_threshold > 0:
+            normalized = counts / np.max(counts)
             normalized /= normalized.sum()
             keep = np.ones(counts.size)
             positive = normalized > subsample_threshold
@@ -143,7 +143,7 @@ def iter_context_pairs(
         for batch in source:
             for segment in _segments(batch, cross_restarts):
                 if keep is not None:
-                    if segment.size and segment.max() >= keep.size:
+                    if segment.size and np.max(segment) >= keep.size:
                         raise ValueError("walk node ID is outside frequencies")
                     if subsample_threshold > 0:
                         segment = segment[rng.random(segment.size) < keep[segment]]
