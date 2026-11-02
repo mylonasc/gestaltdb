@@ -75,7 +75,7 @@ class StorageSession:
         self._write_guard = self._default_write_guard if write_guard is None else write_guard
 
     @contextmanager
-    def _default_write_guard(self):
+    def _default_write_guard(self) -> Iterator[None]:
         path = getattr(self.store, "path", None)
         guard = (self._memory_lock if path is None else
                  self.lock_manager.for_path(Path(path) / ".gestaltdb_temporal_writer.lock"))
@@ -118,17 +118,21 @@ class NodeReader:
     def __init__(self, session: StorageSession) -> None:
         self._session = session
 
-    def get(self, node_id: bytes) -> Node | None:
-        """Read a decoded current node, or None, using its stored byte key."""
-        return node_records.get_node(
-            self._session.store, self._session.entity_serializer, node_id)
+    def get(self, node_id: NodeKeyInput) -> Node | None:
+        """Read a decoded current node, or None, using its stored key.
 
-    def get_many(self, node_ids: Iterable[bytes]) -> list[Node | None]:
+        Accepts ``str`` or ``bytes``; ``str`` IDs are UTF-8 encoded.
+        """
+        return node_records.get_node(
+            self._session.store, self._session.entity_serializer, node_key_to_bytes(node_id))
+
+    def get_many(self, node_ids: Iterable[NodeKeyInput]) -> list[Node | None]:
         """Read current nodes in request order, retaining None for missing IDs."""
         return node_records.get_nodes(
-            self._session.store, self._session.serializer, node_ids)
+            self._session.store, self._session.serializer,
+            [node_key_to_bytes(node_id) for node_id in node_ids])
 
-    def keys(self, num_nodes: int | None = None, key_offset: bytes | None = None) -> Any:
+    def keys(self, num_nodes: int | None = None, key_offset: bytes | None = None) -> Iterator[bytes]:
         """Iterate current node keys in backend order."""
         return self._session.store.get_node_keys_generator(num_nodes, key_offset)
 
@@ -189,12 +193,15 @@ class EdgeReader:
     def __init__(self, session: StorageSession) -> None:
         self._session = session
 
-    def get(self, edge_id: bytes) -> Edge | None:
-        """Read a decoded current edge, or None, using its stored byte key."""
-        return edge_records.get_edge(
-            self._session.store, self._session.entity_serializer, edge_id)
+    def get(self, edge_id: NodeKeyInput) -> Edge | None:
+        """Read a decoded current edge, or None, using its stored key.
 
-    def keys(self, num_edges: int | None = None, key_offset: bytes | None = None) -> Any:
+        Accepts ``str`` or ``bytes``; ``str`` IDs are UTF-8 encoded.
+        """
+        return edge_records.get_edge(
+            self._session.store, self._session.entity_serializer, node_key_to_bytes(edge_id))
+
+    def keys(self, num_edges: int | None = None, key_offset: bytes | None = None) -> Iterator[bytes]:
         """Iterate current edge keys in backend order."""
         yield from self._session.store.get_edge_keys_generator(num_edges, key_offset)
 

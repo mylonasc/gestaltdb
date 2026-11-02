@@ -24,7 +24,7 @@ def test_standalone_edge_service_never_redispatches(graph, monkeypatch):
         monkeypatch.setattr(GraphDB, name, forbidden)
     repository.put(Edge("e", "a", "b", {"type": "Old", "score": 1}))
     repository.put_many([Edge("e", "c", "d", {"type": "New", "score": 2})])
-    assert repository.get(b"e").source == "c"
+    assert repository.get("e").source == "c"
     assert set(repository.keys()) == {b"e"}
     assert graph.count_typed_adjacency("a", "Old") == 0
     assert len(list(graph.iter_typed_adjacency("c", "New"))) == 1
@@ -44,7 +44,7 @@ def test_facade_edge_calls_do_not_construct_child_graphs(graph, monkeypatch):
     monkeypatch.setattr(GraphDB, "transaction", forbidden)
     graph.put_edge(Edge("e", "a", "b"))
     graph.put_edges_bulk([Edge("other", "a", "c")], check_existing=False)
-    assert graph.get_edge(b"e").target == "b"
+    assert graph.get_edge("e").target == "b"
     graph.delete_edge(b"e")
     assert graph.get_edge(b"e") is None
 

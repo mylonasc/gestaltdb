@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Generate a structured API index for the packaged agent docs search tool.
 
-Parses ``src/gestaltdb/graphdb.py`` with ``ast`` and emits
-``src/gestaltdb/agent_skill/api_index.json``: one entry per public ``GraphDB``
-method with its signature, docstring summary, ``Returns:`` note, a
+Parses the public ``GraphDB`` and temporal/epistemic/rules service classes with
+``ast`` and emits ``src/gestaltdb/agent_skill/api_index.json``: one entry per
+public method with its signature, docstring summary, ``Returns:`` note, a
 heuristically assigned docs topic, source line, and packaged examples that
 demonstrate it.
 
@@ -27,6 +27,11 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
 REPO_ROOT = SKILL_DIR.parents[2]
 GRAPHDB_PATH = REPO_ROOT / "src" / "gestaltdb" / "graphdb.py"
+ENGINE_PATHS = (
+    REPO_ROOT / "src" / "gestaltdb" / "temporal_engine.py",
+    REPO_ROOT / "src" / "gestaltdb" / "epistemic_engine.py",
+    REPO_ROOT / "src" / "gestaltdb" / "rules_engine.py",
+)
 SKILL_RESOURCE_DIR = REPO_ROOT / "src" / "gestaltdb" / "agent_skill"
 INDEX_PATH = SKILL_RESOURCE_DIR / "api_index.json"
 
@@ -129,8 +134,46 @@ def _example_coverage() -> dict[str, list[dict[str, object]]]:
     return coverage
 
 
+def _collect_engine_methods(
+    path: Path, class_name: str, prefix: str, topic: str, coverage: dict[str, list[dict[str, object]]]
+) -> list[dict]:
+    """Collect public methods from a service engine class with a dotted prefix."""
+    try:
+        source = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return []
+    tree = ast.parse(source)
+    entries = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef) or node.name != class_name:
+            continue
+        for item in node.body:
+            if not isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if item.name.startswith("_"):
+                continue
+            doc = ast.get_docstring(item) or ""
+            summary, returns = _split_docstring(doc)
+            bare_signature = _format_signature(item)
+            # Prefix the bare method name so search resolves `graph.temporal.*`
+            # and `graph.rules.*` call sites.
+            dotted_signature = bare_signature.replace(item.name, f"{prefix}.{item.name}", 1)
+            entries.append(
+                {
+                    "name": f"{prefix}.{item.name}",
+                    "signature": dotted_signature,
+                    "summary": summary,
+                    "returns": returns,
+                    "topic": topic,
+                    "line": item.lineno,
+                    "examples": coverage.get(item.name, []),
+                }
+            )
+    return entries
+
+
 def build_index() -> dict:
-    """Build the API index from the GraphDB source file."""
+    """Build the API index from GraphDB plus temporal/epistemic/rules engines."""
     source = GRAPHDB_PATH.read_text(encoding="utf-8")
     tree = ast.parse(source)
     coverage = _example_coverage()
@@ -156,11 +199,20 @@ def build_index() -> dict:
                     "examples": coverage.get(item.name, []),
                 }
             )
+    engine_sources = [
+        (ENGINE_PATHS[0], "TemporalEngine", "temporal", "temporal"),
+        (ENGINE_PATHS[1], "EpistemicEngine", "epistemic", "epistemic"),
+        (ENGINE_PATHS[2], "RulesEngine", "rules", "epistemic"),
+    ]
+    for engine_path, class_name, prefix, topic in engine_sources:
+        methods.extend(_collect_engine_methods(engine_path, class_name, prefix, topic, coverage))
     methods.sort(key=lambda entry: entry["name"])
     return {
         "generated_from": {
-            "path": "src/gestaltdb/graphdb.py",
-            "sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+            path.relative_to(REPO_ROOT).as_posix(): hashlib.sha256(
+                path.read_bytes()
+            ).hexdigest()
+            for path in (GRAPHDB_PATH, *ENGINE_PATHS)
         },
         "methods": methods,
     }

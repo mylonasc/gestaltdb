@@ -98,10 +98,12 @@ class SampledSubgraphBatch:
 
     @property
     def n_nodes(self) -> int:
+        """Number of node rows in this batch (local ID space size)."""
         return int(self.node_ids_global.size)
 
     @property
     def n_edges(self) -> int:
+        """Number of edge rows in this batch (global edge ID space size)."""
         return int(self.edge_ids_global.size)
 
     def to_numpy(self) -> NumpyBatch:
