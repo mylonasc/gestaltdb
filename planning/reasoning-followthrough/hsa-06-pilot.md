@@ -98,9 +98,41 @@ uv run --with pyrex-rocksdb --with pyarrow python -m benchmarks.reasoning_hsa_ac
   --after-history-batch-size 64 --timeout 900 --output /tmp/opencode/hsa-06-paired-1k.json
 ```
 
-OS caches remain uncontrolled, hardware/noise are local, and sparse histories,
-warm pairs and larger paired scale points are still missing. Profiling reports
+OS caches remain uncontrolled, hardware/noise are local, and sparse histories
+and larger paired scale points are still missing. Profiling reports
 from HSA-04 stay separate; their latency is not substituted for these timings.
+
+## Warm-pair extension (1K dense, first+warm)
+
+Report: `benchmarks/results/reasoning-454-hsa-06-paired-1k-warm.json`
+
+SHA-256: `1649d8cb12e3418cff8f4b8a1e283e55e43614bcbe543c5f74202c76a1d6b3a0`
+
+Same fixture shape as the pilot (1000 rows, dense amendments, commit batch
+1000) with 6 alternating pairs per method/selection/time/**cache** (first and
+warm): **432 observations / 216 pairs**, all with exact fact/version parity.
+Before `001e276`, after `857c2a5` (library sources identical to `hsa-dev`;
+only tests/benchmarks/docs differ from the pilot after-side).
+
+All 72 own-mode observed latency/RSS gates are within their <=1.05x / <=1.10x
+bounds. Warm medians improve substantially on both sides (e.g. time-50 warm
+ordinary 1.408s → 0.077s; batched locator all 2.601s → 0.172s), so ordinary
+warmup cannot manufacture a native pass.
+
+Selective actual-locator-vs-ordinary gates still **breach** 1.25x at time 50 on
+both first and warm handles (paired latency ~2.04–2.18x; RSS also breaches).
+Warm evidence therefore confirms the pilot deferral rather than overturning it:
+keep ordinary default, no automatic native adoption, HSA-05 stays deferred.
+
+```bash
+uv run --with pyrex-rocksdb --with pyarrow python -m benchmarks.reasoning_hsa_acceptance \
+  --before /absolute/path/to/hsa-01-baseline-attribution \
+  --after /absolute/path/to/hsa-06-warm-sparse \
+  --rows 1000 --commit-batch 1000 --repeats 6 \
+  --methods ordinary native-full-record native-authenticated-locator \
+  --selections all predicate subject --times 30 50 --caches first warm \
+  --after-history-batch-size 64 --timeout 900 --output /tmp/opencode/hsa-06-paired-1k-warm.json
+```
 
 ## Disposition and remaining work
 
