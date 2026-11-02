@@ -18,6 +18,10 @@ The workflows below need no database except the explicitly marked adapters.
 They illustrate the difference between an in-memory result, saved reasoning
 state, and claims deliberately published to storage.
 
+New to logical reasoning? Read :doc:`reasoning-introduction` first: it defines
+facts, rules, closure and :term:`witnesses <witness>` before the first executable
+example. :doc:`glossary` provides short definitions and optional background links.
+
 Compile an ontology and evaluate facts
 --------------------------------------
 

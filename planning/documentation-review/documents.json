@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "groups": [
+    {"role":"explanation","audiences":["property-graph developer","graph-ML developer","knowledge-graph developer","ontology/Datalog user","reasoning integrator","operator"],"disposition":"keep","owner":"DOC-06","reason":"Shared definitions and optional background links introduce unfamiliar terms before specialized examples.","files":["docs/glossary.rst"]},
+    {"role":"tutorial","audiences":["ontology/Datalog user","knowledge-graph developer"],"disposition":"keep","owner":"DOC-06","reason":"Define facts, rules, fixpoints, witnesses and supports before running a complete base-install example and visualizing its explanation.","files":["docs/reasoning-introduction.rst"]},
     {"role":"overview","audiences":["property-graph developer","graph-ML developer","knowledge-graph developer","ontology/Datalog user","reasoning integrator","operator"],"disposition":"keep","owner":"DOC-02","reason":"Initial DOC-02 pass adds goal tables and separated navigation; reconcile destinations as capability guides land.","files":["README.md","docs/index.rst"]},
     {"role":"tutorial","audiences":["property-graph developer"],"disposition":"keep","owner":"DOC-02","reason":"Initial DOC-02 pass provides one executable safe lifecycle/query/sampling workflow and broad next-step routes.","files":["docs/quickstart.rst"]},
     {"role":"explanation","audiences":["property-graph developer","reasoning integrator"],"disposition":"split","owner":"DOC-11","reason":"Keep the application component map and route internal service decomposition to reference.","files":["docs/architecture.rst"]},

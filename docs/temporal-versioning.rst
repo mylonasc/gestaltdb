@@ -9,12 +9,21 @@ GestaltDB can append immutable node and edge versions alongside its existing
 mutable graph. Temporal versions use two distinct time dimensions:
 
 * **valid time** is the half-open interval ``[start, end)`` in which a fact is
-  true in the modeled domain;
+  applicable in the modeled domain;
 * **system time** is the monotonically increasing UTC instant at which GestaltDB
   committed that version.
 
+Together these dimensions are **bitemporal**: one question asks what applied at
+a time, another asks what had been recorded about it by a given horizon. A
+**correction** records a replacement account; a **retraction** withdraws the
+selected claim/version's applicability under the temporal rules. Old records are
+retained. See :doc:`glossary` for the shared vocabulary and
+:doc:`reasoning-temporal` for computing intervals of inferred conclusions rather
+than merely storing history.
+
 The explicit version APIs do not update records returned by ``get_node`` or
-``get_edge`` and do not alter Cypher or sampling behavior. Temporal history has
+``get_edge`` and do not change unqualified current-graph Cypher or ordinary
+sampling results. Qualified historical queries use a separate view. Temporal history has
 separate indexes for exact versions, logical entities, valid starts, system
 times, and typed outgoing/incoming traversal.
 

@@ -30,6 +30,51 @@
   display: none;
 }
 
+.code-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid #d6d9dc;
+  background: #f3f6f6;
+  color: #404040;
+  font: 0.8rem sans-serif;
+}
+
+.copy-code-status {
+  margin-left: auto;
+  overflow-wrap: anywhere;
+}
+
+.copy-code-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0.25rem;
+  color: #245b78;
+  background: white;
+  border: 1px solid #aeb8c0;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.copy-code-button:focus-visible {
+  outline: 2px solid #245b78;
+  outline-offset: 2px;
+}
+
+.clipboard-fallback {
+  position: fixed;
+  left: -10000px;
+}
+
+.highlight .linenos {
+  user-select: none;
+}
+
 /* Four narrow columns are not readable on a phone. Repeat headings per row
  * only when the small enhancement has prepared a simple, non-spanned table.
  */

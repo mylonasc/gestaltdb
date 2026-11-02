@@ -386,3 +386,17 @@ column labels on narrow screens. Complex tables keep their semantic table form.
 `scripts/check_docs_layout.py` provides an optional authoring-time browser check;
 it is not a new package/runtime dependency or a claim to replace a full
 accessibility audit.
+
+The terminology/usability follow-through adds a shared glossary and a first
+facts/rules/explanations tutorial. Specialist pages introduce unfamiliar terms
+before their examples and link to that foundation. In particular, a witness is
+defined as one recorded derivation, distinguished from all independent supports
+and from a source-authenticated proof certificate. The short temporal-reasoning
+example now constructs its own program and imports rather than relying on hidden
+setup. The inventory grows to 93 documents (78 Sphinx pages).
+
+Code blocks receive Sphinx-rendered line numbers plus accessible copy controls
+and per-page block numbers. Clipboard copying excludes line-number markup. Three
+basic static figures are generated through `gestaltdb.viz.api` from the quickstart,
+Cypher and rule-explanation fixtures; regeneration is checked without optional
+backends. The existing architecture SVG/DOT remains the component map.

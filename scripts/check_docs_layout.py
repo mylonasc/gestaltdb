@@ -16,7 +16,8 @@ from threading import Thread
 
 
 PAGES = ["index", "quickstart", "storage-backends", "serializers", "data-access",
-         "ingestion", "cypher-tutorial", "typed-sampling", "performance"]
+         "ingestion", "cypher-tutorial", "typed-sampling", "performance",
+         "reasoning-introduction", "ontology", "reasoning-proofs"]
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
@@ -44,12 +45,15 @@ def main() -> int:
     base = f"http://127.0.0.1:{server.server_port}"
     failures = []
     checked = 0
+    code_blocks_checked = 0
+    clipboard_checks = 0
     try:
         with sync_playwright() as playwright:
             chrome = shutil.which("google-chrome") or shutil.which("chromium")
             browser = playwright.chromium.launch(headless=True, **({"executable_path": chrome} if chrome else {}))
             try:
                 page = browser.new_page()
+                page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=base)
                 # Layout must work without third-party script/font/CDN access.
                 page.route("**/*", lambda route: route.continue_() if route.request.url.startswith(base + "/") else route.abort())
                 for width in (1366, 900, 390):
@@ -87,6 +91,28 @@ def main() -> int:
                             checked += 1
                         if page.evaluate("document.documentElement.scrollWidth > innerWidth + 2"):
                             failures.append(f"{name} at {width}px: page overflows viewport")
+                        blocks = page.locator(".rst-content div.highlight")
+                        for index in range(blocks.count()):
+                            code_blocks_checked += 1
+                            block = blocks.nth(index)
+                            if block.locator(".copy-code-button").count() != 1:
+                                failures.append(f"{name}: code block {index} lacks a copy button")
+                            if not block.locator("pre .linenos").count():
+                                failures.append(f"{name}: code block {index} lacks line numbers")
+                        if blocks.count():
+                            expected = blocks.first.locator("pre").evaluate("""pre => {
+                                const source = pre.cloneNode(true);
+                                source.querySelectorAll('.linenos').forEach(line => line.remove());
+                                return source.textContent;
+                            }""")
+                            blocks.first.locator(".copy-code-button").click()
+                            page.wait_for_function("document.querySelector('.rst-content div.highlight .copy-code-status').textContent === 'Copied'")
+                            # The actual clipboard must equal source without numbers,
+                            # not the numbered display or a success-only UI message.
+                            copied = page.evaluate("navigator.clipboard.readText()")
+                            clipboard_checks += 1
+                            if copied != expected:
+                                failures.append(f"{name} at {width}px: clipboard includes numbers or omits code")
                         if args.screenshots:
                             if tables.count():
                                 tables.first.locator("tbody td").first.scroll_into_view_if_needed()
@@ -102,6 +128,7 @@ def main() -> int:
         print("\n".join(failures))
         return 1
     print(f"Layout passed: {checked} table checks across {len(PAGES)} pages and 3 viewports.")
+    print(f"Code controls passed: {code_blocks_checked} numbered blocks, {clipboard_checks} clipboard comparisons.")
     return 0
 
 

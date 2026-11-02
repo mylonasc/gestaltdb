@@ -34,6 +34,11 @@ desktop, intermediate and phone widths with third-party network requests blocked
 `--screenshots <directory>` retains viewport captures for visual inspection. It
 does not replace manual accessibility review of stacked table/header semantics.
 
+The same browser check verifies code line numbers, copy controls and actual
+clipboard text (excluding line-number spans). Generate example graphs through the
+library with `uv run python scripts/generate_documentation_figures.py`; `--check`
+verifies that committed SVGs match the deterministic public-API outputs.
+
 The checker requires every existing `docs/*.rst` page and every packaged agent
 Markdown resource to have exactly one classification. It compares packaged topic
 resources with the literal `TOPICS` registry without importing the library and

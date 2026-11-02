@@ -11,6 +11,9 @@ The owning documentation slice should link its guide to the corresponding item.
 | `docs/_static/components.svg` with editable `components.dot` | Architecture component and data-handoff map | **Keep.** Already shows backends and serializers separately, Cypher, current/temporal read views, sampling, ontology, reasoning and explicit publication. Link new task guides to it. Extend the same DOT source only when a missing relationship materially improves the map; do not draw a competing architecture overview. |
 | `docs/_static/external_graphdb_ingest_100k.svg` | Performance evidence | **Keep with original measurement qualifications.** Not generic decoration or a new release benchmark. |
 | `docs/_static/external_graphdb_queries_100k.svg` | Performance evidence | **Keep with original measurement qualifications.** Do not redraw/relabel without the source measurements and their scope. |
+| `docs/_static/examples/property-graph-example.svg` | Quickstart and property-graph guide | Generated with GestaltDB's `visualize_nodes_edges` from the two-node example; retain the tested fixture and caption. |
+| `docs/_static/examples/cypher-example.svg` | Cypher tutorial | Generated with `visualize_nodes_edges` from the exact four-node/three-edge tutorial graph. This is the stored input, not an automatically inferred/query-filtered graph. |
+| `docs/_static/examples/reasoning-witness.svg` | Facts/rules introduction | Generated with `visualize_proof_explanation` from an evaluated rule result. This displays one witness, not every independent support. |
 
 Regenerate the architecture asset, only when its source changes, with
 `dot -Tsvg docs/_static/components.dot -o docs/_static/components.svg`.
@@ -21,6 +24,14 @@ focused lifecycle/capability extension if text and tables are insufficient.
 
 New diagrams below must answer a teaching question the existing assets do not.
 Optional animation is never a reason to discard a useful static overview.
+
+Rebuild the three **example** SVGs with
+`uv run python scripts/generate_documentation_figures.py`; verify with `--check`.
+The generator uses public GestaltDB visualization APIs and deterministic fixtures,
+not hand-edited SVG markup, external datasets or a browser screenshot. Assets are
+repository-authored under the project license. Static graph/witness figures now
+partially address VIS-03/VIS-09; query-binding animation and ontology-compilation
+stages remain separate follow-ups rather than implied deliveries.
 
 ## Focused visual opportunities
 

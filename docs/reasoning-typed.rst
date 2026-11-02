@@ -3,6 +3,24 @@
 Typed Datalog: literals, filters, aggregates
 ============================================================
 
+Before the example
+-------------------
+
+Start with :doc:`reasoning-introduction` if facts, predicates, rules or
+:term:`witnesses <witness>` are new to you. **Arity** is the number of arguments:
+binary relations have two, while n-ary relations can have more. A **literal** is
+typed data such as integer ``18`` rather than an entity identifier. A **filter**
+checks already-bound values; an **aggregate** combines a group, for example by
+counting its facts. :term:`Stratification <stratification>` orders certain rule
+layers so absence or restricted aggregation is evaluated after its inputs.
+A **multi-head rule** has several conclusions; **normalization** converts it to
+equivalent single-head rules. A predicate variable ranges over relation names
+from an explicitly supplied finite domain, not arbitrary invented predicates.
+The :doc:`glossary` links these terms to their focused guides.
+
+Typed execution model
+----------------------
+
 ``gestaltdb.reasoning.terms`` defines strict immutable literal values;
 ``gestaltdb.reasoning.typed`` evaluates finite n-ary positive Datalog over
 entities and literals with kind-strict comparisons, normalized multi-head

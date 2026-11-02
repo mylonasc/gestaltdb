@@ -34,6 +34,19 @@ html_title = "GestaltDB"
 html_static_path = ["_static"]
 html_css_files = ["documentation.css"]
 html_js_files = ["documentation.js"]
+html_codeblock_linenos_style = "inline"
+
+
+def number_code_blocks(app, doctree, docname):
+    """Number highlighted blocks without changing executable source snippets."""
+    from docutils import nodes
+
+    for node in doctree.findall(nodes.literal_block):
+        node["linenos"] = True
+
+
+def setup(app):
+    app.connect("doctree-resolved", number_code_blocks)
 
 autodoc_typehints = "description"
 # Keep dtype aliases readable; expanding numpy.str_ into prose creates an

@@ -13,6 +13,12 @@ details. Lead with one small runnable result, then concepts, common tasks, limit
 API links and advanced evidence. Avoid imposing arbitrary line limits on reference
 pages; keep entry points short by linking detail rather than removing caveats.
 
+Do not assume that a capable Python/database user knows logic-programming terms.
+Introduce nonstandard terms such as witness, closure, stratum and grounded atom
+in plain language before code uses them. Link to `docs/glossary.rst` and the
+facts/rules introduction; optional external background is supplementary, never
+the only explanation. Show one concrete meaning before abbreviated terminology.
+
 Use property-graph developer, graph-ML developer, knowledge-graph developer,
 ontology/Datalog user, reasoning integrator and operator as the shared audience
 names. Contributor and coding-agent material has a separate retrieval/development
@@ -99,6 +105,12 @@ graphics-debt issue. Use static diagrams before optional animation; alt text,
 captions and readable static fallbacks are mandatory. No semantics should depend
 on autoplay, color alone, a network fetch or interactive JavaScript. Prefer
 small diagrams driven by the runnable fixture over decorative architecture art.
+
+For actual graph/result examples, prefer `gestaltdb.viz.api` to a hand-drawn
+replacement. `scripts/generate_documentation_figures.py` builds committed static
+SVGs from the same small fixtures without a backend, browser or npm dependency.
+Keep the existing Graphviz architecture map: it describes components rather than
+data entities and is not interchangeable with an example graph visualization.
 
 ## Compatibility and evidence
 

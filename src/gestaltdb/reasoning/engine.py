@@ -143,6 +143,12 @@ def _matches(
 class DatalogEngine:
     """Stateless, deterministic positive-Datalog evaluator.
 
+    A closure is the input facts together with their rule-derived consequences.
+    A witness is one recorded derivation: the rule and concrete premises that
+    explain a conclusion. It is not every independent support or a certificate
+    that the supplied assertions are true. See the documentation's facts/rules
+    introduction and glossary for examples and terminology.
+
     Only complete closures are returned. Limits apply to each invocation;
     failure does not poison later runs. Proof collection is opt-in and bounded
     independently: truncating a witness trace never truncates logical closure.

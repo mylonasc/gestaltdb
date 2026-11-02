@@ -27,6 +27,14 @@ Create, query, and sample
 target. A property index supports direct name lookup; native labels and
 relationship types are indexed automatically.
 
+.. figure:: _static/examples/property-graph-example.svg
+   :alt: Aspirin has one outgoing binds relationship with score 0.9 to PTGS1.
+   :width: 100%
+
+   This example's two-node graph, drawn with GestaltDB's own
+   ``visualize_nodes_edges`` API. The arrow is the stored relationship, not an
+   inference step.
+
 .. code-block:: python
 
    from tempfile import TemporaryDirectory
@@ -133,7 +141,7 @@ Choose your next path
    * - Classify entities from ontology axioms
      - :doc:`ontology`
    * - Evaluate standalone binary/typed Datalog
-     - :doc:`api-workflows`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
+     - :doc:`reasoning-introduction`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
    * - Compute intervals over which conclusions hold
      - :doc:`reasoning-temporal`
    * - Connect a graph to reasoning and source-verified saved state

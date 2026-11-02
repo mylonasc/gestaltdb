@@ -35,7 +35,7 @@ Choose a capability
    * - Classify entities using semantic axioms
      - :doc:`ontology`
    * - Apply Datalog rules, literals, negation or aggregates
-     - :doc:`api-workflows`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
+     - :doc:`reasoning-introduction`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
    * - Compute when conclusions hold
      - :doc:`reasoning-temporal`
    * - Integrate reasoning with a database or saved state
@@ -75,6 +75,7 @@ benchmarks are separated from the first-run path.
 
    installation
    quickstart
+   glossary
    architecture
 
 .. toctree::
@@ -110,6 +111,7 @@ benchmarks are separated from the first-run path.
    :maxdepth: 1
    :caption: Ontology and Datalog
 
+   reasoning-introduction
    ontology
    reasoning-typed
    reasoning-negation

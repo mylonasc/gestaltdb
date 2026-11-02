@@ -11,6 +11,17 @@ of the same operation.
 The :doc:`architecture` guide shows the ingestion-to-training application path
 and how explicit reasoning adapters can supply derived graph structure.
 
+Terms before the policies
+-------------------------
+
+A **seed** is a starting node/edge, whereas an RNG seed controls reproducible
+randomness. **Fanout** is the requested number of neighbors drawn at a step.
+A **cohort** is a selected group of entities. **CSR** (compressed sparse row)
+stores each source node's adjacency in a slice of compact arrays. A **negative
+sample** is a training candidate under a rejection policy, not a verified false
+claim. See :doc:`glossary` for these terms and :doc:`property-filtering` for why
+selecting seeds alone does not constrain every later hop.
+
 Choose a Sampling Layer
 -----------------------
 
