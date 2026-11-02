@@ -654,6 +654,38 @@ def test_sampler_snapshot_from_edge_arrays_records_source_metadata(tmp_path):
     assert loaded.metadata["source_artifacts"]["edge_arrays"] == "../../edge_arrays.npz"
 
 
+@pytest.mark.parametrize("path_type", ["relative_to_snapshot", "relative_to_project", "absolute"])
+def test_sampler_snapshot_explicit_source_path_bases(tmp_path, path_type):
+    source_path = tmp_path / "db"
+    source_path.mkdir()
+    snapshot_path = tmp_path / "artifacts" / "snapshot"
+    paths = {
+        "relative_to_snapshot": "../../db",
+        "relative_to_project": "db",
+        "absolute": str(source_path),
+    }
+    snapshot = SamplerSnapshot.from_edge_arrays(
+        snapshot_path,
+        external_node_ids=["a", "b"], external_edge_ids=["ab"],
+        external_relation_ids=["R"], src_int=[0], dst_int=[1], rel_int=[0],
+        source_db={"path": paths[path_type], "path_type": path_type},
+    )
+    base_path = tmp_path if path_type == "relative_to_project" else None
+    assert snapshot.metadata["source_db"]["path"] == paths[path_type]
+    assert snapshot.source_graph_exists(base_path=base_path)
+    if path_type == "relative_to_project":
+        assert not snapshot.source_graph_exists()
+        with pytest.raises(ValueError, match="base_path is required"):
+            snapshot.open_source_graph()
+
+    # Source references are optional locators, not a load-time dependency.
+    source_path.rmdir()
+    loaded = SamplerSnapshot.load(snapshot_path)
+    assert not loaded.source_graph_exists(base_path=base_path)
+    with pytest.raises(ValueError, match="source DB path does not exist"):
+        loaded.open_source_graph(base_path=base_path)
+
+
 def test_sampler_snapshot_without_source_metadata_still_loads(tmp_path):
     snapshot = SamplerSnapshot.from_edge_arrays(
         tmp_path / "array_snapshot",

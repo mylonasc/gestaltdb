@@ -73,7 +73,6 @@ class SamplerEngineKGNeighborhoodSampler:
         path = self.cfg.paths.sampler_snapshot_path
         metadata_path = path / "metadata.json"
         if not metadata_path.exists():
-            path.mkdir(parents=True, exist_ok=True)
             arrays = np.load(self.cfg.paths.edge_arrays_path, allow_pickle=True)
             node_map = pl.read_parquet(self.cfg.paths.node_map_path).sort("node_int")
             rel_map = pl.read_parquet(self.cfg.paths.relation_map_path).sort("rel_int")
@@ -89,16 +88,16 @@ class SamplerEngineKGNeighborhoodSampler:
                 edge_src_type_values=arrays["node1_type"].astype(str),
                 edge_dst_type_values=arrays["node2_type"].astype(str),
                 source_db={
-                    "path": cfg.paths.db_path,
+                    "path": self.cfg.paths.db_path.resolve(),
                     "path_type": "relative_to_snapshot",
                 },
                 source_artifacts={
-                    "edge_arrays": cfg.paths.edge_arrays_path,
-                    "node_map": cfg.paths.node_map_path,
-                    "node_info": cfg.paths.node_info_path,
-                    "node_mappings": cfg.paths.node_mappings_path,
-                    "relation_map": cfg.paths.relation_map_path,
-                    "edge_mappings": cfg.paths.edge_mappings_path,
+                    "edge_arrays": self.cfg.paths.edge_arrays_path.resolve(),
+                    "node_map": self.cfg.paths.node_map_path.resolve(),
+                    "node_info": self.cfg.paths.node_info_path.resolve(),
+                    "node_mappings": self.cfg.paths.node_mappings_path.resolve(),
+                    "relation_map": self.cfg.paths.relation_map_path.resolve(),
+                    "edge_mappings": self.cfg.paths.edge_mappings_path.resolve(),
                 },
                 metadata={"source": "example/gnn_kg edge_arrays.npz"},
             )

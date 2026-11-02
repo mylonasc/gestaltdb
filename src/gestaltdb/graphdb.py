@@ -233,7 +233,8 @@ class GraphDB:
         self._store = store
         self.serializer = serializer
         store_path = getattr(store, "path", None)
-        self._store_path: Path | None = None if store_path is None else Path(store_path)
+        # Keep the store location stable if callers later change directories.
+        self._store_path: Path | None = None if store_path is None else Path(store_path).resolve()
         self._backend_name: str | None = _registry_name_for_instance(store, _backend_registry())
         self._serializer_name: str | None = _registry_name_for_instance(serializer, _serializer_registry())
         self._manifest: dict | None = None
@@ -275,7 +276,7 @@ class GraphDB:
         overwrite=False,
     ) -> "GraphDB":
         """Create a self-describing graph store and return an open handle."""
-        path = Path(path)
+        path = Path(path).absolute()
         backend_cls = cls._backend_class(backend)
         serializer_cls = cls._serializer_class(serializer)
         backend_options = dict(backend_options or {})
@@ -307,7 +308,7 @@ class GraphDB:
     @classmethod
     def open(cls, path, *, backend_options=None, validate_manifest=True) -> "GraphDB":
         """Open a self-describing graph store from a directory."""
-        path = Path(path)
+        path = Path(path).resolve()
         manifest_path = path / MANIFEST_FILENAME
         if not manifest_path.exists():
             raise ValueError(f"missing GestaltDB manifest: {manifest_path}. Migrate an existing DB with graph.save_manifest().")
@@ -394,7 +395,7 @@ class GraphDB:
     def save_manifest(self, path=None) -> dict:
         """Write or update the root manifest for this graph."""
         if path is not None:
-            self._store_path = Path(path)
+            self._store_path = Path(path).resolve()
         if self._store_path is None:
             raise ValueError("cannot save manifest without a store path; pass graph.save_manifest(path=...)")
         self._store_path.mkdir(parents=True, exist_ok=True)
@@ -990,6 +991,9 @@ class GraphDB:
 
         Args:
             output_path: Directory where snapshot arrays and metadata are written.
+            source_db_reference: Record the managed source location automatically.
+            source_db_path: Override location (cwd-relative, except project mode).
+            source_db_path_mode: Snapshot-relative (default), absolute, or project-relative.
             temporal: Build temporal-history arrays from one pinned read view.
             system_time: Optional system-time horizon for a temporal build.
             time_bucket: Temporal candidate-index bucket policy: ``None``,
@@ -1004,17 +1008,13 @@ class GraphDB:
         from .sampling import SamplerSnapshot
 
         if source_db_reference and "source_db" not in kwargs:
-            resolved_source_path = Path(source_db_path) if source_db_path is not None else self._store_path
-            if resolved_source_path is not None and (resolved_source_path / MANIFEST_FILENAME).exists():
-                if source_db_path_mode not in {"relative", "absolute", "relative_to_snapshot", "relative_to_project"}:
-                    raise ValueError("source_db_path_mode must be 'relative', 'absolute', 'relative_to_snapshot', or 'relative_to_project'")
-                path_type = "relative_to_snapshot" if source_db_path_mode == "relative" else source_db_path_mode
-                kwargs["source_db"] = {
-                    "path": str(resolved_source_path),
-                    "path_type": path_type,
-                    "backend": self._backend_name,
-                    "serializer": self._serializer_name,
-                }
+            source = _lifecycle.sampler_source_reference(
+                self._store_path, backend_name=self._backend_name,
+                serializer_name=self._serializer_name, source_db_path=source_db_path,
+                path_mode=source_db_path_mode,
+            )
+            if source is not None:
+                kwargs["source_db"] = source
         if temporal:
             with self.temporal.open_read_view(
                 self, manifest=self.manifest, database_id=self.database_id,

@@ -24,6 +24,27 @@ MANIFEST_FILENAME = "gestaltdb_manifest.json"
 MANIFEST_FORMAT_VERSION = 1
 MANIFEST_METADATA_KEY = b"schema:manifest"
 
+
+def sampler_source_reference(store_path, *, backend_name, serializer_name,
+                             source_db_path=None, path_mode="relative") -> dict | None:
+    """Describe a managed store without reinterpreting project-relative paths."""
+    path = Path(source_db_path) if source_db_path is not None else store_path
+    if path is None or not (path / MANIFEST_FILENAME).exists():
+        return None
+    if path_mode not in {"relative", "absolute", "relative_to_snapshot", "relative_to_project"}:
+        raise ValueError("source_db_path_mode must be 'relative', 'absolute', 'relative_to_snapshot', or 'relative_to_project'")
+    path_type = "relative_to_snapshot" if path_mode == "relative" else path_mode
+    # Managed paths are locations, not paths already relative to the snapshot.
+    if path_type != "relative_to_project":
+        path = path.resolve()
+    return {
+        "path": str(path),
+        "path_type": path_type,
+        "backend": backend_name,
+        "serializer": serializer_name,
+    }
+
+
 def backend_class(name: str):
     """Return the backend store class for a manifest name."""
     registry = backend_registry()
