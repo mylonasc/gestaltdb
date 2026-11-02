@@ -1,148 +1,147 @@
 Quickstart
 ==========
 
-This page shows the shortest path from an empty database to a useful query.
+Create a graph, select a relationship with Cypher, and reuse a snapshot for
+sampling. This standalone example uses disposable storage and closes the database
+even if an operation fails. No database server is needed.
 
-Create a Graph
---------------
+Install one backend
+-------------------
 
-.. code-block:: python
+Use a supported Python version (3.10–3.13) and install the LMDB extra for this
+example:
 
-   from gestaltdb.graphdb import Edge, GraphDB, Node
-   from gestaltdb.kvstores import LMDBStore
-   from gestaltdb.serializers import PickleSerializer
+.. code-block:: sh
 
-   graph_db = GraphDB(LMDBStore(path="quickstart_lmdb"), PickleSerializer())
+   python -m pip install "gestaltdb[lmdb]"
 
-   graph_db.put_node(Node(
-       node_id="drug-1",
-       labels=["Drug"],
-       properties={"name": "Aspirin"},
-   ))
-   graph_db.put_node(Node(
-       node_id="protein-1",
-       labels=["Protein"],
-       properties={"name": "PTGS1"},
-   ))
-   graph_db.put_edge(Edge(
-       edge_id="drug-1-protein-1",
-       source="drug-1",
-       target="protein-1",
-       properties={"type": "binds", "score": 0.9},
-   ))
+The base package has no embedded KV backend. LMDB, LevelDB and PyRex/RocksDB are
+swappable persistence choices; serializers are selected independently. This
+example explicitly chooses LMDB and built-in JSON. See :doc:`storage-backends`
+and :doc:`serializers` for other choices and their transaction/snapshot limits.
 
-Nodes and Edges
----------------
+Create, query, and sample
+-------------------------
 
-Fetch records directly when you know their IDs (``str`` or ``bytes`` both work;
-returned keys and traversal neighbors are bytes, so decode with
-``graph_db.key_to_string(...)`` for comparisons):
-
-.. code-block:: python
-
-   drug = graph_db.get_node("drug-1")
-   edge = graph_db.get_edge("drug-1-protein-1")
-
-   print(drug.properties["name"])
-   print(edge.properties["score"])
-
-Labels and Indexes
-------------------
-
-Labels are indexed automatically. Property indexes are explicit; create them for
-properties you query frequently.
-
-.. code-block:: python
-
-   graph_db.create_node_property_index("name")
-   graph_db.create_edge_property_index("score")
-
-   drugs = graph_db.nodes_by_label("Drug")
-   aspirin = graph_db.nodes_by_property("name", "Aspirin")
-   strong_edges = graph_db.edges_by_property_range("score", 0.8, None)
-
-Cypher Query
-------------
-
-Use ``GraphDB.query`` for Cypher reads and writes over labels, typed
-relationships, paths, read-composition clauses, aggregation, and mutations.
-
-.. code-block:: python
-
-   result = graph_db.query(
-       'MATCH (d:Drug {name: "Aspirin"}) '
-       'MATCH (d)-[r:binds]->(p) '
-       'WHERE r.score >= 0.8 '
-       'RETURN d.id AS drug, p.name AS protein, r.score AS score'
-   )
-
-   for record in result:
-       print(record)
-
-Typed Traversal
----------------
-
-Relationship types are stored in ``edge.properties["type"]`` and maintained in
-typed adjacency indexes.
-
-.. code-block:: python
-
-   neighbors = graph_db.neighbors_by_edge_type("drug-1", "binds", direction="out")
-   print(neighbors)
-
-Bulk Inserts
-------------
-
-Use bulk writes when loading many records.
-
-.. code-block:: python
-
-   graph_db.put_nodes([
-       Node(node_id="drug-2", labels=["Drug"], properties={"name": "Ibuprofen"}),
-       Node(node_id="protein-2", labels=["Protein"], properties={"name": "PTGS2"}),
-   ])
-   graph_db.put_edges_bulk([
-       Edge(edge_id="drug-2-protein-2", source="drug-2", target="protein-2", properties={"type": "binds"}),
-   ])
-
-Reusable Array-Native Sampling
-------------------------------
-
-For repeated training batches, build compact CSR arrays once and load an engine
-in RAM or memmap mode. Subsequent draws avoid KV reads and entity deserialization:
+**Standalone runnable example.** The query finds a drug's high-scoring protein
+target. A property index supports direct name lookup; native labels and
+relationship types are indexed automatically.
 
 .. code-block:: python
 
    from tempfile import TemporaryDirectory
+
+   from gestaltdb.graphdb import Edge, GraphDB, Node
    from gestaltdb.sampling import SamplerEngine
 
-   with TemporaryDirectory() as snapshot_dir:
-       snapshot = graph_db.build_sampler_snapshot(f"{snapshot_dir}/sampler")
+   with TemporaryDirectory() as root:
+       with GraphDB.create(
+           f"{root}/graph", backend="lmdb", serializer="json"
+       ) as graph_db:
+           graph_db.put_nodes([
+               Node("drug-1", labels=["Drug"], properties={"name": "Aspirin"}),
+               Node("protein-1", labels=["Protein"], properties={"name": "PTGS1"}),
+           ])
+           graph_db.put_edge(Edge(
+               "binding-1", "drug-1", "protein-1",
+               properties={"type": "binds", "score": 0.9},
+           ))
+
+           graph_db.create_node_property_index("name")
+           matches = graph_db.nodes_by_property("name", "Aspirin")
+           assert [node.get_id for node in matches] == ["drug-1"]
+
+           result = graph_db.query(
+               "MATCH (d:Drug {name: $name})-[r:binds]->(p:Protein) "
+               "WHERE r.score >= $minimum "
+               "RETURN d.id AS drug, p.name AS protein, r.score AS score",
+               parameters={"name": "Aspirin", "minimum": 0.8},
+           )
+           assert result.records == [
+               {"drug": "drug-1", "protein": "PTGS1", "score": 0.9}
+           ]
+           print(result.records)
+
+           # Build once while the source is open; reuse after it closes.
+           snapshot = graph_db.build_sampler_snapshot(f"{root}/sampler")
+
        engine = SamplerEngine.load(snapshot.path, mode="memmap", seed=7)
        sample = engine.sample_neighbors_external(
            ["drug-1"], fanout=5, relations=["binds"],
        )
-       assert sample.to_external(engine.snapshot)["neighbor_nodes"].tolist() == ["protein-1"]
+       assert sample.to_external(engine.snapshot)["neighbor_nodes"].tolist() == [
+           "protein-1"
+       ]
 
-To restrict every hop by properties, use build-time ``node_filter`` and
-``edge_filter``; selecting filtered seeds alone is not enough. The full workflow
-is in :doc:`property-filtering`. See :doc:`typed-sampling` for weighted neighbors,
-heterogeneous layers, walks, hard negatives, and temporal policies.
+       # create() wrote a manifest: open() recovers the backend and codec.
+       with GraphDB.open(f"{root}/graph") as reopened:
+           assert reopened.get_node("drug-1").properties["name"] == "Aspirin"
 
-Close the Store
----------------
+The printed result is::
 
-Close the database when a script or notebook cell is finished.
+   [{'drug': 'drug-1', 'protein': 'PTGS1', 'score': 0.9}]
 
-.. code-block:: python
+What the example establishes
+----------------------------
 
-   graph_db.close()
+- **Graph model:** nodes have stable IDs, labels and properties. Edges have their
+  own IDs, directed endpoints and properties; ``properties["type"]`` identifies
+  the relationship type. Multiple distinct edges may connect the same nodes.
+  Mathematically, this is a directed multigraph :math:`G=(V,E,s,t)`, where
+  :math:`s,t:E\to V` map each edge to its source and target; labels/properties
+  attach to those entities.
+- **Access choices:** use direct reads when you know IDs, explicit indexes for
+  property cohorts, and Cypher for graph patterns and composed results. Cypher
+  supports writes too, but is a documented subset, not every Cypher/GQL feature
+  (:doc:`cypher`).
+- **Index requirements:** label/type indexes are automatic; property indexes are
+  explicit. Deferred ingestion requires index rebuilds before index-backed reads
+  (:doc:`property-filtering`).
+- **Persistence:** ``create`` writes a self-describing database directory;
+  ``open`` reuses it. Context managers close handles. The temporary directory here
+  intentionally deletes the demonstration data when the block ends.
+- **Sampling:** the snapshot is immutable and does not include later graph writes.
+  Array-native sampling needs no open database. ``_external`` methods accept
+  application IDs; ``to_external`` converts compact output IDs back for inspection.
+  Memmap avoids eager array loading, not all memory use (:doc:`typed-sampling`).
 
-Next Steps
-----------
+Filtering the query's rows or seeds does **not** filter every sampled hop. Build a
+filtered snapshot with ``node_filter`` / ``edge_filter`` when that is the intended
+graph; see :doc:`property-filtering`. This example uses the whole two-node graph.
 
-- See :doc:`cypher` for the supported query syntax.
-- See :doc:`storage-backends` for backend selection.
-- See :doc:`property-filtering` for indexed cohorts and filtered snapshots.
-- See :doc:`typed-sampling` for live traversal and array-native ML sampling.
-- See :doc:`performance` for benchmark scripts and caveats.
+Choose your next path
+---------------------
+
+.. list-table:: From application goal to focused guide
+   :header-rows: 1
+   :widths: 45 55
+
+   * - I want to…
+     - Continue with…
+   * - Choose persistence, codecs or current-snapshot guarantees
+     - :doc:`storage-backends`, :doc:`serializers`, :doc:`operations`
+   * - Load Arrow/Polars tables or select indexed cohorts
+     - :doc:`api-workflows`, :doc:`property-filtering`, :doc:`performance`
+   * - Query paths, aggregate, or mutate with Cypher
+     - :doc:`cypher`
+   * - Draw layers, subgraphs, walks or temporal negatives
+     - :doc:`typed-sampling`, :doc:`random-walks`
+   * - Inspect historical state at valid/system time
+     - :doc:`temporal-versioning`
+   * - Record sourced claims, derive stored rules or inspect belief
+     - :doc:`temporal-versioning`, :doc:`modal-epistemic`, :doc:`inference-audit`
+   * - Classify entities from ontology axioms
+     - :doc:`ontology`
+   * - Evaluate standalone binary/typed Datalog
+     - :doc:`api-workflows`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
+   * - Compute intervals over which conclusions hold
+     - :doc:`reasoning-temporal`
+   * - Connect a graph to reasoning and source-verified saved state
+     - :doc:`ontology-graph`, :doc:`reasoning-authenticated-sessions`
+   * - Visualize or exchange results
+     - :doc:`visualization`, :doc:`networkx`, :doc:`notebooks`
+
+Ordinary mutable writes do not create temporal history automatically. Ontology
+compilation and standalone reasoning do not silently change graph records,
+Cypher results or sampler membership. The :doc:`architecture` guide explains
+these separate responsibilities and their explicit adapters.

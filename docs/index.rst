@@ -1,110 +1,171 @@
 GestaltDB Documentation
 =======================
 
-GestaltDB combines an embedded property graph with **fast bulk ingestion**,
-**high-performance graph sampling**, and **indexed property-graph filtering**. Store attributed nodes and
-edges on LMDB, LevelDB, or RocksDB/PyRex; select cohorts by labels, relationship
-types, properties, and Cypher; then sample live neighborhoods or reusable
-array-native snapshots for ML training. Ontology and reasoning components add
-semantic classification, temporal evidence, explanations, and incremental
-maintenance of supported conclusions.
+GestaltDB is an embedded property-graph toolkit with swappable **LMDB, LevelDB and
+RocksDB/PyRex backends**, independent serializers, indexed filtering, and Cypher
+reads and writes. **Arrow/Polars ingestion** and reusable **array-native sampling**
+support graph-data and ML pipelines. Temporal history, sourced claims, ontology
+compilation and standalone Datalog add explicit knowledge-representation workflows.
 
-Start with the quickstart if you want to create a graph and run a query. Use the
-topic pages for backend selection, serializers, Cypher syntax, ingestion,
-sampling, and benchmarks. The :doc:`architecture` guide maps library components
-and their interfaces to application workflows, with links to the corresponding
-APIs, temporal/bitemporal features, and integration boundaries.
+Start with :doc:`quickstart` to create a disposable graph, query it, and sample
+neighbors. You can use the database, sampling or standalone reasoning without
+adopting the whole stack. See :doc:`architecture` for how the components connect.
 
-Filter, Sample, Train
--------------------------
+Choose a capability
+--------------------
 
-- **Filter the property graph:** exact/range indexes, label + property and
-  relationship type + property lookups, ID-only candidate iteration, and Cypher.
-  See :doc:`property-filtering` for a complete filtered-snapshot workflow.
-- **Sample efficiently:** live typed neighbors/paths/subgraphs, or compact CSR
-  snapshots for node/edge seeds, weighted neighbors, heterogeneous layers,
-  random/metapath walks, multihop subgraphs, and hard negatives.
-  See :doc:`typed-sampling` for policies and runnable examples.
-- **Reuse arrays across batches:** RAM or memory-mapped loading avoids repeated
-  KV reads and graph-object deserialization during sampling. Temporal snapshots
-  add point/window filtering and causal multihop policies. See :doc:`performance`
-  for cost boundaries, memory trade-offs, and reproducible benchmarks.
+.. list-table:: Find the path for your application
+   :header-rows: 1
+   :widths: 45 55
+
+   * - Goal
+     - Start here
+   * - Store and query a property graph
+     - :doc:`quickstart`, :doc:`cypher`
+   * - Choose a backend, codec or persistence mode
+     - :doc:`storage-backends`, :doc:`serializers`
+   * - Load tables and select indexed cohorts
+     - :doc:`api-workflows`, :doc:`property-filtering`
+   * - Prepare graph-learning batches
+     - :doc:`typed-sampling`, :doc:`random-walks`
+   * - Query what applied then or what was recorded then
+     - :doc:`temporal-versioning`
+   * - Represent sourced/conflicting claims and reason over worlds
+     - :doc:`temporal-versioning`, :doc:`modal-epistemic`
+   * - Classify entities using semantic axioms
+     - :doc:`ontology`
+   * - Apply Datalog rules, literals, negation or aggregates
+     - :doc:`api-workflows`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
+   * - Compute when conclusions hold
+     - :doc:`reasoning-temporal`
+   * - Integrate reasoning with a database or saved state
+     - :doc:`ontology-graph`, :doc:`reasoning-authenticated-sessions`
+   * - Explore or exchange results
+     - :doc:`visualization`, :doc:`networkx`
+   * - Operate, recover or measure workloads
+     - :doc:`operations`, :doc:`performance`
+
+Important choices
+------------------
+
+- **Live traversal or reusable arrays?** Live sampling reads typed adjacency;
+  ``SamplerSnapshot`` / ``SamplerEngine`` reuse compact arrays for repeated draws.
+  Filter the eligible graph at build time, not just the seeds. Snapshot construction,
+  loading and steady-state sampling have separate costs (:doc:`typed-sampling`).
+- **Historical data or temporal reasoning?** Version history selects what is
+  visible at valid/system time; interval reasoning computes when conclusions
+  follow. Recording history does not run Datalog (:doc:`reasoning-temporal`).
+- **Stored rules or standalone Datalog?** ``graph.rules`` operates on temporal
+  claims. Standalone engines consume explicit programs/facts; database extraction,
+  admission and publication use explicit adapters (:doc:`api-workflows`).
+- **Evaluation or publication?** A computed result does not automatically modify
+  graph records. Source authentication checks source/state identity, not the truth
+  of assertions or user credentials (:doc:`reasoning-authenticated-sessions`).
+
+Guide navigation
+-----------------
+
+The first groups cover application workflows. Advanced integration pages retain
+their exact capability and authentication contracts; engineering references and
+benchmarks are separated from the first-run path.
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Filtering and Sampling
+   :maxdepth: 1
+   :caption: Getting Started
 
+   installation
+   quickstart
+   architecture
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Property Graph, Persistence, and Queries
+
+   storage-backends
+   serializers
    property-filtering
+   cypher
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Sampling and Graph ML
+
    typed-sampling
    random-walks
    sampling-consistency
 
 .. toctree::
-   :maxdepth: 2
-   :caption: User Guide
+   :maxdepth: 1
+   :caption: Temporal and Epistemic Knowledge
 
-   installation
-   quickstart
-   architecture
-   storage-backends
-   serializers
-   operations
    temporal-versioning
    modal-epistemic
    inference-audit
-   reasoning-testing
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Ontology and Datalog
+
    ontology
+   reasoning-typed
+   reasoning-negation
+   reasoning-proofs
+   reasoning-demand
+   reasoning-validation
+   reasoning-equality
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Temporal Reasoning
+
+   reasoning-intervals
+   reasoning-temporal
+   reasoning-ranges
+   reasoning-conformance
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Advanced Reasoning Integration
+
    ontology-graph
    reasoning-current-frontier
    reasoning-current-admission
    reasoning-queries
+   reasoning-generation-identity
+   reasoning-sessions
+   reasoning-authenticated-sessions
+   reasoning-typed-execution
    reasoning-range-admission
    reasoning-bound-range-publication
-   reasoning-authenticated-sessions
+   ontology-publication
    reasoning-authenticated-inferred
-   reasoning-typed-execution
+   reasoning-executors
+   reasoning-extraction
    reasoning-native-claims
    reasoning-native-locator-claims
-   ontology-benchmarks
-   ontology-publication
-   cypher
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Visualization and Interoperability
+
    visualization
    networkx
-   performance
    notebooks
 
 .. toctree::
-   :maxdepth: 2
-   :caption: API Reference
+   :maxdepth: 1
+   :caption: Operations and Performance
+
+   operations
+   performance
+   ontology-benchmarks
+
+.. toctree::
+   :maxdepth: 1
+   :caption: API and Engineering Reference
 
    api
    api-workflows
+   reasoning-profiles
+   reasoning-testing
    code-quality
-
-Quick Example
--------------
-
-.. code-block:: python
-
-   from gestaltdb.graphdb import Edge, GraphDB, Node
-   from gestaltdb.kvstores import LMDBStore
-   from gestaltdb.serializers import PickleSerializer
-
-   graph_db = GraphDB(LMDBStore(path="graph_lmdb_example"), PickleSerializer())
-
-   alice = Node(node_id="alice", labels=["Person"], properties={"name": "Alice"})
-   bob = Node(node_id="bob", labels=["Person"], properties={"name": "Bob"})
-   graph_db.put_node(alice)
-   graph_db.put_node(bob)
-
-   graph_db.put_edge(Edge(
-       edge_id="alice-knows-bob",
-       source="alice",
-       target="bob",
-       properties={"type": "knows", "since": 2024},
-   ))
-
-   result = graph_db.query('MATCH (a:Person {name: "Alice"}) MATCH (a)-[:knows]->(b) RETURN a.id, b.name')
-   print(result.records)
-
-   graph_db.close()

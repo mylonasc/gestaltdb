@@ -348,3 +348,13 @@ These inventories are the foundation for the guide-writing slices, not a claim
 that the listed documentation gaps have already been repaired. DOC-10 must
 reconcile them against the final user journeys. Optional graphics may remain
 explicit follow-ups rather than blocking useful prose and runnable examples.
+
+DOC-02's initial reader-facing pass adds goal-oriented routes to README and the
+Sphinx landing page, separates navigation into ten groups, and replaces the
+quickstart's implicit shared-state snippets with one tested disposable-database
+workflow. The example covers explicit backend/codec choice, indexes, parameterized
+Cypher, snapshot sampling after the database closes, and manifest-backed reopen.
+It introduces directed-multigraph notation with a plain-language reading. The
+new route checks guard major capability links and the quickstart executes in a
+fresh directory. Deeper introductions and advanced-page grouping remain owned by
+their capability slices; linking an existing page does not repair its content.

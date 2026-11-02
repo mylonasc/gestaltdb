@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "groups": [
-    {"role":"overview","audiences":["property-graph developer","graph-ML developer","knowledge-graph developer","ontology/Datalog user","reasoning integrator","operator"],"disposition":"rewrite","owner":"DOC-02","reason":"Provide concise goal-oriented routes without embedding every tutorial.","files":["README.md","docs/index.rst"]},
-    {"role":"tutorial","audiences":["property-graph developer"],"disposition":"rewrite","owner":"DOC-02","reason":"Keep the first workflow short, self-contained and safe; expand next-step routes.","files":["docs/quickstart.rst"]},
+    {"role":"overview","audiences":["property-graph developer","graph-ML developer","knowledge-graph developer","ontology/Datalog user","reasoning integrator","operator"],"disposition":"keep","owner":"DOC-02","reason":"Initial DOC-02 pass adds goal tables and separated navigation; reconcile destinations as capability guides land.","files":["README.md","docs/index.rst"]},
+    {"role":"tutorial","audiences":["property-graph developer"],"disposition":"keep","owner":"DOC-02","reason":"Initial DOC-02 pass provides one executable safe lifecycle/query/sampling workflow and broad next-step routes.","files":["docs/quickstart.rst"]},
     {"role":"explanation","audiences":["property-graph developer","reasoning integrator"],"disposition":"split","owner":"DOC-11","reason":"Keep the application component map and route internal service decomposition to reference.","files":["docs/architecture.rst"]},
     {"role":"operations","audiences":["operator","property-graph developer"],"disposition":"rewrite","owner":"DOC-13","reason":"Align extras, wheel installs and deployment prerequisites with the backend matrix.","files":["docs/installation.rst"]},
     {"role":"reference","audiences":["operator","property-graph developer"],"disposition":"split","owner":"DOC-11","reason":"Lead with independent backend/codec choice, then detailed capability/lifecycle reference.","files":["docs/storage-backends.rst","docs/serializers.rst"]},
