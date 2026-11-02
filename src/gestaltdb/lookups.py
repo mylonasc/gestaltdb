@@ -37,7 +37,11 @@ class EntityLookup:
         return sum(1 for _ in self._indexes.iter_node_ids_by_label(label))
 
     def nodes_by_property(self, property_name: str, value: object) -> list[Node | None]:
-        """Return decoded nodes from an exact-match property index."""
+        """Return decoded nodes from an exact-match property index.
+
+        The property must have an index (see ``create_node_property_index``);
+        unindexed properties return ``[]`` rather than raising.
+        """
         return [self._nodes.get(key) for key in
                 self._indexes.iter_node_ids_by_property(property_name, value)]
 
@@ -60,7 +64,10 @@ class EntityLookup:
     def nodes_by_property_range(self, property_name: str, start_value: object = None,
                                 end_value: object = None, include_start: bool = True,
                                 include_end: bool = True) -> list[Node | None]:
-        """Return decoded nodes from a scalar property range index."""
+        """Return decoded nodes from a scalar property range index.
+
+        The property must have an index; unindexed properties return ``[]``.
+        """
         return [self._nodes.get(key) for key in
                 self._indexes.iter_node_ids_by_property_range(
                     property_name, start_value, end_value, include_start, include_end)]
@@ -91,7 +98,13 @@ class EntityLookup:
             label, property_name, start_value, end_value, include_start, include_end))
 
     def range_query_nodes(self, property_name: str, start_val: object, end_val: object) -> Iterator[Node | None]:
-        """Yield decoded nodes through the store's raw range iteration."""
+        """Yield decoded nodes through the store's raw range iteration.
+
+        .. deprecated::
+            Prefer ``nodes_by_property_range`` with a configured property
+            index. This keeps the legacy exact raw key format and can return
+            ``[]`` where the indexed API returns rows.
+        """
         start_key = f"IDX:N:{property_name}:{start_val}:".encode("utf-8")
         end_key = f"IDX:N:{property_name}:{end_val}:\xff".encode("utf-8")
         for key, _value in self._session.store.range_iter(start_key, end_key):
@@ -109,7 +122,10 @@ class EntityLookup:
         return sum(1 for _ in self._indexes.iter_edge_ids_by_type(edge_type))
 
     def edges_by_property(self, property_name: str, value: object) -> list[Edge | None]:
-        """Return decoded edges from an exact-match property index."""
+        """Return decoded edges from an exact-match property index.
+
+        The property must have an index; unindexed properties return ``[]``.
+        """
         return [self._edges.get(key) for key in
                 self._indexes.iter_edge_ids_by_property(property_name, value)]
 
@@ -132,7 +148,10 @@ class EntityLookup:
     def edges_by_property_range(self, property_name: str, start_value: object = None,
                                 end_value: object = None, include_start: bool = True,
                                 include_end: bool = True) -> list[Edge | None]:
-        """Return decoded edges from a scalar property range index."""
+        """Return decoded edges from a scalar property range index.
+
+        The property must have an index; unindexed properties return ``[]``.
+        """
         return [self._edges.get(key) for key in
                 self._indexes.iter_edge_ids_by_property_range(
                     property_name, start_value, end_value, include_start, include_end)]

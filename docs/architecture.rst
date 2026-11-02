@@ -334,7 +334,8 @@ an ``EntityLookup`` over the current ``StorageSession``: it composes the index
 reader with the current node/edge readers to serve ``nodes_by_*``,
 ``edges_by_*`` and ``count_*`` queries without touching ``GraphDB``.
 ``view.lookup`` serves the same reads from the snapshot scope. The legacy
-``range_query_nodes`` stub keeps its exact raw key format and iteration order.
+``range_query_nodes`` is deprecated (use ``nodes_by_property_range``); it keeps
+its exact raw key format and iteration order.
 
 The decomposition is useful, with four important boundaries:
 
@@ -347,7 +348,7 @@ The decomposition is useful, with four important boundaries:
   columnar ingestion, stored rules, sampling, lifecycle, scope binding).
   Ingestion, stored rules, live traversal, and modal queries remain
   responsibilities behind that facade; temporal work has its own engine.
-* ``GraphDB.run_rules`` / ``maintain_truth`` evaluate stored temporal claims.
+* ``graph.rules.run`` / ``graph.rules.maintain`` evaluate stored temporal claims.
   Standalone Datalog evaluators use their own programs, facts, supports, and
   adapters. These are two rule-execution families with different interfaces.
 * Inside standalone reasoning, temporal closure and maintenance reuse private

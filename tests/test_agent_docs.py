@@ -67,6 +67,16 @@ def test_agent_docs_search_examples_only(capsys):
     assert "Use this for application code" not in output
 
 
+def test_agent_docs_search_resolves_service_api_aliases(capsys):
+    assert agent_docs.main(["search", "read_view", "--limit", "1"]) == 0
+    output = capsys.readouterr().out
+    assert "API: graph.temporal.open_read_view(" in output
+
+    assert agent_docs.main(["search", "run_rules", "--limit", "1"]) == 0
+    output = capsys.readouterr().out
+    assert "API: graph.rules.run(" in output
+
+
 def test_agent_docs_api_index_is_fresh():
     import importlib.util
     import json

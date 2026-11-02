@@ -1092,7 +1092,10 @@ with TemporaryDirectory() as tmpdir:
             "employment", valid_time="2024-01-15T00:00:00Z"
         ).edge.properties["revision"] == 1
 
-        assert graph.temporal.migrate_time_indexed_edges(delete_legacy=True) == ()
+        assert graph.temporal.migrate_time_indexed_edges(
+            delete_legacy=True,
+            delete_current_edge=lambda key: graph.edges.delete(key),
+        ) == ()
         assert len(list(graph.temporal.iter_edge_versions("employment"))) == 2
     finally:
         graph.close()

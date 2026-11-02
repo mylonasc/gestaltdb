@@ -8,10 +8,17 @@ Read this topic for immutable graph history, bitemporal reads, legacy
 - Temporal node/edge versions are separate from mutable current-state records.
 - Claim/node/edge retractions require same-kind asserted temporal history or an earlier assertion in the same batch. Unknown IDs fail before allocating a commit; repeated retractions of known IDs remain valid, with no validity-overlap requirement.
 - Valid intervals are half-open `[start, end)`; system horizons are inclusive visible commit prefixes.
-- Use `GraphDB.read_view` to pin graph, claim, Cypher, and temporal snapshot work to one horizon.
+- Temporal versions and read views live on `graph.temporal`. Use
+  `graph.temporal.open_read_view(graph, manifest=graph.manifest,
+  database_id=graph.database_id, valid_time=...)` to pin graph, claim,
+  Cypher, and temporal snapshot work to one horizon. There is no
+  `GraphDB.read_view`; `graph.current_read_view()` pins mutable state only.
+- Rules live on `graph.rules` (`create_rule`, `run`, `maintain`, `explain`);
+  claims and modal evaluation live on `graph.epistemic`. Older
+  `GraphDB.run_rules` / `maintain_truth` / `explain_claim` names do not exist.
 - Deferred temporal writes make indexed reads fail closed until `rebuild_temporal_indexes()` or `rebuild_deferred_indexes()` completes.
 - `TimeIndexedEdge` is deprecated legacy current-state data. Back up the complete database and stop writers before migration.
-- Run `migrate_time_indexed_edges(delete_legacy=False)`, validate representative as-of reads, then rerun with `delete_legacy=True`.
+- Run `migrate_time_indexed_edges(delete_legacy=False)`, validate representative as-of reads, then rerun with `delete_legacy=True` and an explicit `delete_current_edge` hook (for example `delete_current_edge=lambda key: graph.edges.delete(key)`).
 - Migration retries skip exact prior results. Corrupt keys/payloads and changed post-migration input fail closed.
 - Open a database with the serializer that wrote it. Temporal graph payloads support Pickle, JSON, MessagePack, and Protobuf when their dependencies and property types are compatible.
 - Format-v1 snapshots still load without temporal/integrity guarantees. Rebuild from source for authenticated format v2; there is no in-place snapshot upgrade.
@@ -40,7 +47,10 @@ with TemporaryDirectory() as tmpdir:
         migrated = graph.temporal.migrate_time_indexed_edges(delete_legacy=False)
         assert len(migrated) == 1
         assert graph.temporal.get_edge_as_of("e1", valid_time="2024-06-01T00:00:00Z")
-        graph.temporal.migrate_time_indexed_edges(delete_legacy=True)
+        graph.temporal.migrate_time_indexed_edges(
+            delete_legacy=True,
+            delete_current_edge=lambda key: graph.edges.delete(key),
+        )
     finally:
         graph.close()
 ```

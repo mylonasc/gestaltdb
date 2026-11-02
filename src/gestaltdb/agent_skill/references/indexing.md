@@ -4,7 +4,7 @@ GestaltDB automatically indexes node labels and relationship types. Property ind
 
 ## Rules
 
-- Call `create_node_property_index` before `nodes_by_property` or property range lookups.
+- Call `create_node_property_index` before `nodes_by_property` or property range lookups. Unindexed exact/range/count lookups return `[]`/`0` rather than raising; re-check `index_statistics()` or `SHOW INDEXES` when a populated lookup is unexpectedly empty.
 - Call `create_edge_property_index` before edge property lookups.
 - Pass `None` for an unbounded range endpoint.
 - Lookup order is not guaranteed; compare ID sets instead of ordered lists.

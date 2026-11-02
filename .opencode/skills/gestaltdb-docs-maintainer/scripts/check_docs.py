@@ -273,7 +273,7 @@ class DocChecker:
                         )
 
     def check_api_index(self):
-        """Verify the packaged agent-docs API index is fresh relative to graphdb.py."""
+        """Verify the packaged agent-docs API index is fresh relative to indexed APIs."""
         import importlib.util
         import json
 
@@ -303,7 +303,7 @@ class DocChecker:
         if committed != expected:
             self.add_error(
                 str(index_path),
-                "api_index.json is stale relative to src/gestaltdb/graphdb.py; run "
+                "api_index.json is stale relative to its indexed API sources; run "
                 "uv run python .opencode/skills/gestaltdb-docs-maintainer/scripts/generate_api_index.py --write",
             )
 

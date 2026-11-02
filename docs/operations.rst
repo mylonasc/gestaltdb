@@ -84,8 +84,10 @@ the serializer that originally wrote it, and run:
    graph.close()
 
 Reopen the database, validate representative ``get_edge_as_of`` and temporal
-Cypher reads, then call ``migrate_time_indexed_edges(delete_legacy=True)`` to
-remove legacy records. The migration groups records by logical edge ID. A record
+Cypher reads, then call
+``migrate_time_indexed_edges(delete_legacy=True, delete_current_edge=...)`` to
+remove legacy records (for example
+``delete_current_edge=lambda key: graph.edges.delete(key)``). The migration groups records by logical edge ID. A record
 is valid from its timestamp to the next timestamp for that ID; the final record
 is open-ended. It appends one marker-backed temporal commit and does not
 materialize mutable ``Edge`` records.

@@ -7,10 +7,11 @@ from typing import Iterable, Iterator
 
 import numpy as np
 
+from ._arrays import Array, FloatArray, IntArray
 from .walks import RandomWalkBatch
 
 
-def _count(value, name: str, *, minimum: int = 0) -> int:
+def _count(value: object, name: str, *, minimum: int = 0) -> int:
     if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
         raise ValueError(f"{name} must be an integer")
     if value < minimum:
@@ -18,7 +19,7 @@ def _count(value, name: str, *, minimum: int = 0) -> int:
     return int(value)
 
 
-def _frequencies(values, name: str) -> np.ndarray:
+def _frequencies(values: Iterable[float] | Array, name: str) -> FloatArray:
     frequencies = np.array(values, dtype=np.float64, copy=True)
     if frequencies.ndim != 1 or not np.all(np.isfinite(frequencies)) or np.any(frequencies < 0):
         raise ValueError(f"{name} must be one-dimensional, finite and non-negative")
@@ -27,21 +28,26 @@ def _frequencies(values, name: str) -> np.ndarray:
 
 @dataclass(slots=True)
 class ContextPairBatch:
-    """Aligned compact center/context IDs, positive distances and pair weights."""
+    """Aligned compact center/context IDs, positive distances and pair weights.
 
-    center_nodes: np.ndarray
-    context_nodes: np.ndarray
-    distances: np.ndarray
-    weights: np.ndarray
+    IDs are compact and belong to the walks' snapshot; convert at application
+    boundaries. Batches are bounded by ``batch_size``; see ``iter_context_pairs``
+    and ``docs/random-walks.rst`` RWS-02 for windowing and subsampling.
+    """
 
-    def to_numpy(self) -> dict[str, np.ndarray]:
+    center_nodes: IntArray
+    context_nodes: IntArray
+    distances: IntArray
+    weights: FloatArray
+
+    def to_numpy(self) -> dict[str, Array]:
         """Return arrays without copying; IDs belong to the walks' snapshot."""
         return {name: getattr(self, name) for name in (
             "center_nodes", "context_nodes", "distances", "weights"
         )}
 
 
-def _segments(batch: RandomWalkBatch, cross_restarts: bool):
+def _segments(batch: RandomWalkBatch, cross_restarts: bool) -> Iterator[IntArray]:
     nodes, edges, relations, lengths = (
         batch.node_ids, batch.edge_indices, batch.relation_ids, batch.lengths
     )
@@ -77,7 +83,7 @@ def iter_context_pairs(
     dynamic_window: bool = False,
     distance_weighting: str = "uniform",
     cross_restarts: bool = False,
-    frequencies=None,
+    frequencies: Iterable[float] | Array | None = None,
     subsample_threshold: float = 0.0,
     batch_size: int = 4096,
     seed: int | None = None,
@@ -122,10 +128,13 @@ def iter_context_pairs(
     rng = np.random.default_rng(seed)
     source = (walks,) if isinstance(walks, RandomWalkBatch) else walks
 
-    def batches():
-        centers, contexts, distances, weights = [], [], [], []
+    def batches() -> Iterator[ContextPairBatch]:
+        centers: list[int] = []
+        contexts: list[int] = []
+        distances: list[int] = []
+        weights: list[float] = []
 
-        def pack():
+        def pack() -> ContextPairBatch:
             return ContextPairBatch(
                 np.asarray(centers, dtype=np.int64), np.asarray(contexts, dtype=np.int64),
                 np.asarray(distances, dtype=np.int64), np.asarray(weights, dtype=np.float64),

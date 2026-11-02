@@ -519,18 +519,8 @@ class GraphDB:
         """
         return self.nodes.put(node)
 
-    def get_node(self, node_id) -> Node | None:
-        """Return a node by byte key.
-
-        Args:
-            node_id: Node ID bytes as stored in the backend.
-
-        Returns:
-            The decoded node, or ``None`` when absent.
-
-        Examples:
-            >>> graph_db.get_node(b"drug-1")  # doctest: +SKIP
-        """
+    def get_node(self, node_id: NodeKeyInput) -> Node | None:
+        """Return a node by key; ``str`` IDs are UTF-8 encoded automatically."""
         return self.nodes.get(node_id)
 
     def delete_node(self, node_id: NodeKeyInput) -> None:
@@ -1302,23 +1292,15 @@ class GraphDB:
         """
         return self.traversal.rebuild_typed_adjacency()
 
-    def get_edge(self, edge_id) -> Edge | None:
-        """Return an edge by byte key.
-
-        Args:
-            edge_id: Edge ID bytes as stored in the backend.
-
-        Returns:
-            The decoded edge, or ``None`` when absent.
-
-        Examples:
-            >>> graph_db.get_edge(b"d1-p1")  # doctest: +SKIP
-        """
+    def get_edge(self, edge_id: NodeKeyInput) -> Edge | None:
+        """Return an edge by key; ``str`` IDs are UTF-8 encoded automatically."""
         return self.edges.get(edge_id)
 
     # --- Legacy example range query (keeps its exact raw key format) ---
-    def range_query_nodes(self, property_name: str, start_val, end_val):
-        """Example stub: You might rely on the underlying store to handle indexing for nodes."""
+    def range_query_nodes(self, property_name: str, start_val, end_val) -> Iterator[Node | None]:
+        """Deprecated; use ``nodes_by_property_range`` instead."""
+        import warnings
+        warnings.warn("range_query_nodes is deprecated; use nodes_by_property_range instead", DeprecationWarning, stacklevel=2)
         return self.lookup.range_query_nodes(property_name, start_val, end_val)
 
     # --------------------------------
@@ -1592,8 +1574,8 @@ class GraphDB:
         """Serialize an edge for use with columnar edge ingestion."""
         return self.entity_serializer.serialize(edge, "Edge")
 
-    def get_nodes(self, node_ids: Iterable[bytes]) -> list[Node | None]:
-        """Return decoded nodes in request order (``None`` for missing IDs)."""
+    def get_nodes(self, node_ids: Iterable[NodeKeyInput]) -> list[Node | None]:
+        """Return decoded nodes in request order; accepts ``str`` or byte IDs."""
         return self.nodes.get_many(node_ids)
     def get_node_keys_generator(self, num_nodes = None, key_offset = None):
         """Yield node keys from the backing store.
@@ -1900,10 +1882,16 @@ class GraphDB:
                 tx_store.commit()
                 self._typed_adjacency_count_cache.clear()
 
-    def close(self):
+    def close(self) -> None:
         """Close the underlying key-value store.
 
         Examples:
             >>> graph_db.close()  # doctest: +SKIP
         """
         self.store.close()
+
+    def __enter__(self) -> "GraphDB":
+        return self
+
+    def __exit__(self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: Any) -> None:
+        self.close()
