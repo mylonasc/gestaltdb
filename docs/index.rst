@@ -21,7 +21,7 @@ Choose a capability
    * - Goal
      - Start here
    * - Store and query a property graph
-     - :doc:`quickstart`, :doc:`cypher`
+     - :doc:`quickstart`, :doc:`property-graph`, :doc:`cypher`
    * - Choose a backend, codec or persistence mode
      - :doc:`storage-backends`, :doc:`serializers`
    * - Load tables and select indexed cohorts
@@ -81,6 +81,7 @@ benchmarks are separated from the first-run path.
    :maxdepth: 1
    :caption: Property Graph, Persistence, and Queries
 
+   property-graph
    storage-backends
    serializers
    property-filtering

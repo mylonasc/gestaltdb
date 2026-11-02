@@ -119,7 +119,7 @@ Choose your next path
    * - I want to…
      - Continue with…
    * - Choose persistence, codecs or current-snapshot guarantees
-     - :doc:`storage-backends`, :doc:`serializers`, :doc:`operations`
+     - :doc:`property-graph`, :doc:`storage-backends`, :doc:`serializers`, :doc:`operations`
    * - Load Arrow/Polars tables or select indexed cohorts
      - :doc:`api-workflows`, :doc:`property-filtering`, :doc:`performance`
    * - Query paths, aggregate, or mutate with Cypher

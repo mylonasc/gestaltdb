@@ -358,3 +358,14 @@ It introduces directed-multigraph notation with a plain-language reading. The
 new route checks guard major capability links and the quickstart executes in a
 fresh directory. Deeper introductions and advanced-page grouping remain owned by
 their capability slices; linking an existing page does not repair its content.
+
+DOC-11's initial core/persistence pass introduces `docs/property-graph.rst`,
+rewrites backend/serializer guides around independent choices and complete
+workflows, and preserves old storage measurements in
+`docs/storage-backend-evidence.rst`. It distinguishes handle lifetime from
+transactions, live readers from pinned views, current graph from temporal
+history, and supported runtime capabilities from universal backend parity.
+Examples explicitly exercise replacement/deletion, manifests, direct construction,
+rollback, snapshot isolation, binary values and recursive temporal scalars.
+The page inventory grows to 88 files (73 Sphinx pages); the original review counts
+above remain the historical baseline.

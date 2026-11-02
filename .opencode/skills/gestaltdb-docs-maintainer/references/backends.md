@@ -2,6 +2,13 @@
 
 **When to read:** Read this file when you are adding, modifying, or debugging key-value storage backends, persistence options, transactional behavior, or self-describing store manifests (`GraphDB.create` / `GraphDB.open`).
 
+Human-facing entry points: `docs/property-graph.rst` introduces entities and ID
+domains; `docs/storage-backends.rst` covers independent backend/codec choice,
+manifest lifecycle and backend-qualified transaction/snapshot examples;
+`docs/serializers.rst` covers value compatibility and trusted-Pickle boundaries.
+Historical storage measurements are retained in
+`docs/storage-backend-evidence.rst`, not certified as current release evidence.
+
 ---
 
 ## 1. Storage Backend Architecture
