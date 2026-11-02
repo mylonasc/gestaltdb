@@ -3,7 +3,7 @@
     "src/gestaltdb/epistemic_engine.py": "6dc354771d5e7719a21123c051b46ebf49cc46b7cafbc677f7f4f6329e14ea03",
     "src/gestaltdb/graphdb.py": "0a7850e14202f75208a1c26e45eb6f3e0f60449cd41537a0e141253609d3880d",
     "src/gestaltdb/rules_engine.py": "cce4cf56c288e60875d011082d9816b22a56b5f64dad8fa64a4e5228cdf01d13",
-    "src/gestaltdb/temporal_engine.py": "78fc51735a47ca10ccc48ff3681f9f147dacc0be54ddbd4dde581c1c42332588"
+    "src/gestaltdb/temporal_engine.py": "4e799c4a5d0c399978d942a00878ff1e9edf0e52c35da42e2b8db870ef805e5a"
   },
   "methods": [
     {
@@ -1460,7 +1460,7 @@
     },
     {
       "examples": [],
-      "line": 329,
+      "line": 335,
       "name": "temporal.commit_direct",
       "returns": "",
       "signature": "temporal.commit_direct(writes: Sequence[VersionWrite], metadata: Mapping[str, object], index_mode: str)",
@@ -1478,7 +1478,7 @@
     },
     {
       "examples": [],
-      "line": 333,
+      "line": 339,
       "name": "temporal.commit_versions",
       "returns": "",
       "signature": "temporal.commit_versions(writes: Iterable[VersionWrite], metadata: Mapping[str, object] | None=None, index_mode: str | IndexMaintenanceMode='maintain')",
@@ -1487,7 +1487,7 @@
     },
     {
       "examples": [],
-      "line": 319,
+      "line": 325,
       "name": "temporal.committer",
       "returns": "",
       "signature": "temporal.committer()",
@@ -1496,7 +1496,7 @@
     },
     {
       "examples": [],
-      "line": 385,
+      "line": 391,
       "name": "temporal.correct_edge_version",
       "returns": "",
       "signature": "temporal.correct_edge_version(edge: Edge, supersedes_version_id: str, valid: TemporalIntervalInput | None=None, version_id: str | None=None, metadata: Mapping[str, object] | None=None, index_mode: str | IndexMaintenanceMode='maintain')",
@@ -1505,7 +1505,7 @@
     },
     {
       "examples": [],
-      "line": 378,
+      "line": 384,
       "name": "temporal.correct_node_version",
       "returns": "",
       "signature": "temporal.correct_node_version(node: Node, supersedes_version_id: str, valid: TemporalIntervalInput | None=None, version_id: str | None=None, metadata: Mapping[str, object] | None=None, index_mode: str | IndexMaintenanceMode='maintain')",
@@ -1541,7 +1541,7 @@
     },
     {
       "examples": [],
-      "line": 516,
+      "line": 522,
       "name": "temporal.delete_index_generation",
       "returns": "",
       "signature": "temporal.delete_index_generation(generation: int, through_commit: int)",
@@ -1550,7 +1550,7 @@
     },
     {
       "examples": [],
-      "line": 482,
+      "line": 488,
       "name": "temporal.ensure_indexes",
       "returns": "",
       "signature": "temporal.ensure_indexes(horizon: int)",
@@ -1559,7 +1559,7 @@
     },
     {
       "examples": [],
-      "line": 283,
+      "line": 289,
       "name": "temporal.entity_as_of",
       "returns": "",
       "signature": "temporal.entity_as_of(kind: Literal['node'], logical_id: str, valid_time: PointInput, system_time: PointInput | None=None, through_commit: int | None=None, hydrate: Hydrator | None=None)",
@@ -1568,7 +1568,7 @@
     },
     {
       "examples": [],
-      "line": 285,
+      "line": 291,
       "name": "temporal.entity_as_of",
       "returns": "",
       "signature": "temporal.entity_as_of(kind: Literal['edge'], logical_id: str, valid_time: PointInput, system_time: PointInput | None=None, through_commit: int | None=None, hydrate: Hydrator | None=None)",
@@ -1577,7 +1577,7 @@
     },
     {
       "examples": [],
-      "line": 287,
+      "line": 293,
       "name": "temporal.entity_as_of",
       "returns": "",
       "signature": "temporal.entity_as_of(kind: Literal['claim'], logical_id: str, valid_time: PointInput, system_time: PointInput | None=None, through_commit: int | None=None, hydrate: Hydrator | None=None)",
@@ -1586,7 +1586,7 @@
     },
     {
       "examples": [],
-      "line": 289,
+      "line": 295,
       "name": "temporal.entity_as_of",
       "returns": "",
       "signature": "temporal.entity_as_of(kind: str, logical_id: str, valid_time: PointInput, system_time: PointInput | None=None, through_commit: int | None=None, hydrate: Hydrator | None=None)",
@@ -1595,7 +1595,7 @@
     },
     {
       "examples": [],
-      "line": 290,
+      "line": 296,
       "name": "temporal.entity_as_of",
       "returns": "",
       "signature": "temporal.entity_as_of(kind: str, logical_id: str, valid_time: PointInput, system_time: PointInput | None=None, through_commit: int | None=None, hydrate: Hydrator | None=None)",
@@ -1618,7 +1618,7 @@
           "example": 1
         }
       ],
-      "line": 300,
+      "line": 306,
       "name": "temporal.get_edge_as_of",
       "returns": "",
       "signature": "temporal.get_edge_as_of(logical_id: str, valid_time: PointInput, system_time: PointInput | None=None, through_commit: int | None=None, hydrate: Hydrator | None=None)",
@@ -1627,7 +1627,7 @@
     },
     {
       "examples": [],
-      "line": 264,
+      "line": 270,
       "name": "temporal.get_edge_version",
       "returns": "",
       "signature": "temporal.get_edge_version(version_id: str, system_time: PointInput | None=None, through_commit: int | None=None)",
@@ -1636,7 +1636,7 @@
     },
     {
       "examples": [],
-      "line": 295,
+      "line": 301,
       "name": "temporal.get_node_as_of",
       "returns": "",
       "signature": "temporal.get_node_as_of(logical_id: str, valid_time: PointInput, system_time: PointInput | None=None, through_commit: int | None=None, hydrate: Hydrator | None=None)",
@@ -1645,7 +1645,7 @@
     },
     {
       "examples": [],
-      "line": 260,
+      "line": 266,
       "name": "temporal.get_node_version",
       "returns": "",
       "signature": "temporal.get_node_version(version_id: str, system_time: PointInput | None=None, through_commit: int | None=None)",
@@ -1690,7 +1690,16 @@
     },
     {
       "examples": [],
-      "line": 487,
+      "line": 256,
+      "name": "temporal.get_versions_through_batch",
+      "returns": "",
+      "signature": "temporal.get_versions_through_batch(version_ids: object, through_commit: int)",
+      "summary": "Resolve distinct version IDs once against one captured horizon.",
+      "topic": "temporal"
+    },
+    {
+      "examples": [],
+      "line": 493,
       "name": "temporal.has_visible_history",
       "returns": "",
       "signature": "temporal.has_visible_history()",
@@ -1708,7 +1717,7 @@
     },
     {
       "examples": [],
-      "line": 492,
+      "line": 498,
       "name": "temporal.index_entries",
       "returns": "",
       "signature": "temporal.index_entries(version: TemporalVersion, generation: int | None=None)",
@@ -1717,7 +1726,7 @@
     },
     {
       "examples": [],
-      "line": 463,
+      "line": 469,
       "name": "temporal.index_generation",
       "returns": "",
       "signature": "temporal.index_generation()",
@@ -1726,7 +1735,7 @@
     },
     {
       "examples": [],
-      "line": 459,
+      "line": 465,
       "name": "temporal.index_horizon",
       "returns": "",
       "signature": "temporal.index_horizon()",
@@ -1735,7 +1744,7 @@
     },
     {
       "examples": [],
-      "line": 468,
+      "line": 474,
       "name": "temporal.index_name",
       "returns": "",
       "signature": "temporal.index_name(index_name: str, generation: int)",
@@ -1744,7 +1753,7 @@
     },
     {
       "examples": [],
-      "line": 278,
+      "line": 284,
       "name": "temporal.interval_locators",
       "returns": "",
       "signature": "temporal.interval_locators(index_name: str, parts: list[bytes], instant: TemporalInstant)",
@@ -1762,7 +1771,7 @@
     },
     {
       "examples": [],
-      "line": 272,
+      "line": 278,
       "name": "temporal.iter_edge_versions",
       "returns": "",
       "signature": "temporal.iter_edge_versions(logical_id: str | None=None, system_time: PointInput | None=None, through_commit: int | None=None)",
@@ -1771,7 +1780,7 @@
     },
     {
       "examples": [],
-      "line": 310,
+      "line": 316,
       "name": "temporal.iter_edges_as_of",
       "returns": "",
       "signature": "temporal.iter_edges_as_of(valid_time: PointInput, system_time: PointInput | None=None, through_commit: int | None=None, edge_type: str | None=None, direction: str='out', source: str | None=None, target: str | None=None, hydrate: Hydrator | None=None)",
@@ -1780,7 +1789,7 @@
     },
     {
       "examples": [],
-      "line": 268,
+      "line": 274,
       "name": "temporal.iter_node_versions",
       "returns": "",
       "signature": "temporal.iter_node_versions(logical_id: str | None=None, system_time: PointInput | None=None, through_commit: int | None=None)",
@@ -1789,7 +1798,7 @@
     },
     {
       "examples": [],
-      "line": 305,
+      "line": 311,
       "name": "temporal.iter_nodes_as_of",
       "returns": "",
       "signature": "temporal.iter_nodes_as_of(valid_time: PointInput, system_time: PointInput | None=None, through_commit: int | None=None, hydrate: Hydrator | None=None)",
@@ -1807,7 +1816,7 @@
     },
     {
       "examples": [],
-      "line": 431,
+      "line": 437,
       "name": "temporal.list_orphans_locked",
       "returns": "",
       "signature": "temporal.list_orphans_locked(through_commit: int | None=None)",
@@ -1816,7 +1825,7 @@
     },
     {
       "examples": [],
-      "line": 435,
+      "line": 441,
       "name": "temporal.list_temporal_orphans",
       "returns": "",
       "signature": "temporal.list_temporal_orphans(through_commit: int | None=None)",
@@ -1825,7 +1834,7 @@
     },
     {
       "examples": [],
-      "line": 455,
+      "line": 461,
       "name": "temporal.load_index_state",
       "returns": "",
       "signature": "temporal.load_index_state()",
@@ -1848,7 +1857,7 @@
           "example": 1
         }
       ],
-      "line": 410,
+      "line": 416,
       "name": "temporal.migrate_time_indexed_edges",
       "returns": "",
       "signature": "temporal.migrate_time_indexed_edges(delete_legacy: bool=False, metadata: Mapping[str, object] | None=None, index_mode: str | IndexMaintenanceMode='maintain', delete_current_edge: Callable[[bytes], None] | None=None)",
@@ -1866,7 +1875,7 @@
     },
     {
       "examples": [],
-      "line": 524,
+      "line": 530,
       "name": "temporal.open_read_view",
       "returns": "",
       "signature": "temporal.open_read_view(graph: TemporalReadSource, manifest: Mapping[str, Any], database_id: str, valid_time: PointInput, system_time: PointInput | None=None, through_commit: int | None=None)",
@@ -1875,7 +1884,7 @@
     },
     {
       "examples": [],
-      "line": 426,
+      "line": 432,
       "name": "temporal.orphan_details",
       "returns": "",
       "signature": "temporal.orphan_details(commit_id: int, descriptor_payload: bytes)",
@@ -1884,7 +1893,7 @@
     },
     {
       "examples": [],
-      "line": 477,
+      "line": 483,
       "name": "temporal.persist_index_state",
       "returns": "",
       "signature": "temporal.persist_index_state(commit_id: int, generation: int, pending_marker: tuple[int, bytes] | None=None)",
@@ -1893,7 +1902,7 @@
     },
     {
       "examples": [],
-      "line": 372,
+      "line": 378,
       "name": "temporal.put_edge_version",
       "returns": "",
       "signature": "temporal.put_edge_version(edge: Edge, valid: TemporalIntervalInput, version_id: str | None=None, metadata: Mapping[str, object] | None=None, index_mode: str | IndexMaintenanceMode='maintain')",
@@ -1902,7 +1911,7 @@
     },
     {
       "examples": [],
-      "line": 366,
+      "line": 372,
       "name": "temporal.put_node_version",
       "returns": "",
       "signature": "temporal.put_node_version(node: Node, valid: TemporalIntervalInput, version_id: str | None=None, metadata: Mapping[str, object] | None=None, index_mode: str | IndexMaintenanceMode='maintain')",
@@ -1929,7 +1938,7 @@
     },
     {
       "examples": [],
-      "line": 503,
+      "line": 509,
       "name": "temporal.rebuild_temporal_indexes",
       "returns": "",
       "signature": "temporal.rebuild_temporal_indexes(through_commit: int | None=None, write_indexes_fn: IndexWriter | None=None)",
@@ -1938,7 +1947,7 @@
     },
     {
       "examples": [],
-      "line": 445,
+      "line": 451,
       "name": "temporal.reclaim_temporal_orphans",
       "returns": "",
       "signature": "temporal.reclaim_temporal_orphans(through_commit: int)",
@@ -1956,7 +1965,7 @@
     },
     {
       "examples": [],
-      "line": 356,
+      "line": 362,
       "name": "temporal.require_retraction_identities",
       "returns": "",
       "signature": "temporal.require_retraction_identities(identities: Iterable[RetractionIdentity])",
@@ -1974,7 +1983,7 @@
     },
     {
       "examples": [],
-      "line": 401,
+      "line": 407,
       "name": "temporal.retract_edge_version",
       "returns": "",
       "signature": "temporal.retract_edge_version(logical_id: str, valid: TemporalIntervalInput | None=None, valid_from: TemporalInput | None=None, supersedes_version_id: str | None=None, reason: str | None=None, version_id: str | None=None, metadata: Mapping[str, object] | None=None, index_mode: str | IndexMaintenanceMode='maintain')",
@@ -1983,7 +1992,7 @@
     },
     {
       "examples": [],
-      "line": 392,
+      "line": 398,
       "name": "temporal.retract_node_version",
       "returns": "",
       "signature": "temporal.retract_node_version(logical_id: str, valid: TemporalIntervalInput | None=None, valid_from: TemporalInput | None=None, supersedes_version_id: str | None=None, reason: str | None=None, version_id: str | None=None, metadata: Mapping[str, object] | None=None, index_mode: str | IndexMaintenanceMode='maintain')",
@@ -2019,7 +2028,7 @@
     },
     {
       "examples": [],
-      "line": 256,
+      "line": 262,
       "name": "temporal.system_horizon",
       "returns": "",
       "signature": "temporal.system_horizon(system_time: PointInput | None=None, through_commit: int | None=None)",
@@ -2028,7 +2037,7 @@
     },
     {
       "examples": [],
-      "line": 360,
+      "line": 366,
       "name": "temporal.version_id_exists",
       "returns": "",
       "signature": "temporal.version_id_exists(version_id: str)",
@@ -2037,7 +2046,7 @@
     },
     {
       "examples": [],
-      "line": 472,
+      "line": 478,
       "name": "temporal.visibility_checksum",
       "returns": "",
       "signature": "temporal.visibility_checksum(through_commit: int, pending_marker: tuple[int, bytes] | None=None)",
@@ -2064,7 +2073,7 @@
     },
     {
       "examples": [],
-      "line": 497,
+      "line": 503,
       "name": "temporal.write_temporal_indexes",
       "returns": "",
       "signature": "temporal.write_temporal_indexes(versions: Sequence[TemporalVersion], commit_id: int, generation: int | None=None)",
