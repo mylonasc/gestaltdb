@@ -13,26 +13,30 @@ Ontology and reasoning components add semantic classification, temporal evidence
 
 Documentation: https://mylonasc.github.io/gestaltdb/
 
-**Development version:** `0.17.0` adds bounded historical-authentication reuse,
-opt-in native logical-history batching, and expanded graph-handle ergonomics.
-Ordinary extraction remains the default after exact paired acceptance showed
-that automatic native locator adoption is not yet justified. It also includes
-the generation-pinned [reasoning-aware Cypher](docs/reasoning-queries.rst) API
-from `0.16.0`. Typing remains incremental, not whole-library strict coverage.
-See the [testing guide](docs/reasoning-testing.rst) for compatibility boundaries.
+**Start in five minutes:** the [quickstart](docs/quickstart.rst) creates a disposable
+graph, runs a parameterized Cypher query, and builds a reusable sampler snapshot.
+Backend choice is explicit; no database server is required.
+
+**Current release:** `0.17.0`. See the [changelog](CHANGELOG.md) and
+[compatibility/testing guide](docs/reasoning-testing.rst). Ordinary extraction
+remains the default; native history extraction is an explicit opt-in.
 
 ## Components and Applications
 
-| Component | Interface and application value |
+| Your goal | Start here |
 | --- | --- |
-| **GraphDB and ingestion** | Load Python objects or Arrow/Polars columns, maintain indexes, and manage persistent entities and relationships. Useful for data integration, dependency graphs, and graph-backed applications. [Operations](docs/operations.rst) · [Bulk ingestion](#arrow-ingestion-example) |
-| **KV backends and serializers** | Choose LMDB, LevelDB, or RocksDB/PyRex and an independent payload encoding. The nontransactional PyRex path provides native columnar writes for fast bulk loading. [Backends](docs/storage-backends.rst) · [Serializers](docs/serializers.rst) |
-| **Cypher and graph exploration** | Query and mutate the property graph, filter application cohorts, and inspect results visually. [Cypher](docs/cypher.rst) · [Filtering](docs/property-filtering.rst) · [Visualization](docs/visualization.rst) |
-| **Sampling engine** | Build a `SamplerSnapshot` once and reuse `SamplerEngine` for weighted/heterogeneous neighborhoods, walks, temporal sampling, and positive/negative examples for external ML frameworks. [Sampling guide](docs/typed-sampling.rst) |
-| **Temporal and epistemic storage** | Record versioned graphs and sourced claims, with valid time, system time, knowledge worlds, and conflicting evidence. Useful for historical analysis and scientific evidence tracking. [Bitemporal history](docs/temporal-versioning.rst) · [Epistemic and modal queries](docs/modal-epistemic.rst) |
-| **Ontology model and compiler** | Compile selected class/property axioms into rules with axiom origins, for semantic classification and relationship enrichment. [Ontology](docs/ontology.rst) · [Supported profiles](docs/reasoning-profiles.rst) |
-| **Standalone reasoning and temporal reasoning** | Evaluate Datalog, selective goals, validation, and interval closure. Explicit support indexes maintain conclusions as evidence changes. [Typed rules](docs/reasoning-typed.rst) · [Temporal closure](docs/reasoning-temporal.rst) · [Maintenance](docs/reasoning-maintenance.rst) |
-| **Reasoning adapters and saved state** | Map stored graph/claim data to facts; resume reasoning state, verify its source, publish inferred claims, or build derived sampling snapshots. [Sessions](docs/reasoning-sessions.rst) · [Range publication](docs/reasoning-bound-range-publication.rst) · [Inferred snapshots](docs/reasoning-authenticated-inferred.rst) |
+| Store a graph and choose persistence | [Quickstart](docs/quickstart.rst) · [graph model](docs/property-graph.rst) · swappable [backends](docs/storage-backends.rst) and independent [serializers](docs/serializers.rst) |
+| Load tables and select cohorts | [Arrow](#arrow-ingestion-example) / [Polars](#polars-ingestion-example) · [indexes and filtering](docs/property-filtering.rst) |
+| Query or mutate a property graph | [Cypher](docs/cypher.rst): paths, composition, aggregates, writes and schema commands |
+| Prepare graph-learning batches | [Sampling](docs/typed-sampling.rst) · [walks and embedding preparation](docs/random-walks.rst); training stays external |
+| Ask what applied then, or what was known then | [Temporal/bitemporal history](docs/temporal-versioning.rst) |
+| Represent sourced or conflicting knowledge | [Claims and stored rules](docs/temporal-versioning.rst) · [epistemic/modal evaluation](docs/modal-epistemic.rst) |
+| Classify entities from semantic axioms | [Ontology](docs/ontology.rst) · [supported profile](docs/reasoning-profiles.rst), not full OWL |
+| Derive facts with Datalog | [Runnable binary/typed workflows](docs/api-workflows.rst) · [typed rules, literals and aggregates](docs/reasoning-typed.rst) · [scoped negation](docs/reasoning-negation.rst) |
+| Compute when conclusions hold | [Temporal interval reasoning](docs/reasoning-temporal.rst), separate from storing history |
+| Connect reasoning to a database or saved state | [Graph projection](docs/ontology-graph.rst) · [authenticated sessions](docs/reasoning-authenticated-sessions.rst) · [range publication](docs/reasoning-bound-range-publication.rst) |
+| Explore or exchange graph results | [Offline visualization](docs/visualization.rst) · [NetworkX and static GEXF](docs/networkx.rst) |
+| Operate and measure the database | [Compatibility/recovery](docs/operations.rst) · [workload-specific performance](docs/performance.rst) |
 
 ```mermaid
 flowchart TB
