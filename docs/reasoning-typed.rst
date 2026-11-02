@@ -99,7 +99,7 @@ order, deterministic suffixed IDs). Unexpanded programs fail closed, as do
 empty domains, non-string domains and variables shared between predicate
 and term positions. There is no open-world predicate invention.
 
-Bounded typed explanations (#392)
+Bounded typed explanations
 ----------------------------------------
 
 Pass ``collect_proofs=True`` to ``evaluate`` or ``evaluate_stratified`` to
@@ -171,7 +171,7 @@ programs (mixed arities, repeated atoms, constants, filters, recursion)
 match an independent grounding oracle exactly, and repeated runs are
 deterministic.
 
-On the RE-01 analytical workloads translated 1:1 to binary typed rules
+On the analytical reference workloads translated 1:1 to binary typed rules
 (entities stay entities; no literals or filters), both engines reach
 identical closures in identical iteration counts: hierarchy N=256 completes
 1280 facts in 5 rounds, recursive N=1024 completes 9227 facts in 6 rounds,
@@ -179,7 +179,7 @@ dense N=128 completes 8128 facts in 8 rounds. The generic engine costs
 roughly 1.5–1.7x wall time there (3.7→5.6ms, 86→144ms, 535→918ms medians)
 for positional indexing with no filter work to amortize it; see
 ``benchmarks/results/reasoning-re07-typed.json``. Those original closure-only
-measurements do not measure the later optional typed proof collection.
+measurements exclude optional typed proof collection.
 The generic evaluator does not offer automatic incremental proof maintenance;
 recursive and lattice aggregation stay explicitly deferred.
 

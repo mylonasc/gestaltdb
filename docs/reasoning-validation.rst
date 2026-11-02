@@ -37,7 +37,8 @@ What is checked
   irreflexive.
 - **Functional conflicts**: two facts sharing subject and predicate with
   different remaining values. The pair is reported with a note that equality
-  is *not* inferred — equality-generating functionality belongs to RE-11.
+  is *not* inferred. Equality handling is a separate, explicit operation
+  (:doc:`reasoning-equality`).
 
 ``max_violations`` bounds the report; hitting it sets ``truncated`` instead of
 failing, and deterministic canonical order makes repeat runs identical.
@@ -74,10 +75,9 @@ The original small-workload measurement was about 70ms warm for 20,000 typed
 facts with 100 planted disjointness conflicts (single process). It is not a
 general complexity or release-performance guarantee: validation buffers the
 closure, sorts/deduplicates it, and some checks rescan it per constraint or
-conflict. See #200 (D6) for the indexing/cancellation follow-up; callers must
-bound their input independently.
+conflict. Callers must bound their input independently.
 
-Declarative structural validation (#394)
+Declarative structural validation
 ----------------------------------------
 
 ``gestaltdb.reasoning.structural`` covers shape constraints beyond conflict

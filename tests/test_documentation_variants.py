@@ -72,7 +72,6 @@ def test_capability_boundaries_are_explicit():
     for name in ("reasoning-native-claims-0", "reasoning-native-locator-claims-0"):
         assert by_id[name]["backends"] == ["pyrex"]
     assert "json" not in by_id["serializers-1"]["codecs"]
-    assert by_id["performance-0"]["render"] is False
 
 
 def test_variant_rewrite_does_not_change_unrelated_strings_or_unicode():

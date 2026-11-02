@@ -87,7 +87,7 @@ pruning. Remaining atoms are selected by current bound-bucket size, with ties
 retaining body order. This is a **heuristic**, not a calibrated cost optimizer.
 Sort-merge/hash-join operators, SCC-parallel execution and adaptive scheduling are
 not enabled. Unknown strategy names fail explicitly instead of quietly falling
-back. They remain benchmark-gated future executor work.
+back.
 
 Input/fact/rule/candidate/proof limits retain their existing meanings. The iteration
 unit differs explicitly: ``max_iterations`` and ``run.result.iterations`` count
@@ -146,8 +146,8 @@ results. Every row checks exact analytical closure and repeat-result/witness par
 This is reusable architecture and explicit inspection, **not a throughput-speedup
 claim**. Profiling adds candidate-level overhead and is deliberately opt-in.
 Reusing a plan does not reuse input indexes or avoid evaluating the closure.
-Source extraction, persistent planning, native query operators and production
-backend selection remain separate roadmap work.
+Plan reuse does not acquire source snapshots, persist plans, or select storage
+backends or native query operators.
 
 The committed ``benchmarks/results/reasoning-re04-plans.json`` contains **144
 successful rows** from clean source ``cb4351e`` (Python 3.13, three fresh workers

@@ -316,7 +316,7 @@ scope, preserving native columnar writes, optimized JSON conversion, transaction
 rollback and typed adjacency without GraphDB redispatch. These low-level loaders
 retain ``maintain``/``defer`` index policy. The existing graph-wide
 ``ingest_arrow``/``ingest_polars`` entry points still coordinate both entity
-families and the aggregate deferred-index rebuild. They now delegate to
+families and the aggregate deferred-index rebuild. They delegate to
 ``IngestionCoordinator``, which owns mode dispatch and the optional rebuild over
 the same session. Callers that need cross-family atomicity wrap the coordinator
 in a transaction; temporal staleness/rebuild requires an explicitly supplied
@@ -374,8 +374,6 @@ Conflict-tolerant evidence and truth maintenance preserve supported conclusions;
 they do not automatically resolve contradictions. Broader OWL coverage,
 signed-denial premises, datatype shapes, and reusable TBox closure remain gated
 or deferred (:doc:`reasoning-profiles`). External frameworks perform model
-training. Weighted-rule semantics and an automated neuro-symbolic loop remain
-tracked in `#124 <https://github.com/mylonasc/gestaltdb/issues/124>`_ and
-`#128 <https://github.com/mylonasc/gestaltdb/issues/128>`_. Operational guarantees
-follow the selected backend and documented coordination scope; the reliability
-record is `#381 <https://github.com/mylonasc/gestaltdb/issues/381>`_.
+training. Weighted-rule semantics and an automated neuro-symbolic loop are not
+provided. Operational guarantees follow the selected backend and documented
+coordination scope.

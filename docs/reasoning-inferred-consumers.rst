@@ -20,9 +20,8 @@ builds the sampler consumer: one immutable snapshot per pinned session with
 digests, scope, explicit selection). Selection is explicit — inferred nodes
 under one predicate plus session edges from those nodes — with one edge per
 fact, weight ``1.0`` and no hidden rewrite. Generation mismatches and
-non-empty output paths fail closed. Neither probabilistic reasoning nor
-coordination with #127/#128 beyond leaving those interfaces untouched is
-implemented here.
+non-empty output paths fail closed. This builder does not implement probabilistic
+reasoning or automated model-training loops.
 
 This legacy builder does not independently authenticate its supplied session.
 For exact shared generation/state admission, complete versioned metadata and

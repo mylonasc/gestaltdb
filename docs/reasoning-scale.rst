@@ -1,15 +1,13 @@
 :orphan:
 
-Benchmark-gated scale decisions
+Reasoning scale and resource boundaries
 ============================================================
 
-RE-26 profiles first and adopts nothing on speculation. The join-shape
-profiler (``benchmarks/reasoning_joins.py``) freezes its evidence in
-``benchmarks/results/reasoning-re26-joins.json``; the crossover comparison
-measures DRed against full rebuild across change sizes; spill and worker
-execution stay behind explicit ownership, cancellation and disk budgets.
-No second runtime is adopted, no constant-memory or zero-copy promises
-are made, and the common operator API is pinned.
+Indexed Python performs bounded joins and fixpoint evaluation. Runtime cost
+depends on join shape, closure size and update scope, not just input row count.
+The repository profiler ``benchmarks/reasoning_joins.py`` and report
+``benchmarks/results/reasoning-re26-joins.json`` compare join shapes and DRed
+against full rebuild. These are reference workloads, not latency guarantees.
 
 Measured profile
 ----------------------------------------
@@ -25,22 +23,16 @@ Measured profile
   19.2ms. Incremental wins everywhere measured; rebuild converges only
   toward global changes. Peak RSS stays under 62MB throughout.
 
-Decision record
-----------------------------------------
+Available execution and resource policies
+------------------------------------------------------------
 
-- **No bitmap/CSR/transitive-specialized/multiway engine**: the indexed
-  Python path is linear on chains and join-bound (not iteration-bound)
-  on stars; a bespoke kernel has no measured need. Revisit with a
-  workload where iterations, not joins, dominate.
-- **No differential/signed-update runtime and no B/F engine**: DRed
-  beats rebuild by 9–50x from single-edge to half-closure changes; a
-  B/F engine would need per-fact delta propagation to beat DRed on
-  sub-edge-granularity updates with huge unaffected closures — that
-  workload is documented, not observed.
-- **No out-of-core execution**: spill requires caller-owned directories
-  with explicit byte budgets (``SpillBudget`` fails closed otherwise);
-  workers require fixed counts plus cooperative cancellation
-  (``WorkerPolicy``); RSS/thread/I/O numbers accompany any future claim.
-- **Common operator API preserved**: ``check_operator_api`` pins the
-  ``v1`` entry points every engine must expose; operator drift fails
-  closed.
+- No bitmap, CSR, transitive-specialized or multiway native inference engine is
+  provided. Optional prepared plans and closure-only Polars are explicit choices
+  (:doc:`reasoning-executors`), not automatic replacements for indexed Python.
+- Incremental maintenance uses bounded supports and DRed. Differential/signed
+  update and backward/forward engines are not provided. Compare incremental work
+  with a fresh rebuild on the same update shape (:doc:`reasoning-maintenance`).
+- No executor implements spill or out-of-core closure. ``SpillBudget`` and
+  ``WorkerPolicy`` describe explicit resource policies; constructing one does not
+  enable spilling or parallel execution. Use external process limits for hard
+  memory and time bounds.

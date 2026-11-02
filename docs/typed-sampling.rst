@@ -420,7 +420,7 @@ undirected incident adjacency; the first transition is uniform and static
 snapshot edge weights multiply the bias. Distances ignore relation and
 temporal filters by design.
 
-Streaming walk corpora (RWS-01)
+Streaming walk corpora
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 For context-pair generation and the embedding pipeline extensions, see

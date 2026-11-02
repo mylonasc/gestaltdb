@@ -86,7 +86,7 @@ Persistence compatibility and races
 ------------------------------------------
 
 Existing v1 JSON files and their canonical session digests are unchanged.
-``save_session`` now serializes cooperating threads/processes through a hidden
+``save_session`` serializes cooperating threads/processes through a hidden
 sidecar lock and accepts additive ``expected_session_digest``. Unlike a horizon
 alone, this pin rejects same-horizon edits and deletion. The legacy
 ``advance_persisted_session`` also uses an exact loaded-state comparison when

@@ -3,10 +3,8 @@
 Incremental workload gates and live-reasoning workflows
 ============================================================
 
-RE-E3 exits here: every live-reasoning path has a crash, cancellation,
-staleness and recovery gate, plus measured workload evidence and a
-repeatable update/audit workflow. The rule is unchanged from RE-14 onward:
-no correctness trade for latency — incremental paths must equal full
+Live reasoning requires explicit handling of cancellation, stale state and
+recovery. Incremental paths must equal full
 rebuilds exactly, or fail closed demanding explicit rematerialization.
 
 .. code-block:: python

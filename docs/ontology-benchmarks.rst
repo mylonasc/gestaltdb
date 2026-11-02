@@ -1,17 +1,16 @@
 :orphan:
 
-Ontology solver benchmarks and v1 decision
+Ontology solver benchmarks
 ============================================================
 
-This ONTO-07 report evaluates the selected ``gestalt-core-v1`` fragment, not
+This report evaluates the selected ``gestalt-core-v1`` fragment, not
 full OWL reasoning. The implementation contract is :doc:`ontology-contract`.
 Benchmark adapters are development tools, not additional public execution
 backends. No JVM integration or new runtime dependency is introduced.
 
-For the later optional Polars closure-only prototype and its separately scoped
-RE-03 evidence, see :doc:`reasoning-polars`. The runner now accepts explicit
-``--backends polars`` and ``--threads``; the committed v1 evidence below remains
-historical evidence for its recorded source revision, not a new backend decision.
+For the optional Polars closure-only prototype, see :doc:`reasoning-polars`.
+The runner accepts explicit ``--backends polars`` and ``--threads``. Measurements
+below apply to their recorded source revision, not necessarily the current wheel.
 
 Reproduction
 ------------
@@ -140,8 +139,8 @@ when present), including distribution metadata. They are not compressed download
 an exhaustive dependency resolver, or universal platform sizes. Existing NumPy/Lark
 costs are reported separately, not charged as newly added ontology dependencies.
 
-Measurements and decision
--------------------------
+Measurements and limitations
+----------------------------------------
 
 The recorded run used Linux x86-64 (glibc 2.39), CPython 3.13.11, Clingo 5.8.2,
 OWL-RL 7.6.2, RDFLib 7.6.0 and LMDB 2.2.1, on 2026-10-19. The host reported
@@ -163,7 +162,7 @@ Committed evidence under ``benchmarks/results/``:
 
 All 168 successful rows matched their analytical closures. All four matrices
 are complete; the five limited rows are diagnostics, not successful timings.
-No decision evidence comes from the earlier interrupted larger legacy run.
+Interrupted runs are not successful performance measurements.
 
 Small shared workloads
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -277,29 +276,17 @@ Observed deployment footprint
 * The observed optional LMDB distribution is approximately 0.97 MiB. Existing
   NumPy and Lark costs remain separate; they are not new ontology dependencies.
 
-V1 backend decision
-~~~~~~~~~~~~~~~~~~~~
+Supported runtime and comparison tools
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**Keep the native engine as the v1 default, with no mandatory external solver.**
-This is a portability, footprint and semantic-contract decision, **not a claim
-that native is fastest**. It supplies exact work counters, fail-closed inference,
-bounded witnesses and no-site-packages implementation independence in a small
-incremental payload. Clingo's benchmark adapter supplies neither the same native
-candidate-budget semantics nor those historical witness facilities. Replacing
-the production evaluator on timing alone would weaken that contract.
+Indexed Python is the default runtime, with no mandatory external solver. It
+provides explicit work counters, fail-closed limits and bounded witnesses. This
+is not a claim that it is the fastest engine for every workload. See
+:doc:`reasoning-executors` for supported executor choices and proof modes.
 
-**Clingo is the preferred future optional accelerator candidate** for larger
-positive materialization workloads where its native wheel and different resource/
-explanation capabilities are acceptable. The Python interface worked across the
-tested Python 3.10-3.13 environments; measured performance/RSS here is Linux-only,
-not a wheel-availability guarantee for every platform. A production backend needs
-an explicit capability/limit contract and explanation design, not silent fallback
-or exposure of the benchmark adapter as a supported API.
-
-**Keep OWL-RL as the independent oracle/interoperability candidate**, not the v1
-default: its broader semantics and extra RDF representation are useful, but this
-fragment does not need the additional closure work. Neither external option makes
-authenticated temporal extraction disappear. Prioritize a separately scoped
-batch-read/reuse investigation before claiming scalable repeated reasoning over
-large claim sets. V1 remains bounded and explicit rather than promising unrestricted
-bulk throughput. JVM integrations remain excluded.
+Clingo and OWL-RL adapters in this comparison are benchmark tools, not supported
+application executors. Their timing, resource limits and explanation facilities
+are not interchangeable with GestaltDB's runtime contracts. OWL-RL also performs
+broader RDF closure work than the selected fragment requires. Neither comparison
+removes the cost of authenticating and extracting temporal evidence. JVM
+integrations are not provided.

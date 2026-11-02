@@ -24,6 +24,24 @@ ontology/Datalog user, reasoning integrator and operator as the shared audience
 names. Contributor and coding-agent material has a separate retrieval/development
 role and must not displace user tutorials.
 
+## Library-focused publication (required)
+
+Published guides describe the library as it exists: current APIs, supported
+workflows, limitations and compatibility requirements. They must not read as
+implementation diaries, issue acceptance reports, release-candidate checklists,
+roadmap delivery slices or interim adoption decisions. Do not use issue/phase
+IDs as headings, tell users what a later milestone will implement, or narrate
+regression investigation, CI recovery or release publication steps.
+
+State unsupported features directly rather than calling them future work.
+Keep actual format/API identifiers such as `indexed-python-v1` and necessary
+minimum dependency versions: these describe compatibility, not project phases.
+Benchmark evidence may retain source revisions, environments, methodology and
+limitations; it must not turn old measurements into claims about current wheels.
+Development plans and investigation history belong in `planning/`, not the
+published Sphinx navigation. Audit prose as well as code before calling a guide
+complete; passing Sphinx is not an editorial quality check.
+
 ## Terminology
 
 | Term | Use precisely |

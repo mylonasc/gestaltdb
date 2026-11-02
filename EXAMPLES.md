@@ -810,7 +810,7 @@ with TemporaryDirectory() as tmpdir:
         external_walks = walks.to_external(snapshot)
         print(external_walks["node_ids"][0, : walks.lengths[0] + 1].tolist())
 
-        # RWS-01: consume bounded walk batches rather than a whole corpus.
+# Consume bounded walk batches rather than a whole corpus.
         for walk_batch in engine.iter_random_walks(
             walk_length=4, walks_per_node=2, batch_size=2, direction="any"
         ):
@@ -854,7 +854,7 @@ requests because they cannot expose one unified verifiable source snapshot.
 Read-only Cypher accepts the same option, and `graph.current_read_view()` keeps
 several direct graph reads on one horizon.
 
-## Stream DeepWalk Training Inputs (RWS-01–RWS-07)
+## Stream DeepWalk Training Inputs
 
 ```python
 from tempfile import TemporaryDirectory

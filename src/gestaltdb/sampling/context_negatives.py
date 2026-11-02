@@ -1,4 +1,4 @@
-"""Co-occurrence-objective negatives, separate from KG edge negatives (RWS-03)."""
+"""Co-occurrence-objective negatives, separate from KG edge negatives."""
 
 from __future__ import annotations
 

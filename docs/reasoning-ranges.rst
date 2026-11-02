@@ -17,7 +17,7 @@ unchanged rule IDs), or legacy closures without a digest, trigger a full rebuild
 with zero reused segments. Manually constructed unbound closures can still be
 verified by fresh evaluation; they are never admitted as reusable caches.
 
-Stratified negation and aggregates (#393)
+Stratified negation and aggregates
 -----------------------------------------
 
 Range evaluation covers the full evaluated fragment, not just positive

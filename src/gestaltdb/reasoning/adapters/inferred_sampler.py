@@ -1,8 +1,7 @@
 """Immutable sampler artifacts from explicitly selected inferred views.
 
-The scenario milestone (``test_reasoning_inferred_consumers``) answers a goal
-from a session and reconciles a managed world. This slice builds the second
-consumer: an immutable ``SamplerSnapshot`` derived from one pinned session.
+Build an immutable ``SamplerSnapshot`` from explicitly selected conclusions
+of one pinned session, without rewriting the base graph.
 
 Selection is explicit and generation-bound. The caller names a unary node
 predicate (for example ``person``) and one or more binary edge predicates

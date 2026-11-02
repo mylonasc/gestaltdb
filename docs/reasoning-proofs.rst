@@ -42,7 +42,7 @@ minimality is combinatorial and explicitly deferred: the contract covers
 bounded one-step witnesses (``max_proof_bytes`` fails closed instead of
 truncating), and exports state their complexity honestly.
 
-Typed derivation tracking (#392)
+Typed derivation tracking
 ----------------------------------------
 
 ``GenericEngine.evaluate(..., collect_proofs=True)`` records one
@@ -76,6 +76,5 @@ Measured cost
 
 On a 30-link chain (495 facts, 465 supports): witness selection plus
 export in ~0.1ms (525 bytes), checkpoint in ~5.3ms, resume with full
-re-validation in ~7.0ms. The export vocabulary is the interchange that
-native proof trees (#126) consume — generation without the engine,
-never proof without the evidence.
+re-validation in ~7.0ms. The export vocabulary records evidence for explanation
+consumers; it does not independently verify proofs.

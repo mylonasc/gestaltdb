@@ -1,11 +1,11 @@
 :orphan:
 
-Pinned reasoning pipeline decision: RE-342
+Pinned reasoning pipeline benchmarks
 ================================================
 
-Decision (2026-10-24): **retain indexed Python as default; do not automatically
-adopt frontier demand, prepared execution, Polars or native extraction.** The
-new frontier API is useful selective-read infrastructure, not a demonstrated
+Indexed Python is the default; frontier demand, prepared execution, Polars and
+native extraction require explicit selection. The
+frontier API provides selective reads, not a demonstrated
 latency optimization on these authenticated temporal fixtures.
 
 Evidence
@@ -94,7 +94,7 @@ This limits application admission despite a declared installed runtime.
 The 1024-input proof case passed for both indexed engines at roughly
 0.345 / 0.309 seconds, with bounded witness semantics unchanged.
 
-Native boundary and decision
+Native comparison limits
 ------------------------------
 
 Benchmark-only PyRex modes compare native temporal-record scan/decode and native
@@ -113,17 +113,15 @@ is roughly 1025 MB versus 635 MB in the primed reference. This is not sufficient
 to adopt a general native claim consumer. The small denser case showed no
 material native pipeline win. No universal native-speedup claim follows.
 
-The next performance investigation should safely amortize repeated source
-authentication within a pinned extraction session, with corruption, rebinding,
-concurrent-write and cancellation parity gates. Do not simply skip verification
-or trust an opaque cached digest. Explicit intermediate-cap ownership is now
+Source authentication must not be skipped or replaced by trusting an opaque
+cached digest. Explicit intermediate-cap ownership is
 available through the dispatcher/current-graph consumer (see
 :doc:`reasoning-executors`); the default remains unchanged, and these original
-bounded failures are retained. The explicit-budget continuation below measures
+bounded failures are retained. The explicit-budget comparison below measures
 successful larger Polars pipelines; raising the cap alone is not executor
-admission or a memory guarantee. Broader #194/#249 acceptance remains separate.
+admission or a memory guarantee.
 
-Explicit-budget continuation: #255
+Explicit-budget comparison
 ----------------------------------
 
 Four additional reports, ``benchmarks/results/reasoning-re255-*-100k.json``, bind
@@ -132,7 +130,7 @@ clean source ``b87ef1c035832425349ce3d426b226b3ce1ebde5`` and harness SHA256
 All 48 observations pass exact assertion-version evidence, goal and analytical
 full-closure parity (200028 selective / 300019 sparse facts). Collection ran
 serially, with three repetitions per method/cache/backend/shape, outside the
-checkout. No bounded/error/timeout observations occurred in this continuation;
+checkout. No bounded/error/timeout observations occurred in this comparison;
 the original 18 default-cap failures and initial diagnostic remain unchanged.
 
 The caller explicitly chose ``polars_max_intermediate_rows=1000000``; the
@@ -189,14 +187,14 @@ benefit. More precisely, paired group medians are 1575--1595 indexed versus
 1577--1607 Polars on LMDB and 631--662 versus 633--668 on PyRex. RSS includes
 mapped pages, priming and parity validation, not isolated engine allocation.
 
-**Decision remains unchanged:** indexed Python stays the default. Explicit
+Indexed Python is the default. Explicit
 closure-only Polars is a measured option for these bounded workloads with a
 caller-owned cap and conversion/runtime prerequisites, not automatic adoption.
 Three-sample P95 is merely the maximum; first is not OS-cold, fixed method order
 and host effects limit ranking, and the matrix is neither a crossover threshold
 search nor a general scale/concurrency/durability certification. Typed proof,
 maintenance and range execution do not become Polars-capable through this data.
-General native historical/correction/concurrent-source admission remains #194.
+These results do not establish general native concurrent-source admission.
 
 Reproduction
 ---------------
@@ -213,7 +211,7 @@ versions and harness hashes. For example:
    uv run --extra backends --extra polars python -m benchmarks.reasoning_frontier_pipeline --rows 10000 --backend leveldb --methods frontier indexed-python --repeats 3 --output /tmp/opencode/re342-leveldb.json
    uv run --extra backends --extra polars python -m benchmarks.reasoning_frontier_pipeline --rows 1024 --backend lmdb --methods indexed-python indexed-scc --proofs --repeats 3 --output /tmp/opencode/re342-proofs.json
 
-For the #255 continuation, repeat for ``lmdb`` / ``pyrex`` and
+For the explicit-budget comparison, repeat for ``lmdb`` / ``pyrex`` and
 ``selective`` / ``sparse`` from a clean committed tree, keeping all output files
 outside the checkout until collection is finished:
 

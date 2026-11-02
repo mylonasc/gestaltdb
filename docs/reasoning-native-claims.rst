@@ -127,7 +127,7 @@ native handle and view rebinding are rejected. Inherited evaluation returns a
 complete nonpersisting closure with the existing bounded witness contract, not
 all-support provenance or a publication permit.
 
-Measured grouped-read continuation (#194)
+Grouped-read measurements
 ------------------------------------------
 
 ``benchmarks.reasoning_frontier_pipeline`` explicitly names this path
@@ -198,12 +198,13 @@ method order is fixed, cache/host effects remain uncontrolled, and three-sample
 P95 is only the maximum. Ingestion, priming and parity checking are excluded
 from total pipeline time, with separate load/worker-wall metadata retained.
 
-**Decision: no native adoption.** Grouping removes the per-claim composition
+Ordinary extraction remains the default. Grouping removes the per-claim composition
 bottleneck and permits successful 100K reads while preserving integrity, but
 the admitted native full scan is slower and uses more worker RSS than ordinary
 extraction here. Prior restricted native decoder results are not transferable
-to this source. Native index-locator admission, transactional source expansion,
-support/publication stage accounting and broader #194 acceptance remain separate.
+to this source. Native index-locator admission is described separately in
+:doc:`reasoning-native-locator-claims`. These measurements do not cover
+transactional claim admission, support maintenance or publication.
 
 Reproduce from a clean committed tree, writing output outside the checkout:
 

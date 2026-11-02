@@ -109,10 +109,9 @@ raises without a successful partial result; the borrowed view remains owned by
 the caller. Row/work limits are not byte/RSS or hard deadline guarantees.
 
 Fewer yielded rows do not imply lower wall time: repeated queries and source
-authentication can dominate. The initial scheduler deliberately revisits rules
+authentication can dominate. The scheduler revisits rules
 and prefixes; it is a correctness-first bounded reference strategy, not a native
 join optimizer. Compare it with predicate-selective extraction on the same
-authenticated source before claiming a workload-specific improvement. Larger
-pipeline/executor/native comparisons are tracked in #342/#194/#255.
-The first measured decision and reproducible 100K-input evidence are in
+authenticated source before claiming a workload-specific improvement.
+Reproducible 100K-input pipeline measurements and their limitations are in
 :doc:`reasoning-frontier-benchmarks`; defaults remain unchanged.

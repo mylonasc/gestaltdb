@@ -22,9 +22,6 @@ and its protein endpoint; ``WHERE`` filters the bound rows.
    edges are shown; the first query below selects only Aspirin's PTGS1 target
    when the minimum score is 0.8.
 
-.. Graphics debt VIS-03 (#495): a small binding/result visual may complement
-   this fixture; retain the existing architecture diagram for component handoffs.
-
 .. code-block:: python
 
    from tempfile import TemporaryDirectory

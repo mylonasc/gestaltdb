@@ -1,4 +1,4 @@
-"""Bounded typed/metapath and finite-state walk schemas (RWS-05)."""
+"""Bounded typed/metapath and finite-state walk schemas."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ class WalkTransition:
             multiply relation weights and optional static edge weights.
 
     See Also:
-        ``docs/random-walks.rst`` RWS-05 for a runnable state-machine example.
+        ``docs/random-walks.rst`` for a runnable state-machine example.
     """
 
     source_state: int
@@ -96,7 +96,7 @@ class WalkSchema:
         max_transitions: Arc-count bound.
 
     See Also:
-        ``docs/random-walks.rst`` RWS-05 for metapath/state-machine examples.
+        ``docs/random-walks.rst`` for metapath/state-machine examples.
     """
 
     node_types: tuple[int, ...] | None = None

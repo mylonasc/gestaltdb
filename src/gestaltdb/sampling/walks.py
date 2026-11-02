@@ -1,4 +1,4 @@
-"""Walk batches and bounded corpus iteration (RWS-01)."""
+"""Walk batches and bounded corpus iteration."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ class RandomWalkBatch:
     populated transitions, including restart transitions.
 
     See Also:
-        ``docs/random-walks.rst`` RWS-01 for a runnable streaming example and
+        ``docs/random-walks.rst`` for a runnable streaming example and
         the all-compact-IDs-same-snapshot contract.
     """
 
@@ -82,7 +82,7 @@ def iter_walk_batches(
     ``start_nodes`` are compact IDs (``None`` visits every node);
     ``walk_type`` is ``"random"``, ``"node2vec"``, or ``"policy"`` with extra
     options passed to the selected kernel. Prefer ``engine.iter_random_walks``
-    unless you already hold compact seeds; see ``docs/random-walks.rst`` RWS-01.
+    unless you already hold compact seeds; see ``docs/random-walks.rst``.
     """
     for name, value in (("walks_per_node", walks_per_node), ("batch_size", batch_size)):
         if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):

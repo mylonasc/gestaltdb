@@ -328,6 +328,19 @@ as documentation corrections.
 
 ### Reconciled delivery status (2026-11-03)
 
+Publication quality is a required acceptance condition: guides describe current
+library contracts, not intermediate implementation work, roadmap slices, regression
+resolution or release logistics. The library-focused editorial pass removes phase
+headings and stale prerelease advice, updates range/equality/publication boundaries,
+and separates dense development reports into `planning/documentation-review/history/`.
+Qualified reproducible benchmark evidence remains available without adoption diaries.
+An editorial regression check covers Sphinx, README, examples and packaged guides;
+it supplements, not replaces, semantic review. This work remains unmerged until its
+stacked PR is delivered and does not close the broader epic slices.
+The fixed performance setup is now in the archived report rather than the public
+guide, leaving 41 current tab declarations and the same 389 rendered alternatives
+(365 executable, 24 compiled shared-state fragments).
+
 - **Merged/delivered:** DOC-01 #481 (PR #496), DOC-02 #482 (PR #498),
   DOC-11 #491 (PR #499), consolidated by #494 at `69fe552`. Their child
   issues are closed and #480's corresponding delivery entries are checked.

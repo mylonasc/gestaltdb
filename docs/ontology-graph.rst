@@ -65,10 +65,10 @@ Self loops can appear if logically entailed. Results are sorted external IDs,
 not compact sampler IDs, physical edge IDs or paths. A caller can use selected
 IDs as seeds for a separate asserted-graph sampler, but that sampler's next hop
 does not automatically use inferred relations. There is no implicit multi-hop,
-weighted sampling or Cypher clause rewrite. This explicit semantic boundary is
-the integration point for the broader hierarchical-sampling work in issue #127.
+weighted sampling or Cypher clause rewrite. Use explicit mappings and hierarchy
+objects where the relevant traversal or query API supports them.
 
-Typed n-ary projection (#396)
+Typed n-ary projection
 ----------------------------------------
 
 ``gestaltdb.reasoning.adapters.typed_graph`` projects the same snapshot

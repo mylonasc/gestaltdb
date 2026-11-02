@@ -40,7 +40,7 @@ Execution and semantic boundary
 ----------------------------------------
 
 Input conversion is bounded Python work: deduplicate facts, intern full entity/
-predicate/constant names with the RE-02 dictionary and transfer compact uint64
+predicate/constant names with the shared relation dictionary and transfer compact uint64
 relations through Arrow. Final decoding iterates result rows in Python. These
 boundary costs are measured, not described as zero-copy KV decoding.
 
@@ -99,16 +99,15 @@ caller, not authenticated database horizons. A new invocation rebuilds its state
 different contexts/dictionaries never share caches implicitly. No PyRex scan API,
 storage dependency or JVM runtime is required by this prototype.
 
-Measurements and decision
+Measurements and limitations
 ----------------------------------------
 
-Extend the existing analytical comparison runner rather than introduce a second
-oracle. For example::
+Use the analytical comparison runner from a source checkout. For example::
 
    uv run --with pyarrow --with polars --with clingo python -m benchmarks.ontology --backends native polars clingo --sizes 16 128 --repeats 3 --threads 1 --temp-root /tmp/opencode --output /tmp/opencode/re03-comparison.json
    uv run --with pyarrow --with polars --with clingo python -m benchmarks.ontology --backends native polars clingo --workloads hierarchy recursive duplicates --sizes 1024 --repeats 3 --threads 4 --temp-root /tmp/opencode --output /tmp/opencode/re03-sparse.json
 
-The runner now records thread caps for Polars/OpenMP/BLAS, per-stage telemetry,
+The runner records thread caps for Polars/OpenMP/BLAS, per-stage telemetry,
 runtime installed-file footprint and source digests. Every successful row checks
 the identical analytical closure and digest. ``native`` retains the historical
 benchmark name for indexed Python, not a compiled extension. Clingo remains a
@@ -134,9 +133,8 @@ consistently slower with Polars. Peak full-worker RSS in the comparison was abou
 tested N=1024 sparse workloads; the one- and four-thread matrices were rerun
 sequentially on the same shared host (not a dedicated CPU-isolated machine).
 
-This supports continuing the columnar experiment, **not switching the default**.
-No million-row, universal scaling, proof-mode or maintenance-performance claim is
-made. Full RE-06 backend selection still needs representative user workloads,
-source extraction, footprint, failure/cancellation and supported-mode evidence.
-The compact Python batch container has no independent fixpoint executor to time;
-its conversion/transfer costs are measured in the RE-02 report instead.
+Polars remains explicit and closure-only, not the default. These measurements do
+not establish million-row scaling, proof-mode or maintenance performance. Include
+source extraction and conversion in application comparisons. The compact Python
+batch container is not an independent fixpoint executor; see
+:doc:`reasoning-batches` for conversion and transfer costs.

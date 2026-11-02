@@ -1,4 +1,4 @@
-"""Explicit edge/neighbor transition units and node2vec bias (RWS-07)."""
+"""Explicit edge/neighbor transition units and node2vec bias."""
 
 from __future__ import annotations
 

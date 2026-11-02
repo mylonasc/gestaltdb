@@ -187,7 +187,7 @@ def explain_plan(program: Program, *, identity: CompilationIdentity) -> dict:
     """JSON-safe structural plan description; no source reads or evaluation.
 
     Dynamic indexed-bucket ordering has no static row estimates. Actual rows,
-    selected indexes and SCC execution belong to RE-04, not fabricated telemetry.
+    selected indexes and SCC execution are not reported by structural inspection.
     Each call returns fresh mutable presentation data, never mutable plan state.
     """
     if not isinstance(program, Program):

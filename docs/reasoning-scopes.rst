@@ -25,7 +25,6 @@ Calculi stay gated
 combination, retraction, convergence and provenance policies — each with
 independent tests — plus a user-value scenario. No calculus ships
 approved; ``approval_gates`` names exactly what an extension must
-present. Probabilistic rules (#124) and neuro-symbolic loops (#128)
-coordinate through this gate: combination is a separately selected
-calculus with its own retraction, convergence and provenance contract,
-never a default mode.
+present. Probabilistic rules and automated neuro-symbolic loops are not built-in
+capabilities. An extension must explicitly define its calculus, retraction,
+convergence and provenance contracts; it is never a default mode.

@@ -71,10 +71,9 @@ class ExecutorDecision:
 def select_executor(request: ExecutorRequest) -> ExecutorDecision:
     """Select an executor deterministically; identical requests agree.
 
-    Selection encodes the RE-01/RE-03/RE-04/RE-05 measurements: indexed Python
-    is the reference default with the smallest startup and RSS and the fastest
-    small-workload pipelines; the Polars prototype wins dense closures but
-    costs import time and memory and supports no proofs. No workload-size
+    Indexed Python is the default; Polars is an explicit closure-only option.
+    Runtime costs depend on workload shape, conversion and optional imports.
+    The Polars prototype does not collect proofs. No workload-size
     heuristic overrides an explicit request, and no request silently falls
     back to a weaker executor.
     """
