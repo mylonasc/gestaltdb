@@ -4,7 +4,7 @@
   "review_date": "2026-11-02",
   "reviewed_at": "2026-11-02T20:03:14Z",
   "roadmap": {"issue": 156, "state": "closed"},
-  "note": "Reviewed hsa-dev 089583b after #450-#476. Main contains HSA-01/HSA-02; hsa-dev contains HSA-03/HSA-04/HSA-06 and the final 1,512-observation / 756-pair acceptance matrix. #194 remains open for closure reconciliation; #451 is closed with all exit criteria evidenced (HSA-01-04 and HSA-06 delivered; HSA-05 deferred and not required). Native adoption remains deferred and ordinary extraction remains default. #156/phases/#391-#396 remain closed; no changed GR dispositions.",
+  "note": "Reviewed integrated HSA source 089583b after #450-#476; #477 corrected review records without changing library sources. The landing includes HSA-01/HSA-02/HSA-03/HSA-04/HSA-06 and the final 1,512-observation / 756-pair acceptance matrix. #194 remains open for closure reconciliation; #451 is closed with all exit criteria evidenced (HSA-05 deferred and not required). Native adoption remains deferred and ordinary extraction remains default. #156/phases/#391-#396 remain closed; no changed GR dispositions.",
   "phases": {
     "RE-E1": {
       "issue": 157,
