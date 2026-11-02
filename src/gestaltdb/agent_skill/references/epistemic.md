@@ -18,11 +18,12 @@ valid/system time, or distinguishing contradictory evidence from uncertainty.
 - `claim_status` returns `ClaimStatus.SUPPORTED`, `REFUTED`, `BOTH`, or `UNKNOWN` under open-world semantics.
 - Pass either `system_time` or `through_commit` for historical knowledge. A `GraphReadView` pins the horizon and supplies a default valid time.
 - Deferred claim writes make the temporal index family stale; rebuild the temporal indexes before indexed reads.
-- `create_rule(name, when=[...], then=...)` versions safe positive Horn rules; head variables must be bound in the body and predicates must be constants.
-- `run_rules(as_of=...)` joins positive entity claims within one world, intersects premise validity, and stores conclusions under the `gestaltdb:rules` agent with rule/premise version justifications.
+- All claim writes/reads live on `graph.epistemic` (`assert_claim`, `correct_claim`, `retract_claim`, `iter_claims_as_of`, `claim_status`).
+- `graph.rules.create_rule(name, when=[...], then=...)` versions safe positive Horn rules; head variables must be bound in the body and predicates must be constants.
+- `graph.rules.run(as_of=...)` joins positive entity claims within one world, intersects premise validity, and stores conclusions under the `gestaltdb:rules` agent with rule/premise version justifications.
 - Set `max_iterations`, `max_derivations`, and `max_justifications` for workload bounds. A limit error persists no partial conclusions, and an unchanged repeat run is idempotent.
-- Call `maintain_truth(as_of=...)` after premise or rule changes. It keeps independent supports, corrects changed justifications, and retracts a conclusion only after its final support disappears. Later calls can omit `as_of` to resume the previous valid time.
-- `explain_claim(claim_id, valid_time=..., system_time=...)` returns exact claim/rule version nodes and ordered derivation edges. Use `max_depth` and `max_nodes` to bound traversal; inspect `truncated` to detect a reached bound.
+- Call `graph.rules.maintain(as_of=...)` after premise or rule changes. It keeps independent supports, corrects changed justifications, and retracts a conclusion only after its final support disappears. Later calls can omit `as_of` to resume the previous valid time.
+- `graph.rules.explain(claim_id, valid_time=..., system_time=...)` returns exact claim/rule version nodes and ordered derivation edges. Use `max_depth` and `max_nodes` to bound traversal; inspect `truncated` to detect a reached bound.
 - `assert_world_accessibility(agent=..., from_world=..., to_world=..., kind=...)` stores positive temporal links in independent `belief`, `knowledge`, and `modal` frames.
 - `entails(agent, proposition, mode, world=..., valid_time=...)` evaluates `BELIEVES`, `KNOWS`, `POSSIBLE`, or `NECESSARY` in one pinned read view. Always set finite `max_depth` and `max_states` appropriate to the workload.
 - Modal formulas accept atoms plus `NOT`, `AND`, `OR`, and nested modal operators. They use four-valued paraconsistent semantics; missing accessibility is `unknown`, and contradictions do not entail unrelated atoms.

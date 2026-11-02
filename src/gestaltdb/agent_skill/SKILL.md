@@ -57,18 +57,19 @@ The package root intentionally does not export `GraphDB`, `Node`, `Edge`, storag
 - Install backend and serializer extras independently, for example `gestaltdb[leveldb,msgpack]`; Pickle and JSON need no serializer extra, while a base install has no embedded backend.
 - Use `GraphDB.create(path, backend="leveldb", serializer="json")` for a self-describing database directory, or construct `GraphDB(store, serializer)` directly.
 - Use `GraphDB.open(path)` to reopen a self-describing database created with `GraphDB.create`.
-- Use `graph.index_statistics()` and `graph.manifest` for inspection; inspect retrieved `Node.properties` and `Edge.properties` for property names/values.
-- Traversal records carry byte IDs under `neighbor_id`/`edge_id`/`source_id`/`target_id`; decode with `graph.key_to_string(...)` and compare ID sets, since lookup order is not guaranteed.
-- Always close graph handles with `graph.close()` in a `finally` block.
+- Use `graph.index_statistics()` and `graph.manifest` for inspection; inspect retrieved `Node.properties` and `Edge.properties` for property names/values. `manifest["graph"]` holds index definitions, not live totals; use `count_*` helpers or Cypher `count(*)` for totals. List keys with `graph.nodes.keys()` / `graph.edges.keys()` and fetch with `get_node(s)` / `get_edge`.
+- ID-taking reads (`get_node`, `get_edge`, traversal seeds) accept `str` or `bytes`; traversal records and key iterators yield bytes, so decode with `graph.key_to_string(...)` and compare ID sets, since lookup order is not guaranteed.
+- Node identity is the `get_id` property (also `to_dict()["id"]`); there is no `node.id` and `get_id` is not callable.
+- Always close graph handles with `graph.close()` in a `finally` block (`with GraphDB.create/open(...) as graph:` also works).
 - Store relationship types as `Edge(properties={"type": "REL_TYPE"})`.
-- Create property indexes explicitly before index-backed property lookups.
+- Create property indexes explicitly before index-backed property lookups; unindexed lookups return `[]`/`0`, so check `index_statistics()` or `SHOW INDEXES` when a populated lookup is empty.
 - Run `graph.rebuild_deferred_indexes()` before relying on secondary indexes after deferred ingestion.
 - Use `SamplingHop` and `SamplingPattern` for GraphDB typed traversal sampling with external node IDs.
 - Use reusable `SamplerSnapshot`/`SamplerEngine` arrays for repeated ML batches; RAM/memmap sampling avoids repeated KV reads and graph-object deserialization.
 - Filter the sampled property graph with build-time `node_filter`/`edge_filter`; filtering seeds alone does not constrain every hop. Callbacks scan source records, while runtime sampling uses relation/direction/temporal policies.
 - Import visualization helpers from `gestaltdb.viz.api`. `VizOptions` configures labels, attribute styling, and caps; `VizFigure.save()` writes offline HTML, while `as_svg()` / `save_svg()` generate dependency-free static SVG. Browser PNG and view-state exports are local; static Python SVG does not capture iframe state.
 - Use `assert_claim` for sourced positive/negative propositions and `claim_status` for open-world four-valued evaluation at valid/system time.
-- Use `create_rule` and bounded `run_rules(as_of=...)` for positive Horn inference over entity claims; use `maintain_truth` after premise/rule changes and `explain_claim` for bounded historical derivation graphs.
+- Use `graph.rules.create_rule` and bounded `graph.rules.run(as_of=...)` for positive Horn inference over entity claims; use `graph.rules.maintain` after premise/rule changes and `graph.rules.explain` for bounded historical derivation graphs.
 - Use `assert_world_accessibility` plus bounded `entails` for temporal `BELIEVES`, `KNOWS`, `POSSIBLE`, and `NECESSARY` evaluation. Belief, knowledge, and generic modal accessibility are separate frames.
 - Treat `TimeIndexedEdge` as deprecated legacy data. Back up and stop writers before `migrate_time_indexed_edges`; validate before deleting legacy records.
 

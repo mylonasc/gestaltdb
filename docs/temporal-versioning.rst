@@ -159,7 +159,7 @@ do not leak historical adjacency.
 Consistent Read Views
 ---------------------
 
-``GraphDB.read_view`` captures the contiguous prefix of fully visible commits
+``graph.temporal.open_read_view`` captures the contiguous prefix of fully visible commits
 and a default valid-time instant. It stops before the first incomplete commit,
 so a later marker cannot change the view. Every history and as-of call through
 the view uses that horizon, even if newer commits are published through the
@@ -377,7 +377,7 @@ catalog changes. Reusing a rule name creates a new version; ``get_rule`` and
        max_justifications=100_000,
    )
 
-``run_rules`` evaluates the latest version of each rule with semi-naive deltas.
+``graph.rules.run`` evaluates the latest version of each rule with semi-naive deltas.
 Only positive entity-object claims participate. All premises in a match must
 share a world, and each justification contributes the intersection of its
 premises' half-open valid-time intervals. Overlapping supports for an equivalent
@@ -405,7 +405,7 @@ the latest version of each rule. Undeclared predicates, unbound negated
 variables and negative dependency cycles are rejected before the catalog
 changes.
 
-``run_rules`` and ``maintain_truth`` order positive predicate components so
+``graph.rules.run`` and ``graph.rules.maintain`` order positive predicate components so
 every negative edge points strictly downward. A negated atom anti-joins only
 against completed lower strata; a negative edge inside one component is
 unstratifiable and never falls back to unstratified evaluation. Components
@@ -459,7 +459,7 @@ not a closed-world default for undocumented predicates.
 Incremental Truth Maintenance and Explanations
 -----------------------------------------------
 
-``maintain_truth`` reconciles rule-derived claims after claims or rule versions
+``graph.rules.maintain`` reconciles rule-derived claims after claims or rule versions
 change. It recomputes a bounded fixpoint from non-derived positive entity
 claims, indexes premise/rule dependents and independent supports, and appends
 only changed derivations. Removing one support corrects the conclusion's
@@ -487,7 +487,7 @@ are published in one temporal commit before the rebuildable dependency index;
 retrying after interruption is therefore idempotent. A bound failure publishes
 no maintenance commit.
 
-``explain_claim`` resolves the claim at both valid and system time and returns a
+``graph.rules.explain`` resolves the claim at both valid and system time and returns a
 ``ClaimExplanation`` graph. Claim nodes contain exact immutable
 ``ClaimVersion`` values, rule nodes contain exact ``RuleVersion`` values,
 absence nodes contain ``RuleAbsence`` evidence, and

@@ -34,12 +34,14 @@ Create a Graph
 Nodes and Edges
 ---------------
 
-Fetch records directly when you know their IDs:
+Fetch records directly when you know their IDs (``str`` or ``bytes`` both work;
+returned keys and traversal neighbors are bytes, so decode with
+``graph_db.key_to_string(...)`` for comparisons):
 
 .. code-block:: python
 
-   drug = graph_db.get_node(b"drug-1")
-   edge = graph_db.get_edge(b"drug-1-protein-1")
+   drug = graph_db.get_node("drug-1")
+   edge = graph_db.get_edge("drug-1-protein-1")
 
    print(drug.properties["name"])
    print(edge.properties["score"])

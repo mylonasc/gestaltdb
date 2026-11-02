@@ -55,7 +55,7 @@ class SampledNeighbors:
     valid_to_open: BoolArray | None = None
 
     def to_external(self, snapshot: SamplerSnapshot) -> dict[str, Array]:
-        """Convert compact node and edge IDs to external IDs."""
+        """Convert compact IDs to external IDs; ``-1`` padding maps to ``None``."""
         return {
             "input_nodes": _external_id_array(self.input_nodes, snapshot.external_node_ids),
             "edge_ids": _external_id_array(self.edge_indices, snapshot.external_edge_ids),
@@ -471,7 +471,7 @@ class SamplerEngine:
         causal_policy: str = "none",
         balanced: bool = False,
     ) -> SampledNeighbors:
-        """Sample neighbors using external node and relation IDs as input."""
+        """External-ID neighbor sampling; returns a compact batch needing to_external."""
         compact_nodes = self.snapshot.node_ints(nodes)
         compact_relations = None if relations is None else self.snapshot.relation_ints(relations)
         return self.sample_neighbors(
@@ -642,7 +642,7 @@ class SamplerEngine:
         temporal: TemporalContext | None = None,
         window_policy: str = "overlap",
     ) -> LayeredSampleBatch:
-        """Sample a heterogeneous neighborhood while preserving layer blocks."""
+        """Sample layered neighborhoods; per-hop config lives in NeighborSamplingSpec."""
         seeds = self._validated_ids(seed_nodes, self.snapshot.num_nodes, "seed_nodes")
         self._validate_sampling_options(
             fanout=0, direction="out", temporal=temporal,
@@ -676,7 +676,7 @@ class SamplerEngine:
         temporal: TemporalContext | None = None,
         window_policy: str = "overlap",
     ) -> LayeredSampleBatch:
-        """Sample heterogeneous layers using external node and relation IDs."""
+        """External-ID layered sampling; returns a compact batch needing to_external."""
         compact_layers: list[NeighborSamplingSpec] = []
         for layer in layers:
             if not isinstance(layer, ExternalNeighborSamplingSpec):
@@ -752,12 +752,11 @@ class SamplerEngine:
         temporal: TemporalContext | None = None,
         window_policy: str = "overlap",
     ) -> RandomWalkBatch:
-        """Sample fixed-width first-order random walks.
+        """Sample fixed-width first-order walks (compact IDs; -1 pads gaps/restarts).
 
-        A metapath is repeated cyclically and advances only when an edge is
-        traversed. Random restart and ``dead_end="restart"`` transitions move to
-        the walk's start node and are represented by ``-1`` edge/relation IDs.
-        ``relations`` and ``metapath`` are mutually exclusive.
+        ``metapath`` repeats cyclically, advancing only on edge steps, and is
+        mutually exclusive with ``relations``. ``lengths`` counts populated
+        transitions including restarts; ``edge_indices`` are compact edge rows.
         """
         _validate_count(walk_length, "walk_length")
         self._validate_sampling_options(
@@ -841,7 +840,7 @@ class SamplerEngine:
         temporal: TemporalContext | None = None,
         window_policy: str = "overlap",
     ) -> RandomWalkBatch:
-        """Sample random walks using external node and relation IDs as input."""
+        """External-ID walk input (incl. metapath); returns compact batch needing to_external."""
         compact_relations = None if relations is None else self.snapshot.relation_ints(relations)
         compact_metapath = None if metapath is None else self.snapshot.relation_ints(metapath)
         return self.sample_random_walks(
@@ -986,7 +985,7 @@ class SamplerEngine:
         temporal: TemporalContext | None = None,
         window_policy: str = "overlap",
     ) -> RandomWalkBatch:
-        """Sample node2vec walks using external node and relation IDs."""
+        """External-ID node2vec input; returns a compact batch needing to_external."""
         compact_relations = None if relations is None else self.snapshot.relation_ints(relations)
         return self.sample_node2vec_walks(
             self.snapshot.node_ints(start_nodes),
@@ -1365,7 +1364,7 @@ class SamplerEngine:
         window_policy: str = "overlap",
         causal_policy: str = "none",
     ) -> SampledSubgraphBatch:
-        """Sample a training subgraph using external seed edge IDs."""
+        """External-ID subgraph seeds; temporal dup edge IDs raise, use compact rows."""
         compact_relations = None if relations is None else self.snapshot.relation_ints(relations)
         return self.sample_subgraph(
             self.snapshot.edge_ints(seed_edges),
