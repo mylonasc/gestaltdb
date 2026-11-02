@@ -195,7 +195,7 @@ def main():
         temporary.replace(args.output)
 
     save()
-    with tempfile.TemporaryDirectory(prefix="hsa-paired-", dir="/tmp/opencode") as directory:
+    with tempfile.TemporaryDirectory(prefix="hsa-paired-") as directory:
         path = Path(directory) / "db"
         report["fixture_writer"] = "after"
         report["fixture"] = run_worker(roots["after"], "load", {
