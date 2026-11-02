@@ -18,7 +18,7 @@ Choose a Sampling Layer
    :header-rows: 1
    :widths: 20 40 40
 
-   * -
+   * - Criterion
      - Live ``GraphDB``
      - ``SamplerSnapshot`` + ``SamplerEngine``
    * - Data

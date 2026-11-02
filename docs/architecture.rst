@@ -19,6 +19,10 @@ hub; sampling and standalone reasoning expose their own execution interfaces.
    Selected API calls and data handoffs. Applications choose when to build
    snapshots, run reasoning, advance saved state, and publish results.
 
+Follow the database/query branch with :doc:`data-access`, :doc:`ingestion` and
+:doc:`cypher-tutorial`. The diagram is a component map, not a promise that writes,
+inference, snapshot construction or publication happen automatically together.
+
 Component responsibilities
 ---------------------------
 

@@ -369,3 +369,20 @@ Examples explicitly exercise replacement/deletion, manifests, direct constructio
 rollback, snapshot isolation, binary values and recursive temporal scalars.
 The page inventory grows to 88 files (73 Sphinx pages); the original review counts
 above remain the historical baseline.
+
+DOC-12's initial pass adds `data-access.rst`, `ingestion.rst` and
+`cypher-tutorial.rst`: access-path decisions, an indexed cohort, three explicit
+columnar loading policies/workflows, and complete Cypher read/aggregate/write/
+history examples. The syntax reference retains detailed contracts and labels
+setup-dependent snippets as fragments. A stale temporal-constructor limitation
+is corrected against the existing temporal-expression tests. The inventory now
+contains 91 files (76 Sphinx pages).
+
+Existing architecture graphics are retained: `components.svg` and its editable
+DOT source remain the overview, with new task-guide links and a reuse/extension
+policy in the graphics backlog. Layout work wraps table cells and long API names,
+widens the reading column, and progressively stacks simple tables with actual
+column labels on narrow screens. Complex tables keep their semantic table form.
+`scripts/check_docs_layout.py` provides an optional authoring-time browser check;
+it is not a new package/runtime dependency or a claim to replace a full
+accessibility audit.

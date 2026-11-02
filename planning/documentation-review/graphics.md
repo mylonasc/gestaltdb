@@ -4,6 +4,26 @@ Tracking: [Documentation Debt: Graphics #495](https://github.com/mylonasc/gestal
 These are proposed teaching aids, not claims of implemented UI or runtime behavior.
 The owning documentation slice should link its guide to the corresponding item.
 
+## Existing assets: retain before adding
+
+| Existing asset | Current use | Disposition / extension policy |
+| --- | --- | --- |
+| `docs/_static/components.svg` with editable `components.dot` | Architecture component and data-handoff map | **Keep.** Already shows backends and serializers separately, Cypher, current/temporal read views, sampling, ontology, reasoning and explicit publication. Link new task guides to it. Extend the same DOT source only when a missing relationship materially improves the map; do not draw a competing architecture overview. |
+| `docs/_static/external_graphdb_ingest_100k.svg` | Performance evidence | **Keep with original measurement qualifications.** Not generic decoration or a new release benchmark. |
+| `docs/_static/external_graphdb_queries_100k.svg` | Performance evidence | **Keep with original measurement qualifications.** Do not redraw/relabel without the source measurements and their scope. |
+
+Regenerate the architecture asset, only when its source changes, with
+`dot -Tsvg docs/_static/components.dot -o docs/_static/components.svg`.
+Graphviz is an authoring-time dependency, not a library or Sphinx runtime
+requirement. Preserve the figure's descriptive alt text and caption. The overview
+already partially addresses VIS-01 and VIS-12; those items should propose only a
+focused lifecycle/capability extension if text and tables are insufficient.
+
+New diagrams below must answer a teaching question the existing assets do not.
+Optional animation is never a reason to discard a useful static overview.
+
+## Focused visual opportunities
+
 | ID | Owner | Guide / concept | Proposed visual and learning outcome |
 | --- | --- | --- | --- |
 | VIS-01 | DOC-11 | Persistence and lifecycle | Static interchangeable backend/serializer diagram: graph API → independently selected store and codec. Show capability differences, not universal transaction parity. |

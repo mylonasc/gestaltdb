@@ -1,0 +1,79 @@
+/* Keep dense capability tables inside the reading column, not a horizontal strip. */
+.wy-nav-content {
+  max-width: 1100px;
+}
+
+.wy-table-responsive table.docutils {
+  width: 100%;
+  table-layout: fixed;
+}
+
+/* The RTD theme gives cells nowrap; it must be overridden for paragraph tables. */
+.wy-table-responsive table.docutils th,
+.wy-table-responsive table.docutils td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.wy-table-responsive table.docutils code,
+.wy-table-responsive table.docutils .literal {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.wy-table-responsive table.docutils pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mobile-column-label {
+  display: none;
+}
+
+/* Four narrow columns are not readable on a phone. Repeat headings per row
+ * only when the small enhancement has prepared a simple, non-spanned table.
+ */
+@media (max-width: 600px) {
+  .wy-table-responsive table.responsive-cards,
+  .wy-table-responsive table.responsive-cards tbody,
+  .wy-table-responsive table.responsive-cards tr,
+  .wy-table-responsive table.responsive-cards caption {
+    display: block;
+    width: 100%;
+  }
+
+  .wy-table-responsive table.responsive-cards colgroup {
+    display: none;
+  }
+
+  .wy-table-responsive table.responsive-cards thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .wy-table-responsive table.responsive-cards tbody tr {
+    margin-bottom: 1rem;
+    border-top: 1px solid #d6d9dc;
+  }
+
+  .wy-table-responsive table.responsive-cards td {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.6rem;
+  }
+
+  .wy-table-responsive table.responsive-cards .mobile-column-label {
+    display: block;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  .wy-table-responsive table.responsive-cards .mobile-cell-value {
+    min-width: 0;
+  }
+}

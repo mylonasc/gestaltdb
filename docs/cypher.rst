@@ -11,6 +11,11 @@ clauses, writes, and a persisted node-constraint catalog.
 Relationship types come from ``edge.properties["type"]``. Node labels are stored
 on ``Node(labels=[...])``.
 
+Start with :doc:`cypher-tutorial` for complete runnable read, aggregate, mutation
+and historical-query examples. This page is the syntax/behavior reference:
+unless a block supplies its own setup, its Python examples are **illustrative
+fragments** that assume an open ``graph_db`` and suitable data.
+
 For generation-pinned read-only Cypher over selected inference facts, see
 :doc:`reasoning-queries` (a smaller single-pattern subset). Ordinary queries
 continue to read physical records only.
@@ -626,8 +631,9 @@ functions, such as ``count(*) + 1`` or ``toString(count(*))``.
 maps, entities, lists, paths, strings, Booleans, numbers, and nulls. Nulls sort
 last ascending and first descending. Conversion functions reject unsupported
 input types; malformed strings passed to numeric/Boolean conversions return
-``None``. Temporal constructors (such as ``date`` and ``duration``) and the
-spatial ``point`` constructor produce explicit unsupported-function errors.
+``None``. Temporal constructors (including ``date`` and ``duration``) return
+the immutable temporal values described above. The spatial ``point`` constructor
+remains unsupported.
 
 Current Limitations
 -------------------
