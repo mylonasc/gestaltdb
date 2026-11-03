@@ -326,7 +326,17 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
-### Platform exploration, exchange and operations (implemented, pending merge)
+### Platform exploration, exchange and operations (delivered)
+
+Delivered through #516 at `b7e3acf` after all remote checks passed, including both
+example lanes, supported-edge full suites and installed artifacts. The fixed-checkout
+local suite passes 5,277 tests with 51 skips. Base Python 3.10 docs checks pass 339
+tests with 514 explicit optional skips. Strict Sphinx passes on both toolchains;
+browser checks cover 34 pages at three widths, 99 table checks, 411 numbered blocks
+and 99 clipboard comparisons, including the mobile API-signature fix. Docs/API drift,
+eight agent examples, module-size and generated figures pass. #493 is closed and
+#480 records twelve delivered slices; only final DOC-10 #490 audience/package
+acceptance remains open, with graphics debt #495 explicit.
 
 DOC-13 #493 makes visualization a task path with independently runnable
 query/neighborhood HTML+SVG and backend-free reasoning/ontology artifacts. Exact
@@ -355,8 +365,7 @@ Focused docs/NetworkX/viz validation passes 997 tests; strict Sphinx, Ruff and
 inventory pass. Coverage: 44 capability families, 107 documents / 92 Sphinx pages,
 246 source examples (146 standalone / 100 illustrative). The 50 backend/codec
 declarations still render 493 variants, now 481 executable / 12 compiled fragments.
-Full-suite/browser/base/remote validation and merge remain pending; final
-cross-audience/package acceptance stays DOC-10.
+Only final cross-audience/package acceptance (DOC-10 #490) remains.
 
 ### Documentation example inventory and CI (delivered)
 
