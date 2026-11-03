@@ -326,7 +326,7 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
-### Claims, stored rules and modal learning path (implemented, pending merge)
+### Claims, stored rules and modal learning path (delivered)
 
 DOC-05 #485 adds `claims-introduction.rst` and `stored-rules.rst`, and makes the
 modal guide's first example independently runnable. The journey starts with
@@ -339,15 +339,21 @@ explicitly distinct. Three setups add 36 executable alternatives: current total
 50 declarations / 493 variants (469 executable, 24 compiled shared-state variants).
 Inventory: 103 documents / 88 Sphinx pages. Focused validation passes 691 tests;
 strict Sphinx passes on Python 3.10/Sphinx 8 and the current local toolchain.
+After syncing concurrent main changes, the complete Python 3.12 suite passed
+5,002 tests (60 optional skips); browser checks covered 24 pages at three widths.
+Merged through #507 at `d443caf` after all PR checks passed, including Python
+3.10/3.13 full suites, installed artifacts, documentation and optional integrations.
 
 ### Main integration checkpoint
 
 DOC-12 #492 merged through #501 at `0025bbf`. The follow-through stack #502–#506
-is consolidated for main review in #506, with its complete source history intact.
+merged through consolidated #506 at `8510882`, with its complete source history
+intact. DOC-03 #483 and DOC-04 #484 are delivered and closed. The superseded
+stacked PRs #502–#505 are closed after verifying their heads are ancestors of main.
 Rendering tests requiring docutils explicitly skip without the docs extra so
 the base-install test contract remains independent of Sphinx dependencies.
 
-### Temporal/bitemporal learning path (implemented, pending merge)
+### Temporal/bitemporal learning path (delivered)
 
 DOC-04 #484 adds `temporal-introduction.rst`, `temporal-updates.rst` and
 `temporal-reads.rst`. A compact Alice department timeline compares two valid
@@ -366,10 +372,10 @@ catalog to 47 declarations / 457 alternatives (433 executable, 24 compiled
 shared-state variants). Inventory: 101 documents / 86 Sphinx pages. Validation
 includes 770 documentation/temporal tests and a broader 675-test temporal,
 migration, interface, Cypher and sampling run; strict Sphinx, documentation checks,
-lint and offline browser checks pass. #484 remains open until merged delivery;
+lint and offline browser checks pass. #484 is delivered through #506 at `8510882`;
 final cross-audience acceptance remains DOC-10.
 
-### Sampling learning path (implemented, pending merge)
+### Sampling learning path (delivered)
 
 DOC-03 #483 adds `sampling-introduction.rst` with a live/snapshot decision table,
 ID domains before code, and a pinned property-filtered database-to-snapshot draw
@@ -385,7 +391,7 @@ tab catalog has 43 declarations / 409 alternatives (385 executable and 24 compil
 shared-state fragments). The page inventory is 98 documents / 83 Sphinx pages.
 Focused sampling, example, editorial, strict Sphinx and offline layout/interaction
 checks validate this implementation; final cross-audience acceptance remains
-DOC-10. #483 stays open until delivery merges.
+DOC-10. #483 is delivered through #505/#506 at `8510882`.
 
 ### Reconciled delivery status (2026-11-03)
 
@@ -396,24 +402,26 @@ headings and stale prerelease advice, updates range/equality/publication boundar
 and separates dense development reports into `planning/documentation-review/history/`.
 Qualified reproducible benchmark evidence remains available without adoption diaries.
 An editorial regression check covers Sphinx, README, examples and packaged guides;
-it supplements, not replaces, semantic review. This work remains unmerged until its
-stacked PR is delivered and does not close the broader epic slices.
+it supplements, not replaces, semantic review. This work is delivered through
+#506 at `8510882` and does not close the broader epic slices.
 The fixed performance setup is now in the archived report rather than the public
-guide, leaving 41 current tab declarations and the same 389 rendered alternatives
+guide, leaving 41 tab declarations at that checkpoint and 389 rendered alternatives
 (365 executable, 24 compiled shared-state fragments).
 
 - **Merged/delivered:** DOC-01 #481 (PR #496), DOC-02 #482 (PR #498),
   DOC-11 #491 (PR #499), consolidated by #494 at `69fe552`. Their child
   issues are closed and #480's corresponding delivery entries are checked.
-- **Implemented, not merged:** DOC-12 #492 in #501; terminology, code controls
-  and generated figures in #502; glossary tooltips and backend/serializer tabs
-  are stacked follow-through. These do not complete the remaining epic slices.
-- **Partial/pending:** DOC-03–DOC-10 and DOC-13, including final audience
-  acceptance and packaged-document alignment. Graphics debt remains in #495.
+- **Also delivered:** DOC-12 #492 in #501; terminology, code controls,
+  generated figures, glossary tooltips, backend/serializer tabs and editorial
+  cleanup through #502–#506; DOC-03 #483 and DOC-04 #484 through #505/#506.
+- **Also delivered:** DOC-05 #485 through #507 at `d443caf`.
+- **Further work:** DOC-06–DOC-10 and DOC-13 retain remaining scope, including
+  final audience acceptance and packaged-doc alignment. Graphics debt remains
+  in #495.
 
 The existing Concepts and Terminology glossary remains canonical, expanded for
-encountered jargon and linked with accessible definition tooltips. Explicit
-example declarations cover 42 database/codec setups: 389 rendered alternatives,
+encountered jargon and linked with accessible definition tooltips. The initial
+explicit declarations covered 42 database/codec setups: 389 alternatives,
 including 365 executable alternatives and 24 compiled setup-fragment variants.
 One fixed benchmark setup is classified without tabs. Backend-free snippets and
 existing-graph continuations keep their context. Capability-qualified tabs do not
