@@ -7,6 +7,10 @@ adapter returns a detached ``InferenceExplanation`` with deterministic
 ``to_json()``, copy-returning ``to_dict()`` and script-free ``as_html()``.
 It does not run a model, request network resources, or change rule semantics.
 
+Begin with :doc:`claims-introduction` for evidence polarity and confidence, and
+:doc:`stored-rules` for derivation/support maintenance. This guide adds audit
+export, not a new inference or probability engine.
+
 Model outputs are assertions, not proofs
 ---------------------------------------------
 

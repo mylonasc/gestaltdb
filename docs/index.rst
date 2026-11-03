@@ -31,7 +31,7 @@ Choose a capability
    * - Query what applied then or what was recorded then
      - :doc:`temporal-introduction`, :doc:`temporal-reads`
    * - Represent sourced/conflicting claims and reason over worlds
-     - :doc:`temporal-versioning`, :doc:`modal-epistemic`
+     - :doc:`claims-introduction`, :doc:`stored-rules`, :doc:`modal-epistemic`
    * - Classify entities using semantic axioms
      - :doc:`ontology`
    * - Apply Datalog rules, literals, negation or aggregates
@@ -112,6 +112,8 @@ benchmarks are separated from the first-run path.
    temporal-updates
    temporal-reads
    temporal-versioning
+   claims-introduction
+   stored-rules
    modal-epistemic
    inference-audit
 

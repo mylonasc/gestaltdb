@@ -153,6 +153,12 @@ a small example that connects facts, rules, conclusions and explanations; use
       A named context containing claims, such as an actual-world account or an
       agent's belief context. A modal world is not a separate database backend.
 
+   Horn rule
+      A rule with one conclusion (head) derived from matching premises (body).
+      GestaltDB requires safe variable bindings; stored claim rules and standalone
+      Datalog have distinct input, persistence and feature contracts
+      (:doc:`stored-rules`).
+
    accessibility
       Explicit agent-specific links between worlds used by modal operators.
       A knowledge link and a belief link belong to separate frames; the library

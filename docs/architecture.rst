@@ -198,7 +198,7 @@ Choose an application workflow
      - :doc:`reasoning-sessions`, :doc:`reasoning-authenticated-sessions`
    * - Inspect decisions based on model predictions
      - External model -> tagged claims -> stored rules -> inference audit export
-     - :doc:`inference-audit`, :doc:`modal-epistemic`
+     - :doc:`claims-introduction`, :doc:`stored-rules`, :doc:`inference-audit`, :doc:`modal-epistemic`
 
 Code navigation and modularity
 -------------------------------
