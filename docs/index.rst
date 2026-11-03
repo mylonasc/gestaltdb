@@ -39,7 +39,7 @@ Choose a capability
    * - Compute when conclusions hold
      - :doc:`reasoning-temporal`, :doc:`reasoning-range-tutorial`
    * - Integrate reasoning with a database or saved state
-     - :doc:`ontology-graph`, :doc:`reasoning-authenticated-sessions`
+     - :doc:`reasoning-workflows`
    * - Explore or exchange results
      - :doc:`visualization`, :doc:`networkx`
    * - Operate, recover or measure workloads
@@ -145,22 +145,7 @@ benchmarks are separated from the first-run path.
    :maxdepth: 1
    :caption: Advanced Reasoning Integration
 
-   ontology-graph
-   reasoning-current-frontier
-   reasoning-current-admission
-   reasoning-queries
-   reasoning-generation-identity
-   reasoning-sessions
-   reasoning-authenticated-sessions
-   reasoning-typed-execution
-   reasoning-range-admission
-   reasoning-bound-range-publication
-   ontology-publication
-   reasoning-authenticated-inferred
-   reasoning-executors
-   reasoning-extraction
-   reasoning-native-claims
-   reasoning-native-locator-claims
+   reasoning-workflows
 
 .. toctree::
    :maxdepth: 1

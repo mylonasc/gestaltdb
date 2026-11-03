@@ -1,5 +1,3 @@
-:orphan:
-
 Pinned rule catalog and generation binding
 ============================================================
 
@@ -10,6 +8,11 @@ Pinned rule catalog and generation binding
 and a fact horizon into one ``PinnedGeneration`` identity; ``verify`` fails
 closed on any catalog drift or horizon movement instead of silently mixing
 generations.
+
+**Reference fragment:** ``digest``, ``program`` and ``horizon`` must come from
+the caller's selected rule content and fact scope. These values do not
+authenticate database input; see :doc:`reasoning-generation-identity` for the
+source-specific bridges.
 
 .. code-block:: python
 
@@ -29,10 +32,9 @@ stay readable across catalog versions.
 Legacy compatibility
 ----------------------------------------
 
-Legacy ``run_rules``/``maintain_truth`` are deliberately not adapted here.
-``catalog_legacy_parity_gates`` names the five behaviors that must reach
-parity first (interval selection, all-support justifications, limits,
-identity/provenance, publication). Until every gate passes, the
-compatibility path stays the default, no witness-only substitution is
-made, and this catalog remains opt-in binding metadata with any deliberate
-versioned API differences documented at adoption time.
+The stored-rule service (:doc:`stored-rules`) is not implemented through this
+catalog API. ``catalog_legacy_parity_gates`` describes interval selection,
+all-support justifications, limits, identity/provenance and publication as
+distinct compatibility requirements. Constructing a catalog does not replace
+the stored service, migrate its state or substitute bounded witnesses for its
+maintenance supports. The catalog remains explicit binding metadata.

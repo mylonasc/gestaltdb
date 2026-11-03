@@ -1,5 +1,3 @@
-:orphan:
-
 Reasoning scale and resource boundaries
 ============================================================
 

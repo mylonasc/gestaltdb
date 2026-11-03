@@ -1,5 +1,3 @@
-:orphan:
-
 Resumable incremental reasoning sessions
 ========================================
 

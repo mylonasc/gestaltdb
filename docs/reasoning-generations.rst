@@ -1,5 +1,3 @@
-:orphan:
-
 Recoverable staged generations and compare-and-publish
 ============================================================
 
@@ -14,7 +12,7 @@ old-or-new generations.
 
 Stages retain authenticated source read-view provenance. The default
 ``publish_staged(..., freshness="latest")`` also requires the current commit
-horizon to match that source horizon. This first implementation conservatively
+horizon to match that source horizon. This policy conservatively
 rejects unrelated intervening commits too; re-stage explicitly to retry. It
 does not silently publish conclusions whose source assertions were retracted.
 

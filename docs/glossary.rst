@@ -297,6 +297,21 @@ a small example that connects facts, rules, conclusions and explanations; use
       identities and supported execution contract. It is not automatic authority
       to publish results (:doc:`reasoning-generation-identity`).
 
+   executor
+      An implementation that evaluates a supported program over selected facts.
+      Choosing an executor does not choose or authenticate a database source,
+      maintain saved state or publish conclusions (:doc:`reasoning-workflows`).
+
+   frontier evaluation
+      Goal-directed evaluation that interleaves rule matching with selected
+      database reads under one pinned view. Its goal answers are not a complete
+      materialization of every consequence (:doc:`reasoning-workflows`).
+
+   session
+      Retained reasoning state for a selected source scope, program and horizon,
+      including active evidence and maintenance state. Durable storage alone does
+      not authenticate that state against its source (:doc:`reasoning-sessions`).
+
    materialization
       Computing a result and retaining it for subsequent use, rather than deriving
       it again for each request. Publication of materialized conclusions is an

@@ -1,5 +1,3 @@
-:orphan:
-
 Executor selection and resource limits
 ============================================================
 
@@ -29,11 +27,10 @@ default remains indexed Python; optional engines require an explicit request.
 Available executors
 ----------------------------------------
 
-- **Default: ``indexed-python-v1``** (``DatalogEngine``). Reference behavior,
-  smallest startup cost and worker RSS, fastest small/interactive pipelines,
-  and the only engine with bounded native witness collection. It stays the
-  default even where columnar alternatives are faster; speed alone does not
-  switch it.
+- **Default: ``indexed-python-v1``** (``DatalogEngine``). Indexed positive binary
+  evaluation with optional bounded witness collection. It stays the default
+  regardless of installed optional runtimes or workload size. Prepared indexed
+  plans below also support bounded witnesses.
 - **Opt-in: ``polars-prototype-v1``** for explicit closure-only requests with a
   declared-available runtime. It must never be selected implicitly: imports are
   heavy, RSS is higher, small workloads are slower, and it rejects proof
@@ -48,23 +45,11 @@ Available executors
   oracle, not a shipped runtime, and native/columnar paths are measured
   against it rather than replacing it.
 
-Measured basis (clean-source medians, Python 3.13, three fresh workers per
-cell; full reports in ``benchmarks/results/reasoning-re03-*.json``):
-
-- Dense N=128 pipeline: 534.73ms indexed vs 46.44ms Polars (Clingo 54.29ms).
-- Sparse recursive N=1024: 90.37ms indexed vs 40.40ms Polars.
-- Hierarchy/duplicates N=1024: indexed slightly faster (17.66/16.42ms vs
-  21.27/21.12ms). All N=16 cases favor indexed Python.
-- Peak full-worker RSS: ~54 MiB indexed vs ~127 MiB Polars. Four threads did
-  not materially improve the tested sparse workloads.
-- Prepared SCC plans add no throughput on the measured programs (dense N=128:
-  550.95ms unprofiled vs 534.73ms default); profiling is measurably costly
-  and stays opt-in.
-
-These are small synthetic observations with identical independent evidence
-wrappers, not production-scale guarantees. No million-row, spill or
-maintenance workload has been measured; executor claims stop where the
-evidence stops.
+Qualified synthetic comparisons, including conversion/startup costs and worker
+RSS, are retained in :doc:`reasoning-polars` and :doc:`reasoning-plans`.
+End-to-end source and executor measurements are in
+:doc:`reasoning-frontier-benchmarks`. These are evidence for the named workloads,
+not production latency/RSS guarantees or an automatic selection policy.
 
 Native kernels and spill
 ----------------------------------------

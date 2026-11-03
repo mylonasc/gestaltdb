@@ -1,26 +1,39 @@
-:orphan:
-
-Incremental workload gates and live-reasoning workflows
+Validate incremental reasoning and recovery
 ============================================================
 
 Live reasoning requires explicit handling of cancellation, stale state and
 recovery. Incremental paths must equal full
 rebuilds exactly, or fail closed demanding explicit rematerialization.
 
+**Standalone example, base install only.** Remove one of two edges, then compare
+the maintained closure with a fresh rebuild. Logical equality is required; lower
+work on every topology is not.
+
 .. code-block:: python
 
-   from gestaltdb.reasoning import propagate_insertions, rematerialize, retract_facts
+   from gestaltdb.reasoning import (
+       GenericProgram, GenericRule, TypedAtom, TypedFact, Variable, rematerialize, retract_facts,
+   )
    from gestaltdb.reasoning.model import ReasoningLimits
 
+   x, y, z = Variable("x"), Variable("y"), Variable("z")
+   program = GenericProgram([
+       GenericRule("direct", [TypedAtom("edge", [x, y])], [], TypedAtom("reach", [x, y])),
+       GenericRule("extend", [TypedAtom("reach", [x, y]), TypedAtom("edge", [y, z])],
+                   [], TypedAtom("reach", [x, z])),
+   ])
+   base = [TypedFact("edge", ["a", "b"]), TypedFact("edge", ["b", "c"])]
+   victim = base[1]
    material = rematerialize(program, base, limits=ReasoningLimits())
    out = retract_facts(program, material.facts, [victim],
                        limits=ReasoningLimits(), index=material.index)
    assert set(out.facts) == set(rematerialize(
        program, [fact for fact in base if fact != victim],
        limits=ReasoningLimits()).facts)
-   assert out.work < rematerialize(program, base, limits=ReasoningLimits()).work
+   assert TypedFact("reach", ["a", "b"]) in out.facts
+   assert TypedFact("reach", ["a", "c"]) not in out.facts
 
-Gates
+Recovery contracts
 ----------------------------------------
 
 - **Crash at every generation boundary**: cancelling on any check raises
@@ -30,8 +43,8 @@ Gates
   closed before any work; catalog drift and horizon movement fail at the
   pinned-generation boundary.
 - **Orphan recovery on capable backends**: audit is read-only and reclaim
-  needs explicit consent plus horizon; backend-gated tests enforce this
-  where storage backends are installed and skip otherwise.
+  needs explicit consent plus horizon (:doc:`operations`). Maintenance itself
+  does not repair unpublished temporal artifacts.
 - **Redundant cycles are no-ops**: re-inserting known facts or retracting
   absent ones returns empty deltas with a byte-identical index digest.
 - **Rule revision rematerializes**: new rulesets evaluate under the new

@@ -1,6 +1,4 @@
-:orphan:
-
-Cross-context, temporal-modal and confidence design gates
+Cross-context and confidence extension boundaries
 ============================================================
 
 ``gestaltdb.reasoning.scopes`` specifies boundaries; it evaluates
@@ -11,12 +9,20 @@ changing the existing bounded modal API. Confidence, fuzzy and
 probabilistic combination are separately selected calculi, never logical
 truth and never accidental multiplication.
 
+**Standalone example, base install only.** An undeclared cross-world inheritance
+request is rejected; constructing a policy does not evaluate claims.
+
 .. code-block:: python
 
-   from gestaltdb.reasoning import InheritancePolicy, ModalScope
+   from gestaltdb.reasoning import InheritancePolicy, ReasoningError
 
    policy = InheritancePolicy()  # default deny
-   policy.check("alice", "base", "derived", "belief")  # raises: no grant
+   try:
+       policy.check("alice", "base", "derived", "belief")
+   except ReasoningError:
+       pass  # no inheritance grant
+   else:
+       raise AssertionError("undeclared cross-world inheritance was accepted")
 
 Calculi stay gated
 ----------------------------------------

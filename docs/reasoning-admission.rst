@@ -1,5 +1,3 @@
-:orphan:
-
 Generation-bound executor admission
 ===================================
 
@@ -18,5 +16,5 @@ interpret arbitrary semantic profiles; legacy binary rows keep profile metadata
 opaque. The explicit ``typed-indexed-python-v1`` row additionally requires
 ``positive-typed-point-v1`` / ``typed-values-v1`` and closure mode. See
 :doc:`reasoning-typed-execution` for real typed dispatch and authenticated session
-input. Enabling a new physical path additionally requires a measured
-end-to-end crossover from the benchmark work, not just admission.
+input. Admission checks supported compatibility; it neither runs an executor
+nor establishes that a different physical path would be faster.

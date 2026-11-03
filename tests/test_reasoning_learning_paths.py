@@ -64,3 +64,42 @@ def test_range_authority_and_scope_limits_are_visible():
     for term in ("not a negative claim", "proofs_truncated", "each completed segment", "sinks", "Computation, admission",
                  "not automatic real-world identity", "stage_range"):
         assert term in text
+
+
+def test_advanced_entry_examples_execute_independently():
+    for page in ("reasoning-workflows", "reasoning-gates", "reasoning-scopes"):
+        blocks = python_blocks(page)
+        assert len(blocks) == 1
+        exec(compile(blocks[0], page, "exec"), {})
+
+
+def test_advanced_hub_covers_all_owned_pages_and_roles():
+    import json
+
+    groups = json.loads((ROOT / "planning/documentation-review/documents.json").read_text())["groups"]
+    hub = (ROOT / "docs/reasoning-workflows.rst").read_text()
+    children = set(re.findall(r"^   ([a-z][a-z0-9-]+)$", hub, re.MULTILINE))
+    for group in groups:
+        if group["owner"] != "DOC-08":
+            continue
+        assert group["disposition"] == "keep"
+        for filename in group["files"]:
+            page = Path(filename).stem
+            if page != "reasoning-workflows":
+                assert page in children, f"missing intentional hub path: {filename}"
+    index = (ROOT / "docs/index.rst").read_text()
+    assert "   reasoning-workflows\n" in index
+    for child in children:
+        assert (ROOT / f"docs/{child}.rst").is_file()
+
+
+def test_advanced_hub_keeps_authority_and_optional_paths_distinct():
+    source = (ROOT / "docs/reasoning-workflows.rst").read_text()
+    for term in ("Ordinary extraction remains the default", "Indexed Python is the",
+                 "not user login", "independent proof certificate", "grants no publication authority",
+                 "experimental closure-only", "benchmark", "exact", "partial closure"):
+        assert term in source
+    for target in ("reasoning-current-admission", "reasoning-frontier", "reasoning-sessions",
+                   "reasoning-authenticated-sessions", "reasoning-range-admission",
+                   "reasoning-bound-range-publication", "reasoning-queries"):
+        assert f":doc:`{target}`" in source

@@ -1,5 +1,3 @@
-:orphan:
-
 Compact relation batches and Arrow exchange
 ============================================================
 
