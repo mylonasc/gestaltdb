@@ -377,6 +377,7 @@ opt-in through ``balanced=True`` (see below).
 
 .. code-block:: python
 
+   from tempfile import TemporaryDirectory
    from gestaltdb.sampling import SamplerSnapshot, derive_edge_weights
 
    with TemporaryDirectory() as tmpdir:

@@ -95,6 +95,24 @@ Python versions, and `with GraphDB.create(...) as graph` or `try/finally` closur
 Use explicit submodule imports for graph entities/backends/serializers. Do not
 silently fall back when an optional dependency is missing.
 
+`docs/_ext/example_inventory.json` records every Python/Cypher source block in
+Sphinx pages, README/EXAMPLES/AGENTS and packaged agent Markdown. Each page binds
+the ordered code blocks by digest; prose-only edits need no refresh. Groups name
+zero-based source-block indices, runner and required extras. Run
+`python docs/_ext/example_inventory.py --list` to inspect current digests, then
+review the execution scope before updating the declaration. The command never
+classifies new code automatically. Do not refresh a digest to dismiss a failing
+example: repair the code or explicitly explain its actual shared-state scope.
+
+Sphinx renders the reviewed status/install guidance before each canonical block,
+outside generated backend/codec tabs. `execute` rows run in independent namespaces
+and disposable working directories; `variants` reuse the capability-qualified tab
+tests. Reference fragments compile only; standalone blocks must execute. Direct
+Cypher and constant Python `.query(...)` strings have parser coverage, while
+complete database workflows also execute queries. Dynamic query construction is
+not statically evaluated. Tests run trusted repository examples, not sandboxed or
+untrusted user code. See `example-checks.md` here for the CI coverage and limits.
+
 Small drug/protein/evidence datasets may be reused across pages, but each page
 must define its own required state. Give one example one primary teaching goal;
 do not hide it behind a production-scale setup. Prefer stable expected IDs or

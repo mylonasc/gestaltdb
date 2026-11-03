@@ -8,6 +8,13 @@ on:
     paths:
       - 'AGENTS.md'
       - 'EXAMPLES.md'
+      - 'README.md'
+      - 'docs/_ext/**'
+      - 'docs/conf.py'
+      - 'tests/test_documentation*.py'
+      - 'tests/test_reasoning_learning_paths.py'
+      - 'tests/test_agent_docs.py'
+      - 'planning/documentation-review/**'
       - 'EPIC_REASONING_ENGINE.md'
       - 'gestaltdb_reasoning_feature_tracker.xlsx'
       - 'src/gestaltdb/**/*.py'
@@ -29,6 +36,13 @@ on:
     paths:
       - 'AGENTS.md'
       - 'EXAMPLES.md'
+      - 'README.md'
+      - 'docs/_ext/**'
+      - 'docs/conf.py'
+      - 'tests/test_documentation*.py'
+      - 'tests/test_reasoning_learning_paths.py'
+      - 'tests/test_agent_docs.py'
+      - 'planning/documentation-review/**'
       - 'EPIC_REASONING_ENGINE.md'
       - 'gestaltdb_reasoning_feature_tracker.xlsx'
       - 'src/gestaltdb/**/*.py'
@@ -73,3 +87,5 @@ jobs:
           python planning/reasoning-engine/check_roadmap.py
           python planning/reasoning-engine/check_tracking.py
           python planning/reasoning-engine/sync_tracker.py --check
+          python planning/documentation-review/check_inventory.py
+          python docs/_ext/example_inventory.py

@@ -326,6 +326,36 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
+### Documentation example inventory and CI (implemented, pending merge)
+
+DOC-09 #489 adds a stdlib-only Python/Cypher source-block inventory for every
+Sphinx page, README/EXAMPLES/AGENTS and packaged agent Markdown: 246 examples,
+including 144 standalone, 100 illustrative fragments and two notebook
+continuations. Page-level ordered code digests require explicit review after
+example changes; there is no automatic classification/update path. The catalog
+drives rendered RST execution/install labels before capability-qualified tabs.
+Standalone rows execute independently (96 direct programs plus 48 owned by the
+existing tab matrix); shared-state fragments compile without claiming full setup.
+All 99 direct/literal embedded Cypher queries receive parser coverage, while
+complete database workflows retain actual query execution. Local Markdown links
+and packaged-resource/navigation checks stay offline; strict Sphinx covers RST.
+
+The dedicated CI lanes use Python 3.10/docs for base examples and strict Sphinx,
+and Python 3.13 with only the relevant optional backends/codecs/Arrow/Polars/NetworkX
+for complete example/tab coverage. They run in `documentation-examples.yml`;
+the reference/roadmap workflow remains build-free. Existing Python 3.12 Pages and installed-wheel
+checks remain distinct. Documentation/config/catalog/test changes trigger the
+gates, not just runtime edits. Contributor scope/limits live outside Sphinx in
+`planning/documentation-review/example-checks.md`.
+
+The inventory exposed and repaired a missing sampling import, two query fragments
+missing required RETURN clauses, an uncaught expected profile rejection and a
+fixed-path proof SVG example. Shared Markdown graph fragments are explicitly
+labelled rather than pretending to reuse already closed temporary graphs.
+Focused validation passes 846 tests; Ruff, inventory and strict Sphinx pass.
+Delivery remains pending final full-suite/browser/CI validation and merge;
+cross-audience/package acceptance remains DOC-10.
+
 ### Advanced reasoning integration (delivered)
 
 DOC-08 #488 adds `reasoning-workflows.rst`: a task decision table and grouped

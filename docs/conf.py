@@ -27,6 +27,7 @@ extensions = [
     "myst_parser",
     "sphinx_tabs.tabs",
     "database_examples",
+    "example_inventory",
     "terminology",
 ]
 
