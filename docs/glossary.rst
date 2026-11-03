@@ -282,6 +282,16 @@ a small example that connects facts, rules, conclusions and explanations; use
       is constant. Temporal closure evaluates these intervals to determine when
       conclusions hold (:doc:`reasoning-temporal`).
 
+   change point
+      A validity boundary at which the selected active input set can change.
+      Range evaluation splits at all such boundaries rather than approximating
+      answers from a coarse grid of sampled instants (:doc:`reasoning-temporal`).
+
+   equality
+      An explicit, scope-bound policy for treating identifiers as equivalent and
+      selecting canonical representatives. A representative is not a physical
+      merge or an identity claim valid at every time (:doc:`reasoning-equality`).
+
    admission
       Explicit verification that a source/result/state matches the requested
       identities and supported execution contract. It is not automatic authority

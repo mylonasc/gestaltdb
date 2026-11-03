@@ -37,7 +37,7 @@ Choose a capability
    * - Apply Datalog rules, literals, negation or aggregates
      - :doc:`reasoning-introduction`, :doc:`reasoning-typed-tutorial`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
    * - Compute when conclusions hold
-     - :doc:`reasoning-temporal`
+     - :doc:`reasoning-temporal`, :doc:`reasoning-range-tutorial`
    * - Integrate reasoning with a database or saved state
      - :doc:`ontology-graph`, :doc:`reasoning-authenticated-sessions`
    * - Explore or exchange results
@@ -135,8 +135,9 @@ benchmarks are separated from the first-run path.
    :maxdepth: 1
    :caption: Temporal Reasoning
 
-   reasoning-intervals
    reasoning-temporal
+   reasoning-range-tutorial
+   reasoning-intervals
    reasoning-ranges
    reasoning-conformance
 

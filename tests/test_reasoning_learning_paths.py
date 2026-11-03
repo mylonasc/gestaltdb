@@ -38,3 +38,29 @@ def test_engine_choice_and_progressive_routes_are_visible():
     for target in ("reasoning-demand", "reasoning-maintenance", "reasoning-equality",
                    "reasoning-validation", "reasoning-temporal", "stored-rules"):
         assert f":doc:`{target}`" in source
+
+
+def test_range_task_examples_are_independent():
+    blocks = python_blocks("reasoning-range-tutorial")
+    assert len(blocks) == 3
+    for index, code in enumerate(blocks):
+        exec(compile(code, f"range-tutorial-{index}", "exec"), {})
+
+
+def test_range_introduction_checks_gaps_boundaries_and_evidence():
+    blocks = python_blocks("reasoning-temporal")
+    assert len(blocks) == 1
+    exec(compile(blocks[0], "range-first-example", "exec"), {})
+    text = (ROOT / "docs/reasoning-temporal.rst").read_text()
+    for term in ("not temporal inference", "gap", "change point", "proofs_truncated"):
+        assert term in text
+    for target in ("reasoning-range-admission", "reasoning-bound-range-publication",
+                   "reasoning-range-tutorial", "temporal-introduction"):
+        assert f":doc:`{target}`" in text
+
+
+def test_range_authority_and_scope_limits_are_visible():
+    text = (ROOT / "docs/reasoning-range-tutorial.rst").read_text()
+    for term in ("not a negative claim", "proofs_truncated", "each completed segment", "sinks", "Computation, admission",
+                 "not automatic real-world identity", "stage_range"):
+        assert term in text

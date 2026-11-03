@@ -3,6 +3,9 @@
 Temporal conformance and audit workflows
 ============================================================
 
+For a first range program and independently runnable scoped-policy/update tasks,
+use :doc:`reasoning-temporal` and :doc:`reasoning-range-tutorial`.
+
 Use ``verify_closure`` to check a temporal result by independent re-segmentation
 and point evaluation. Unsupported combinations fail explicitly; evaluation
 failure never yields a successful partial interval result. Bounded explanations

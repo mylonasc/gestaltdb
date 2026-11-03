@@ -33,7 +33,7 @@ remains the default; native history extraction is an explicit opt-in.
 | Represent sourced or conflicting knowledge | [Sourced claims](docs/claims-introduction.rst) · [stored rules](docs/stored-rules.rst) · [epistemic/modal evaluation](docs/modal-epistemic.rst) |
 | Classify entities from semantic axioms | [Ontology](docs/ontology.rst) · [supported profile](docs/reasoning-profiles.rst), not full OWL |
 | Derive facts with Datalog | [Facts, rules and explanations](docs/reasoning-introduction.rst) · [typed tutorial](docs/reasoning-typed-tutorial.rst) · [typed reference](docs/reasoning-typed.rst) · [scoped negation](docs/reasoning-negation.rst) |
-| Compute when conclusions hold | [Temporal interval reasoning](docs/reasoning-temporal.rst), separate from storing history |
+| Compute when conclusions hold | [Temporal interval reasoning](docs/reasoning-temporal.rst) · [range updates and scoped policies](docs/reasoning-range-tutorial.rst), separate from storing history |
 | Connect reasoning to a database or saved state | [Graph projection](docs/ontology-graph.rst) · [authenticated sessions](docs/reasoning-authenticated-sessions.rst) · [range publication](docs/reasoning-bound-range-publication.rst) |
 | Explore or exchange graph results | [Offline visualization](docs/visualization.rst) · [NetworkX and static GEXF](docs/networkx.rst) |
 | Operate and measure the database | [Compatibility/recovery](docs/operations.rst) · [workload-specific performance](docs/performance.rst) |

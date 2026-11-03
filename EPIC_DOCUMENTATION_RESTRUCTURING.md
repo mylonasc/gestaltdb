@@ -326,7 +326,25 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
-### Ontology and standalone Datalog foundations (implemented, pending merge)
+### Temporal range-reasoning journey (implemented, pending merge)
+
+DOC-07 #487 puts a complete gap-preserving range example and compact change-point
+timeline before physical execution details. It compares point answers at boundaries
+and inside segments against fresh evaluation, inspects per-segment evidence and
+runs the conformance gate without claiming source authentication. The separate
+`reasoning-range-tutorial.rst` defines independent scoped-absence/update/proof-budget,
+aggregate and equality-scope examples. Computation, conformance, authenticated
+finite-range admission and computation-owned publication are distinct stages;
+raw caller-derived staging retains its weaker contract. Exact references remain
+available with fragment scope explicit. Historical unbound intro measurements
+are retained outside Sphinx, not relabelled as current-wheel results.
+
+Focused validation passes 636 tests and strict Sphinx. The new code examples are
+storage-independent and need no backend/serializer tabs; existing applicable
+variants remain tested. Inventory: 105 documents / 90 Sphinx pages. Final audience
+acceptance remains DOC-10; #487 is not delivered until merged.
+
+### Ontology and standalone Datalog foundations (delivered)
 
 DOC-06 #486 places ontology classification/axiom origins before optional RDF and
 database adapters, with classification/validation/hierarchy boundaries visible.
@@ -339,7 +357,10 @@ source-independent evaluation stays distinct from stored claim rules and source
 admission/publication. Focused validation passes 612 tests and strict Sphinx.
 Inventory: 104 documents / 89 Sphinx pages; backend/codec declarations remain
 unchanged because these new examples do not open a database or select a codec.
-Final audience acceptance remains DOC-10; delivery is not declared until merge.
+Broader ontology/typed regression passes 351 tests with four optional skips;
+the base-only Python 3.10 example run passes seven tests. Delivered through #509
+at `dc9261a` after all PR checks passed, including Python 3.10/3.13 suites and
+ontology conformance. Final audience acceptance remains DOC-10.
 
 ### Claims, stored rules and modal learning path (delivered)
 

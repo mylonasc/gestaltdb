@@ -145,7 +145,7 @@ Choose your next path
    * - Evaluate standalone binary/typed Datalog
      - :doc:`reasoning-introduction`, :doc:`reasoning-typed-tutorial`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
    * - Compute intervals over which conclusions hold
-     - :doc:`reasoning-temporal`
+     - :doc:`reasoning-temporal`, :doc:`reasoning-range-tutorial`
    * - Connect a graph to reasoning and source-verified saved state
      - :doc:`ontology-graph`, :doc:`reasoning-authenticated-sessions`
    * - Visualize or exchange results
