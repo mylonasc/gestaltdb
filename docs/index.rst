@@ -35,7 +35,7 @@ Choose a capability
    * - Classify entities using semantic axioms
      - :doc:`ontology`
    * - Apply Datalog rules, literals, negation or aggregates
-     - :doc:`reasoning-introduction`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
+     - :doc:`reasoning-introduction`, :doc:`reasoning-typed-tutorial`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
    * - Compute when conclusions hold
      - :doc:`reasoning-temporal`
    * - Integrate reasoning with a database or saved state
@@ -123,6 +123,7 @@ benchmarks are separated from the first-run path.
 
    reasoning-introduction
    ontology
+   reasoning-typed-tutorial
    reasoning-typed
    reasoning-negation
    reasoning-proofs

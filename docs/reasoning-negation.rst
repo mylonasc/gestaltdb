@@ -3,6 +3,11 @@
 Scoped closed-world negation
 ============================================================
 
+For a first runnable example with successful absence evidence, see
+:doc:`reasoning-typed-tutorial`. This reference distinguishes that proof trace
+from the why-not blocker diagnostics below. Missing input is not an explicit
+negative claim; stored claim rules have a separate contract (:doc:`stored-rules`).
+
 Stratified negation evaluates absence against completed lower strata — never
 against facts still being derived. ``GenericRule.negated`` holds absence atoms
 over constant predicates; a program-level ``closed`` tuple declares which

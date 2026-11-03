@@ -103,6 +103,22 @@ a small example that connects facts, rules, conclusions and explanations; use
       against the supplied complete scope. It is not a claim that the whole
       world or every source is known (:doc:`reasoning-negation`).
 
+   aggregate
+      A value computed by combining completed rows in a logical group, such as
+      the count of a team's distinct member facts. Typed Datalog supports a
+      restricted nonrecursive aggregation stratum, not arbitrary recursive
+      arithmetic (:doc:`reasoning-typed-tutorial`).
+
+   range restriction
+      Requiring rule variables used in heads, comparisons or absence checks to
+      be bound by positive body atoms. This prevents those positions from
+      inventing arbitrary unbound values (:doc:`reasoning-typed-tutorial`).
+
+   selected-fragment conformance
+      Agreement with specified semantics for the declared supported subset.
+      Passing such checks is not full OWL/RDFS compatibility, source authentication
+      or certification of facts about the real world (:doc:`ontology`).
+
    stratification
       Ordering evaluation into layers so that a negated relation has been
       computed before absence is checked. Negative dependency cycles are rejected

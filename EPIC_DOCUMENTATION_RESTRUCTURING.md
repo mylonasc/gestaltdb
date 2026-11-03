@@ -326,6 +326,21 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
+### Ontology and standalone Datalog foundations (implemented, pending merge)
+
+DOC-06 #486 places ontology classification/axiom origins before optional RDF and
+database adapters, with classification/validation/hierarchy boundaries visible.
+The existing facts/rules introduction adds a binary-versus-typed choice table;
+`reasoning-typed-tutorial.rst` supplies four independent base-install examples for
+comparisons, recursion, scoped absence/proofs and grouped aggregation. Exact
+normalization/predicate-domain/proof contracts remain in focused references.
+Navigation and the packaged ontology topic route to the progressive examples;
+source-independent evaluation stays distinct from stored claim rules and source
+admission/publication. Focused validation passes 612 tests and strict Sphinx.
+Inventory: 104 documents / 89 Sphinx pages; backend/codec declarations remain
+unchanged because these new examples do not open a database or select a codec.
+Final audience acceptance remains DOC-10; delivery is not declared until merge.
+
 ### Claims, stored rules and modal learning path (delivered)
 
 DOC-05 #485 adds `claims-introduction.rst` and `stored-rules.rst`, and makes the

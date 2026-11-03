@@ -116,10 +116,41 @@ program and input horizon. Reevaluate or use the appropriate maintenance API
 after support changes; do not treat an old explanation as current evidence.
 Bounds, exports and checkpoint distinctions are in :doc:`reasoning-proofs`.
 
+Choose binary or typed rules
+-----------------------------
+
+Both standalone engines accept explicit Python values, not an unrestricted
+textual Datalog parser. Neither automatically extracts database facts or persists
+its conclusions. Use :doc:`stored-rules` for the separate persisted claim service.
+
+.. list-table:: Pick the fact model before constructing a program
+   :header-rows: 1
+
+   * - Need
+     - Binary entity API
+     - Typed n-ary API
+   * - Values
+     - Entity identifier strings; two arguments per relation
+     - Entity identifiers and strict typed literals; explicit arity per predicate
+   * - Fact construction
+     - ``Fact(subject, predicate, object)``
+     - ``TypedFact(predicate, [argument, ...])``
+   * - Program and engine
+     - ``Program`` / ``DatalogEngine``
+     - ``GenericProgram`` / ``GenericEngine``
+   * - Typical task
+     - Positive graph reachability or compiled ontology closure
+     - Numeric comparisons, unary/n-ary facts, scoped absence, restricted aggregates
+
+``Literal("integer", 18)`` is typed data, not the entity string ``"18"``. The typed
+engine does not silently recode binary values or make every adapter support typed
+proofs. Work through :doc:`reasoning-typed-tutorial` before its detailed reference.
+
 Choose the next reasoning capability
 ------------------------------------
 
-- **Values and n-ary relations:** :doc:`reasoning-typed` adds strict literals,
+- **Values and n-ary relations:** :doc:`reasoning-typed-tutorial` introduces strict literals;
+  :doc:`reasoning-typed` details
   comparisons, multi-head normalization and restricted aggregates. **Arity** means
   the number of arguments; a **literal** is typed data rather than an entity name.
 - **Absence:** :doc:`reasoning-negation` requires declared closed scopes and
@@ -131,7 +162,7 @@ Choose the next reasoning capability
 - **Time intervals:** :doc:`reasoning-temporal` computes when conclusions hold,
   separately from storing temporal graph history.
 - **Stored database rules:** ``graph.rules`` operates on selected temporal claims,
-  not on this standalone program API (:doc:`temporal-versioning`).
+   not on this standalone program API (:doc:`stored-rules`).
 
 For optional background, see `Datalog <https://en.wikipedia.org/wiki/Datalog>`_
 and the linked terms in :doc:`glossary`. GestaltDB's own guides, rather than an
