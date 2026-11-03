@@ -326,6 +326,86 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
+### Main integration checkpoint
+
+DOC-12 #492 merged through #501 at `0025bbf`. The follow-through stack #502–#506
+is consolidated for main review in #506, with its complete source history intact.
+Rendering tests requiring docutils explicitly skip without the docs extra so
+the base-install test contract remains independent of Sphinx dependencies.
+
+### Temporal/bitemporal learning path (implemented, pending merge)
+
+DOC-04 #484 adds `temporal-introduction.rst`, `temporal-updates.rst` and
+`temporal-reads.rst`. A compact Alice department timeline compares two valid
+instants under two captured recorded horizons while demonstrating that current
+records remain separate. Independent workflows cover partial-interval correction
+and retraction, deferred-index rebuilds, authenticated pinned traversal/snapshot
+materialization, and explicitly horizon-qualified Cypher. Window sampling and
+interval inference are routed to their distinct APIs; recovery/migration remain
+in operations. The old temporal URL and detailed service contracts are retained
+as reference, with fragment scope stated and the mixed implicit-setup sketch
+replaced by focused routes. README, architecture, quickstart and packaged temporal
+guidance link to the new path. No runtime behavior changes.
+
+Four database setups add 48 executable backend/serializer variants, bringing the
+catalog to 47 declarations / 457 alternatives (433 executable, 24 compiled
+shared-state variants). Inventory: 101 documents / 86 Sphinx pages. Validation
+includes 770 documentation/temporal tests and a broader 675-test temporal,
+migration, interface, Cypher and sampling run; strict Sphinx, documentation checks,
+lint and offline browser checks pass. #484 remains open until merged delivery;
+final cross-audience acceptance remains DOC-10.
+
+### Sampling learning path (implemented, pending merge)
+
+DOC-03 #483 adds `sampling-introduction.rst` with a live/snapshot decision table,
+ID domains before code, and a pinned property-filtered database-to-snapshot draw
+that runs after the database closes. Four independent task guides cover
+neighborhoods/message frames, induced/packed subgraphs, temporal point/window
+boundaries and training-negative rejection. The walk guide starts with policy
+selection; hierarchy and compatibility details remain reachable in the explicitly
+labelled sampling reference. README, landing navigation and the packaged sampling
+topic route to this path. No runtime behavior changes.
+
+Two database setups add 20 tested capability-qualified alternatives. The current
+tab catalog has 43 declarations / 409 alternatives (385 executable and 24 compiled
+shared-state fragments). The page inventory is 98 documents / 83 Sphinx pages.
+Focused sampling, example, editorial, strict Sphinx and offline layout/interaction
+checks validate this implementation; final cross-audience acceptance remains
+DOC-10. #483 stays open until delivery merges.
+
+### Reconciled delivery status (2026-11-03)
+
+Publication quality is a required acceptance condition: guides describe current
+library contracts, not intermediate implementation work, roadmap slices, regression
+resolution or release logistics. The library-focused editorial pass removes phase
+headings and stale prerelease advice, updates range/equality/publication boundaries,
+and separates dense development reports into `planning/documentation-review/history/`.
+Qualified reproducible benchmark evidence remains available without adoption diaries.
+An editorial regression check covers Sphinx, README, examples and packaged guides;
+it supplements, not replaces, semantic review. This work remains unmerged until its
+stacked PR is delivered and does not close the broader epic slices.
+The fixed performance setup is now in the archived report rather than the public
+guide, leaving 41 current tab declarations and the same 389 rendered alternatives
+(365 executable, 24 compiled shared-state fragments).
+
+- **Merged/delivered:** DOC-01 #481 (PR #496), DOC-02 #482 (PR #498),
+  DOC-11 #491 (PR #499), consolidated by #494 at `69fe552`. Their child
+  issues are closed and #480's corresponding delivery entries are checked.
+- **Implemented, not merged:** DOC-12 #492 in #501; terminology, code controls
+  and generated figures in #502; glossary tooltips and backend/serializer tabs
+  are stacked follow-through. These do not complete the remaining epic slices.
+- **Partial/pending:** DOC-03–DOC-10 and DOC-13, including final audience
+  acceptance and packaged-document alignment. Graphics debt remains in #495.
+
+The existing Concepts and Terminology glossary remains canonical, expanded for
+encountered jargon and linked with accessible definition tooltips. Explicit
+example declarations cover 42 database/codec setups: 389 rendered alternatives,
+including 365 executable alternatives and 24 compiled setup-fragment variants.
+One fixed benchmark setup is classified without tabs. Backend-free snippets and
+existing-graph continuations keep their context. Capability-qualified tabs do not
+change the ordinary extraction default, deferred automatic native adoption or
+optional HSA-05 #458.
+
 DOC-01's initial implementation lives under `planning/documentation-review/`:
 
 - `capabilities.json` maps 44 capability families to representative source/tests,
@@ -386,3 +466,17 @@ column labels on narrow screens. Complex tables keep their semantic table form.
 `scripts/check_docs_layout.py` provides an optional authoring-time browser check;
 it is not a new package/runtime dependency or a claim to replace a full
 accessibility audit.
+
+The terminology/usability follow-through adds a shared glossary and a first
+facts/rules/explanations tutorial. Specialist pages introduce unfamiliar terms
+before their examples and link to that foundation. In particular, a witness is
+defined as one recorded derivation, distinguished from all independent supports
+and from a source-authenticated proof certificate. The short temporal-reasoning
+example now constructs its own program and imports rather than relying on hidden
+setup. The inventory grows to 93 documents (78 Sphinx pages).
+
+Code blocks receive Sphinx-rendered line numbers plus accessible copy controls
+and per-page block numbers. Clipboard copying excludes line-number markup. Three
+basic static figures are generated through `gestaltdb.viz.api` from the quickstart,
+Cypher and rule-explanation fixtures; regeneration is checked without optional
+backends. The existing architecture SVG/DOT remains the component map.

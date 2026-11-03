@@ -3,11 +3,9 @@
 Historical Storage Backend Measurements
 ========================================
 
-This page preserves the numeric observations previously embedded in
-:doc:`storage-backends`. They are **historical local measurements**, not new
-measurements of the documentation-restructuring branch or the v0.17.0 wheel.
-The original prose did not bind every observation to an immutable source hash;
-do not use these numbers as current release acceptance or a universal ranking.
+These are **historical local measurements**, not measurements of the current
+wheel. Not every observation is bound to an immutable source hash; do not use
+these numbers as a current-release performance guarantee or universal ranking.
 For reproducible commands and stronger evidence qualifications, see
 :doc:`performance`. Backend choice starts with :doc:`storage-backends`.
 

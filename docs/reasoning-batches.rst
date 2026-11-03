@@ -65,8 +65,8 @@ The reference builders and set operations use transient Python tuples/sets and
 copy into compact buffers. ``nbytes`` counts final column payloads only, excluding
 dictionaries, reverse maps and staging allocations. The dictionary retains full
 external strings and a Python reverse index. Compact output does not imply compact
-peak RSS, compressed storage or vectorized execution. Optimized joins are later
-executor work, not a hidden fallback claim.
+peak RSS, compressed storage or vectorized execution. These containers do not
+provide an optimized join executor or a hidden fallback.
 
 Optional Arrow boundary
 -----------------------
@@ -113,11 +113,10 @@ and schema, callers may explicitly restore the original metadata using
 ``result.replace_schema_metadata(original.schema.metadata)`` before importing.
 That is a caller assertion of unchanged ID meaning, **not source authentication**;
 do not relabel a differently encoded table to bypass compatibility checks. Actual
-IDs/types/nulls are still validated. A general Polars execution/provenance adapter
-is RE-03 and must control this binding itself.
+IDs/types/nulls are still validated. For explicit closure-only Polars execution,
+see :doc:`reasoning-polars`; relation exchange alone does not execute rules.
 
-This is decoded logical-relation exchange, not the proposed PyRex raw-KV Arrow
-scan API. PyRex issue #31 remains optional upstream extraction work. No snapshot,
+This is decoded logical-relation exchange, not a PyRex raw-KV scan. No snapshot,
 transaction, storage ownership or zero-copy KV decoding guarantee is inferred
 from these relation buffers.
 

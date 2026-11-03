@@ -6,17 +6,15 @@ Ontology v1 implementation contract
 Development status
 ------------------
 
-This is the ONTO-01 interface agreement for epic #131. The immutable reasoning
-contracts, standalone Datalog evaluator, ontology compiler, bounded witness
-explanations and pinned claims adapter shipped on ``main`` in ``0.13.0rc1``.
-See ``EPIC_REASONING_ENGINE.md`` in the repository for roadmap priorities and
-``planning/reasoning-engine/release-readiness.md`` for release evidence.
+The reasoning interfaces separate immutable values, standalone evaluation,
+ontology compilation, bounded witness explanations and pinned database adapters.
+This reference describes their supported contracts and integration boundaries.
 
 Separation of concerns
 ----------------------
 
 ``gestaltdb.reasoning.model`` and ``gestaltdb.reasoning.protocols`` use only
-the standard library. Future core and ontology implementation must not import
+the standard library. Core and ontology modules do not import
 GraphDB, storage, serializers, Cypher, sampling or temporal version records.
 Adapters translate into these values, never the reverse. The existing package
 initializer still eagerly imports other subsystems; standalone architecture
@@ -24,8 +22,8 @@ does not mean separate installation or a minimal top-level import footprint.
 
 ``Fact(subject, predicate, object)`` contains three nonempty UTF-8 strings.
 There are no literals, blank-node generation, confidence weights or implicit IRI
-normalization. Local strings are opaque identifiers. Imported IRIs, if supported
-later, must preserve full identity. ``Variable(name)`` is the only variable form;
+normalization. Local strings are opaque identifiers; preserve full IRI identity
+when supplying identifiers. ``Variable(name)`` is the only variable form;
 ``'?x'`` remains a constant string, including in predicates.
 
 ``Atom`` has a constant predicate and string/variable endpoint terms. A ``Rule``
@@ -72,14 +70,16 @@ The supported compilation templates are:
 Multiple inheritance and cycles are legal and terminate under set semantics.
 Named equivalence does not merge individuals. Multiple domain or range axioms
 infer every stated class, not a union choice. Stable axiom identities and compiler
-rule origins are available in ONTO-03; immutable revision identity is separate from the
+rule origins are available on compiled ontologies; immutable revision identity is separate from the
 kernel's program digest. Hierarchy schema facts themselves are not automatically
-included in instance closure; future schema lookups must state their semantics.
+included in instance closure.
 
 Unsupported axiom shapes must fail before evaluation. Disjointness, equality,
 functionality, cardinality, datatypes, negation and existential generation are
-deferred, as are union superclasses and unscoped reflexivity. There is no claim
-of complete RDFS/OWL-RL/OWL-EL/OWL-DL support. Domain and range infer types; they
+not compiled by this fragment. Union superclasses and unscoped reflexivity are
+also unsupported.
+Separate validation, equality and typed-rule APIs have their own contracts.
+There is no claim of complete RDFS/OWL-RL/OWL-EL/OWL-DL support. Domain and range infer types; they
 do not validate required fields. Conflicts never entail arbitrary facts, and
 missing is not false.
 
@@ -147,7 +147,7 @@ records. Combining snapshots, worlds or temporal/current data planes requires a
 separate explicit adapter policy. Publication, deletion maintenance and historical
 interval inference are post-v1 work.
 
-Standalone evaluator (ONTO-02)
+Standalone evaluator
 ------------------------------
 
 The evaluator is stateless across calls and has no database, filesystem, clock,
@@ -198,7 +198,7 @@ caller responsibilities. Exceptions raised by an input iterator propagate;
 invalid yielded values raise ``ReasoningError``. Limit failures do not change the
 program or input collections and do not affect subsequent calls on the same engine.
 
-Immutable ontology compilation (ONTO-03)
+Immutable ontology compilation
 ---------------------------------------------
 
 Import ``Ontology`` and the nine supported axiom classes from
@@ -250,7 +250,7 @@ logical simplification. Compilation currently emits templates directly rather
 than materializing hierarchy closure or collapsing strongly connected components.
 Cycles terminate through the evaluator's set semantics and resource bounds.
 
-Result lookups and witness explanations (ONTO-04)
+Result lookups and witness explanations
 -------------------------------------------------
 
 ``fact in result`` performs binary-search membership without a second full fact
@@ -298,7 +298,8 @@ an inference bound still raises and returns no partial successful result.
 The core never imports the ontology layer. A caller resolves witness rule IDs
 through its compiled ontology's origin table and retains that source revision.
 Named input evidence is an opaque caller-supplied reference, not an authenticated
-claim version; source validation and snapshot context belong to ONTO-05.
+claim version; source validation and snapshot context belong to the pinned
+temporal claims adapter described below.
 
 ``FactWitness`` stores a fact and either an asserted-input witness or its exact
 ``Rule`` and ordered premises. Premises retain original body positions even if
@@ -337,7 +338,7 @@ Explaining a known fact when collection was disabled raises ``ReasoningError``.
 The lower-level trace alone does not establish that an unstored fact is entailed;
 use the result wrapper for that distinction.
 
-Pinned temporal claims (ONTO-05)
+Pinned temporal claims
 --------------------------------
 
 Import ``PinnedClaimSource``, ``ClaimSelection``, ``ClaimMapping`` and
@@ -438,7 +439,7 @@ without closing the borrowed graph/view. Keep the caller's graph open for the
 duration of extraction/evaluation. Stale temporal indexes fail closed and require
 an explicit caller-managed rebuild outside this read-only workflow.
 
-Conformance and isolation gates (ONTO-06)
+Conformance and isolation tests
 --------------------------------------------------
 
 The conformance suite is ``tests/test_ontology_conformance.py``. It combines
@@ -462,7 +463,7 @@ suite or a claim to implement OWL-RL. The independently grounded kernel tests,
 single-axiom/mixed compiler tests and temporal adapter isolation/failure tests
 remain required even when the optional oracle is absent.
 
-Run the oracle gate explicitly (versions used for this slice)::
+Run the reference oracle comparisons from a source checkout::
 
    uv run --with "owlrl==7.6.2" --with "rdflib==7.6.0" pytest tests/test_ontology_conformance.py -q
 
@@ -471,13 +472,6 @@ architecture and isolated execution checks still run. Do not count oracle skips
 as an executed differential gate. These packages are test-only and are not added
 to runtime requirements. Run the whole suite with the same ``--with`` options to
 exercise the gate alongside regressions; add installed backend extras as needed.
-
-``.github/workflows/ontology.yml`` runs these feature/reference/oracle gates on
-Python 3.10-3.13 for relevant PRs and pushes to ``onto-dev`` and ``main``. It installs
-the optional oracle and LMDB/LevelDB explicitly, so an absent oracle cannot silently
-turn the differential gate into skips. The existing general test workflow targets
-``main``; this dedicated workflow also covers epic integration before that release.
-The optional PyRex cases may still skip when that backend is not installed.
 
 Static import checks inspect every reasoning-core and ontology module, excluding
 the explicit adapter subtree. They require standard-library or inward relative

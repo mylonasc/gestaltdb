@@ -71,7 +71,7 @@ before persistence. No stale new output is relabelled as current.
 
 ``advance_authenticated_session`` holds the database temporal writer guard,
 then a cooperating session-file lock, across load/admission, existing incremental
-advance or explicit rebuild, new-generation admission and exact-state file CAS.
+advance or explicit rebuild, new-generation admission and exact-state file :term:`CAS`.
 Normal temporal writers cannot change the source through that boundary. Source
 store/decoder rebinding and reentrant source movement before replacement fail
 closed. It writes no database claims and grants no publication permit.
@@ -86,7 +86,7 @@ Persistence compatibility and races
 ------------------------------------------
 
 Existing v1 JSON files and their canonical session digests are unchanged.
-``save_session`` now serializes cooperating threads/processes through a hidden
+``save_session`` serializes cooperating threads/processes through a hidden
 sidecar lock and accepts additive ``expected_session_digest``. Unlike a horizon
 alone, this pin rejects same-horizon edits and deletion. The legacy
 ``advance_persisted_session`` also uses an exact loaded-state comparison when

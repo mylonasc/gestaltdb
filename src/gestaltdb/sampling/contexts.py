@@ -1,4 +1,4 @@
-"""Framework-independent Skip-gram context pairs from walk batches (RWS-02)."""
+"""Framework-independent Skip-gram context pairs from walk batches."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ class ContextPairBatch:
 
     IDs are compact and belong to the walks' snapshot; convert at application
     boundaries. Batches are bounded by ``batch_size``; see ``iter_context_pairs``
-    and ``docs/random-walks.rst`` RWS-02 for windowing and subsampling.
+    and ``docs/random-walks.rst`` for windowing and subsampling.
     """
 
     center_nodes: IntArray

@@ -9,9 +9,6 @@ the entity model and :doc:`serializers` for value types and codec trade-offs.
 Backend Selection Summary
 -------------------------
 
-.. Graphics debt VIS-01 (#495): independent backend/codec selection diagram;
-   retain the capability matrix and text as its accessible static fallback.
-
 .. list-table:: Install only what the application needs
    :header-rows: 1
    :widths: 17 18 35 30
@@ -179,7 +176,7 @@ Transactions
      - ``graph.current_read_view()``
    * - LMDB
      - Supported across named databases
-     - Pinned, verifiable MVCC state
+     - Pinned, verifiable :term:`MVCC` state
    * - LevelDB layout
      - Unsupported
      - Unsupported

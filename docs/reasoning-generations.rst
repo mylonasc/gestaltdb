@@ -3,7 +3,7 @@
 Recoverable staged generations and compare-and-publish
 ============================================================
 
-Point publication now splits into ``stage_point`` (extraction + inference,
+Point publication splits into ``stage_point`` (extraction + inference,
 no writer guard) and ``publish_staged`` (guard held only for orphan audit,
 target comparison and one logical commit). The stage binds database,
 namespace, ontology revision, policy, mapping, evidence and valid point in

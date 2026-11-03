@@ -3,13 +3,24 @@
 Bounded proofs, export interchange and checkpoints
 ============================================================
 
-``gestaltdb.reasoning.explanations`` closes the roadmap: bounded
-minimal/top-k proof contracts, a stable model-output interchange and
-authenticated generation checkpoints. A proof is a chosen witness, never
-the whole support set — ``export_proof`` labels the witness kind
-alongside the complete alternatives so consumers never confuse the two,
-and carries no scores or confidences (ranked probabilistic provenance
-stays a separately gated calculus).
+What an explanation does—and does not—show
+------------------------------------------
+
+A :term:`witness` is one recorded route from premises to a conclusion: “this
+rule used these facts to derive that fact”. Multiple independent :term:`supports
+<support>` may justify the same conclusion. The retained route is therefore not
+an all-support index or an independent certificate that the inputs are true.
+See :doc:`reasoning-introduction` for a runnable example and generated witness
+figure, and :doc:`glossary` for facts, rules, premises, closure and DAGs.
+
+``gestaltdb.reasoning.explanations`` exposes bounded minimal/top-k witness
+selection, export and generation checkpoints. “Minimal” here concerns a bounded
+one-step selection contract, not globally smallest deep derivation trees.
+``export_proof`` records the witness kind and supplied alternative supports;
+it does not turn scores or confidence metadata into logical probabilities.
+
+**Illustrative fragment:** ``fact`` and ``supports`` below come from a completed
+supported maintenance/evaluation workflow; this is not standalone setup.
 
 .. code-block:: python
 
@@ -21,8 +32,9 @@ stays a separately gated calculus).
 Checkpoints and limits
 ----------------------------------------
 
-``checkpoint_closure`` persists only authenticated generations — program
-digest, fact horizon, support evidence and index digest bound together.
+``checkpoint_closure`` binds program digest, fact horizon, support evidence and
+index digest together in a saved generation. This consistency binding does not
+by itself authenticate arbitrary input facts against a database source.
 ``resume_checkpoint`` rebuilds and re-validates instead of trusting
 stored derivations; incompatible generations fail closed and incomplete
 checkpoints are discarded explicitly, never silently repaired. Deep-tree
@@ -30,7 +42,7 @@ minimality is combinatorial and explicitly deferred: the contract covers
 bounded one-step witnesses (``max_proof_bytes`` fails closed instead of
 truncating), and exports state their complexity honestly.
 
-Typed derivation tracking (#392)
+Typed derivation tracking
 ----------------------------------------
 
 ``GenericEngine.evaluate(..., collect_proofs=True)`` records one
@@ -46,14 +58,16 @@ horizon: ``trace.is_current_for(program, facts)`` reports whether it still
 describes the live closure, so retracted support is re-explained after
 retract/rematerialize rather than misattributed.
 
+**Illustrative fragment:** ``program``, ``facts`` and ``derived`` are a typed
+program, its inputs and a selected conclusion. Use public explanation methods;
+internal trace dictionaries are not application APIs.
+
 .. code-block:: python
 
    from gestaltdb.reasoning import ReasoningLimits
    from gestaltdb.reasoning.typed import GenericEngine
 
    proven = GenericEngine().evaluate(program, facts, limits=ReasoningLimits(), collect_proofs=True)
-   node = proven.proofs._by_fact[derived]
-   assert node.rule.rule_id and node.premises
    explanation = proven.proofs.explain(derived)
    assert not explanation.truncated
 
@@ -62,6 +76,5 @@ Measured cost
 
 On a 30-link chain (495 facts, 465 supports): witness selection plus
 export in ~0.1ms (525 bytes), checkpoint in ~5.3ms, resume with full
-re-validation in ~7.0ms. The export vocabulary is the interchange that
-native proof trees (#126) consume — generation without the engine,
-never proof without the evidence.
+re-validation in ~7.0ms. The export vocabulary records evidence for explanation
+consumers; it does not independently verify proofs.

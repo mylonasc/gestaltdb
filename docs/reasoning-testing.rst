@@ -1,10 +1,9 @@
-Reasoning engine testing milestone
-==================================
+Using and validating reasoning results
+======================================
 
-The 0.13.0rc1 candidate makes the reasoning implementation available for opt-in
-user testing. Until its tagged prerelease is published, the commands below name
-the intended release, not a claim of availability. This milestone does not
-complete the entire roadmap or promise production-scale performance.
+Use explicit programs, bounded evaluation and small known inputs before applying
+reasoning to application data. Standalone evaluation, graph projection and
+temporal claim extraction have distinct source and persistence contracts.
 
 Install and isolate
 -------------------
@@ -16,10 +15,10 @@ database backend, solver, JVM, Arrow or Polars:
 
    python -m venv .venv-reasoning
    . .venv-reasoning/bin/activate
-   python -m pip install 'gestaltdb==0.13.0rc1'
+   python -m pip install gestaltdb
 
 For explicit persisted graph/claim workflows, select a backend, for example
-``python -m pip install 'gestaltdb[lmdb]==0.13.0rc1'``. JSON and Pickle are built
+``python -m pip install 'gestaltdb[lmdb]'``. JSON and Pickle are built
 in; optional binary serializers and backends are independent extras. Do not
 install every benchmark client just to use the reasoner. See :doc:`installation`.
 
@@ -72,9 +71,10 @@ Supported paths and deliberate boundaries
   :doc:`reasoning-generations`, :doc:`reasoning-sessions` and
   :doc:`reasoning-inferred-consumers`. The common identity contract does not
   silently retrofit every older API or make executors interchangeable.
-- **Time ranges:** positive typed closure over change segments preserves gaps
-  and evidence. Range negation/aggregates are not supported; equality is scoped
-  per segment. See :doc:`reasoning-conformance` and :doc:`reasoning-ranges`.
+- **Time ranges:** typed closure over change segments preserves gaps and
+  evidence. Supported stratified absence and aggregates are recomputed per
+  segment; equality is scoped per segment. See :doc:`reasoning-conformance`
+  and :doc:`reasoning-ranges` for restrictions and evidence handling.
 - **Experimental/optional:** Polars is closure-only and never replaces the
   default or silently drops proofs. Arrow exchange is not universally zero-copy.
   Existential/EL experiments and context extensions are gated, not a full
@@ -85,12 +85,10 @@ Supported paths and deliberate boundaries
 Compatibility and safe testing
 ------------------------------
 
-Keep a backup and test on a disposable copy before opening a valuable database
-with a prerelease. The representative release fixture reopens LMDB/JSON graph
-records and claims created by 0.12.0, then verifies reasoning transitions and
-reopen parity. This does not certify every historical serializer/backend or
-guarantee downgrade after new writes. Do not share an open directory between
-different GestaltDB versions.
+Keep a backup and test on a disposable copy before upgrading a valuable database.
+Do not assume downgrade compatibility after new writes, or share an open directory
+between different GestaltDB versions. Reopen requires the configured backend and
+serializer; see :doc:`operations` for lifecycle and recovery guidance.
 
 No implicit physical node merge, backend fallback or history migration is part
 of enabling reasoning. Honor backend snapshot/publication capabilities; in
@@ -111,10 +109,5 @@ Report Python/GestaltDB/backend/serializer versions, selected profile/executor,
 limits, a small reproducible rule/input set, expected versus actual answers,
 and whether a fresh rebuild agrees. Include stage timings and graph shape for
 performance reports, not unsupported universal speedup conclusions. Remove
-credentials and private graph data from reports. Use the repository's GitHub
-issues; release readiness is tracked in #156 and review follow-through in #200.
-
-Remaining optimizer/native benchmark work, broader integration and research
-extensions remain tracked. They do not postpone this testing milestone unless
-they expose incorrect results, unsafe publication or compatibility regressions
-in an advertised path. Stable promotion follows user feedback and fixes.
+credentials and private graph data from reports. Report reproducible problems
+through the repository's GitHub issues.

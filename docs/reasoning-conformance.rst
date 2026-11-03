@@ -1,12 +1,12 @@
 :orphan:
 
-Temporal conformance, performance gates and audit workflows
+Temporal conformance and audit workflows
 ============================================================
 
-RE-E4 exits here. The supported temporal/profile matrix is explicit, every
-supported combination verifies independently, and the when/why workflows
-below say exactly which mode to reach for. Anything outside the matrix
-rematerializes explicitly — failure never yields a partial interval result.
+Use ``verify_closure`` to check a temporal result by independent re-segmentation
+and point evaluation. Unsupported combinations fail explicitly; evaluation
+failure never yields a successful partial interval result. Bounded explanations
+can be flagged as truncated without truncating logical conclusions.
 
 Supported combinations
 ----------------------------------------
@@ -16,9 +16,10 @@ Supported combinations
   evidence, pinned catalogs and staged generations. Verified by
   ``verify_closure`` (independent re-segmentation, per-segment point
   evaluation, derivation and coverage checks).
-- Stratified negation / aggregates / closed scopes: point evaluation only,
-  via explicit per-point stratified runs. Range evaluation rejects these
-  fragments; there is no range-negation mode.
+- Stratified negation / aggregates / closed scopes: range evaluation runs the
+  supported point evaluator on each segment and records scoped first-witness
+  evidence. ``verify_closure`` checks absence probes and aggregate operands.
+  See :doc:`reasoning-ranges` for evidence budgets and reuse restrictions.
 - Equality: per-segment canonicalization with per-segment scopes. No
   global merges across segments or horizons.
 - Storage backends: historical readback and orphan recovery run where the
@@ -29,10 +30,10 @@ Supported combinations
 any drift — stale segments, missing supports, uncovered validity — fails
 closed demanding rematerialization.
 
-Measured gates
+Reference measurements
 ----------------------------------------
 
-``benchmarks/reasoning_temporal.py`` freezes the evidence in
+``benchmarks/reasoning_temporal.py`` records reference measurements in
 ``benchmarks/results/reasoning-re22-temporal.json`` (fragmented 20/60-edge
 chains, 3 repeats): extraction is sub-millisecond (pure cut-point sweep),
 inference ~3.5ms/11.6ms, single-validity updates ~0.9ms/5.7ms against

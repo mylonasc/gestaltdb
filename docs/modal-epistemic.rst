@@ -1,6 +1,23 @@
 Bounded Modal and Epistemic Evaluation
 ======================================
 
+Terms before formulas
+----------------------
+
+**Epistemic** concerns knowledge; **modal** operators express claims such as
+belief, knowledge or possibility relative to other contexts. A :term:`world` is
+a named claim context, and :term:`accessibility` explicitly links contexts for
+an agent. A **frame** is the relevant world/link structure. These are logical
+contexts and relations, not separate physical databases.
+
+Contradictory evidence can coexist: :term:`paraconsistent` means that a
+contradiction does not make unrelated propositions follow. A missing positive
+claim is not automatically a negative claim. The :doc:`glossary` explains the
+related :term:`bitemporal`, :term:`valid time` and :term:`system time` terminology.
+
+World models
+-------------
+
 GestaltDB evaluates finite world models over the existing bitemporal claim
 history. Accessibility is not inferred: each agent and frame has explicit,
 temporal links created with ``assert_world_accessibility``. ``belief``,

@@ -77,9 +77,6 @@ See :doc:`property-filtering` for the full exact/range/ID/count map and the port
 Freshness is part of the workflow
 ----------------------------------
 
-.. Graphics debt VIS-02 (#495): use the existing architecture map for the broad
-   flow; add only a focused maintain/defer/rebuild state diagram if needed.
-
 Object writes maintain configured current indexes. Columnar loading chooses an
 index policy: maintain during writes, defer and explicitly rebuild, or defer and
 rebuild before returning. A stale-family error is a signal to complete the

@@ -9,7 +9,7 @@ existing supports and logical retractions use DRed against the pinned
 dependency index. Unknown history (a delta referencing versions the session
 never observed) rebuilds explicitly from a full scan instead of guessing.
 
-This first milestone advances in memory with an explicit rebuild fallback.
+Sessions advance in memory with an explicit rebuild fallback.
 Durable cross-process persistence of session state lives in
 ``gestaltdb.reasoning.adapters.session_store``: a session
 is a value, and ``advance_session`` returns the next value. Callers persist

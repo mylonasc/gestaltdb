@@ -21,6 +21,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Optional NetworkX import/export and static GEXF loading: `src/gestaltdb/integrations/networkx.py`; mapping/security contracts: `docs/networkx.rst` (install `gestaltdb[networkx]`).
 - Columnar ingestion containers and enums: `src/gestaltdb/ingestion.py`
 - Canonical temporal values and selection semantics: `src/gestaltdb/temporal.py`
+- Temporal learning path: `docs/temporal-introduction.rst`, `docs/temporal-updates.rst`, `docs/temporal-reads.rst`; exact history/service contracts remain in `docs/temporal-versioning.rst`.
 - Immutable temporal version records and write descriptors: `src/gestaltdb/versioning.py`
 - Epistemic claim values and four-valued status: `src/gestaltdb/epistemic.py`
 - Bounded modal expressions and evaluation: `src/gestaltdb/modal.py`
@@ -56,7 +57,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Legacy Cypher import shims: `src/gestaltdb/cypher.py` and `src/gestaltdb/cypher_*.py`
 - Explicit type hierarchies: `src/gestaltdb/hierarchy.py`; `RelationHierarchy` expands sampler relations and opt-in Cypher relationship sub-property matching, `LabelHierarchy` enables opt-in Cypher node sub-type matching. The historical `sampling/hierarchy.py` path is a compatibility shim.
 - Sampling API: `src/gestaltdb/sampling/`
-- Sphinx docs: `docs/`; user-facing filtering and sampling guides: `docs/property-filtering.rst`, `docs/typed-sampling.rst`; performance boundaries and benchmark commands: `docs/performance.rst`
+- Sphinx docs: `docs/`; sampling entry: `docs/sampling-introduction.rst` (links focused layer/subgraph/time/negative tasks); filtering: `docs/property-filtering.rst`; policy/format reference: `docs/typed-sampling.rst`; performance: `docs/performance.rst`
 - Tests: `tests/`
 - Modular subsystem guides: `.opencode/skills/gestaltdb-docs-maintainer/references/`
 

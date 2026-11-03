@@ -5,7 +5,7 @@ explicit fact set, so removing support can only split classes on the next
 rebuild — stale unions are unrepresentable. Literals never merge (value
 identity already decides them); no unique-name assumption is made. Functional
 properties generate explicit ``SameAs`` links for later inspection instead of
-silently rewriting facts. Temporal scoping belongs to RE-20; treat every
+silently rewriting facts. Treat every
 mapping as valid only for its evaluated snapshot.
 """
 

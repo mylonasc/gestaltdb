@@ -134,9 +134,8 @@ Optional Dependencies
 Pre-Release Installs
 --------------------
 
-Alpha releases use standard Python pre-release versions, for example
-``0.2.0a0``. If a stable release with the same base version exists in the
-future, install alpha builds explicitly:
+Pre-releases use standard Python version identifiers. Pip normally selects
+stable releases; use ``--pre`` to allow available pre-release builds explicitly:
 
 .. code-block:: sh
 

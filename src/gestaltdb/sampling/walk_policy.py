@@ -54,13 +54,13 @@ class WalkPolicy:
         weighted_first_step: Opt into static weights on the first step
             (requires ``node2vec=True``).
 
-    Hard avoidance core (RWS-04): ``avoid_recent`` includes the current node
+    Hard avoidance: ``avoid_recent`` includes the current node
     (1 forbids self-loops, 2 also forbids returning to the previous node);
     ``non_backtracking`` forbids that return independently; ``relax`` drops only
     avoidance, not other filters; parallel edges to a forbidden node all fail.
 
     See Also:
-        ``docs/random-walks.rst`` RWS-04 through RWS-07 for examples of
+        ``docs/random-walks.rst`` for examples of
         avoidance, schemas, chronology, and transition units.
     """
 
@@ -129,7 +129,7 @@ def sample_policy_walks(
 
     See Also:
         ``engine.sample_policy_walks`` for the engine entry point and
-        ``docs/random-walks.rst`` RWS-04 for runnable avoidance examples.
+        ``docs/random-walks.rst`` for runnable avoidance examples.
     """
     policy = WalkPolicy() if policy is None else policy
     if not isinstance(policy, WalkPolicy):

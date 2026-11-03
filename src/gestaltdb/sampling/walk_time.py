@@ -1,4 +1,4 @@
-"""Explicit edge-validity traversal times for chronological walks (RWS-06)."""
+"""Explicit edge-validity traversal times for chronological walks."""
 
 from __future__ import annotations
 

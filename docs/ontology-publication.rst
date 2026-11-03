@@ -73,15 +73,12 @@ cycles and preserves independent support. Losing the final support retracts the
 managed output; losing only one support updates its generation. This is not
 incremental truth maintenance or an all-support proof index.
 
-Interval semantics before any broader materialization
+Point versus interval publication
 ----------------------------------------------------------------
 
-This API deliberately accepts no output interval or window. For a future interval
-publisher, every rule application must intersect the validity sets of all its
-premises, then union all independent supports of each conclusion. Maintain a
-normalized, sorted, disjoint union of half-open intervals; merge adjacent intervals
-but never fill gaps with a min/max envelope. Iterate those interval sets to a
-bounded fixed point, retain revision/system-horizon separation, and recompute
-or maintain all supports when deleting. Point witnesses cannot establish these
-unions. Such an interval publisher and incremental support index are not supplied
-by this operation.
+This point API accepts no output interval or window. Interval conclusions require
+intersecting premise validity and unioning independent supports without filling
+gaps. A point witness alone cannot establish those interval unions. Use
+:doc:`reasoning-ranges` for range evaluation and
+:doc:`reasoning-bound-range-publication` for computation-owned guarded interval
+publication. These are separate APIs, not options on this point publisher.

@@ -116,7 +116,7 @@ cache migration, range/session/sampler admission, publication or general typed,
 negation/equality/aggregate execution. Those require their own source and
 semantic contracts; see :doc:`reasoning-generation-identity`.
 
-Opt-in reasoning-aware queries (#395)
+Opt-in reasoning-aware queries
 -------------------------------------
 
 For the explicit generation-pinned, read-only Cypher surface over a selected

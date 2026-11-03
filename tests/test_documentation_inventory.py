@@ -61,9 +61,10 @@ def test_missing_citation(inventory_root):
 def test_duplicate_classification(inventory_root):
     path = inventory_root / "planning/documentation-review/documents.json"
     data = json.loads(path.read_text())
+    duplicated = data["groups"][0]["files"][0]
     data["groups"].append(data["groups"][0])
     path.write_text(json.dumps(data))
-    assert "duplicate document classification: README.md" in CHECKER["validate"](inventory_root)
+    assert f"duplicate document classification: {duplicated}" in CHECKER["validate"](inventory_root)
 
 
 def test_invalid_status_and_unsafe_path(inventory_root):

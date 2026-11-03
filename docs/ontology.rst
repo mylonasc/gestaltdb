@@ -1,6 +1,27 @@
 Ontology reasoning
 ========================
 
+Before the APIs
+---------------
+
+An :term:`ontology` describes named classes and relations using semantic
+:term:`axioms <axiom>`, such as “every Researcher is a Person”. Compiling those axioms
+produces rules that derive additional :term:`facts <fact>` from supplied inputs.
+A :term:`witness` explains one derivation by naming its rule and premises; it is
+not every independent justification. Start with :doc:`reasoning-introduction`
+for a complete facts/rules/explanation example and :doc:`glossary` for terminology.
+
+In RDF/OWL descriptions, :term:`TBox` means the schema/terminology axioms and
+:term:`ABox` means assertions about individuals. GestaltDB's optional RDF import
+below accepts a selected schema fragment, not arbitrary OWL data or reasoning.
+For a relation's **domain** and **range**, the relevant axioms infer class
+memberships of its subject and object; they are not checks that reject records
+with missing properties. **Subsumption** means inclusion in a more general class
+or relation, as defined in :doc:`glossary`.
+
+Supported layer
+----------------
+
 The ontology layer compiles immutable named-class/object-property axioms to a
 standalone positive-Datalog program. It uses no database handle and adds no
 mandatory solver dependency. It does not change asserted labels, relationships,

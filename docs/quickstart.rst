@@ -27,6 +27,14 @@ Create, query, and sample
 target. A property index supports direct name lookup; native labels and
 relationship types are indexed automatically.
 
+.. figure:: _static/examples/property-graph-example.svg
+   :alt: Aspirin has one outgoing binds relationship with score 0.9 to PTGS1.
+   :width: 100%
+
+   This example's two-node graph, drawn with GestaltDB's own
+   ``visualize_nodes_edges`` API. The arrow is the stored relationship, not an
+   inference step.
+
 .. code-block:: python
 
    from tempfile import TemporaryDirectory
@@ -104,6 +112,8 @@ What the example establishes
   Array-native sampling needs no open database. ``_external`` methods accept
   application IDs; ``to_external`` converts compact output IDs back for inspection.
   Memmap avoids eager array loading, not all memory use (:doc:`typed-sampling`).
+- **Training tasks:** continue with :doc:`sampling-introduction` for ID domains,
+  eligible-graph filtering and focused layer, subgraph, temporal and negative guides.
 
 Filtering the query's rows or seeds does **not** filter every sampled hop. Build a
 filtered snapshot with ``node_filter`` / ``edge_filter`` when that is the intended
@@ -127,13 +137,13 @@ Choose your next path
    * - Draw layers, subgraphs, walks or temporal negatives
      - :doc:`typed-sampling`, :doc:`random-walks`
    * - Inspect historical state at valid/system time
-     - :doc:`temporal-versioning`
+     - :doc:`temporal-introduction`, :doc:`temporal-updates`, :doc:`temporal-reads`
    * - Record sourced claims, derive stored rules or inspect belief
      - :doc:`temporal-versioning`, :doc:`modal-epistemic`, :doc:`inference-audit`
    * - Classify entities from ontology axioms
      - :doc:`ontology`
    * - Evaluate standalone binary/typed Datalog
-     - :doc:`api-workflows`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
+     - :doc:`reasoning-introduction`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
    * - Compute intervals over which conclusions hold
      - :doc:`reasoning-temporal`
    * - Connect a graph to reasoning and source-verified saved state

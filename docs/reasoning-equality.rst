@@ -40,8 +40,8 @@ Conflicts are first-class results, not failures: a ``differentFrom`` pair
 landing in one class yields an ``InequalityConflict`` with the merge path and
 the violated link. Functional conflicts likewise report the two values and
 state that equality is *not* inferred — generation beyond explicit links is
-out of scope, and key/cardinality checks beyond single-valued functionality
-belong to RE-23.
+out of scope. For declarative key/cardinality checks, see
+:doc:`reasoning-validation`.
 
 Removal, scope and time
 ----------------------------------------
@@ -50,9 +50,9 @@ Because no state persists between calls, removing support can only split
 classes on the next rebuild; insertion-only union-find reuse is explicitly
 not implemented. Each mapping is valid for exactly the evaluated snapshot:
 callers pass an opaque ``EqualityScope`` (a pinned-context identity) and must
-rebuild after any change; temporal scoping of representatives is revisited in
-RE-20, which may rebuild at change points instead of sharing representatives
-globally. Recursive equality interaction with other strata is evaluated
+rebuild after any change. Temporal range evaluation scopes representatives per
+segment rather than sharing them globally (:doc:`reasoning-ranges`).
+Recursive equality interaction with other strata is evaluated
 against the same input horizon, never against a cached older mapping.
 
 Measured cost
@@ -60,6 +60,6 @@ Measured cost
 
 Canonicalizing 100,000 entities chained by 99,999 links completes in about
 0.6s single-threaded with bounded memory (parent/size/evidence tables sized by
-distinct entities); see the roadmap register for the frozen reference. The
+distinct entities) in the reference workload. This is not a latency guarantee. The
 bound ``max_entities`` fails closed instead of degrading, and cooperative
 ``cancel`` is honored between union batches.

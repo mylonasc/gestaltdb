@@ -4,6 +4,10 @@ GestaltDB has two sampling layers: live typed traversal for application queries,
 and reusable array-native CSR snapshots for high-throughput training batches.
 For property-graph cohort selection, read the `indexing` topic too.
 
+The human learning path starts at `docs/sampling-introduction.rst`, followed by
+`sampling-neighborhoods`, `sampling-subgraphs`, `sampling-temporal` and
+`sampling-negatives`. `docs/typed-sampling.rst` retains the policy/format reference.
+
 ## ID Spaces (Read This First)
 
 - `external`: application string IDs (`"drug"`, `"binds"`). Live traversal and

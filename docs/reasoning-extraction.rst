@@ -86,9 +86,8 @@ The separate :doc:`reasoning-native-claims` adapter still admits only plain PyRe
 Native Arrow scans (``pyrex-rocksdb>=0.5.0``)
 --------------------------------------------------
 
-Release 0.5.0 (PyPI, 2026-10-20) implements the requested ``scan_arrow`` /
-``Snapshot`` contract on plain non-transactional handles, verified by direct
-audit rather than assumed from the proposal:
+Plain nontransactional PyRex handles expose the following raw ``scan_arrow`` /
+snapshot contract from runtime 0.5.0 onward, subject to capability checks:
 
 - ``db.scan_arrow(prefix=, start=, stop=, batch_size=, max_batch_bytes=,
   read_options=, snapshot=, allow_overflow=)`` streams single-consumer Arrow
@@ -122,34 +121,30 @@ The original 2000-small-row measurement found the Python iterator faster
 (~2.4M vs ~1.2M rows/s warm); the native path pays per-batch Arrow overhead that
 must not be assumed to disappear at scale. No throughput speedup is claimed —
 the value is bounded batches and shared snapshot horizons. Python copying and
-payload decoding remain. Subsequent 100K variable-value and authenticated claim
-measurements retain a no-adoption decision; see
+payload decoding remain. For qualified 100K variable-value and authenticated claim
+measurements, see
 :doc:`reasoning-frontier-benchmarks` and :doc:`reasoning-native-claims`.
 First/primed measurements do not certify an OS-cold cache.
 
-PyRex 0.6.0 upstream re-audit
+Transactional raw scan support
 ----------------------------------------
 
-``TransactionDB`` in 0.6.0 adds ``scan_arrow`` and ``create_snapshot`` with the
-same default-column-family raw schema/range/snapshot contract. Bounded tests in
-``tests/test_reasoning_native_capability_audit.py`` check exact copied rows,
-shared snapshots across subsequent writes, ``[start, stop)`` prefix intersections,
-owned/borrowed lifetime, single-use scans, row limits, commit/rollback visibility
-and isolation of uncommitted transactions. The same test set verifies 0.5.0's
-explicit unsupported transactional result, not an implicit fallback.
+``TransactionDB`` supports ``scan_arrow`` and ``create_snapshot`` from PyRex 0.6.0
+onward with the same default-column-family raw schema/range/snapshot contract.
+Runtime 0.5.0 does not support these transactional entry points. Capabilities
+are checked explicitly; unsupported requests never silently fall back.
 
-In 0.6.0 named ``ColumnFamilyHandle`` values still expose neither entry point.
+Named ``ColumnFamilyHandle`` values are not supported by this adapter.
 Raw TransactionDB scans read the default family only: a same-prefix key in a
 named family does not appear. Passing a named-family handle to the native scan
 adapter fails closed; it is never silently coerced to the default family.
 No arbitrary column-family routing API is introduced here.
 
-This updates the capability matrix, not source or executor admission.
+Raw scan capability is not source or executor admission.
 ``PinnedNativeClaimSource`` still rejects transactional handles even when raw
 scans work. No temporal/current/range provenance, publication or all-support
 guarantee follows from raw snapshot sequence/validity. Installed-runtime gates
-remain explicit; these small probes are correctness audits, not performance
-observations or a broad future-version guarantee.
+remain explicit; a version number alone does not establish runtime capability.
 
 Decoded Evidence handoff
 ----------------------------------------
@@ -165,11 +160,9 @@ the handoff. The ``complete`` flag mirrors the raw batch it was decoded
 from — end-of-scan is always generator exhaustion, since filtered-out tails
 carry no batch. ``iter_locator_keys`` yields keys only for caller
 point-materialization so locator-versus-full-scan tradeoffs can be measured
-per backend (column projection would need upstream support and is documented,
-not assumed). The 0.5.0 audit found no transactional/named-family scans; the
-0.6.0 re-audit above adds raw transactional default-family coverage only.
-The GenerationStore question is settled by the scale decision:
-no bespoke native kernel — recorded defer.
+per backend. Column projection and named-family routing are not provided by
+this adapter. Raw transactional default-family scanning is separate from
+authenticated transactional claim-source admission.
 
 Batched claim source
 ----------------------------------------

@@ -30,6 +30,81 @@
   display: none;
 }
 
+.code-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid #d6d9dc;
+  background: #f3f6f6;
+  color: #404040;
+  font: 0.8rem sans-serif;
+}
+
+.copy-code-status {
+  margin-left: auto;
+  overflow-wrap: anywhere;
+}
+
+.copy-code-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0.25rem;
+  color: #245b78;
+  background: white;
+  border: 1px solid #aeb8c0;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.copy-code-button:focus-visible {
+  outline: 2px solid #245b78;
+  outline-offset: 2px;
+}
+
+.clipboard-fallback {
+  position: fixed;
+  left: -10000px;
+}
+
+.highlight .linenos {
+  user-select: none;
+}
+
+.term-definition-link {
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+}
+
+.term-definition-tooltip {
+  position: fixed;
+  z-index: 10000;
+  max-width: min(360px, calc(100vw - 24px));
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #52677c;
+  border-radius: 4px;
+  background: #f3f6f6;
+  color: #202830;
+  box-shadow: 0 2px 6px #0002;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+.sphinx-tabs-tab {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.sphinx-tabs-tablist {
+  flex-wrap: wrap;
+}
+
 /* Four narrow columns are not readable on a phone. Repeat headings per row
  * only when the small enhancement has prepared a simple, non-spanned table.
  */

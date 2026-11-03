@@ -3,6 +3,85 @@
  * Without JavaScript the wrapped, bounded table remains available.
  */
 document.addEventListener("DOMContentLoaded", () => {
+  const tooltip = document.createElement("div");
+  tooltip.id = "term-definition-tooltip";
+  tooltip.className = "term-definition-tooltip";
+  tooltip.setAttribute("role", "tooltip");
+  tooltip.hidden = true;
+  document.body.appendChild(tooltip);
+  let currentTerm = null;
+  const hideTerm = () => {
+    if (currentTerm) currentTerm.removeAttribute("aria-describedby");
+    currentTerm = null;
+    tooltip.hidden = true;
+  };
+  const showTerm = (link) => {
+    hideTerm();
+    currentTerm = link;
+    tooltip.textContent = link.dataset.termDefinition;
+    tooltip.hidden = false;
+    link.setAttribute("aria-describedby", tooltip.id);
+    const anchor = link.getBoundingClientRect();
+    const box = tooltip.getBoundingClientRect();
+    tooltip.style.left = `${Math.max(12, Math.min(anchor.left, innerWidth - box.width - 12))}px`;
+    const below = anchor.bottom + 8;
+    tooltip.style.top = `${below + box.height < innerHeight ? below : Math.max(12, anchor.top - box.height - 8)}px`;
+  };
+  document.querySelectorAll("a.term-definition-link[title]").forEach((link) => {
+    link.dataset.termDefinition = link.title;
+    link.removeAttribute("title"); // avoid a second native tooltip when enhanced
+    link.addEventListener("mouseenter", () => showTerm(link));
+    link.addEventListener("focus", () => showTerm(link));
+    link.addEventListener("mouseleave", () => { if (document.activeElement !== link) hideTerm(); });
+    link.addEventListener("blur", () => { if (!link.matches(":hover")) hideTerm(); });
+    link.addEventListener("keydown", (event) => { if (event.key === "Escape") hideTerm(); });
+  });
+
+  document.querySelectorAll(".rst-content div.highlight").forEach((block, index) => {
+    const pre = block.querySelector("pre");
+    if (!pre) return;
+    const tools = document.createElement("div");
+    tools.className = "code-tools";
+    const number = document.createElement("span");
+    number.textContent = `Code ${index + 1}`;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "copy-code-button";
+    button.setAttribute("aria-label", `Copy code block ${index + 1}`);
+    button.title = "Copy code (without line numbers)";
+    button.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M16 8V3H3v13h5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+    const status = document.createElement("span");
+    status.className = "copy-code-status";
+    status.setAttribute("role", "status");
+    button.addEventListener("click", async () => {
+      const source = pre.cloneNode(true);
+      source.querySelectorAll(".linenos").forEach((line) => line.remove());
+      const text = source.textContent;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const textarea = document.createElement("textarea");
+          textarea.value = text;
+          textarea.className = "clipboard-fallback";
+          document.body.appendChild(textarea);
+          try {
+            textarea.select();
+            if (!document.execCommand("copy")) throw new Error("Copy unavailable");
+          } finally {
+            textarea.remove();
+            button.focus();
+          }
+        }
+        status.textContent = "Copied";
+      } catch {
+        status.textContent = "Copy unavailable — select the code manually";
+      }
+    });
+    tools.append(number, status, button);
+    block.insertBefore(tools, pre);
+  });
+
   // RTD may add its responsive wrapper after DOMContentLoaded; select the
   // semantic tables themselves rather than depending on that wrapper's timing.
   document.querySelectorAll("table.docutils").forEach((table) => {

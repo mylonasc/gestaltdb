@@ -3,6 +3,13 @@
 Read this topic for immutable graph history, bitemporal reads, legacy
 `TimeIndexedEdge` migration, and recovery decisions.
 
+For a first application example, use `docs/temporal-introduction.rst`: it compares
+Alice's valid-time department at two recorded horizons without changing the
+mutable current record. `docs/temporal-updates.rst` covers interval corrections,
+retractions and deferred indexes; `docs/temporal-reads.rst` covers authenticated
+views, historical traversal and bitemporal Cypher. Exact service contracts remain
+in `docs/temporal-versioning.rst`; migration and recovery remain in `docs/operations.rst`.
+
 ## Rules
 
 - Temporal node/edge versions are separate from mutable current-state records.
@@ -10,8 +17,10 @@ Read this topic for immutable graph history, bitemporal reads, legacy
 - Valid intervals are half-open `[start, end)`; system horizons are inclusive visible commit prefixes.
 - Temporal versions and read views live on `graph.temporal`. Use
   `graph.temporal.open_read_view(graph, manifest=graph.manifest,
-  database_id=graph.database_id, valid_time=...)` to pin graph, claim,
-  Cypher, and temporal snapshot work to one horizon. There is no
+   database_id=graph.database_id, valid_time=...)` to pin temporal graph/claim
+   reads and snapshot builds to one horizon. Qualified Cypher opens its own view;
+   supply the same explicit valid/system horizons rather than assuming an open
+   Python view affects unrelated queries. There is no
   `GraphDB.read_view`; `graph.current_read_view()` pins mutable state only.
 - Rules live on `graph.rules` (`create_rule`, `run`, `maintain`, `explain`);
   claims and modal evaluation live on `graph.epistemic`. Older

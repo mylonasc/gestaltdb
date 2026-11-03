@@ -1,11 +1,9 @@
 :orphan:
 
-Executor decision and production hardening
+Executor selection and resource limits
 ============================================================
 
-RE-06 selects the production executor from the frozen RE-01 budgets and the
-measured RE-03/RE-04/RE-05 evidence, without introducing a new execution
-profile. ``gestaltdb.reasoning.executors.select_executor`` is deterministic and
+``gestaltdb.reasoning.executors.select_executor`` is deterministic and
 stdlib-only: identical requests always agree, unknown profiles/modes/preferences
 fail closed, and optional-runtime availability is caller-declared, never
 probed by importing optionals here.
@@ -17,7 +15,7 @@ generation binding before calling the explicit dispatcher.
 Positive typed application execution uses the distinct existing GenericEngine
 kind, ``typed-indexed-python-v1``, with the same common telemetry and explicit
 source-session admission. See :doc:`reasoning-typed-execution`. The binary
-defaults and the measured optional-engine adoption decision below are unchanged.
+default remains indexed Python; optional engines require an explicit request.
 
 .. code-block:: python
 
@@ -28,7 +26,7 @@ defaults and the measured optional-engine adoption decision below are unchanged.
    explicit = select_executor(ExecutorRequest(preferred="polars-prototype", polars_available=True))
    assert explicit.kind == "polars-prototype-v1"
 
-The decision
+Available executors
 ----------------------------------------
 
 - **Default: ``indexed-python-v1``** (``DatalogEngine``). Reference behavior,
@@ -68,17 +66,12 @@ wrappers, not production-scale guarantees. No million-row, spill or
 maintenance workload has been measured; executor claims stop where the
 evidence stops.
 
-Deferred native kernels and spill
+Native kernels and spill
 ----------------------------------------
 
-No bespoke C++/Rust kernel is implemented in this slice, deliberately. The
-measured dense-closure gap is already covered by the optional Polars path, the
-default keeps the smallest footprint, and keyed indexed joins handle the tested
-scale. A native kernel becomes justified only with representative workloads
-that exceed the frozen RE-01 budgets or maintenance evidence that indexed
-rounds cannot meet; that work belongs to the benchmark-gated RE-26 track, not
-to an implicit rewrite. This is a recorded defer decision, not a missing
-delivery.
+There is no bespoke C++/Rust inference kernel. Indexed Python remains the default;
+the optional Polars path uses compiled columnar operations for its supported
+closure-only fragment. Neither path is selected automatically from workload size.
 
 No executor implements spill: intermediate budgets fail closed before
 materializing unbounded joins, and those counters are not exact allocator,
@@ -113,7 +106,7 @@ Opt-in executor-aware evaluation
 ----------------------------------------
 
 ``gestaltdb.reasoning.adapters.execution.execute_closure`` is the single
-opt-in entry that connects decisions to real engines. It verifies an
+opt-in entry for explicit executor dispatch. It verifies an
 explicit ``ExecutorRequest`` (request mode must match proof collection),
 optionally admits a bound ``GenerationIdentity`` with exact dictionary,
 mode and executor compatibility, dispatches to the decided engine, and
@@ -146,7 +139,7 @@ not all independent supports. Polars consumes
 the same evidence values but projects them to set-valued facts internally for
 closure-only conversion. It does not return proofs or all-support provenance.
 Actual pinned frontier/reference/prepared/Polars/native pipeline evidence and
-the no-automatic-adoption decision are in :doc:`reasoning-frontier-benchmarks`.
+their measurement limits are in :doc:`reasoning-frontier-benchmarks`.
 In particular, installed Polars availability does not imply that an application's
 intermediates fit the dispatcher's default prototype cap.
 
@@ -190,8 +183,6 @@ the same common schema; native metrics separately report the chosen cap,
 observed conservative peak rows, cumulative output-row accounting and timings.
 Those candidate rows are not indexed Python attempted-unification counts.
 There is no successful partial outcome after cancellation or a bound failure.
-The over-100K regression verifies full reference parity, not a new performance
-ranking. Measured adoption decisions remain unchanged.
 
 Installation isolation
 ----------------------------------------
@@ -199,8 +190,5 @@ Installation isolation
 The base wheel ships no optional dependencies. Missing ``pyarrow``,
 ``polars``, ``rdflib``, backend packages or ``pyrex`` fail at first use with
 the requiring extra named (e.g. ``gestaltdb[polars]``,
-``gestaltdb[rocksdb]``); the installed-wheel smoke tests assert exactly
-that on every supported Python. CI exercises Python 3.10–3.13 with the
-LMDB/LevelDB/Arrow/Polars/solver and PyRex 0.5.0 extras plus the base-wheel
-smoke, so neither the default nor the opt-in paths can silently depend on an
-undeclared package. See the phase exit evidence in the roadmap register.
+``gestaltdb[rocksdb]``). Install the extras needed by the selected workflow;
+installing Polars does not change the default executor. See :doc:`installation`.

@@ -65,10 +65,10 @@ Self loops can appear if logically entailed. Results are sorted external IDs,
 not compact sampler IDs, physical edge IDs or paths. A caller can use selected
 IDs as seeds for a separate asserted-graph sampler, but that sampler's next hop
 does not automatically use inferred relations. There is no implicit multi-hop,
-weighted sampling or Cypher clause rewrite. This explicit semantic boundary is
-the integration point for the broader hierarchical-sampling work in issue #127.
+weighted sampling or Cypher clause rewrite. Use explicit mappings and hierarchy
+objects where the relevant traversal or query API supports them.
 
-Typed n-ary projection (#396)
+Typed n-ary projection
 ----------------------------------------
 
 ``gestaltdb.reasoning.adapters.typed_graph`` projects the same snapshot
@@ -101,12 +101,13 @@ token and stale caches cannot match.
    from gestaltdb.reasoning.typed import TypedFact
    from tempfile import TemporaryDirectory
 
-   mapping = TypedGraphMapping(node_attributes=[("age", "age")],
+   mapping = TypedGraphMapping(edge_types=[("PAYS", "pays")],
+                               node_attributes=[("age", "age")],
                                edge_attributes=[("amount", "amount")])
    with TemporaryDirectory() as directory:
        graph = GraphDB.create(directory, backend="lmdb", serializer="json")
        try:
-           graph.put_nodes([Node("a", properties={"age": 30})])
+           graph.put_nodes([Node("a", properties={"age": 30}), Node("b")])
            graph.put_edge(Edge("ab", "a", "b", {"type": "PAYS", "amount": 5}))
            with graph.current_read_view(require_verifiable=True) as view:
                with PinnedTypedGraphSource(view, mapping=mapping) as source:

@@ -3,6 +3,24 @@
 Typed Datalog: literals, filters, aggregates
 ============================================================
 
+Before the example
+-------------------
+
+Start with :doc:`reasoning-introduction` if facts, predicates, rules or
+:term:`witnesses <witness>` are new to you. **Arity** is the number of arguments:
+binary relations have two, while n-ary relations can have more. A **literal** is
+typed data such as integer ``18`` rather than an entity identifier. A **filter**
+checks already-bound values; an **aggregate** combines a group, for example by
+counting its facts. :term:`Stratification <stratification>` orders certain rule
+layers so absence or restricted aggregation is evaluated after its inputs.
+A **multi-head rule** has several conclusions; **normalization** converts it to
+equivalent single-head rules. A predicate variable ranges over relation names
+from an explicitly supplied finite domain, not arbitrary invented predicates.
+The :doc:`glossary` links these terms to their focused guides.
+
+Typed execution model
+----------------------
+
 ``gestaltdb.reasoning.terms`` defines strict immutable literal values;
 ``gestaltdb.reasoning.typed`` evaluates finite n-ary positive Datalog over
 entities and literals with kind-strict comparisons, normalized multi-head
@@ -81,7 +99,7 @@ order, deterministic suffixed IDs). Unexpanded programs fail closed, as do
 empty domains, non-string domains and variables shared between predicate
 and term positions. There is no open-world predicate invention.
 
-Bounded typed explanations (#392)
+Bounded typed explanations
 ----------------------------------------
 
 Pass ``collect_proofs=True`` to ``evaluate`` or ``evaluate_stratified`` to
@@ -153,7 +171,7 @@ programs (mixed arities, repeated atoms, constants, filters, recursion)
 match an independent grounding oracle exactly, and repeated runs are
 deterministic.
 
-On the RE-01 analytical workloads translated 1:1 to binary typed rules
+On the analytical reference workloads translated 1:1 to binary typed rules
 (entities stay entities; no literals or filters), both engines reach
 identical closures in identical iteration counts: hierarchy N=256 completes
 1280 facts in 5 rounds, recursive N=1024 completes 9227 facts in 6 rounds,
@@ -161,7 +179,7 @@ dense N=128 completes 8128 facts in 8 rounds. The generic engine costs
 roughly 1.5–1.7x wall time there (3.7→5.6ms, 86→144ms, 535→918ms medians)
 for positional indexing with no filter work to amortize it; see
 ``benchmarks/results/reasoning-re07-typed.json``. Those original closure-only
-measurements do not measure the later optional typed proof collection.
+measurements exclude optional typed proof collection.
 The generic evaluator does not offer automatic incremental proof maintenance;
 recursive and lattice aggregation stay explicitly deferred.
 

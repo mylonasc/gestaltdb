@@ -1,5 +1,18 @@
-Temporal Version History
-========================
+.. _temporal-version-history:
+
+Temporal history and service reference
+=======================================
+
+Start with :doc:`temporal-introduction` for a complete two-horizon example,
+:doc:`temporal-updates` for interval corrections/retractions and index freshness,
+or :doc:`temporal-reads` for pinned reads and historical Cypher. This reference
+retains detailed temporal publication, integrity and shared claim/rule contracts.
+Recovery and migration procedures live in :doc:`operations`.
+
+Unless a block creates its own graph, the code below is a **reference fragment**
+using an open ``graph`` and the named values from its surrounding explanation.
+It is not an independently runnable application. Claims and rules share temporal
+commits but remain separate services, not historical graph edges.
 
 For historical-analysis and evidence-audit workflows, the
 :doc:`architecture` guide distinguishes this storage layer from temporal
@@ -9,12 +22,21 @@ GestaltDB can append immutable node and edge versions alongside its existing
 mutable graph. Temporal versions use two distinct time dimensions:
 
 * **valid time** is the half-open interval ``[start, end)`` in which a fact is
-  true in the modeled domain;
+  applicable in the modeled domain;
 * **system time** is the monotonically increasing UTC instant at which GestaltDB
   committed that version.
 
+Together these dimensions are **bitemporal**: one question asks what applied at
+a time, another asks what had been recorded about it by a given horizon. A
+**correction** records a replacement account; a **retraction** withdraws the
+selected claim/version's applicability under the temporal rules. Old records are
+retained. See :doc:`glossary` for the shared vocabulary and
+:doc:`reasoning-temporal` for computing intervals of inferred conclusions rather
+than merely storing history.
+
 The explicit version APIs do not update records returned by ``get_node`` or
-``get_edge`` and do not alter Cypher or sampling behavior. Temporal history has
+``get_edge`` and do not change unqualified current-graph Cypher or ordinary
+sampling results. Qualified historical queries use a separate view. Temporal history has
 separate indexes for exact versions, logical entities, valid starts, system
 times, and typed outgoing/incoming traversal.
 
@@ -77,6 +99,8 @@ Assertions, Corrections, and Retractions
 Corrections and retractions append records. They never modify or physically
 delete the superseded payload. Omitting ``valid`` from a correction inherits the
 superseded version's interval.
+
+.. _temporal-batch-reference:
 
 Atomic Logical Batches
 ----------------------
@@ -156,6 +180,8 @@ Temporal traversal resolves each logical edge before checking its winning
 source, target, and type, so interval-local topology corrections and retractions
 do not leak historical adjacency.
 
+.. _temporal-read-view-reference:
+
 Consistent Read Views
 ---------------------
 
@@ -190,63 +216,18 @@ behavior.
 ``through_commit`` may recreate an older visible view. Database paths are not
 part of provenance, so moving a managed database does not change its identity.
 
-End-to-End Temporal Knowledge Workflow
---------------------------------------
+.. _end-to-end-temporal-knowledge-workflow:
 
-A production workflow can keep one graph fact aligned across each read layer:
+Choose graph history or sourced claims
+---------------------------------------
 
-.. code-block:: python
-
-   from gestaltdb import ClaimStatus, SamplerEngine, TemporalContext, TemporalInstant
-
-   # Append node and edge versions, then query the same valid instant through Cypher.
-   graph.temporal.put_edge_version(employment_edge, valid=(0, None))
-   rows = graph.query(
-       "MATCH (a {id: 'alice'})-[:WORKS_FOR]->(b) "
-       "FOR VALID_TIME AS OF datetime($at) RETURN b.id AS company",
-       {"at": "2024-06-01T00:00:00Z"},
-   )
-
-   # Export one authenticated history horizon and filter before seeded fanout.
-   snapshot = graph.build_sampler_snapshot(
-       "snapshots/knowledge", temporal=True, time_bucket="day"
-   )
-   engine = SamplerEngine(snapshot, seed=7)
-   sampled = engine.sample_neighbors(
-       [alice_compact_id], fanout=10,
-       temporal=TemporalContext.as_of(TemporalInstant.parse("2024-06-01T00:00:00Z")),
-   )
-
-   # Claims remain sourced; rules derive claims; modal evaluation returns evidence.
-   graph.epistemic.assert_claim(
-       subject="alice", predicate="WORKS_FOR", object="acme",
-       polarity="positive", agent="source:hr", world="verified", valid=(0, None),
-   )
-   graph.rules.create_rule(
-       "employment-implies-affiliation",
-       when=[("?p", "WORKS_FOR", "?c")], then=("?p", "AFFILIATED_WITH", "?c"),
-   )
-   graph.rules.run(as_of=0, world="verified")
-   graph.epistemic.assert_world_accessibility(
-       agent="auditor", from_world="actual", to_world="verified",
-       kind="knowledge", valid=(0, None),
-   )
-   with graph.temporal.open_read_view(
-       graph, manifest=graph.manifest, database_id=graph.database_id,
-       valid_time=0,
-   ) as view:
-       result = graph.epistemic.entails(
-           view,
-           "auditor",
-           {"subject": "alice", "predicate": "AFFILIATED_WITH", "object": "acme"},
-           "KNOWS", world="actual", max_depth=4, max_states=100,
-       )
-   assert result.status is ClaimStatus.SUPPORTED
-
-Temporal snapshots contain graph history, not claims. Claims, rule conclusions,
-truth maintenance, and modal evidence remain in the source database and share
-the read-view commit horizon. Use time-aware hard-negative policies described in
-:doc:`typed-sampling` to prevent future positives from leaking into training.
+Historical node/edge reads and qualified Cypher select graph structure
+(:doc:`temporal-reads`). Temporal sampler snapshots contain graph history, not
+claims (:doc:`sampling-temporal`). Claims retain source, polarity and world
+identity on ``graph.epistemic``; ``graph.rules`` derives and explains selected
+claim conclusions. Their shared commit history does not implicitly convert
+claims to edges or make unqualified Cypher reason over them. See the claim/rule
+reference below, :doc:`modal-epistemic` and :doc:`inference-audit` for those tasks.
 
 Index Maintenance
 -----------------
@@ -285,6 +266,8 @@ Migration fails closed for undecodable payloads, payload/key mismatches,
 duplicate timestamps, or changed legacy input after a previous migration. It
 does not rewrite existing temporal history or snapshots. See :doc:`operations`
 for the backup, retry, serializer, snapshot, and recovery contract.
+
+.. _temporal-claims-reference:
 
 Epistemic Claims and Provenance
 -------------------------------

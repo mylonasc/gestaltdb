@@ -3,13 +3,12 @@
 Storage-neutral interval sets and support segments
 ============================================================
 
-``gestaltdb.reasoning.intervals`` is the scalar interval prototype for
+``gestaltdb.reasoning.intervals`` provides scalar interval sets for
 temporal reasoning: half-open ``[start, end)`` spans over integer
 microseconds (instant precision, the temporal epoch scale) with ``None``
 for unbounded ends. Empty ``[t, t)`` spans are unrepresentable and fail
 closed. Nothing here touches storage or temporal records; callers map
-epoch values in and out explicitly, and future Polars/native operators
-must match these semantics.
+epoch values in and out explicitly. Interval values do not select an executor.
 
 .. code-block:: python
 

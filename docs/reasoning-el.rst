@@ -32,10 +32,9 @@ brute-force finite interpretations that completion must agree with on
 satisfiable inputs — unsatisfiable sizes return no verdict instead of a
 vacuous one.
 
-Explicitly deferred
+Unsupported semantics
 ----------------------------------------
 
-Full OWL DL stays deferred research: no JVM adapter, no dependency of
-earlier phases on it, dedicated experimental profiles only. Anonymous
+Full OWL DL and JVM adapters are not provided. Anonymous
 constructions are rejected rather than silently approximated, and the
 profile gate keeps experimental semantics out of every production path.

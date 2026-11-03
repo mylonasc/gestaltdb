@@ -27,15 +27,15 @@ Choose a capability
    * - Load tables and select indexed cohorts
      - :doc:`data-access`, :doc:`ingestion`, :doc:`property-filtering`
    * - Prepare graph-learning batches
-     - :doc:`typed-sampling`, :doc:`random-walks`
+     - :doc:`sampling-introduction`, :doc:`random-walks`
    * - Query what applied then or what was recorded then
-     - :doc:`temporal-versioning`
+     - :doc:`temporal-introduction`, :doc:`temporal-reads`
    * - Represent sourced/conflicting claims and reason over worlds
      - :doc:`temporal-versioning`, :doc:`modal-epistemic`
    * - Classify entities using semantic axioms
      - :doc:`ontology`
    * - Apply Datalog rules, literals, negation or aggregates
-     - :doc:`api-workflows`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
+     - :doc:`reasoning-introduction`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
    * - Compute when conclusions hold
      - :doc:`reasoning-temporal`
    * - Integrate reasoning with a database or saved state
@@ -51,7 +51,7 @@ Important choices
 - **Live traversal or reusable arrays?** Live sampling reads typed adjacency;
   ``SamplerSnapshot`` / ``SamplerEngine`` reuse compact arrays for repeated draws.
   Filter the eligible graph at build time, not just the seeds. Snapshot construction,
-  loading and steady-state sampling have separate costs (:doc:`typed-sampling`).
+  loading and steady-state sampling have separate costs (:doc:`sampling-introduction`).
 - **Historical data or temporal reasoning?** Version history selects what is
   visible at valid/system time; interval reasoning computes when conclusions
   follow. Recording history does not run Datalog (:doc:`reasoning-temporal`).
@@ -75,6 +75,7 @@ benchmarks are separated from the first-run path.
 
    installation
    quickstart
+   glossary
    architecture
 
 .. toctree::
@@ -94,14 +95,22 @@ benchmarks are separated from the first-run path.
    :maxdepth: 1
    :caption: Sampling and Graph ML
 
-   typed-sampling
+   sampling-introduction
+   sampling-neighborhoods
+   sampling-subgraphs
    random-walks
+   sampling-temporal
+   sampling-negatives
    sampling-consistency
+   typed-sampling
 
 .. toctree::
    :maxdepth: 1
    :caption: Temporal and Epistemic Knowledge
 
+   temporal-introduction
+   temporal-updates
+   temporal-reads
    temporal-versioning
    modal-epistemic
    inference-audit
@@ -110,6 +119,7 @@ benchmarks are separated from the first-run path.
    :maxdepth: 1
    :caption: Ontology and Datalog
 
+   reasoning-introduction
    ontology
    reasoning-typed
    reasoning-negation

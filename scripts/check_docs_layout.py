@@ -16,12 +16,51 @@ from threading import Thread
 
 
 PAGES = ["index", "quickstart", "storage-backends", "serializers", "data-access",
-         "ingestion", "cypher-tutorial", "typed-sampling", "performance"]
+          "ingestion", "cypher-tutorial", "typed-sampling", "performance",
+          "reasoning-introduction", "ontology", "reasoning-proofs",
+          "sampling-introduction", "sampling-neighborhoods", "sampling-subgraphs",
+          "sampling-temporal", "sampling-negatives", "random-walks",
+          "temporal-introduction", "temporal-updates", "temporal-reads"]
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
+
+
+def check_interactions(page, base):
+    """Exercise actual tabs, selected code, clipboard and glossary navigation."""
+    page.goto(f"{base}/quickstart.html", wait_until="networkidle")
+    example = page.locator(".database-example-tabs").first
+    for backend, literal in (("LevelDB", "leveldb"), ("PyRex", "pyrex"), ("LMDB", "lmdb")):
+        example.get_by_role("tab", name=backend, exact=True).click()
+        panel = example.locator('[role="tabpanel"]:visible').first
+        for codec, literal_codec in (("MessagePack", "messagepack"), ("JSON", "json")):
+            panel.get_by_role("tab", name=codec, exact=True).click()
+            blocks = example.locator("div.highlight:visible")
+            assert "python -m pip install" in blocks.first.inner_text()
+            code = blocks.last
+            text = code.locator("pre").evaluate("pre => { const copy = pre.cloneNode(true); copy.querySelectorAll('.linenos').forEach(n => n.remove()); return copy.textContent; }")
+            assert f"backend='{literal}'" in text
+            assert f"serializer='{literal_codec}'" in text
+            code.locator(".copy-code-button").click()
+            page.wait_for_function("element => element.textContent === 'Copied'",
+                                   arg=code.locator(".copy-code-status").element_handle())
+            assert page.evaluate("navigator.clipboard.readText()") == text
+    page.goto(f"{base}/reasoning-introduction.html", wait_until="networkidle")
+    term = page.locator('a.term-definition-link[href$="#term-Datalog"]').first
+    term.hover()
+    tooltip = page.get_by_role("tooltip")
+    assert tooltip.is_visible() and "rule-based" in tooltip.inner_text()
+    page.mouse.move(0, 0)
+    assert not tooltip.is_visible()
+    term.focus()
+    assert tooltip.is_visible() and term.get_attribute("aria-describedby")
+    term.press("Escape")
+    assert not tooltip.is_visible() and not term.get_attribute("aria-describedby")
+    term.press("Enter")
+    page.wait_for_url("**/glossary.html#term-Datalog")
+    print("Interactions passed: backend/codec tabs, selected code/install commands, clipboard and glossary tooltips.")
 
 
 def main() -> int:
@@ -44,14 +83,18 @@ def main() -> int:
     base = f"http://127.0.0.1:{server.server_port}"
     failures = []
     checked = 0
+    code_blocks_checked = 0
+    clipboard_checks = 0
     try:
         with sync_playwright() as playwright:
             chrome = shutil.which("google-chrome") or shutil.which("chromium")
             browser = playwright.chromium.launch(headless=True, **({"executable_path": chrome} if chrome else {}))
             try:
                 page = browser.new_page()
+                page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=base)
                 # Layout must work without third-party script/font/CDN access.
                 page.route("**/*", lambda route: route.continue_() if route.request.url.startswith(base + "/") else route.abort())
+                check_interactions(page, base)
                 for width in (1366, 900, 390):
                     page.set_viewport_size({"width": width, "height": 900})
                     for name in PAGES:
@@ -87,6 +130,29 @@ def main() -> int:
                             checked += 1
                         if page.evaluate("document.documentElement.scrollWidth > innerWidth + 2"):
                             failures.append(f"{name} at {width}px: page overflows viewport")
+                        blocks = page.locator(".rst-content div.highlight:visible")
+                        for index in range(blocks.count()):
+                            code_blocks_checked += 1
+                            block = blocks.nth(index)
+                            if block.locator(".copy-code-button").count() != 1:
+                                failures.append(f"{name}: code block {index} lacks a copy button")
+                            if not block.locator("pre .linenos").count():
+                                failures.append(f"{name}: code block {index} lacks line numbers")
+                        if blocks.count():
+                            expected = blocks.first.locator("pre").evaluate("""pre => {
+                                const source = pre.cloneNode(true);
+                                source.querySelectorAll('.linenos').forEach(line => line.remove());
+                                return source.textContent;
+                            }""")
+                            blocks.first.locator(".copy-code-button").click()
+                            page.wait_for_function("element => element.textContent === 'Copied'",
+                                                   arg=blocks.first.locator(".copy-code-status").element_handle())
+                            # The actual clipboard must equal source without numbers,
+                            # not the numbered display or a success-only UI message.
+                            copied = page.evaluate("navigator.clipboard.readText()")
+                            clipboard_checks += 1
+                            if copied != expected:
+                                failures.append(f"{name} at {width}px: clipboard includes numbers or omits code")
                         if args.screenshots:
                             if tables.count():
                                 tables.first.locator("tbody td").first.scroll_into_view_if_needed()
@@ -102,6 +168,7 @@ def main() -> int:
         print("\n".join(failures))
         return 1
     print(f"Layout passed: {checked} table checks across {len(PAGES)} pages and 3 viewports.")
+    print(f"Code controls passed: {code_blocks_checked} numbered blocks, {clipboard_checks} clipboard comparisons.")
     return 0
 
 

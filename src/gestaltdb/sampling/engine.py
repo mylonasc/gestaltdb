@@ -715,7 +715,7 @@ class SamplerEngine:
         walk_length: int = 40, *, walks_per_node: int = 1, batch_size: int = 1024,
         shuffle: bool = False, walk_type: str = "random", **walk_options,
     ) -> Iterator[RandomWalkBatch]:
-        """Stream walk batches, one seed pass per round (RWS-01).
+        """Stream walk batches, one seed pass per round.
 
         ``None`` seeds means every snapshot node; explicit compact IDs retain
         order and duplicates. Each round optionally shuffles seed positions.

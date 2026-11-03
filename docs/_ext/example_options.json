@@ -1,0 +1,63 @@
+{
+  "temporal-introduction": [{"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Immutable temporal writes and as-of selection support these backends/codecs. Logical temporal publication is not a promise of identical backend rollback or current-snapshot capability."}],
+  "temporal-updates": [
+    {"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Corrections and retractions append immutable versions. Backend transaction/publication mechanisms remain distinct; no current-graph snapshot is requested."},
+    {"index":1,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Deferred temporal indexes are rebuilt explicitly before indexed reads, independently of entity codec and backend transaction support."}
+  ],
+  "temporal-reads": [{"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"This view authenticates immutable temporal history, not a mutable current snapshot. Historical Cypher pins its own explicitly selected horizon; available current-snapshot capabilities are not interchangeable."}],
+  "sampling-introduction": [{"index":0,"backends":["lmdb","pyrex-transactional"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"This workflow requires a verifiable current snapshot so property filters run against one pinned source. LevelDB and plain PyRex are not equivalent alternatives."}],
+  "sampling-temporal": [{"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Temporal history is built from an authenticated immutable-history read view, not a mutable current snapshot. Publication and transaction capabilities remain backend-qualified."}],
+  "quickstart": [{"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Choose an independently installed backend and codec. The source example uses LMDB/JSON; each tab is a complete alternative. Snapshot builds here do not require a verifiable current snapshot."}],
+  "property-graph": [{"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Ordinary current CRUD uses the chosen backend and codec; this example does not require a graph-wide transaction."}],
+  "data-access": [{"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Exact/range property indexing is portable across these backends and supported codecs."}],
+  "ingestion": [
+    {"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"extras":["arrow"],"reason":"Entity-column loading supports these choices, but optimized JSON conversion and native writer availability differ; do not infer equal performance."},
+    {"index":1,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"extras":["polars"],"reason":"Polars loading keeps the explicit defer/rebuild policy. Backend and codec choice do not imply identical fast paths."},
+    {"index":2,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"extras":["arrow"],"reason":"Payloads are encoded by the chosen graph serializer; changing the tab rebuilds compatible bytes rather than reusing bytes from another codec."}
+  ],
+  "cypher-tutorial": [
+    {"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Ordinary read/aggregate queries support these choices; automatic read pinning remains backend-qualified."},
+    {"index":1,"backends":["lmdb","pyrex-transactional"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"This example requires an explicit graph-wide transaction. LevelDB and plain PyRex are intentionally not offered."},
+    {"index":2,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Temporal-version payloads use the selected codec. Historical selection is separate from current mutable snapshots."}
+  ],
+  "storage-backends": [
+    {"index":0,"backends":["lmdb"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"The map_size option specifically configures LMDB; serializer choice is independent. Use the portable quickstart for other backend setups."},
+    {"index":1,"backends":["leveldb","lmdb","pyrex"],"codecs":["messagepack","pickle","protobuf"],"reason":"Direct construction still needs matching classes and extras. JSON is omitted because this payload contains raw bytes."},
+    {"index":2,"backends":["lmdb","pyrex-transactional"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Rollback requires a transaction-capable backend; ordinary LevelDB/plain PyRex are not equivalent."},
+    {"index":3,"backends":["lmdb","pyrex-transactional"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"This pinned-current-read example requires verifiable snapshot capability. Transactional PyRex uses the supported runtime floor, not plain PyRex."}
+  ],
+  "serializers": [
+    {"index":0,"codecs":["json","pickle","messagepack","protobuf"],"reason":"Recursive GestaltDB temporal scalars round-trip through these codecs without any storage backend."},
+    {"index":1,"codecs":["messagepack","pickle","protobuf"],"reason":"These codecs support the raw byte payload. JSON does not. Pickle is for trusted data only."},
+    {"index":2,"codecs":["protobuf","messagepack","pickle"],"reason":"These choices preserve the large integer and bytes. Plain JSON cannot encode this raw-byte payload."},
+    {"index":3,"codecs":["pickle"],"reason":"This Python set payload is intentionally Pickle-specific; other codecs are not equivalent."},
+    {"index":4,"backends":["lmdb","leveldb","pyrex"],"codecs":["messagepack","pickle","protobuf"],"reason":"Backend choice is independent, but this binary property excludes JSON. Reopen always uses the original manifest codec."}
+  ],
+  "property-filtering": [{"index":0,"backends":["lmdb","pyrex-transactional"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"The example explicitly requires an authenticated mutable snapshot; LevelDB/plain PyRex cannot provide that guarantee."}],
+  "ontology": [{"index":2,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Pinned immutable claim-history selection is distinct from a mutable current snapshot. Claims remain serializer-neutral; graph configuration remains explicit."}],
+  "ontology-graph": [
+    {"index":0,"backends":["lmdb","pyrex-transactional"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Current-graph ontology projection requires an authenticated current snapshot."},
+    {"index":1,"backends":["lmdb","pyrex-transactional"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Property-bearing current-graph projection requires a verifiable mutable snapshot and compatible value encoding."}
+  ],
+  "ontology-publication": [{"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Point publication uses the selected backend contract. Nontransactional orphan recovery remains caller-managed; tabs do not imply identical atomicity."}],
+  "inference-audit": [{"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"The claim/audit workflow is separate from codec-specific graph payloads. Audit export is evidence, not independent proof certification."}],
+  "networkx": [
+    {"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"extras":["networkx"],"reason":"This fixture uses values compatible with all listed codecs. Arbitrary NetworkX attributes need their own codec compatibility checks."},
+    {"index":1,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"extras":["networkx"],"reason":"Static GEXF loading keeps the mapping/security limits regardless of backend choice."}
+  ],
+  "notebooks": [{"index":0,"backends":["leveldb","lmdb","pyrex"],"codecs":["pickle","json","messagepack","protobuf"],"fragment":true,"reason":"Notebook setup fragment: use the selected store/codec and close the handle when the notebook is finished. Later cells use this graph."}],
+  "typed-sampling": [{"index":2,"backends":["lmdb","leveldb","pyrex"],"codecs":["pickle","json","messagepack","protobuf"],"fragment":true,"reason":"Live traversal setup fragment; later examples share graph_db. It is not a snapshot-capability guarantee."}],
+  "visualization": [{"index":0,"backends":["leveldb","lmdb","pyrex"],"codecs":["pickle","json","messagepack","protobuf"],"reason":"The graph-query visualization accepts these simple stored values. Rendering remains independent of backend choice."}],
+  "temporal-versioning": [{"index":7,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"The claim-history workflow preserves backend-qualified publication and temporal-view behavior; it does not require a mutable snapshot."}],
+  "reasoning-authenticated-inferred": [{"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Authenticated inferred artifacts use temporal source/session pins, not an implicit current-graph snapshot guarantee."}],
+  "reasoning-authenticated-sessions": [{"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Session authentication checks source/state pins. File-state CAS and temporal history do not become a universal backend transaction."}],
+  "reasoning-bound-range-publication": [{"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Bound range publication retains its writer guard, target-state checks and backend-qualified commit behavior."}],
+  "reasoning-current-admission": [{"index":0,"backends":["lmdb","pyrex-transactional"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Current-source admission needs authenticated mutable snapshots; plain PyRex and LevelDB are excluded."}],
+  "reasoning-current-frontier": [{"index":0,"backends":["lmdb","pyrex-transactional"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Current-frontier reads require one verifiable current snapshot with exact identity."}],
+  "reasoning-frontier": [{"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"This frontier reads pinned immutable temporal claims; it is distinct from current-graph frontier capability."}],
+  "reasoning-native-claims": [{"index":0,"backends":["pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"extras":["arrow"],"reason":"Authenticated native claim admission requires plain PyRex. LMDB, LevelDB and transactional PyRex are not equivalent alternatives."}],
+  "reasoning-native-locator-claims": [{"index":0,"backends":["pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"extras":["arrow"],"reason":"Native locator admission is an explicit plain-PyRex capability; changing the codec does not remove catalog/canonical authentication."}],
+  "reasoning-queries": [{"index":0,"backends":["lmdb","pyrex-transactional"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Generation-pinned current inferred queries require verifiable current-source snapshots."}],
+  "reasoning-range-admission": [{"index":0,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Finite-range history admission recomputes and verifies selected temporal evidence; backend choice does not turn it into a cache hit."}],
+  "reasoning-typed-execution": [{"index":1,"backends":["lmdb","leveldb","pyrex"],"codecs":["json","pickle","messagepack","protobuf"],"reason":"Typed execution from authenticated temporal sessions preserves its explicit closure-only capability profile."}]
+}

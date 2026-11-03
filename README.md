@@ -28,11 +28,11 @@ remains the default; native history extraction is an explicit opt-in.
 | Store a graph and choose persistence | [Quickstart](docs/quickstart.rst) · [graph model](docs/property-graph.rst) · swappable [backends](docs/storage-backends.rst) and independent [serializers](docs/serializers.rst) |
 | Load tables and select cohorts | [Access choices](docs/data-access.rst) · [Arrow/Polars ingestion](docs/ingestion.rst) · [indexes and filtering](docs/property-filtering.rst) |
 | Query or mutate a property graph | [Cypher tutorial](docs/cypher-tutorial.rst) · [reference](docs/cypher.rst): paths, composition, aggregates, writes and schema commands |
-| Prepare graph-learning batches | [Sampling](docs/typed-sampling.rst) · [walks and embedding preparation](docs/random-walks.rst); training stays external |
-| Ask what applied then, or what was known then | [Temporal/bitemporal history](docs/temporal-versioning.rst) |
+| Prepare graph-learning batches | [Sampling introduction](docs/sampling-introduction.rst) · [walks and embedding preparation](docs/random-walks.rst); training stays external |
+| Ask what applied then, or what was known then | [Temporal introduction](docs/temporal-introduction.rst) · [historical reads](docs/temporal-reads.rst) |
 | Represent sourced or conflicting knowledge | [Claims and stored rules](docs/temporal-versioning.rst) · [epistemic/modal evaluation](docs/modal-epistemic.rst) |
 | Classify entities from semantic axioms | [Ontology](docs/ontology.rst) · [supported profile](docs/reasoning-profiles.rst), not full OWL |
-| Derive facts with Datalog | [Runnable binary/typed workflows](docs/api-workflows.rst) · [typed rules, literals and aggregates](docs/reasoning-typed.rst) · [scoped negation](docs/reasoning-negation.rst) |
+| Derive facts with Datalog | [Facts, rules and explanations](docs/reasoning-introduction.rst) · [typed rules, literals and aggregates](docs/reasoning-typed.rst) · [scoped negation](docs/reasoning-negation.rst) |
 | Compute when conclusions hold | [Temporal interval reasoning](docs/reasoning-temporal.rst), separate from storing history |
 | Connect reasoning to a database or saved state | [Graph projection](docs/ontology-graph.rst) · [authenticated sessions](docs/reasoning-authenticated-sessions.rst) · [range publication](docs/reasoning-bound-range-publication.rst) |
 | Explore or exchange graph results | [Offline visualization](docs/visualization.rst) · [NetworkX and static GEXF](docs/networkx.rst) |
@@ -72,7 +72,7 @@ For copyable, tested API examples, see [Runnable API Workflows](docs/api-workflo
 
 - **Performance is workload-dependent.** Fast ingestion and repeated array-native sampling are key strengths. Account separately for index rebuilds, snapshot construction, loading, and inference. [Performance guidance](docs/performance.rst)
 - **Semantics are explicit.** Selected ontology/rule fragments support classification, validation, and maintenance. Conflicting evidence can coexist; truth maintenance preserves supported conclusions rather than automatically resolving contradictions. [Profiles](docs/reasoning-profiles.rst)
-- **History is recorded deliberately.** Historical queries use temporal versions and claims; ordinary mutable graph updates are a separate path. [Temporal versioning](docs/temporal-versioning.rst)
+- **History is recorded deliberately.** Historical queries use temporal versions and claims; ordinary mutable graph updates are a separate path. [Temporal introduction](docs/temporal-introduction.rst) · [detailed reference](docs/temporal-versioning.rst)
 - **Source verification has a specific meaning.** An “authenticated” artifact is checked against expected database history and application-held identities. It is source/state verification, not login authentication or a guarantee that assertions are true. [Saved reasoning state](docs/reasoning-authenticated-sessions.rst)
 - **Integration stays application-controlled.** Snapshots are rebuilt explicitly; reasoning and publication are explicit operations, and some changes require recomputation. ML training uses external frameworks; probabilistic rules and an automated feedback loop remain [#124](https://github.com/mylonasc/gestaltdb/issues/124) and [#128](https://github.com/mylonasc/gestaltdb/issues/128). Operational hardening scope is recorded in [#381](https://github.com/mylonasc/gestaltdb/issues/381).
 
@@ -253,7 +253,7 @@ The engine also supports node/edge seed sampling, multihop expansion, positive t
 
 **Performance model:** amortize snapshot construction over many batches; benchmark construction, loading, and sampling separately. `memmap` reduces eager array loading but does not eliminate RAM use: candidate/result buffers, metadata, and positive-membership structures still allocate memory. Snapshot construction scans and materializes data; it is not an out-of-core ingestion pipeline. There is no universal speedup claim. See [sampling performance guidance and reproducible benchmark commands](https://mylonasc.github.io/gestaltdb/performance.html#sampling-and-filtering-performance).
 
-See the [full sampling guide](https://mylonasc.github.io/gestaltdb/typed-sampling.html) for the API matrix, compact/local/external IDs, weighted draws, temporal semantics, and negative-sampling examples.
+Start with the [sampling introduction](https://mylonasc.github.io/gestaltdb/sampling-introduction.html) and its focused neighborhood, subgraph, temporal and negative-sampling tasks. The [sampling reference](https://mylonasc.github.io/gestaltdb/typed-sampling.html) retains the full API matrix, hierarchy policies and artifact contracts.
 
 ## Arrow Ingestion Example
 

@@ -49,7 +49,7 @@ the stratified positive fixpoint over the completed closure.
 Strata, cycles and witnesses
 ----------------------------------------
 
-Positive SCCs evaluate in dependency order; components with no rules still
+Positive :term:`SCCs <SCC>` evaluate in dependency order; components with no rules still
 occupy schedule positions with zero rounds. A negative edge inside one
 component, or rankings that cannot order negative edges strictly downward,
 fail closed as unstratifiable — there is no fallback to non-monotonic
@@ -82,13 +82,9 @@ Stratified closures match an independent stratum-by-stratum grounding oracle
 exactly, and deterministic repeats agree. Base insert/delete recomputation
 tests confirm updated horizons: adding a disqualifier retracts the conclusion
 on recomputation, and removing the final support for a derived fact retracts
-it as well. Incremental invalidation across updates stays in RE-16; here
-recomputation is the correct explicit fallback.
-
-Coordinated with `#125 <https://github.com/mylonasc/gestaltdb/issues/125>`_
-(the broader negation proposal): this slice delivers the scoped stratified
-core with exact anti-joins and scope-carrying blocker witnesses; that issue remains
-the umbrella for any wider negation work.
+it as well. Recompute after source changes rather than reusing absence evidence
+from an older horizon. Incremental/session APIs have their own supported update
+contracts; scoped absence is not an unrestricted non-monotonic reasoner.
 
 GraphDB rule catalogs
 ---------------------

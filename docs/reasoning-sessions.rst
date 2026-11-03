@@ -29,7 +29,7 @@ rebuild instead of incremental repair. Alternative sourced assertions for one
 fact survive single retractions; the fact disappears only with its final
 active version.
 
-This milestone advances sessions in memory; the returned session value is the
+Session updates operate in memory; the returned session value is the
 resumable state. ``gestaltdb.reasoning.adapters.session_store`` adds durable
 cross-process persistence for that value: ``save_session`` writes one versioned
 JSON document atomically (temporary file plus rename, so readers observe the

@@ -8,7 +8,7 @@ Goal-directed queries and demand specialization
 ============================================================
 
 ``gestaltdb.reasoning.demand.answer`` evaluates an explicit bound goal with a
-magic-set specialized program on the existing generic engine. Specialization
+:term:`magic-set <magic sets>` specialized program on the existing generic engine. Specialization
 is deterministic, identity-bound and cached; answers carry full-closure
 parity by construction. Anything outside the supported positive fragment —
 negation, aggregates, closed scopes, predicate variables — fails closed

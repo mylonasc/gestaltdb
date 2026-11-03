@@ -18,6 +18,10 @@ The workflows below need no database except the explicitly marked adapters.
 They illustrate the difference between an in-memory result, saved reasoning
 state, and claims deliberately published to storage.
 
+New to logical reasoning? Read :doc:`reasoning-introduction` first: it defines
+facts, rules, closure and :term:`witnesses <witness>` before the first executable
+example. :doc:`glossary` provides short definitions and optional background links.
+
 Compile an ontology and evaluate facts
 --------------------------------------
 
@@ -92,6 +96,5 @@ repeating a large example in every function's docstring:
 * :doc:`inference-audit`: connect explicitly tagged model-output assertions to
   historical rule explanations and export an audit report.
 
-Those guides include runnable examples with dedicated regression coverage. Their
-entry-point docstrings point to the required inputs and the relevant guide where
-this pass touched them; the examples are not replaced by disabled doctests.
+Those guides include runnable examples with explicit inputs and capability
+boundaries. Use the matching entry-point reference for parameter details.

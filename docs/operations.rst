@@ -68,6 +68,8 @@ Missing optional packages raise an actionable ``ImportError`` when the feature
 is used. They are not required to import the base package. The test suite skips
 only unavailable backend/serializer matrix entries.
 
+.. _temporal-migration-operations:
+
 Legacy Edge Migration
 ---------------------
 
@@ -103,6 +105,8 @@ loadable without temporal or integrity guarantees. Rebuild from the source
 database to obtain authenticated format-v2 snapshots; there is no in-place v1
 upgrade. Unknown versions, incomplete publication, checksum mismatches, invalid
 array shapes, or provenance mismatches fail closed.
+
+.. _temporal-recovery-operations:
 
 Recovery and Retention
 ----------------------

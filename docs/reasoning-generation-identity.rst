@@ -14,7 +14,7 @@ These storage-neutral values are compatibility metadata, not authentication.
 Use ``gestaltdb.reasoning.adapters.generation.bind_claim_generation`` to verify
 a ``ClaimReasoningResult`` against its database and bind a content-compatible
 ``RuleCatalog``. ``catalog_for_ontology`` constructs a catalog from compiled
-rule content without changing legacy program digests. The initial profile is
+rule content without changing legacy program digests. This bridge's profile is
 positive binary entity reasoning. Current-graph and temporal-range admission
 are not implemented by this bridge; typed point sessions have a separate
 explicit admission path below.
@@ -34,7 +34,7 @@ The resulting ``ClaimGenerationBinding.verify_source(graph)`` authenticates
 the original prefix and conservatively rejects any newer commit. Explicit
 ``freshness="historical"`` verifies the old prefix instead. This read-only check
 is not an atomic publication permit: publishers must hold their writer guard
-through checking and committing. Staged binary point publication now carries
+through checking and committing. Staged binary point publication carries
 and revalidates this binding (see :doc:`reasoning-generations`). Computation-owned
 finite-range publication uses :doc:`reasoning-bound-range-publication`; legacy
 caller-derived ``stage_range`` remains separate. Durable sessions and the existing

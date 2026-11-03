@@ -3,6 +3,21 @@
 Complete time-range closure with scoped equality
 ============================================================
 
+Before the algorithm
+---------------------
+
+Ordinary :term:`closure` says which facts follow. Temporal closure also says
+**when** they follow. Premises used together overlap by interval intersection;
+independent alternative supports contribute an interval union. A **segment** is
+an interval between change points where the active inputs stay constant.
+``[a, b)`` includes its start and excludes its end. See :doc:`glossary` for
+:term:`valid time`, :term:`system time`, :term:`support` and :term:`witness`, and
+:doc:`reasoning-introduction` for the facts/rules foundation. Historical database
+selection remains a separate workflow (:doc:`temporal-versioning`).
+
+Evaluation and bounds
+----------------------
+
 ``gestaltdb.reasoning.temporal_closure.evaluate_range`` never samples one
 instant: all validity bounds become cut points, the timeline splits into
 elementary segments with uniform active inputs, and each segment evaluates
@@ -21,18 +36,29 @@ fail closed instead of degrading. The independent ``verify_closure`` gate
 still re-derives segmentation and point-evaluates through its own scan
 path, so scheduled closures keep proving segment identity.
 
+**Standalone runnable example.** The base install suffices. Two edges overlap
+only on ``[5, 10)``, so their two-hop reachability holds exactly on that interval.
+
 .. code-block:: python
 
-   from gestaltdb.reasoning import Interval, IntervalSet, TemporalFact, evaluate_range
-   from gestaltdb.reasoning.model import ReasoningLimits
+   from gestaltdb.reasoning import (
+       GenericEngine, GenericProgram, GenericRule, Interval, IntervalSet,
+       ReasoningLimits, TemporalFact, TypedAtom, TypedFact, Variable, evaluate_range,
+   )
 
+   x, y, z = Variable("x"), Variable("y"), Variable("z")
+   program = GenericProgram([
+       GenericRule("direct", [TypedAtom("edge", [x, y])], (), TypedAtom("reach", [x, y])),
+       GenericRule("extend", [TypedAtom("reach", [x, y]), TypedAtom("edge", [y, z])],
+                   (), TypedAtom("reach", [x, z])),
+   ])
    facts = [TemporalFact(TypedFact("edge", ["a", "b"]), IntervalSet([Interval(0, 10)])),
             TemporalFact(TypedFact("edge", ["b", "c"]), IntervalSet([Interval(5, 15)]))]
    closure = evaluate_range(program, facts, limits=ReasoningLimits())
    assert closure.answers(TypedFact("reach", ["a", "c"])).intervals == (Interval(5, 10),)
    assert set(closure.at(7)) == set(
        GenericEngine().evaluate(program, [f.fact for f in facts if 7 in f.valid],
-                                limits=ReasoningLimits()).facts)
+                                 limits=ReasoningLimits()).facts)
 
 Time-scoped equality
 ----------------------------------------

@@ -20,6 +20,13 @@ the same endpoints. Edge identity is therefore not just the pair :math:`(u,v)`.
 Properties and labels attach to the identified entities; they are not implicit
 extra nodes or relationships.
 
+.. figure:: _static/examples/property-graph-example.svg
+   :alt: Two named nodes, Aspirin and PTGS1, joined by a directed binds edge with score 0.9.
+   :width: 100%
+
+   A basic property graph rendered by GestaltDB. For unfamiliar vocabulary, see
+   :doc:`glossary`; :doc:`visualization` shows how to make your own figures.
+
 Create, replace, and delete
 ---------------------------
 

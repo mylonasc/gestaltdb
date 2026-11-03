@@ -13,10 +13,34 @@ details. Lead with one small runnable result, then concepts, common tasks, limit
 API links and advanced evidence. Avoid imposing arbitrary line limits on reference
 pages; keep entry points short by linking detail rather than removing caveats.
 
+Do not assume that a capable Python/database user knows logic-programming terms.
+Introduce nonstandard terms such as witness, closure, stratum and grounded atom
+in plain language before code uses them. Link to `docs/glossary.rst` and the
+facts/rules introduction; optional external background is supplementary, never
+the only explanation. Show one concrete meaning before abbreviated terminology.
+
 Use property-graph developer, graph-ML developer, knowledge-graph developer,
 ontology/Datalog user, reasoning integrator and operator as the shared audience
 names. Contributor and coding-agent material has a separate retrieval/development
 role and must not displace user tutorials.
+
+## Library-focused publication (required)
+
+Published guides describe the library as it exists: current APIs, supported
+workflows, limitations and compatibility requirements. They must not read as
+implementation diaries, issue acceptance reports, release-candidate checklists,
+roadmap delivery slices or interim adoption decisions. Do not use issue/phase
+IDs as headings, tell users what a later milestone will implement, or narrate
+regression investigation, CI recovery or release publication steps.
+
+State unsupported features directly rather than calling them future work.
+Keep actual format/API identifiers such as `indexed-python-v1` and necessary
+minimum dependency versions: these describe compatibility, not project phases.
+Benchmark evidence may retain source revisions, environments, methodology and
+limitations; it must not turn old measurements into claims about current wheels.
+Development plans and investigation history belong in `planning/`, not the
+published Sphinx navigation. Audit prose as well as code before calling a guide
+complete; passing Sphinx is not an editorial quality check.
 
 ## Terminology
 
@@ -43,6 +67,25 @@ role and must not displace user tutorials.
 | Experimental / deferred | Not a default supported execution route. Explain opt-in scope or lack of implementation. |
 
 ## Runnable examples
+
+Keep `docs/glossary.rst` as the canonical user terminology section; add unfamiliar
+jargon there and use Sphinx `:term:` links at useful introductions. The terminology
+extension derives short tooltip definitions from that file, retaining ordinary
+glossary navigation and a native title fallback without JavaScript. Enhanced
+tooltips support hover, keyboard focus and Escape dismissal.
+
+Declare applicable backend/serializer alternatives in
+`docs/_ext/example_options.json` (page name plus zero-based Python-block index).
+Keep one canonical source block; `database_examples.py` renders real nested
+`sphinx-tabs` with installation commands and AST-rewritten configuration only.
+Every declaration explains its capability boundary. Transaction/current-snapshot
+examples exclude incapable backends; native admission stays plain-PyRex-only;
+raw bytes exclude JSON; Pickle is trusted-data-only. Never imply equal performance.
+Backend-free snippets and existing-graph continuations need no selectors. Fixed
+benchmark setups have an explicit non-rendered disposition; notebook/shared-state
+setup fragments are compiled, not advertised as independently executable programs.
+Run `tests/test_documentation_variants.py` with all backend, serializer, Arrow,
+Polars and NetworkX extras to execute alternatives and detect undeclared examples.
 
 Label each block as standalone, continuation, illustrative fragment or pseudocode.
 Standalone examples include imports, data construction, optional extras and expected
@@ -99,6 +142,12 @@ graphics-debt issue. Use static diagrams before optional animation; alt text,
 captions and readable static fallbacks are mandatory. No semantics should depend
 on autoplay, color alone, a network fetch or interactive JavaScript. Prefer
 small diagrams driven by the runnable fixture over decorative architecture art.
+
+For actual graph/result examples, prefer `gestaltdb.viz.api` to a hand-drawn
+replacement. `scripts/generate_documentation_figures.py` builds committed static
+SVGs from the same small fixtures without a backend, browser or npm dependency.
+Keep the existing Graphviz architecture map: it describes components rather than
+data entities and is not interchangeable with an example graph visualization.
 
 ## Compatibility and evidence
 

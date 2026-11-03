@@ -5,8 +5,8 @@ disjoint class membership, reflexive loops on irreflexive properties and
 functional-property conflicts. Violations carry the exact supporting facts and
 constraint identities. The input closure stands unchanged: detection is
 paraconsistent evidence, not classical inconsistency, and domain/range
-entailment stays in the compiler. Equality-generating functionality belongs to
-RE-11; this module only detects conflicts.
+entailment stays in the compiler. Equality handling is separate;
+this module only detects conflicts.
 """
 
 from __future__ import annotations
