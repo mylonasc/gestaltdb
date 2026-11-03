@@ -1,6 +1,13 @@
 Compatibility, Migration, and Recovery
 ======================================
 
+Use :doc:`installation` to choose supported dependencies and
+:doc:`storage-backends` for backend-specific transaction/snapshot guarantees.
+This guide is for compatibility, migration and recovery of existing databases,
+not a first-run example. Back up the complete store and quiesce writers before
+destructive migration or orphan reclamation. A read-only audit does not authorize
+cleanup, and a successful reasoning/visualization workflow is not a recovery tool.
+
 Compatibility Contract
 ----------------------
 
@@ -43,7 +50,7 @@ payloads use the database serializer.
      - ``pyrex-rocksdb``
    * - PyRex/RocksDB transactional
      - Native graph transaction; no native columnar writer
-     - ``pyrex-rocksdb>=0.4.1``
+     - ``pyrex-rocksdb>=0.7.1`` (package minimum; transactional mode explicit)
 
 .. list-table::
    :header-rows: 1

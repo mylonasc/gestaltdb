@@ -360,6 +360,17 @@ a small example that connects facts, rules, conclusions and explanations; use
       Configuration metadata describing a database directory's backend, codec and
       format identity. It enables compatible reopen, not arbitrary format conversion.
 
+   GEXF
+      Graph Exchange XML Format, an XML graph-interchange format. GestaltDB loads
+      a supported static subset; temporal GEXF dynamics are not temporal database
+      history and GEXF writing is not provided (:doc:`networkx`). See the
+      `format specification <https://gexf.net/>`_.
+
+   notebook kernel
+      The interpreter process that executes notebook cells. It may use a different
+      Python environment from the notebook server or your shell, so dependencies
+      must be installed into the selected kernel's environment (:doc:`notebooks`).
+
    codec
       An encoder/decoder, called a serializer in these guides. A backend stores
       bytes; a codec determines how supported payloads become and recover from bytes.

@@ -326,6 +326,38 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
+### Platform exploration, exchange and operations (implemented, pending merge)
+
+DOC-13 #493 makes visualization a task path with independently runnable
+query/neighborhood HTML+SVG and backend-free reasoning/ontology artifacts. Exact
+controls, caps, layering and export/state contracts move to a linked reference;
+the established visualization entry URL remains. Browser state versus Python
+SVG, detached notebook figures and embedded-data distribution limits are explicit.
+Frontend contributor instructions route to the repository web guide, not the
+application introduction; existing generated figures and architecture graphics
+remain unchanged.
+
+NetworkX examples now exercise reimport with parallel edges, self-loops and an
+isolated node, plus static GEXF-to-materialized-NetworkX export. Mapping,
+directionality, XML security, in-memory preparation and non-atomic batch failure
+contracts remain intact. Notebook setup becomes an independent disposable cell
+that closes the graph before display. It is executed across the existing backend/
+codec alternatives instead of falsely remaining a compile-only setup fragment.
+
+Installation leads with application extras and supported Python, corrects the
+declared PyRex floor to 0.7.1, and distinguishes separate RDF from the broad all
+bundle. Tests bind these promises to pyproject declarations. Performance maps
+ingestion/query/build/load/sampling/reasoning/authentication/publication/exchange
+costs separately; recovery remains explicitly backed-up, quiesced operator work.
+Architecture/API navigation connects the supported integrations.
+
+Focused docs/NetworkX/viz validation passes 997 tests; strict Sphinx, Ruff and
+inventory pass. Coverage: 44 capability families, 107 documents / 92 Sphinx pages,
+246 source examples (146 standalone / 100 illustrative). The 50 backend/codec
+declarations still render 493 variants, now 481 executable / 12 compiled fragments.
+Full-suite/browser/base/remote validation and merge remain pending; final
+cross-audience/package acceptance stays DOC-10.
+
 ### Documentation example inventory and CI (delivered)
 
 DOC-09 #489 adds a stdlib-only Python/Cypher source-block inventory for every

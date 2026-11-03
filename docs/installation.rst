@@ -4,21 +4,58 @@ Installation
 Python Version
 --------------
 
-GestaltDB targets Python 3.10 through 3.13. The LevelDB backend uses ``plyvel``;
-at the time of writing, ``plyvel`` wheels are not available for Python 3.14 or
-free-threaded Python builds. Use Python 3.12 or 3.13 for notebooks that need the
-LevelDB backend.
+Use **Python 3.10 through 3.13** (``>=3.10,<3.14``). Python 3.14 and free-threaded
+builds are not declared supported. Optional backends have their own platform and
+wheel requirements; ``plyvel`` may need a native LevelDB development package
+when built from source. In a notebook, install into the interpreter used by its
+kernel, not an unrelated shell environment (:doc:`notebooks`).
+
+Choose only the features you use
+---------------------------------
+
+.. list-table:: Application installation choices
+   :header-rows: 1
+
+   * - Task
+     - Requirement
+     - Start here
+   * - Array sampling, standalone reasoning or offline visualization
+     - ``gestaltdb`` (base; includes NumPy and Lark, no KV backend)
+     - :doc:`sampling-introduction`, :doc:`reasoning-introduction`, :doc:`visualization`
+   * - Store/query a graph with JSON or Pickle
+     - ``gestaltdb[lmdb]``, ``gestaltdb[leveldb]`` or ``gestaltdb[rocksdb]``
+     - :doc:`storage-backends`
+   * - Add a binary payload codec
+     - Add ``msgpack`` or ``protobuf`` to the chosen backend extra
+     - :doc:`serializers`
+   * - Load Arrow or Polars tables
+     - Add ``arrow`` or ``polars`` plus a backend; ``fast-ingest`` includes PyRex
+     - :doc:`ingestion`
+   * - Exchange NetworkX or static GEXF
+     - Add ``networkx`` and a backend for database import/export
+     - :doc:`networkx`
+   * - Import the supported offline RDF ontology fragment
+     - ``gestaltdb[rdf]``; no database required for standalone compilation
+     - :doc:`ontology`
+
+Extras are additive: ``gestaltdb[lmdb,msgpack]`` selects storage and codec
+independently. ``backends`` and ``serializers`` are convenience bundles, not
+required for every application. ``all`` additionally installs external benchmark
+clients; it is not the default runtime recommendation and does not include the
+separate ``rdf`` extra. Visualization rendering
+requires neither the ``docs`` extra nor Node/npm; Jupyter itself is installed
+separately if you want notebook display.
 
 Install With uv
 ---------------
 
-From a local checkout:
+In your application project:
 
 .. code-block:: sh
 
-   uv sync
+   uv add "gestaltdb[lmdb]"
 
-For editable development:
+For editable use of a local checkout:
 
 .. code-block:: sh
 
@@ -41,7 +78,7 @@ Install With pip
    python -m venv .venv
    . .venv/bin/activate
    python -m pip install --upgrade pip
-   python -m pip install .
+   python -m pip install "gestaltdb[lmdb]"
 
 The base package includes the Pickle and JSON serializers but no embedded KV
 backend. Install backend and serializer extras independently; extras are
@@ -74,7 +111,10 @@ Install From GitHub
 
 .. code-block:: sh
 
-   python -m pip install "gestaltdb[all] @ git+https://github.com/mylonasc/gestaltdb.git"
+   python -m pip install "gestaltdb[lmdb] @ git+https://github.com/mylonasc/gestaltdb.git"
+
+This installs source, not the published wheel. Pin a reviewed commit when you
+need reproducible source installs; choose the extras required by your application.
 
 Notebook Kernel Example
 -----------------------
@@ -84,11 +124,8 @@ Jupyter:
 
 .. code-block:: sh
 
-   uv python install 3.12
-   uv venv --python 3.12
-   uv sync --extra leveldb --extra lmdb --extra msgpack --extra protobuf
-   uv add --dev ipykernel
-   .venv/bin/python -m ipykernel install --user --name gestaltdb-py312 --display-name "GestaltDB Python 3.12"
+   python -m pip install "gestaltdb[lmdb]" ipykernel
+   python -m ipykernel install --user --name gestaltdb --display-name "GestaltDB"
 
 Optional Dependencies
 ---------------------
@@ -100,7 +137,7 @@ Optional Dependencies
    LevelDB key-value backend through ``plyvel``.
 
 ``rocksdb``
-   RocksDB key-value backend through ``pyrex-rocksdb>=0.4.1``.
+   RocksDB key-value backend through ``pyrex-rocksdb>=0.7.1``.
 
 ``backends``
    Convenience bundle containing the LMDB, LevelDB, and RocksDB backends.
@@ -113,7 +150,7 @@ Optional Dependencies
 
 ``fast-ingest``
    Convenience extra for ``pyarrow``, ``polars``, and
-   ``pyrex-rocksdb>=0.4.1``.
+   ``pyrex-rocksdb>=0.7.1``.
 
 ``msgpack``
    MessagePack serializer.
@@ -127,6 +164,13 @@ Optional Dependencies
 
 ``bloom``
    Bloom-filter support through ``pybloom-live``.
+
+``networkx``
+   Materialized graph exchange and static GEXF loading; includes NetworkX and
+   ``defusedxml``. Not automatic NetworkX algorithm dispatch over live storage.
+
+``rdf``
+   Offline import of the selected RDF ontology fragment through RDFLib.
 
 ``docs``
     Sphinx documentation build dependencies.

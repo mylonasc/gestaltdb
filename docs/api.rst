@@ -1,6 +1,20 @@
 API Reference
 =============
 
+Application integration routes
+--------------------------------
+
+- **Offline exploration:** :doc:`visualization` has complete graph/query/sample
+  and reasoning examples; :doc:`visualization-reference` describes exact caps,
+  controls, SVG/browser exports and saved-state boundaries. Import builders from
+  ``gestaltdb.viz.api``; no NetworkX or JavaScript runtime is required.
+- **Materialized graph exchange:** :doc:`networkx` documents
+  ``gestaltdb.integrations.networkx.from_networkx``, ``to_networkx`` and
+  ``load_gexf`` with direction/identity, batch-failure and XML-security contracts.
+- **Environment and lifecycle:** :doc:`installation`, :doc:`notebooks` and
+  :doc:`operations` cover independent extras, correct kernels, handle ownership
+  and explicit recovery; :doc:`performance` separates workflow-stage costs.
+
 Filtering and Sampling Entry Points
 ----------------------------------------
 
