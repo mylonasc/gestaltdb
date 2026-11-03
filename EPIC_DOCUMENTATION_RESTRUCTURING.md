@@ -326,7 +326,7 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
-### Advanced reasoning integration (implemented, pending merge)
+### Advanced reasoning integration (delivered)
 
 DOC-08 #488 adds `reasoning-workflows.rst`: a task decision table and grouped
 navigation for source/answer adapters, maintenance/session state, consumption and
@@ -345,7 +345,15 @@ plan and pipeline evidence. Stored rules, source/state identity, authentication,
 closure certification, read-only consumers and guarded publication stay distinct.
 Focused documentation/example validation passes 616 tests. Inventory: 106
 documents / 91 Sphinx pages; backend/serializer declarations remain unchanged.
-Delivery and final audience acceptance are not declared by implementation alone.
+Delivered through #512 at `d39ee15` after all PR checks passed, including Python
+3.10/3.13 full suites, installed artifacts and ontology conformance. The unchanged
+local checkout passes 5,032 tests with 51 skips. Base Python 3.10 checks pass 13
+tests; strict Sphinx passes on Python 3.10/Sphinx 8 and the local toolchain.
+Browser checks cover 28 pages at three widths, 78 table checks, 327 numbered
+blocks and 81 clipboard comparisons. Docs/API drift, eight agent examples,
+module-size and generated figures pass. #488 is closed and #480 records ten
+delivered slices; DOC-09, DOC-13 and final DOC-10 acceptance remain open, together
+with graphics debt #495.
 
 ### Temporal range-reasoning journey (delivered)
 
