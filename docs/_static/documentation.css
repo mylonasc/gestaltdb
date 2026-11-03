@@ -109,6 +109,35 @@
  * only when the small enhancement has prepared a simple, non-spanned table.
  */
 @media (max-width: 600px) {
+  /* Sphinx signatures use table sizing and nested parameter lists use a
+   * min-content grid in the theme. Wrap/stack them instead of clipping API text.
+   */
+  .rst-content dl.py > dt.sig {
+    display: block;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .rst-content .sig .sig-prename {
+    display: block;
+  }
+
+  .rst-content .sig .pre {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .rst-content dl.field-list,
+  .rst-content dl.py dl.field-list {
+    display: block;
+  }
+
+  .rst-content dl.field-list > dd {
+    min-width: 0;
+    margin-left: 0;
+    overflow-wrap: anywhere;
+  }
+
   .wy-table-responsive table.responsive-cards,
   .wy-table-responsive table.responsive-cards tbody,
   .wy-table-responsive table.responsive-cards tr,
