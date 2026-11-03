@@ -128,7 +128,7 @@ def test_status_labels_distinguish_installation_and_shared_state():
         "kind": "standalone", "runner": "execute", "extras": ["arrow", "lmdb"], "reason": "Loads a table.",
     })
     label = HELPER["status_text"]({"kind": "illustrative", "runner": "compile", "reason": "Requires a graph."})
-    assert "not standalone" in label and "Not executed" in label
+    assert label == "**Illustrative fragment (not standalone).**"
 
 
 def test_sphinx_hook_labels_source_before_tab_rewriting(example_root):

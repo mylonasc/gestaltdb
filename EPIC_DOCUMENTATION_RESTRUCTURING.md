@@ -342,7 +342,8 @@ and packaged-resource/navigation checks stay offline; strict Sphinx covers RST.
 
 The dedicated CI lanes use Python 3.10/docs for base examples and strict Sphinx,
 and Python 3.13 with only the relevant optional backends/codecs/Arrow/Polars/NetworkX
-for complete example/tab coverage. Existing Python 3.12 Pages and installed-wheel
+for complete example/tab coverage. They run in `documentation-examples.yml`;
+the reference/roadmap workflow remains build-free. Existing Python 3.12 Pages and installed-wheel
 checks remain distinct. Documentation/config/catalog/test changes trigger the
 gates, not just runtime edits. Contributor scope/limits live outside Sphinx in
 `planning/documentation-review/example-checks.md`.

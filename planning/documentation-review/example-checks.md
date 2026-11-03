@@ -42,8 +42,9 @@ source authentication or a security signature.
 
 ## CI matrix
 
-The Documentation and roadmap checks workflow runs for documentation, extension,
-inventory, example-test, packaged-resource and runtime changes:
+The Documentation examples workflow runs for documentation, extension, inventory,
+example-test, packaged-resource and runtime changes. The separate Documentation
+and roadmap checks workflow retains its build-free reference validation:
 
 | Lane | Coverage |
 | --- | --- |

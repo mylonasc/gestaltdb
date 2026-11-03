@@ -164,3 +164,26 @@ def test_optional_integrations_installs_native_build_prerequisite():
     assert "libleveldb-dev" in text
     assert text.index("libleveldb-dev") < text.index('.[all,coverage]')
     assert 'python-version: "3.13"' in text
+
+
+@pytest.mark.parametrize("event", ["push", "pull_request"])
+@pytest.mark.parametrize("path", [
+    "README.md", "EXAMPLES.md", "AGENTS.md", "docs/quickstart.rst", "docs/conf.py",
+    "docs/_ext/example_inventory.json", "docs/_ext/example_options.json",
+    "src/gestaltdb/agent_skill/references/ontology.md", "src/gestaltdb/current.py",
+    "tests/test_documentation_execution.py", "tests/test_agent_docs.py", "tests/conftest.py",
+    "planning/documentation-review/documents.json", "pyproject.toml", "uv.lock",
+    ".github/workflows/documentation-examples.yml",
+])
+def test_example_inputs_select_the_dedicated_workflow(event, path):
+    assert _selected("documentation-examples.yml", [path], event)
+
+
+def test_example_matrix_does_not_expand_the_lightweight_reference_job():
+    text = (WORKFLOWS / "documentation-examples.yml").read_text()
+    assert "python: '3.10'" in text and "python: '3.13'" in text
+    assert "extras: docs,backends,serializers,arrow,polars,networkx" in text
+    assert "tests/test_documentation*.py" in text and "test_reasoning_learning_paths.py" in text
+    assert "sphinx-build -E -W" in text
+    checks = (WORKFLOWS / "documentation-checks.yml").read_text()
+    assert "pytest" not in checks and "sphinx-build" not in checks

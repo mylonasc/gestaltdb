@@ -210,9 +210,11 @@ def status_text(row: dict) -> str:
         suffix = "Choose the capability-qualified installation tab below."
     elif row["kind"] == "standalone":
         suffix = f'Install with ``python -m pip install "{requirement}"``.'
+    elif row["kind"] == "continuation":
+        suffix = row["setup"]
     else:
-        suffix = "Not executed as an independent program."
-    return f"**{LABELS[row['kind']]}.** {row['reason']} {suffix}"
+        suffix = ""
+    return f"**{LABELS[row['kind']]}.** {suffix}".rstrip()
 
 
 def local_link_errors(root: Path = ROOT) -> list[str]:
