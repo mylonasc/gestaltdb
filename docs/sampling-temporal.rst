@@ -4,7 +4,8 @@ Sample historical graph structure
 Use a temporal snapshot when a draw must respect when nodes and relationships
 were available. A valid-time filter selects modeled time; a system-time horizon
 selects which recorded history the build knows. These are separate dimensions
-(:term:`bitemporal`). Recording temporal versions does not run temporal reasoning
+(:term:`bitemporal`; see :doc:`temporal-introduction` for a two-horizon timeline).
+Recording temporal versions does not run temporal reasoning
 or train a model. Start with :doc:`sampling-introduction` for snapshot basics.
 
 Draw at a boundary and across a window

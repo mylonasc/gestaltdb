@@ -326,6 +326,28 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
+### Temporal/bitemporal learning path (implemented, pending merge)
+
+DOC-04 #484 adds `temporal-introduction.rst`, `temporal-updates.rst` and
+`temporal-reads.rst`. A compact Alice department timeline compares two valid
+instants under two captured recorded horizons while demonstrating that current
+records remain separate. Independent workflows cover partial-interval correction
+and retraction, deferred-index rebuilds, authenticated pinned traversal/snapshot
+materialization, and explicitly horizon-qualified Cypher. Window sampling and
+interval inference are routed to their distinct APIs; recovery/migration remain
+in operations. The old temporal URL and detailed service contracts are retained
+as reference, with fragment scope stated and the mixed implicit-setup sketch
+replaced by focused routes. README, architecture, quickstart and packaged temporal
+guidance link to the new path. No runtime behavior changes.
+
+Four database setups add 48 executable backend/serializer variants, bringing the
+catalog to 47 declarations / 457 alternatives (433 executable, 24 compiled
+shared-state variants). Inventory: 101 documents / 86 Sphinx pages. Validation
+includes 770 documentation/temporal tests and a broader 675-test temporal,
+migration, interface, Cypher and sampling run; strict Sphinx, documentation checks,
+lint and offline browser checks pass. #484 remains open until merged delivery;
+final cross-audience acceptance remains DOC-10.
+
 ### Sampling learning path (implemented, pending merge)
 
 DOC-03 #483 adds `sampling-introduction.rst` with a live/snapshot decision table,

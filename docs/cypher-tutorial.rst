@@ -147,7 +147,8 @@ numbers. The query qualifier must evaluate to a ``datetime()``/``TemporalInstant
 value; a bare integer is not a valid Cypher qualifier. Add ``FOR SYSTEM_TIME AS OF``
 to select a recorded-history horizon under
 the bitemporal contract. Qualified queries are read-only and their context is
-query-wide; see :doc:`temporal-versioning` and the temporal section of
+query-wide; see the timeline in :doc:`temporal-introduction`, the shared-horizon
+workflow in :doc:`temporal-reads` and the temporal section of
 :doc:`cypher`. Neither a scalar constructor nor a historical ``MATCH`` runs
 interval Datalog (:doc:`reasoning-temporal`).
 

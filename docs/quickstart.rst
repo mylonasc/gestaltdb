@@ -137,7 +137,7 @@ Choose your next path
    * - Draw layers, subgraphs, walks or temporal negatives
      - :doc:`typed-sampling`, :doc:`random-walks`
    * - Inspect historical state at valid/system time
-     - :doc:`temporal-versioning`
+     - :doc:`temporal-introduction`, :doc:`temporal-updates`, :doc:`temporal-reads`
    * - Record sourced claims, derive stored rules or inspect belief
      - :doc:`temporal-versioning`, :doc:`modal-epistemic`, :doc:`inference-audit`
    * - Classify entities from ontology axioms

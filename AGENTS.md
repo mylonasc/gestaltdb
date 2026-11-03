@@ -21,6 +21,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Optional NetworkX import/export and static GEXF loading: `src/gestaltdb/integrations/networkx.py`; mapping/security contracts: `docs/networkx.rst` (install `gestaltdb[networkx]`).
 - Columnar ingestion containers and enums: `src/gestaltdb/ingestion.py`
 - Canonical temporal values and selection semantics: `src/gestaltdb/temporal.py`
+- Temporal learning path: `docs/temporal-introduction.rst`, `docs/temporal-updates.rst`, `docs/temporal-reads.rst`; exact history/service contracts remain in `docs/temporal-versioning.rst`.
 - Immutable temporal version records and write descriptors: `src/gestaltdb/versioning.py`
 - Epistemic claim values and four-valued status: `src/gestaltdb/epistemic.py`
 - Bounded modal expressions and evaluation: `src/gestaltdb/modal.py`

@@ -29,7 +29,7 @@ remains the default; native history extraction is an explicit opt-in.
 | Load tables and select cohorts | [Access choices](docs/data-access.rst) · [Arrow/Polars ingestion](docs/ingestion.rst) · [indexes and filtering](docs/property-filtering.rst) |
 | Query or mutate a property graph | [Cypher tutorial](docs/cypher-tutorial.rst) · [reference](docs/cypher.rst): paths, composition, aggregates, writes and schema commands |
 | Prepare graph-learning batches | [Sampling introduction](docs/sampling-introduction.rst) · [walks and embedding preparation](docs/random-walks.rst); training stays external |
-| Ask what applied then, or what was known then | [Temporal/bitemporal history](docs/temporal-versioning.rst) |
+| Ask what applied then, or what was known then | [Temporal introduction](docs/temporal-introduction.rst) · [historical reads](docs/temporal-reads.rst) |
 | Represent sourced or conflicting knowledge | [Claims and stored rules](docs/temporal-versioning.rst) · [epistemic/modal evaluation](docs/modal-epistemic.rst) |
 | Classify entities from semantic axioms | [Ontology](docs/ontology.rst) · [supported profile](docs/reasoning-profiles.rst), not full OWL |
 | Derive facts with Datalog | [Facts, rules and explanations](docs/reasoning-introduction.rst) · [typed rules, literals and aggregates](docs/reasoning-typed.rst) · [scoped negation](docs/reasoning-negation.rst) |
@@ -72,7 +72,7 @@ For copyable, tested API examples, see [Runnable API Workflows](docs/api-workflo
 
 - **Performance is workload-dependent.** Fast ingestion and repeated array-native sampling are key strengths. Account separately for index rebuilds, snapshot construction, loading, and inference. [Performance guidance](docs/performance.rst)
 - **Semantics are explicit.** Selected ontology/rule fragments support classification, validation, and maintenance. Conflicting evidence can coexist; truth maintenance preserves supported conclusions rather than automatically resolving contradictions. [Profiles](docs/reasoning-profiles.rst)
-- **History is recorded deliberately.** Historical queries use temporal versions and claims; ordinary mutable graph updates are a separate path. [Temporal versioning](docs/temporal-versioning.rst)
+- **History is recorded deliberately.** Historical queries use temporal versions and claims; ordinary mutable graph updates are a separate path. [Temporal introduction](docs/temporal-introduction.rst) · [detailed reference](docs/temporal-versioning.rst)
 - **Source verification has a specific meaning.** An “authenticated” artifact is checked against expected database history and application-held identities. It is source/state verification, not login authentication or a guarantee that assertions are true. [Saved reasoning state](docs/reasoning-authenticated-sessions.rst)
 - **Integration stays application-controlled.** Snapshots are rebuilt explicitly; reasoning and publication are explicit operations, and some changes require recomputation. ML training uses external frameworks; probabilistic rules and an automated feedback loop remain [#124](https://github.com/mylonasc/gestaltdb/issues/124) and [#128](https://github.com/mylonasc/gestaltdb/issues/128). Operational hardening scope is recorded in [#381](https://github.com/mylonasc/gestaltdb/issues/381).
 

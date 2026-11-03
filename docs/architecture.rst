@@ -81,8 +81,9 @@ silently converting every ordinary mutation into history.
 when it was recorded in the database history. For example, a supplier status
 valid last month may be corrected today: an application can inspect both the
 revised account of last month and the account available before the correction.
-See :doc:`temporal-versioning` for version writes, half-open validity intervals,
-historical reads, and bitemporal Cypher queries.
+Start with :doc:`temporal-introduction` for a two-horizon example and
+:doc:`temporal-reads` for historical traversal and Cypher. Exact version-write,
+validity and publication contracts remain in :doc:`temporal-versioning`.
 
 ``read_view`` selects a valid-time point and visible commit prefix;
 ``current_read_view`` pins mutable graph state where the backend supports it.
@@ -191,7 +192,7 @@ Choose an application workflow
      - :doc:`ontology`, :doc:`ontology-graph`, :doc:`reasoning-validation`
    * - Audit historical eligibility or evidence
      - Versioned claims -> pinned history -> temporal closure -> explanations/publication
-     - :doc:`temporal-versioning`, :doc:`reasoning-temporal`, :doc:`reasoning-bound-range-publication`
+     - :doc:`temporal-introduction`, :doc:`reasoning-temporal`, :doc:`reasoning-bound-range-publication`
    * - Maintain conclusions as evidence changes
      - Committed versions -> session ledger -> maintenance -> saved state or publication
      - :doc:`reasoning-sessions`, :doc:`reasoning-authenticated-sessions`

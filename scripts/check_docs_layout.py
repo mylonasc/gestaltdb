@@ -19,7 +19,8 @@ PAGES = ["index", "quickstart", "storage-backends", "serializers", "data-access"
           "ingestion", "cypher-tutorial", "typed-sampling", "performance",
           "reasoning-introduction", "ontology", "reasoning-proofs",
           "sampling-introduction", "sampling-neighborhoods", "sampling-subgraphs",
-          "sampling-temporal", "sampling-negatives", "random-walks"]
+          "sampling-temporal", "sampling-negatives", "random-walks",
+          "temporal-introduction", "temporal-updates", "temporal-reads"]
 
 
 class QuietHandler(SimpleHTTPRequestHandler):

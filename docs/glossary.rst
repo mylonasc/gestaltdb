@@ -137,7 +137,17 @@ a small example that connects facts, rules, conclusions and explanations; use
    bitemporal
       Tracking two time dimensions: when an assertion applies (valid time) and
       when it was recorded (system time). This supports both “what applied then?”
-      and “what had we recorded about it by then?” (:doc:`temporal-versioning`).
+      and “what had we recorded about it by then?” (:doc:`temporal-introduction`).
+
+   correction
+      An appended replacement account for an existing temporal version over a
+      selected valid interval. It preserves the old record and earlier system-time
+      answers; it does not mutate the current graph (:doc:`temporal-updates`).
+
+   retraction
+      An appended withdrawal of applicability over a valid interval. When it wins
+      historical selection, an entity as-of read returns no value; older payloads
+      remain recorded (:doc:`temporal-updates`).
 
    world
       A named context containing claims, such as an actual-world account or an
@@ -207,11 +217,22 @@ a small example that connects facts, rules, conclusions and explanations; use
 
    valid time
       When an assertion applies in the modeled world. Half-open interval
-      ``[a, b)`` includes ``a`` but excludes ``b`` (:doc:`temporal-versioning`).
+      ``[a, b)`` includes ``a`` but excludes ``b`` (:doc:`temporal-introduction`).
 
    system time
       When an update was recorded in database history. A recorded-history horizon
-      limits which updates a reader may know about; it is distinct from valid time.
+       limits which updates a reader may know about; it is distinct from valid time.
+
+   commit
+      A published group of immutable temporal version records with one recorded
+      system timestamp and commit ID. Logical visibility is shared across the
+      group; physical transaction support remains backend-specific
+      (:doc:`temporal-updates`).
+
+   ordinal
+      A version record's position within its temporal commit. Historical winner
+      selection orders eligible records by commit and then ordinal, not by the
+      latest valid-start date (:doc:`temporal-updates`).
 
    temporal segment
       A time interval between change points where the selected active input set

@@ -29,7 +29,7 @@ Choose a capability
    * - Prepare graph-learning batches
      - :doc:`sampling-introduction`, :doc:`random-walks`
    * - Query what applied then or what was recorded then
-     - :doc:`temporal-versioning`
+     - :doc:`temporal-introduction`, :doc:`temporal-reads`
    * - Represent sourced/conflicting claims and reason over worlds
      - :doc:`temporal-versioning`, :doc:`modal-epistemic`
    * - Classify entities using semantic axioms
@@ -108,6 +108,9 @@ benchmarks are separated from the first-run path.
    :maxdepth: 1
    :caption: Temporal and Epistemic Knowledge
 
+   temporal-introduction
+   temporal-updates
+   temporal-reads
    temporal-versioning
    modal-epistemic
    inference-audit

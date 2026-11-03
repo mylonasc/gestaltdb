@@ -10,7 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 PILLARS = {
     "property-graph", "storage-backends", "serializers", "property-filtering", "cypher",
-    "typed-sampling", "random-walks", "temporal-versioning", "modal-epistemic",
+    "sampling-introduction", "random-walks", "temporal-introduction", "modal-epistemic",
     "ontology", "reasoning-typed", "reasoning-negation", "reasoning-temporal",
     "reasoning-authenticated-sessions", "visualization", "networkx", "operations",
 }
