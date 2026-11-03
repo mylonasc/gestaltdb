@@ -127,13 +127,14 @@ python -m pip install "gestaltdb[backends,serializers]"
 `GraphDB.create()` keeps RocksDB/PyRex as its compatibility default, so a base
 install must pass an installed backend explicitly and never silently falls back.
 
-Install every optional integration, including ingestion and benchmark clients:
+The broad optional bundle includes ingestion and external benchmark clients;
+prefer the smaller extras needed by your application:
 
 ```sh
 python -m pip install "gestaltdb[all]"
 ```
 
-Optional extras include `lmdb`, `leveldb`, `rocksdb`, `backends`, `msgpack`, `protobuf`, `serializers`, `arrow`, `polars`, `fast-ingest`, `networkx`, `bloom`, `docs`, `dev`, and `all`.
+Optional extras include `lmdb`, `leveldb`, `rocksdb`, `backends`, `msgpack`, `protobuf`, `serializers`, `arrow`, `polars`, `fast-ingest`, `networkx`, `rdf`, `bloom`, `docs`, `dev`, and `all`. Offline RDF import uses the separate `rdf` extra; it is not included in `all`. Base-only offline visualization, standalone reasoning and array sampling need no embedded backend.
 
 ### NetworkX and GEXF
 
