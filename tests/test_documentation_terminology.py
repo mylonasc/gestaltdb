@@ -4,10 +4,10 @@ from pathlib import Path
 import runpy
 from types import SimpleNamespace
 
-from docutils import nodes
 import pytest
 
 
+nodes = pytest.importorskip("docutils.nodes", reason="Install the docs extra for glossary rendering tests")
 HELPER = runpy.run_path(str(Path(__file__).resolve().parents[1] / "docs/_ext/terminology.py"))
 
 

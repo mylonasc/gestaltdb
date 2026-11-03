@@ -326,6 +326,13 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
+### Main integration checkpoint
+
+DOC-12 #492 merged through #501 at `0025bbf`. The follow-through stack #502–#506
+is consolidated for main review in #506, with its complete source history intact.
+Rendering tests requiring docutils explicitly skip without the docs extra so
+the base-install test contract remains independent of Sphinx dependencies.
+
 ### Temporal/bitemporal learning path (implemented, pending merge)
 
 DOC-04 #484 adds `temporal-introduction.rst`, `temporal-updates.rst` and
