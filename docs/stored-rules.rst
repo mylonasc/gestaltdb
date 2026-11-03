@@ -84,7 +84,7 @@ Absence is not an explicit denial
 ----------------------------------
 
 ``not_when=[...]`` checks that no matching positive premise is present under a
-declared ``closed_world`` predicate scope. It does not consume an explicit
+declared :term:`closed-world scope` (``closed_world`` predicates). It does not consume an explicit
 negative claim, infer one, or make every missing predicate false. Negated variables
 must be safely bound; undeclared negation and negative dependency cycles reject
 before the catalog changes.

@@ -2,14 +2,15 @@ Sourced claims and conflicting evidence
 ========================================
 
 Use ``graph.epistemic`` to record who asserted or denied a proposition, where it
-came from, and when it applies. A claim is not a mutable graph edge or an
+came from, and when it applies. A :term:`claim` is not a mutable graph edge or an
 independently verified fact. Read :doc:`temporal-introduction` for valid versus
 recorded time; claims use the same immutable temporal history.
 
 Evidence is not a single Boolean
 ---------------------------------
 
-Positive evidence supports a proposition; explicit negative evidence refutes it.
+:term:`Polarity <polarity>` distinguishes positive evidence supporting a proposition
+from explicit negative evidence refuting it.
 Both can coexist without making unrelated propositions follow
 (:term:`paraconsistent`). Missing evidence is **unknown**, not false.
 

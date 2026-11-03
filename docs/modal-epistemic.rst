@@ -13,7 +13,7 @@ Terms before formulas
 **Epistemic** concerns knowledge; **modal** operators express claims such as
 belief, knowledge or possibility relative to other contexts. A :term:`world` is
 a named claim context, and :term:`accessibility` explicitly links contexts for
-an agent. A **frame** is the relevant world/link structure. These are logical
+an agent. A :term:`frame <modal frame>` is the relevant world/link structure. These are logical
 contexts and relations, not separate physical databases.
 
 Contradictory evidence can coexist: :term:`paraconsistent` means that a

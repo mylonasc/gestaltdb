@@ -153,6 +153,27 @@ a small example that connects facts, rules, conclusions and explanations; use
       A named context containing claims, such as an actual-world account or an
       agent's belief context. A modal world is not a separate database backend.
 
+   claim
+      A sourced assertion or denial of a proposition, with agent, source and world
+      identity. Recording a claim does not verify its truth or create a mutable
+      graph edge (:doc:`claims-introduction`).
+
+   polarity
+      Whether a claim supplies explicit positive or negative evidence. Polarity
+      is independent of its confidence score and of missing evidence
+      (:doc:`claims-introduction`).
+
+   closed-world scope
+      An explicit predicate and context boundary within which a rule may test for
+      missing positive evidence. Such an absence check is not an explicit negative
+      claim or a global assumption that all unrecorded propositions are false
+      (:doc:`stored-rules`).
+
+   modal frame
+      The selected world/link structure for an evaluating agent and operator kind.
+      Belief, knowledge and general modal frames have independent explicit links;
+      they are not separate physical databases (:doc:`modal-epistemic`).
+
    Horn rule
       A rule with one conclusion (head) derived from matching premises (body).
       GestaltDB requires safe variable bindings; stored claim rules and standalone
