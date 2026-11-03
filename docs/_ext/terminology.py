@@ -36,7 +36,6 @@ def setup(app):
 
     def annotate_links(app, doctree, docname):
         glossary = Path(app.srcdir) / "glossary.rst"
-        app.env.note_dependency(str(glossary))
         terms = definitions(glossary)
         for link in doctree.findall(nodes.reference):
             uri = link.get("refuri", "")
@@ -46,5 +45,11 @@ def setup(app):
                 link["reftitle"] = terms[key]
                 link["classes"].append("term-definition-link")
 
+    def note_glossary_dependency(app, docname, source):
+        # The current document context exists during reading, not necessarily
+        # during output resolution (in particular on Sphinx 8 / Python 3.10).
+        app.env.note_dependency(str(Path(app.srcdir) / "glossary.rst"))
+
+    app.connect("source-read", note_glossary_dependency)
     app.connect("doctree-resolved", annotate_links, priority=700)
     return {"parallel_read_safe": True, "parallel_write_safe": True}

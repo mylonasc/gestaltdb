@@ -15,9 +15,13 @@ def test_terms_normalize_only_lookup_keys(tmp_path):
     glossary = tmp_path / "glossary.rst"
     glossary.write_text(".. glossary::\n\n   Datalog\n      A rule language. More detail.\n\n   closure\n      All consequences.\n")
     callbacks = {}
-    app = SimpleNamespace(srcdir=tmp_path, env=SimpleNamespace(note_dependency=lambda path: None),
+    dependencies = []
+    app = SimpleNamespace(srcdir=tmp_path, env=SimpleNamespace(note_dependency=dependencies.append),
                           connect=lambda event, callback, **kwargs: callbacks.update({event: callback}))
     HELPER["setup"](app)
+    callbacks["source-read"](app, "other", [""])
+    assert dependencies == [str(glossary)]
+    app.env.note_dependency = lambda path: pytest.fail("Reading context is unavailable during output resolution")
     tree = nodes.document("", "")
     for fragment in ("term-Datalog", "term-datalog", "term-closure"):
         tree += nodes.reference("", fragment, refuri=f"glossary.html#{fragment}")
