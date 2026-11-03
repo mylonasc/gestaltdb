@@ -26,8 +26,8 @@ prove the prediction correct, propagate probabilities, or explain the model's
 internal decisions. This export is an audit record, not independent proof
 verification or a regulatory-compliance certificate.
 
-Runnable model-to-proof example
--------------------------------
+Runnable model-output audit
+---------------------------
 
 This example requires the ``lmdb`` extra and closes the database explicitly.
 The prediction could come from a GNN; the example deliberately uses a fixed
