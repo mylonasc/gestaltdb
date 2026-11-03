@@ -108,7 +108,7 @@ when an edge is traversed.
 
 `engine.iter_random_walks(start_nodes=None, walk_length=40, walks_per_node=1,
 batch_size=1024, shuffle=False, walk_type="random", **walk_options)` streams
-ordinary walk batches in seed rounds (RWS-01). `None` visits all nodes; explicit
+ordinary walk batches in seed rounds. `None` visits all nodes; explicit
 compact cohorts retain duplicates and are copied once. Use `walk_type="node2vec"`
 to forward options to the biased kernel. Validation is eager, generation lazy.
 Unshuffled all-node seed buffers are batch-sized; shuffling needs an O(seed count)
@@ -120,7 +120,7 @@ parallelism, cohort partitioning, or worker-count invariance is implied.
 
 ### Mapping IDs Back to External Graph
 
-`gestaltdb.sampling.iter_context_pairs` (RWS-02) converts a walk batch or stream
+`gestaltdb.sampling.iter_context_pairs` converts a walk batch or stream
 to bounded `ContextPairBatch` arrays: center/context IDs, distances and weights.
 Fixed/dynamic windows, inverse-distance weights and explicit frequency-based
 subsampling are supported. Restart jumps split sequences by default; separate
@@ -132,13 +132,13 @@ with explicit exclusions and uniqueness/exhaustion policies (not KG negatives).
 avoidance, typed/metapath/FSM `WalkSchema`/`WalkTransition`, interval/event
 `TemporalWalkPolicy`, and edge/distinct-neighbor transition units. Legacy kernels
 and batch defaults remain unchanged; temporal policy batches add masked times,
-version IDs and copied snapshot provenance. RWS-08 cache/native adoption was
-measured and deferred; prototypes stay under `benchmarks/`, not runtime APIs.
+version IDs and copied snapshot provenance. No runtime transition-distribution
+cache or alternative native walk executor is provided.
 
 `SampledSubgraphBatch` local arrays index nodes locally within the batch (`senders`, `receivers`, `positives`, `negatives`).
 - `batch.node_ids_global`: Maps local batch index to compact global snapshot ID.
 - `snapshot.external_node_id(compact_id)`: Maps compact global snapshot ID to original external string ID.
-- `snapshot.global_triple_to_external(head, rel, tail)`: Recovers full external triple tuple.
+- `snapshot.global_triple_to_external((head, rel, tail))`: Recovers a full external triple tuple.
 
 ### Resolving External IDs
 
@@ -154,9 +154,10 @@ when loaded and should be rebuilt when repeated large-batch resolution matters.
 
 Temporal history may contain several rows for one external edge ID; external
 edge lookup rejects this ambiguity instead of silently choosing a version.
-Layer and walk calls accept point/window filters but do not impose causal
-ordering. Node/edge seed draws select from the entire snapshot, including all
-history rows; use time-filtered traversal or subgraph APIs for temporal selection.
+Layer and walk calls accept point/window filters but do not impose multihop
+valid-start ordering. Node/edge seed draws also accept temporal point/window
+filters: nodes use availability intervals, edges use version validity. Without
+a temporal filter, seed draws select from the entire snapshot, including history.
 
 ---
 

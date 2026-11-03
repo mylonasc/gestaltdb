@@ -27,7 +27,7 @@ Choose a capability
    * - Load tables and select indexed cohorts
      - :doc:`data-access`, :doc:`ingestion`, :doc:`property-filtering`
    * - Prepare graph-learning batches
-     - :doc:`typed-sampling`, :doc:`random-walks`
+     - :doc:`sampling-introduction`, :doc:`random-walks`
    * - Query what applied then or what was recorded then
      - :doc:`temporal-versioning`
    * - Represent sourced/conflicting claims and reason over worlds
@@ -51,7 +51,7 @@ Important choices
 - **Live traversal or reusable arrays?** Live sampling reads typed adjacency;
   ``SamplerSnapshot`` / ``SamplerEngine`` reuse compact arrays for repeated draws.
   Filter the eligible graph at build time, not just the seeds. Snapshot construction,
-  loading and steady-state sampling have separate costs (:doc:`typed-sampling`).
+  loading and steady-state sampling have separate costs (:doc:`sampling-introduction`).
 - **Historical data or temporal reasoning?** Version history selects what is
   visible at valid/system time; interval reasoning computes when conclusions
   follow. Recording history does not run Datalog (:doc:`reasoning-temporal`).
@@ -95,9 +95,14 @@ benchmarks are separated from the first-run path.
    :maxdepth: 1
    :caption: Sampling and Graph ML
 
-   typed-sampling
+   sampling-introduction
+   sampling-neighborhoods
+   sampling-subgraphs
    random-walks
+   sampling-temporal
+   sampling-negatives
    sampling-consistency
+   typed-sampling
 
 .. toctree::
    :maxdepth: 1

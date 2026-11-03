@@ -7,6 +7,29 @@ walks and context pairs.
 All node, edge, relation and type IDs below are compact IDs from the exact same
 sampler snapshot. Do not mix IDs from different snapshots.
 
+Start with :doc:`sampling-introduction` to build a snapshot from stored graph
+records. A :term:`metapath` constrains the sequence of relationship types; it is
+not a shortest-path query or a rule-derived relation.
+
+.. list-table:: Choose the walk policy before preparing a corpus
+   :header-rows: 1
+
+   * - Need
+     - Entry point
+   * - First-order transitions, optional edge weights
+     - ``sample_random_walks`` or streamed ``walk_type="random"``
+   * - Bias returns versus outward exploration
+     - ``sample_node2vec_walks`` or streamed ``walk_type="node2vec"``
+   * - Avoidance, typed state machines or explicit temporal clocks
+     - ``sample_policy_walks`` or streamed ``walk_type="policy"``
+   * - Bounded center/context training inputs
+     - ``iter_context_pairs`` and ``ContextNegativeSampler``
+
+The first standalone example below generates a complete small corpus and checks
+its context-pair output. Subsequent policy fragments use its engine/snapshot unless
+they construct their own. For knowledge-graph triple negatives instead of
+embedding-objective negatives, use :doc:`sampling-negatives`.
+
 Streaming corpora
 ----------------------------------------------------------------------
 

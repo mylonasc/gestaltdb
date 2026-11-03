@@ -326,6 +326,24 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
+### Sampling learning path (implemented, pending merge)
+
+DOC-03 #483 adds `sampling-introduction.rst` with a live/snapshot decision table,
+ID domains before code, and a pinned property-filtered database-to-snapshot draw
+that runs after the database closes. Four independent task guides cover
+neighborhoods/message frames, induced/packed subgraphs, temporal point/window
+boundaries and training-negative rejection. The walk guide starts with policy
+selection; hierarchy and compatibility details remain reachable in the explicitly
+labelled sampling reference. README, landing navigation and the packaged sampling
+topic route to this path. No runtime behavior changes.
+
+Two database setups add 20 tested capability-qualified alternatives. The current
+tab catalog has 43 declarations / 409 alternatives (385 executable and 24 compiled
+shared-state fragments). The page inventory is 98 documents / 83 Sphinx pages.
+Focused sampling, example, editorial, strict Sphinx and offline layout/interaction
+checks validate this implementation; final cross-audience acceptance remains
+DOC-10. #483 stays open until delivery merges.
+
 ### Reconciled delivery status (2026-11-03)
 
 Publication quality is a required acceptance condition: guides describe current

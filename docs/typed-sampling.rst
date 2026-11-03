@@ -1,12 +1,16 @@
 .. _typed-traversal-and-sampling:
 
-High-Performance Graph Sampling
-===================================
+Graph sampling API and policy reference
+========================================
 
-Sampling is a first-class GestaltDB workflow, from application-side typed
-traversal to repeated GNN/KG training batches. The live APIs and the array-native
-engine serve different workloads; they are not interchangeable implementations
-of the same operation.
+For a first runnable database-to-snapshot workflow, start with
+:doc:`sampling-introduction`. This reference preserves exact live traversal,
+array policy, hierarchy, temporal and artifact-format contracts. Live traversal
+and array-native sampling serve different workloads, not interchangeable
+implementations of every operation.
+
+Task guides: :doc:`sampling-neighborhoods`, :doc:`sampling-subgraphs`,
+:doc:`random-walks`, :doc:`sampling-temporal`, :doc:`sampling-negatives`.
 
 The :doc:`architecture` guide shows the ingestion-to-training application path
 and how explicit reasoning adapters can supply derived graph structure.
@@ -168,6 +172,8 @@ Compact, Local, and External IDs
 entry points accept application IDs but still return compact result objects.
 Convert neighbor/layer/walk results with ``to_external(engine.snapshot)`` at the
 application boundary, not on every hot-path operation.
+
+.. _sampling-live-traversal:
 
 Live Typed Traversal
 --------------------
@@ -521,6 +527,8 @@ contract per layer.
    balanced_edges = engine.sample_edges(9, balanced=True)
    layer = NeighborSamplingSpec(fanout=9, balanced=True)
 
+.. _sampling-relation-hierarchies:
+
 Relation sub-property hierarchies
 ---------------------------------
 
@@ -577,6 +585,8 @@ relationship sub-properties are available for opt-in Cypher matching through
 described below; ontology-to-hierarchy construction is described in
 :doc:`ontology`.
 
+.. _sampling-node-hierarchies:
+
 Node type hierarchies
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -628,6 +638,8 @@ from all snapshot rows.
 New weights and lookup arrays are authenticated by the v2 artifact catalog.
 Older v2 snapshots without them still load with unit weights and derived
 lookups, without weakening their existing checksum guarantees.
+
+.. _sampling-temporal-reference:
 
 Temporal Sampler Snapshots
 --------------------------
@@ -701,6 +713,8 @@ filter or causal policy to a non-temporal/legacy snapshot raises ``ValueError``.
 PyG dictionaries and DGL graphs retain string ``edge_version_ids`` as Python
 metadata because their edge-feature stores only accept numeric tensors.
 
+.. _sampling-induced-reference:
+
 Bounded Induced Subgraphs
 -------------------------
 
@@ -750,6 +764,8 @@ filters restrict which edges are returned but do not change the draw
 probabilities, so filtered batches keep the same weights. Weights are
 ``None`` by default and flow through ``to_numpy`` and the framework exports
 when present.
+
+.. _sampling-negative-reference:
 
 Time-Aware Hard Negatives
 -------------------------

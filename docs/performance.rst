@@ -7,6 +7,8 @@ not just its fastest stage. Historical storage measurements and their limits are
 in :doc:`storage-backend-evidence`; reasoning comparisons are in
 :doc:`ontology-benchmarks` and :doc:`reasoning-frontier-benchmarks`.
 
+.. _sampling-and-filtering-performance:
+
 Sampling and filtering
 ----------------------
 

@@ -56,7 +56,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Legacy Cypher import shims: `src/gestaltdb/cypher.py` and `src/gestaltdb/cypher_*.py`
 - Explicit type hierarchies: `src/gestaltdb/hierarchy.py`; `RelationHierarchy` expands sampler relations and opt-in Cypher relationship sub-property matching, `LabelHierarchy` enables opt-in Cypher node sub-type matching. The historical `sampling/hierarchy.py` path is a compatibility shim.
 - Sampling API: `src/gestaltdb/sampling/`
-- Sphinx docs: `docs/`; user-facing filtering and sampling guides: `docs/property-filtering.rst`, `docs/typed-sampling.rst`; performance boundaries and benchmark commands: `docs/performance.rst`
+- Sphinx docs: `docs/`; sampling entry: `docs/sampling-introduction.rst` (links focused layer/subgraph/time/negative tasks); filtering: `docs/property-filtering.rst`; policy/format reference: `docs/typed-sampling.rst`; performance: `docs/performance.rst`
 - Tests: `tests/`
 - Modular subsystem guides: `.opencode/skills/gestaltdb-docs-maintainer/references/`
 

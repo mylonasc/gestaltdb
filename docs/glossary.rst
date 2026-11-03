@@ -179,6 +179,22 @@ a small example that connects facts, rules, conclusions and explanations; use
       policy. “Not known positive” is not proof of a false proposition, nor an
       epistemic negative claim (:doc:`typed-sampling`).
 
+   message-passing block
+      A pair of node frames and edge positions describing messages for one model
+      layer. GestaltDB's layer exports orient messages from sampled neighbors to
+      layer inputs, not necessarily in stored graph-edge direction
+      (:doc:`sampling-neighborhoods`).
+
+   induced subgraph
+      A selected node set together with every eligible edge between those nodes.
+      A neighbor expansion that reaches the same nodes need not include all of
+      those edges (:doc:`sampling-subgraphs`).
+
+   metapath
+      An ordered sequence of relationship types constraining walk transitions.
+      The ordinary walk API repeats this sequence on edge steps; a metapath is not
+      a shortest-path query or an inferred relation (:doc:`random-walks`).
+
    provenance
       Information about where data or a result came from: for example, source
       version IDs, rule applications or snapshot identity. A provenance record

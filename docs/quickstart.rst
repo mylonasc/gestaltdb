@@ -112,6 +112,8 @@ What the example establishes
   Array-native sampling needs no open database. ``_external`` methods accept
   application IDs; ``to_external`` converts compact output IDs back for inspection.
   Memmap avoids eager array loading, not all memory use (:doc:`typed-sampling`).
+- **Training tasks:** continue with :doc:`sampling-introduction` for ID domains,
+  eligible-graph filtering and focused layer, subgraph, temporal and negative guides.
 
 Filtering the query's rows or seeds does **not** filter every sampled hop. Build a
 filtered snapshot with ``node_filter`` / ``edge_filter`` when that is the intended

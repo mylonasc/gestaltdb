@@ -16,8 +16,10 @@ from threading import Thread
 
 
 PAGES = ["index", "quickstart", "storage-backends", "serializers", "data-access",
-         "ingestion", "cypher-tutorial", "typed-sampling", "performance",
-         "reasoning-introduction", "ontology", "reasoning-proofs"]
+          "ingestion", "cypher-tutorial", "typed-sampling", "performance",
+          "reasoning-introduction", "ontology", "reasoning-proofs",
+          "sampling-introduction", "sampling-neighborhoods", "sampling-subgraphs",
+          "sampling-temporal", "sampling-negatives", "random-walks"]
 
 
 class QuietHandler(SimpleHTTPRequestHandler):

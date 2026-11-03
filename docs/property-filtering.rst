@@ -105,6 +105,10 @@ property index.
 End-to-End: Indexed Cohort to Filtered Sampling
 ---------------------------------------------------
 
+For a smaller first example without cohort indexes, use
+:doc:`sampling-introduction`. This workflow adds explicit indexed seed selection
+and persisted confidence weights.
+
 Install ``gestaltdb[lmdb]`` for this complete example. Only approved drugs,
 high-score proteins, and high-confidence binding relationships enter the
 snapshot. Edges with excluded endpoints are omitted even if their own properties

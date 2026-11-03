@@ -28,7 +28,7 @@ remains the default; native history extraction is an explicit opt-in.
 | Store a graph and choose persistence | [Quickstart](docs/quickstart.rst) · [graph model](docs/property-graph.rst) · swappable [backends](docs/storage-backends.rst) and independent [serializers](docs/serializers.rst) |
 | Load tables and select cohorts | [Access choices](docs/data-access.rst) · [Arrow/Polars ingestion](docs/ingestion.rst) · [indexes and filtering](docs/property-filtering.rst) |
 | Query or mutate a property graph | [Cypher tutorial](docs/cypher-tutorial.rst) · [reference](docs/cypher.rst): paths, composition, aggregates, writes and schema commands |
-| Prepare graph-learning batches | [Sampling](docs/typed-sampling.rst) · [walks and embedding preparation](docs/random-walks.rst); training stays external |
+| Prepare graph-learning batches | [Sampling introduction](docs/sampling-introduction.rst) · [walks and embedding preparation](docs/random-walks.rst); training stays external |
 | Ask what applied then, or what was known then | [Temporal/bitemporal history](docs/temporal-versioning.rst) |
 | Represent sourced or conflicting knowledge | [Claims and stored rules](docs/temporal-versioning.rst) · [epistemic/modal evaluation](docs/modal-epistemic.rst) |
 | Classify entities from semantic axioms | [Ontology](docs/ontology.rst) · [supported profile](docs/reasoning-profiles.rst), not full OWL |
@@ -253,7 +253,7 @@ The engine also supports node/edge seed sampling, multihop expansion, positive t
 
 **Performance model:** amortize snapshot construction over many batches; benchmark construction, loading, and sampling separately. `memmap` reduces eager array loading but does not eliminate RAM use: candidate/result buffers, metadata, and positive-membership structures still allocate memory. Snapshot construction scans and materializes data; it is not an out-of-core ingestion pipeline. There is no universal speedup claim. See [sampling performance guidance and reproducible benchmark commands](https://mylonasc.github.io/gestaltdb/performance.html#sampling-and-filtering-performance).
 
-See the [full sampling guide](https://mylonasc.github.io/gestaltdb/typed-sampling.html) for the API matrix, compact/local/external IDs, weighted draws, temporal semantics, and negative-sampling examples.
+Start with the [sampling introduction](https://mylonasc.github.io/gestaltdb/sampling-introduction.html) and its focused neighborhood, subgraph, temporal and negative-sampling tasks. The [sampling reference](https://mylonasc.github.io/gestaltdb/typed-sampling.html) retains the full API matrix, hierarchy policies and artifact contracts.
 
 ## Arrow Ingestion Example
 
