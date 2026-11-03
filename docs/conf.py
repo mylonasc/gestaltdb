@@ -32,6 +32,8 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 html_theme = "sphinx_rtd_theme"
 html_title = "GestaltDB"
 html_static_path = ["_static"]
+html_css_files = ["documentation.css"]
+html_js_files = ["documentation.js"]
 
 autodoc_typehints = "description"
 # Keep dtype aliases readable; expanding numpy.str_ into prose creates an

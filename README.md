@@ -26,8 +26,8 @@ remains the default; native history extraction is an explicit opt-in.
 | Your goal | Start here |
 | --- | --- |
 | Store a graph and choose persistence | [Quickstart](docs/quickstart.rst) · [graph model](docs/property-graph.rst) · swappable [backends](docs/storage-backends.rst) and independent [serializers](docs/serializers.rst) |
-| Load tables and select cohorts | [Arrow](#arrow-ingestion-example) / [Polars](#polars-ingestion-example) · [indexes and filtering](docs/property-filtering.rst) |
-| Query or mutate a property graph | [Cypher](docs/cypher.rst): paths, composition, aggregates, writes and schema commands |
+| Load tables and select cohorts | [Access choices](docs/data-access.rst) · [Arrow/Polars ingestion](docs/ingestion.rst) · [indexes and filtering](docs/property-filtering.rst) |
+| Query or mutate a property graph | [Cypher tutorial](docs/cypher-tutorial.rst) · [reference](docs/cypher.rst): paths, composition, aggregates, writes and schema commands |
 | Prepare graph-learning batches | [Sampling](docs/typed-sampling.rst) · [walks and embedding preparation](docs/random-walks.rst); training stays external |
 | Ask what applied then, or what was known then | [Temporal/bitemporal history](docs/temporal-versioning.rst) |
 | Represent sourced or conflicting knowledge | [Claims and stored rules](docs/temporal-versioning.rst) · [epistemic/modal evaluation](docs/modal-epistemic.rst) |

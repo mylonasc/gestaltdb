@@ -7,6 +7,10 @@ reads, then build a reusable filtered sampler snapshot when every training hop
 must stay within that graph. For sampling policies, see :doc:`typed-sampling`;
 for cost and benchmark guidance, see :doc:`performance`.
 
+For a small indexed-lookup introduction before the full filtered-sampling
+workflow, start with :doc:`data-access`. Table-shaped loading and index-maintenance
+policies are covered in :doc:`ingestion`.
+
 Choose Where to Filter
 --------------------------
 

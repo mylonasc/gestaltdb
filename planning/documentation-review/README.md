@@ -23,6 +23,17 @@ uv run python planning/documentation-review/check_inventory.py --matrix
 uv run pytest tests/test_documentation_inventory.py -q
 ```
 
+For rendered table checks after building Sphinx HTML:
+
+```sh
+uv run --with playwright python scripts/check_docs_layout.py docs/_build/html
+```
+
+This uses installed Chrome/Chromium or a Playwright-installed Chromium. It checks
+desktop, intermediate and phone widths with third-party network requests blocked;
+`--screenshots <directory>` retains viewport captures for visual inspection. It
+does not replace manual accessibility review of stacked table/header semantics.
+
 The checker requires every existing `docs/*.rst` page and every packaged agent
 Markdown resource to have exactly one classification. It compares packaged topic
 resources with the literal `TOPICS` registry without importing the library and

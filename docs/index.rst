@@ -25,7 +25,7 @@ Choose a capability
    * - Choose a backend, codec or persistence mode
      - :doc:`storage-backends`, :doc:`serializers`
    * - Load tables and select indexed cohorts
-     - :doc:`api-workflows`, :doc:`property-filtering`
+     - :doc:`data-access`, :doc:`ingestion`, :doc:`property-filtering`
    * - Prepare graph-learning batches
      - :doc:`typed-sampling`, :doc:`random-walks`
    * - Query what applied then or what was recorded then
@@ -84,7 +84,10 @@ benchmarks are separated from the first-run path.
    property-graph
    storage-backends
    serializers
+   data-access
+   ingestion
    property-filtering
+   cypher-tutorial
    cypher
 
 .. toctree::

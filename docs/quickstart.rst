@@ -121,9 +121,9 @@ Choose your next path
    * - Choose persistence, codecs or current-snapshot guarantees
      - :doc:`property-graph`, :doc:`storage-backends`, :doc:`serializers`, :doc:`operations`
    * - Load Arrow/Polars tables or select indexed cohorts
-     - :doc:`api-workflows`, :doc:`property-filtering`, :doc:`performance`
+     - :doc:`data-access`, :doc:`ingestion`, :doc:`property-filtering`
    * - Query paths, aggregate, or mutate with Cypher
-     - :doc:`cypher`
+     - :doc:`cypher-tutorial`, :doc:`cypher`
    * - Draw layers, subgraphs, walks or temporal negatives
      - :doc:`typed-sampling`, :doc:`random-walks`
    * - Inspect historical state at valid/system time
