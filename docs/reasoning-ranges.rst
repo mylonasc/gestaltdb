@@ -3,6 +3,12 @@
 Temporal delta maintenance and interval publication
 ============================================================
 
+Start with :doc:`reasoning-temporal` and :doc:`reasoning-range-tutorial` for
+independent interval, maintenance, absence, aggregate and equality examples.
+This page retains exact update and publication contracts. Code below is
+**reference-fragment** material using the surrounding program/base/goal values,
+not independently runnable setup; the tutorial defines complete inputs.
+
 ``update_range`` propagates changed validity ranges without rebuilding the
 world: segments whose active base set is unchanged reuse their derivations
 verbatim, and only genuinely new active combinations re-evaluate. Removals

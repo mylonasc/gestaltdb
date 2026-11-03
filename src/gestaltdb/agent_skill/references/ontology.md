@@ -94,3 +94,10 @@ Interval closure (`docs/reasoning-temporal.rst`) and support maintenance
 (`docs/reasoning-maintenance.rst`) have explicit standalone contracts. They are
 not automatically enabled by this ontology adapter, nor do they imply automatic
 query rewriting or weighted sampler integration.
+
+`docs/reasoning-range-tutorial.rst` has complete standalone range absence,
+aggregation, update and segment-scoped equality examples. Logical conclusions
+remain complete when proof storage truncates; inspect `proofs_truncated` and
+`missing_evidence()`. `verify_closure` checks the supplied program/base result,
+not the authenticity of a database source. Finite-range source admission and
+bound interval publication remain explicit separate adapters.
