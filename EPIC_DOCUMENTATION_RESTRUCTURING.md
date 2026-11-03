@@ -326,6 +326,27 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
+### Advanced reasoning integration (implemented, pending merge)
+
+DOC-08 #488 adds `reasoning-workflows.rst`: a task decision table and grouped
+navigation for source/answer adapters, maintenance/session state, consumption and
+publication, execution/representation contracts, explicit alternatives and
+qualified evidence. The flat advanced landing list now hands off to this hub.
+All DOC-08 pages have an intentional role and inbound tree path; formerly orphaned
+contracts join the appropriate groups without URL changes. Ordinary extraction
+and indexed Python remain defaults; native point sources and experimental
+Polars/EL remain explicit alternatives, not adoption or performance promises.
+
+The dispatcher entry and deletion/rebuild comparison are independently runnable,
+backend-free examples. Extension-policy denial is caught as an expected failure;
+catalog/maintenance/expansion fragments identify their application-owned setup.
+Executor timing duplication is replaced by links to the existing detailed Polars,
+plan and pipeline evidence. Stored rules, source/state identity, authentication,
+closure certification, read-only consumers and guarded publication stay distinct.
+Focused documentation/example validation passes 616 tests. Inventory: 106
+documents / 91 Sphinx pages; backend/serializer declarations remain unchanged.
+Delivery and final audience acceptance are not declared by implementation alone.
+
 ### Temporal range-reasoning journey (delivered)
 
 DOC-07 #487 puts a complete gap-preserving range example and compact change-point

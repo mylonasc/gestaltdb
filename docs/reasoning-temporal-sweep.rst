@@ -1,6 +1,4 @@
-:orphan:
-
-Bounded temporal event-sweep prototype
+Bounded temporal event-sweep scheduler
 ======================================
 
 ``gestaltdb.reasoning.temporal_sweep.active_segments`` accepts ``TemporalFact``

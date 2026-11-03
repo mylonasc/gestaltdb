@@ -1,5 +1,3 @@
-:orphan:
-
 Bounded EL feasibility: consequence-based classification
 ============================================================
 

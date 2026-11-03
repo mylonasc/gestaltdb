@@ -1,14 +1,17 @@
-:orphan:
+.. _ontology-v1-implementation-contract:
 
-Ontology v1 implementation contract
-===================================
+Ontology and binary reasoning contracts
+========================================
 
-Development status
-------------------
+Reference scope
+----------------
 
 The reasoning interfaces separate immutable values, standalone evaluation,
 ontology compilation, bounded witness explanations and pinned database adapters.
 This reference describes their supported contracts and integration boundaries.
+For a runnable introduction use :doc:`ontology`; for source, session and
+publication choices use :doc:`reasoning-workflows`. Typed n-ary reasoning has a
+separate value/execution contract (:doc:`reasoning-typed`).
 
 Separation of concerns
 ----------------------

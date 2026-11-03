@@ -10,6 +10,11 @@ before optional RDF/import contracts. For the binary/typed choice and progressiv
 comparison, recursion, scoped absence, aggregation and proof examples, use
 `docs/reasoning-introduction.rst` and `docs/reasoning-typed-tutorial.rst`.
 Stored temporal claim rules are a separate service (`docs/stored-rules.rst`).
+For database and saved-state integration, `docs/reasoning-workflows.rst` routes
+current versus temporal sources, complete closure versus goal answers, explicit
+executor selection, source/state admission, read-only consumers and guarded
+publication. Ordinary extraction and indexed Python remain defaults; optional
+native sources and experimental Polars require explicit supported requests.
 
 ```python
 from gestaltdb.ontology import Domain, Ontology, SubClassOf, TYPE_PREDICATE, compile_ontology

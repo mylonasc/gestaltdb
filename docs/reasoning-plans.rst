@@ -1,5 +1,3 @@
-:orphan:
-
 Reusable indexed reasoning plans
 ============================================================
 
