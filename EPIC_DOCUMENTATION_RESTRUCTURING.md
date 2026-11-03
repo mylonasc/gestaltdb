@@ -326,7 +326,7 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
-### Temporal range-reasoning journey (implemented, pending merge)
+### Temporal range-reasoning journey (delivered)
 
 DOC-07 #487 puts a complete gap-preserving range example and compact change-point
 timeline before physical execution details. It compares point answers at boundaries
@@ -342,7 +342,18 @@ are retained outside Sphinx, not relabelled as current-wheel results.
 Focused validation passes 636 tests and strict Sphinx. The new code examples are
 storage-independent and need no backend/serializer tabs; existing applicable
 variants remain tested. Inventory: 105 documents / 90 Sphinx pages. Final audience
-acceptance remains DOC-10; #487 is not delivered until merged.
+acceptance remains DOC-10. Delivered through #510 at `f958751` after all PR checks
+passed, including Python 3.10/3.13 full suites, installed artifacts and ontology
+conformance. The fixed-checkout local suite passes 5,028 tests with 51 skips;
+base-install Python 3.10 examples pass ten tests. Strict Sphinx passes on Python
+3.10/Sphinx 8 and the local toolchain. Browser checks cover 27 pages at three
+widths, 324 numbered code blocks and 78 clipboard comparisons. Docs/API drift,
+eight agent examples, module-size and generated-figure checks pass.
+
+Nine slices are delivered: DOC-01–DOC-07, DOC-11 and DOC-12. Advanced integration
+organization (DOC-08), documentation CI (DOC-09), packaged/final audience acceptance
+(DOC-10) and the remaining platform review (DOC-13) remain open, as does graphics
+debt #495. Passing validation does not complete those remaining acceptance tasks.
 
 ### Ontology and standalone Datalog foundations (delivered)
 
