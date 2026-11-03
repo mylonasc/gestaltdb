@@ -1,5 +1,6 @@
 import datetime
 import json
+from pathlib import Path
 
 import pytest
 
@@ -323,6 +324,71 @@ def test_managed_graph_build_sampler_snapshot_records_source_db(backend, tmp_pat
         assert source_graph.get_node(b"n1").properties["kind"] == "drug"
     finally:
         source_graph.close()
+
+
+@pytest.mark.parametrize("backend", BACKEND_PARAMS, ids=lambda param: param[0] if isinstance(param, tuple) else str(param))
+@pytest.mark.parametrize("reopen", [False, True], ids=["create", "open"])
+@pytest.mark.parametrize("change_directory", [False, True], ids=["same-cwd", "changed-cwd"])
+def test_relative_managed_source_reference_survives_chdir_and_relocation(backend, reopen, change_directory, tmp_path, monkeypatch):
+    from gestaltdb.sampling import SamplerSnapshot
+
+    backend_name, _ = backend
+    monkeypatch.chdir(tmp_path)
+    graph = GraphDB.create("data/db", backend=backend_name, serializer="json")
+    try:
+        graph.put_node(Node(node_id="a"))
+        graph.put_node(Node(node_id="b"))
+        graph.put_edge(Edge(edge_id="ab", source="a", target="b", properties={"type": "R"}))
+        if reopen:
+            graph.close()
+            graph = GraphDB.open("data/db")
+        # The graph owns its original location, not the current working directory.
+        if change_directory:
+            monkeypatch.chdir(tmp_path / "data")
+        output_path = "artifacts/snapshot" if change_directory else "data/artifacts/snapshot"
+        snapshot = graph.build_sampler_snapshot(output_path)
+        assert snapshot.metadata["source_db"]["path_type"] == "relative_to_snapshot"
+        assert Path(snapshot.metadata["source_db"]["path"]) == Path("../../db")
+        assert snapshot.source_graph_exists()
+    finally:
+        graph.close()
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").rename(tmp_path / "moved")
+    snapshot = SamplerSnapshot.load(tmp_path / "moved/artifacts/snapshot")
+    source = snapshot.open_source_graph()
+    try:
+        assert snapshot.get_node(source, snapshot.node_int("a")).get_id == "a"
+        assert snapshot.get_edge(source, snapshot.edge_int("ab")).get_id == "ab"
+    finally:
+        source.close()
+
+
+@pytest.mark.parametrize("reference_mode", ["relative", "absolute", "relative_to_project", "manual", "disabled"])
+def test_managed_source_reference_overrides(lmdb_graph_db, tmp_path, monkeypatch, reference_mode):
+    graph = lmdb_graph_db
+    graph.save_manifest()
+    graph.put_node(Node(node_id="a"))
+    monkeypatch.chdir(tmp_path)
+    options = {}
+    if reference_mode == "manual":
+        options["source_db"] = {"path": "../lmdb", "path_type": "relative_to_snapshot"}
+    elif reference_mode == "disabled":
+        options["source_db_reference"] = False
+    else:
+        options.update(source_db_path="lmdb", source_db_path_mode=reference_mode)
+    snapshot = graph.build_sampler_snapshot("snapshot", **options)
+    if reference_mode == "disabled":
+        assert "source_db" not in snapshot.metadata
+        return
+    source = snapshot.metadata["source_db"]
+    expected_paths = {
+        "relative": "../lmdb", "absolute": str(tmp_path / "lmdb"),
+        "relative_to_project": "lmdb", "manual": "../lmdb",
+    }
+    assert source["path"] == expected_paths[reference_mode]
+    base_path = tmp_path if reference_mode == "relative_to_project" else None
+    assert snapshot.source_graph_exists(base_path=base_path)
 
 
 def test_update_node_creates_or_merges_properties(graph_db):
