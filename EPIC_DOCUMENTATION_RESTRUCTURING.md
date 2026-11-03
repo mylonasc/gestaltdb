@@ -326,6 +326,20 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
+### Claims, stored rules and modal learning path (implemented, pending merge)
+
+DOC-05 #485 adds `claims-introduction.rst` and `stored-rules.rst`, and makes the
+modal guide's first example independently runnable. The journey starts with
+sourced polarity, four-valued status and confidence-as-metadata; it then derives,
+explains, retracts and maintains a persisted conclusion. A second workflow tests
+independent supports, and modal setup tests all four modes plus unknown without
+an accessibility link under one bounded authenticated view. Scoped absence,
+standalone Datalog, current graph records and audit/proof verification remain
+explicitly distinct. Three setups add 36 executable alternatives: current total
+50 declarations / 493 variants (469 executable, 24 compiled shared-state variants).
+Inventory: 103 documents / 88 Sphinx pages. Focused validation passes 691 tests;
+strict Sphinx passes on Python 3.10/Sphinx 8 and the current local toolchain.
+
 ### Main integration checkpoint
 
 DOC-12 #492 merged through #501 at `0025bbf`. The follow-through stack #502–#506

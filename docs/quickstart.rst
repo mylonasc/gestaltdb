@@ -139,7 +139,7 @@ Choose your next path
    * - Inspect historical state at valid/system time
      - :doc:`temporal-introduction`, :doc:`temporal-updates`, :doc:`temporal-reads`
    * - Record sourced claims, derive stored rules or inspect belief
-     - :doc:`temporal-versioning`, :doc:`modal-epistemic`, :doc:`inference-audit`
+     - :doc:`claims-introduction`, :doc:`stored-rules`, :doc:`modal-epistemic`, :doc:`inference-audit`
    * - Classify entities from ontology axioms
      - :doc:`ontology`
    * - Evaluate standalone binary/typed Datalog

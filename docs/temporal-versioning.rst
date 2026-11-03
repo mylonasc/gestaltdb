@@ -272,6 +272,9 @@ for the backup, retry, serializer, snapshot, and recovery contract.
 Epistemic Claims and Provenance
 -------------------------------
 
+For an independent claims/status/derivation example, use
+:doc:`claims-introduction`; for support maintenance, use :doc:`stored-rules`.
+
 Epistemic claims are immutable, sourced subject-predicate-object assertions or
 denials. They use the same valid/system-time commits and read views as node and
 edge versions, but remain separate from graph edges and current-state Cypher.
@@ -337,6 +340,8 @@ least one matching positive claim is visible, ``REFUTED`` for negative only,
 A ``GraphReadView`` exposes the same claim lookup, iteration, and status methods
 at its pinned system horizon and default valid time.
 
+.. _temporal-stored-rules-reference:
+
 Positive Horn Rules
 -------------------
 
@@ -376,6 +381,8 @@ Successful conclusions are published together in one temporal commit and
 remain separate from mutable graph edges and unqualified Cypher. Rule
 evaluation does not consume negative claims, literal-object claims, or claims
 from different worlds in one match.
+
+.. _temporal-stored-negation-reference:
 
 Closed-world negation and stratification
 ----------------------------------------

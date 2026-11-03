@@ -30,7 +30,7 @@ remains the default; native history extraction is an explicit opt-in.
 | Query or mutate a property graph | [Cypher tutorial](docs/cypher-tutorial.rst) · [reference](docs/cypher.rst): paths, composition, aggregates, writes and schema commands |
 | Prepare graph-learning batches | [Sampling introduction](docs/sampling-introduction.rst) · [walks and embedding preparation](docs/random-walks.rst); training stays external |
 | Ask what applied then, or what was known then | [Temporal introduction](docs/temporal-introduction.rst) · [historical reads](docs/temporal-reads.rst) |
-| Represent sourced or conflicting knowledge | [Claims and stored rules](docs/temporal-versioning.rst) · [epistemic/modal evaluation](docs/modal-epistemic.rst) |
+| Represent sourced or conflicting knowledge | [Sourced claims](docs/claims-introduction.rst) · [stored rules](docs/stored-rules.rst) · [epistemic/modal evaluation](docs/modal-epistemic.rst) |
 | Classify entities from semantic axioms | [Ontology](docs/ontology.rst) · [supported profile](docs/reasoning-profiles.rst), not full OWL |
 | Derive facts with Datalog | [Facts, rules and explanations](docs/reasoning-introduction.rst) · [typed rules, literals and aggregates](docs/reasoning-typed.rst) · [scoped negation](docs/reasoning-negation.rst) |
 | Compute when conclusions hold | [Temporal interval reasoning](docs/reasoning-temporal.rst), separate from storing history |
