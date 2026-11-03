@@ -326,7 +326,7 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
-### Documentation example inventory and CI (implemented, pending merge)
+### Documentation example inventory and CI (delivered)
 
 DOC-09 #489 adds a stdlib-only Python/Cypher source-block inventory for every
 Sphinx page, README/EXAMPLES/AGENTS and packaged agent Markdown: 246 examples,
@@ -353,8 +353,16 @@ missing required RETURN clauses, an uncaught expected profile rejection and a
 fixed-path proof SVG example. Shared Markdown graph fragments are explicitly
 labelled rather than pretending to reuse already closed temporary graphs.
 Focused validation passes 846 tests; Ruff, inventory and strict Sphinx pass.
-Delivery remains pending final full-suite/browser/CI validation and merge;
-cross-audience/package acceptance remains DOC-10.
+Delivered through #514 at `7b7e445` after all remote checks passed, including both
+new example lanes, supported-edge full suites and installed artifacts. The
+fixed-checkout local full suite passes 5,270 tests with 51 skips; Python 3.10
+base/docs checks pass 344 tests with 502 explicit optional skips. Both strict
+Sphinx builds and refreshed browser checks pass: 28 pages at three widths,
+78 table checks, 327 numbered blocks and 81 clipboard comparisons. Docs/API
+drift, eight agent examples, module-size and generated figures pass. #489 is
+closed and #480 records eleven delivered slices. Remaining delivery is DOC-13
+#493 followed by final DOC-10 #490 audience/package acceptance; graphics debt
+#495 remains explicit.
 
 ### Advanced reasoning integration (delivered)
 
