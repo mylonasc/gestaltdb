@@ -8,6 +8,13 @@ on:
     paths:
       - 'AGENTS.md'
       - 'EXAMPLES.md'
+      - 'README.md'
+      - 'docs/_ext/**'
+      - 'docs/conf.py'
+      - 'tests/test_documentation*.py'
+      - 'tests/test_reasoning_learning_paths.py'
+      - 'tests/test_agent_docs.py'
+      - 'planning/documentation-review/**'
       - 'EPIC_REASONING_ENGINE.md'
       - 'gestaltdb_reasoning_feature_tracker.xlsx'
       - 'src/gestaltdb/**/*.py'
@@ -29,6 +36,13 @@ on:
     paths:
       - 'AGENTS.md'
       - 'EXAMPLES.md'
+      - 'README.md'
+      - 'docs/_ext/**'
+      - 'docs/conf.py'
+      - 'tests/test_documentation*.py'
+      - 'tests/test_reasoning_learning_paths.py'
+      - 'tests/test_agent_docs.py'
+      - 'planning/documentation-review/**'
       - 'EPIC_REASONING_ENGINE.md'
       - 'gestaltdb_reasoning_feature_tracker.xlsx'
       - 'src/gestaltdb/**/*.py'
@@ -73,3 +87,40 @@ jobs:
           python planning/reasoning-engine/check_roadmap.py
           python planning/reasoning-engine/check_tracking.py
           python planning/reasoning-engine/sync_tracker.py --check
+          python planning/documentation-review/check_inventory.py
+          python docs/_ext/example_inventory.py
+
+  examples:
+    name: Examples (${{ matrix.python }}, ${{ matrix.scope }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python: '3.10'
+            scope: base
+            extras: docs
+          - python: '3.13'
+            scope: optional
+            extras: docs,backends,serializers,arrow,polars,networkx
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install optional backend build dependency
+        if: matrix.scope == 'optional'
+        run: sudo apt-get update && sudo apt-get install --yes libleveldb-dev
+      - name: Install the documentation test scope
+        run: python -m pip install -e ".[${{ matrix.extras }}]" pytest
+      - name: Validate source and packaged examples
+        run: >-
+          python -m pytest -q tests/test_documentation*.py
+          tests/test_reasoning_learning_paths.py tests/test_agent_docs.py
+      - name: Execute maintained agent examples
+        if: matrix.scope == 'optional'
+        run: python .opencode/skills/gestaltdb-docs-maintainer/scripts/doc_tool.py test-examples
+      - name: Build strict documentation on the oldest supported Python
+        if: matrix.scope == 'base'
+        run: sphinx-build -E -W --keep-going -b html docs docs/_build/html

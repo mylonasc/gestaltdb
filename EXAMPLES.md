@@ -408,6 +408,10 @@ with TemporaryDirectory() as tmpdir:
 
 ## Choose a Backend and Serializer
 
+**Illustrative configuration fragment:** choose one configuration for your own
+disposable path and close its graph handle after use. This block shows alternatives,
+not an independently runnable application.
+
 Backend and serializer extras are independent and additive. Install exactly the
 pair you intend to use; no combination-specific extra is needed:
 
@@ -500,6 +504,11 @@ with TemporaryDirectory() as path:
 ```
 
 ## Read and Write with Cypher
+
+**Illustrative fragments:** these calls require an application-owned open
+``graph`` and the named records. They do not reuse the already closed temporary
+graphs above. For independent, disposable reads/writes and expected results, use
+[the Cypher tutorial](docs/cypher-tutorial.rst).
 
 ```python
 result = graph.query(
@@ -612,6 +621,10 @@ matches = graph.query(
 ```
 
 ## Traverse and Sample Typed Relationships
+
+**Illustrative fragments:** supply your own open ``graph`` with the indicated
+edge types and seed IDs. The [sampling introduction](docs/sampling-introduction.rst)
+defines a complete independently runnable setup.
 
 ```python
 import random
@@ -929,6 +942,9 @@ with TemporaryDirectory() as tmpdir:
 `GraphDB.visualize` is the same path as a method, and `visualize_sample`
 covers large graphs through typed sampling instead of full dumps:
 
+**Illustrative fragment:** ``graph`` below is an application-owned open graph;
+the temporary graph in the preceding standalone example is already closed.
+
 ```python
 from gestaltdb.sampling import SamplingHop, SamplingPattern
 from gestaltdb.viz.api import VizOptions
@@ -964,6 +980,7 @@ Every reasoning node carries a readable `label` property:
 from gestaltdb.reasoning.engine import DatalogEngine
 from gestaltdb.reasoning.model import Atom, Fact, Program, ReasoningLimits, Rule, Variable
 from gestaltdb.viz.api import VizOptions, visualize_proof_explanation
+from tempfile import TemporaryDirectory
 
 x, y = Variable("X"), Variable("Y")
 program = Program([Rule("parent-ancestor", [Atom(x, "parent", y)], Atom(x, "ancestor", y))])
@@ -973,7 +990,8 @@ figure = visualize_proof_explanation(
     result.explain(Fact("a", "ancestor", "b")),
     options=VizOptions(node_label_property="label", edge_labels="all"),
 )
-figure.save_svg("/tmp/proof.svg")  # layered tree by default, no force layout involved
+with TemporaryDirectory() as directory:
+    figure.save_svg(f"{directory}/proof.svg")  # layered tree, no force layout involved
 ```
 
 `visualize_claim_explanation(graph.rules.explain(...))`,

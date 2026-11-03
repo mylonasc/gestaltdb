@@ -175,7 +175,8 @@ with TemporaryDirectory() as tmpdir:
 
 Labels and relationship types are indexed automatically; **property indexes are explicit**. Creating a property index also maintains its label/property or type/property composite forms—no separate composite-index declaration is needed.
 
-With a populated graph, select application cohorts and strong relationships directly:
+**Illustrative fragment:** supply your own open, populated graph to select
+application cohorts and strong relationships directly:
 
 ```python
 graph.create_node_property_index("score")

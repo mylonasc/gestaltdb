@@ -257,7 +257,7 @@ relationships fails unless ``DETACH DELETE`` cascades to incident edges.
 
 .. code-block:: python
 
-   graph_db.query('MATCH (d {id: "drug-9"}) DETACH DELETE d')
+   graph_db.query('MATCH (d {id: "drug-9"}) DETACH DELETE d RETURN 1 AS deleted')
 
 ``MERGE`` matches a pattern or creates it when absent, running ``ON MATCH``
 actions in the first case and ``ON CREATE`` actions in the second. It is
@@ -453,7 +453,7 @@ graph properties.
 
    graph_db.create_node_property_index("observed")
    graph_db.query(
-       "CREATE (e:Event {id: 'e1', observed: datetime('2025-01-31T12:30:00Z')})"
+       "CREATE (e:Event {id: 'e1', observed: datetime('2025-01-31T12:30:00Z')}) RETURN e.id"
    )
    graph_db.query(
        "MATCH (e:Event) WHERE e.observed >= datetime('2025-01-01T00:00:00Z') "

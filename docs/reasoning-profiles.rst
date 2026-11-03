@@ -12,11 +12,16 @@ detection are separate rows — never one blurred claim.
 
 .. code-block:: python
 
-   from gestaltdb.reasoning import check_construct, subset_constructs
+   from gestaltdb.reasoning import ReasoningError, check_construct, subset_constructs
 
    assert check_construct("subproperty").mechanism == "ontology.compiler"
    assert "subclass" in subset_constructs("gestaltdb-rl-core-v1")
-   check_construct("disjunctive-head")  # raises: non-Horn, no case splitting
+   try:
+       check_construct("disjunctive-head")
+   except ReasoningError:
+       pass  # non-Horn heads and case splitting are not supported
+   else:
+       raise AssertionError("unsupported disjunctive head was accepted")
 
 Named subsets
 ----------------------------------------
