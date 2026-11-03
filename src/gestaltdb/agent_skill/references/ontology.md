@@ -5,6 +5,12 @@ The default is a bounded, read-only, positive-Datalog closure over named entitie
 It needs no embedded backend or solver extra. The existing package initializer
 still loads other GestaltDB subsystems; separate installation is not promised.
 
+The human ontology guide `docs/ontology.rst` begins with standalone classification
+before optional RDF/import contracts. For the binary/typed choice and progressive
+comparison, recursion, scoped absence, aggregation and proof examples, use
+`docs/reasoning-introduction.rst` and `docs/reasoning-typed-tutorial.rst`.
+Stored temporal claim rules are a separate service (`docs/stored-rules.rst`).
+
 ```python
 from gestaltdb.ontology import Domain, Ontology, SubClassOf, TYPE_PREDICATE, compile_ontology
 from gestaltdb.reasoning import DatalogEngine, Fact, ReasoningLimits
@@ -84,5 +90,7 @@ as copied raw batches; decoding and visibility mapping stay caller-owned.
   require explicit quiesced orphan reclamation/index rebuilding before retry;
   no silent repair occurs. Use the publication Sphinx guide for that workflow.
 
-Interval closure, incremental all-support indexes and automatic query/weighted
-sampler integration remain explicit follow-ups, not implied features.
+Interval closure (`docs/reasoning-temporal.rst`) and support maintenance
+(`docs/reasoning-maintenance.rst`) have explicit standalone contracts. They are
+not automatically enabled by this ontology adapter, nor do they imply automatic
+query rewriting or weighted sampler integration.
