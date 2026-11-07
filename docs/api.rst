@@ -8,6 +8,7 @@ Application integration routes
   and reasoning examples; :doc:`visualization-reference` describes exact caps,
   controls, SVG/browser exports and saved-state boundaries. Import builders from
   ``gestaltdb.viz.api``; no NetworkX or JavaScript runtime is required.
+- **Standalone reasoning without a database:** packaged `datalog` (binary/typed rules, scoped absence, aggregates, witnesses) and `temporal_reasoning` (validity-interval closure, point/range parity, conformance) topics; human paths in :doc:`reasoning-introduction` and :doc:`reasoning-temporal`.
 - **Materialized graph exchange:** :doc:`networkx` documents
   ``gestaltdb.integrations.networkx.from_networkx``, ``to_networkx`` and
   ``load_gexf`` with direction/identity, batch-failure and XML-security contracts.

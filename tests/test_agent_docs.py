@@ -9,9 +9,25 @@ def test_agent_docs_topics_and_skill_are_available():
     assert "cypher" in agent_docs.TOPICS
     assert "backends" in agent_docs.TOPICS
     assert "temporal" in agent_docs.TOPICS
+    assert "ontology" in agent_docs.TOPICS
+    assert "datalog" in agent_docs.TOPICS
+    assert "temporal_reasoning" in agent_docs.TOPICS
     skill = agent_docs.read_skill()
     assert "GestaltDB User Guide For Agents" in skill
     assert "python -m gestaltdb.agent_docs" in skill
+    for topic in ("ontology", "datalog", "temporal_reasoning"):
+        assert f"`{topic}`" in skill
+
+
+def test_packaged_reasoning_topics_are_retrievable():
+    for topic in ("sampling", "ontology", "datalog", "temporal", "temporal_reasoning", "epistemic"):
+        content = agent_docs.read_topic(topic)
+        assert content.strip()
+        assert agent_docs.extract_python_examples(content)
+    datalog = agent_docs.read_topic("datalog")
+    assert "DatalogEngine" in datalog and "GenericEngine" in datalog
+    temporal_reasoning = agent_docs.read_topic("temporal_reasoning")
+    assert "evaluate_range" in temporal_reasoning and "IntervalSet" in temporal_reasoning
 
 
 def test_agent_docs_extract_examples():

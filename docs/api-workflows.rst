@@ -36,6 +36,8 @@ Binary and typed inference
 The binary engine can collect bounded witnesses. The typed engine adds n-ary
 relations and strict literal filters. See :doc:`reasoning-typed` and
 :doc:`reasoning-negation` for aggregation and closed-world absence semantics.
+Packaged retrieval mirrors these paths without a database: `datalog` for
+standalone rules, `temporal_reasoning` for validity-interval closure.
 
 .. autoclass:: gestaltdb.reasoning.engine.DatalogEngine
    :members: evaluate
