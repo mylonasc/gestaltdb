@@ -1,6 +1,5 @@
 """Public imports, shipped examples and dependency-free standalone execution."""
 import importlib
-import importlib.util
 from pathlib import Path
 import textwrap
 
@@ -24,8 +23,6 @@ def test_shipped_ontology_example_executes_without_a_backend():
 
 @pytest.mark.parametrize("index", [0, 1])
 def test_user_guide_examples_execute(index):
-    if index == 1 and importlib.util.find_spec("lmdb") is None:
-        pytest.skip("optional LMDB example")
     document = Path(__file__).parents[1] / "docs" / "ontology.rst"
     block = document.read_text().split(".. code-block:: python\n")[index + 1]
     lines = []

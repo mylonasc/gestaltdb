@@ -31,15 +31,15 @@ Choose a capability
    * - Query what applied then or what was recorded then
      - :doc:`temporal-introduction`, :doc:`temporal-reads`
    * - Represent sourced/conflicting claims and reason over worlds
-     - :doc:`temporal-versioning`, :doc:`modal-epistemic`
+     - :doc:`claims-introduction`, :doc:`stored-rules`, :doc:`modal-epistemic`
    * - Classify entities using semantic axioms
      - :doc:`ontology`
    * - Apply Datalog rules, literals, negation or aggregates
-     - :doc:`reasoning-introduction`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
+     - :doc:`reasoning-introduction`, :doc:`reasoning-typed-tutorial`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
    * - Compute when conclusions hold
-     - :doc:`reasoning-temporal`
+     - :doc:`reasoning-temporal`, :doc:`reasoning-range-tutorial`
    * - Integrate reasoning with a database or saved state
-     - :doc:`ontology-graph`, :doc:`reasoning-authenticated-sessions`
+     - :doc:`reasoning-workflows`
    * - Explore or exchange results
      - :doc:`visualization`, :doc:`networkx`
    * - Operate, recover or measure workloads
@@ -112,6 +112,8 @@ benchmarks are separated from the first-run path.
    temporal-updates
    temporal-reads
    temporal-versioning
+   claims-introduction
+   stored-rules
    modal-epistemic
    inference-audit
 
@@ -121,6 +123,7 @@ benchmarks are separated from the first-run path.
 
    reasoning-introduction
    ontology
+   reasoning-typed-tutorial
    reasoning-typed
    reasoning-negation
    reasoning-proofs
@@ -132,8 +135,9 @@ benchmarks are separated from the first-run path.
    :maxdepth: 1
    :caption: Temporal Reasoning
 
-   reasoning-intervals
    reasoning-temporal
+   reasoning-range-tutorial
+   reasoning-intervals
    reasoning-ranges
    reasoning-conformance
 
@@ -141,22 +145,7 @@ benchmarks are separated from the first-run path.
    :maxdepth: 1
    :caption: Advanced Reasoning Integration
 
-   ontology-graph
-   reasoning-current-frontier
-   reasoning-current-admission
-   reasoning-queries
-   reasoning-generation-identity
-   reasoning-sessions
-   reasoning-authenticated-sessions
-   reasoning-typed-execution
-   reasoning-range-admission
-   reasoning-bound-range-publication
-   ontology-publication
-   reasoning-authenticated-inferred
-   reasoning-executors
-   reasoning-extraction
-   reasoning-native-claims
-   reasoning-native-locator-claims
+   reasoning-workflows
 
 .. toctree::
    :maxdepth: 1

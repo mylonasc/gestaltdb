@@ -11,6 +11,8 @@ the original recorded revision, not necessarily the current library.
   attribution diagnostics and adoption evaluation.
 - `relational-execution-development-report.rst`: original structural contract,
   roadmap baseline register and reference-machine acceptance budgets.
+- `temporal-introduction-observations.md`: unbound historical workload counts and
+  timing removed from the introductory range-learning path.
 
 Raw benchmark artifacts remain under `benchmarks/results/`. Current guidance is
 in the corresponding `docs/` pages; authoring constraints are in

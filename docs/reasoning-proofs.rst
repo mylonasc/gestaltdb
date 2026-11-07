@@ -12,6 +12,8 @@ rule used these facts to derive that fact”. Multiple independent :term:`suppor
 an all-support index or an independent certificate that the inputs are true.
 See :doc:`reasoning-introduction` for a runnable example and generated witness
 figure, and :doc:`glossary` for facts, rules, premises, closure and DAGs.
+For complete typed absence and aggregate explanation setups, use
+:doc:`reasoning-typed-tutorial`.
 
 ``gestaltdb.reasoning.explanations`` exposes bounded minimal/top-k witness
 selection, export and generation checkpoints. “Minimal” here concerns a bounded

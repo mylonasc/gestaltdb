@@ -1,8 +1,14 @@
 Notebook Usage
 ==============
 
-The repository includes notebooks under ``notebooks/``. They use the same public
-APIs described in this documentation.
+Use the same public Python APIs in a notebook as in a script. Choose a :term:`notebook kernel`
+with the application's backend/codec extras installed; a ``VizFigure`` displays
+as an offline HTML iframe without a JavaScript build or database server. Browser
+interaction does not update Python variables or write back to the database
+(:doc:`visualization`).
+
+The source repository includes optional notebooks under ``notebooks/``; the
+installed library does not need a repository checkout to use the example below.
 
 Available notebooks include:
 
@@ -23,42 +29,45 @@ Available notebooks include:
   epistemic narrative graph with a local Ollama model and explaining what
   Sherlock Holmes could know at a selected scene without later-story leakage.
 
+The Ollama narrative notebook requires a separately configured local model
+service; it is not a base-install or offline-model guarantee. Benchmark notebooks
+are source tools, not latency promises for a fresh installation.
+
 Choose the Correct Kernel
 -------------------------
 
-For LMDB-only notebooks, any supported Python version with ``lmdb`` installed is
-enough. For LevelDB notebooks, use a CPython version that can install ``plyvel``.
-Python 3.12 is a safe default.
+Use a supported Python 3.10–3.13 environment. Install Jupyter separately and
+register that environment's interpreter; the notebook server and kernel may run
+in different environments. From an activated environment:
 
 .. code-block:: sh
 
-   uv python install 3.12
-   uv venv --python 3.12
-   uv sync --extra leveldb --extra lmdb
-   uv add --dev notebook ipykernel
-   .venv/bin/python -m ipykernel install --user --name gestaltdb-py312 --display-name "GestaltDB Python 3.12"
+   python -m pip install "gestaltdb[leveldb]" notebook ipykernel
+   python -m ipykernel install --user --name gestaltdb --display-name "GestaltDB"
+
+Select **GestaltDB** in the notebook's kernel picker. Other backends and codecs
+remain independent choices (:doc:`installation`). Base-only reasoning, array
+sampling and explicit-collection visualization need no embedded backend.
 
 Minimal Notebook Cell
 ---------------------
 
 .. code-block:: python
 
+   from tempfile import TemporaryDirectory
    from gestaltdb.graphdb import Edge, GraphDB, Node
-   from gestaltdb.kvstores import LevelDBStore
-   from gestaltdb.serializers import PickleSerializer
+   from gestaltdb.viz.api import VizOptions
 
-   graph_db = GraphDB(LevelDBStore("/tmp/leveldb_notebook_example"), PickleSerializer())
-
-   graph_db.put_node(Node(node_id="drug-1"))
-   graph_db.put_node(Node(node_id="protein-1"))
-   graph_db.put_edge(Edge(
-       edge_id="drug-1-protein-1",
-       source="drug-1",
-       target="protein-1",
-       properties={"type": "drug-to-protein"},
-   ))
-
-   graph_db.neighbors_by_edge_type("drug-1", "drug-to-protein")
+   with TemporaryDirectory() as directory:
+       with GraphDB.create(f"{directory}/db", backend="leveldb", serializer="pickle") as graph:
+           graph.put_nodes([Node("drug-1"), Node("protein-1")])
+           graph.put_edge(Edge("e1", "drug-1", "protein-1", {"type": "binds"}))
+           figure = graph.visualize(
+               'MATCH (a)-[r:binds]->(b) RETURN a, r, b',
+               options=VizOptions(edge_labels="all"),
+           )
+           assert figure.viz.edge_ids == ("e1",)
+   figure  # Jupyter displays the detached payload after the graph is closed
 
 Close Stores Between Runs
 -------------------------
@@ -66,9 +75,12 @@ Close Stores Between Runs
 Repeated notebook execution can keep database files open. Close the graph before
 rerunning setup cells that recreate stores.
 
-.. code-block:: python
-
-   graph_db.close()
+The cell above uses context managers and removes its disposable storage on exit,
+so rerunning it does not reuse an old handle. For a deliberately persistent
+multi-cell graph, use your own path and close the handle explicitly after the
+last read/write. Keeping a figure displayed does not require keeping its source
+graph open. Each iframe has independent view state; saved coordinates/filters
+are not automatically sent back to Python (:doc:`visualization-reference`).
 
 Troubleshooting ``plyvel``
 --------------------------

@@ -1,15 +1,13 @@
-:orphan:
-
 Inferred query-to-managed-world scenario
 ========================================
 
-``tests/test_reasoning_inferred_consumers.py`` wires a typed session to a
-separate managed world with explicit caller-driven steps — no automatic
-Cypher rewrite, no hidden publication. The session answers an inferred goal;
-the caller reconciles the managed world to those answers; corrections and
-retractions flow through session advance and re-publication. Every transition
-compares the session, the managed world and fresh recomputation, and readers
-pinned at older commit horizons observe the old managed state unchanged.
+A typed session and a managed target world have separate lifecycles. A session
+can answer an inferred goal; an application must separately invoke a supported
+publisher to reconcile the managed world. Advancing the session after a source
+correction or retraction does not automatically update published claims. Compare
+session answers, managed outputs and fresh recomputation when validating an
+application. Readers pinned at older commit horizons retain their old managed
+state (:doc:`ontology-publication`, :doc:`reasoning-sessions`).
 
 Retractions in the source retire the whole logical claim even when they name
 a superseded version, and versions committed by the managed-world writes

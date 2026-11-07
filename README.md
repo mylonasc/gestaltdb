@@ -30,10 +30,11 @@ remains the default; native history extraction is an explicit opt-in.
 | Query or mutate a property graph | [Cypher tutorial](docs/cypher-tutorial.rst) · [reference](docs/cypher.rst): paths, composition, aggregates, writes and schema commands |
 | Prepare graph-learning batches | [Sampling introduction](docs/sampling-introduction.rst) · [walks and embedding preparation](docs/random-walks.rst); training stays external |
 | Ask what applied then, or what was known then | [Temporal introduction](docs/temporal-introduction.rst) · [historical reads](docs/temporal-reads.rst) |
-| Represent sourced or conflicting knowledge | [Claims and stored rules](docs/temporal-versioning.rst) · [epistemic/modal evaluation](docs/modal-epistemic.rst) |
+| Represent sourced or conflicting knowledge | [Sourced claims](docs/claims-introduction.rst) · [stored rules](docs/stored-rules.rst) · [epistemic/modal evaluation](docs/modal-epistemic.rst) |
 | Classify entities from semantic axioms | [Ontology](docs/ontology.rst) · [supported profile](docs/reasoning-profiles.rst), not full OWL |
-| Derive facts with Datalog | [Facts, rules and explanations](docs/reasoning-introduction.rst) · [typed rules, literals and aggregates](docs/reasoning-typed.rst) · [scoped negation](docs/reasoning-negation.rst) |
-| Compute when conclusions hold | [Temporal interval reasoning](docs/reasoning-temporal.rst), separate from storing history |
+| Derive facts with Datalog | [Facts, rules and explanations](docs/reasoning-introduction.rst) · [typed tutorial](docs/reasoning-typed-tutorial.rst) · [typed reference](docs/reasoning-typed.rst) · [scoped negation](docs/reasoning-negation.rst) |
+| Compute when conclusions hold | [Temporal interval reasoning](docs/reasoning-temporal.rst) · [range updates and scoped policies](docs/reasoning-range-tutorial.rst), separate from storing history |
+| Integrate reasoning with application state | [Choose sources, execution, sessions and publication](docs/reasoning-workflows.rst) |
 | Connect reasoning to a database or saved state | [Graph projection](docs/ontology-graph.rst) · [authenticated sessions](docs/reasoning-authenticated-sessions.rst) · [range publication](docs/reasoning-bound-range-publication.rst) |
 | Explore or exchange graph results | [Offline visualization](docs/visualization.rst) · [NetworkX and static GEXF](docs/networkx.rst) |
 | Operate and measure the database | [Compatibility/recovery](docs/operations.rst) · [workload-specific performance](docs/performance.rst) |
@@ -126,13 +127,14 @@ python -m pip install "gestaltdb[backends,serializers]"
 `GraphDB.create()` keeps RocksDB/PyRex as its compatibility default, so a base
 install must pass an installed backend explicitly and never silently falls back.
 
-Install every optional integration, including ingestion and benchmark clients:
+The broad optional bundle includes ingestion and external benchmark clients;
+prefer the smaller extras needed by your application:
 
 ```sh
 python -m pip install "gestaltdb[all]"
 ```
 
-Optional extras include `lmdb`, `leveldb`, `rocksdb`, `backends`, `msgpack`, `protobuf`, `serializers`, `arrow`, `polars`, `fast-ingest`, `networkx`, `bloom`, `docs`, `dev`, and `all`.
+Optional extras include `lmdb`, `leveldb`, `rocksdb`, `backends`, `msgpack`, `protobuf`, `serializers`, `arrow`, `polars`, `fast-ingest`, `networkx`, `rdf`, `bloom`, `docs`, `dev`, and `all`. Offline RDF import uses the separate `rdf` extra; it is not included in `all`. Base-only offline visualization, standalone reasoning and array sampling need no embedded backend.
 
 ### NetworkX and GEXF
 
@@ -174,7 +176,8 @@ with TemporaryDirectory() as tmpdir:
 
 Labels and relationship types are indexed automatically; **property indexes are explicit**. Creating a property index also maintains its label/property or type/property composite forms—no separate composite-index declaration is needed.
 
-With a populated graph, select application cohorts and strong relationships directly:
+**Illustrative fragment:** supply your own open, populated graph to select
+application cohorts and strong relationships directly:
 
 ```python
 graph.create_node_property_index("score")

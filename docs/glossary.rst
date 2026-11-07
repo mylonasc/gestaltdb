@@ -103,6 +103,22 @@ a small example that connects facts, rules, conclusions and explanations; use
       against the supplied complete scope. It is not a claim that the whole
       world or every source is known (:doc:`reasoning-negation`).
 
+   aggregate
+      A value computed by combining completed rows in a logical group, such as
+      the count of a team's distinct member facts. Typed Datalog supports a
+      restricted nonrecursive aggregation stratum, not arbitrary recursive
+      arithmetic (:doc:`reasoning-typed-tutorial`).
+
+   range restriction
+      Requiring rule variables used in heads, comparisons or absence checks to
+      be bound by positive body atoms. This prevents those positions from
+      inventing arbitrary unbound values (:doc:`reasoning-typed-tutorial`).
+
+   selected-fragment conformance
+      Agreement with specified semantics for the declared supported subset.
+      Passing such checks is not full OWL/RDFS compatibility, source authentication
+      or certification of facts about the real world (:doc:`ontology`).
+
    stratification
       Ordering evaluation into layers so that a negated relation has been
       computed before absence is checked. Negative dependency cycles are rejected
@@ -152,6 +168,33 @@ a small example that connects facts, rules, conclusions and explanations; use
    world
       A named context containing claims, such as an actual-world account or an
       agent's belief context. A modal world is not a separate database backend.
+
+   claim
+      A sourced assertion or denial of a proposition, with agent, source and world
+      identity. Recording a claim does not verify its truth or create a mutable
+      graph edge (:doc:`claims-introduction`).
+
+   polarity
+      Whether a claim supplies explicit positive or negative evidence. Polarity
+      is independent of its confidence score and of missing evidence
+      (:doc:`claims-introduction`).
+
+   closed-world scope
+      An explicit predicate and context boundary within which a rule may test for
+      missing positive evidence. Such an absence check is not an explicit negative
+      claim or a global assumption that all unrecorded propositions are false
+      (:doc:`stored-rules`).
+
+   modal frame
+      The selected world/link structure for an evaluating agent and operator kind.
+      Belief, knowledge and general modal frames have independent explicit links;
+      they are not separate physical databases (:doc:`modal-epistemic`).
+
+   Horn rule
+      A rule with one conclusion (head) derived from matching premises (body).
+      GestaltDB requires safe variable bindings; stored claim rules and standalone
+      Datalog have distinct input, persistence and feature contracts
+      (:doc:`stored-rules`).
 
    accessibility
       Explicit agent-specific links between worlds used by modal operators.
@@ -239,10 +282,35 @@ a small example that connects facts, rules, conclusions and explanations; use
       is constant. Temporal closure evaluates these intervals to determine when
       conclusions hold (:doc:`reasoning-temporal`).
 
+   change point
+      A validity boundary at which the selected active input set can change.
+      Range evaluation splits at all such boundaries rather than approximating
+      answers from a coarse grid of sampled instants (:doc:`reasoning-temporal`).
+
+   equality
+      An explicit, scope-bound policy for treating identifiers as equivalent and
+      selecting canonical representatives. A representative is not a physical
+      merge or an identity claim valid at every time (:doc:`reasoning-equality`).
+
    admission
       Explicit verification that a source/result/state matches the requested
       identities and supported execution contract. It is not automatic authority
       to publish results (:doc:`reasoning-generation-identity`).
+
+   executor
+      An implementation that evaluates a supported program over selected facts.
+      Choosing an executor does not choose or authenticate a database source,
+      maintain saved state or publish conclusions (:doc:`reasoning-workflows`).
+
+   frontier evaluation
+      Goal-directed evaluation that interleaves rule matching with selected
+      database reads under one pinned view. Its goal answers are not a complete
+      materialization of every consequence (:doc:`reasoning-workflows`).
+
+   session
+      Retained reasoning state for a selected source scope, program and horizon,
+      including active evidence and maintenance state. Durable storage alone does
+      not authenticate that state against its source (:doc:`reasoning-sessions`).
 
    materialization
       Computing a result and retaining it for subsequent use, rather than deriving
@@ -291,6 +359,17 @@ a small example that connects facts, rules, conclusions and explanations; use
    manifest
       Configuration metadata describing a database directory's backend, codec and
       format identity. It enables compatible reopen, not arbitrary format conversion.
+
+   GEXF
+      Graph Exchange XML Format, an XML graph-interchange format. GestaltDB loads
+      a supported static subset; temporal GEXF dynamics are not temporal database
+      history and GEXF writing is not provided (:doc:`networkx`). See the
+      `format specification <https://gexf.net/>`_.
+
+   notebook kernel
+      The interpreter process that executes notebook cells. It may use a different
+      Python environment from the notebook server or your shell, so dependencies
+      must be installed into the selected kernel's environment (:doc:`notebooks`).
 
    codec
       An encoder/decoder, called a serializer in these guides. A backend stores

@@ -6,6 +6,10 @@ Typed Datalog: literals, filters, aggregates
 Before the example
 -------------------
 
+For a progressive sequence of independently runnable comparison, recursion,
+absence/proof and aggregation examples, use :doc:`reasoning-typed-tutorial`.
+This page retains exact value, normalization and explanation contracts.
+
 Start with :doc:`reasoning-introduction` if facts, predicates, rules or
 :term:`witnesses <witness>` are new to you. **Arity** is the number of arguments:
 binary relations have two, while n-ary relations can have more. A **literal** is
@@ -181,7 +185,7 @@ for positional indexing with no filter work to amortize it; see
 ``benchmarks/results/reasoning-re07-typed.json``. Those original closure-only
 measurements exclude optional typed proof collection.
 The generic evaluator does not offer automatic incremental proof maintenance;
-recursive and lattice aggregation stay explicitly deferred.
+recursive and lattice aggregation are not supported.
 
 Scoped negation lives in :doc:`reasoning-negation`: explicit closed predicate
 sets, stratified anti-joins and scope-carrying absence witnesses.

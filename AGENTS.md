@@ -23,7 +23,7 @@ Use this file when you are an agent trying to understand or modify the library w
 - Canonical temporal values and selection semantics: `src/gestaltdb/temporal.py`
 - Temporal learning path: `docs/temporal-introduction.rst`, `docs/temporal-updates.rst`, `docs/temporal-reads.rst`; exact history/service contracts remain in `docs/temporal-versioning.rst`.
 - Immutable temporal version records and write descriptors: `src/gestaltdb/versioning.py`
-- Epistemic claim values and four-valued status: `src/gestaltdb/epistemic.py`
+- Epistemic claim values and four-valued status: `src/gestaltdb/epistemic.py`; learning path: `docs/claims-introduction.rst`, `docs/stored-rules.rst`, `docs/modal-epistemic.rst`.
 - Bounded modal expressions and evaluation: `src/gestaltdb/modal.py`
 - Positive Horn rule values and evaluation results: `src/gestaltdb/rules.py`
 - Model-output/logical audit export: `src/gestaltdb/inference.py`, `docs/inference-audit.rst`. Explicit `model_output` provenance; scores are not logical probabilities; bounded historical evidence export, not independent proof verification.

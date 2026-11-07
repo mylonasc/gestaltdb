@@ -106,7 +106,7 @@ Choose the right read/write path
    * - Sample historical structure
      - :doc:`sampling-temporal`
    * - Retain sourced positive/negative propositions or run stored rules
-     - Separate claim/rule services (:ref:`temporal-claims-reference`, :doc:`modal-epistemic`)
+     - Separate services (:doc:`claims-introduction`, :doc:`stored-rules`, :doc:`modal-epistemic`)
    * - Compute validity intervals of inferred conclusions
      - :doc:`reasoning-temporal`; temporal storage alone does not evaluate Datalog
 

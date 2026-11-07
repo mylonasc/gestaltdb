@@ -1,5 +1,3 @@
-:orphan:
-
 Bounded maintenance provenance and insertion propagation
 ============================================================
 
@@ -10,6 +8,10 @@ premise-tuple) derivation, indexed forward and backward in a
 ``propagate_insertions`` extends a materialized closure by changed
 predicates only, preserving every alternative source with duplicate
 handling under support/output/work budgets.
+
+**Reference fragment:** ``program``, the existing ``closure`` and ``new_fact``
+are supplied by the application. For a complete deletion/rebuild comparison,
+see :doc:`reasoning-gates`; for database changes use :doc:`reasoning-sessions`.
 
 .. code-block:: python
 

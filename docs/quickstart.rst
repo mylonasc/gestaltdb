@@ -139,13 +139,13 @@ Choose your next path
    * - Inspect historical state at valid/system time
      - :doc:`temporal-introduction`, :doc:`temporal-updates`, :doc:`temporal-reads`
    * - Record sourced claims, derive stored rules or inspect belief
-     - :doc:`temporal-versioning`, :doc:`modal-epistemic`, :doc:`inference-audit`
+     - :doc:`claims-introduction`, :doc:`stored-rules`, :doc:`modal-epistemic`, :doc:`inference-audit`
    * - Classify entities from ontology axioms
      - :doc:`ontology`
    * - Evaluate standalone binary/typed Datalog
-     - :doc:`reasoning-introduction`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
+     - :doc:`reasoning-introduction`, :doc:`reasoning-typed-tutorial`, :doc:`reasoning-typed`, :doc:`reasoning-negation`
    * - Compute intervals over which conclusions hold
-     - :doc:`reasoning-temporal`
+     - :doc:`reasoning-temporal`, :doc:`reasoning-range-tutorial`
    * - Connect a graph to reasoning and source-verified saved state
      - :doc:`ontology-graph`, :doc:`reasoning-authenticated-sessions`
    * - Visualize or exchange results

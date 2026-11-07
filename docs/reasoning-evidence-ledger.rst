@@ -1,5 +1,3 @@
-:orphan:
-
 Exact-version assertion ledger prototype
 ========================================
 

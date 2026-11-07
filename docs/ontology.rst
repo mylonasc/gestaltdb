@@ -28,6 +28,72 @@ mandatory solver dependency. It does not change asserted labels, relationships,
 Cypher results or sampler membership. All database interactions are explicit
 adapters; core and compiler depend only inward and on the standard library.
 
+.. _standalone-example:
+
+Classify a person and inspect the explanation
+---------------------------------------------
+
+**Standalone example, base install only.** The ontology says that subjects of
+``worksFor`` are Researchers and every Researcher is a Person. Compilation turns
+those axioms into a program; evaluation applies that program to Alice's employment
+fact. No RDF parser, database backend or external solver is needed.
+
+.. code-block:: python
+
+   from gestaltdb.ontology import Domain, Ontology, SubClassOf, TYPE_PREDICATE, compile_ontology
+   from gestaltdb.reasoning import DatalogEngine, Fact, ReasoningLimits
+
+   plan = compile_ontology(Ontology("people", [
+       Domain("worksFor", "Researcher"), SubClassOf("Researcher", "Person"),
+   ]))
+   result = DatalogEngine().evaluate(
+       plan.program, [Fact("alice", "worksFor", "acme")],
+       limits=ReasoningLimits(), collect_proofs=True,
+   )
+   person = Fact("alice", TYPE_PREDICATE, "Person")
+   assert person in result
+   assert Fact("alice", TYPE_PREDICATE, "Researcher") in result
+   explanation = result.explain(person)
+   assert not explanation.truncated
+   assert {origin.axiom_id for origin in plan.origins} == {
+       axiom.axiom_id for axiom in plan.ontology.axioms
+   }
+
+``TYPE_PREDICATE`` is the relation used for class membership, not a command to add
+a stored node label. ``plan.origins`` maps exact generated rule IDs to their
+source axioms. ``result.match(subject=..., predicate=..., object=...)`` provides
+immutable result lookups. Proof retention is bounded and records one witness,
+not every possible justification (:doc:`reasoning-proofs`).
+
+Classification, validation and hierarchy expansion
+----------------------------------------------------
+
+.. list-table:: Similar-looking tasks have distinct contracts
+   :header-rows: 1
+
+   * - Task
+     - Meaning
+     - Route
+   * - Classification
+     - Derive memberships/relations from axioms and facts; domain/range infer types
+     - This guide
+   * - Validation
+     - Report configured conflicts or structural violations; do not infer equality
+       or repair source data automatically
+     - :doc:`reasoning-validation`
+   * - Hierarchy expansion
+     - Expand explicitly mapped parent labels/relations for a query or draw;
+       do not run the complete ontology program
+     - The hierarchy adapter below
+
+The compiler supports subclass/subproperty, named equivalence, domain/range,
+inverse, symmetric and transitive properties, binary property chains, left-side
+class conjunction/disjunction and scoped reflexivity. It is the selected
+``gestalt-core-v1`` fragment, **not full RDFS/OWL**. Equality, datatype reasoning,
+disjointness, existential generation and negation are not compiled by this
+fragment. Separate equality, validation and typed-rule APIs have their own
+contracts. Cycles terminate under set semantics; missing input is not false.
+
 Optional offline RDF import
 ---------------------------
 
@@ -93,36 +159,6 @@ subsumption require a canonicalization policy that a strict hierarchy cannot
 infer, so the adapter raises ``ValueError`` rather than silently dropping those
 semantics. Resolve them explicitly or build the hierarchy directly.
 
-Standalone example
-------------------------
-
-.. code-block:: python
-
-   from gestaltdb.ontology import Domain, Ontology, SubClassOf, TYPE_PREDICATE, compile_ontology
-   from gestaltdb.reasoning import DatalogEngine, Fact, ReasoningLimits
-
-   plan = compile_ontology(Ontology("people", [
-       Domain("worksFor", "Researcher"), SubClassOf("Researcher", "Person"),
-   ]))
-   result = DatalogEngine().evaluate(
-       plan.program, [Fact("alice", "worksFor", "acme")],
-       limits=ReasoningLimits(), collect_proofs=True,
-   )
-   person = Fact("alice", TYPE_PREDICATE, "Person")
-   assert person in result
-   explanation = result.explain(person)
-   assert not explanation.truncated
-
-Use ``result.match(subject=..., predicate=..., object=...)`` for immutable result
-lookups. The compiled origin table maps exact witness rules back to source axioms.
-The profile supports subclass/subproperty, named equivalence, domain/range,
-inverse, symmetric and transitive properties, plus binary property chains,
-left-side class conjunction/disjunction and scoped reflexivity. Cycles terminate
-under set semantics.
-It is a selected ``gestalt-core-v1`` fragment, not full RDFS or OWL support.
-Equality, datatype reasoning, disjointness, existential generation and negation
-are not supported. Domain/range infer memberships rather than validate missing data.
-
 Read-only temporal claims
 --------------------------------
 
@@ -177,9 +213,15 @@ Inference bounds fail closed; proof-node/edge bounds only truncate the witness
 trace, explicitly. A trace stores one witness, not all independent supports.
 Counters are not a wall-clock/RSS sandbox for arbitrary Python inputs. Neither
 the native engine nor a solver swap makes temporal extraction free.
-No JVM integration is supported. Clingo was faster on larger dense synthetic
-closures, but does not provide the same work-counter/witness contract in this v1.
-See :doc:`ontology-benchmarks` for measured trade-offs, startup/footprint caveats
-and reproducible evidence. The development contract is :doc:`ontology-contract`.
+No JVM integration or mandatory external solver is provided. Comparison tools
+do not become application executors through their benchmark results. See
+:doc:`ontology-benchmarks` for qualified timing/footprint evidence and
+:doc:`ontology-contract` for exact interface and conformance boundaries.
 For additive relational IR and structural plan inspection, see
 :doc:`reasoning-execution` (no new execution semantics).
+
+For standalone rule construction, start with :doc:`reasoning-introduction` and
+:doc:`reasoning-typed-tutorial`. Continue with :doc:`reasoning-demand` for selective
+answers, :doc:`reasoning-maintenance` for support-aware updates,
+:doc:`reasoning-equality` for snapshot-local representatives and
+:doc:`reasoning-validation` for reports rather than inferred memberships.

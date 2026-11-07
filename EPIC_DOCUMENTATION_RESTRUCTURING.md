@@ -326,14 +326,189 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
+### Platform exploration, exchange and operations (delivered)
+
+Delivered through #516 at `b7e3acf` after all remote checks passed, including both
+example lanes, supported-edge full suites and installed artifacts. The fixed-checkout
+local suite passes 5,277 tests with 51 skips. Base Python 3.10 docs checks pass 339
+tests with 514 explicit optional skips. Strict Sphinx passes on both toolchains;
+browser checks cover 34 pages at three widths, 99 table checks, 411 numbered blocks
+and 99 clipboard comparisons, including the mobile API-signature fix. Docs/API drift,
+eight agent examples, module-size and generated figures pass. #493 is closed and
+#480 records twelve delivered slices; only final DOC-10 #490 audience/package
+acceptance remains open, with graphics debt #495 explicit.
+
+DOC-13 #493 makes visualization a task path with independently runnable
+query/neighborhood HTML+SVG and backend-free reasoning/ontology artifacts. Exact
+controls, caps, layering and export/state contracts move to a linked reference;
+the established visualization entry URL remains. Browser state versus Python
+SVG, detached notebook figures and embedded-data distribution limits are explicit.
+Frontend contributor instructions route to the repository web guide, not the
+application introduction; existing generated figures and architecture graphics
+remain unchanged.
+
+NetworkX examples now exercise reimport with parallel edges, self-loops and an
+isolated node, plus static GEXF-to-materialized-NetworkX export. Mapping,
+directionality, XML security, in-memory preparation and non-atomic batch failure
+contracts remain intact. Notebook setup becomes an independent disposable cell
+that closes the graph before display. It is executed across the existing backend/
+codec alternatives instead of falsely remaining a compile-only setup fragment.
+
+Installation leads with application extras and supported Python, corrects the
+declared PyRex floor to 0.7.1, and distinguishes separate RDF from the broad all
+bundle. Tests bind these promises to pyproject declarations. Performance maps
+ingestion/query/build/load/sampling/reasoning/authentication/publication/exchange
+costs separately; recovery remains explicitly backed-up, quiesced operator work.
+Architecture/API navigation connects the supported integrations.
+
+Focused docs/NetworkX/viz validation passes 997 tests; strict Sphinx, Ruff and
+inventory pass. Coverage: 44 capability families, 107 documents / 92 Sphinx pages,
+246 source examples (146 standalone / 100 illustrative). The 50 backend/codec
+declarations still render 493 variants, now 481 executable / 12 compiled fragments.
+Only final cross-audience/package acceptance (DOC-10 #490) remains.
+
+### Documentation example inventory and CI (delivered)
+
+DOC-09 #489 adds a stdlib-only Python/Cypher source-block inventory for every
+Sphinx page, README/EXAMPLES/AGENTS and packaged agent Markdown: 246 examples,
+including 144 standalone, 100 illustrative fragments and two notebook
+continuations. Page-level ordered code digests require explicit review after
+example changes; there is no automatic classification/update path. The catalog
+drives rendered RST execution/install labels before capability-qualified tabs.
+Standalone rows execute independently (96 direct programs plus 48 owned by the
+existing tab matrix); shared-state fragments compile without claiming full setup.
+All 99 direct/literal embedded Cypher queries receive parser coverage, while
+complete database workflows retain actual query execution. Local Markdown links
+and packaged-resource/navigation checks stay offline; strict Sphinx covers RST.
+
+The dedicated CI lanes use Python 3.10/docs for base examples and strict Sphinx,
+and Python 3.13 with only the relevant optional backends/codecs/Arrow/Polars/NetworkX
+for complete example/tab coverage. They run in `documentation-examples.yml`;
+the reference/roadmap workflow remains build-free. Existing Python 3.12 Pages and installed-wheel
+checks remain distinct. Documentation/config/catalog/test changes trigger the
+gates, not just runtime edits. Contributor scope/limits live outside Sphinx in
+`planning/documentation-review/example-checks.md`.
+
+The inventory exposed and repaired a missing sampling import, two query fragments
+missing required RETURN clauses, an uncaught expected profile rejection and a
+fixed-path proof SVG example. Shared Markdown graph fragments are explicitly
+labelled rather than pretending to reuse already closed temporary graphs.
+Focused validation passes 846 tests; Ruff, inventory and strict Sphinx pass.
+Delivered through #514 at `7b7e445` after all remote checks passed, including both
+new example lanes, supported-edge full suites and installed artifacts. The
+fixed-checkout local full suite passes 5,270 tests with 51 skips; Python 3.10
+base/docs checks pass 344 tests with 502 explicit optional skips. Both strict
+Sphinx builds and refreshed browser checks pass: 28 pages at three widths,
+78 table checks, 327 numbered blocks and 81 clipboard comparisons. Docs/API
+drift, eight agent examples, module-size and generated figures pass. #489 is
+closed and #480 records eleven delivered slices. Remaining delivery is DOC-13
+#493 followed by final DOC-10 #490 audience/package acceptance; graphics debt
+#495 remains explicit.
+
+### Advanced reasoning integration (delivered)
+
+DOC-08 #488 adds `reasoning-workflows.rst`: a task decision table and grouped
+navigation for source/answer adapters, maintenance/session state, consumption and
+publication, execution/representation contracts, explicit alternatives and
+qualified evidence. The flat advanced landing list now hands off to this hub.
+All DOC-08 pages have an intentional role and inbound tree path; formerly orphaned
+contracts join the appropriate groups without URL changes. Ordinary extraction
+and indexed Python remain defaults; native point sources and experimental
+Polars/EL remain explicit alternatives, not adoption or performance promises.
+
+The dispatcher entry and deletion/rebuild comparison are independently runnable,
+backend-free examples. Extension-policy denial is caught as an expected failure;
+catalog/maintenance/expansion fragments identify their application-owned setup.
+Executor timing duplication is replaced by links to the existing detailed Polars,
+plan and pipeline evidence. Stored rules, source/state identity, authentication,
+closure certification, read-only consumers and guarded publication stay distinct.
+Focused documentation/example validation passes 616 tests. Inventory: 106
+documents / 91 Sphinx pages; backend/serializer declarations remain unchanged.
+Delivered through #512 at `d39ee15` after all PR checks passed, including Python
+3.10/3.13 full suites, installed artifacts and ontology conformance. The unchanged
+local checkout passes 5,032 tests with 51 skips. Base Python 3.10 checks pass 13
+tests; strict Sphinx passes on Python 3.10/Sphinx 8 and the local toolchain.
+Browser checks cover 28 pages at three widths, 78 table checks, 327 numbered
+blocks and 81 clipboard comparisons. Docs/API drift, eight agent examples,
+module-size and generated figures pass. #488 is closed and #480 records ten
+delivered slices; DOC-09, DOC-13 and final DOC-10 acceptance remain open, together
+with graphics debt #495.
+
+### Temporal range-reasoning journey (delivered)
+
+DOC-07 #487 puts a complete gap-preserving range example and compact change-point
+timeline before physical execution details. It compares point answers at boundaries
+and inside segments against fresh evaluation, inspects per-segment evidence and
+runs the conformance gate without claiming source authentication. The separate
+`reasoning-range-tutorial.rst` defines independent scoped-absence/update/proof-budget,
+aggregate and equality-scope examples. Computation, conformance, authenticated
+finite-range admission and computation-owned publication are distinct stages;
+raw caller-derived staging retains its weaker contract. Exact references remain
+available with fragment scope explicit. Historical unbound intro measurements
+are retained outside Sphinx, not relabelled as current-wheel results.
+
+Focused validation passes 636 tests and strict Sphinx. The new code examples are
+storage-independent and need no backend/serializer tabs; existing applicable
+variants remain tested. Inventory: 105 documents / 90 Sphinx pages. Final audience
+acceptance remains DOC-10. Delivered through #510 at `f958751` after all PR checks
+passed, including Python 3.10/3.13 full suites, installed artifacts and ontology
+conformance. The fixed-checkout local suite passes 5,028 tests with 51 skips;
+base-install Python 3.10 examples pass ten tests. Strict Sphinx passes on Python
+3.10/Sphinx 8 and the local toolchain. Browser checks cover 27 pages at three
+widths, 324 numbered code blocks and 78 clipboard comparisons. Docs/API drift,
+eight agent examples, module-size and generated-figure checks pass.
+
+Nine slices are delivered: DOC-01–DOC-07, DOC-11 and DOC-12. Advanced integration
+organization (DOC-08), documentation CI (DOC-09), packaged/final audience acceptance
+(DOC-10) and the remaining platform review (DOC-13) remain open, as does graphics
+debt #495. Passing validation does not complete those remaining acceptance tasks.
+
+### Ontology and standalone Datalog foundations (delivered)
+
+DOC-06 #486 places ontology classification/axiom origins before optional RDF and
+database adapters, with classification/validation/hierarchy boundaries visible.
+The existing facts/rules introduction adds a binary-versus-typed choice table;
+`reasoning-typed-tutorial.rst` supplies four independent base-install examples for
+comparisons, recursion, scoped absence/proofs and grouped aggregation. Exact
+normalization/predicate-domain/proof contracts remain in focused references.
+Navigation and the packaged ontology topic route to the progressive examples;
+source-independent evaluation stays distinct from stored claim rules and source
+admission/publication. Focused validation passes 612 tests and strict Sphinx.
+Inventory: 104 documents / 89 Sphinx pages; backend/codec declarations remain
+unchanged because these new examples do not open a database or select a codec.
+Broader ontology/typed regression passes 351 tests with four optional skips;
+the base-only Python 3.10 example run passes seven tests. Delivered through #509
+at `dc9261a` after all PR checks passed, including Python 3.10/3.13 suites and
+ontology conformance. Final audience acceptance remains DOC-10.
+
+### Claims, stored rules and modal learning path (delivered)
+
+DOC-05 #485 adds `claims-introduction.rst` and `stored-rules.rst`, and makes the
+modal guide's first example independently runnable. The journey starts with
+sourced polarity, four-valued status and confidence-as-metadata; it then derives,
+explains, retracts and maintains a persisted conclusion. A second workflow tests
+independent supports, and modal setup tests all four modes plus unknown without
+an accessibility link under one bounded authenticated view. Scoped absence,
+standalone Datalog, current graph records and audit/proof verification remain
+explicitly distinct. Three setups add 36 executable alternatives: current total
+50 declarations / 493 variants (469 executable, 24 compiled shared-state variants).
+Inventory: 103 documents / 88 Sphinx pages. Focused validation passes 691 tests;
+strict Sphinx passes on Python 3.10/Sphinx 8 and the current local toolchain.
+After syncing concurrent main changes, the complete Python 3.12 suite passed
+5,002 tests (60 optional skips); browser checks covered 24 pages at three widths.
+Merged through #507 at `d443caf` after all PR checks passed, including Python
+3.10/3.13 full suites, installed artifacts, documentation and optional integrations.
+
 ### Main integration checkpoint
 
 DOC-12 #492 merged through #501 at `0025bbf`. The follow-through stack #502–#506
-is consolidated for main review in #506, with its complete source history intact.
+merged through consolidated #506 at `8510882`, with its complete source history
+intact. DOC-03 #483 and DOC-04 #484 are delivered and closed. The superseded
+stacked PRs #502–#505 are closed after verifying their heads are ancestors of main.
 Rendering tests requiring docutils explicitly skip without the docs extra so
 the base-install test contract remains independent of Sphinx dependencies.
 
-### Temporal/bitemporal learning path (implemented, pending merge)
+### Temporal/bitemporal learning path (delivered)
 
 DOC-04 #484 adds `temporal-introduction.rst`, `temporal-updates.rst` and
 `temporal-reads.rst`. A compact Alice department timeline compares two valid
@@ -352,10 +527,10 @@ catalog to 47 declarations / 457 alternatives (433 executable, 24 compiled
 shared-state variants). Inventory: 101 documents / 86 Sphinx pages. Validation
 includes 770 documentation/temporal tests and a broader 675-test temporal,
 migration, interface, Cypher and sampling run; strict Sphinx, documentation checks,
-lint and offline browser checks pass. #484 remains open until merged delivery;
+lint and offline browser checks pass. #484 is delivered through #506 at `8510882`;
 final cross-audience acceptance remains DOC-10.
 
-### Sampling learning path (implemented, pending merge)
+### Sampling learning path (delivered)
 
 DOC-03 #483 adds `sampling-introduction.rst` with a live/snapshot decision table,
 ID domains before code, and a pinned property-filtered database-to-snapshot draw
@@ -371,7 +546,7 @@ tab catalog has 43 declarations / 409 alternatives (385 executable and 24 compil
 shared-state fragments). The page inventory is 98 documents / 83 Sphinx pages.
 Focused sampling, example, editorial, strict Sphinx and offline layout/interaction
 checks validate this implementation; final cross-audience acceptance remains
-DOC-10. #483 stays open until delivery merges.
+DOC-10. #483 is delivered through #505/#506 at `8510882`.
 
 ### Reconciled delivery status (2026-11-03)
 
@@ -382,24 +557,26 @@ headings and stale prerelease advice, updates range/equality/publication boundar
 and separates dense development reports into `planning/documentation-review/history/`.
 Qualified reproducible benchmark evidence remains available without adoption diaries.
 An editorial regression check covers Sphinx, README, examples and packaged guides;
-it supplements, not replaces, semantic review. This work remains unmerged until its
-stacked PR is delivered and does not close the broader epic slices.
+it supplements, not replaces, semantic review. This work is delivered through
+#506 at `8510882` and does not close the broader epic slices.
 The fixed performance setup is now in the archived report rather than the public
-guide, leaving 41 current tab declarations and the same 389 rendered alternatives
+guide, leaving 41 tab declarations at that checkpoint and 389 rendered alternatives
 (365 executable, 24 compiled shared-state fragments).
 
 - **Merged/delivered:** DOC-01 #481 (PR #496), DOC-02 #482 (PR #498),
   DOC-11 #491 (PR #499), consolidated by #494 at `69fe552`. Their child
   issues are closed and #480's corresponding delivery entries are checked.
-- **Implemented, not merged:** DOC-12 #492 in #501; terminology, code controls
-  and generated figures in #502; glossary tooltips and backend/serializer tabs
-  are stacked follow-through. These do not complete the remaining epic slices.
-- **Partial/pending:** DOC-03–DOC-10 and DOC-13, including final audience
-  acceptance and packaged-document alignment. Graphics debt remains in #495.
+- **Also delivered:** DOC-12 #492 in #501; terminology, code controls,
+  generated figures, glossary tooltips, backend/serializer tabs and editorial
+  cleanup through #502–#506; DOC-03 #483 and DOC-04 #484 through #505/#506.
+- **Also delivered:** DOC-05 #485 through #507 at `d443caf`.
+- **Further work:** DOC-06–DOC-10 and DOC-13 retain remaining scope, including
+  final audience acceptance and packaged-doc alignment. Graphics debt remains
+  in #495.
 
 The existing Concepts and Terminology glossary remains canonical, expanded for
-encountered jargon and linked with accessible definition tooltips. Explicit
-example declarations cover 42 database/codec setups: 389 rendered alternatives,
+encountered jargon and linked with accessible definition tooltips. The initial
+explicit declarations covered 42 database/codec setups: 389 alternatives,
 including 365 executable alternatives and 24 compiled setup-fragment variants.
 One fixed benchmark setup is classified without tabs. Backend-free snippets and
 existing-graph continuations keep their context. Capability-qualified tabs do not

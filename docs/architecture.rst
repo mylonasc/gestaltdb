@@ -174,6 +174,16 @@ sampling snapshots.
 Choose an application workflow
 -------------------------------
 
+Graph interoperability and visualization are separate boundaries. The optional
+``gestaltdb.integrations.networkx`` adapter imports/exports materialized **current**
+records and loads supported local static GEXF, not temporal history or live
+algorithm dispatch (:doc:`networkx`). The base ``gestaltdb.viz.api`` builders
+consume selected records, query/sample results or reasoning explanations and
+produce detached offline figures (:doc:`visualization`). Rendering does not
+require NetworkX; notebook display does not synchronize browser state back into
+the database (:doc:`notebooks`). See :doc:`installation` for independent extras
+and :doc:`performance` for the costs at each handoff.
+
 .. list-table:: From application goal to component interfaces
    :header-rows: 1
    :widths: 24 40 36
@@ -198,7 +208,7 @@ Choose an application workflow
      - :doc:`reasoning-sessions`, :doc:`reasoning-authenticated-sessions`
    * - Inspect decisions based on model predictions
      - External model -> tagged claims -> stored rules -> inference audit export
-     - :doc:`inference-audit`, :doc:`modal-epistemic`
+     - :doc:`claims-introduction`, :doc:`stored-rules`, :doc:`inference-audit`, :doc:`modal-epistemic`
 
 Code navigation and modularity
 -------------------------------

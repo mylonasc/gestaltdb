@@ -1,5 +1,3 @@
-:orphan:
-
 Opt-in generation identity and admission
 ========================================
 

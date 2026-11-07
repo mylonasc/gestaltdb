@@ -1,14 +1,18 @@
-:orphan:
-
 Explicit relation expansion and sampler handoff
 ============================================================
 
-``gestaltdb.reasoning.adapters.graph`` gains explicit inferred-query helpers:
+``gestaltdb.reasoning.adapters.graph`` provides explicit inferred-query helpers:
 ``expand_edge_types`` resolves which concrete mapped edge types can derive a
 predicate, ``sample_expanded_neighbors`` samples distinct endpoints with
 per-relation fanout accounting, and ``inferred_seeds`` validates inferred
 endpoints into sampler seed lists. Nothing rewrites Cypher, mutates arrays,
 or changes weight/path multiplicity.
+
+**Illustrative fragment:** ``compiled`` and ``scoped`` are application-supplied
+ontology/result values, with rules relating the mapped ``narrow``/``wide``
+predicates. The concrete graph must use the mapped edge types. See
+:doc:`ontology-graph` for complete projection setup; this is not a continuation
+of that page's different relation fixture.
 
 .. code-block:: python
 
@@ -48,6 +52,6 @@ Seeds are data, not snapshots
 ``inferred_seeds`` only validates and canonicalizes endpoint strings. No
 snapshot is built or mutated; callers feed the result to sampler seed APIs
 explicitly and keep snapshot authentication at the sampler boundary.
-Composition of expansion with demand specialization or stratified negation
-stays out of scope per the broader composition design; each mode is invoked
-explicitly and documented with its complete strategy.
+Composition of expansion with demand specialization or stratified negation is
+not supported by these helpers. Invoke each supported mode explicitly; relation
+expansion alone does not provide a combined evaluation strategy.

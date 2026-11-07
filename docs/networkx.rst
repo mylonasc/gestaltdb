@@ -1,5 +1,11 @@
-NetworkX and GEXF
-=================
+Exchange current graphs with NetworkX and GEXF
+==============================================
+
+Use this adapter to move a **materialized current graph** between GestaltDB and
+NetworkX, or load a supported **static** :term:`GEXF` file into a database. Choose the
+mapping before import: a display label is not necessarily a native graph label,
+and an XML edge ID is not a relationship type. Historical claims, reasoning
+state and sampler arrays are not implicitly converted.
 
 Install the optional adapter and a backend, for example::
 
@@ -9,6 +15,27 @@ Import helpers from ``gestaltdb.integrations.networkx``. NetworkX and
 ``defusedxml`` are loaded lazily; importing GestaltDB or the integration module
 does not require them. No live NetworkX backend or algorithm dispatch is
 installed: algorithms operate on a materialized export of current records.
+
+.. list-table:: Choose the exchange boundary
+   :header-rows: 1
+
+   * - Task
+     - API
+     - Important limit
+   * - Import an in-memory NetworkX graph
+     - ``from_networkx``
+     - No update/merge mode; existing-ID collisions reject
+   * - Run NetworkX algorithms on stored records
+     - ``to_networkx`` then ordinary NetworkX calls
+     - Full in-memory export, not live algorithm dispatch or an automatic snapshot
+   * - Load a local static GEXF file
+     - ``load_gexf``
+     - Local XML only; dynamics and GEXF writing are not supported
+
+Imports preflight before writing but are **not one atomic import transaction**.
+Completed batches can survive a later failure. Quiesce writers for consistent
+exchange; selecting a backend with transactions does not change this batch-level
+contract. See the failure and memory/security sections below.
 
 NetworkX algorithm round trip
 -----------------------------
@@ -23,7 +50,10 @@ NetworkX algorithm round trip
    source = nx.MultiDiGraph(name="people")
    source.add_node("alice", category="Person", name="Alice")
    source.add_node("bob", category="Person", name="Bob")
+   source.add_node("carol", category="Person", name="Carol")  # isolated node
    source.add_edge("alice", "bob", key="friend", id="e1", relation="KNOWS")
+   source.add_edge("alice", "bob", key="colleague", id="e2", relation="KNOWS")
+   source.add_edge("bob", "bob", key="self", id="e3", relation="KNOWS")
 
    with TemporaryDirectory() as directory:
        graph = GraphDB.create(directory + "/db", backend="lmdb", serializer="json")
@@ -35,6 +65,12 @@ NetworkX algorithm round trip
            exported = to_networkx(graph, graph_attributes=result.graph_attributes)
            assert nx.shortest_path(exported, "alice", "bob") == ["alice", "bob"]
            assert exported.edges["alice", "bob", "friend"]["type"] == "KNOWS"
+           assert "carol" in exported and exported.number_of_edges() == 3
+           assert exported.has_edge("bob", "bob", "self")
+           with GraphDB.create(directory + "/copy", backend="lmdb", serializer="json") as copy:
+               restored = from_networkx(exported, copy)
+               assert restored.imported_nodes == 3 and restored.imported_edges == 3
+               assert set(copy.get_node(b"alice").labels) == {"Person"}
        finally:
            graph.close()
 
@@ -50,7 +86,7 @@ stream. The caller owns the destination GraphDB handle.
    from io import BytesIO
    from tempfile import TemporaryDirectory
    from gestaltdb.graphdb import GraphDB
-   from gestaltdb.integrations.networkx import load_gexf
+   from gestaltdb.integrations.networkx import load_gexf, to_networkx
 
    data = b'''<gexf xmlns="http://www.gexf.net/1.2draft" version="1.2">
      <graph defaultedgetype="directed" mode="static">
@@ -64,6 +100,9 @@ stream. The caller owns the destination GraphDB handle.
            result = load_gexf(BytesIO(data), graph, label_property="name")
            assert result.imported_nodes == 2 and result.imported_edges == 1
            assert graph.get_node(b"alice").properties["name"] == "Alice"
+           exported = to_networkx(graph, graph_attributes=result.graph_attributes)
+           assert set(exported.nodes) == {"alice", "bob"}
+           assert next(iter(exported.edges(data=True)))[2]["weight"] == 2.5
        finally:
            graph.close()
 
@@ -180,7 +219,7 @@ NetworkX loading and export fully materialize graphs. Import also prepares
 entity records in memory. Batching destination writes is **not** streaming or
 out-of-core loading.
 
-GEXF is parsed first by ``defusedxml`` with DTDs, entities and external
+GEXF is parsed first by ``defusedxml`` with document type declarations (DTDs), entities and external
 references forbidden; only the validated, sanitized tree reaches NetworkX.
 ``max_bytes`` defaults to 64 MiB and limits decompressed XML, including compressed
 paths. Caller-owned streams must implement normal bounded ``read(size)``
@@ -193,3 +232,7 @@ API reference
 
 .. automodule:: gestaltdb.integrations.networkx
    :members:
+
+Use :doc:`visualization` to inspect selected records without installing NetworkX,
+:doc:`operations` for database recovery, and :doc:`performance` to measure
+preflight/conversion separately from batched writes and graph algorithms.
