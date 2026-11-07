@@ -326,6 +326,27 @@ as documentation corrections.
 
 ## 12. Implementation ledger
 
+### Packaged documentation and final audience acceptance (delivered)
+
+Delivered through #531 at `25b6aaa` after all remote checks passed, including both
+example lanes, supported-edge full suites, installed artifacts, ontology
+conformance and PR-address checks. Packaged retrieval grows to 12 topics with two
+new backend-free references: `datalog` (binary/typed rules, comparisons, recursion,
+scoped absence, aggregates, bounded witnesses) and `temporal_reasoning` (validity-
+interval closure, point/range parity, per-interval evidence, conformance). `SKILL.md`
+now advertises all 12 topics including the previously omitted `ontology`; cross-links
+route ontology/datalog/epistemic/temporal/temporal_reasoning/visualization and
+quickstart/storage/query/index/ingest/sampling refs to the new routes. AGENTS.md,
+package docstring, EXAMPLES.md and api.rst/api-workflows.rst align import guidance
+and retrieval pointers with the registry.
+
+Verification: inventory 44 capability families, 109 documents, 12 packaged topics;
+example catalog 248 source examples (148 standalone); check_docs zero drift; ruff
+clean; Sphinx builds; focused suites pass (191 agent/inventory/execution; 120
+graph/cypher/sampling/docstrings). Wheel-installed `agent_docs list/get/search`
+retrieval verified, including the new topics. #490 is closed and #480 records all
+thirteen delivery slices; graphics debt #495 remains the explicit post-epic follow-up.
+
 ### Platform exploration, exchange and operations (delivered)
 
 Delivered through #516 at `b7e3acf` after all remote checks passed, including both
