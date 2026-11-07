@@ -9,6 +9,8 @@ mutable current record. `docs/temporal-updates.rst` covers interval corrections,
 retractions and deferred indexes; `docs/temporal-reads.rst` covers authenticated
 views, historical traversal and bitemporal Cypher. Exact service contracts remain
 in `docs/temporal-versioning.rst`; migration and recovery remain in `docs/operations.rst`.
+For when-conclusions-hold interval computation (not stored history), use the
+packaged `temporal_reasoning` topic and `docs/reasoning-temporal.rst`.
 
 ## Rules
 

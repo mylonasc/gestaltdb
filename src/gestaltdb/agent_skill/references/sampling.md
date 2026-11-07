@@ -7,6 +7,8 @@ For property-graph cohort selection, read the `indexing` topic too.
 The human learning path starts at `docs/sampling-introduction.rst`, followed by
 `sampling-neighborhoods`, `sampling-subgraphs`, `sampling-temporal` and
 `sampling-negatives`. `docs/typed-sampling.rst` retains the policy/format reference.
+Sampler temporal filters bound seed/window eligibility; deriving when conclusions
+hold over validity ranges is the separate packaged `temporal_reasoning` topic.
 
 ## ID Spaces (Read This First)
 

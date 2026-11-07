@@ -31,8 +31,11 @@ Available topics:
 - `sampling`: high-performance CSR snapshots, weighted neighbors, layers, walks, hard negatives, temporal filters, and live typed traversal.
 - `ingestion`: Arrow/Polars ingestion and index maintenance modes.
 - `visualization`: offline HTML/Jupyter, property labels/styling, directed exploration, saved views, SVG/PNG export, and `GraphDB.visualize`.
+- `ontology`: standalone classification, axiom origins, and hierarchy expansion boundaries.
+- `datalog`: standalone binary/typed rules, comparisons, recursion, scoped absence, aggregates, and bounded witnesses.
 - `epistemic`: sourced bitemporal claims, provenance, contradiction, and four-valued status.
 - `temporal`: version history, legacy migration, recovery, and compatibility limits.
+- `temporal_reasoning`: interval closure over validity ranges, point/range parity, per-interval evidence, and conformance.
 
 ## Agent Workflow
 

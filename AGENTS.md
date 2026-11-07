@@ -252,7 +252,7 @@ Optional backend dependencies may be missing in a local environment. If a failur
 - To release a tagged version, first ensure the version is committed on `main`, tests and docs checks passed, and local build artifacts pass `twine check`; then create the GitHub release, e.g. `gh release create vX.Y.Z --target main --title "gestaltdb X.Y.Z" --notes "..."`.
 - After creating a release, watch the publish run with `gh run list --workflow Publish --limit 5` and `gh run watch <run-id> --exit-status`; verify PyPI with `https://pypi.org/project/gestaltdb/X.Y.Z/` or the PyPI JSON API.
 - Verify installed wheels against the declared Python range, not the agent host default if it is outside `requires-python`. Use `uv run --python 3.12 --with gestaltdb==X.Y.Z ...` for release smoke tests.
-- Do not assume package attributes or helper names during smoke tests. Inspect or use documented APIs, e.g. `importlib.metadata.version("gestaltdb")`, `python -m gestaltdb.agent_docs list`, `agent_docs.read_skill()`, and `agent_docs.read_topic("quickstart")`.
+- Do not assume package attributes or helper names during smoke tests. Inspect or use documented APIs, e.g. `importlib.metadata.version("gestaltdb")`, `python -m gestaltdb.agent_docs list`, `agent_docs.read_skill()`, and `agent_docs.read_topic("quickstart")`. Packaged retrieval covers 12 topics including `ontology`, `datalog`, and `temporal_reasoning`.
 
 ## Documentation Maintenance
 
