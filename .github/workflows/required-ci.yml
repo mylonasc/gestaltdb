@@ -1,0 +1,37 @@
+name: Required CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: required-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: CI gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out PR merge and full comparison history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Install workflow parser only
+        run: python -m pip install 'PyYAML==6.0.3'
+      - name: Test gate policy
+        run: python -m unittest discover -s tests -p test_ci_gate.py -v
+      - name: Require all applicable PR workflows to succeed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/ci_gate.py
