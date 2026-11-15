@@ -1,5 +1,7 @@
 # Security Policy
 
+<!-- Temporary docs-only required-CI probe; this verification PR is never merged. -->
+
 ## Supported Versions
 
 Security fixes are provided for the latest minor release line. Older
