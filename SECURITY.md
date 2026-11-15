@@ -57,3 +57,34 @@ except as they affect the shipped bundle.
 - Embedded backends (`LMDBStore`, `LevelDBStore`, `PyRexStore`) offer no
   authentication or encryption; restrict filesystem access to the database
   directory.
+
+## Required Pull-Request CI
+
+`Required CI / CI gate` runs on every pull request targeting `main`, without
+path filters. It reads the existing workflows' `pull_request` branch/path
+filters and waits for all applicable workflows for that PR's current head.
+Unrelated path-filtered workflows are not required to start. A selected
+workflow must finish successfully; failures, cancellations, unexpected skips,
+API errors, and missing runs fail closed. The gate itself has read-only
+permissions and uses neither `pull_request_target` nor privileged
+`workflow_run` execution.
+
+The `basic protection` ruleset requires the exact check context `CI gate`,
+issued by GitHub Actions, with the branch up to date before merging. Human
+review approvals are not required for this single-maintainer workflow.
+
+When a failed workflow is rerun successfully, rerun the gate too if it already
+failed. Unsupported new glob/event-filter syntax must be implemented and tested
+in `scripts/ci_gate.py` before use. GitHub can truncate native path-filter
+evaluation for very large PRs; if a selected workflow is consequently absent,
+split the PR rather than bypassing the gate. Gate policy tests run on every PR:
+
+```sh
+python -m pip install 'PyYAML==6.0.3'
+python -m unittest discover -s tests -p test_ci_gate.py -v
+```
+
+Repository rules are GitHub settings, not implied by committing a workflow.
+After changing the required check, verify both the active ruleset and a live
+passing/failing PR. Keep the existing deletion/force-push protections and do not
+add an administrator bypass to work around ordinary test failures.
