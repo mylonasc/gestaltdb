@@ -26,18 +26,24 @@ EXPECTED_DECODE_ERRORS = (ValueError, TypeError, RecursionError)
 
 
 def _structural_equal(left: object, right: object) -> bool:
-    """Compare decoded payloads, treating NaN as equal to itself."""
-    if isinstance(left, float) and isinstance(right, float):
-        return left == right or (math.isnan(left) and math.isnan(right))
-    if isinstance(left, dict) and isinstance(right, dict):
-        return left.keys() == right.keys() and all(
-            _structural_equal(left[key], right[key]) for key in left
-        )
-    if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
-        return len(left) == len(right) and all(
-            _structural_equal(item, other) for item, other in zip(left, right)
-        )
-    return left == right
+    """Compare decoded trees without Python recursion, including NaN values."""
+    pending = [(left, right)]
+    while pending:
+        left, right = pending.pop()
+        if isinstance(left, float) and isinstance(right, float):
+            if left != right and not (math.isnan(left) and math.isnan(right)):
+                return False
+        elif isinstance(left, dict) and isinstance(right, dict):
+            if left.keys() != right.keys():
+                return False
+            pending.extend((left[key], right[key]) for key in left)
+        elif isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
+            if len(left) != len(right):
+                return False
+            pending.extend(zip(left, right))
+        elif left != right:
+            return False
+    return True
 
 
 def _roundtrip(serializer, blob: bytes) -> None:
@@ -49,8 +55,7 @@ def _roundtrip(serializer, blob: bytes) -> None:
     restored = serializer.deserialize(encoded)
     if not _structural_equal(decoded, restored):
         raise AssertionError(
-            f"{type(serializer).__name__} roundtrip drifted for {blob!r}: "
-            f"{decoded!r} != {restored!r}"
+            f"{type(serializer).__name__} roundtrip drifted for {blob!r}"
         )
 
 
