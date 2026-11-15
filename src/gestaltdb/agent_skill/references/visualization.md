@@ -198,3 +198,5 @@ figure = visualize_proof_explanation(
 )
 assert "a ancestor b" in figure.as_svg()
 ```
+
+Standalone rule construction is covered by the packaged `datalog` topic; interval-validity figures by `temporal_reasoning`.

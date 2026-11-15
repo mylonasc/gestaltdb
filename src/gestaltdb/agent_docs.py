@@ -40,6 +40,12 @@ TOPICS: dict[str, Topic] = {
         "ontology", "Ontology Reasoning", "Standalone ontology compilation, bounded Datalog, witnesses and pinned claim evidence.",
         "references/ontology.md",
     ),
+    "datalog": Topic(
+        "datalog",
+        "Standalone Datalog Rules",
+        "Binary and typed Datalog without a database: comparisons, recursion, scoped absence, aggregates, and bounded witnesses.",
+        "references/datalog.md",
+    ),
     "quickstart": Topic(
         "quickstart",
         "Quickstart For Library Users",
@@ -93,6 +99,12 @@ TOPICS: dict[str, Topic] = {
         "Temporal History And Migration",
         "Versioned graph reads, TimeIndexedEdge migration, compatibility, recovery, and retention limits.",
         "references/temporal.md",
+    ),
+    "temporal_reasoning": Topic(
+        "temporal_reasoning",
+        "Temporal Interval Reasoning",
+        "When conclusions hold over validity ranges: change segments, point/range parity, per-interval evidence, and conformance.",
+        "references/temporal_reasoning.md",
     ),
 }
 

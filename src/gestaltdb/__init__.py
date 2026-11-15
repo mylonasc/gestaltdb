@@ -89,6 +89,10 @@ install-opencode-skill`` to copy the packaged skill into
 ``.opencode/skills/gestaltdb-user-guide/SKILL.md``. Agents can also run
 ``python -m gestaltdb.agent_docs list`` or ``python -m gestaltdb.agent_docs get
 cypher --examples`` to retrieve focused guidance from an installed package.
+Packaged topics cover graph lifecycle, persistence, query, index, ingest,
+sampling, visualization, ontology, standalone Datalog, claims, history, and
+temporal reasoning; e.g. ``get datalog --examples`` and
+``get temporal_reasoning --examples`` run without a database.
 See repository ``AGENTS.md`` for contributor guidance, ``EXAMPLES.md`` for
 runnable usage patterns, and ``docs/`` for the Sphinx user guide.
 """

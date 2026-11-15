@@ -80,6 +80,7 @@
     {"path":"src/gestaltdb/agent_skill/SKILL.md","sha256":"3e6b928892ad3dae10752f3fb39162ce60268d0f5cf0b064d9de445852e8aa9d","groups":[["compile",[0],[]],["execute",[1],["leveldb"]]],"requires":"Import-map fragment, not a complete application program."},
     {"path":"src/gestaltdb/agent_skill/references/backends.md","sha256":"f6ac68cc7dc32c245d1b954a340a66e4d5a60bca95a5bf3c2666eb85f0786608","groups":[["execute",[0],["leveldb"]],["execute",[1,2],["polars","rocksdb"]]]},
     {"path":"src/gestaltdb/agent_skill/references/cypher.md","sha256":"4e570cb59a0411c83e96521ce3192724385e72df5bf418c778a6a7a572d7aa43","groups":[["execute",[0],["leveldb"]]]},
+    {"path":"src/gestaltdb/agent_skill/references/datalog.md","sha256":"7f22148d99edf128bb278a00d532f81bc5c5fe6db6086bb0f0a3ae11cf3712c6","groups":[["execute",[0],[]]]},
     {"path":"src/gestaltdb/agent_skill/references/epistemic.md","sha256":"bad854e79882a87030052bb2e6b6adf44c8cd4dffbaaa136f1ed71dda84e74f2","groups":[["execute",[0],["leveldb"]]]},
     {"path":"src/gestaltdb/agent_skill/references/indexing.md","sha256":"ba6d63217d773510560b3e4bc4951cff893a9e506d19eaefb22bbb750c5334d1","groups":[["execute",[0],["leveldb"]]]},
     {"path":"src/gestaltdb/agent_skill/references/ingestion.md","sha256":"783edf539b9c42350626340415e20bd7a8ad16aa06f27ad15cda82422a379826","groups":[["execute",[0],["arrow","leveldb"]]]},
@@ -87,6 +88,7 @@
     {"path":"src/gestaltdb/agent_skill/references/quickstart.md","sha256":"1027893a829f7282f044d7f31c6a4e32189b1062ceb045943a5d14f745f0fd05","groups":[["execute",[0],["leveldb"]]]},
     {"path":"src/gestaltdb/agent_skill/references/sampling.md","sha256":"db2454e12d3b74f3f6bfce38e54e1b389611468394d2cb39f1fd85a93bf8f89e","groups":[["execute",[0,2,3],["leveldb"]],["execute",[1],[]]]},
     {"path":"src/gestaltdb/agent_skill/references/temporal.md","sha256":"69ee5027c91df665c57e578d3bc9d362bb0b387d215b8d372cd322f380c72fea","groups":[["execute",[0],["leveldb"]]]},
+    {"path":"src/gestaltdb/agent_skill/references/temporal_reasoning.md","sha256":"f85ec94a1de553e16bfd047374c75b3374d04ba911eb32d8d96d84e4523be188","groups":[["execute",[0],[]]]},
     {"path":"src/gestaltdb/agent_skill/references/visualization.md","sha256":"86ff0f4c4a63b9d0583c36af2af878d050039ea701f58b994c9f8b4269731f7d","groups":[["execute",[0,2],[]],["execute",[1],["leveldb"]]]}
   ]
 }

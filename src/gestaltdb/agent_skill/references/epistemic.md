@@ -7,7 +7,8 @@ The human learning path is `docs/claims-introduction.rst` (assert, contradict,
 derive, explain, retract and maintain), `docs/stored-rules.rst` (independent
 supports and explicit absence), then `docs/modal-epistemic.rst` (bounded linked
 worlds). `docs/inference-audit.rst` describes historical evidence export, not
-independent proof verification.
+independent proof verification. Standalone database-free rules live in the
+packaged `datalog` topic, not on `graph.rules`.
 
 ## Rules
 

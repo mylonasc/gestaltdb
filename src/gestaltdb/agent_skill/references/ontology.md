@@ -10,6 +10,9 @@ before optional RDF/import contracts. For the binary/typed choice and progressiv
 comparison, recursion, scoped absence, aggregation and proof examples, use
 `docs/reasoning-introduction.rst` and `docs/reasoning-typed-tutorial.rst`.
 Stored temporal claim rules are a separate service (`docs/stored-rules.rst`).
+For standalone binary/typed rules without a database, use the packaged `datalog`
+topic and `docs/reasoning-typed-tutorial.rst`; for when-conclusions-hold interval
+closure, use the packaged `temporal_reasoning` topic and `docs/reasoning-temporal.rst`.
 For database and saved-state integration, `docs/reasoning-workflows.rst` routes
 current versus temporal sources, complete closure versus goal answers, explicit
 executor selection, source/state admission, read-only consumers and guarded

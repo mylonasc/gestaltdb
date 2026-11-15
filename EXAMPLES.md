@@ -50,7 +50,7 @@ see [`docs/reasoning-typed-execution.rst`](docs/reasoning-typed-execution.rst).
 The typed executor retains strict literals/n-ary values and rejects unsupported
 proof/physical-engine requests rather than converting them to binary facts.
 
-These examples are designed for developers and agents who need working patterns quickly. They use explicit imports from submodules because the package root intentionally exports only selected helpers.
+These examples are designed for developers and agents who need working patterns quickly. They use explicit imports from submodules because the package root intentionally exports only selected helpers. Installed-library agents can also run `python -m gestaltdb.agent_docs list` (12 topics: quickstart, backends, cypher, indexing, sampling, ingestion, visualization, ontology, datalog, epistemic, temporal, temporal_reasoning).
 
 **Filtering and sampling workflows:** [Indexed property lookups](#index-and-lookup-properties) · [Live typed sampling](#traverse-and-sample-typed-relationships) · [Filtered, reusable sampler snapshots](#build-and-use-a-sampler-snapshot). The [sampling guide](https://mylonasc.github.io/gestaltdb/typed-sampling.html) covers all policies; the [filtering guide](https://mylonasc.github.io/gestaltdb/property-filtering.html) explains seed selection versus filtering every sampled hop.
 

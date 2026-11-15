@@ -35,3 +35,5 @@ with TemporaryDirectory() as tmpdir:
     finally:
         graph.close()
 ```
+
+Next topics: `datalog` for standalone rules, `temporal_reasoning` for validity-interval closure, `sampling` for training batches.
